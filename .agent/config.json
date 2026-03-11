@@ -1,0 +1,18 @@
+{
+  "language": "typescript",
+  "frameworks": ["nextjs", "expo"],
+  "monorepo": "turborepo",
+  "rules": [
+    ".ai/agent.md",
+    ".ai/monorepo.md",
+    ".ai/style.md",
+    ".ai/context-protection.md"
+  ],
+  "tools": ["filesystem", "git", "search"],
+  "restrictions": {
+    "backend_changes": false,
+    "context_crud_modification": false,
+    "ui_redesign": false,
+    "javascript_files": false
+  }
+}
