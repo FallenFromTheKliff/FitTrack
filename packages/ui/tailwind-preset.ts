@@ -15,16 +15,16 @@ export const FitPreset: Partial<Config> = {
         "text-secondary": tokens.colors.textSecondary,
         success: tokens.colors.success,
         warning: tokens.colors.warning,
-        danger: tokens.colors.danger,
+        danger: tokens.colors.danger
       },
       borderRadius: {
         input: `${tokens.radii.input}px`,
         card: `${tokens.radii.card}px`,
-        modal: `${tokens.radii.modal}px`,
+        modal: `${tokens.radii.modal}px`
       },
       boxShadow: {
-        card: tokens.shadows.card,
-      },
-    },
-  },
+        card: tokens.shadows.card
+      }
+    }
+  }
 };

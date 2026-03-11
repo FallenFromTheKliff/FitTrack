@@ -105,19 +105,19 @@ export const THEME_LABELS: Record<ThemeKey, string> = {
   sunlight: "Sunlight",
   dark: "Dark",
   light: "Light",
-  navy: "Navy Blues",
+  navy: "Navy Blues"
 };
 export const THEME_IS_DARK: Record<ThemeKey, boolean> = {
   night: true,
   sunlight: false,
   dark: true,
   light: false,
-  navy: true,
+  navy: true
 };
 export const THEME_ACCENT_COLOR: Record<ThemeKey, string> = {
   night: "#E87722",
   sunlight: "#E87722",
   dark: "#A0A0A0",
   light: "#888888",
-  navy: "#8EA7C1",
+  navy: "#8EA7C1"
 };

@@ -25,11 +25,11 @@ export const tokens = {
     success: "#22C55E",
     warning: "#F59E0B",
     danger: "#EF4444",
-    overlay: "rgba(0,0,0,0.85)",
+    overlay: "rgba(0,0,0,0.85)"
   },
   spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, "2xl": 48 },
   radii: { input: 8, card: 12, modal: 16 },
-  shadows: { card: "0 4px 16px rgba(0,0,0,0.4)" },
+  shadows: { card: "0 4px 16px rgba(0,0,0,0.4)" }
 } as const;
 
 export default tokens;

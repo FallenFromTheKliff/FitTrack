@@ -16,14 +16,7 @@ export const timeAgo = (iso: string) => {
 export function calcBMI(weightKg: number, heightCm: number) {
   const hm = heightCm / 100;
   const bmi = Math.round((weightKg / (hm * hm)) * 10) / 10;
-  const status =
-    bmi < 18.5
-      ? "Underweight"
-      : bmi < 25
-        ? "Normal"
-        : bmi < 30
-          ? "Overweight"
-          : "Obese";
+  const status = bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
   return { bmi, status };
 }
 
@@ -43,19 +36,10 @@ export function slotLabel(booked: number, capacity: number): string {
   return `${capacity - booked} left`;
 }
 
-// export function getTodayString(): string {
-//   const d = new Date();
-//   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-// }
-
 export function parseYMD(s: string) {
   const [y = 0, m = 0, d = 0] = (s || "").split("-").map(Number);
   return { year: y, month: m, day: d };
 }
-
-// export function formatYMD(year: number, month: number, day: number): string {
-//   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-// }
 
 export function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -73,6 +57,15 @@ export function formatBookingDate(dateStr: string): string {
     weekday: "short",
     month: "short",
     day: "numeric",
-    year: "numeric",
+    year: "numeric"
   });
 }
+
+export const revisePassword = (password: string) => {
+  const minLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  return { minLength, hasUppercase, hasLowercase, hasNumber, hasSpecial };
+};

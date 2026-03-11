@@ -3,19 +3,19 @@ import type { FontKey } from "../types";
 export const FONT_FAMILIES: Record<FontKey, string> = {
   standard: "System",
   retro: "Blrrpix",
-  painter: "CaveatBrush",
+  painter: "CaveatBrush"
 };
 
 export const WEB_FONT_CLASSES: Record<FontKey, string> = {
   standard: "",
   retro: "font-retro",
-  painter: "font-painter",
+  painter: "font-painter"
 };
 
 export const FONT_LABELS: Record<FontKey, string> = {
   standard: "Standard",
   retro: "Retro",
-  painter: "Painter",
+  painter: "Painter"
 };
 
 export const DEFAULT_FONT: FontKey = "standard";
@@ -45,7 +45,7 @@ export const fitStyles = {
   badgeSuccess: "bg-success/20 text-success",
   badgeWarning: "bg-warning/20 text-warning",
   badgeDanger: "bg-danger/20 text-danger",
-  badgeBrand: "bg-brand/20 text-brand",
+  badgeBrand: "bg-brand/20 text-brand"
 } as const;
 
 export type FitStyleKey = keyof typeof fitStyles;
