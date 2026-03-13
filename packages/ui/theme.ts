@@ -19,7 +19,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
     success: "#22C55E",
     warning: "#F59E0B",
     danger: "#EF4444",
-    overlay: "rgba(0,0,0,0.85)",
+    overlay: "rgba(0,0,0,0.85)"
   },
   sunlight: {
     brand: "#E87722",
@@ -38,7 +38,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
     success: "#16A34A",
     warning: "#D97706",
     danger: "#DC2626",
-    overlay: "rgba(0,0,0,0.5)",
+    overlay: "rgba(0,0,0,0.5)"
   },
   dark: {
     brand: "#A0A0A0",
@@ -57,7 +57,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
     success: "#5AAA6A",
     warning: "#C0983A",
     danger: "#C06060",
-    overlay: "rgba(10,10,10,0.92)",
+    overlay: "rgba(10,10,10,0.92)"
   },
   light: {
     brand: "#888888",
@@ -76,7 +76,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
     success: "#2A7A4A",
     warning: "#8A6020",
     danger: "#9E3A3A",
-    overlay: "rgba(200,215,230,0.88)",
+    overlay: "rgba(200,215,230,0.88)"
   },
   navy: {
     brand: "#8EA7C1",
@@ -95,7 +95,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
     success: "#6DC48A",
     warning: "#C4A27A",
     danger: "#C47A7A",
-    overlay: "rgba(22,28,36,0.92)",
+    overlay: "rgba(22,28,36,0.92)"
   },
 };
 

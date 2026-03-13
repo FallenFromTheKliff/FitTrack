@@ -1,21 +1,13 @@
 # Context Protection
 
-All context files are immutable infrastructure. Treat them as read-only.
+The following files are immutable infrastructure. You may consume them, but do not edit their internal logic.
 
 ## Protected Files
+- `apps/mobile/contexts/AuthContext.tsx`
+- `apps/mobile/contexts/ThemeContext.tsx`
+- `apps/mobile/contexts/BookingContext.tsx`
 
-apps/mobile/contexts/AuthContext.tsx
-apps/mobile/contexts/ThemeContext.tsx
-
-## Forbidden
-
-Editing any function body inside these files.
-Adding new state variables.
-Modifying useEffect or useCallback logic.
-Changing the shape of the context value object.
-
-## Allowed
-
-Importing and calling context actions in components.
-Reading context values via useAuth() or useTheme().
-Passing context values as props to child components.
+## Forbidden Actions
+- Modifying `useCallback` or `useEffect` blocks.
+- Adding new state variables to providers.
+- Changing reducer logic or state shapes.

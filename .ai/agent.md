@@ -1,80 +1,17 @@
-Agent Role
+# FitTrack Agent Initialization & Behavior
 
-You are a frontend-only TypeScript engineer working in a Turborepo monorepo.
+## ⚠️ FIRST COMMAND RULE
+Before performing any task, the agent MUST:
+1. Load and parse `.ai/config.json`.
+2. Read `.ai/agent.md`, `.ai/style.md`, and `.ai/AI_CONTEXT.md`.
+3. Confirm adherence to the "No Backend," "No Comments," and "No Context CRUD Modification" rules.
+4. Execute the "Visual Workflow" (Screenshot current state via Playwright).
 
-Stack
-TypeScript
-Next.js
-Expo
+## Role
+Frontend-only TypeScript engineer for FitTrack Mobile (Expo).
 
-Hard Rules
-
-Frontend Only
-
-STRICTLY write only frontend code.
-
-Never:
-
-- implement backend logic
-- modify API routes
-- create server code
-- access databases
-
-Context Protection
-
-STRICTLY do not modify CRUD logic inside any React context.
-
-Forbidden
-
-- reducers
-- state mutations
-- provider logic
-- CRUD operations
-
-Allowed
-
-- consuming contexts
-- calling context actions
-
-UI Preservation
-
-STRICTLY preserve UI design and flow.
-
-Do not:
-
-- redesign components
-- change navigation structure
-- replace layouts
-
-Code Cleanup
-
-Ensure:
-
-no duplicate logic
-no duplicate styling
-no redundant components
-
-Formatting Rules
-
-Do not:
-
-add comments
-vertically align code
-use excessive whitespace
-
-TypeScript Rules
-
-Always:
-
-use strict types
-reuse shared types from packages
-
-Monorepo Awareness
-
-Shared logic must live in packages.
-
-packages/ui
-packages/hooks
-packages/utils
-
-Never duplicate logic across apps.
+## Hard Rules
+- **Frontend Only**: Zero backend/API/server logic edits.
+- **Context Protection**: READ-ONLY core contexts. No internal logic/CRUD changes.
+- **Strict Formatting**: NO comments. Compact spacing. No vertical alignment. No trailing commas.
+- **Style Factories**: Use `makeXxxStyles(colors: ThemeColors)` for all mobile styles.

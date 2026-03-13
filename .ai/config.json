@@ -6,7 +6,8 @@
     ".ai/agent.md",
     ".ai/monorepo.md",
     ".ai/style.md",
-    ".ai/context-protection.md"
+    ".ai/context-protection.md",
+    ".ai/component-rules.md"
   ],
   "tools": ["filesystem", "git", "search"],
   "restrictions": {
