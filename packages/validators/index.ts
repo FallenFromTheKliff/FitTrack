@@ -29,6 +29,29 @@ export const profileBodySchema = z.object({
   age: z.number().min(13).max(100)
 });
 
+export const profileFitnessSchema = z.object({
+  weightKg: z.number().min(30).max(300),
+  heightCm: z.number().min(100).max(250),
+  currentCalories: z.number().min(0).max(10000)
+});
+
+export const editProfilePersonalSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().regex(/^09\d{9}$/, "Enter a valid 11-digit PH number"),
+  dateOfBirth: z.string().optional()
+});
+
+export const editProfileFitnessSchema = z.object({
+  weightKg: z.string().refine((v) => v === "" || (!isNaN(Number(v)) && Number(v) >= 0), {
+    message: "Enter a valid weight"
+  }),
+  heightCm: z.string().refine((v) => v === "" || (!isNaN(Number(v)) && Number(v) >= 0), {
+    message: "Enter a valid height"
+  })
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(8),
@@ -58,6 +81,9 @@ export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;
 export type ProfilePersonalData = z.infer<typeof profilePersonalSchema>;
 export type ProfileBodyData = z.infer<typeof profileBodySchema>;
+export type ProfileFitnessData = z.infer<typeof profileFitnessSchema>;
+export type EditProfilePersonalData = z.infer<typeof editProfilePersonalSchema>;
+export type EditProfileFitnessData = z.infer<typeof editProfileFitnessSchema>;
 export type ChangePasswordData = z.infer<typeof changePasswordSchema>;
 export type AddProductData = z.infer<typeof addProductSchema>;
 export type CreateBookingData = z.infer<typeof createBookingSchema>;

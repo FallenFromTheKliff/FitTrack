@@ -1,6 +1,5 @@
-export { tokens, R, MAX_WIDTH } from "./tokens";
+export { tokens, R, BORDER_RADIUS, MAX_WIDTH } from "./tokens";
 export type { ThemeColors } from "./tokens";
-export { FitPreset } from "./tailwind-preset";
 export {
   themes,
   THEME_LABELS,

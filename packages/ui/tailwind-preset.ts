@@ -1,4 +1,4 @@
-import { tokens } from "./tokens";
+import { tokens } from "@fittrack/ui/tokens";
 import type { Config } from "tailwindcss";
 
 export const FitPreset: Partial<Config> = {

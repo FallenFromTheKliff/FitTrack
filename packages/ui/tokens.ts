@@ -5,6 +5,12 @@ export const R = {
   xl: 12,
 } as const;
 
+export const BORDER_RADIUS = {
+  input: 8,
+  card: 12,
+  modal: 16,
+} as const;
+
 export const MAX_WIDTH = 450;
 
 export const tokens = {

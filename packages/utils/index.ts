@@ -61,6 +61,27 @@ export function formatBookingDate(dateStr: string): string {
   });
 }
 
+export function formatShortDate(iso: string): string {
+  return formatDate(iso, "MMM d");
+}
+
+export function formatLongDate(iso: string): string {
+  return formatDate(iso, "MMMM d, yyyy");
+}
+
+export function formatMonthYear(iso: string): string {
+  return formatDate(iso, "MMM yyyy");
+}
+
+export function formatScheduleDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
 export const revisePassword = (password: string) => {
   const minLength = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
@@ -69,3 +90,19 @@ export const revisePassword = (password: string) => {
   const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
   return { minLength, hasUppercase, hasLowercase, hasNumber, hasSpecial };
 };
+
+export function splitFullName(fullName: string): {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+} {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 0) return { firstName: "", middleName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], middleName: "", lastName: "" };
+  if (parts.length === 2) return { firstName: parts[0], middleName: "", lastName: parts[1] };
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(" "),
+    lastName: parts[parts.length - 1]
+  };
+}

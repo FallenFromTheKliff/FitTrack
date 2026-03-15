@@ -1,7 +1,28 @@
 {
   "browser": "chromium",
   "headless": false,
-  "viewport": { "width": 390, "height": 844 },
-  "baseURL": "http://localhost:8081",
-  "startUrls": ["http://localhost:8081", "http://localhost:3000"]
+  "viewports": {
+    "mobile": { "width": 390, "height": 844 },
+    "web": { "width": 1440, "height": 900 }
+  },
+  "defaultViewport": "mobile",
+  "startUrls": [
+    "http://localhost:8081",
+    "http://localhost:8080"
+  ],
+  "apps": {
+    "mobile": {
+      "url": "http://localhost:8081",
+      "viewport": "mobile",
+      "loginRoute": null,
+      "notes": "Expo dev server — navigate to the app via the Expo Go URL or Metro bundler"
+    },
+    "web": {
+      "url": "http://localhost:8080",
+      "viewport": "web",
+      "loginRoute": "/login",
+      "dashboardRoute": "/dashboard",
+      "notes": "Next.js dev server — unauthenticated requests redirect to /login"
+    }
+  }
 }

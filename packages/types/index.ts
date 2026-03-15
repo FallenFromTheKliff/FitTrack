@@ -1,6 +1,7 @@
 export type Role = "admin" | "staff" | "member";
 export type ThemeKey = "night" | "sunlight" | "dark" | "light" | "navy";
 export type FontKey = "standard" | "retro" | "painter";
+export type AnimationLevel = "full" | "minimal" | "none";
 export type SlotStatus = "available" | "full" | "waitlist";
 export type BookingStatus = "confirmed" | "waitlisted" | "cancelled";
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
@@ -29,7 +30,7 @@ export type ThemeColors = {
 export interface ThemeSettings {
   themeKey: ThemeKey;
   fontKey: FontKey;
-  useAnimations: boolean;
+  animationLevel: AnimationLevel;
 }
 
 export interface User extends AuthUser {
@@ -45,6 +46,11 @@ export interface AuthUser {
   tier?: MemberTier;
   memberSince?: string;
   avatarInitials?: string;
+  avatarUri?: string;
+  weightKg?: number;
+  heightCm?: number;
+  currentCalories?: number;
+  dateOfBirth?: string;
 }
 
 export interface Booking {
@@ -55,6 +61,9 @@ export interface Booking {
   resourceType: "amenity" | "trainer";
   date: string;
   time: string;
+  startTime?: string;
+  endTime?: string;
+  description?: string;
   status: BookingStatus;
   price: number;
   trainerId?: string;
@@ -66,6 +75,9 @@ export interface CreateBookingDTO {
   resourceType: Booking["resourceType"];
   date: string;
   time: string;
+  startTime?: string;
+  endTime?: string;
+  description?: string;
   price: number;
   trainerId?: string;
   trainerName?: string;
@@ -142,7 +154,8 @@ export interface IThemeContext {
   setFont: (key: FontKey) => void;
   setAppearance: (themeKey: ThemeKey, fontKey: FontKey) => void;
   resetAppearance: () => void;
-  setUseAnimations: (val: boolean) => void;
+  setAnimationLevel: (level: AnimationLevel) => void;
+  saveAllAppearance: (themeKey: ThemeKey, fontKey: FontKey, animationLevel: AnimationLevel) => void;
   previewTheme: (key: ThemeKey | null) => void;
   previewFont: (key: FontKey | null) => void;
 }

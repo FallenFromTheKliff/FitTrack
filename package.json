@@ -6,13 +6,13 @@
     "dev": "turbo run dev",
     "dev:mobile": "cd apps/mobile && pnpm dev",
     "dev:web": "cd apps/web && pnpm dev",
-    "dev:all": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "pnpm -r exec rm -rf .next .expo .turbo node_modules dist"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.68",
     "@tailwindcss/postcss": "^4.2.1",
     "turbo": "^2.8.13",
     "typescript": "^5.9.3"

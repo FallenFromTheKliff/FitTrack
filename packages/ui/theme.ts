@@ -101,11 +101,11 @@ export const themes: Record<ThemeKey, ThemeColors> = {
 
 export const DEFAULT_THEME: ThemeKey = "night";
 export const THEME_LABELS: Record<ThemeKey, string> = {
-  night: "Night",
-  sunlight: "Sunlight",
-  dark: "Dark",
-  light: "Light",
-  navy: "Navy Blues"
+  night: "SertFit Gym",
+  sunlight: "Morning Rise",
+  dark: "Night Hours",
+  light: "Wavy Lights",
+  navy: "Moody Blues"
 };
 export const THEME_IS_DARK: Record<ThemeKey, boolean> = {
   night: true,
