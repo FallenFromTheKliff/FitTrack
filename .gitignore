@@ -6,3 +6,5 @@ dist/
 *.log
 tasks.md
 package-lock.json
+apps/api/.env
+apps/mobile/.env

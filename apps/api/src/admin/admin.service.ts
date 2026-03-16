@@ -1,0 +1,605 @@
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
+import { CreateAdminDto, UpgradeToCoachDto, CreateVenueDto, UpdateVenueDto, CreateStaffDto } from './dto/admin.dto';
+
+@Injectable()
+export class AdminService {
+    constructor(private prisma: PrismaService) { }
+
+    // ===== USER MANAGEMENT =====
+    async createAdmin(dto: CreateAdminDto) {
+        // Check if email exists
+        const existing = await this.prisma.user.findUnique({
+            where: { email: dto.email },
+        });
+
+        if (existing) {
+            throw new ConflictException('Email already exists');
+        }
+
+        // Get ADMIN role
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' },
+        });
+
+        if (!adminRole) {
+            throw new NotFoundException('ADMIN role not found');
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+        // Create admin user
+        const admin = await this.prisma.user.create({
+            data: {
+                email: dto.email,
+                password: hashedPassword,
+                roleId: adminRole.id,
+                emailVerified: true, // Auto-verify admin emails
+                emailVerifiedAt: new Date(),
+                lastOtpVerifiedAt: new Date(),
+            },
+        });
+
+        // Auto-create profile
+        await this.prisma.userProfile.create({
+            data: { userId: admin.id },
+        });
+
+        const { password, ...adminWithoutPassword } = admin;
+
+        return {
+            message: 'Admin created successfully',
+            admin: adminWithoutPassword,
+        };
+    }
+
+    async upgradeUserToCoach(dto: UpgradeToCoachDto) {
+        // Check if user exists
+        const user = await this.prisma.user.findUnique({
+            where: { id: dto.userId },
+            include: { coach: true, role: true },
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // Check if already a coach
+        if (user.coach) {
+            throw new ConflictException('User is already a coach');
+        }
+
+        // Get COACH role
+        const coachRole = await this.prisma.role.findUnique({
+            where: { name: 'COACH' },
+        });
+
+        if (!coachRole) {
+            throw new NotFoundException('COACH role not found');
+        }
+
+        // Upgrade user to COACH role
+        await this.prisma.user.update({
+            where: { id: dto.userId },
+            data: { roleId: coachRole.id },
+        });
+
+        // Create coach profile
+        const coach = await this.prisma.coach.create({
+            data: {
+                userId: dto.userId,
+                specialties: dto.specialties,
+                bio: dto.bio,
+                certifications: dto.certifications || [],
+                yearsExperience: dto.yearsExperience,
+                hourlyRate: dto.hourlyRate,
+            },
+        });
+
+        return {
+            message: 'User upgraded to coach successfully',
+            coach,
+        };
+    }
+
+    // ===== SOFT DELETE USER =====
+    async softDeleteUser(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        if (user.deletedAt) {
+            throw new BadRequestException('User is already deleted');
+        }
+
+        // Prevent admin from deleting themselves
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' },
+        });
+
+        // if (user.roleId === adminRole?.id) {
+        //     throw new BadRequestException('Cannot delete admin users');
+        // }
+
+        const deleted = await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                deletedAt: new Date(),
+            },
+            select: {
+                id: true,
+                email: true,
+                phone_no: true,
+                deletedAt: true,
+            },
+        });
+
+        return {
+            message: 'User soft deleted successfully',
+            user: deleted,
+        };
+    }
+
+    async getAllDeletionRequests(status?: string) {
+        const where = status ? { status } : {};
+
+        const requests = await this.prisma.accountDeletionRequest.findMany({
+            where,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        email: true,
+                        phone_no: true,
+                        createdAt: true,
+                        profile: true,
+                        role: true,
+                    }
+                }
+            },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        return {
+            total: requests.length,
+            requests
+        };
+    }
+
+    async approveDeletionRequest(requestId: string, reviewedBy: string, reviewNotes?: string) {
+        const request = await this.prisma.accountDeletionRequest.findUnique({
+            where: { id: requestId },
+            include: { user: true }
+        });
+
+        if (!request) {
+            throw new NotFoundException('Deletion request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+            throw new BadRequestException('Request already processed');
+        }
+
+        // Update request status
+        await this.prisma.accountDeletionRequest.update({
+            where: { id: requestId },
+            data: {
+                status: 'APPROVED',
+                reviewedBy,
+                reviewedAt: new Date(),
+                reviewNotes,
+            }
+        });
+
+        // Soft delete user
+        await this.prisma.user.update({
+            where: { id: request.userId },
+            data: { deletedAt: new Date() }
+        });
+
+        return {
+            message: 'User account deleted successfully',
+            email: request.user.email,
+        };
+    }
+
+    async rejectDeletionRequest(requestId: string, reviewedBy: string, reviewNotes?: string) {
+        const request = await this.prisma.accountDeletionRequest.findUnique({
+            where: { id: requestId }
+        });
+
+        if (!request) {
+            throw new NotFoundException('Deletion request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+            throw new BadRequestException('Request already processed');
+        }
+
+        await this.prisma.accountDeletionRequest.update({
+            where: { id: requestId },
+            data: {
+                status: 'REJECTED',
+                reviewedBy,
+                reviewedAt: new Date(),
+                reviewNotes: reviewNotes || 'Request rejected',
+            }
+        });
+
+        return {
+            message: 'Deletion request rejected'
+        };
+    }
+
+    async getAllUsers() {
+        const users = await this.prisma.user.findMany({
+            include: {
+                role: true,
+                profile: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return users.map(({ password, ...user }) => user);
+    }
+
+    async getAllCoaches() {
+        const coaches = await this.prisma.coach.findMany({
+            include: {
+                user: {
+                    include: {
+                        profile: true,
+                    },
+                },
+                availability: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return coaches;
+    }
+
+      /**
+     * Get all staff users (for admin monitoring)
+     */
+    async getAllStaff() {
+        const staffRole = await this.prisma.role.findUnique({
+            where: { name: 'STAFF' },
+        });
+
+        if (!staffRole) {
+            return { total: 0, staff: [] };
+        }
+
+        const staff = await this.prisma.user.findMany({
+            where: {
+                roleId: staffRole.id,
+                deletedAt: null,  // Only active staff
+            },
+            select: {
+                id: true,
+                email: true,
+                phone_no: true,
+                emailVerified: true,
+                phoneVerified: true,
+                createdAt: true,
+                role: true,
+                profile: true,
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return {
+            total: staff.length,
+            staff,
+        };
+    }
+
+    // ===== VENUE MANAGEMENT =====
+    async createVenue(dto: CreateVenueDto) {
+        const venue = await this.prisma.venue.create({
+            data: {
+                name: dto.name,
+                description: dto.description,
+                capacity: dto.capacity,
+                hourlyRate: dto.hourlyRate,
+                minimumHours: dto.minimumHours || 1,
+                amenities: dto.amenities || [],
+            },
+        });
+
+        return {
+            message: 'Venue created successfully',
+            venue,
+        };
+    }
+
+    async updateVenue(id: number, dto: UpdateVenueDto) {
+        const venue = await this.prisma.venue.findUnique({
+            where: { id },
+        });
+
+        if (!venue) {
+            throw new NotFoundException('Venue not found');
+        }
+
+        const updated = await this.prisma.venue.update({
+            where: { id },
+            data: {
+                ...(dto.name && { name: dto.name }),
+                ...(dto.description !== undefined && { description: dto.description }),
+                ...(dto.capacity && { capacity: dto.capacity }),
+                ...(dto.hourlyRate !== undefined && { hourlyRate: dto.hourlyRate }),
+                ...(dto.minimumHours && { minimumHours: dto.minimumHours }),
+                ...(dto.amenities && { amenities: dto.amenities }),
+                ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+            },
+        });
+
+        return {
+            message: 'Venue updated successfully',
+            venue: updated,
+        };
+    }
+
+    async deleteVenue(id: number) {
+        const venue = await this.prisma.venue.findUnique({
+            where: { id },
+        });
+
+        if (!venue) {
+            throw new NotFoundException('Venue not found');
+        }
+
+        // Soft delete by marking as inactive
+        await this.prisma.venue.update({
+            where: { id },
+            data: { isActive: false },
+        });
+
+        return {
+            message: 'Venue deleted (marked inactive) successfully',
+        };
+    }
+
+    // ===== BOOKING MANAGEMENT =====
+    async getPendingBookings() {
+        const bookings = await this.prisma.venueBooking.findMany({
+            where: { status: 'pending' },
+            include: {
+                user: {
+                    include: { profile: true },
+                },
+                venue: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return bookings;
+    }
+
+    async confirmBooking(bookingId: string) {
+        const booking = await this.prisma.venueBooking.findUnique({
+            where: { id: bookingId },
+        });
+
+        if (!booking) {
+            throw new NotFoundException('Booking not found');
+        }
+
+        if (booking.status !== 'pending') {
+            throw new BadRequestException('Booking is not pending');
+        }
+
+        const updated = await this.prisma.venueBooking.update({
+            where: { id: bookingId },
+            data: { status: 'confirmed' },
+        });
+
+        return {
+            message: 'Booking confirmed successfully',
+            booking: updated,
+        };
+    }
+
+    async rejectBooking(bookingId: string, reason?: string) {
+        const booking = await this.prisma.venueBooking.findUnique({
+            where: { id: bookingId },
+        });
+
+        if (!booking) {
+            throw new NotFoundException('Booking not found');
+        }
+
+        if (booking.status !== 'pending') {
+            throw new BadRequestException('Booking is not pending');
+        }
+
+        const updated = await this.prisma.venueBooking.update({
+            where: { id: bookingId },
+            data: {
+                status: 'cancelled',
+                cancelledAt: new Date(),
+                cancelReason: reason || 'Rejected by admin',
+            },
+        });
+
+        return {
+            message: 'Booking rejected successfully',
+            booking: updated,
+        };
+    }
+
+    // ===== STAFF MANAGEMENT =====
+    async createStaff(dto: CreateStaffDto) {
+        // Check if email exists
+        const existing = await this.prisma.user.findUnique({
+            where: { email: dto.email },
+        });
+
+        if (existing) {
+            throw new ConflictException('Email already registered');
+        }
+
+        // Get STAFF role
+        const staffRole = await this.prisma.role.findUnique({
+            where: { name: 'STAFF' },
+        });
+
+        if (!staffRole) {
+            throw new NotFoundException(
+                'STAFF role not found in database. Please run database seeding.'
+            );
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+        // Create staff user
+        const staff = await this.prisma.user.create({
+            data: {
+                email: dto.email,
+                password: hashedPassword,
+                phone_no: dto.phone_no,
+                roleId: staffRole.id,
+                emailVerified: true,  // Staff accounts are pre-verified
+                phoneVerified: dto.phone_no ? true : false,
+            },
+            include: {
+                role: true,
+                profile: true,
+            },
+        });
+
+        // Optionally create a basic profile
+        if (dto.firstName && dto.lastName) {
+            await this.prisma.userProfile.create({
+                data: {
+                    userId: staff.id,
+                    firstName: dto.firstName,
+                    lastName: dto.lastName,
+                },
+            });
+        }
+
+        const { password, ...staffWithoutPassword } = staff;
+
+        return {
+            message: 'Staff account created successfully',
+            staff: staffWithoutPassword,
+        };
+    }
+
+    /**
+     * Upgrade a staff to admin (rare operation)
+     */
+    async upgradeStaffToAdmin(staffId: string) {
+        const staff = await this.prisma.user.findUnique({
+            where: { id: staffId },
+            include: { role: true }
+        });
+
+        if (!staff) {
+            throw new NotFoundException('Staff user not found');
+        }
+
+        if (staff.role.name !== 'STAFF') {
+            throw new BadRequestException('User is not a staff member');
+        }
+
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' }
+        });
+
+        if (!adminRole) {
+            throw new NotFoundException('ADMIN role not found');
+        }
+
+        const updated = await this.prisma.user.update({
+            where: { id: staffId },
+            data: { roleId: adminRole.id },
+            include: {
+                role: true,
+                profile: true,
+            }
+        });
+
+        const { password, ...userWithoutPassword } = updated;
+
+        return {
+            message: 'Staff upgraded to admin successfully',
+            user: userWithoutPassword,
+        };
+    }
+
+    /**
+     * Downgrade an admin to staff (rare operation, requires super admin)
+     */
+    async downgradeAdminToStaff(adminId: string) {
+        const admin = await this.prisma.user.findUnique({
+            where: { id: adminId },
+            include: { role: true }
+        });
+
+        if (!admin) {
+            throw new NotFoundException('Admin user not found');
+        }
+
+        if (admin.role.name !== 'ADMIN') {
+            throw new BadRequestException('User is not an admin');
+        }
+
+        // Prevent downgrading the last admin
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' }
+        });
+
+        if (!adminRole) {
+            throw new NotFoundException('Admin Role not found');
+        }
+
+        const adminCount = await this.prisma.user.count({
+            where: {
+                roleId: adminRole.id,
+                deletedAt: null,
+            }
+        });
+
+        if (adminCount <= 1) {
+            throw new BadRequestException(
+                'Cannot downgrade the last admin. Create another admin first.'
+            );
+        }
+
+        const staffRole = await this.prisma.role.findUnique({
+            where: { name: 'STAFF' }
+        });
+
+        if (!staffRole) {
+            throw new NotFoundException('STAFF role not found');
+        }
+
+        const updated = await this.prisma.user.update({
+            where: { id: adminId },
+            data: { roleId: staffRole.id },
+            include: {
+                role: true,
+                profile: true,
+            }
+        });
+
+        const { password, ...userWithoutPassword } = updated;
+
+        return {
+            message: 'Admin downgraded to staff successfully',
+            user: userWithoutPassword,
+        };
+    }
+}
+

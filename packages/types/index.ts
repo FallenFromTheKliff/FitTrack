@@ -1,4 +1,4 @@
-export type Role = "admin" | "staff" | "member";
+export type Role = "ADMIN" | "STAFF" | "USER" | "COACH";
 export type ThemeKey = "night" | "sunlight" | "dark" | "light" | "navy";
 export type FontKey = "standard" | "retro" | "painter";
 export type AnimationLevel = "full" | "minimal" | "none";
@@ -38,11 +38,13 @@ export interface User extends AuthUser {
   lastCheckIn?: string;
 }
 export interface AuthUser {
-  id?: string;
+  id: string;
   name?: string;
   email: string;
-  phone: string;
+  phone_no?: string | null;
   role?: Role;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
   tier?: MemberTier;
   memberSince?: string;
   avatarInitials?: string;
@@ -51,6 +53,15 @@ export interface AuthUser {
   heightCm?: number;
   currentCalories?: number;
   dateOfBirth?: string;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    dateOfBirth?: string | null;
+    gender?: string | null;
+    currentWeightKg?: number | null;
+    heightCm?: number | null;
+    membershipType?: string;
+  };
 }
 
 export interface Booking {
@@ -128,13 +139,13 @@ export interface IAuthContext {
   isLoading: boolean;
   login: (
     email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+    password: string
+  ) => Promise<{ success: boolean; otpRequired?: boolean; error?: string }>;
   register: (data: {
     email: string;
-    phone: string;
+    phone_no?: string;
     password: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; userId?: string; error?: string }>;
   logout: () => void | Promise<void>;
   deleteUser?: () => void | Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => Promise<void>;
@@ -143,6 +154,45 @@ export interface IAuthContext {
   verifyCurrentPassword?: (password: string) => Promise<boolean>;
   changePassword?: (currentPassword: string, nextPassword: string) => Promise<{ success: boolean; error?: string }>;
   commitLogin: () => Promise<void>;
+}
+
+export interface MemberRecord {
+  id: string;
+  email: string;
+  phone_no?: string | null;
+  roleId?: number;
+  role?: { id: number; name: string };
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  deletedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    dateOfBirth?: string | null;
+    gender?: string | null;
+    currentWeightKg?: number | null;
+    heightCm?: number | null;
+    membershipType?: string;
+  } | null;
+}
+
+export type CreateStaffInput = {
+  email: string;
+  password: string;
+  phone_no?: string;
+  firstName?: string;
+  lastName?: string;
+};
+
+export interface IMemberContext {
+  members: MemberRecord[];
+  isLoading: boolean;
+  error: string | null;
+  fetchMembers: () => Promise<void>;
+  createStaff: (data: CreateStaffInput) => Promise<{ success: boolean; error?: string }>;
+  deleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 export interface IThemeContext {
   colors: ThemeColors;

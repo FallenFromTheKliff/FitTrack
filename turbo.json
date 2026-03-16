@@ -5,6 +5,9 @@
     "dev": { "cache": false, "persistent": true },
     "lint": { "outputs": [] },
     "typecheck": { "outputs": [] },
+    "db:generate": { "cache": false },
+    "db:migrate": { "cache": false },
+    "db:seed": { "cache": false },
     "clean": { "cache": false }
   }
 }

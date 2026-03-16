@@ -1,0 +1,247 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  users User[]
+}
+
+// USER MANAGEMENT
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  phone_no  String?
+
+  // RBAC
+  roleId    Int
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  // Email OTP
+  emailVerified       Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt     DateTime? @map("email_verified_at")
+  
+  // Phone OTP
+  phoneVerified       Boolean   @default(false) @map("phone_verified")
+  phoneVerifiedAt     DateTime? @map("phone_verified_at")
+  
+  // 7-day OTP re-verification tracking
+  lastOtpVerifiedAt   DateTime? @map("last_otp_verified_at")
+
+  // Relations
+  refreshTokens       RefreshToken[]
+  otps                Otp[]
+  passwordResets      PasswordReset[]
+  deletionRequests AccountDeletionRequest[]
+  venueBookings       VenueBooking[]
+  trainerAppointments TrainerAppointment[]
+  profile             UserProfile?
+  coach               Coach?
+
+  deletedAt     DateTime? // Null = active, Non-null = soft deleted
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName           String?  @map("first_name")
+  lastName            String?  @map("last_name")
+  membershipType      String   @default("member") @map("membership_type")
+
+  // Relevant Data For Macro Tracking
+  dateOfBirth         DateTime? @map("date_of_birth")
+  gender              String?
+  currentWeightKg     Float?    @map("current_weight_kg")
+  heightCm            Float?    @map("height_cm")
+  fitnessGoal         String?   @map("fitness_goal")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("user_profiles")
+}
+
+model AccountDeletionRequest {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  reason      String?  // Why user wants to delete
+  status      String   @default("pending") // pending, approved, rejected
+  
+  reviewedBy  String?  @map("reviewed_by") // Admin/Staff who reviewed
+  reviewedAt  DateTime? @map("reviewed_at")
+  reviewNotes String?  @map("review_notes") // Admin notes
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
+}
+
+// BOOKING VENUES
+model Venue {
+  id              Int      @id @default(autoincrement())
+  
+  name            String
+  description     String?
+  capacity        Int
+  hourlyRate      Float?   @map("hourly_rate")
+  minimumHours    Int      @default(1) @map("minimum_hours")
+  amenities       String[] @default([])
+  isActive        Boolean  @default(true) @map("is_active")
+  
+  // Relations
+  bookings        VenueBooking[]
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("venues")
+}
+
+model VenueBooking {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  venueId     Int      @map("venue_id")
+  venue       Venue    @relation(fields: [venueId], references: [id])
+  
+  startTime   DateTime @map("start_time")
+  endTime     DateTime @map("end_time")
+  durationHours Float  @map("duration_hours")
+  
+  status      String   @default("pending") // pending, confirmed, cancelled, completed
+  purpose     String?
+  participants Int?
+  
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelReason String? @map("cancel_reason")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([venueId, startTime])
+  @@index([userId])
+  @@map("venue_bookings")
+}
+
+// COACH APPOINTMENTS
+model Coach {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  specialties     String[]
+  bio             String?
+  certifications  String[]
+  yearsExperience Int      @default(0) @map("years_experience")
+  hourlyRate      Float    @map("hourly_rate")
+  isActive        Boolean  @default(true) @map("is_active")
+  
+  availability    CoachAvailability[]
+  appointments    TrainerAppointment[]
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("coaches")
+}
+
+model CoachAvailability {
+  id          String   @id @default(uuid())
+  coachId     String   @map("coach_id")
+  coach       Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  
+  dayOfWeek   Int      @map("day_of_week") // 0 = Sunday, 6 = Saturday
+  startTime   String   @map("start_time")  // HH:mm format (e.g., "09:00")
+  endTime     String   @map("end_time")    // HH:mm format (e.g., "17:00")
+  isAvailable Boolean  @default(true) @map("is_available")
+
+  @@index([coachId, dayOfWeek])
+  @@map("coach_availability")
+}
+
+model TrainerAppointment {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  coachId     String   @map("coach_id")
+  coach       Coach    @relation(fields: [coachId], references: [id])
+  
+  scheduledAt DateTime @map("scheduled_at")
+  duration    Int      // duration in minutes
+  endTime     DateTime @map("end_time")
+  
+  status      String   @default("pending") // pending, confirmed, declined, cancelled, completed
+  sessionType String?  @map("session_type")
+  notes       String?
+  
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelReason String? @map("cancel_reason")
+  cancelledBy  String? @map("cancelled_by") // userId who cancelled
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([coachId, scheduledAt])
+  @@index([userId])
+  @@map("trainer_appointments")
+}
+
+// AUTH, OTP, TOKEN
+model Otp {
+  id        String   @id @default(uuid())
+  userId    String   
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  type      String   // 'email' or 'phone'
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
+  @@map("otps")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_resets")
+}
