@@ -136,9 +136,13 @@ export interface IAuthContext {
     password: string;
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void | Promise<void>;
+  deleteUser?: () => void | Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => Promise<void>;
   sendOTP: (destination: string) => Promise<{ success: boolean }>;
   verifyOTP: (code: string) => Promise<{ success: boolean; error?: string }>;
+  verifyCurrentPassword?: (password: string) => Promise<boolean>;
+  changePassword?: (currentPassword: string, nextPassword: string) => Promise<{ success: boolean; error?: string }>;
+  commitLogin: () => Promise<void>;
 }
 export interface IThemeContext {
   colors: ThemeColors;
