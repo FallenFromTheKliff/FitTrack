@@ -10,6 +10,7 @@
     "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate",
     "db:migrate": "pnpm --filter @fittrack/api exec npx prisma migrate dev",
     "db:seed": "pnpm --filter @fittrack/api exec npx prisma db seed",
+    "db:purge": "pnpm --filter @fittrack/api run db:purge",
     "db:studio": "pnpm --filter @fittrack/api exec npx prisma studio",
     "build": "turbo run build",
     "lint": "turbo run lint",

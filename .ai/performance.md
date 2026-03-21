@@ -20,6 +20,13 @@ Every change must be evaluated not only for correctness and visual fidelity but 
 - All `makeXxxStyles(colors)` calls must be wrapped in `useMemo(() => makeXxxStyles(colors), [colors])`. Never call naked in the render body — it recreates the `StyleSheet` object on every render.
 - When a factory accepts additional parameters (e.g. `makeFitInputFieldStyles(colors, compact)`), include all parameters in the `useMemo` dep array: `useMemo(() => makeFitInputFieldStyles(colors, compact), [colors, compact])`.
 
+### TanStack Query (Mobile)
+
+- Use `useQuery` for all API-sourced data. Do not fetch inside `useEffect` with manual `useState` loading/error state — that pattern is deprecated in this codebase.
+- Set `enabled: !!userId` or similar guards on queries that depend on auth state to prevent fetching before a user is loaded.
+- Use `queryClient.invalidateQueries({ queryKey: ['bookings'] })` inside `useMutation` `onSuccess` callbacks instead of the `bookingRefreshTick` counter pattern in `FABStateContext`.
+- Do not call `refetch()` manually in response to user navigation — rely on `staleTime` and focus-based invalidation.
+
 ### BlurView (`expo-blur`)
 
 - Gate `BlurView` on a boolean condition so it unmounts when not visible. Never keep a `BlurView` permanently mounted with `opacity: 0` — it continues to consume GPU resources while hidden.
@@ -48,6 +55,10 @@ Every change must be evaluated not only for correctness and visual fidelity but 
 - `useFocusEffect` callbacks must be wrapped in `useCallback` with correct deps.
 - `menuItems` arrays in FAB-enabled screens must be inside `useMemo`.
 
+### Shared Hooks from `@fittrack/hooks`
+
+- `useDebounce`, `useLoadingText`, `useTimedMessage` must be imported from `@fittrack/hooks`. Local copies in `apps/mobile/hooks/` are deprecated — the agent must update import paths when touching files that use them.
+
 ### General
 
 - No `console.log` in production paths. Use `if (__DEV__) console.log(...)`.
@@ -62,6 +73,14 @@ Every change must be evaluated not only for correctness and visual fidelity but 
 - `makeXxxStyles(colors)` returns a plain object of `CSSProperties`. Call it once outside JSX or memoize if the component re-renders frequently: `const s = useMemo(() => makeDashboardStyles(colors), [colors])`.
 - Do not call style factory functions inside JSX expressions — call once at the top of the component and reference by key.
 
+### TanStack Query (Web)
+
+- Use `useQuery` and `useMutation` for all server state. Do not fetch inside `useEffect` with manual `useState` loading/error state — that pattern is not permitted for new code.
+- Query keys follow the convention `['resource']` or `['resource', id]`. Examples: `['members']`, `['deletion-requests']`, `['bookings']`, `['venues']`, `['coaches']`.
+- Always call `queryClient.invalidateQueries({ queryKey: ['resource'] })` inside `useMutation` `onSuccess` to keep cache fresh after mutations.
+- Use `select` option on `useQuery` to derive filtered/transformed data rather than computing in the component body with `useMemo`.
+- Set `staleTime` on infrequently-changing data (e.g. venues, coaches) to avoid unnecessary refetches: `staleTime: 5 * 60_000`.
+
 ### "use client" Boundary Size
 
 - Keep client component files small and focused. Split large page files into smaller sub-components.
@@ -73,25 +92,24 @@ Every change must be evaluated not only for correctness and visual fidelity but 
 - Do not render chart components in SSR context — they are always inside `"use client"` pages so this is handled automatically.
 - For large datasets, memoize chart data with `useMemo` before passing as `data` prop.
 
+### framer-motion
+
+- Use `motion` components and `animate`/`useMotionValue` only for entrance animations and directional slides where CSS transitions are insufficient.
+- Do not use framer-motion for theme-change color transitions — those are handled by `useThemeTransition()` returning a CSS transition class string.
+- Wrap framer-motion animation definitions in `useMemo` when they depend on props or state to avoid object recreation on every render.
+
 ### Image Optimization
 
 - Use `next/image` for all images. Never use raw `<img>` tags.
 - Set `width`, `height`, or `fill` on every `<Image>` to avoid layout shift (CLS).
 
-### Data Fetching
+### Shared Hooks from `@fittrack/hooks`
 
-- All data is currently local mock data. When real API calls are added, use TanStack Query (`useQuery`, `useMutation`) for client-side data. Set appropriate `staleTime` in the Query client (default `60_000`ms from `@fittrack/query`).
-- For infrequently changing reference data (member tiers, amenity lists), define in `data/` files and import directly — do not use `useQuery` for truly static data.
+- `useDebounce`, `useLoadingText`, `useTimedMessage` must be imported from `@fittrack/hooks`. Local copies in `apps/web/hooks/` are deprecated — the agent must update import paths when touching files that use them. The `"use client"` directive is not needed in the shared package versions.
 
 ### Tailwind Purging
 
 - The `content` array in `tailwind.config.ts` covers `./app/**/*.{ts,tsx}`, `./components/**/*.{ts,tsx}`, `./contexts/**/*.{ts,tsx}`. Do not create Tailwind class strings via runtime string concatenation — Tailwind's purge cannot detect dynamically built class names. Use `cn()` with static class strings.
-
-### Animations
-
-- Use `useFadeIn` for entrance animations — it respects `animationLevel` and skips animation when set to `"none"`.
-- Use CSS `transition` properties (via `useThemeTransition`) for theme color changes — not JS-driven updates.
-- Do not animate `width`, `height`, or layout-affecting properties in hot paths. Prefer `opacity` and `transform`.
 
 ### Callbacks and Memos
 

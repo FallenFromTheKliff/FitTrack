@@ -6,6 +6,7 @@ export const FitPreset: Partial<Config> = {
     extend: {
       colors: {
         brand: tokens.colors.brand,
+        "on-brand": tokens.colors.onBrand,
         "brand-light": tokens.colors.brandLight,
         base: tokens.colors.base,
         surface: tokens.colors.surface,

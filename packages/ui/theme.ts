@@ -4,6 +4,7 @@ import type { ThemeKey } from "../types";
 export const themes: Record<ThemeKey, ThemeColors> = {
   night: {
     brand: "#E87722",
+    onBrand: "#FFFFFF",
     brandLight: "#FDE9D4",
     base: "#111111",
     surface: "#1E1E1E",
@@ -23,6 +24,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
   },
   sunlight: {
     brand: "#E87722",
+    onBrand: "#FFFFFF",
     brandLight: "#FDE9D4",
     base: "#FFF8F0",
     surface: "#FFFFFF",
@@ -42,6 +44,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
   },
   dark: {
     brand: "#A0A0A0",
+    onBrand: "#111111",
     brandLight: "#2A2A2A",
     base: "#0A0A0A",
     surface: "#141414",
@@ -61,6 +64,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
   },
   light: {
     brand: "#888888",
+    onBrand: "#111111",
     brandLight: "#F0F0F0",
     base: "#F0F4F8",
     surface: "#FFFFFF",
@@ -80,6 +84,7 @@ export const themes: Record<ThemeKey, ThemeColors> = {
   },
   navy: {
     brand: "#8EA7C1",
+    onBrand: "#111111",
     brandLight: "#1A2530",
     base: "#161C24",
     surface: "#1E2832",

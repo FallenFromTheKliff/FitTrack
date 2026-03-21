@@ -1,67 +1,65 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'prisma/prisma.service';
+import {Injectable, NotFoundException} from '@nestjs/common';
+import {PrismaService} from 'prisma/prisma.service';
 
 @Injectable()
 export class VenueService {
-    constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-    async getAllVenues(isActive?: boolean) {
-        const venues = await this.prisma.venue.findMany({
-            where: isActive !== undefined ? { isActive } : {},
-            orderBy: { name: 'asc' },
-        });
+  async getAllVenues(isActive?: boolean) {
+    return await this.prisma.venue.findMany({
+      where: isActive !== undefined ? {isActive} : {},
+      orderBy: [{displayOrder: 'asc'}, {name: 'asc'}]
+    });
+  }
 
-        return venues;
+  async getVenueDetails(venueId: number) {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id: venueId },
+    });
+
+    if (!venue) {
+      throw new NotFoundException('Venue not found');
     }
 
-    async getVenueDetails(venueId: number) {
-        const venue = await this.prisma.venue.findUnique({
-            where: { id: venueId },
-        });
+    return venue;
+  }
 
-        if (!venue) {
-            throw new NotFoundException('Venue not found');
-        }
+  async getVenueAvailability(venueId: number, date: string) {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id: venueId },
+    });
 
-        return venue;
+    if (!venue) {
+      throw new NotFoundException('Venue not found');
     }
 
-    async getVenueAvailability(venueId: number, date: string) {
-        const venue = await this.prisma.venue.findUnique({
-            where: { id: venueId },
-        });
+    // Get bookings for the specified date
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
 
-        if (!venue) {
-            throw new NotFoundException('Venue not found');
-        }
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
 
-        // Get bookings for the specified date
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
+    const bookings = await this.prisma.venueBooking.findMany({
+      where: {
+        venueId,
+        status: { in: ['pending', 'confirmed'] },
+        startTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      orderBy: { startTime: 'asc' },
+    });
 
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const bookings = await this.prisma.venueBooking.findMany({
-            where: {
-                venueId,
-                status: { in: ['pending', 'confirmed'] },
-                startTime: {
-                    gte: startOfDay,
-                    lte: endOfDay,
-                },
-            },
-            orderBy: { startTime: 'asc' },
-        });
-
-        return {
-            venue,
-            date,
-            bookings: bookings.map((b) => ({
-                startTime: b.startTime,
-                endTime: b.endTime,
-                status: b.status,
-            })),
-        };
-    }
+    return {
+      venue,
+      date,
+      bookings: bookings.map((b) => ({
+        startTime: b.startTime,
+        endTime: b.endTime,
+        status: b.status,
+      })),
+    };
+  }
 }

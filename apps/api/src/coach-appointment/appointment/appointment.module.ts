@@ -4,6 +4,6 @@ import { AppointmentController } from './appointment.controller';
 
 @Module({
   providers: [AppointmentService],
-  controllers: [AppointmentController]
+  controllers: [AppointmentController],
 })
 export class AppointmentModule {}

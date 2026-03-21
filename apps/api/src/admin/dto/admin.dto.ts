@@ -1,137 +1,224 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsString, MinLength, MaxLength, Matches, IsNotEmpty, IsNumber, IsArray, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  Matches,
+  IsNotEmpty,
+  IsNumber,
+  IsArray,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreateAdminDto {
-    @IsEmail({}, { message: 'Invalid email format' })
-    @IsNotEmpty()
-    email: string;
+  @IsEmail({}, { message: 'Invalid email format' })
+  @IsNotEmpty()
+  email: string;
 
-    @IsString()
-    @IsNotEmpty()
-    @MinLength(8)
-    @MaxLength(64)
-    @Matches(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`])[A-Za-z\d@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`]+$/,
-        { message: 'Password must contain uppercase, lowercase, number, and symbol' }
-    )
-    password: string;
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(64)
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`])[A-Za-z\d@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`]+$/,
+    {
+      message: 'Password must contain uppercase, lowercase, number, and symbol',
+    },
+  )
+  password: string;
 }
 
 export class UpgradeToCoachDto {
-    @IsString()
-    @IsNotEmpty()
-    userId: string;
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
 
-    @IsArray()
-    @IsString({ each: true })
-    @IsNotEmpty()
-    specialties: string[];
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
+  specialties: string[];
 
-    @IsOptional()
-    @IsString()
-    bio?: string;
+  @IsOptional()
+  @IsString()
+  bio?: string;
 
-    @IsArray()
-    @IsString({ each: true })
-    @IsOptional()
-    certifications?: string[];
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  certifications?: string[];
 
-    @IsNumber()
-    @IsNotEmpty()
-    yearsExperience: number;
+  @IsNumber()
+  @IsNotEmpty()
+  yearsExperience: number;
 
-    @IsNumber()
-    @IsNotEmpty()
-    hourlyRate: number;
+  @IsNumber()
+  @IsNotEmpty()
+  hourlyRate: number;
 }
 
 export class CreateVenueDto {
-    @IsString()
-    @IsNotEmpty()
-    name: string;
+  @IsString()
+  @IsNotEmpty()
+  name: string;
 
-    @IsOptional()
-    @IsString()
-    description?: string;
+  @IsOptional()
+  @IsString()
+  slug?: string;
 
-    @IsNumber()
-    @IsNotEmpty()
-    capacity: number;
+  @IsOptional()
+  @IsString()
+  description?: string;
 
-    @IsOptional()
-    @IsNumber()
-    hourlyRate?: number;
+  @IsNumber()
+  @IsNotEmpty()
+  capacity: number;
 
-    @IsOptional()
-    @IsNumber()
-    minimumHours?: number;
+  @IsOptional()
+  @IsNumber()
+  hourlyRate?: number;
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    amenities?: string[];
+  @IsOptional()
+  @IsNumber()
+  minimumHours?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  amenities?: string[];
+
+  @IsOptional()
+  @IsString()
+  iconKey?: string;
+
+  @IsOptional()
+  @IsNumber()
+  gridColumn?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridRow?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridWidth?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridHeight?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isReservable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isSystem?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  displayOrder?: number;
 }
 
 export class UpdateVenueDto {
-    @IsOptional()
-    @IsString()
-    name?: string;
+  @IsOptional()
+  @IsString()
+  name?: string;
 
-    @IsOptional()
-    @IsString()
-    description?: string;
+  @IsOptional()
+  @IsString()
+  slug?: string;
 
-    @IsOptional()
-    @IsNumber()
-    capacity?: number;
+  @IsOptional()
+  @IsString()
+  description?: string;
 
-    @IsOptional()
-    @IsNumber()
-    hourlyRate?: number;
+  @IsOptional()
+  @IsNumber()
+  capacity?: number;
 
-    @IsOptional()
-    @IsNumber()
-    minimumHours?: number;
+  @IsOptional()
+  @IsNumber()
+  hourlyRate?: number;
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    amenities?: string[];
+  @IsOptional()
+  @IsNumber()
+  minimumHours?: number;
 
-    @IsOptional()
-    @IsBoolean()
-    isActive?: boolean;
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  amenities?: string[];
+
+  @IsOptional()
+  @IsString()
+  iconKey?: string;
+
+  @IsOptional()
+  @IsNumber()
+  gridColumn?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridRow?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridWidth?: number;
+
+  @IsOptional()
+  @IsNumber()
+  gridHeight?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isReservable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isSystem?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  displayOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class CreateStaffDto {
-    @IsEmail()
-    @IsNotEmpty()
-    email: string;
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
 
-    @IsString()
-    @IsNotEmpty()
-    @MinLength(8)
-    @MaxLength(64)
-    @Matches(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`])[A-Za-z\d@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`]+$/,
-        { message: 'Password must contain uppercase, lowercase, number, and symbol' }
-    )
-    password: string;
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(64)
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`])[A-Za-z\d@$!%*?&#^()_+=\-{}[\]:;"'|,.<>~`]+$/,
+    {
+      message: 'Password must contain uppercase, lowercase, number, and symbol',
+    },
+  )
+  password: string;
 
-    @IsOptional()
-    @Transform(({ value }) => value?.replace(/[\s-]/g, ''))
-    @Matches(/^(09\d{9}|\+639\d{9})$/, {
-        message: 'Phone number must be a valid Philippine mobile number'
-    })
-    phone_no?: string;
+  @IsOptional()
+  @Transform(({ value }) => value?.replace(/[\s-]/g, ''))
+  @Matches(/^(09\d{9}|\+639\d{9})$/, {
+    message: 'Phone number must be a valid Philippine mobile number',
+  })
+  phone_no?: string;
 
-    @IsOptional()
-    @IsString()
-    @MinLength(2)
-    firstName?: string;
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  firstName?: string;
 
-    @IsOptional()
-    @IsString()
-    @MinLength(2)
-    lastName?: string;
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  lastName?: string;
 }

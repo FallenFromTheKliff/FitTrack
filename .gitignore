@@ -1,10 +1,24 @@
+# Main
 node_modules/
+*.log
+tasks.md
+package-lock.json
+apps/mobile/.env
+
+# Environment files
+.env
+!.env.format
+
+# Build outputs
 .next/
 .expo/
 .turbo/
 dist/
-*.log
-tasks.md
-package-lock.json
-apps/api/.env
-apps/mobile/.env
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json

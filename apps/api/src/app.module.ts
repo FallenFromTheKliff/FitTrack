@@ -21,10 +21,12 @@ import { StaffModule } from './staff/staff.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ThrottlerModule.forRoot([{
-      ttl: 60000, // 60 seconds
-      limit: 1000, // requests per minute
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 60 seconds
+        limit: 1000, // requests per minute
+      },
+    ]),
 
     PrismaModule,
     UserModule,
@@ -44,4 +46,4 @@ import { StaffModule } from './staff/staff.module';
   ],
   controllers: [AdminController],
 })
-export class AppModule { }
+export class AppModule {}

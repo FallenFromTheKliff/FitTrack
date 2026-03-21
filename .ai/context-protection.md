@@ -1,6 +1,6 @@
 # Context Protection
 
-Core context and infrastructure files are immutable. You may consume them (import, call hooks, read values) but must not edit their internal logic, state shape, reducer logic, or provider structure.
+Core context and infrastructure files are immutable. You may consume them (import, call hooks, read values) but must not edit their internal logic, state shape, reducer logic, or provider structure — unless the task is an explicitly approved migration (e.g. TanStack Query adoption) documented in the current task brief.
 
 ---
 
@@ -30,21 +30,22 @@ Core context and infrastructure files are immutable. You may consume them (impor
 ## Web Protected Files (`apps/web/`)
 
 ### Absolutely Immutable
-- `apps/web/contexts/AuthContext.tsx`
 - `apps/web/contexts/ThemeContext.tsx`
 
-### Read Carefully Before Touching
-- `apps/web/contexts/ScheduleContext.tsx` — manages in-memory booking state for admin use; do not change state shape without updating all consumers
+### Mutable Only for Approved Migrations
+- `apps/web/contexts/AuthContext.tsx` — internal query/mutation logic may be updated when a TanStack Query migration task is explicitly approved. The public API surface (`user`, `isAuthenticated`, `isLoading`, `login`, `register`, `logout`, `deleteUser`, `updateUser`, `sendOTP`, `verifyOTP`, `verifyCurrentPassword`, `changePassword`, `commitLogin`) must remain unchanged.
+- `apps/web/contexts/MemberContext.tsx` — internal fetch logic may be updated for TanStack Query migration. Public surface (`members`, `isLoading`, `error`, `fetchMembers`, `createStaff`, `deleteUser`) must remain unchanged.
+- `apps/web/contexts/ScheduleContext.tsx` — may receive additive new methods (`fetchBookings`, `confirmBooking`, `rejectBooking`) and TanStack Query internals when explicitly approved. Existing `addBooking`, `removeBooking`, `updateBooking`, `clearBookings` public surface must remain.
 
 ### Forbidden Actions (Web Contexts)
-- Modifying `loadUserSettings`, `clearUserSettings`, `login`, `logout`, or `updateUser` logic
-- Changing the `localStorage` key format for session or preference storage
-- Altering the CSS variable injection logic in `ThemeContext` (`document.documentElement.style.setProperty`)
+- Modifying `loadUserSettings`, `clearUserSettings`, or the CSS variable injection logic in `ThemeContext`
 - Changing the `dark` class toggle behaviour on `<html>`
-- Modifying the `isTransitioning` flag timing or the `triggerTransition` callback
+- Modifying the `isTransitioning` flag timing or the `triggerTransition` callback in `ThemeContext`
+- Changing the `localStorage` key format for session or preference storage
+- Removing or renaming any method from the public API surface of any context
 
 ### Web AuthContext API Surface
-The web `AuthContext` exposes: `user`, `isAuthenticated`, `isLoading`, `login`, `register`, `logout`, `updateUser`, `sendOTP`, `verifyOTP`. It does NOT have `commitLogin`, `markOTPVerified`, `changePassword`, or `deleteUser` — these are mobile-only. Do not add mobile-only functions to the web context.
+The web `AuthContext` exposes: `user`, `isAuthenticated`, `isLoading`, `login`, `register`, `logout`, `deleteUser`, `updateUser`, `sendOTP`, `verifyOTP`, `verifyCurrentPassword`, `changePassword`, `commitLogin`. Do not add mobile-only functions (`markOTPVerified`) to the web context.
 
 ---
 
@@ -54,6 +55,7 @@ The web `AuthContext` exposes: `user`, `isAuthenticated`, `isLoading`, `login`, 
 - `packages/validators/index.ts` — Zod schemas are additive only. Never weaken a validation rule or remove an existing schema.
 - `packages/ui/theme.ts` — Theme definitions are additive. Never remove a theme key, rename a color token, or change an existing color value.
 - `packages/ui/index.ts` — Exports are additive only. Never remove an existing export.
+- `packages/hooks/index.ts` — Exports are additive only. Never remove `useDebounce`, `useLoadingText`, or `useTimedMessage`.
 
 ---
 

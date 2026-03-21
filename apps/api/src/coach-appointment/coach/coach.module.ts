@@ -5,6 +5,6 @@ import { CoachController } from './coach.controller';
 @Module({
   providers: [CoachService],
   controllers: [CoachController],
-  exports: [CoachService]
+  exports: [CoachService],
 })
 export class CoachModule {}

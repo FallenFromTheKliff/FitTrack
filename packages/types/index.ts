@@ -10,6 +10,7 @@ export type MemberTier = "Basic" | "Premium" | "Elite";
 
 export type ThemeColors = {
   brand: string;
+  onBrand: string;
   brandLight: string;
   base: string;
   surface: string;
@@ -26,7 +27,7 @@ export type ThemeColors = {
   warning: string;
   danger: string;
   overlay: string;
-};
+}
 export interface ThemeSettings {
   themeKey: ThemeKey;
   fontKey: FontKey;
@@ -34,13 +35,14 @@ export interface ThemeSettings {
 }
 
 export interface User extends AuthUser {
-  status: "active" | "inactive" | "frozen" | "expired";
+  status: "active" | "frozen" | "expired";
   lastCheckIn?: string;
 }
 export interface AuthUser {
   id: string;
   name?: string;
   email: string;
+  status?: "active" | "frozen" | "expired";
   phone_no?: string | null;
   role?: Role;
   emailVerified?: boolean;
@@ -69,7 +71,7 @@ export interface Booking {
   memberId?: string;
   resourceId?: string;
   resourceName: string;
-  resourceType: "amenity" | "trainer";
+  resourceType: "venue" | "amenity" | "trainer";
   date: string;
   time: string;
   startTime?: string;
@@ -184,7 +186,7 @@ export type CreateStaffInput = {
   phone_no?: string;
   firstName?: string;
   lastName?: string;
-};
+}
 
 export interface IMemberContext {
   members: MemberRecord[];

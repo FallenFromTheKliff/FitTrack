@@ -99,11 +99,20 @@ model Venue {
   id              Int      @id @default(autoincrement())
   
   name            String
+  slug            String   @unique
   description     String?
   capacity        Int
   hourlyRate      Float?   @map("hourly_rate")
   minimumHours    Int      @default(1) @map("minimum_hours")
   amenities       String[] @default([])
+  iconKey         String   @default("dumbbell") @map("icon_key")
+  gridColumn      Int      @default(1) @map("grid_column")
+  gridRow         Int      @default(1) @map("grid_row")
+  gridWidth       Int      @default(2) @map("grid_width")
+  gridHeight      Int      @default(2) @map("grid_height")
+  isReservable    Boolean  @default(true) @map("is_reservable")
+  isSystem        Boolean  @default(false) @map("is_system")
+  displayOrder    Int      @default(0) @map("display_order")
   isActive        Boolean  @default(true) @map("is_active")
   
   // Relations

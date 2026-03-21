@@ -1,0 +1,1 @@
+Windows/PowerShell environment. Common repo commands from root: `pnpm dev`, `pnpm dev:web`, `pnpm dev:mobile`, `pnpm dev:api`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm db:generate`, `pnpm db:migrate`, `pnpm db:seed`, `pnpm db:purge`, `pnpm db:studio`. Useful shell commands: `Get-ChildItem`, `Get-Content -Raw`, `rg`, `git status`, `git diff`, `pnpm --filter <pkg> ...`.

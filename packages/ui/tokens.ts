@@ -16,6 +16,7 @@ export const MAX_WIDTH = 450;
 export const tokens = {
   colors: {
     brand: "#06b6d4",
+    onBrand: "#FFFFFF",
     brandLight: "#5eead4",
     base: "#0f172a",
     surface: "#0b1220",

@@ -4,10 +4,61 @@ export const formatDate = (iso: string, pat = "MMM d, yyyy") => {
   const d = parseISO(iso);
   return isValid(d) ? format(d, pat) : "—";
 };
+export const formatDateTime = (iso: string) => formatDate(iso, "MMM d, yyyy · h:mm a");
+export function formatTodayLong(): string {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+}
+export function parseYMD(s: string) {
+  const [y = 0, m = 0, d = 0] = (s || "").split("-").map(Number);
+  return { year: y, month: m, day: d };
+}
+export function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+export function getFirstDayOfWeek(year: number, month: number): number {
+  return new Date(year, month - 1, 1).getDay();
+}
 
-export const formatDateTime = (iso: string) =>
-  formatDate(iso, "MMM d, yyyy · h:mm a");
+export function formatBookingDate(dateStr: string): string {
+  if (!dateStr) return "Select a date";
+  const { year, month, day } = parseYMD(dateStr);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+export function formatScheduleDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
 
+export function formatShortDate(iso: string): string {
+  return formatDate(iso, "MMM d");
+}
+export function formatLongDate(iso: string): string {
+  return formatDate(iso, "MMMM d, yyyy");
+}
+export function formatMonthYear(iso: string): string {
+  return formatDate(iso, "MMM yyyy");
+}
+
+export function formatTime(totalSeconds: number): string {
+  const mm = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const ss = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${mm}:${ss}`;
+}
 export const timeAgo = (iso: string) => {
   const d = parseISO(iso);
   return isValid(d) ? formatDistanceToNow(d, { addSuffix: true }) : "—";
@@ -27,59 +78,12 @@ export const formatCurrency = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n);
 
-export const formatNumber = (n: number) =>
-  new Intl.NumberFormat("en-PH").format(n);
+export const formatNumber = (n: number) => new Intl.NumberFormat("en-PH").format(n);
 
 export function slotLabel(booked: number, capacity: number): string {
   if (booked >= capacity) return "Full";
   if (booked >= capacity * 0.8) return "Almost Full";
   return `${capacity - booked} left`;
-}
-
-export function parseYMD(s: string) {
-  const [y = 0, m = 0, d = 0] = (s || "").split("-").map(Number);
-  return { year: y, month: m, day: d };
-}
-
-export function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-export function getFirstDayOfWeek(year: number, month: number): number {
-  return new Date(year, month - 1, 1).getDay();
-}
-
-export function formatBookingDate(dateStr: string): string {
-  if (!dateStr) return "Select a date";
-  const { year, month, day } = parseYMD(dateStr);
-  const d = new Date(year, month - 1, day);
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
-}
-
-export function formatShortDate(iso: string): string {
-  return formatDate(iso, "MMM d");
-}
-
-export function formatLongDate(iso: string): string {
-  return formatDate(iso, "MMMM d, yyyy");
-}
-
-export function formatMonthYear(iso: string): string {
-  return formatDate(iso, "MMM yyyy");
-}
-
-export function formatScheduleDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
 }
 
 export const revisePassword = (password: string) => {

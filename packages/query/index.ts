@@ -7,7 +7,7 @@ export function makeQueryClient() {
         staleTime: 60_000,
         retry: 2,
         refetchOnWindowFocus: false,
-      },
-    },
+      }
+    }
   });
 }

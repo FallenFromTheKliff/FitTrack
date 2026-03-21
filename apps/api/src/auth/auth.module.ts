@@ -9,29 +9,29 @@ import { JwtStrategy } from './jwt.strategy/jwt.strategy';
 import { OtpService } from './otp/otp/otp.service';
 
 @Module({
-    imports: [
-        PassportModule,
-        ConfigModule,
+  imports: [
+    PassportModule,
+    ConfigModule,
 
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => {
-                const secret = config.get<string>('JWT_SECRET');
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
 
-                if (!secret) {
-                    throw new Error('JWT_SECRET is missing');
-                }
+        if (!secret) {
+          throw new Error('JWT_SECRET is missing');
+        }
 
-                return {
-                    secret,
-                    signOptions: { expiresIn: '1h' },
-                };
-            },
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [AuthService, JwtStrategy, OtpService],
-    exports: [AuthService],
+        return {
+          secret,
+          signOptions: { expiresIn: '1h' },
+        };
+      },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, OtpService],
+  exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}
