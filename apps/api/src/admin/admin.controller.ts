@@ -10,117 +10,81 @@ import {
   Param,
   Delete,
   UseGuards,
-  Request,
+  Request
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/roles.guard/roles.guard';
 import { Roles } from 'src/auth/roles.decorator/roles.decorator';
-import {
-  CreateAdminDto,
-  CreateStaffDto,
-  UpgradeToCoachDto,
-  CreateVenueDto,
-  UpdateVenueDto,
-} from './dto/admin.dto';
+import { CreateAdminDto, CreateStaffDto, UpgradeToCoachDto, CreateVenueDto, UpdateVenueDto } from './dto/admin.dto';
 import { BookingService } from 'src/booking-venue/booking/booking.service';
 import { ReviewDeletionRequestDto } from 'src/user/dto/deletion-request.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN') // Only ADMIN can access these endpoints
+@Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(
-    private adminService: AdminService,
-    private bookingService: BookingService,
-  ) {}
+    constructor(
+        private adminService: AdminService,
+        private bookingService: BookingService
+    ) {}
 
-  // ===== USER MANAGEMENT =====
+    @Post('create-admin')
+    async createAdmin(@Body() dto: CreateAdminDto) {
+        return this.adminService.createAdmin(dto);
+    }
 
-  /**
-   * Create a new admin user
-   */
-  @Post('create-admin')
-  async createAdmin(@Body() dto: CreateAdminDto) {
-    return this.adminService.createAdmin(dto);
-  }
+    @Post('create-staff')
+    async createStaff(@Body() dto: CreateStaffDto) {
+        return this.adminService.createStaff(dto);
+    }
 
-  /**
-   * Create a new staff user (sub-admin)
-   */
-  @Post('create-staff')
-  async createStaff(@Body() dto: CreateStaffDto) {
-    return this.adminService.createStaff(dto);
-  }
+    @Post('upgrade-to-coach')
+    async upgradeToCoach(@Body() dto: UpgradeToCoachDto) {
+        return this.adminService.upgradeUserToCoach(dto);
+    }
 
-  /**
-   * Upgrade a regular user to coach
-   */
-  @Post('upgrade-to-coach')
-  async upgradeToCoach(@Body() dto: UpgradeToCoachDto) {
-    return this.adminService.upgradeUserToCoach(dto);
-  }
+    @Patch('staff/:id/upgrade-to-admin')
+    async upgradeStaffToAdmin(@Param('id') staffId: string) {
+        return this.adminService.upgradeStaffToAdmin(staffId);
+    }
 
-  /**
-   * Upgrade staff to admin (rare operation)
-   */
-  @Patch('staff/:id/upgrade-to-admin')
-  async upgradeStaffToAdmin(@Param('id') staffId: string) {
-    return this.adminService.upgradeStaffToAdmin(staffId);
-  }
+    @Patch('admin/:id/downgrade-to-staff')
+    async downgradeAdminToStaff(@Param('id') adminId: string) {
+        return this.adminService.downgradeAdminToStaff(adminId);
+    }
 
-  /**
-   * Downgrade admin to staff (rare operation)
-   */
-  @Patch('admin/:id/downgrade-to-staff')
-  async downgradeAdminToStaff(@Param('id') adminId: string) {
-    return this.adminService.downgradeAdminToStaff(adminId);
-  }
+    @Delete('users/:id')
+    async softDeleteUser(@Param('id') userId: string) {
+        return this.adminService.softDeleteUser(userId);
+    }
 
-  /**
-   * Soft delete a user (mark as deleted)
-   */
-  @Delete('users/:id')
-  async softDeleteUser(@Param('id') userId: string) {
-    return this.adminService.softDeleteUser(userId);
-  }
+    @Get('users')
+    async getAllUsers() {
+        return this.adminService.getAllUsers();
+    }
 
-  /**
-   * Get all users
-   */
-  @Get('users')
-  async getAllUsers() {
-    return this.adminService.getAllUsers();
-  }
+    @Get('staff')
+    async getAllStaff() {
+        return this.adminService.getAllStaff();
+    }
 
-  /**
-   * Get all staff users
-   */
-  @Get('staff')
-  async getAllStaff() {
-    return this.adminService.getAllStaff();
-  }
+    @Get('coaches')
+    async getAllCoaches() {
+        return this.adminService.getAllCoaches();
+    }
 
-  /**
-   * Get all coaches
-   */
-  @Get('coaches')
-  async getAllCoaches() {
-    return this.adminService.getAllCoaches();
-  }
+    @Get('deletion-requests')
+    async getAllDeletionRequests(@Body() body?: { status?: string }) {
+        return this.adminService.getAllDeletionRequests(body?.status);
+    }
 
-  // ===== DELETION MANAGEMENT =====
-  @Get('deletion-requests')
-  async getAllDeletionRequests(@Body() body?: { status?: string }) {
-    return this.adminService.getAllDeletionRequests(body?.status);
-  }
-
-  @Patch('deletion-requests/:id/approve')
-  async approveDeletionRequest(
-    @Request() req,
-    @Param('id') id: string,
-    @Body() dto: ReviewDeletionRequestDto,
-  ) {
+    @Patch('deletion-requests/:id/approve')
+    async approveDeletionRequest(
+        @Request() req,
+        @Param('id') id: string,
+        @Body() dto: ReviewDeletionRequestDto
+    ){
     return this.adminService.approveDeletionRequest(
       id,
       req.user.id,

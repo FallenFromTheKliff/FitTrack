@@ -25,6 +25,8 @@ COPY --from=builder --chown=fittrack:fittrack /app/node_modules ./node_modules
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/dist ./dist
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma ./prisma
+COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=fittrack:fittrack /app/apps/api/tsconfig.json ./tsconfig.json
 ENV NODE_PATH=/app/apps/api/node_modules
 USER fittrack
 EXPOSE 3001

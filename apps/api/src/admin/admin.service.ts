@@ -4,181 +4,167 @@ import * as bcrypt from 'bcrypt';
 import {CreateAdminDto, CreateStaffDto, CreateVenueDto, UpdateVenueDto, UpgradeToCoachDto} from './dto/admin.dto';
 
 function toVenueSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    return value.trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 }
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+    constructor(private prisma: PrismaService) {}
 
-  // ===== USER MANAGEMENT =====
-  async createAdmin(dto: CreateAdminDto) {
-    // Check if email exists
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+    async createAdmin(dto: CreateAdminDto) {
+        const existing = await this.prisma.user.findUnique({
+            where: { email: dto.email }
+        });
 
-    if (existing) {
-      throw new ConflictException('Email already exists');
+        if (existing) {
+            throw new ConflictException('Email already exists');
+        }
+
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' }
+        });
+
+        if (!adminRole) {
+            throw new NotFoundException('ADMIN role not found');
+        }
+
+        const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+        const admin = await this.prisma.user.create({
+            data: {
+                email: dto.email,
+                password: hashedPassword,
+                roleId: adminRole.id,
+                emailVerified: true,
+                emailVerifiedAt: new Date(),
+                lastOtpVerifiedAt: new Date()
+            }
+        });
+
+        await this.prisma.userProfile.create({
+            data: { userId: admin.id },
+        });
+
+        const { password, ...adminWithoutPassword } = admin;
+
+        return {
+            message: 'Admin created successfully',
+            admin: adminWithoutPassword
+        };
     }
 
-    // Get ADMIN role
-    const adminRole = await this.prisma.role.findUnique({
-      where: { name: 'ADMIN' },
-    });
+    async upgradeUserToCoach(dto: UpgradeToCoachDto) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: dto.userId },
+            include: { coach: true, role: true }
+        });
 
-    if (!adminRole) {
-      throw new NotFoundException('ADMIN role not found');
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        if (user.coach) {
+            throw new ConflictException('User is already a coach');
+        }
+
+        const coachRole = await this.prisma.role.findUnique({
+            where: { name: 'COACH' }
+        });
+
+        if (!coachRole) {
+            throw new NotFoundException('COACH role not found');
+        }
+
+        await this.prisma.user.update({
+            where: { id: dto.userId },
+            data: { roleId: coachRole.id }
+        });
+
+        const coach = await this.prisma.coach.create({
+            data: {
+                userId: dto.userId,
+                specialties: dto.specialties,
+                bio: dto.bio,
+                certifications: dto.certifications || [],
+                yearsExperience: dto.yearsExperience,
+                hourlyRate: dto.hourlyRate
+            }
+        });
+
+        return {
+            message: 'User upgraded to coach successfully',
+            coach
+        };
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    async softDeleteUser(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId }
+        });
 
-    // Create admin user
-    const admin = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        roleId: adminRole.id,
-        emailVerified: true, // Auto-verify admin emails
-        emailVerifiedAt: new Date(),
-        lastOtpVerifiedAt: new Date(),
-      },
-    });
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
 
-    // Auto-create profile
-    await this.prisma.userProfile.create({
-      data: { userId: admin.id },
-    });
+        if (user.deletedAt) {
+            throw new BadRequestException('User is already deleted');
+        }
 
-    const { password, ...adminWithoutPassword } = admin;
+        const adminRole = await this.prisma.role.findUnique({
+            where: { name: 'ADMIN' },
+        });
 
-    return {
-      message: 'Admin created successfully',
-      admin: adminWithoutPassword,
-    };
-  }
+        // if (user.roleId === adminRole?.id) {
+        //     throw new BadRequestException('Cannot delete admin users');
+        // }
 
-  async upgradeUserToCoach(dto: UpgradeToCoachDto) {
-    // Check if user exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-      include: { coach: true, role: true },
-    });
+        const deleted = await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                deletedAt: new Date(),
+            },
+            select: {
+                id: true,
+                email: true,
+                phone_no: true,
+                deletedAt: true
+            }
+        });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+        return {
+            message: 'User soft deleted successfully',
+            user: deleted
+        };
     }
 
-    // Check if already a coach
-    if (user.coach) {
-      throw new ConflictException('User is already a coach');
-    }
+    async getAllDeletionRequests(status?: string) {
+      const where = status ? { status } : {};
 
-    // Get COACH role
-    const coachRole = await this.prisma.role.findUnique({
-      where: { name: 'COACH' },
-    });
-
-    if (!coachRole) {
-      throw new NotFoundException('COACH role not found');
-    }
-
-    // Upgrade user to COACH role
-    await this.prisma.user.update({
-      where: { id: dto.userId },
-      data: { roleId: coachRole.id },
-    });
-
-    // Create coach profile
-    const coach = await this.prisma.coach.create({
-      data: {
-        userId: dto.userId,
-        specialties: dto.specialties,
-        bio: dto.bio,
-        certifications: dto.certifications || [],
-        yearsExperience: dto.yearsExperience,
-        hourlyRate: dto.hourlyRate,
-      },
-    });
-
-    return {
-      message: 'User upgraded to coach successfully',
-      coach,
-    };
-  }
-
-  // ===== SOFT DELETE USER =====
-  async softDeleteUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.deletedAt) {
-      throw new BadRequestException('User is already deleted');
-    }
-
-    // Prevent admin from deleting themselves
-    const adminRole = await this.prisma.role.findUnique({
-      where: { name: 'ADMIN' },
-    });
-
-    // if (user.roleId === adminRole?.id) {
-    //     throw new BadRequestException('Cannot delete admin users');
-    // }
-
-    const deleted = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        deletedAt: new Date(),
-      },
-      select: {
-        id: true,
-        email: true,
-        phone_no: true,
-        deletedAt: true,
-      },
-    });
-
-    return {
-      message: 'User soft deleted successfully',
-      user: deleted,
-    };
-  }
-
-  async getAllDeletionRequests(status?: string) {
-    const where = status ? { status } : {};
-
-    const requests = await this.prisma.accountDeletionRequest.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            phone_no: true,
-            createdAt: true,
-            profile: true,
-            role: true,
+      const requests = await this.prisma.accountDeletionRequest.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone_no: true,
+              createdAt: true,
+              profile: true,
+              role: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+        orderBy: { createdAt: 'asc' },
+      });
 
-    return {
-      total: requests.length,
-      requests,
-    };
-  }
+        return {
+          total: requests.length,
+          requests,
+        };
+    }
 
   async approveDeletionRequest(
     requestId: string,
@@ -501,8 +487,10 @@ export class AdminService {
         password: hashedPassword,
         phone_no: dto.phone_no,
         roleId: staffRole.id,
-        emailVerified: true, // Staff accounts are pre-verified
-        phoneVerified: !!dto.phone_no
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        lastOtpVerifiedAt: new Date(),
+        phoneVerified: !!dto.phone_no,
       },
       include: {
         role: true,

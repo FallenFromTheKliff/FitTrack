@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL}
-    command: ["sh", "-c", "npx prisma migrate deploy && npx ts-node prisma/seed.ts"]
+    command: ["sh", "-c", "node /app/apps/api/node_modules/prisma/build/index.js migrate deploy && node /app/node_modules/.pnpm/ts-node@10.9.2_@types+node@22.19.15_typescript@5.9.3/node_modules/ts-node/dist/bin.js --project /app/tsconfig.json --transpile-only /app/prisma/seed.ts"]
     restart: "no"
 
   api:
