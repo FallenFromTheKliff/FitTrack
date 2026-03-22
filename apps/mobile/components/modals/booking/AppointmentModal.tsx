@@ -1,0 +1,365 @@
+import { useMemo, useState } from "react";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import type { Trainer } from "@fittrack/types";
+import { useTheme } from "@/contexts/ThemeContext";
+import { mobileApi } from "@/lib/api";
+import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
+import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
+import { useLoadingText } from "@fittrack/hooks";
+import { getTodayString } from "@/data/bookings";
+import { WEEKDAY_NAMES } from "@/data/calendar";
+import { formatBookingDate } from "@fittrack/utils";
+import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
+
+import { FitText } from "@/components/fit/FitText";
+import FitButton from "@/components/fit/FitButton";
+import CalendarModal from "@/components/modals/shared/CalendarModal";
+import TimeSlotModal, { type TimeSlot } from "@/components/modals/shared/TimeSlotModal";
+
+type Props = {
+  isVisible: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+};
+
+type CoachRecord = {
+  id: string | number;
+  specialties?: string[];
+  hourlyRate?: number;
+  user?: {
+    email?: string;
+    profile?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
+};
+
+type CoachAvailability = {
+  dayOfWeek: number | string;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+};
+
+type AvailabilityResponse = {
+  coachId: string;
+  availability: CoachAvailability[];
+};
+
+type AppointmentStep = "coach" | "time";
+
+type SlotOption = {
+  label: string;
+  startTime: string;
+  durationMin: number;
+};
+
+function to12HourLabel(value: string) {
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText ?? "0");
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return value;
+  }
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const normalizedHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function toDurationMinutes(startTime: string, endTime: string) {
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  if (!Number.isFinite(startHour) || !Number.isFinite(startMinute) || !Number.isFinite(endHour) || !Number.isFinite(endMinute)) {
+    return 60;
+  }
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  const duration = end - start;
+  return duration > 0 ? duration : 60;
+}
+
+function mapCoachToTrainer(coach: CoachRecord): Trainer {
+  const firstName = coach.user?.profile?.firstName?.trim() ?? "";
+  const lastName = coach.user?.profile?.lastName?.trim() ?? "";
+  const fullName = `${firstName} ${lastName}`.trim() || coach.user?.email || "Coach";
+  const initials = fullName
+    .split(" ")
+    .filter((part) => part.length > 0)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "C";
+  return {
+    id: String(coach.id),
+    name: fullName,
+    specialty: coach.specialties?.[0] ?? "General Coaching",
+    rating: 0,
+    pricePerSession: coach.hourlyRate ?? 0,
+    avatarInitials: initials
+  };
+}
+
+function matchesDay(selectedDate: string, dayValue: number | string) {
+  const currentDate = new Date(`${selectedDate}T00:00:00`);
+  const dayIndex = currentDate.getDay();
+  if (typeof dayValue === "number") {
+    return dayValue === dayIndex;
+  }
+  const normalized = dayValue.toLowerCase();
+  return WEEKDAY_NAMES[dayIndex] === normalized;
+}
+
+export default function AppointmentModal({ isVisible, onClose, onSuccess }: Props) {
+  const { colors } = useTheme();
+  const { ic } = useThemeTransitionAnim();
+  const { opacity, scale } = useOverlayAnim(isVisible, "scale");
+  const s = useMemo(() => makeAppointmentModalStyles(colors), [colors]);
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState<AppointmentStep>("coach");
+  const [selectedCoach, setSelectedCoach] = useState<Trainer | null>(null);
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [selectedSlotLabel, setSelectedSlotLabel] = useState("");
+  const [isCalOpen, setIsCalOpen] = useState(false);
+  const [isTimeOpen, setIsTimeOpen] = useState(false);
+  const [errorText, setErrorText] = useState("");
+
+  const { data: coaches = [] } = useQuery<CoachRecord[]>({
+    queryKey: ["coaches"],
+    queryFn: async () => {
+      const { data } = await mobileApi.get<CoachRecord[]>("/coaches?active=true");
+      return data;
+    },
+    enabled: isVisible
+  });
+
+  const trainers = useMemo(() => coaches.map(mapCoachToTrainer), [coaches]);
+
+  const { data: availability } = useQuery<AvailabilityResponse>({
+    queryKey: ["coach-availability", selectedCoach?.id],
+    queryFn: async () => {
+      const { data } = await mobileApi.get<AvailabilityResponse>(`/coaches/${selectedCoach?.id}/availability`);
+      return data;
+    },
+    enabled: isVisible && !!selectedCoach
+  });
+
+  const slotOptions = useMemo<SlotOption[]>(() => {
+    if (!availability?.availability) {
+      return [];
+    }
+    return availability.availability
+      .filter((slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek))
+      .map((slot) => ({
+        label: to12HourLabel(slot.startTime),
+        startTime: slot.startTime,
+        durationMin: toDurationMinutes(slot.startTime, slot.endTime)
+      }));
+  }, [availability, selectedDate]);
+
+  const timeSlots = useMemo<TimeSlot[]>(() => slotOptions.map((slot) => ({
+    time: slot.label,
+    duration: `${Math.max(1, Math.round(slot.durationMin / 60))} hr`,
+    status: "available",
+    spots: 1
+  })), [slotOptions]);
+
+  const selectedSlot = useMemo(
+    () => slotOptions.find((slot) => slot.label === selectedSlotLabel) ?? null,
+    [selectedSlotLabel, slotOptions]
+  );
+
+  const createAppointmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCoach || !selectedSlot) {
+        throw new Error("Missing required appointment details.");
+      }
+      await mobileApi.post("/appointments", {
+        coachId: selectedCoach.id,
+        scheduledAt: `${selectedDate}T${selectedSlot.startTime}:00`,
+        duration: selectedSlot.durationMin
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    }
+  });
+
+  const bookingLabel = useLoadingText("BOOKING APPOINTMENT", createAppointmentMutation.isPending);
+
+  const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+    backgroundColor: ic.value.surface,
+    borderColor: ic.value.border
+  }));
+  const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
+  const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
+
+  const resetAndClose = () => {
+    if (createAppointmentMutation.isPending) {
+      return;
+    }
+    setStep("coach");
+    setSelectedCoach(null);
+    setSelectedDate(getTodayString());
+    setSelectedSlotLabel("");
+    setIsCalOpen(false);
+    setIsTimeOpen(false);
+    setErrorText("");
+    onClose();
+  };
+
+  const goToTimeStep = () => {
+    if (!selectedCoach) {
+      setErrorText("Select a coach to continue.");
+      return;
+    }
+    setErrorText("");
+    setStep("time");
+  };
+
+  const handleBookAppointment = async () => {
+    if (!selectedCoach || !selectedSlot) {
+      setErrorText("Select both date and time.");
+      return;
+    }
+    setErrorText("");
+    try {
+      await createAppointmentMutation.mutateAsync();
+      onSuccess?.();
+      resetAndClose();
+    } catch {
+      setErrorText("Unable to book appointment.");
+    }
+  };
+
+  return (
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={undefined}
+    >
+      <KeyboardAvoidingView
+        style={s.fill}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Animated.View style={[s.backdrop, backdropStyle]}>
+          <Animated.View style={[s.card, cardStyle]}>
+            <Animated.View style={[s.header, headerBorderStyle]}>
+              <View style={s.headerIcon}>
+                <Users size={18} color={colors.brand} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FitText style={s.headerTitle}>Book a Trainer</FitText>
+                <FitText style={s.headerSubtitle}>
+                  {step === "coach" ? "Step 1 of 2 - Select coach" : "Step 2 of 2 - Pick time"}
+                </FitText>
+              </View>
+            </Animated.View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+              {step === "coach" ? (
+                <View>
+                  <FitText style={s.sectionLabel}>AVAILABLE COACHES</FitText>
+                  <View style={s.coachList}>
+                    {trainers.map((trainer) => {
+                      const isActive = selectedCoach?.id === trainer.id;
+                      return (
+                        <Pressable
+                          key={trainer.id}
+                          style={[s.coachRow, isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "10" }]}
+                          onPress={() => setSelectedCoach(isActive ? null : trainer)}
+                        >
+                          <View style={[s.coachAvatar, isActive && { backgroundColor: colors.brand }]}>
+                            <FitText style={[s.coachAvatarText, isActive && { color: colors.surface }]}>
+                              {trainer.avatarInitials}
+                            </FitText>
+                          </View>
+                          <View style={s.coachInfo}>
+                            <FitText style={s.coachName}>{trainer.name}</FitText>
+                            <FitText style={s.coachSpecialty}>
+                              {trainer.specialty} - {trainer.pricePerSession}/session
+                            </FitText>
+                          </View>
+                          {isActive ? <CheckCircle size={16} color={colors.brand} strokeWidth={2} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <FitText style={s.sectionLabel}>SELECT DATE</FitText>
+                  <Pressable style={[s.fieldBtn, { borderColor: colors.fieldBorder }]} onPress={() => setIsCalOpen(true)}>
+                    <CalendarDays size={16} color={colors.textMuted} strokeWidth={2} />
+                    <FitText style={s.fieldBtnText}>{formatBookingDate(selectedDate)}</FitText>
+                  </Pressable>
+                  <FitText style={s.sectionLabel}>SELECT TIME SLOT</FitText>
+                  <Pressable
+                    style={[s.fieldBtn, { borderColor: selectedSlotLabel ? colors.brand : colors.fieldBorder }]}
+                    onPress={() => setIsTimeOpen(true)}
+                  >
+                    <Clock size={16} color={selectedSlotLabel ? colors.brand : colors.textMuted} strokeWidth={2} />
+                    <FitText style={[s.fieldBtnText, selectedSlotLabel && { color: colors.textPrimary }]}>
+                      {selectedSlotLabel || "Choose available slot"}
+                    </FitText>
+                  </Pressable>
+                  <FitText style={s.helperText}>
+                    {timeSlots.length > 0 ? `${timeSlots.length} available slots found.` : "No available slots for this date."}
+                  </FitText>
+                </View>
+              )}
+              {errorText ? <FitText style={s.errorText}>{errorText}</FitText> : null}
+            </ScrollView>
+            <Animated.View style={[s.footer, footerBorderStyle]}>
+              <FitButton
+                label={step === "coach" ? "Cancel" : "Back"}
+                variant="ghost"
+                onPress={step === "coach" ? resetAndClose : () => setStep("coach")}
+                disabled={createAppointmentMutation.isPending}
+                flex={1}
+              />
+              <FitButton
+                label={step === "coach" ? "Continue" : bookingLabel}
+                variant="primary"
+                onPress={step === "coach" ? goToTimeStep : handleBookAppointment}
+                disabled={step === "time" ? !selectedSlot || createAppointmentMutation.isPending : !selectedCoach}
+                loading={createAppointmentMutation.isPending}
+                flex={2}
+              />
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
+        <CalendarModal
+          isVisible={isCalOpen}
+          selectedDate={selectedDate}
+          blockPast
+          defaultYear={new Date().getFullYear()}
+          defaultMonth={new Date().getMonth() + 1}
+          onSelect={(date) => {
+            setSelectedDate(date);
+            setSelectedSlotLabel("");
+            setIsCalOpen(false);
+          }}
+          onClose={() => setIsCalOpen(false)}
+        />
+        <TimeSlotModal
+          isVisible={isTimeOpen}
+          slots={timeSlots}
+          selectedTime={selectedSlotLabel}
+          onSelect={(slot) => {
+            setSelectedSlotLabel(slot.time);
+            setIsTimeOpen(false);
+          }}
+          onClose={() => setIsTimeOpen(false)}
+        />
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
