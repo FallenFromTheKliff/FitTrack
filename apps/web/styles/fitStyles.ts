@@ -285,12 +285,12 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
 
 export function makeFitSectionStyles(colors: ThemeColors) {
   return {
-    section: { marginBottom: 20 } as CSSProperties,
+    section: { marginBottom: 24 } as CSSProperties,
     headingRow: {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 8
+      marginBottom: 24
     } as CSSProperties,
     heading: {
       fontSize: 11,

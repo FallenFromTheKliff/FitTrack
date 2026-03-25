@@ -17,8 +17,8 @@ import FitButton from "@/components/fit/FitButton";
 type NavItem = { label: string; icon: LucideIcon; route: string };
 const NAV_ITEMS: NavItem[] = [
   { label: "Home", icon: Home, route: "/(tabs)/home" },
-  { label: "Gym Facilities", icon: Map, route: "/(tabs)/facilities" },
   { label: "Bookings", icon: CalendarDays, route: "/(tabs)/bookings" },
+  { label: "Facilities", icon: Map, route: "/(tabs)/facilities" },
   { label: "Nutrition", icon: Apple, route: "/(tabs)/nutrition" },
   { label: "Workout", icon: Dumbbell, route: "/(tabs)/workout" },
   { label: "BrodigyAI", icon: Bot, route: "/(tabs)/chathistory" },

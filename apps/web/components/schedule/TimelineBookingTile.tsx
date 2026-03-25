@@ -1,6 +1,6 @@
 "use client";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Booking } from "./types";
+import type { Booking } from "@/data/schedule-constants";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";

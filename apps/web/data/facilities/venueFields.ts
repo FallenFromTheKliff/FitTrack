@@ -1,6 +1,19 @@
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 import { COLS, ROWS } from "@/data/facilities/mapTypes";
 
+export const VENUE_ICON_OPTIONS = [
+    { label: "Basketball", value: "basketball" },
+    { label: "Volleyball", value: "volleyball" },
+    { label: "Boxing", value: "boxing" },
+    { label: "Reception", value: "reception" },
+    { label: "Gym Area", value: "gym-area" }
+];
+
+export const VENUE_BOOKING_OPTIONS = [
+    { label: "Reservable", value: "true" },
+    { label: "Facility Only", value: "false" }
+];
+
 export const VENUE_FIELDS: FieldConfig[] = [
     { name: "name", label: "Name", type: "text", required: true, placeholder: "e.g., Boxing Ring" },
     { name: "description", label: "Description", type: "textarea", placeholder: "Optional venue description" },
@@ -11,13 +24,7 @@ export const VENUE_FIELDS: FieldConfig[] = [
         name: "iconKey",
         label: "Icon",
         type: "select",
-        options: [
-            { label: "Basketball", value: "basketball" },
-            { label: "Volleyball", value: "volleyball" },
-            { label: "Boxing", value: "boxing" },
-            { label: "Reception", value: "reception" },
-            { label: "Gym Area", value: "gym-area" }
-        ]
+        options: VENUE_ICON_OPTIONS
     },
     { name: "gridColumn", label: "Grid Column", type: "text", required: true, placeholder: `1-${COLS}` },
     { name: "gridRow", label: "Grid Row", type: "text", required: true, placeholder: `1-${ROWS}` },
@@ -27,10 +34,7 @@ export const VENUE_FIELDS: FieldConfig[] = [
         name: "isReservable",
         label: "User Booking",
         type: "radio",
-        options: [
-            { label: "Reservable", value: "true" },
-            { label: "Facility Only", value: "false" }
-        ]
+        options: VENUE_BOOKING_OPTIONS
     },
     { name: "displayOrder", label: "Display Order", type: "text", placeholder: "Lower numbers appear first" }
 ];

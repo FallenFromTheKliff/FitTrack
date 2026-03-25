@@ -1,6 +1,6 @@
 "use client";
-import type { ButtonHTMLAttributes, ReactNode, CSSProperties } from "react";
-import { ChevronRight } from "lucide-react";
+import type { ButtonHTMLAttributes, ReactNode, CSSProperties, Ref } from "react";
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
@@ -27,6 +27,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   showTrailing?: boolean;
   textStyle?: CSSProperties;
   active?: boolean;
+  buttonRef?: Ref<HTMLButtonElement>;
 };
 
 export default function FitButton({
@@ -35,11 +36,11 @@ export default function FitButton({
   loading = false, loadingLabel, fullWidth = false,
   flex, showTrailing = false, textStyle,
   active = false, disabled, className,
-  style, ...props
+  style, buttonRef, ...props
 }: Props) {
   const { colors, activeIconColor, onBrandTextColor } = useTheme();
   const fontClass = useFontClass();
-  const ic = activeIconColor ?? colors.brand;
+  const accentColor = activeIconColor ?? colors.brand;
   const isDisabled = disabled || loading;
   const displayLabel = loading && loadingLabel ? loadingLabel : label;
   const flexStyle: CSSProperties = flex !== undefined ? { flex } : {};
@@ -57,22 +58,24 @@ export default function FitButton({
     active,
     isDisabled,
     iconOnly,
-    accentColor: ic,
+    accentColor,
     onBrandTextColor
   });
 
   const needsTrailing = showTrailing || variant === "field";
   const isCard = variant === "card";
+  const LeadingIcon = loading ? LoaderCircle : Icon;
 
   return (
       <button
           {...props}
+          ref={buttonRef}
           type={props.type ?? "button"}
           disabled={isDisabled}
           className={base}
           style={{ ...variants[variant], ...flexStyle, ...style }}
       >
-        {Icon && variant !== "field" && <Icon size={iconSize} strokeWidth={2} />}
+        {LeadingIcon && variant !== "field" && <LeadingIcon size={iconSize} strokeWidth={2} className={loading ? "animate-spin" : undefined} />}
         {!iconOnly && (
             <span style={{
               flex: needsTrailing ? 1 : undefined,
@@ -82,7 +85,7 @@ export default function FitButton({
               {children ?? displayLabel}
             </span>
         )}
-        {needsTrailing && (
+        {needsTrailing && !loading && (
             <ChevronRight size={variant === "field" ? iconSize : 17} strokeWidth={2} />
         )}
       </button>

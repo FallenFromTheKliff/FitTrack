@@ -1,4 +1,25 @@
 import type { FieldConfig } from "@/components/modals/DetailsModal";
+import type { MemberRecord } from "@fittrack/types";
+
+export const MEMBER_STATUS_TABS = [
+  { key: "Active", label: "Active" },
+  { key: "Frozen", label: "Frozen" }
+] as const;
+
+export type MemberStatusTab = typeof MEMBER_STATUS_TABS[number]["key"];
+
+export type DeletionRequest = {
+  id: string;
+  userId?: string | null;
+  status?: string | null;
+  createdAt?: string;
+  user?: MemberRecord;
+};
+
+export type DeletionRequestResponse = {
+  total: number;
+  requests: DeletionRequest[];
+};
 
 export const STATUS_COLORS: Record<string, string> = {
   Active: "var(--fit-success)",

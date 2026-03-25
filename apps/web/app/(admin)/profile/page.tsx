@@ -13,10 +13,14 @@ import { useProfilePage } from "@/hooks/profile/useProfile";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitSection from "@/components/fit/FitSection";
 import FitPill from "@/components/fit/FitPill";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-import CalendarModal from "@/components/modals/CalendarModal";
-import SecurityModal from "@/components/modals/SecurityModal";
+import { CalendarModal, ConfirmModal, SecurityModal } from "@/components/modals";
+import {
+  buildProfileInfoRows,
+  buildProfileStatusRows,
+  sanitizePhoneInput
+} from "./helpers";
 
 export default function ProfileSettingsPage() {
   const { colors, onBrandTextColor } = useTheme();
@@ -109,22 +113,11 @@ export default function ProfileSettingsPage() {
       </div>
   );
 
-  const infoRows = [
-    { label: "Role", value: roleValue, tone: colors.brand },
-    { label: "Tier", value: tierValue, tone: colors.warning },
-    { label: "Member Since", value: memberSinceValue, tone: colors.textPrimary },
-    { label: "Date of Birth", value: dobDisplay, tone: colors.textPrimary }
-  ];
-
-  const statusRows = [
-    { label: "Email Verified", state: "Active", color: colors.success },
-    { label: "Profile Completeness", state: hasChanges ? "Unsaved" : "Saved", color: hasChanges ? colors.warning : colors.success },
-    { label: "Security Status", state: "Protected", color: colors.brand },
-    { label: "Membership Access", state: "Enabled", color: colors.success }
-  ];
+  const infoRows = buildProfileInfoRows(roleValue, tierValue, memberSinceValue, dobDisplay, colors);
+  const statusRows = buildProfileStatusRows(hasChanges, colors);
 
   return (
-      <section className={themeTransition} style={fadeIn}>
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
         <div style={s.outerWrap}>
           <div style={s.innerWrap}>
             {message && (
@@ -186,7 +179,7 @@ export default function ProfileSettingsPage() {
                                     maxLength={field.key === "phone" ? 11 : undefined}
                                     onChange={(e) => {
                                       const nextValue = field.key === "phone"
-                                          ? e.target.value.replace(/\D/g, "").slice(0, 11)
+                                          ? sanitizePhoneInput(e.target.value)
                                           : e.target.value;
                                       setPersonalData((prev) => ({ ...prev, [field.key]: nextValue }));
                                     }}
@@ -340,6 +333,7 @@ export default function ProfileSettingsPage() {
             onClose={() => setShowSecurityModal(false)}
             onSuccess={() => { setSensitiveAction("password"); setShowSensitiveConfirm(true); }}
         />
-      </section>
+      </FitSection>
   );
 }
+

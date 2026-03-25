@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, Image as ImageIcon, XCircle } from "lucide-react-native";
+import { CalendarDays, XCircle } from "lucide-react-native";
 
 import type { Booking } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -11,6 +11,7 @@ import { STATUS_COLORS } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
 import { makeBookingDetailModalStyles } from "@/styles/modals/BookingDetailStyles";
 import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
+import { getVenueIcon } from "@/utils/venueMap";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -63,13 +64,15 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
   const statusColor = STATUS_COLORS[booking.status] ?? colors.textMuted;
   const statusValue = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
   const coachInitials = booking.trainerName
-      ? booking.trainerName
-          .split(" ")
-          .map((part: string) => part[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()
-      : "-";
+    ? booking.trainerName
+        .split(" ")
+        .map((part: string) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "-";
+
+  const VenueIcon = venuePresentation ? getVenueIcon(venuePresentation.iconKey) : null;
 
   const pricing = (() => {
     const venueRate = venue?.hourlyRate ?? venuePresentation?.price ?? 0;
@@ -106,82 +109,105 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
   })();
 
   return (
-      <Modal
-          visible={isVisible}
-          transparent
-          animationType="none"
-          onRequestClose={onClose}
-          statusBarTranslucent
-      >
-        <Animated.View style={[s.backdrop, backdropStyle]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-          <Animated.View style={[s.card, cardStyle]}>
-            <Animated.View style={[s.header, headerBorderStyle]}>
-              <Animated.View style={[s.headerIcon, headerIconStyle]}>
-                <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
-              </Animated.View>
-              <View style={s.headerText}>
-                <FitText style={s.headerTitle}>Booking Details</FitText>
-                <FitText style={s.headerSubtitle}>{booking.resourceName}</FitText>
-              </View>
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Animated.View style={[s.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Animated.View style={[s.card, cardStyle]}>
+          <Animated.View style={[s.header, headerBorderStyle]}>
+            <Animated.View style={[s.headerIcon, headerIconStyle]}>
+              <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
             </Animated.View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
-              <View style={s.resourceCard}>
-                <View style={s.resourceImageArea}>
-                  <ImageIcon size={32} color={colors.textDisabled} strokeWidth={1.5} />
-                </View>
-                <FitText style={s.resourceEmoji}>{venuePresentation?.emoji ?? ""}</FitText>
-                <FitText style={s.resourceName}>{booking.resourceName}</FitText>
+            <View style={s.headerText}>
+              <FitText style={s.headerTitle}>Booking Details</FitText>
+              <FitText style={s.headerSubtitle}>{booking.resourceName}</FitText>
+            </View>
+          </Animated.View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+            {/* Resource card — renders actual venue icon, not a letter */}
+            <View style={[s.resourceCard, localStyles.resourceIconCard]}>
+              <View style={[
+                localStyles.venueIconWrap,
+                { backgroundColor: colors.brand + "18", borderColor: colors.brand + "44" }
+              ]}>
+                {VenueIcon
+                  ? <VenueIcon size={40} color={colors.brand} strokeWidth={1.8} />
+                  : <CalendarDays size={40} color={colors.textDisabled} strokeWidth={1.5} />
+                }
               </View>
-              <View style={s.dateTimeRow}>
-                <View style={s.dateTimeCell}>
-                  <FitText style={s.detailLabel}>DATE</FitText>
-                  <FitText style={s.detailValue}>{formatBookingDate(booking.date)}</FitText>
-                </View>
-                <View style={s.dateTimeDivider} />
-                <View style={s.dateTimeCell}>
-                  <FitText style={s.detailLabel}>TIME</FitText>
-                  <FitText style={s.detailValue}>{timeValue}</FitText>
-                </View>
+              <FitText style={s.resourceName}>{booking.resourceName}</FitText>
+            </View>
+            <View style={s.dateTimeRow}>
+              <View style={s.dateTimeCell}>
+                <FitText style={s.detailLabel}>DATE</FitText>
+                <FitText style={s.detailValue}>{formatBookingDate(booking.date)}</FitText>
               </View>
-              <View style={s.coachCard}>
-                <View style={[s.coachAvatar, booking.trainerName && { backgroundColor: colors.brand }]}>
-                  <FitText style={[s.coachAvatarText, booking.trainerName && { color: colors.onBrand }]}>{coachInitials}</FitText>
-                </View>
-                <View style={s.coachInfo}>
-                  <FitText style={s.coachName}>{booking.trainerName ?? "No Coach Assigned"}</FitText>
-                  <FitText style={s.coachSub}>Coach</FitText>
-                </View>
+              <View style={s.dateTimeDivider} />
+              <View style={s.dateTimeCell}>
+                <FitText style={s.detailLabel}>TIME</FitText>
+                <FitText style={s.detailValue}>{timeValue}</FitText>
               </View>
-              <View style={[s.statusBadge, { borderColor: statusColor + "44", backgroundColor: statusColor + "12" }]}>
-                <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-                <FitText style={[s.statusText, { color: statusColor }]}>{statusValue}</FitText>
-              </View>
-              <View style={s.priceCard}>
-                <FitText style={s.detailLabel}>PRICE</FitText>
-                <FitText style={s.priceValue}>{"\u20B1"}{pricing.finalPrice.toLocaleString()}</FitText>
-                <FitText style={s.priceSub}>
-                  {pricing.parsed && venuePresentation
-                      ? `\u20B1${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr`
-                      : ""}
-                  {booking.trainerName ? " + coach session" : ""}
+            </View>
+            <View style={s.coachCard}>
+              <View style={[s.coachAvatar, booking.trainerName && { backgroundColor: colors.brand }]}>
+                <FitText style={[s.coachAvatarText, booking.trainerName && { color: colors.onBrand }]}>
+                  {coachInitials}
                 </FitText>
               </View>
-            </ScrollView>
-            <Animated.View style={[s.footer, footerBorderStyle]}>
-              <FitButton
-                  label="CANCEL RESERVATION"
-                  variant="danger"
-                  icon={XCircle}
-                  iconSize={18}
-                  onPress={() => booking && onCancelReservation?.(booking)}
-                  disabled={!onCancelReservation || isCancelling || booking.status === "cancelled"}
-                  flex={1}
-              />
-              <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
-            </Animated.View>
+              <View style={s.coachInfo}>
+                <FitText style={s.coachName}>{booking.trainerName ?? "No Coach Assigned"}</FitText>
+                <FitText style={s.coachSub}>Coach</FitText>
+              </View>
+            </View>
+            <View style={[s.statusBadge, { borderColor: statusColor + "44", backgroundColor: statusColor + "12" }]}>
+              <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+              <FitText style={[s.statusText, { color: statusColor }]}>{statusValue}</FitText>
+            </View>
+            <View style={s.priceCard}>
+              <FitText style={s.detailLabel}>PRICE</FitText>
+              <FitText style={s.priceValue}>{"\u20B1"}{pricing.finalPrice.toLocaleString()}</FitText>
+              <FitText style={s.priceSub}>
+                {pricing.parsed && venuePresentation
+                  ? `\u20B1${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr`
+                  : ""}
+                {booking.trainerName ? " + coach session" : ""}
+              </FitText>
+            </View>
+          </ScrollView>
+          <Animated.View style={[s.footer, footerBorderStyle]}>
+            <FitButton
+              label="CANCEL RESERVATION"
+              variant="danger"
+              icon={XCircle}
+              iconSize={18}
+              onPress={() => booking && onCancelReservation?.(booking)}
+              disabled={!onCancelReservation || isCancelling || booking.status === "cancelled"}
+              flex={1}
+            />
+            <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
           </Animated.View>
         </Animated.View>
-      </Modal>
+      </Animated.View>
+    </Modal>
   );
 }
+
+const localStyles = StyleSheet.create({
+  resourceIconCard: {
+    alignItems: "center",
+    gap: 10
+  },
+  venueIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center"
+  }
+});

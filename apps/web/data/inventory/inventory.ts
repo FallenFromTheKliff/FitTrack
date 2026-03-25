@@ -1,6 +1,24 @@
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
-export const PRODUCTS_LIST = [
+export type ProductStatus = "In Stock" | "Low Stock" | "Out of Stock";
+
+export type Product = {
+  sku: string;
+  name: string;
+  category: string;
+  stock: number;
+  status: ProductStatus;
+  price: number;
+};
+
+export const INVENTORY_TABS = [
+  { key: "products", label: "Products" },
+  { key: "analytics", label: "Analytics" }
+] as const;
+
+export type InventoryTab = typeof INVENTORY_TABS[number]["key"];
+
+export const PRODUCTS_LIST: Product[] = [
   { sku: "SUP-001", name: "Whey Protein - Vanilla", category: "Supplements", stock: 45, status: "In Stock", price: 49.99 },
   { sku: "DRK-001", name: "Pre-Workout Berry", category: "Drinks", stock: 8, status: "Low Stock", price: 34.99 },
   { sku: "SUP-002", name: "BCAA Powder", category: "Supplements", stock: 22, status: "In Stock", price: 29.99 },

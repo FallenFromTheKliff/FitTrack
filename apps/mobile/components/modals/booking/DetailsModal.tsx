@@ -55,74 +55,75 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   const capacityLabel = venue.maxSlots > 0 ? `${venue.maxSlots} slots` : "Not specified";
 
   return (
-      <Modal
-          visible={isVisible}
-          transparent
-          animationType="none"
-          onRequestClose={undefined}
-          statusBarTranslucent
-      >
-        <Animated.View style={[s.backdrop, backdropStyle]}>
-          <Animated.View style={[s.card, cardStyle]}>
-            <Animated.View style={[s.header, headerBorderStyle]}>
-              <Animated.View style={[s.headerIcon, headerIconStyle]}>
-                <Icon size={17} color={colors.brand} strokeWidth={2} />
-              </Animated.View>
-              <View style={s.headerText}>
-                <FitText style={s.headerTitle}>{venue.name}</FitText>
-                <FitText style={s.headerSubtitle}>{priceLabel} {"\u00B7"} up to {venue.maxSlots} slots</FitText>
-              </View>
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="none"
+      onRequestClose={undefined}
+      statusBarTranslucent
+    >
+      <Animated.View style={[s.backdrop, backdropStyle]}>
+        <Animated.View style={[s.card, cardStyle]}>
+          <Animated.View style={[s.header, headerBorderStyle]}>
+            {/* Header icon badge renders actual Lucide icon, not a letter */}
+            <Animated.View style={[s.headerIcon, headerIconStyle]}>
+              <Icon size={17} color={colors.brand} strokeWidth={2} />
             </Animated.View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
-              <View>
-                <FitText style={s.sectionLabel}>Description</FitText>
-                <View style={s.fieldBlock}>
-                  <FitText style={s.fieldTextMuted}>{meta.description}</FitText>
-                </View>
+            <View style={s.headerText}>
+              <FitText style={s.headerTitle}>{venue.name}</FitText>
+              <FitText style={s.headerSubtitle}>{priceLabel} {"\u00B7"} up to {venue.maxSlots} slots</FitText>
+            </View>
+          </Animated.View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+            <View>
+              <FitText style={s.sectionLabel}>Description</FitText>
+              <View style={s.fieldBlock}>
+                <FitText style={s.fieldTextMuted}>{meta.description}</FitText>
               </View>
+            </View>
+            <View>
+              <FitText style={s.sectionLabel}>Operating Hours</FitText>
+              <View style={s.hoursRow}>
+                <Clock size={16} color={colors.brand} strokeWidth={2} />
+                <FitText style={s.fieldText}>{meta.hours}</FitText>
+              </View>
+            </View>
+            {venue.isReservable && (
               <View>
-                <FitText style={s.sectionLabel}>Operating Hours</FitText>
+                <FitText style={s.sectionLabel}>Capacity</FitText>
                 <View style={s.hoursRow}>
-                  <Clock size={16} color={colors.brand} strokeWidth={2} />
-                  <FitText style={s.fieldText}>{meta.hours}</FitText>
+                  <Users size={16} color={colors.brand} strokeWidth={2} />
+                  <FitText style={s.fieldText}>{capacityLabel}</FitText>
                 </View>
               </View>
-              {venue.isReservable && (
-                  <View>
-                    <FitText style={s.sectionLabel}>Capacity</FitText>
-                    <View style={s.hoursRow}>
-                      <Users size={16} color={colors.brand} strokeWidth={2} />
-                      <FitText style={s.fieldText}>{capacityLabel}</FitText>
-                    </View>
+            )}
+            <View>
+              <FitText style={s.sectionLabel}>Status</FitText>
+              <View style={[s.statusRow, { borderColor: statusMeta.color + "44", backgroundColor: statusMeta.color + "12" }]}>
+                <View style={[s.statusDot, { backgroundColor: statusMeta.color }]} />
+                <FitText style={[s.statusText, { color: statusMeta.color }]}>{statusMeta.label}</FitText>
+              </View>
+            </View>
+            <View>
+              <FitText style={s.sectionLabel}>Images</FitText>
+              <View style={s.imagesGrid}>
+                {AMENITY_IMAGE_PLACEHOLDERS.map((label) => (
+                  <View key={label} style={s.imageTile}>
+                    <ImageIcon size={28} color={colors.textDisabled} strokeWidth={1.5} />
+                    <FitText style={s.imageTileLabel}>{label}</FitText>
                   </View>
-              )}
-              <View>
-                <FitText style={s.sectionLabel}>Status</FitText>
-                <View style={[s.statusRow, { borderColor: statusMeta.color + "44", backgroundColor: statusMeta.color + "12" }]}>
-                  <View style={[s.statusDot, { backgroundColor: statusMeta.color }]} />
-                  <FitText style={[s.statusText, { color: statusMeta.color }]}>{statusMeta.label}</FitText>
-                </View>
+                ))}
               </View>
-              <View>
-                <FitText style={s.sectionLabel}>Images</FitText>
-                <View style={s.imagesGrid}>
-                  {AMENITY_IMAGE_PLACEHOLDERS.map((label) => (
-                      <View key={label} style={s.imageTile}>
-                        <ImageIcon size={28} color={colors.textDisabled} strokeWidth={1.5} />
-                        <FitText style={s.imageTileLabel}>{label}</FitText>
-                      </View>
-                  ))}
-                </View>
-              </View>
-            </ScrollView>
-            <Animated.View style={[s.footer, footerBorderStyle]}>
-              <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
-              {onReserve && venue.isReservable && meta.status === "available" ? (
-                  <FitButton label="Reserve Now" variant="primary" onPress={onReserve} flex={2} />
-              ) : null}
-            </Animated.View>
+            </View>
+          </ScrollView>
+          <Animated.View style={[s.footer, footerBorderStyle]}>
+            <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
+            {onReserve && venue.isReservable && meta.status === "available" ? (
+              <FitButton label="Reserve Now" variant="primary" onPress={onReserve} flex={2} />
+            ) : null}
           </Animated.View>
         </Animated.View>
-      </Modal>
+      </Animated.View>
+    </Modal>
   );
 }

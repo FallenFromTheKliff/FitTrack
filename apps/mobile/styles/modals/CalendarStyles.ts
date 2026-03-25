@@ -34,8 +34,27 @@ export function makeCalendarModalStyles(colors: ThemeColors) {
       fontSize: 17,
       fontWeight: "700",
       color: colors.textPrimary,
-      minWidth: 160,
+      minWidth: 180,
       textAlign: "center"
+    },
+    viewRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingTop: 12,
+      paddingBottom: 8
+    },
+    viewButton: {
+      minHeight: 38,
+      paddingVertical: 0,
+      paddingHorizontal: 8
+    },
+    viewButtonText: {
+      fontSize: 13,
+      fontWeight: "700"
+    },
+    body: {
+      minHeight: 332
     },
     weekRow: {
       flexDirection: "row",
@@ -58,21 +77,62 @@ export function makeCalendarModalStyles(colors: ThemeColors) {
     },
     dayCell: {
       width: "14.28%",
-      aspectRatio: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: R.md,
+      paddingHorizontal: 2,
       marginBottom: 4
     },
-    dayCellSelected: { backgroundColor: colors.borderStrong, borderRadius: R.md },
-    dayCellToday: { borderWidth: 1, borderColor: colors.brand, borderRadius: R.md },
-    dayText: { fontSize: 17, color: colors.textPrimary },
+    emptyDayCell: {
+      width: "100%",
+      height: 44
+    },
+    dayButton: {
+      width: "100%",
+      minHeight: 44,
+      paddingVertical: 0,
+      paddingHorizontal: 0
+    },
+    dayText: {
+      fontSize: 16,
+      fontWeight: "600"
+    },
+    monthGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      paddingHorizontal: 12,
+      paddingBottom: 12,
+      gap: 8
+    },
+    monthCell: {
+      width: "31%",
+      minHeight: 48,
+      paddingVertical: 0,
+      paddingHorizontal: 0
+    },
+    yearGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      paddingHorizontal: 12,
+      paddingBottom: 12,
+      gap: 8
+    },
+    yearCell: {
+      width: "23%",
+      minHeight: 48,
+      paddingVertical: 0,
+      paddingHorizontal: 0
+    },
+    pickerText: {
+      fontSize: 14,
+      fontWeight: "600"
+    },
     footer: {
       flexDirection: "row",
       gap: 12,
       padding: 16,
       borderTopWidth: 1,
       borderTopColor: colors.border
+    },
+    footerButton: {
+      minHeight: 42
     }
   });
 }

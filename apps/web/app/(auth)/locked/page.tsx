@@ -4,6 +4,7 @@ import { Lock, AlertTriangle } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
+import { LOCKED_PAGE_COPY } from "./helpers";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -20,17 +21,17 @@ export default function LockedPage() {
         <div style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: colors.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
           <Lock size={28} color={colors.brand} strokeWidth={1.5} />
         </div>
-        <FitText as="h1" style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Account Locked</FitText>
+        <FitText as="h1" style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>{LOCKED_PAGE_COPY.title}</FitText>
         <FitText as="p" style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 1.6 }}>
-          Too many failed login attempts. Your account has been temporarily locked for security.
+          {LOCKED_PAGE_COPY.body}
         </FitText>
         <div style={{ marginTop: 20, backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 12, padding: 16, textAlign: "left" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <AlertTriangle size={14} color={colors.warning} />
-            <FitText style={{ fontSize: 13, fontWeight: 600 }}>Security Notice</FitText>
+            <FitText style={{ fontSize: 13, fontWeight: 600 }}>{LOCKED_PAGE_COPY.noticeTitle}</FitText>
           </div>
           <FitText as="p" style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.6 }}>
-            Your account is temporarily locked due to multiple failed attempts. Wait 30 minutes or contact support to unlock immediately.
+            {LOCKED_PAGE_COPY.noticeBody}
           </FitText>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>

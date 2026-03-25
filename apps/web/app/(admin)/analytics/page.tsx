@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { DollarSign, Users, Activity, TrendingUp } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -19,18 +19,20 @@ import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
+import FitChartContainer from "@/components/fit/FitChartContainer";
+import { ANALYTICS_DEFAULT_PERIOD, getAnalyticsPieColors } from "./helpers";
 
 export default function AnalyticsPage() {
   const { colors } = useTheme();
   const s = dashboardStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const [period, setPeriod] = useState("6m");
+  const [period, setPeriod] = useState(ANALYTICS_DEFAULT_PERIOD);
 
-  const pieColors = [colors.brand, colors.textSecondary, colors.success];
+  const pieColors = getAnalyticsPieColors(colors);
 
   return (
-      <section className={themeTransition} style={fadeIn}>
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
         <FitSection
             heading="Performance KPIs"
             bare
@@ -60,43 +62,27 @@ export default function AnalyticsPage() {
           </div>
         </FitSection>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <DollarSign size={14} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Revenue vs Expenses</FitText>
+          <FitChartContainer heading="Revenue vs Expenses" subtitle="Last 6 months" action={<DollarSign size={14} color={colors.brand} />} sectionClassName="mb-0" chartStyle={{ height: 220 }}>
+            <BarChart data={ANALYTICS_REVENUE_DATA}>
+              <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+              <Bar dataKey="expense" fill={colors.textSecondary} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="revenue" fill={colors.brand} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </FitChartContainer>
+          <FitSection heading="Membership Distribution" action={<Users size={14} color={colors.brand} />} className="mb-0">
+            <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 16px 10px" }}>
+              <div style={{ width: "60%", height: 220 }}>
+                <FitChartContainer heading="" bare noPadding hideHeading contentPadding="0" chartStyle={{ height: 220 }}>
+                  <PieChart>
+                    <Pie data={ANALYTICS_PIE_DATA} dataKey="value" innerRadius={45} outerRadius={80}>
+                      {ANALYTICS_PIE_DATA.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                  </PieChart>
+                </FitChartContainer>
               </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>Last 6 months</FitText>
-            </div>
-            <div style={{ height: 220 }}>
-              <ResponsiveContainer>
-                <BarChart data={ANALYTICS_REVENUE_DATA}>
-                  <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                  <Bar dataKey="expense" fill={colors.textSecondary} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="revenue" fill={colors.brand} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <Users size={14} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Membership Distribution</FitText>
-              </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>By membership type</FitText>
-            </div>
-            <div style={{ height: 220, display: "flex", alignItems: "center", gap: 16 }}>
-              <ResponsiveContainer width="60%" height="100%">
-                <PieChart>
-                  <Pie data={ANALYTICS_PIE_DATA} dataKey="value" innerRadius={45} outerRadius={80}>
-                    {ANALYTICS_PIE_DATA.map((_, i) => <Cell key={i} fill={pieColors[i]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                </PieChart>
-              </ResponsiveContainer>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {ANALYTICS_PIE_DATA.map((d, i) => (
                     <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -107,48 +93,26 @@ export default function AnalyticsPage() {
                 ))}
               </div>
             </div>
-          </div>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <Activity size={14} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Weekly Attendance</FitText>
-              </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>Morning / Afternoon / Evening</FitText>
-            </div>
-            <div style={{ height: 200 }}>
-              <ResponsiveContainer>
-                <BarChart data={ANALYTICS_WEEK_DATA}>
-                  <XAxis dataKey="d" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                  <Bar dataKey="morning" stackId="a" fill={colors.brand} />
-                  <Bar dataKey="afternoon" stackId="a" fill={colors.textSecondary} />
-                  <Bar dataKey="evening" stackId="a" fill={colors.success} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <TrendingUp size={14} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Peak Hours Analysis</FitText>
-              </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>Average daily traffic</FitText>
-            </div>
-            <div style={{ height: 200 }}>
-              <ResponsiveContainer>
-                <LineChart data={ANALYTICS_PEAK_DATA}>
-                  <XAxis dataKey="h" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                  <Line type="monotone" dataKey="v" stroke={colors.brand} strokeWidth={2} dot={{ r: 3, fill: colors.brand }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          </FitSection>
+          <FitChartContainer heading="Weekly Attendance" subtitle="Morning / Afternoon / Evening" action={<Activity size={14} color={colors.brand} />} sectionClassName="mb-0" chartStyle={{ height: 200 }}>
+            <BarChart data={ANALYTICS_WEEK_DATA}>
+              <XAxis dataKey="d" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+              <Bar dataKey="morning" stackId="a" fill={colors.brand} />
+              <Bar dataKey="afternoon" stackId="a" fill={colors.textSecondary} />
+              <Bar dataKey="evening" stackId="a" fill={colors.success} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </FitChartContainer>
+          <FitChartContainer heading="Peak Hours Analysis" subtitle="Average daily traffic" action={<TrendingUp size={14} color={colors.brand} />} sectionClassName="mb-0" chartStyle={{ height: 200 }}>
+            <LineChart data={ANALYTICS_PEAK_DATA}>
+              <XAxis dataKey="h" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+              <Line type="monotone" dataKey="v" stroke={colors.brand} strokeWidth={2} dot={{ r: 3, fill: colors.brand }} />
+            </LineChart>
+          </FitChartContainer>
         </div>
-      </section>
+      </FitSection>
   );
 }

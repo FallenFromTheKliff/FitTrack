@@ -4,6 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
 import type { EquipmentDef } from "@/data/facilities/mapTypes";
 
@@ -20,9 +21,8 @@ export function DraggableEquipment({ item, disabled = false }: DraggableEquipmen
     });
 
     return (
-        <button
-            ref={setNodeRef}
-            type="button"
+        <FitButton
+            buttonRef={setNodeRef}
             style={{
                 transform: CSS.Translate.toString(transform),
                 opacity: isDragging ? 0.55 : 1,
@@ -60,7 +60,7 @@ export function DraggableEquipment({ item, disabled = false }: DraggableEquipmen
                     </FitText>
                 </div>
             </div>
-        </button>
+        </FitButton>
     );
 }
 
@@ -104,8 +104,10 @@ export function PlacedEquipmentTile({ cellId, item, onRequestDelete, disabled = 
         >
             <item.icon size={18} color={item.color} strokeWidth={2.2} />
             {!disabled && (
-                <button
-                    type="button"
+                <FitButton
+                    variant="ghost"
+                    icon={Trash2}
+                    iconOnly
                     aria-label={`Remove ${item.name}`}
                     onClick={(event) => {
                         event.preventDefault();
@@ -126,11 +128,10 @@ export function PlacedEquipmentTile({ cellId, item, onRequestDelete, disabled = 
                         alignItems: "center",
                         justifyContent: "center",
                         cursor: "pointer",
-                        color: removeIconColor
+                        color: removeIconColor,
+                        padding: 0
                     }}
-                >
-                    <Trash2 size={13} strokeWidth={2.2} />
-                </button>
+                />
             )}
         </div>
     );

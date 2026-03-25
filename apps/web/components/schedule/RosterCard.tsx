@@ -1,7 +1,7 @@
 "use client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { BORDER_RADIUS } from "@fittrack/ui";
-import type { Resource } from "./types";
+import type { Resource } from "@/data/schedule-constants";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";

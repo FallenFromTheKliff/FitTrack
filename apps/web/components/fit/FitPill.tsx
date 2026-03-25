@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 
 import { useTheme } from "@/contexts/ThemeContext";
 
+import FitButton from "./FitButton";
 import { FitText } from "./FitText";
 
 export type FitPillOption<T extends string = string> = {
@@ -90,29 +91,24 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
             {options.map((opt) => {
                 const isActive = opt.key === active;
                 return (
-                    <button
+                    <FitButton
                         key={opt.key}
-                        type="button"
+                        variant={isActive ? "primary" : "ghost"}
+                        label={opt.label}
                         onClick={() => onChange(opt.key)}
                         style={{
                             padding: "5px 14px",
+                            minHeight: 32,
                             borderRadius: 7,
                             border: `1px solid ${isActive ? colors.brand + "55" : "transparent"}`,
-                            backgroundColor: isActive ? `${colors.brand}18` : "transparent",
-                            cursor: "pointer"
+                            backgroundColor: isActive ? `${colors.brand}18` : "transparent"
                         }}
-                    >
-                        <FitText
-                            as="span"
-                            style={{
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: isActive ? colors.brand : colors.textMuted
-                            }}
-                        >
-                            {opt.label}
-                        </FitText>
-                    </button>
+                        textStyle={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: isActive ? colors.brand : colors.textMuted
+                        }}
+                    />
                 );
             })}
         </div>

@@ -11,11 +11,20 @@ import { api } from "@/lib/axios";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { dashboardStyles } from "@/styles/pageStyles";
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
 import { fullName, membershipType } from "@/utils/members";
-import { MEMBER_FILTER_OPTIONS, STATUS_COLORS, TIER_COLORS, ADD_STAFF_FIELDS, EDIT_MEMBER_FIELDS } from "@/data/members/members";
+import {
+  ADD_STAFF_FIELDS,
+  EDIT_MEMBER_FIELDS,
+  MEMBER_FILTER_OPTIONS,
+  MEMBER_STATUS_TABS,
+  STATUS_COLORS,
+  TIER_COLORS,
+  type DeletionRequest,
+  type DeletionRequestResponse,
+  type MemberStatusTab
+} from "@/data/members/members";
 import type { MemberRecord } from "@fittrack/types";
 
 import { FitText } from "@/components/fit/FitText";
@@ -27,30 +36,12 @@ import FitSearch from "@/components/fit/FitSearch";
 import FitSection from "@/components/fit/FitSection";
 import FitTable from "@/components/fit/FitTable";
 import type { FitTableColumn } from "@/components/fit/FitTable";
-import DetailsModal from "@/components/modals/DetailsModal";
-import ConfirmModal from "@/components/modals/ConfirmModal";
-
-const MIN_ACTION_DELAY_MS = FEEDBACK_DURATION_MS.standard;
-
-const MEMBER_STATUS_TABS = [
-  { key: "Active", label: "Active" },
-  { key: "Frozen", label: "Frozen" }
-] as const;
-
-type MemberStatusTab = typeof MEMBER_STATUS_TABS[number]["key"];
-
-type DeletionRequest = {
-  id: string;
-  userId?: string | null;
-  status?: string | null;
-  createdAt?: string;
-  user?: MemberRecord;
-};
-
-type DeletionRequestResponse = {
-  total: number;
-  requests: DeletionRequest[];
-};
+import { ConfirmModal, DetailsModal } from "@/components/modals";
+import {
+  filterMembers,
+  getPendingRequestsByUserId,
+  MIN_ACTION_DELAY_MS
+} from "./helpers";
 
 export default function MembersPage() {
   const { colors } = useTheme();
@@ -94,33 +85,15 @@ export default function MembersPage() {
 
   useEffect(() => { void fetchMembers(); }, [fetchMembers]);
 
-  const pendingRequestsByUserId = useMemo(() => {
-    const map = new Map<string, DeletionRequest>();
-    deletionRequests.forEach((request) => {
-      const status = request.status?.toLowerCase() ?? "";
-      const userId = request.userId ?? request.user?.id ?? "";
-      if (!userId || status !== "pending") return;
-      map.set(userId, request);
-    });
-    return map;
-  }, [deletionRequests]);
+  const pendingRequestsByUserId = useMemo(
+    () => getPendingRequestsByUserId(deletionRequests),
+    [deletionRequests]
+  );
 
-  const filtered = useMemo(() => members.filter((m) => {
-    const query = debouncedQ.toLowerCase();
-    const name = fullName(m).toLowerCase();
-    const matchesSearch = name.includes(query) || m.email.toLowerCase().includes(query);
-    const isFrozen = pendingRequestsByUserId.has(m.id);
-    const role = m.role?.name ?? "USER";
-
-    const matchesStatus = activeStatus === "Active" ? !isFrozen : isFrozen;
-    const matchesChip =
-        activeChip === "all" ||
-        (activeChip === "Admin" ? role === "ADMIN" :
-            activeChip === "Staff" ? role === "STAFF" :
-                activeChip === "Member" ? role === "USER" : true);
-
-    return !m.deletedAt && matchesSearch && matchesChip && matchesStatus;
-  }), [members, debouncedQ, activeChip, activeStatus, pendingRequestsByUserId]);
+  const filtered = useMemo(
+    () => filterMembers(members, debouncedQ, activeChip, activeStatus, pendingRequestsByUserId),
+    [members, debouncedQ, activeChip, activeStatus, pendingRequestsByUserId]
+  );
 
   useEffect(() => {
     const recalc = () => {
@@ -287,7 +260,7 @@ export default function MembersPage() {
   if (user?.role === "STAFF") return null;
 
   return (
-      <section className={themeTransition} style={fadeIn}>
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
         {message && (
             <div style={{ marginBottom: 12 }}>
               <FitText style={{ fontSize: 13, color: colors.success, fontWeight: 500 }}>{message}</FitText>
@@ -432,6 +405,7 @@ export default function MembersPage() {
             .members-kpis .fit-kpi-card { padding: 10px 12px !important; min-height: 72px !important; }
           }
         `}</style>
-      </section>
+      </FitSection>
   );
 }
+

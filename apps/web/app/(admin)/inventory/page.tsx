@@ -1,16 +1,24 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Package, PackagePlus, AlertTriangle, DollarSign, BarChart2, SlidersHorizontal } from "lucide-react";
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { dashboardStyles } from "@/styles/pageStyles";
 import { sleep } from "@/utils/sleep";
-import { MONTHLY_SALES, PRODUCTS_LIST, STOCK_STATUS_COLOR, STOCK_FILTER_OPTIONS, ADD_PRODUCT_FIELDS } from "@/data/inventory/inventory";
+import {
+  ADD_PRODUCT_FIELDS,
+  INVENTORY_TABS,
+  MONTHLY_SALES,
+  PRODUCTS_LIST,
+  STOCK_FILTER_OPTIONS,
+  STOCK_STATUS_COLOR,
+  type InventoryTab,
+  type Product
+} from "@/data/inventory/inventory";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -19,20 +27,16 @@ import { FitInlineFilterChips } from "@/components/fit/FitFilter";
 import { FitKpiCard } from "@/components/fit/FitCard";
 import FitSearch from "@/components/fit/FitSearch";
 import FitSection from "@/components/fit/FitSection";
+import FitChartContainer from "@/components/fit/FitChartContainer";
 import FitTable from "@/components/fit/FitTable";
 import type { FitTableColumn } from "@/components/fit/FitTable";
-import DetailsModal from "@/components/modals/DetailsModal";
-
-type Product = typeof PRODUCTS_LIST[number];
-
-const MIN_ACTION_DELAY_MS = FEEDBACK_DURATION_MS.standard;
-
-const INVENTORY_TABS = [
-  { key: "products", label: "Products" },
-  { key: "analytics", label: "Analytics" }
-] as const;
-
-type InventoryTab = typeof INVENTORY_TABS[number]["key"];
+import { DetailsModal } from "@/components/modals";
+import {
+  filterProducts,
+  getProductStatus,
+  getTopProducts,
+  MIN_ACTION_DELAY_MS
+} from "./helpers";
 
 export default function InventoryPage() {
   const { colors } = useTheme();
@@ -50,18 +54,12 @@ export default function InventoryPage() {
   const [addLoading, setAddLoading] = useState(false);
   const addLoadingLabel = useLoadingText("ADDING PRODUCT", addLoading);
 
-  const filtered = useMemo(() => products.filter((p) => {
-    const matchesSearch =
-        p.name.toLowerCase().includes(debouncedQ.toLowerCase()) ||
-        p.sku.toLowerCase().includes(debouncedQ.toLowerCase());
-    const matchesStock = stockFilter === "All" ? true : p.status === stockFilter;
-    return matchesSearch && matchesStock;
-  }), [products, debouncedQ, stockFilter]);
-
-  const topProducts = useMemo(
-      () => products.map((p) => ({ name: p.name, value: p.price * p.stock })).sort((a, b) => b.value - a.value),
-      [products]
+  const filtered = useMemo(
+    () => filterProducts(products, debouncedQ, stockFilter),
+    [products, debouncedQ, stockFilter]
   );
+
+  const topProducts = useMemo(() => getTopProducts(products), [products]);
   const totalValue = products.reduce((acc, p) => acc + p.price * p.stock, 0);
   const lowStock = products.filter((p) => p.status === "Low Stock").length;
   const categories = new Set(products.map((p) => p.category)).size;
@@ -71,7 +69,7 @@ export default function InventoryPage() {
     await sleep(MIN_ACTION_DELAY_MS);
     const stock = Number(data.stock) || 0;
     const price = Number(data.price) || 0;
-    const status: Product["status"] = stock === 0 ? "Out of Stock" : stock <= 10 ? "Low Stock" : "In Stock";
+    const status = getProductStatus(stock);
     setProducts((prev) => [
       ...prev,
       { sku: data.sku ?? "", name: data.name ?? "", category: data.category ?? "", stock, status, price }
@@ -124,7 +122,7 @@ export default function InventoryPage() {
   ];
 
   return (
-      <section className={themeTransition} style={fadeIn}>
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
         {message && (
             <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-end" }}>
               <FitText style={{ fontSize: 13, color: colors.success, fontWeight: 500 }}>{message}</FitText>
@@ -175,31 +173,23 @@ export default function InventoryPage() {
             )}
             {tab === "analytics" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <FitSection heading="Monthly Sales & Revenue">
-                    <div style={{ height: 260, padding: "22px 16px 10px" }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={MONTHLY_SALES}>
-                          <XAxis dataKey="month" stroke={colors.textMuted} tick={{ fontSize: 12 }} />
-                          <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
-                          <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                          <Line type="monotone" dataKey="revenue" stroke={colors.brand} strokeWidth={2} dot={{ r: 3 }} />
-                          <Line type="monotone" dataKey="cost" stroke={colors.warning} strokeWidth={2} dot={{ r: 3 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </FitSection>
-                  <FitSection heading="Top Selling Products">
-                    <div style={{ height: 240, padding: "20px 16px 10px" }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={topProducts} margin={{ bottom: 40 }}>
-                          <XAxis dataKey="name" stroke={colors.textMuted} tick={{ fontSize: 11, angle: -15, textAnchor: "end" }} />
-                          <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
-                          <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                          <Bar dataKey="value" fill={colors.brand} radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </FitSection>
+                  <FitChartContainer heading="Monthly Sales & Revenue" chartStyle={{ height: 260 }}>
+                    <LineChart data={MONTHLY_SALES}>
+                      <XAxis dataKey="month" stroke={colors.textMuted} tick={{ fontSize: 12 }} />
+                      <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
+                      <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                      <Line type="monotone" dataKey="revenue" stroke={colors.brand} strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="cost" stroke={colors.warning} strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </FitChartContainer>
+                  <FitChartContainer heading="Top Selling Products" chartStyle={{ height: 240 }}>
+                    <BarChart data={topProducts} margin={{ bottom: 40 }}>
+                      <XAxis dataKey="name" stroke={colors.textMuted} tick={{ fontSize: 11, angle: -15, textAnchor: "end" }} />
+                      <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
+                      <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                      <Bar dataKey="value" fill={colors.brand} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </FitChartContainer>
                 </div>
             )}
           </div>
@@ -217,6 +207,6 @@ export default function InventoryPage() {
         <style>{`
         @media (max-width: 860px) { .inventory-grid { grid-template-columns: 1fr !important; } }
       `}</style>
-      </section>
+      </FitSection>
   );
 }

@@ -1,13 +1,12 @@
 export type PageKey =
-    | "dashboard"
-    | "members"
-    | "schedule"
-    | "facilities"
-    | "inventory"
-    | "analytics"
-    | "settings"
-    | "chatbot"
-    | "profile";
+  | "dashboard"
+  | "members"
+  | "schedule"
+  | "facilities"
+  | "inventory"
+  | "analytics"
+  | "settings"
+  | "profile";
 
 export const PAGE_NAMES: Record<PageKey, string> = {
   dashboard: "Dashboard",
@@ -17,7 +16,6 @@ export const PAGE_NAMES: Record<PageKey, string> = {
   inventory: "Inventory Management",
   analytics: "Analytics & Reports",
   settings: "Settings",
-  chatbot: "BrodigyAI",
   profile: "Profile Settings"
 };
 
@@ -29,6 +27,5 @@ export const ADMIN_SUBTITLES: Record<PageKey, string> = {
   inventory: "Keep shelves ready for every workout day!",
   analytics: "Read the numbers and spot your next gain!",
   settings: "Tune the portal to match your gym rhythm!",
-  chatbot: "Get fast training and nutrition support!",
   profile: "Keep your admin profile secure and accurate!"
 };

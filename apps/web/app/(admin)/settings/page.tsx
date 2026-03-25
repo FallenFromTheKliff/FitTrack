@@ -1,35 +1,26 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Building2, Bell, Pencil, Palette } from "lucide-react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 
 import { themes, THEME_LABELS } from "@fittrack/ui";
-import type { ThemeKey, FontKey } from "@fittrack/types";
+import type { FontKey, ThemeKey } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { GYM_FIELDS } from "@/data/settings/settings";
+import { GYM_FIELDS, type GymData } from "@/data/settings/settings";
 import { getReadableTextColor } from "@/utils/contrast";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import FitPill from "@/components/fit/FitPill";
-
-const THEME_KEYS: ThemeKey[] = ["night", "sunlight", "dark", "light", "navy"];
-const FONT_KEYS: FontKey[] = ["standard", "retro", "painter"];
-const STATIC_FONT_PREVIEW_TEXT: Record<FontKey, string> = {
-    standard: "Standard",
-    retro: "Retro",
-    painter: "Painter"
-};
-const STATIC_FONT_PREVIEW_FAMILY: Record<FontKey, CSSProperties["fontFamily"]> = {
-    standard: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    retro: "var(--font-retro), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    painter: "var(--font-painter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-};
-
-type GymData = Record<string, string>;
+import {
+  FONT_KEYS,
+  STATIC_FONT_PREVIEW_FAMILY,
+  STATIC_FONT_PREVIEW_TEXT,
+  THEME_KEYS
+} from "./helpers";
 
 export default function GymSettingsPage() {
     const { colors, settings, saveAllAppearance, previewTheme, previewFont } = useTheme();
@@ -139,7 +130,7 @@ export default function GymSettingsPage() {
     );
 
     return (
-        <section className={themeTransition} style={fadeIn}>
+        <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
             <div style={appearanceFade}>
                 <FitSection heading="Appearance" headingStyle={{ fontSize: 13 }} action={<Palette size={13} color={colors.brand} />}>
                     <div style={{ padding: "20px 20px" }}>
@@ -156,11 +147,10 @@ export default function GymSettingsPage() {
                                     ? getTextOnBackground(selectedBg, colors.brand)
                                     : colors.textPrimary;
                                 return (
-                                    <button
+                                    <FitButton
                                         key={key}
-                                        type="button"
                                         onClick={() => handleThemeSelect(key)}
-                                        className="transition-colors duration-150 ease-in-out"
+                                        variant={isSelected ? "primary" : "ghost"}
                                         style={{
                                             display: "flex",
                                             alignItems: "center",
@@ -169,8 +159,9 @@ export default function GymSettingsPage() {
                                             borderRadius: 10,
                                             border: `1.5px solid ${isSelected ? colors.brand : colors.border}`,
                                             backgroundColor: rowBg,
-                                            cursor: "pointer"
+                                            width: "100%"
                                         }}
+                                        textStyle={{ fontSize: 15, fontWeight: isSelected ? 600 : 400, color: labelColor }}
                                     >
                                         <FitText style={{ fontSize: 15, fontWeight: isSelected ? 600 : 400, color: labelColor }}>
                                             {THEME_LABELS[key]}
@@ -183,7 +174,7 @@ export default function GymSettingsPage() {
                                             border: `1px solid ${colors.border}`,
                                             background: `linear-gradient(135deg, ${t.base} 50%, ${t.brand} 50%)`
                                         }} />
-                                    </button>
+                                    </FitButton>
                                 );
                             })}
                         </div>
@@ -199,11 +190,10 @@ export default function GymSettingsPage() {
                                     ? getTextOnBackground(selectedBg, colors.brand)
                                     : getTextOnBackground(colors.surfaceRaised, colors.textPrimary);
                                 return (
-                                    <button
+                                    <FitButton
                                         key={key}
-                                        type="button"
                                         onClick={() => handleFontSelect(key)}
-                                        className="transition-colors duration-150 ease-in-out"
+                                        variant={isSelected ? "primary" : "ghost"}
                                         style={{
                                             flex: 1,
                                             padding: "14px 0",
@@ -212,14 +202,13 @@ export default function GymSettingsPage() {
                                             backgroundColor: fontButtonBg,
                                             fontSize: 15,
                                             fontWeight: isSelected ? 600 : 400,
-                                            fontFamily: STATIC_FONT_PREVIEW_FAMILY[key],
-                                            cursor: "pointer"
+                                            fontFamily: STATIC_FONT_PREVIEW_FAMILY[key]
                                         }}
                                     >
-                                    <span style={{ color: fontLabelColor, fontSize: 15, fontWeight: isSelected ? 600 : 400 }}>
-                                        {STATIC_FONT_PREVIEW_TEXT[key]}
-                                    </span>
-                                    </button>
+                                        <FitText style={{ color: fontLabelColor, fontSize: 15, fontWeight: isSelected ? 600 : 400, fontFamily: STATIC_FONT_PREVIEW_FAMILY[key] }}>
+                                            {STATIC_FONT_PREVIEW_TEXT[key]}
+                                        </FitText>
+                                    </FitButton>
                                 );
                             })}
                         </div>
@@ -305,6 +294,6 @@ export default function GymSettingsPage() {
                     </div>
                 </FitSection>
             </div>
-        </section>
+        </FitSection>
     );
 }

@@ -17,13 +17,18 @@ import { useAuthEntrance } from "@/hooks/animations/useAuthEntrance";
 import { authStyles } from "@/styles/authStyles";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { sleep } from "@/utils/sleep";
+import {
+  LOGIN_BACKGROUND_IMAGE_URL,
+  LOGIN_HERO_STATS,
+  MAX_LOGIN_ATTEMPTS
+} from "@/data/auth/auth";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
-import OTPModal from "@/components/modals/OTPModal";
-import ForgotPasswordModal from "@/components/modals/ForgotPasswordModal";
+import { ForgotPasswordModal, OTPModal } from "@/components/modals";
 import BufferPage from "@/components/loading/BufferPage";
+import { getLoginItemTransition } from "./helpers";
 
 export default function LoginPage() {
   const { login, commitLogin } = useAuth();
@@ -43,11 +48,8 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
 
   const signInLabel = useLoadingText("SIGNING IN", loading);
-  const getDelay = (index: number) => index * 0.08;
   const itemInitial = shouldAnimate ? { opacity: 0, y: 16 } : false;
-  const itemTransition = (index: number) => shouldAnimate
-    ? { duration: 0.4, ease: "easeOut" as const, delay: getDelay(index) }
-    : { duration: 0 };
+  const itemTransition = (index: number) => getLoginItemTransition(shouldAnimate, index);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -68,7 +70,7 @@ export default function LoginPage() {
     if (!result.success) {
       const next = attempts + 1;
       setAttempts(next);
-      if (next >= 5) { setLocked(true); router.replace("/locked"); return; }
+      if (next >= MAX_LOGIN_ATTEMPTS) { setLocked(true); router.replace("/locked"); return; }
       setErrorMsg(result.error ?? "Invalid email or password.");
       return;
     }
@@ -98,7 +100,7 @@ export default function LoginPage() {
       <div
         style={{
           ...s.bgOverlay,
-          backgroundImage: "url(https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&q=80)"
+          backgroundImage: LOGIN_BACKGROUND_IMAGE_URL
         }}
       />
       <div style={s.content}>
@@ -114,7 +116,7 @@ export default function LoginPage() {
               Full gym management. Members, schedules, inventory, and more — all in one place.
             </FitText>
             <div style={s.heroStatsRow}>
-              {["580 Members", "124 Sessions/day", "$48K Revenue"].map((stat) => (
+              {LOGIN_HERO_STATS.map((stat) => (
                 <div key={stat} style={s.heroStatItem}>
                   <FitText as="span" style={s.heroStatItem}>{stat}</FitText>
                 </div>
@@ -184,7 +186,7 @@ export default function LoginPage() {
                   <FitText style={s.errorText}>{errorMsg}</FitText>
                 </div>
                 {attempts > 0 && attempts < 5 && (
-                  <FitText style={s.errorMeta}>Attempt {attempts} of 5</FitText>
+                  <FitText style={s.errorMeta}>Attempt {attempts} of {MAX_LOGIN_ATTEMPTS}</FitText>
                 )}
               </div>
             )}

@@ -21,10 +21,10 @@ export default function HeaderMessage({ pageKey }: HeaderMessageProps) {
 
   return (
     <div style={s.messageWrap}>
-      <FitText as="h1" style={s.messageTitle}>
+      <FitText as="h1" style={s.messageTitle} excludeGlobalScale>
         {shouldAnimate ? typedTitle : title}
       </FitText>
-      <FitText as="p" style={s.messageSubtitle}>
+      <FitText as="p" style={s.messageSubtitle} excludeGlobalScale>
         {shouldAnimate ? typedSubtitle : subtitle}
       </FitText>
     </div>

@@ -302,7 +302,19 @@ export const modalStyles = (colors: ThemeColors) => ({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+    marginBottom: 10
+  } as CSSProperties,
+  calendarViewRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 8,
     marginBottom: 12
+  } as CSSProperties,
+  calendarBody: {
+    minHeight: 316,
+    display: "flex",
+    flexDirection: "column" as const,
+    justifyContent: "flex-start"
   } as CSSProperties,
   calendarNavBtn: {
     width: 28,
@@ -325,6 +337,20 @@ export const modalStyles = (colors: ThemeColors) => ({
     gridTemplateColumns: "repeat(7, 1fr)",
     gap: 8
   } as CSSProperties,
+  calendarMonthGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 8,
+    flex: 1,
+    alignContent: "start"
+  } as CSSProperties,
+  calendarYearGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 8,
+    flex: 1,
+    alignContent: "start"
+  } as CSSProperties,
   calendarWeekDay: {
     fontSize: 11,
     color: colors.textMuted,
@@ -332,17 +358,36 @@ export const modalStyles = (colors: ThemeColors) => ({
     fontWeight: 600
   } as CSSProperties,
   calendarEmptyCell: {
-    height: 34
+    height: 40
   } as CSSProperties,
   calendarDayBtn: (isSelected: boolean, isToday: boolean): CSSProperties => ({
-    height: 34,
+    height: 40,
     borderRadius: 8,
     border: `1px solid ${isSelected ? colors.brand : colors.border}`,
     backgroundColor: isSelected ? `${colors.brand}22` : colors.surfaceRaised,
     color: isSelected ? colors.brand : colors.textPrimary,
     fontSize: 12,
-    fontWeight: isToday ? 700 : 500,
-    cursor: "pointer"
+    fontWeight: isToday ? 700 : 500
+  }),
+  calendarViewBtn: (isActive: boolean): CSSProperties => ({
+    width: "100%",
+    minHeight: 36,
+    borderRadius: 10,
+    border: `1px solid ${isActive ? colors.brand : colors.border}`,
+    backgroundColor: isActive ? `${colors.brand}18` : colors.surfaceRaised,
+    color: isActive ? colors.brand : colors.textPrimary,
+    fontSize: 12,
+    fontWeight: 700
+  }),
+  calendarPickerBtn: (isActive: boolean): CSSProperties => ({
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 10,
+    border: `1px solid ${isActive ? colors.brand : colors.border}`,
+    backgroundColor: isActive ? `${colors.brand}18` : colors.surfaceRaised,
+    color: isActive ? colors.brand : colors.textPrimary,
+    fontSize: 13,
+    fontWeight: isActive ? 700 : 600
   }),
   calendarFooter: {
     display: "flex",

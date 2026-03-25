@@ -1,6 +1,7 @@
 export { default as FitButton } from "./FitButton";
 export type { FitButtonVariant } from "./FitButton";
 export { default as FitCard, FitKpiCard, FitSelect } from "./FitCard";
+export { default as FitChartContainer } from "./FitChartContainer";
 export { default as FitFilter } from "./FitFilter";
 export { default as FitInputField } from "./FitInputField";
 export { default as FitPill } from "./FitPill";

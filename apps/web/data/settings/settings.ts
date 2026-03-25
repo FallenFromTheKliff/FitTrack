@@ -4,6 +4,8 @@ export type GymField = {
   default: string;
 };
 
+export type GymData = Record<string, string>;
+
 export type PasswordRequirementKey =
   | "minLength"
   | "hasUppercase"

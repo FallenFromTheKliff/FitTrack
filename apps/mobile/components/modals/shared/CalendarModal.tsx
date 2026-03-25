@@ -1,17 +1,14 @@
-import { useMemo, useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Modal, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
-import { getDaysInMonth, getFirstDayOfWeek } from "@fittrack/utils";
-import { MONTH_NAMES, WEEK_DAYS } from "@/data/calendar";
-
+import type { CalendarViewMode } from "@fittrack/types";
+import { formatDateYMD, getDaysInMonth, getFirstDayOfWeek, parseDateYMD } from "@fittrack/utils";
+import { CALENDAR_VIEW_OPTIONS, MONTH_NAMES, MONTH_NAMES_SHORT, WEEK_DAYS } from "@/data/calendar";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
-import { usePowerSlide } from "@/hooks/animations/text/usePowerSlide";
 import { makeCalendarModalStyles } from "@/styles/modals/CalendarStyles";
-import { toDateStr } from "@/utils/date";
-
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 
@@ -27,40 +24,27 @@ type Props = {
   onClose: () => void;
 };
 
-function darkenHex(hex: string, factor = 0.16) {
-  const clean = hex.replace("#", "");
-  if (clean.length !== 6) return hex;
-  const num = parseInt(clean, 16);
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  const nextR = Math.max(0, Math.floor(r * (1 - factor)));
-  const nextG = Math.max(0, Math.floor(g * (1 - factor)));
-  const nextB = Math.max(0, Math.floor(b * (1 - factor)));
-  return `#${((1 << 24) + (nextR << 16) + (nextG << 8) + nextB).toString(16).slice(1)}`;
-}
-
 export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, defaultYear, defaultMonth, onSelect, onClose }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeCalendarModalStyles(colors), [colors]);
-
-  const today = new Date();
-  const todayStr = toDateStr(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const today = useMemo(() => new Date(), []);
+  const fallbackYear = defaultYear ?? today.getFullYear();
+  const fallbackMonth = defaultMonth ?? (today.getMonth() + 1);
+  const fallbackDate = useMemo(() => new Date(fallbackYear, fallbackMonth - 1, 1), [fallbackMonth, fallbackYear]);
+  const todayStr = formatDateYMD(today);
   const minSelectable = minDate && minDate > todayStr ? minDate : blockPast ? todayStr : minDate ?? "";
-  const selectedBg = darkenHex(colors.brand, 0.18);
+  const selected = useMemo(() => parseDateYMD(selectedDate, fallbackDate), [fallbackDate, selectedDate]);
+  const [cursor, setCursor] = useState<Date>(selected);
+  const [currentView, setCurrentView] = useState<CalendarViewMode>("DAYS");
 
-  const [viewYear, setViewYear] = useState(() => {
-    const parts = selectedDate?.split("-");
-    return parts?.length === 3 ? parseInt(parts[0]) : defaultYear ?? today.getFullYear();
-  });
-  const [viewMonth, setViewMonth] = useState(() => {
-    const parts = selectedDate?.split("-");
-    return parts?.length === 3 ? parseInt(parts[1]) : defaultMonth ?? (today.getMonth() + 1);
-  });
-  const [slideKey, setSlideKey] = useState(0);
-  const [slideDir, setSlideDir] = useState<"left" | "right">("right");
+  useEffect(() => {
+    if (isVisible) {
+      setCursor(parseDateYMD(selectedDate, fallbackDate));
+      setCurrentView("DAYS");
+    }
+  }, [fallbackDate, isVisible, selectedDate]);
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -71,97 +55,184 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
   }));
   const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
   const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
-  const { style: monthSlideStyle } = usePowerSlide(slideKey, slideDir);
 
-  const prevMonth = () => {
-    setSlideDir("left");
-    setSlideKey((k) => k + 1);
-    if (viewMonth === 1) { setViewMonth(12); setViewYear((y) => y - 1); }
-    else setViewMonth((m) => m - 1);
-  };
-  const nextMonth = () => {
-    setSlideDir("right");
-    setSlideKey((k) => k + 1);
-    if (viewMonth === 12) { setViewMonth(1); setViewYear((y) => y + 1); }
-    else setViewMonth((m) => m + 1);
+  const year = cursor.getFullYear();
+  const monthIndex = cursor.getMonth();
+  const viewMonth = monthIndex + 1;
+  const monthDays = getDaysInMonth(year, viewMonth);
+  const offset = getFirstDayOfWeek(year, viewMonth);
+  const selectedYmd = selectedDate ?? "";
+  const yearRangeStart = year - 7;
+  const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
+  const dayCells = Array.from({ length: 42 }, (_, index) => {
+    const dayNumber = index - offset + 1;
+    if (dayNumber < 1 || dayNumber > monthDays) return null;
+    const nextDate = new Date(year, monthIndex, dayNumber);
+    return { dayNumber, ymd: formatDateYMD(nextDate) };
+  });
+
+  const navLabel =
+    currentView === "DAYS"
+      ? `${MONTH_NAMES[monthIndex]} ${year}`
+      : currentView === "MONTHS"
+        ? String(year)
+        : `${yearRangeStart} - ${yearRangeStart + 15}`;
+
+  const handlePrev = () => {
+    if (currentView === "DAYS") {
+      setCursor(new Date(year, monthIndex - 1, 1));
+      return;
+    }
+    if (currentView === "MONTHS") {
+      setCursor(new Date(year - 1, monthIndex, 1));
+      return;
+    }
+    setCursor(new Date(year - 16, monthIndex, 1));
   };
 
-  const totalDays = getDaysInMonth(viewYear, viewMonth);
-  const firstWeekday = getFirstDayOfWeek(viewYear, viewMonth);
-  const cells: (number | null)[] = [
-    ...Array(firstWeekday).fill(null),
-    ...Array.from({ length: totalDays }, (_, i) => i + 1)
-  ];
+  const handleNext = () => {
+    if (currentView === "DAYS") {
+      setCursor(new Date(year, monthIndex + 1, 1));
+      return;
+    }
+    if (currentView === "MONTHS") {
+      setCursor(new Date(year + 1, monthIndex, 1));
+      return;
+    }
+    setCursor(new Date(year + 16, monthIndex, 1));
+  };
 
   return (
-      <Modal
-          visible={isVisible}
-          transparent
-          animationType="none"
-          onRequestClose={onClose}
-          statusBarTranslucent
-      >
-        <Animated.View style={[s.backdrop, backdropStyle]}>
-          <Animated.View style={[s.card, cardStyle]}>
-            <Animated.View style={[s.header, headerBorderStyle]}>
-              <View style={s.navRow}>
-                <FitButton variant="link" icon={ChevronLeft} iconOnly iconSize={24} onPress={prevMonth} />
-                <Animated.View style={monthSlideStyle}>
-                  <FitText style={s.monthLabel}>{MONTH_NAMES[viewMonth - 1]} {viewYear}</FitText>
-                </Animated.View>
-                <FitButton variant="link" icon={ChevronRight} iconOnly iconSize={24} onPress={nextMonth} />
-              </View>
-            </Animated.View>
-            <View style={s.weekRow}>
-              {WEEK_DAYS.map((d) => (
-                  <FitText key={d} style={s.weekDay}>{d}</FitText>
-              ))}
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="none"
+      onRequestClose={undefined}
+      statusBarTranslucent
+    >
+      <Animated.View style={[s.backdrop, backdropStyle]}>
+        <Animated.View style={[s.card, cardStyle]}>
+          <Animated.View style={[s.header, headerBorderStyle]}>
+            <View style={s.navRow}>
+              <FitButton variant="link" icon={ChevronLeft} iconOnly iconSize={24} onPress={handlePrev} />
+              <FitText style={s.monthLabel}>{navLabel}</FitText>
+              <FitButton variant="link" icon={ChevronRight} iconOnly iconSize={24} onPress={handleNext} />
             </View>
-            <View style={s.grid}>
-              {cells.map((day, i) => {
-                if (!day) return <View key={`empty-${i}`} style={s.dayCell} />;
-                const dateStr = toDateStr(viewYear, viewMonth, day);
-                const isSelected = (!allowEmpty || selectedDate !== "") ? dateStr === selectedDate : false;
-                const isToday = dateStr === todayStr;
-                const isBeforeMin = minSelectable ? dateStr < minSelectable : false;
-                const isPast = blockPast && dateStr < todayStr;
-                const isDisabled = isPast || isBeforeMin;
-                return (
-                    <Pressable
-                        key={dateStr}
-                        style={[
-                          s.dayCell,
-                          isSelected && s.dayCellSelected,
-                          isSelected && { backgroundColor: selectedBg },
-                          !isSelected && isToday && s.dayCellToday
-                        ]}
-                        onPress={() => !isDisabled && onSelect(dateStr)}
-                        disabled={isDisabled}
-                    >
-                      <FitText
+          </Animated.View>
+          <View style={s.viewRow}>
+            {CALENDAR_VIEW_OPTIONS.map((option) => {
+              const isActive = option.value === currentView;
+              return (
+                <FitButton
+                  key={option.value}
+                  label={option.label}
+                  variant={isActive ? "primary" : "ghost"}
+                  onPress={() => setCurrentView(option.value)}
+                  flex={1}
+                  style={s.viewButton}
+                  textStyle={s.viewButtonText}
+                />
+              );
+            })}
+          </View>
+          <View style={s.body}>
+            {currentView === "DAYS" && (
+              <>
+                <View style={s.weekRow}>
+                  {WEEK_DAYS.map((label) => (
+                    <FitText key={label} style={s.weekDay}>{label}</FitText>
+                  ))}
+                </View>
+                <View style={s.grid}>
+                  {dayCells.map((cell, index) => {
+                    if (!cell) {
+                      return (
+                        <View key={`empty-${index}`} style={s.dayCell}>
+                          <View style={s.emptyDayCell} />
+                        </View>
+                      );
+                    }
+                    const isSelected = cell.ymd === selectedYmd;
+                    const isToday = cell.ymd === todayStr;
+                    const isBeforeMin = minSelectable ? cell.ymd < minSelectable : false;
+                    const isPast = blockPast && cell.ymd < todayStr;
+                    const isDisabled = isPast || isBeforeMin;
+                    return (
+                      <View key={cell.ymd} style={s.dayCell}>
+                        <FitButton
+                          label={String(cell.dayNumber)}
+                          variant={isSelected ? "primary" : "ghost"}
+                          onPress={() => !isDisabled && onSelect(cell.ymd)}
+                          disabled={isDisabled}
                           style={[
+                            s.dayButton,
+                            !isSelected && isToday ? { borderColor: colors.brand } : undefined
+                          ]}
+                          textStyle={[
                             s.dayText,
                             {
                               color: isSelected
-                                  ? colors.base
-                                  : isDisabled
-                                      ? colors.textDisabled
-                                      : colors.textPrimary
-                            },
-                            isSelected && { fontWeight: "700" }
+                                ? colors.onBrand
+                                : isDisabled
+                                  ? colors.textDisabled
+                                  : colors.textPrimary
+                            }
                           ]}
-                      >
-                        {day}
-                      </FitText>
-                    </Pressable>
-                );
-              })}
-            </View>
-            <Animated.View style={[s.footer, footerBorderStyle]}>
-              <FitButton label="Cancel" variant="ghost" onPress={onClose} flex={1} />
-            </Animated.View>
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+            {currentView === "MONTHS" && (
+              <View style={s.monthGrid}>
+                {MONTH_NAMES_SHORT.map((monthName, index) => {
+                  const isActive = index === monthIndex;
+                  return (
+                    <FitButton
+                      key={monthName}
+                      label={monthName}
+                      variant={isActive ? "primary" : "ghost"}
+                      onPress={() => {
+                        setCursor(new Date(year, index, 1));
+                        setCurrentView("DAYS");
+                      }}
+                      style={s.monthCell}
+                      textStyle={s.pickerText}
+                    />
+                  );
+                })}
+              </View>
+            )}
+            {currentView === "YEARS" && (
+              <View style={s.yearGrid}>
+                {yearCells.map((value) => {
+                  const isActive = value === year;
+                  return (
+                    <FitButton
+                      key={value}
+                      label={String(value)}
+                      variant={isActive ? "primary" : "ghost"}
+                      onPress={() => {
+                        setCursor(new Date(value, monthIndex, 1));
+                        setCurrentView("MONTHS");
+                      }}
+                      style={s.yearCell}
+                      textStyle={s.pickerText}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
+          <Animated.View style={[s.footer, footerBorderStyle]}>
+            <FitButton label="Cancel" variant="ghost" onPress={onClose} flex={1} style={s.footerButton} />
+            {allowEmpty && <FitButton label="Clear" variant="ghost" onPress={() => onSelect("")} flex={1} style={s.footerButton} />}
+            <FitButton label="Today" variant="ghost" onPress={() => onSelect(todayStr)} flex={1} style={s.footerButton} />
           </Animated.View>
         </Animated.View>
-      </Modal>
+      </Animated.View>
+    </Modal>
   );
 }

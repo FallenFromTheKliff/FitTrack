@@ -1,6 +1,6 @@
 "use client";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Resource } from "./types";
+import type { Resource } from "@/data/schedule-constants";
 
 import FitCard from "@/components/fit/FitCard";
 import { FitText } from "@/components/fit/FitText";

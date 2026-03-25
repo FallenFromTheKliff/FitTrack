@@ -6,6 +6,7 @@ import { api } from "@/lib/axios";
 
 import { COLS, ROWS, LAYOUT_KEY, EQUIPMENT } from "@/data/facilities/mapTypes";
 import type { VenueRecord, PlacedMap, EquipmentDef } from "@/data/facilities/mapTypes";
+import type { FacilityFloorId } from "@/data/facilities/floorPlans";
 
 export type VenuePayload = {
   name: string;
@@ -182,6 +183,7 @@ export function useVenueMutations() {
 }
 
 export function useFloorLayout() {
+  const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
   const [isEditMode, setIsEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
@@ -189,13 +191,24 @@ export function useFloorLayout() {
   const [layoutType, setLayoutType] = useState("custom");
   const [gridSize, setGridSize] = useState("40");
   const [deleteTargetCell, setDeleteTargetCell] = useState<string | null>(null);
-  const [placedItems, setPlacedItems] = useState<PlacedMap>(() => {
-    if (typeof window === "undefined") return {};
+  const [placedItemsByFloor, setPlacedItemsByFloor] = useState<Record<FacilityFloorId, PlacedMap>>(() => {
+    if (typeof window === "undefined") return { "floor-1": {}, "floor-2": {} };
     try {
       const raw = localStorage.getItem(LAYOUT_KEY);
-      return raw ? (JSON.parse(raw) as PlacedMap) : {};
+      if (!raw) {
+        return { "floor-1": {}, "floor-2": {} };
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && "floors" in parsed) {
+        const floors = (parsed as { floors?: Partial<Record<FacilityFloorId, PlacedMap>> }).floors;
+        return {
+          "floor-1": floors?.["floor-1"] ?? {},
+          "floor-2": floors?.["floor-2"] ?? {}
+        };
+      }
+      return { "floor-1": parsed as PlacedMap, "floor-2": {} };
     } catch {
-      return {};
+      return { "floor-1": {}, "floor-2": {} };
     }
   });
 
@@ -203,11 +216,12 @@ export function useFloorLayout() {
       () => Object.fromEntries(EQUIPMENT.map((item) => [item.id, item])) as Record<string, EquipmentDef>,
       []
   );
+  const placedItems = placedItemsByFloor[activeFloor] ?? {};
   const placedCount = Object.keys(placedItems).length;
 
   const handleSaveLayout = (onSaved?: () => void) => {
     if (typeof window !== "undefined") {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(placedItems));
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ floors: placedItemsByFloor }));
     }
     setHasUnsavedChanges(false);
     onSaved?.();
@@ -227,19 +241,31 @@ export function useFloorLayout() {
 
   const handleConfirmCellDelete = () => {
     if (!deleteTargetCell) return;
-    setPlacedItems((prev) => { const next = { ...prev }; delete next[deleteTargetCell]; return next; });
+    setPlacedItemsByFloor((prev) => {
+      const nextFloorItems = { ...(prev[activeFloor] ?? {}) };
+      delete nextFloorItems[deleteTargetCell];
+      return { ...prev, [activeFloor]: nextFloorItems };
+    });
     setHasUnsavedChanges(true);
     setDeleteTargetCell(null);
   };
 
   const handleClearFloor = () => {
     if (!isEditMode) return;
-    setPlacedItems({});
+    setPlacedItemsByFloor((prev) => ({ ...prev, [activeFloor]: {} }));
     setHasUnsavedChanges(true);
   };
 
   const handleExport = (name: string, type: string, size: string) => {
-    const payload = { layoutName: name, layoutType: type, gridSize: size, rows: ROWS, cols: COLS, placedItems };
+    const payload = {
+      layoutName: name,
+      layoutType: type,
+      gridSize: size,
+      rows: ROWS,
+      cols: COLS,
+      activeFloor,
+      floors: placedItemsByFloor
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -252,16 +278,18 @@ export function useFloorLayout() {
   };
 
   const placeDraggedItem = (equipmentId: string, cellId: string, sourceCellId?: string) => {
-    setPlacedItems((prev) => {
-      const next = { ...prev };
-      if (sourceCellId?.startsWith("cell-")) delete next[sourceCellId];
-      next[cellId] = equipmentId;
-      return next;
+    setPlacedItemsByFloor((prev) => {
+      const nextFloorItems = { ...(prev[activeFloor] ?? {}) };
+      if (sourceCellId?.startsWith("cell-")) delete nextFloorItems[sourceCellId];
+      nextFloorItems[cellId] = equipmentId;
+      return { ...prev, [activeFloor]: nextFloorItems };
     });
     setHasUnsavedChanges(true);
   };
 
   return {
+    activeFloor,
+    setActiveFloor,
     isEditMode,
     hasUnsavedChanges,
     showUnsavedConfirm,
@@ -275,6 +303,7 @@ export function useFloorLayout() {
     deleteTargetCell,
     setDeleteTargetCell,
     placedItems,
+    placedItemsByFloor,
     equipmentById,
     placedCount,
     handleSaveLayout,

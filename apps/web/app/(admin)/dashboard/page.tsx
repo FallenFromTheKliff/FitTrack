@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Activity, DollarSign } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { dashboardStyles } from "@/styles/pageStyles";
@@ -10,6 +10,7 @@ import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { useDashboardStats } from "@/hooks/dashboard/useDashboardStats";
 import {
   DASHBOARD_ACTIVITY,
+  type DashboardActivityItem,
   DASHBOARD_ACTIVITY_FILTER_OPTIONS,
   DASHBOARD_ALERTS,
   DASHBOARD_GROWTH,
@@ -24,8 +25,12 @@ import FitSection from "@/components/fit/FitSection";
 import FitTable from "@/components/fit/FitTable";
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import { FitSelect } from "@/components/fit/FitCard";
-
-type ActivityRow = typeof DASHBOARD_ACTIVITY[number];
+import FitChartContainer from "@/components/fit/FitChartContainer";
+import {
+  DASHBOARD_DEFAULT_ACTIVITY_FILTER,
+  DASHBOARD_DEFAULT_PERIOD,
+  getDashboardActivityStatusColor
+} from "./helpers";
 
 export default function DashboardPage() {
   const { colors } = useTheme();
@@ -33,10 +38,10 @@ export default function DashboardPage() {
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const { kpis } = useDashboardStats();
-  const [period, setPeriod] = useState("this-month");
-  const [activityFilter, setActivityFilter] = useState("all");
+  const [period, setPeriod] = useState(DASHBOARD_DEFAULT_PERIOD);
+  const [activityFilter, setActivityFilter] = useState(DASHBOARD_DEFAULT_ACTIVITY_FILTER);
 
-  const activityColumns: FitTableColumn<ActivityRow>[] = [
+  const activityColumns: FitTableColumn<DashboardActivityItem>[] = [
     {
       key: "member",
       heading: "MEMBER",
@@ -56,17 +61,14 @@ export default function DashboardPage() {
       key: "status",
       heading: "STATUS",
       render: (row, c) => {
-        const statusColor =
-            row.status === "active" ? c.brand
-                : row.status === "success" ? c.success
-                    : c.textMuted;
+        const statusColor = getDashboardActivityStatusColor(row.status, c);
         return <FitPill mode="status" label={row.status} color={statusColor} fontSize={12} />;
       }
     }
   ];
 
   return (
-      <section className={themeTransition} style={fadeIn}>
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
         <FitSection
             heading="Key Metrics"
             bare
@@ -98,44 +100,36 @@ export default function DashboardPage() {
           </div>
         </FitSection>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <Activity size={15} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Membership Growth</FitText>
-              </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>Last 6 months</FitText>
-            </div>
-            <div style={{ height: 200 }}>
-              <ResponsiveContainer>
-                <BarChart data={DASHBOARD_GROWTH}>
-                  <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                  <Bar dataKey="v" fill={colors.brand} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div style={s.chartCard}>
-            <div style={s.chartHeader}>
-              <div style={s.chartTitleRow}>
-                <DollarSign size={15} color={colors.brand} />
-                <FitText style={{ fontSize: 13, fontWeight: 600 }}>Revenue Trend</FitText>
-              </div>
-              <FitText style={{ fontSize: 11, color: colors.textMuted }}>Last 6 months</FitText>
-            </div>
-            <div style={{ height: 200 }}>
-              <ResponsiveContainer>
-                <LineChart data={DASHBOARD_REVENUE}>
-                  <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                  <Line type="monotone" dataKey="v" stroke={colors.brand} strokeWidth={2} dot={{ r: 3, fill: colors.brand }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <FitChartContainer
+            heading="Membership Growth"
+            subtitle="Last 6 months"
+            action={<Activity size={15} color={colors.brand} />}
+            sectionClassName="mb-0"
+            chartStyle={{ height: 200 }}
+            contentPadding="0"
+          >
+            <BarChart data={DASHBOARD_GROWTH}>
+              <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+              <Bar dataKey="v" fill={colors.brand} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </FitChartContainer>
+          <FitChartContainer
+            heading="Revenue Trend"
+            subtitle="Last 6 months"
+            action={<DollarSign size={15} color={colors.brand} />}
+            sectionClassName="mb-0"
+            chartStyle={{ height: 200 }}
+            contentPadding="0"
+          >
+            <LineChart data={DASHBOARD_REVENUE}>
+              <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+              <Line type="monotone" dataKey="v" stroke={colors.brand} strokeWidth={2} dot={{ r: 3, fill: colors.brand }} />
+            </LineChart>
+          </FitChartContainer>
         </div>
         <div style={s.tableCard}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -178,6 +172,6 @@ export default function DashboardPage() {
             ))}
           </div>
         </FitSection>
-      </section>
+      </FitSection>
   );
 }

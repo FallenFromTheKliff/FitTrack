@@ -1,4 +1,9 @@
 export const WEEK_DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+export const CALENDAR_VIEW_OPTIONS = [
+  { value: "DAYS", label: "Days" },
+  { value: "MONTHS", label: "Months" },
+  { value: "YEARS", label: "Years" }
+] as const;
 
 export const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 

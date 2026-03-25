@@ -19,7 +19,6 @@ function getPageKey(pathname: string): PageKey {
   if (pathname.startsWith("/inventory")) return "inventory";
   if (pathname.startsWith("/analytics")) return "analytics";
   if (pathname.startsWith("/settings")) return "settings";
-  if (pathname.startsWith("/chatbot")) return "chatbot";
   if (pathname.startsWith("/profile")) return "profile";
   return "dashboard";
 }
@@ -94,9 +93,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className={themeTransition} style={s.root}>
-      {!isHalfScreenOrLess ? <div style={s.desktopSidebarWrap}><Sidebar /></div> : null}
+      {!isHalfScreenOrLess ? (
+        <div style={s.desktopSidebarWrap}>
+          <Sidebar />
+        </div>
+      ) : null}
       <div style={s.main}>
-        <Header onMenuToggle={() => setIsMobileOpen((v) => !v)} showMenuButton={isHalfScreenOrLess} pageKey={pageKey} />
+        <Header
+          onMenuToggle={() => setIsMobileOpen((v) => !v)}
+          showMenuButton={isHalfScreenOrLess}
+          pageKey={pageKey}
+        />
         <main style={s.content}>{children}</main>
       </div>
       {isHalfScreenOrLess ? (

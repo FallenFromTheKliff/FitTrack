@@ -1,23 +1,13 @@
-const DEFAULT_FACILITY_ICON = "🏋️";
+import type { Booking, Resource } from "@/data/schedule-constants";
 
-type Resource = {
-  id: string;
-  name: string;
-  type: "trainer" | "facility";
-  icon: string;
-};
-
-type Booking = {
-  id: string;
-  resourceId: string;
-  resourceName: string;
-};
+const DEFAULT_FACILITY_ICON = "GYM";
 
 export function deriveResourcesFromBookings(
-  bookings: Booking[],
+  bookings: Pick<Booking, "resourceId" | "resourceName">[],
   manualResources: Resource[]
 ): Resource[] {
   const byId = new Map<string, Resource>();
+
   bookings.forEach((booking) => {
     if (!byId.has(booking.resourceId)) {
       byId.set(booking.resourceId, {
@@ -28,11 +18,14 @@ export function deriveResourcesFromBookings(
       });
       return;
     }
+
     const existing = byId.get(booking.resourceId);
     if (existing) existing.name = booking.resourceName;
   });
+
   manualResources.forEach((resource) => {
     byId.set(resource.id, resource);
   });
+
   return Array.from(byId.values());
 }

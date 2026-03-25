@@ -13,6 +13,7 @@ export type FitTableColumn<T> = {
   key: string;
   heading: string;
   headingStyle?: CSSProperties;
+  align?: "left" | "center" | "right";
   render: (row: T, colors: ReturnType<typeof useTheme>["colors"]) => ReactNode;
 };
 
@@ -54,12 +55,19 @@ export default function FitTable<T>({
   style
 }: Props<T>) {
   const { colors } = useTheme();
+  const getColumnAlignment = (column: FitTableColumn<T>) => {
+    if (column.align) return column.align;
+    const heading = column.heading.toLowerCase();
+    return /capacity|stock|price|rate|value|total|revenue|cost|amount|hours|bmi/.test(heading)
+      ? "right"
+      : "left";
+  };
 
   const headStyle: CSSProperties = {
     fontSize: 11,
     fontWeight: 700,
     color: colors.textMuted,
-    padding: "10px 12px",
+    padding: "16px 14px",
     textAlign: "left",
     borderBottom: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
@@ -67,7 +75,7 @@ export default function FitTable<T>({
   };
 
   const cellStyle: CSSProperties = {
-    padding: "13px 12px",
+    padding: "16px 14px",
     fontSize: 14,
     color: colors.textPrimary,
     borderBottom: `1px solid ${colors.border}`,
@@ -92,7 +100,7 @@ export default function FitTable<T>({
           <thead>
           <tr>
             {columns.map((col) => (
-                <th key={col.key} style={{ ...headStyle, ...col.headingStyle }}>
+                <th key={col.key} style={{ ...headStyle, textAlign: getColumnAlignment(col), ...col.headingStyle }}>
                   <FitText as="span" style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
                     {col.heading}
                   </FitText>
@@ -124,7 +132,7 @@ export default function FitTable<T>({
               rows.map((row) => (
                   <tr key={getRowKey(row)} className="fit-table-row">
                     {columns.map((col) => (
-                        <td key={col.key} style={cellStyle}>
+                        <td key={col.key} style={{ ...cellStyle, textAlign: getColumnAlignment(col) }}>
                           {col.render(row, colors)}
                         </td>
                     ))}

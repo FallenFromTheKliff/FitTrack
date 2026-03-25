@@ -5,6 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { api } from "@/lib/axios";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { modalStyles } from "@/styles/modalStyles";
+import type { ForgotPasswordStep } from "@/data/auth/auth";
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
 import { FitText } from "@/components/fit/FitText";
@@ -16,8 +17,6 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
 };
-
-type Step = "email" | "otp" | "password";
 
 function extractErrorMessage(error: unknown, fallback: string) {
   if (typeof error !== "object" || error === null) {
@@ -41,7 +40,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
   const { colors } = useTheme();
   const s = modalStyles(colors);
   const { message, showMessage } = useTimedMessage(2400);
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<ForgotPasswordStep>("email");
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [passwordDraft, setPasswordDraft] = useState("");

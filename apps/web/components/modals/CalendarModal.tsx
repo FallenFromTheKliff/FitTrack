@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { addMonths, addYears, getDay, getDaysInMonth, startOfMonth } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import type { CalendarViewMode } from "@fittrack/types";
+import { formatDateYMD, parseDateYMD } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
-import { WEEK_DAYS } from "@/data/ui/calendar";
+import { CALENDAR_VIEW_OPTIONS, MONTH_NAMES, MONTH_NAMES_SHORT, WEEK_DAYS } from "@/data/ui/calendar";
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
@@ -16,66 +19,73 @@ type Props = {
   title?: string;
 };
 
-const toYmd = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
-
-const parseYmd = (value?: string): Date => {
-  if (!value) return new Date();
-  const [y, m, d] = value.split("-").map(Number);
-  if (!y || !m || !d) return new Date();
-  return new Date(y, m - 1, d);
-};
-
-const monthLabel = (date: Date): string =>
-  date.toLocaleString("en-US", { month: "long", year: "numeric" });
-
-const daysInMonth = (year: number, monthIndex: number): number =>
-  new Date(year, monthIndex + 1, 0).getDate();
-
-const firstDayOffset = (year: number, monthIndex: number): number =>
-  new Date(year, monthIndex, 1).getDay();
-
-export default function CalendarModal({
-  isOpen,
-  selectedDate,
-  onSelect,
-  onClose,
-  title = "Select Date"
-}: Props) {
+export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose, title = "Select Date" }: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const s = modalStyles(colors);
-  const selected = useMemo(() => parseYmd(selectedDate), [selectedDate]);
+  const selected = useMemo(() => parseDateYMD(selectedDate), [selectedDate]);
   const [cursor, setCursor] = useState<Date>(selected);
+  const [currentView, setCurrentView] = useState<CalendarViewMode>("DAYS");
 
   useEffect(() => {
-    if (isOpen) setCursor(parseYmd(selectedDate));
+    if (isOpen) {
+      setCursor(parseDateYMD(selectedDate));
+      setCurrentView("DAYS");
+    }
   }, [isOpen, selectedDate]);
 
   const year = cursor.getFullYear();
   const monthIndex = cursor.getMonth();
-  const monthDays = daysInMonth(year, monthIndex);
-  const offset = firstDayOffset(year, monthIndex);
-  const todayYmd = toYmd(new Date());
+  const monthDays = getDaysInMonth(cursor);
+  const offset = getDay(startOfMonth(cursor));
+  const todayYmd = formatDateYMD(new Date());
   const selectedYmd = selectedDate ?? "";
-
-  const cells = Array.from({ length: 42 }).map((_, idx) => {
-    const dayNum = idx - offset + 1;
-    if (dayNum < 1 || dayNum > monthDays) return null;
-    const cellDate = new Date(year, monthIndex, dayNum);
-    return { dayNum, ymd: toYmd(cellDate) };
+  const yearRangeStart = year - 7;
+  const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
+  const dayCells = Array.from({ length: 42 }, (_, index) => {
+    const dayNumber = index - offset + 1;
+    if (dayNumber < 1 || dayNumber > monthDays) return null;
+    const nextDate = new Date(year, monthIndex, dayNumber);
+    return { dayNumber, ymd: formatDateYMD(nextDate) };
   });
+
+  const navLabel =
+    currentView === "DAYS"
+      ? `${MONTH_NAMES[monthIndex]} ${year}`
+      : currentView === "MONTHS"
+        ? String(year)
+        : `${yearRangeStart} - ${yearRangeStart + 15}`;
+
+  const handlePrev = () => {
+    if (currentView === "DAYS") {
+      setCursor((value) => addMonths(value, -1));
+      return;
+    }
+    if (currentView === "MONTHS") {
+      setCursor((value) => addYears(value, -1));
+      return;
+    }
+    setCursor((value) => addYears(value, -16));
+  };
+
+  const handleNext = () => {
+    if (currentView === "DAYS") {
+      setCursor((value) => addMonths(value, 1));
+      return;
+    }
+    if (currentView === "MONTHS") {
+      setCursor((value) => addYears(value, 1));
+      return;
+    }
+    setCursor((value) => addYears(value, 16));
+  };
 
   return (
     <FitModal
       isOpen={isOpen}
       onClose={onClose}
       title={title}
-      iconNode={<CalendarDays size={15} color={onBrandTextColor} strokeWidth={2} />}
-      titleStyle={{ fontSize: 14 }}
+      iconNode={<CalendarDays size={16} color={onBrandTextColor} strokeWidth={2} />}
+      titleStyle={{ fontSize: 16, fontWeight: 700 }}
       maxWidth={500}
       closeAriaLabel="Close calendar"
       noScroll
@@ -86,43 +96,109 @@ export default function CalendarModal({
             variant="ghost"
             iconOnly
             icon={ChevronLeft}
-            iconSize={15}
-            onClick={() => setCursor(new Date(year, monthIndex - 1, 1))}
+            iconSize={17}
+            onClick={handlePrev}
             style={s.calendarNavBtn}
-            aria-label="Previous month"
+            aria-label={`Previous ${currentView.toLowerCase()}`}
           />
-          <FitText style={s.calendarMonthLabel}>{monthLabel(cursor)}</FitText>
+          <FitText style={{ fontSize: 14, fontWeight: 700, color: colors.brand, minWidth: 180, textAlign: "center" }}>
+            {navLabel}
+          </FitText>
           <FitButton
             variant="ghost"
             iconOnly
             icon={ChevronRight}
-            iconSize={15}
-            onClick={() => setCursor(new Date(year, monthIndex + 1, 1))}
+            iconSize={17}
+            onClick={handleNext}
             style={s.calendarNavBtn}
-            aria-label="Next month"
+            aria-label={`Next ${currentView.toLowerCase()}`}
           />
         </div>
-        <div style={{ ...s.calendarGrid, marginBottom: 8 }}>
-          {WEEK_DAYS.map((label) => (
-            <FitText key={label} style={s.calendarWeekDay}>{label}</FitText>
-          ))}
-        </div>
-        <div style={s.calendarGrid}>
-          {cells.map((cell, idx) => {
-            if (!cell) return <div key={`empty-${idx}`} style={s.calendarEmptyCell} />;
-            const isSelected = cell.ymd === selectedYmd;
-            const isToday = cell.ymd === todayYmd;
+        <div style={s.calendarViewRow}>
+          {CALENDAR_VIEW_OPTIONS.map((option) => {
+            const isActive = option.value === currentView;
             return (
-              <button
-                key={cell.ymd}
-                type="button"
-                onClick={() => { onSelect(cell.ymd); onClose(); }}
-                style={s.calendarDayBtn(isSelected, isToday)}
-              >
-                {cell.dayNum}
-              </button>
+              <FitButton
+                key={option.value}
+                variant={isActive ? "primary" : "ghost"}
+                label={option.label}
+                onClick={() => setCurrentView(option.value)}
+                style={s.calendarViewBtn(isActive)}
+                aria-pressed={isActive}
+              />
             );
           })}
+        </div>
+        <div style={s.calendarBody}>
+          {currentView === "DAYS" && (
+            <>
+              <div style={{ ...s.calendarGrid, marginBottom: 8 }}>
+                {WEEK_DAYS.map((label) => (
+                  <FitText key={label} style={s.calendarWeekDay}>{label}</FitText>
+                ))}
+              </div>
+              <div style={s.calendarGrid}>
+                {dayCells.map((cell, index) => {
+                  if (!cell) return <div key={`empty-${index}`} style={s.calendarEmptyCell} />;
+                  const isSelected = cell.ymd === selectedYmd;
+                  const isToday = cell.ymd === todayYmd;
+                  return (
+                    <FitButton
+                      key={cell.ymd}
+                      variant={isSelected ? "primary" : "ghost"}
+                      label={String(cell.dayNumber)}
+                      onClick={() => {
+                        onSelect(cell.ymd);
+                        onClose();
+                      }}
+                      style={s.calendarDayBtn(isSelected, isToday)}
+                      aria-label={`Select ${cell.ymd}`}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {currentView === "MONTHS" && (
+            <div style={s.calendarMonthGrid}>
+              {MONTH_NAMES_SHORT.map((monthName, index) => {
+                const isActive = index === monthIndex;
+                return (
+                  <FitButton
+                    key={monthName}
+                    variant={isActive ? "primary" : "ghost"}
+                    label={monthName}
+                    onClick={() => {
+                      setCursor(new Date(year, index, 1));
+                      setCurrentView("DAYS");
+                    }}
+                    style={s.calendarPickerBtn(isActive)}
+                    aria-label={`Select ${MONTH_NAMES[index]}`}
+                  />
+                );
+              })}
+            </div>
+          )}
+          {currentView === "YEARS" && (
+            <div style={s.calendarYearGrid}>
+              {yearCells.map((value) => {
+                const isActive = value === year;
+                return (
+                  <FitButton
+                    key={value}
+                    variant={isActive ? "primary" : "ghost"}
+                    label={String(value)}
+                    onClick={() => {
+                      setCursor(new Date(value, monthIndex, 1));
+                      setCurrentView("MONTHS");
+                    }}
+                    style={s.calendarPickerBtn(isActive)}
+                    aria-label={`Select year ${value}`}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
         <div style={s.calendarFooter}>
           <FitButton variant="ghost" onClick={() => onSelect("")} style={s.calendarClearBtn}>
@@ -130,7 +206,10 @@ export default function CalendarModal({
           </FitButton>
           <FitButton
             variant="ghost"
-            onClick={() => { onSelect(todayYmd); onClose(); }}
+            onClick={() => {
+              onSelect(todayYmd);
+              onClose();
+            }}
             style={s.calendarTodayBtn}
           >
             Today

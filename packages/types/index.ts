@@ -7,6 +7,7 @@ export type BookingStatus = "confirmed" | "waitlisted" | "cancelled";
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 export type EquipmentStatus = "available" | "maintenance" | "occupied";
 export type MemberTier = "Basic" | "Premium" | "Elite";
+export type CalendarViewMode = "DAYS" | "MONTHS" | "YEARS";
 
 export type ThemeColors = {
   brand: string;

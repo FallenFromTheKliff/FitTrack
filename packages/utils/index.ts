@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow, parseISO, isValid } from "date-fns";
+import { format, formatDistanceToNow, isValid, parse, parseISO } from "date-fns";
 
 export const formatDate = (iso: string, pat = "MMM d, yyyy") => {
   const d = parseISO(iso);
@@ -16,6 +16,14 @@ export function formatTodayLong(): string {
 export function parseYMD(s: string) {
   const [y = 0, m = 0, d = 0] = (s || "").split("-").map(Number);
   return { year: y, month: m, day: d };
+}
+export function parseDateYMD(value?: string, fallback = new Date()) {
+  if (!value) return fallback;
+  const parsed = parse(value, "yyyy-MM-dd", fallback);
+  return isValid(parsed) ? parsed : fallback;
+}
+export function formatDateYMD(date: Date): string {
+  return format(date, "yyyy-MM-dd");
 }
 export function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
