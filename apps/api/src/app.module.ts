@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { localEnvFilePath } from '../env-path';
 
 import { UserModule } from './user/user.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -19,7 +20,7 @@ import { StaffModule } from './staff/staff.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: localEnvFilePath,
     }),
     ThrottlerModule.forRoot([
       {
