@@ -1,8 +1,13 @@
 # FITTRACK: A SYSTEM FOR EFFICIENT GYM MANAGEMENT
 
-### Changelog (01/29/26):
-  - Repository for FitTrack established on January 29, 2026
-  - Updated README.md to act as DevLog
+### Changelog (03/25/26):
+  - Project Development resumed recording
+  - Web/Mobile: CRUD fully functional
+  - Web/Mobile: 2D Layout fully functional
+  - Web: Staff Management partially operational, needs tweaking
+  - Web: Venue Management partially operational, needs tweaking
+  - Mobile: Camera operational, requires backend integration and UI tweaks
+  - Mobile: Booking operational, needs backend tweaks
 
 ---
 
@@ -17,20 +22,19 @@
 ## FRONTEND
 ### WEBSITE
   - Admin & Staff
-    - *Modules to be added*
-  - Members
-    - *Modules to be added*
+    - *User Management*
+    - *Schedule Management*
+    - *2D Facility Layout*
 ### MOBILE
   - Members
-    - *Modules to be added*
+    - *User Management*
+    - *Booking and Appointments*
 
 ---
 
 ## BACKEND
 ### WEBSITE
   - Admin & Staff
-    - *Modules to be added*
-  - Members
     - *Modules to be added*
 ### MOBILE
   - Members
