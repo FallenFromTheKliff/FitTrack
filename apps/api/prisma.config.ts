@@ -1,7 +1,8 @@
 import { defineConfig } from 'prisma/config';
+import { localEnvFilePath } from './env-path';
 
 if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
+  require('dotenv').config(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 }
 
 export default defineConfig({

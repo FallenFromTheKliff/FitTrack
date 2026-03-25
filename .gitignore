@@ -7,7 +7,9 @@ apps/mobile/.env
 
 # Environment files
 .env
+.env.docker
 !.env.format
+!.env.docker.format
 
 # Build outputs
 .next/
