@@ -57,19 +57,17 @@ export default function LoginScreen() {
       return;
     }
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
     const result = await login(data.email, data.password);
     setIsLoading(false);
     if (!result) {
       showStatus("Invalid credentials.");
       return;
     }
-    showStatus("Welcome back!");
-    await new Promise((resolve) => setTimeout(resolve, 200));
     if (result.needsOTP) {
-      showStatus("Please verify your email first.");
+      showStatus("Verification code sent. Check your email to continue.");
       return;
     }
+    showStatus("Welcome back!");
     await fadeOutAndShowBuffer();
   };
 

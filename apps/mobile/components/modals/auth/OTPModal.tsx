@@ -18,8 +18,8 @@ const OTP_LENGTH = 6;
 const MAX_WRONG_ATTEMPTS = 5;
 const RESEND_SECONDS = 55;
 const INACTIVITY_MS = 5 * 60 * 1000;
-const VERIFIED_TOTAL_MS = 3000;
 const VERIFIED_SHOW_MS = 200;
+const VERIFIED_EXIT_MS = 180;
 
 type Props = {
   visible: boolean;
@@ -148,10 +148,7 @@ export default function OTPModal({
   const handleVerify = async () => {
     if (!isComplete || isVerifying || isVerified) return;
     setIsVerifying(true);
-    const [result] = await Promise.all([
-      (onVerify ?? verifyOTP)(code),
-      new Promise((r) => setTimeout(r, VERIFIED_TOTAL_MS - VERIFIED_SHOW_MS))
-    ]);
+    const result = await (onVerify ?? verifyOTP)(code);
     if (result.success) {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
       if (resendTimer.current) clearInterval(resendTimer.current);
@@ -162,7 +159,7 @@ export default function OTPModal({
         scale.value = withTiming(0.95, { duration: 200 });
         setTimeout(() => {
           successSignal.value = 1;
-        }, 200);
+        }, VERIFIED_EXIT_MS);
       }, VERIFIED_SHOW_MS);
     } else {
       setIsVerifying(false);
@@ -275,9 +272,7 @@ export default function OTPModal({
                 />
               )}
             </View>
-            <FitText style={s.copyright}>
-              Â© 2026 SertFit Gym. All rights reserved.
-            </FitText>
+            <FitText style={s.copyright}>(c) 2026 SertFit Gym. All rights reserved.</FitText>
           </Animated.View>
         </Animated.View>
       </KeyboardAvoidingView>

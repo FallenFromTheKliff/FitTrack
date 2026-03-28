@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { CheckCircle, XCircle } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { revisePassword } from "@fittrack/utils";
+import { PASSWORD_REQUIREMENT_ITEMS, revisePassword } from "@fittrack/utils";
 import { makeRequirementStyles } from "@/styles/components/RequirementStyles";
 
 import { FitText } from "@/components/fit/FitText";
@@ -23,13 +23,10 @@ export default function PasswordRequirements({ password, onValidationChange }: P
     onValidationChange(allMet);
   }, [allMet, onValidationChange]);
 
-  const items: { met: boolean; label: string }[] = [
-    { met: r.minLength, label: "Minimum 8 characters" },
-    { met: r.hasUppercase, label: "At least one uppercase letter (A–Z)" },
-    { met: r.hasLowercase, label: "At least one lowercase letter (a–z)" },
-    { met: r.hasNumber, label: "At least one number (0–9)" },
-    { met: r.hasSpecial, label: "At least one special character (@$!%*?&)" }
-  ];
+  const items: { met: boolean; label: string }[] = PASSWORD_REQUIREMENT_ITEMS.map((item) => ({
+    met: r[item.key],
+    label: item.label
+  }));
 
   return (
     <View style={s.container}>

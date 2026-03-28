@@ -502,7 +502,7 @@ export default function MembersPage() {
         subtitle={editTarget?.email ?? ""}
         fields={EDIT_MEMBER_FIELDS}
         initialValues={editInitialValues}
-        submitLabel={isStaff || isSelfEdit ? "CLOSE" : "SAVE CHANGES"}
+        submitLabel={isStaff || isSelfEdit ? "DONE" : "SAVE CHANGES"}
         readOnly={isStaff || isSelfEdit}
         readOnlyBanner={isStaff ? "Staff access is read-only in this directory." : isSelfEdit ? "This is your own account. To edit your details, go to Profile." : undefined}
         disableUnchanged

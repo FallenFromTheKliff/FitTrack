@@ -27,6 +27,12 @@ type ConfirmModalProps = {
   onYes: () => void;
 };
 
+function getLoadingTitle(title: string, actionLabel?: string, loadingTitle?: string) {
+  if (loadingTitle) return loadingTitle;
+  const nextTitle = (actionLabel ?? "").replace(/\.+$/, "").trim();
+  return nextTitle || title;
+}
+
 export default function ConfirmModal({
   isVisible,
   title,
@@ -46,7 +52,9 @@ export default function ConfirmModal({
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeConfirmStyles(colors), [colors]);
 
-  const displayTitle = isLoading && loadingTitle ? loadingTitle : title;
+  const displayTitle = isLoading
+    ? getLoadingTitle(title, loadingLabel ?? yesLabel, loadingTitle)
+    : title;
   const loadingText = useLoadingText(loadingLabel ?? "LOADING", isLoading);
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));

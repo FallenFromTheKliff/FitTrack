@@ -1,7 +1,7 @@
 export type { VenueRecord } from "@fittrack/types";
-import type { VenueRecord } from "@fittrack/types";
+import { normalizeVenueIconKey, type VenueIconKey, type VenueRecord } from "@fittrack/types";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Bell, Bike, CircleDot, Dumbbell, Timer, Waves, Square, Flame, Swords } from "lucide-react";
+import { Activity, Bike, CircleDot, ConciergeBell, Dribbble, Dumbbell, Flame, Square, Swords, Timer, Volleyball, Waves } from "lucide-react";
 
 export const COLS = 14;
 export const ROWS = 10;
@@ -17,17 +17,17 @@ export type EquipmentDef = {
 
 export type VenueEquipmentAssignments = Record<string, string[]>;
 
-export const VENUE_ICONS: Record<string, LucideIcon> = {
-  basketball: Activity,
-  volleyball: Activity,
+export const VENUE_ICONS: Record<VenueIconKey, LucideIcon> = {
+  basketball: Dribbble,
+  volleyball: Volleyball,
   boxing: Swords,
-  reception: Bell,
+  reception: ConciergeBell,
   "gym-area": Dumbbell,
   yoga: Waves
 };
 
 export function getVenueIcon(iconKey?: string | null): LucideIcon {
-  return VENUE_ICONS[iconKey ?? "gym-area"] ?? Dumbbell;
+  return VENUE_ICONS[normalizeVenueIconKey(iconKey)];
 }
 
 export const EQUIPMENT: EquipmentDef[] = [

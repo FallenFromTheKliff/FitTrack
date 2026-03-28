@@ -1,12 +1,9 @@
 import { Bell, Moon, Lock, ShieldCheck, HelpCircle, FileText, type LucideIcon } from "lucide-react-native";
 import type { PrefKey } from "@/components/modals/settings/SettingsModal";
+import type { PasswordRequirementKey } from "@fittrack/utils";
+import { PASSWORD_REQUIREMENT_ITEMS } from "@fittrack/utils";
 
-export type PasswordRequirementKey =
-  | "minLength"
-  | "hasUppercase"
-  | "hasLowercase"
-  | "hasNumber"
-  | "hasSpecial";
+export type { PasswordRequirementKey };
 
 export const PREF_META: Record<PrefKey, { title: string; icon: LucideIcon }> = {
   notifications: { title: "Notifications", icon: Bell },
@@ -17,13 +14,7 @@ export const PREF_META: Record<PrefKey, { title: string; icon: LucideIcon }> = {
   terms: { title: "Terms & Conditions", icon: FileText }
 };
 
-export const PASSWORD_REQUIREMENTS: Array<{ key: PasswordRequirementKey; label: string }> = [
-  { key: "minLength", label: "Minimum 8 characters" },
-  { key: "hasUppercase", label: "At least one uppercase letter" },
-  { key: "hasLowercase", label: "At least one lowercase letter" },
-  { key: "hasNumber", label: "At least one number" },
-  { key: "hasSpecial", label: "At least one special character" }
-];
+export const PASSWORD_REQUIREMENTS: Array<{ key: PasswordRequirementKey; label: string }> = PASSWORD_REQUIREMENT_ITEMS;
 
 export const HELP_FAQS = [
   { q: "How do I book a class?", a: "Go to the Bookings tab and select an available class or trainer slot." },

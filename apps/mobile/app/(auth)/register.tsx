@@ -4,11 +4,9 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
-import { AxiosError } from "axios";
 import { ArrowLeft, Dumbbell, Lock, Mail, Phone } from "lucide-react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { mobileApi } from "@/lib/api";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuthEntrance } from "@/hooks/animations/feature/useAuthEntrance";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
@@ -25,17 +23,8 @@ import PasswordRequirements from "@/components/requirements/PasswordRequirements
 
 const PASS_REQ_HEIGHT = 210;
 
-function toRegisterErrorMessage(error: unknown): string {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) return data.message.join(" ");
-    if (typeof data?.message === "string") return data.message;
-  }
-  return "Could not create account. Please try again.";
-}
-
 export default function RegisterScreen() {
-  const { login, commitLogin } = useAuth();
+  const { register, commitLogin } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
@@ -71,80 +60,41 @@ export default function RegisterScreen() {
   const onSubmit = async (data: RegisterData) => {
     if (isLoading) return;
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    try {
-      await mobileApi.post("/auth/register", {
-        email: data.email,
-        phone_no: data.phone,
-        password: data.password
-      });
+    const result = await register({
+      email: data.email,
+      phone: data.phone,
+      password: data.password
+    });
+    if (result) {
       setPendingEmail(data.email);
       setPendingPhone(data.phone);
       setPendingPassword(data.password);
       setShowOTP(true);
       setIsLoading(false);
-    } catch (error: unknown) {
-      const message = toRegisterErrorMessage(error);
-      const shouldContinueToOtp = message === "Failed to send OTP email";
-      if (shouldContinueToOtp) {
-        setPendingEmail(data.email);
-        setPendingPhone(data.phone);
-        setPendingPassword(data.password);
-        setShowOTP(true);
-        showStatus("Account created. OTP email failed, but you can still verify.");
-      } else {
-        showStatus(message);
-      }
-      setIsLoading(false);
+      return;
     }
+    showStatus("Could not create account. Please try again.");
+    setIsLoading(false);
   };
 
   const handleOTPSuccess = async () => {
     setShowOTP(false);
-    if (!pendingEmail || !pendingPassword) {
-      setPendingEmail("");
-      setPendingPhone("");
-      setPendingPassword("");
-      showStatus("Verification complete. Please sign in.");
-      router.replace("/(auth)/login");
-      return;
-    }
-    setIsLoading(true);
-    const result = await login(pendingEmail, pendingPassword);
-    if (!result || result.needsOTP) {
-      setIsLoading(false);
-      setPendingEmail("");
-      setPendingPhone("");
-      setPendingPassword("");
-      showStatus("Verification complete. Please sign in.");
-      router.replace("/(auth)/login");
-      return;
-    }
     setPendingEmail("");
     setPendingPhone("");
     setPendingPassword("");
     setShowBuffer(true);
   };
 
-  const handleOTPVerify = async (code: string) => {
-    if (!pendingEmail) {
-      return { success: false as const, error: "No pending email." };
-    }
-    try {
-      await mobileApi.post("/auth/verify-email", { email: pendingEmail, otp: code });
-      return { success: true as const };
-    } catch (error: unknown) {
-      return { success: false as const, error: toRegisterErrorMessage(error) };
-    }
-  };
-
   const handleOTPResend = async () => {
-    if (!pendingEmail) return;
-    await mobileApi.post("/auth/register", {
+    if (!pendingEmail || !pendingPassword) return;
+    const result = await register({
       email: pendingEmail,
-      phone_no: pendingPhone || undefined,
+      phone: pendingPhone,
       password: pendingPassword
     });
+    if (!result) {
+      showStatus("Could not resend the verification code.");
+    }
   };
 
   const handleOTPDismiss = () => {
@@ -271,7 +221,7 @@ export default function RegisterScreen() {
               <FitText style={s.termsLink}>Privacy Policy</FitText>
             </FitText>
             <FitText style={s.copyright}>
-              © 2026 SertFit Gym. All rights reserved.
+              (c) 2026 SertFit Gym. All rights reserved.
             </FitText>
           </Animated.View>
         </ScrollView>
@@ -279,7 +229,6 @@ export default function RegisterScreen() {
       <OTPModal
         visible={showOTP}
         destination={pendingEmail}
-        onVerify={handleOTPVerify}
         onResend={handleOTPResend}
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}

@@ -48,7 +48,7 @@ export default function FitButton({
   const flexStyle: CSSProperties = flex !== undefined ? { flex } : {};
 
   const base = cn(
-      "inline-flex items-center justify-center gap-2",
+      "inline-flex items-center justify-center gap-[10px]",
       "cursor-pointer transition-colors",
       "disabled:opacity-60 disabled:cursor-not-allowed",
       fontClass,

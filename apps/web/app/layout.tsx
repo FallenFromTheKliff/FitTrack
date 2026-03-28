@@ -12,7 +12,6 @@ const blrrpix = localFont({
   variable: "--font-retro",
   display: "swap"
 });
-
 const caveatBrush = localFont({
   src: "../assets/fonts/caveatbrush.ttf",
   variable: "--font-painter",
@@ -24,11 +23,7 @@ export const metadata: Metadata = {
   description: "Gym Management System"
 };
 
-export default function RootLayout({
-  children
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"

@@ -20,6 +20,12 @@ type Props = {
   isDanger?: boolean;
 };
 
+function getLoadingTitle(title: string, actionLabel?: string, loadingTitle?: string) {
+  if (loadingTitle) return loadingTitle;
+  const nextTitle = (actionLabel ?? "").replace(/\.+$/, "").trim();
+  return nextTitle || title;
+}
+
 export default function ConfirmModal({
   isOpen,
   title,
@@ -35,7 +41,9 @@ export default function ConfirmModal({
 }: Props) {
   const { colors } = useTheme();
   const animatedLoadingLabel = useLoadingText(loadingLabel ?? confirmLabel, isLoading);
-  const modalTitle = isLoading && loadingTitle ? loadingTitle : title;
+  const modalTitle = isLoading
+    ? getLoadingTitle(title, loadingLabel ?? confirmLabel, loadingTitle)
+    : title;
   const handleCancel = isLoading ? () => {} : onCancel;
 
   return (

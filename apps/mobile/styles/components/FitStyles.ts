@@ -93,8 +93,8 @@ export function makeFitCardStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center"
     },
-    textGroup: { flex: 1, gap: 2 },
-    labelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    textGroup: { flex: 1, gap: 4 },
+    labelRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
     trailingRow: {
       marginLeft: "auto",
       flexDirection: "row",

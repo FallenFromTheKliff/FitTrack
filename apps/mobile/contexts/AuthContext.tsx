@@ -159,6 +159,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
           password: data.password
         });
         pendingEmailRef.current = res.data.email;
+        pendingCredentialsRef.current = { email: data.email, password: data.password };
         const placeholder: AuthUser = { id: res.data.userId, email: res.data.email, role: "USER" };
         return placeholder;
       } catch {

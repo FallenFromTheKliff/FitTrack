@@ -18,6 +18,17 @@ export type VenueRecord = {
   isActive?: boolean;
 };
 
+export const VENUE_ICON_KEYS = [
+  "basketball",
+  "volleyball",
+  "boxing",
+  "reception",
+  "gym-area",
+  "yoga"
+] as const;
+
+export type VenueIconKey = typeof VENUE_ICON_KEYS[number];
+
 export type FacilityFloorId = "floor-1" | "floor-2" | "floor-3";
 
 export type FacilityFloorDefinition = {
@@ -82,6 +93,52 @@ function sortVenues(a: VenueRecord, b: VenueRecord) {
 
 function normalizeName(value?: string | null) {
   return (value ?? "").trim().toLowerCase();
+}
+
+function includesVenueHint(value: string, hints: string[]) {
+  return hints.some((hint) => value.includes(hint));
+}
+
+export function normalizeVenueIconKey(value?: string | null): VenueIconKey {
+  const normalized = normalizeName(value);
+  if (normalized === "basketball" || normalized === "basketball-court") return "basketball";
+  if (normalized === "volleyball" || normalized === "volleyball-court") return "volleyball";
+  if (normalized === "boxing" || normalized === "boxing-ring") return "boxing";
+  if (normalized === "reception" || normalized === "front-desk" || normalized === "desk") return "reception";
+  if (
+    normalized === "gym-area" ||
+    normalized === "gym" ||
+    normalized === "dumbbell" ||
+    normalized === "weights" ||
+    normalized === "strength" ||
+    normalized === "cardio"
+  ) {
+    return "gym-area";
+  }
+  if (normalized === "yoga" || normalized === "yoga-studio") return "yoga";
+  return "gym-area";
+}
+
+export function resolveVenueIconKey(input: Pick<VenueRecord, "iconKey" | "slug" | "name">): VenueIconKey {
+  const explicit = normalizeName(input.iconKey);
+  if (explicit) {
+    const normalized = normalizeVenueIconKey(explicit);
+    if (normalized !== "gym-area" || includesVenueHint(explicit, ["gym", "dumbbell", "weights", "strength", "cardio"])) {
+      return normalized;
+    }
+  }
+
+  const haystack = [input.slug, input.name, input.iconKey]
+    .map(normalizeName)
+    .filter(Boolean)
+    .join(" ");
+
+  if (includesVenueHint(haystack, ["basketball"])) return "basketball";
+  if (includesVenueHint(haystack, ["volleyball"])) return "volleyball";
+  if (includesVenueHint(haystack, ["boxing", "ring"])) return "boxing";
+  if (includesVenueHint(haystack, ["reception", "front desk", "front-desk"])) return "reception";
+  if (includesVenueHint(haystack, ["yoga", "studio"])) return "yoga";
+  return "gym-area";
 }
 
 function createFloorVenue(

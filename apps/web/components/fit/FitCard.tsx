@@ -123,8 +123,8 @@ export default function FitCard({
                 <Icon size={iconSize} color={iconBg ? colors.textPrimary : colors.brand} />
             ) : null}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ flex: 1, display: "grid", gap: subtitle ? 6 : 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <FitText as="span" style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}>
                 {label}
               </FitText>
@@ -142,9 +142,7 @@ export default function FitCard({
                 ) : null}
               </div>
             </div>
-            {subtitle ? (
-                <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, marginTop: 6 }}>{subtitle}</FitText>
-            ) : null}
+            {subtitle ? <FitText as="p" style={{ fontSize: 13, color: colors.textMuted }}>{subtitle}</FitText> : null}
             {progress !== undefined ? (
                 <div style={s.progressTrack}>
                   <div style={s.progressFill(progress, trailColor)} />
@@ -181,7 +179,7 @@ export function FitKpiCard({ icon: Icon, label, value, color, style, labelStyle,
   const iconColor = color ?? colors.brand;
   return (
       <div className="fit-kpi-card" style={style}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
           <Icon size={15} color={iconColor} />
           <FitText style={{ fontSize: 12, color: colors.textMuted, ...labelStyle }}>{label}</FitText>
         </div>
