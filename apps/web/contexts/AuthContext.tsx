@@ -1,10 +1,9 @@
 "use client";
 import { useState, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import type { IAuthContext, AuthUser, Role } from "@fittrack/types";
 import { queryKeys } from "@fittrack/query";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 
 type Props = {
   children: ReactNode;
@@ -12,34 +11,16 @@ type Props = {
   onUserCleared: () => void;
 };
 
-type LoginResponse = {
-  access_token: string;
-  refresh_token: string;
-  user: {
-    id: string;
-    email: string;
-    role: Role;
-    emailVerified?: boolean;
-    phoneVerified?: boolean;
-    phone_no?: string | null;
-  };
-};
-
-type OtpResponse = {
-  otpRequired: true;
-  message?: string;
-  reason?: string;
-};
-
 const AuthContext = createContext<IAuthContext | null>(null);
 
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) return data.message.join(" ");
-    if (typeof data?.message === "string") return data.message;
-  }
-  return fallback;
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
+}
+
+function isLoginSuccess(
+  value: Awaited<ReturnType<typeof webApiClient.auth.login>>
+): value is Awaited<ReturnType<typeof webApiClient.auth.login>> & { access_token: string; refresh_token: string; user: { id: string; email: string; role: string; phone_no?: string | null; emailVerified?: boolean; phoneVerified?: boolean } } {
+  return "access_token" in value;
 }
 
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
@@ -57,13 +38,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     queryFn: async () => {
       const token = localStorage.getItem("fittrack_access_token");
       if (!token) return null;
-      const { data } = await api.get("/users/profile");
+      const data = await webApiClient.users.getProfile();
       const authUser: AuthUser = {
         id: data.id,
         email: data.email,
         role: data.role?.name as Role,
         phone_no: data.phone_no,
-        profile: data.profile
+        profile: data.profile ?? undefined
       };
       await onUserLoaded(authUser.id);
       return authUser;
@@ -80,8 +61,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const loginMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const { data } = await api.post<LoginResponse | OtpResponse>("/auth/login", { email, password });
-      return data;
+      return webApiClient.auth.login({ email, password });
     }
   });
 
@@ -95,13 +75,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
         setAttempts(0);
         return { success: true as const, otpRequired: true as const };
       }
-      if (!("access_token" in data)) return { success: false as const, error: "Invalid login response." };
+      if (!isLoginSuccess(data)) return { success: false as const, error: "Invalid login response." };
       localStorage.setItem("fittrack_access_token", data.access_token);
       localStorage.setItem("fittrack_refresh_token", data.refresh_token);
       pendingUser.current = {
         id: data.user.id,
         email: data.user.email,
-        role: data.user.role,
+        role: data.user.role as Role,
         phone_no: data.user.phone_no,
         emailVerified: data.user.emailVerified,
         phoneVerified: data.user.phoneVerified
@@ -118,8 +98,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const registerMutation = useMutation({
     mutationFn: async (payload: { email: string; phone_no?: string; password: string }) => {
-      const { data } = await api.post<{ userId?: string }>("/auth/register", payload);
-      return data;
+      return webApiClient.auth.register(payload);
     }
   });
 
@@ -134,7 +113,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const verifyCurrentPasswordMutation = useMutation({
     mutationFn: async (currentPassword: string) => {
-      const { data } = await api.post<{ verified?: boolean }>("/auth/verify-current-password", { currentPassword });
+      const data = await webApiClient.auth.verifyCurrentPassword(currentPassword);
       return !!data.verified;
     }
   });
@@ -149,7 +128,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const changePasswordMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      await api.post("/auth/change-password", { email, password });
+      await webApiClient.auth.changePassword({ email, password });
     }
   });
 
@@ -166,7 +145,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       const refresh = localStorage.getItem("fittrack_refresh_token");
-      if (refresh) await api.post("/auth/logout", { refresh_token: refresh });
+      if (refresh) await webApiClient.auth.logout({ refresh_token: refresh });
     }
   });
 
@@ -203,12 +182,18 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const verifyOTPMutation = useMutation({
     mutationFn: async ({ email, otp }: { email: string; otp: string }) => {
-      const verify = await api.post<{ emailVerified?: boolean }>("/auth/verify-email", { email, otp });
-      if (!verify.data.emailVerified) throw new Error("Verification failed.");
+      const verify = await webApiClient.auth.verifyEmail({ email, otp });
+      if (!verify.emailVerified) throw new Error("Verification failed.");
       const creds = pendingCredentialsRef.current;
       if (!creds) throw new Error("No pending credentials.");
-      const relogin = await api.post<LoginResponse>("/auth/login", creds);
-      return relogin.data;
+      const relogin = await webApiClient.auth.login(creds);
+      if ("otpRequired" in relogin && relogin.otpRequired) {
+        throw new Error("OTP verification did not complete the session.");
+      }
+      if (!isLoginSuccess(relogin)) {
+        throw new Error("Invalid login response.");
+      }
+      return relogin;
     }
   });
 
@@ -222,7 +207,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       pendingUser.current = {
         id: data.user.id,
         email: data.user.email,
-        role: data.user.role,
+        role: data.user.role as Role,
         phone_no: data.user.phone_no,
         emailVerified: data.user.emailVerified,
         phoneVerified: data.user.phoneVerified

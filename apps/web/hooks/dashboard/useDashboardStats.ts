@@ -2,10 +2,10 @@
 import { useMemo } from "react";
 import { CalendarDays, CheckCircle2, Clock3, TrendingUp, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@fittrack/query";
+import { staffDashboardStatsQueryOptions } from "@fittrack/query";
 import { useMembers } from "@/contexts/MemberContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 import { DASHBOARD_KPIS } from "@/data/charts/dashboard";
 
 type StaffDashboardStats = {
@@ -25,13 +25,9 @@ export function useDashboardStats() {
   const { members } = useMembers();
   const isStaff = user?.role === "STAFF";
 
-  const { data: staffStats } = useQuery<StaffDashboardStats>({
-    queryKey: queryKeys.staffDashboardStats(),
-    enabled: isStaff,
-    queryFn: async () => {
-      const { data } = await api.get<StaffDashboardStats>("/staff/dashboard/stats");
-      return data;
-    }
+  const { data: staffStats } = useQuery({
+    ...staffDashboardStatsQueryOptions<StaffDashboardStats>(webApiClient),
+    enabled: isStaff
   });
 
   const activeCount = useMemo(

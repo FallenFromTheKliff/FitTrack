@@ -4,15 +4,15 @@ import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } 
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dumbbell, RefreshCw, MessageCircle, CalendarPlus } from "lucide-react-native";
-import { queryKeys } from "@fittrack/query";
-import { FACILITY_FLOORS, FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FacilityFloorId, type VenueRecord } from "@fittrack/types";
+import { queryKeys, venuesQueryOptions } from "@fittrack/query";
+import { FACILITY_FLOORS, FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FacilityFloorId } from "@fittrack/types";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeGymMapStyles } from "@/styles/shared/ScreenStyles";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 import { getVenuePresentation } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
@@ -73,13 +73,7 @@ export default function FacilitiesScreen() {
     return () => unregisterFAB();
   }, [isFrozen, menuItems, registerFAB, scrollY, unregisterFAB]));
 
-  const { data: venues = [], refetch } = useQuery<VenueRecord[]>({
-    queryKey: queryKeys.venues(user?.id),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
-      return data;
-    }
-  });
+  const { data: venues = [], refetch } = useQuery(venuesQueryOptions(mobileApiClient, user?.id));
 
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];

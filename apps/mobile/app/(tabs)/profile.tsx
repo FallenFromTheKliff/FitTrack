@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, CalendarDays, CreditCard, Skull, UserCog, XCircle } from "lucide-react-native";
 
 import type { CoachAvailabilityRecord, CoachProfileRecord } from "@fittrack/types";
@@ -12,17 +12,22 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeProfileStyles } from "@/styles/shared/ScreenStyles";
 import { BADGE_COLORS, MOCK_ACHIEVEMENTS, MOCK_BADGES, PROFILE_STATS, TIER_LABELS, TIER_LEVELS } from "@/data/member";
 import { TIME_SLOTS } from "@/data/bookings";
-import { mobileApi } from "@/lib/api";
-import { queryKeys } from "@fittrack/query";
+import { mobileApiClient } from "@/lib/api";
+import {
+  cancelDeletionRequestMutationOptions,
+  coachSelfProfileQueryOptions,
+  createCoachAvailabilityMutationOptions,
+  deleteCoachAvailabilityMutationOptions,
+  profileDeletionStatusQueryOptions,
+  queryKeys,
+  requestDeletionMutationOptions,
+  updateCoachAvailabilityMutationOptions
+} from "@fittrack/query";
 import { coachAvailabilitySchema } from "@fittrack/validators";
 import { to12HourLabel, to24HourValue } from "@fittrack/utils";
 
 import { EditProfileModal, ConfirmModal, TimeSlotModal, type TimeSlot } from "@/components/modals";
 import { FitButton, FitCard, FitSection, FitSquareToggle, FitText, AnimatedFitText } from "@/components/fit";
-
-type DeletionRequest = {
-  status?: string | null;
-};
 
 type AvailabilityDraft = {
   id?: string;
@@ -87,30 +92,24 @@ export default function ProfileScreen() {
     return () => { isMounted.current = false; };
   }, []);
 
-  const { data: deletionStatus = "none" } = useQuery<"none" | "pending" | "approved">({
-    queryKey: deletionStatusKey,
+  const { data: deletionStatus = "none" } = useQuery({
+    ...profileDeletionStatusQueryOptions(mobileApiClient, user?.id),
     enabled: !!user?.id,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<DeletionRequest | null>("/users/deletion-request");
-      const normalized = data?.status?.toLowerCase() ?? "";
-      if (normalized === "pending") return "pending";
-      if (normalized === "approved") return "approved";
-      return "none";
-    }
+    gcTime: 300_000
   });
 
-  const { data: coachProfile = null } = useQuery<CoachProfileRecord | null>({
-    queryKey: queryKeys.coachSelfProfile(user?.id),
+  const { data: coachProfile = null } = useQuery({
+    ...coachSelfProfileQueryOptions<CoachProfileRecord>(mobileApiClient, user?.id),
     enabled: !!user?.id && isCoach,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<CoachProfileRecord[]>("/coaches");
-      return data.find((coach) => coach.user?.id === user?.id) ?? null;
-    }
+    gcTime: 300_000
   });
+  const requestDeletionMutation = useMutation(requestDeletionMutationOptions(mobileApiClient, queryClient));
+  const cancelDeletionMutation = useMutation(cancelDeletionRequestMutationOptions(mobileApiClient, queryClient));
+  const createAvailabilityMutation = useMutation(createCoachAvailabilityMutationOptions(mobileApiClient, queryClient));
+  const updateAvailabilityMutation = useMutation(updateCoachAvailabilityMutationOptions(mobileApiClient, queryClient));
+  const deleteAvailabilityMutation = useMutation(deleteCoachAvailabilityMutationOptions(mobileApiClient, queryClient));
 
   const isFrozen = user?.status === "frozen";
   const hasPendingTermination = deletionStatus === "pending" || isFrozen;
@@ -134,7 +133,10 @@ export default function ProfileScreen() {
     if (isTerminating) return;
     setIsTerminating(true);
     try {
-      await mobileApi.post("/users/request-deletion", { reason: "Requested via mobile app." });
+      await requestDeletionMutation.mutateAsync({
+        reason: "Requested via mobile app.",
+        userId: user?.id
+      });
       await updateUser({ status: "frozen" });
       if (!isMounted.current) return;
       resetAppearance();
@@ -150,7 +152,7 @@ export default function ProfileScreen() {
     if (isCancelling) return;
     setIsCancelling(true);
     try {
-      await mobileApi.delete("/users/deletion-request");
+      await cancelDeletionMutation.mutateAsync({ userId: user?.id });
       await updateUser({ status: "active" });
       if (!isMounted.current) return;
       queryClient.setQueryData(deletionStatusKey, "none");
@@ -204,23 +206,27 @@ export default function ProfileScreen() {
     setIsAvailabilitySaving(true);
     try {
       if (availabilityDraft.id) {
-        await mobileApi.patch(`/coaches/availability/${availabilityDraft.id}`, {
-          startTime: parsed.data.startTime,
-          endTime: parsed.data.endTime,
-          isAvailable: parsed.data.isAvailable
+        await updateAvailabilityMutation.mutateAsync({
+          id: availabilityDraft.id,
+          payload: {
+            startTime: parsed.data.startTime,
+            endTime: parsed.data.endTime,
+            isAvailable: parsed.data.isAvailable
+          },
+          userId: user?.id,
+          coachId: coachProfile.id
         });
       } else {
-        await mobileApi.post("/coaches/availability", {
-          dayOfWeek: parsed.data.dayOfWeek,
-          startTime: parsed.data.startTime,
-          endTime: parsed.data.endTime
+        await createAvailabilityMutation.mutateAsync({
+          payload: {
+            dayOfWeek: parsed.data.dayOfWeek,
+            startTime: parsed.data.startTime,
+            endTime: parsed.data.endTime
+          },
+          userId: user?.id,
+          coachId: coachProfile.id
         });
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSelfProfile(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachAvailability(coachProfile.id) })
-      ]);
       setIsAvailabilityEditorOpen(false);
     } finally {
       setIsAvailabilitySaving(false);
@@ -231,12 +237,11 @@ export default function ProfileScreen() {
     if (!availabilityDeleteTarget || !coachProfile) return;
     setIsAvailabilityDeleting(true);
     try {
-      await mobileApi.delete(`/coaches/availability/${availabilityDeleteTarget.id}`);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSelfProfile(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachAvailability(coachProfile.id) })
-      ]);
+      await deleteAvailabilityMutation.mutateAsync({
+        id: availabilityDeleteTarget.id,
+        userId: user?.id,
+        coachId: coachProfile.id
+      });
       setAvailabilityDeleteTarget(null);
       setIsAvailabilityEditorOpen(false);
     } finally {

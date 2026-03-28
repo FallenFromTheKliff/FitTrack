@@ -9,7 +9,7 @@ import {
 import { motion } from "framer-motion";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@fittrack/query";
+import { adminBookingsQueryOptions } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
@@ -17,7 +17,7 @@ import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { facilitiesMapStyles } from "@/styles/pageStyles";
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 import { useFitSensors } from "@/hooks/useFitSensors";
 import { sleep } from "@/utils/sleep";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
@@ -138,13 +138,9 @@ export default function FacilitiesMapPage() {
     showMessage(`${trimmedName} added as a resource.`);
   };
 
-  const { data: activeBookings = [] } = useQuery<BookingRecord[]>({
-    queryKey: queryKeys.adminBookings(),
-    queryFn: async () => {
-      const { data } = await api.get<{ bookings?: BookingRecord[] } | BookingRecord[]>("/admin/bookings");
-      const bookings = Array.isArray(data) ? data : (data.bookings ?? []);
-      return bookings.filter((booking) => booking.status === "confirmed");
-    }
+  const { data: activeBookings = [] } = useQuery({
+    ...adminBookingsQueryOptions<BookingRecord>(webApiClient),
+    select: (bookings) => bookings.filter((booking) => booking.status === "confirmed")
   });
 
   const [rawViewportWidth, setRawViewportWidth] = useState(0);

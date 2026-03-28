@@ -5,10 +5,14 @@ import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { CoachProfileRecord, Trainer } from "@fittrack/types";
-import { queryKeys } from "@fittrack/query";
+import {
+  activeCoachesQueryOptions,
+  coachAvailabilityQueryOptions,
+  createAppointmentMutationOptions
+} from "@fittrack/query";
 import { formatBookingDate, getDurationMinutes, to12HourLabel } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
@@ -93,23 +97,15 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [errorText, setErrorText] = useState("");
 
-  const { data: coaches = [] } = useQuery<CoachRecord[]>({
-    queryKey: queryKeys.coaches(),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<CoachRecord[]>("/coaches?active=true");
-      return data;
-    },
+  const { data: coaches = [] } = useQuery({
+    ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient),
     enabled: isVisible
   });
 
   const trainers = useMemo(() => coaches.map(mapCoachToTrainer), [coaches]);
 
-  const { data: availability } = useQuery<AvailabilityResponse>({
-    queryKey: queryKeys.coachAvailability(selectedCoach?.id),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<AvailabilityResponse>(`/coaches/${selectedCoach?.id}/availability`);
-      return data;
-    },
+  const { data: availability } = useQuery({
+    ...coachAvailabilityQueryOptions<AvailabilityResponse>(mobileApiClient, selectedCoach?.id),
     enabled: isVisible && !!selectedCoach
   });
 
@@ -138,21 +134,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
     [selectedSlotLabel, slotOptions]
   );
 
-  const createAppointmentMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedCoach || !selectedSlot) {
-        throw new Error("Missing required appointment details.");
-      }
-      await mobileApi.post("/appointments", {
-        coachId: selectedCoach.id,
-        scheduledAt: `${selectedDate}T${selectedSlot.startTime}:00`,
-        duration: selectedSlot.durationMin
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments() });
-    }
-  });
+  const createAppointmentMutation = useMutation(createAppointmentMutationOptions(mobileApiClient, queryClient));
 
   const bookingLabel = useLoadingText("BOOKING APPOINTMENT", createAppointmentMutation.isPending);
 
@@ -196,11 +178,17 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
     }
     setErrorText("");
     try {
-      await createAppointmentMutation.mutateAsync();
+      await createAppointmentMutation.mutateAsync({
+        payload: {
+          coachId: selectedCoach.id,
+          scheduledAt: `${selectedDate}T${selectedSlot.startTime}:00`,
+          duration: selectedSlot.durationMin
+        }
+      });
       onSuccess?.();
       resetAndClose();
-    } catch {
-      setErrorText("Unable to book appointment.");
+    } catch (error: unknown) {
+      setErrorText(error instanceof Error ? error.message : "Unable to book appointment.");
     }
   };
 

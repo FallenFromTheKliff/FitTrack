@@ -3,9 +3,11 @@ import { KeyboardAvoidingView, Modal, Platform, TextInput, View } from "react-na
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { KeyRound, Lock, Mail } from "lucide-react-native";
 import { useForm } from "react-hook-form";
+import { useMutation } from "@tanstack/react-query";
+import { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "@fittrack/query";
 
 import { useTheme, useFontFamily } from "@/contexts/ThemeContext";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
@@ -34,21 +36,7 @@ type Step = "email" | "otp" | "password";
 const OTP_LENGTH = 6;
 
 function extractErrorMessage(error: unknown, fallback: string) {
-  if (typeof error !== "object" || error === null) {
-    return fallback;
-  }
-  if (!("response" in error)) {
-    return fallback;
-  }
-  const response = (error as { response?: { data?: unknown } }).response;
-  if (!response || typeof response.data !== "object" || response.data === null) {
-    return fallback;
-  }
-  if (!("message" in response.data)) {
-    return fallback;
-  }
-  const message = (response.data as { message?: unknown }).message;
-  return typeof message === "string" && message.trim() !== "" ? message : fallback;
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
 export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
@@ -61,8 +49,6 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
   const [step, setStep] = useState<Step>("email");
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [token, setToken] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [canResetPassword, setCanResetPassword] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
@@ -77,6 +63,10 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     mode: "onSubmit",
     reValidateMode: "onChange"
   });
+  const forgotPasswordMutation = useMutation(forgotPasswordMutationOptions(mobileApiClient));
+  const resetPasswordMutation = useMutation(resetPasswordMutationOptions(mobileApiClient));
+  const isSending = forgotPasswordMutation.isPending;
+  const isResetting = resetPasswordMutation.isPending;
 
   const sendingLabel = useLoadingText("SENDING CODE", isSending);
   const resettingLabel = useLoadingText("RESETTING PASSWORD", isResetting);
@@ -86,8 +76,6 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     setStep("email");
     setDigits(Array(OTP_LENGTH).fill(""));
     setToken("");
-    setIsSending(false);
-    setIsResetting(false);
     setCanResetPassword(false);
     setErrorText("");
     setSuccessText("");
@@ -142,17 +130,14 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
   const submitEmail = emailForm.handleSubmit(async (values) => {
     setErrorText("");
     setSuccessText("");
-    setIsSending(true);
     try {
-      await mobileApi.post<{ message: string }>("/auth/forgot-password", {
+      await forgotPasswordMutation.mutateAsync({
         email: values.email.trim()
       });
-      setIsSending(false);
       showMessage("Code sent. Check your email.");
       setStep("otp");
       setDigits(Array(OTP_LENGTH).fill(""));
     } catch (error: unknown) {
-      setIsSending(false);
       setErrorText(extractErrorMessage(error, "Could not send code. Please try again."));
     }
   });
@@ -203,20 +188,17 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     }
     setErrorText("");
     setSuccessText("");
-    setIsResetting(true);
     try {
-      const { data } = await mobileApi.post<{ message: string }>("/auth/reset-password", {
+      const data = await resetPasswordMutation.mutateAsync({
         token,
         newPassword: values.newPassword
       });
-      setIsResetting(false);
       setSuccessText(data.message || "Password reset successful.");
       setTimeout(() => {
         clearState();
         onClose();
       }, 900);
     } catch (error: unknown) {
-      setIsResetting(false);
       setErrorText(extractErrorMessage(error, "Could not reset password. Please try again."));
     }
   });

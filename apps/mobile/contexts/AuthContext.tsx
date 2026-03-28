@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AxiosError } from "axios";
 
 import type { AuthUser, Role } from "@fittrack/types";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 
 type RegisterInput = { email: string; phone: string; password: string };
 type LoginResult = { user: AuthUser; needsOTP: boolean } | undefined;
@@ -32,16 +31,24 @@ type Props = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) {
-      return data.message.join(" ");
-    }
-    if (typeof data?.message === "string") {
-      return data.message;
-    }
-  }
-  return fallback;
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
+}
+
+function isLoginSuccess(
+  value: Awaited<ReturnType<typeof mobileApiClient.auth.login>>
+): value is Awaited<ReturnType<typeof mobileApiClient.auth.login>> & {
+  access_token: string;
+  refresh_token: string;
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    phone_no?: string | null;
+    emailVerified?: boolean;
+    phoneVerified?: boolean;
+  };
+} {
+  return "access_token" in value;
 }
 
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
@@ -66,11 +73,11 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       try {
         const token = await AsyncStorage.getItem("fittrack_access_token");
         if (token) {
-          const { data } = await mobileApi.get("/users/profile");
+          const data = await mobileApiClient.users.getProfile();
           let requestStatus: string | null = null;
           try {
-            const req = await mobileApi.get<{ status?: string | null }>("/users/deletion-request");
-            requestStatus = req.data?.status ?? null;
+            const req = await mobileApiClient.users.getDeletionRequestStatus();
+            requestStatus = req.status ?? null;
           } catch {}
           const status = resolveAccountStatus(data.deletedAt, requestStatus);
           if (status === "expired") {
@@ -84,7 +91,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
             email: data.email,
             role: data.role?.name as Role,
             phone_no: data.phone_no,
-            profile: data.profile,
+            profile: data.profile ?? undefined,
             status
           };
           await onUserLoaded(authUser.id);
@@ -101,16 +108,17 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
       try {
-        const { data } = await mobileApi.post("/auth/login", { email, password });
-        if (data.otpRequired) {
+        const data = await mobileApiClient.auth.login({ email, password });
+        if ("otpRequired" in data && data.otpRequired) {
           pendingEmailRef.current = email;
           pendingCredentialsRef.current = { email, password };
           const placeholder: AuthUser = { id: "", email, role: "USER" };
           pendingUser.current = placeholder;
           return { user: placeholder, needsOTP: true };
         }
-        await AsyncStorage.setItem("fittrack_access_token", data.access_token);
-        await AsyncStorage.setItem("fittrack_refresh_token", data.refresh_token);
+        if (!isLoginSuccess(data)) {
+          return undefined;
+        }
         const authUser: AuthUser = {
           id: data.user.id,
           email: data.user.email,
@@ -134,8 +142,8 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     const authUser = pendingUser.current;
     pendingUser.current = null;
     try {
-      const req = await mobileApi.get<{ status?: string | null }>("/users/deletion-request");
-      const status = resolveAccountStatus(null, req.data?.status ?? null);
+      const req = await mobileApiClient.users.getDeletionRequestStatus();
+      const status = resolveAccountStatus(null, req.status ?? null);
       if (status === "expired") {
         await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
         onUserCleared();
@@ -153,14 +161,17 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const register = useCallback(
     async (data: RegisterInput): Promise<AuthUser | undefined> => {
       try {
-        const res = await mobileApi.post<{ userId: string; email: string }>("/auth/register", {
+        const res = await mobileApiClient.auth.register({
           email: data.email,
           phone_no: data.phone,
           password: data.password
         });
-        pendingEmailRef.current = res.data.email;
+        if (!res.userId || !res.email) {
+          return undefined;
+        }
+        pendingEmailRef.current = res.email;
         pendingCredentialsRef.current = { email: data.email, password: data.password };
-        const placeholder: AuthUser = { id: res.data.userId, email: res.data.email, role: "USER" };
+        const placeholder: AuthUser = { id: res.userId, email: res.email, role: "USER" };
         return placeholder;
       } catch {
         return undefined;
@@ -172,7 +183,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     try {
       const refresh = await AsyncStorage.getItem("fittrack_refresh_token");
       if (refresh) {
-        await mobileApi.post("/auth/logout", { refresh_token: refresh });
+        await mobileApiClient.auth.logout({ refresh_token: refresh });
       }
     } catch {}
     await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
@@ -203,7 +214,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const verifyCurrentPassword = useCallback(async (password: string) => {
     try {
-      const { data } = await mobileApi.post<{ verified?: boolean }>("/auth/verify-current-password", { currentPassword: password });
+      const data = await mobileApiClient.auth.verifyCurrentPassword(password);
       return !!data.verified;
     } catch {
       return false;
@@ -213,7 +224,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const changePassword = useCallback(async (_currentPassword: string, nextPassword: string): Promise<{ success: true } | { success: false; error: string }> => {
     try {
       if (!user?.email) return { success: false, error: "No user session." };
-      await mobileApi.post("/auth/change-password", { email: user.email, password: nextPassword });
+      await mobileApiClient.auth.changePassword({ email: user.email, password: nextPassword });
       return { success: true };
     } catch (error: unknown) {
       return { success: false, error: toErrorMessage(error, "Password change failed.") };
@@ -226,13 +237,14 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       if (!email) {
         return { success: false as const, error: "No pending email." };
       }
-      await mobileApi.post("/auth/verify-email", { email, otp: code });
+      await mobileApiClient.auth.verifyEmail({ email, otp: code });
       if (pendingCredentialsRef.current) {
         const creds = pendingCredentialsRef.current;
         pendingCredentialsRef.current = null;
-        const { data } = await mobileApi.post("/auth/login", { email: creds.email, password: creds.password });
-        await AsyncStorage.setItem("fittrack_access_token", data.access_token);
-        await AsyncStorage.setItem("fittrack_refresh_token", data.refresh_token);
+        const data = await mobileApiClient.auth.login({ email: creds.email, password: creds.password });
+        if (!isLoginSuccess(data)) {
+          return { success: false as const, error: "OTP verification did not complete the session." };
+        }
         const authUser: AuthUser = {
           id: data.user.id,
           email: data.user.email,

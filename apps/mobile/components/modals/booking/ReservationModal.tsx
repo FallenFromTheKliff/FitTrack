@@ -2,13 +2,17 @@ import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CheckCircle, Clock, Plus, XCircle } from "lucide-react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { queryKeys } from "@fittrack/query";
+import {
+  createBookingMutationOptions,
+  venueAvailabilityQueryOptions,
+  venuesQueryOptions
+} from "@fittrack/query";
 import { TIME_SLOTS, getTodayString } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
@@ -41,6 +45,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeReservationModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
+  const createBookingMutation = useMutation(createBookingMutationOptions(mobileApiClient, queryClient));
 
   const [date, setDate] = useState(getTodayString());
   const [startTime, setStartTime] = useState("");
@@ -50,16 +55,12 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [timeTarget, setTimeTarget] = useState<"start" | "end">("start");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmitting = createBookingMutation.isPending;
   const [apiError, setApiError] = useState("");
   const reservingText = useLoadingText("Reserving", isSubmitting);
 
-  const { data: venues = [] } = useQuery<VenueRecord[]>({
-    queryKey: queryKeys.venues(),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
-      return data;
-    },
+  const { data: venues = [] } = useQuery({
+    ...venuesQueryOptions(mobileApiClient),
     enabled: isVisible
   });
 
@@ -74,15 +75,8 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     [selectedVenue]
   );
 
-  const { data: availability = [] } = useQuery<{ startTime: string; endTime: string; status: string }[]>({
-    queryKey: queryKeys.venueAvailability(selectedVenue?.id, date),
-    queryFn: async () => {
-      if (!selectedVenue) return [];
-      const { data } = await mobileApi.get<{ bookings: { startTime: string; endTime: string; status: string }[] }>(
-        `/venues/${selectedVenue.id}/availability?date=${date}`
-      );
-      return data.bookings ?? [];
-    },
+  const { data: availability = [] } = useQuery({
+    ...venueAvailabilityQueryOptions<{ startTime: string; endTime: string; status: string }>(mobileApiClient, selectedVenue?.id, date),
     enabled: isVisible && !!selectedVenue && !!date
   });
 
@@ -157,7 +151,6 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
 
   const handleConfirm = async () => {
     if (!canConfirm || !selectedVenue) return;
-    setIsSubmitting(true);
     setApiError("");
     const startMinutes = timeToMinutes(startTime);
     const endMinutes = timeToMinutes(endTime);
@@ -168,25 +161,22 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     const purpose = notes.filter((note) => note.trim() !== "").join("\n") || undefined;
     try {
       await Promise.all([
-        mobileApi.post("/bookings", {
+        createBookingMutation.mutateAsync({
+          payload: {
+            venueId: selectedVenue.id,
+            startTime: isoStart,
+            durationHours,
+            purpose
+          },
           venueId: selectedVenue.id,
-          startTime: isoStart,
-          durationHours,
-          purpose
+          date
         }),
         new Promise((resolve) => setTimeout(resolve, 2000))
       ]);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.bookings() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.venues() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.venueAvailability(selectedVenue.id, date) })
-      ]);
-      setIsSubmitting(false);
       handleReset();
       onSuccess?.();
       onClose();
     } catch (err: unknown) {
-      setIsSubmitting(false);
       setApiError(err instanceof Error ? err.message : "Reservation failed. Please try again.");
     }
   };

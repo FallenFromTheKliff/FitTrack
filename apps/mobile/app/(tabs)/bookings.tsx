@@ -6,7 +6,17 @@ import { Activity, Bell, CalendarCheck, CalendarDays, CalendarPlus, Dumbbell, Sw
 import type { LucideIcon } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { queryKeys } from "@fittrack/query";
+import {
+  appointmentsQueryOptions,
+  bookingsQueryOptions,
+  cancelAppointmentMutationOptions,
+  cancelBookingMutationOptions,
+  coachScheduleQueryOptions,
+  completeCoachAppointmentMutationOptions,
+  confirmCoachAppointmentMutationOptions,
+  declineCoachAppointmentMutationOptions,
+  venuesQueryOptions
+} from "@fittrack/query";
 import { formatBookingDate, formatGroupLabel, nextDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,8 +27,8 @@ import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import { makeScreenStyles, makeBookingsScreenStyles } from "@/styles/shared/ScreenStyles";
 import { STATUS_COLORS, FILTER_OPTIONS, type StatusFilter, getTodayString } from "@/data/bookings";
 import { groupByDate } from "@/utils/grouping";
-import { mobileApi } from "@/lib/api";
-import { toMobileBookings, type VenueBookingRecord, type VenueRecord } from "@/utils/venueBookings";
+import { mobileApiClient } from "@/lib/api";
+import { toMobileBookings, type VenueBookingRecord } from "@/utils/venueBookings";
 
 import { FitCard, FitFilter, FitSearch, FitText } from "@/components/fit";
 import { AppointmentModal, BookingDetailModal, CalendarModal, type DetailBooking } from "@/components/modals";
@@ -134,48 +144,32 @@ export default function BookingsScreen() {
     }
   }, [isCoach]);
 
-  const { data: venues = [], isLoading: venuesLoading, error: venuesError } = useQuery<VenueRecord[]>({
-    queryKey: queryKeys.venues(user?.id),
+  const { data: venues = [], isLoading: venuesLoading, error: venuesError } = useQuery({
+    ...venuesQueryOptions(mobileApiClient, user?.id),
     enabled: !!user?.id && isUserRole,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
-      return data;
-    }
+    gcTime: 300_000
   });
 
-  const { data: apiBookings = [], isLoading: bookingsLoading, error: bookingsError, refetch } = useQuery<VenueBookingRecord[]>({
-    queryKey: queryKeys.bookings(user?.id),
+  const { data: apiBookings = [], isLoading: bookingsLoading, error: bookingsError, refetch } = useQuery({
+    ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
     enabled: !!user?.id && isUserRole,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueBookingRecord[]>("/bookings");
-      return data;
-    }
+    gcTime: 300_000
   });
 
-  const { data: appointmentsRaw = [], isLoading: appointmentsLoading, error: appointmentsError } = useQuery<AppointmentRecord[]>({
-    queryKey: queryKeys.appointments(user?.id),
+  const { data: appointmentsRaw = [], isLoading: appointmentsLoading, error: appointmentsError } = useQuery({
+    ...appointmentsQueryOptions<AppointmentRecord>(mobileApiClient, user?.id),
     enabled: !!user?.id && isUserRole,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<AppointmentRecord[]>("/appointments");
-      return data;
-    }
+    gcTime: 300_000
   });
 
-  const { data: coachScheduleRaw = [], isLoading: coachScheduleLoading, error: coachScheduleError } = useQuery<CoachScheduleRecord[]>({
-    queryKey: queryKeys.coachSchedule(user?.id),
+  const { data: coachScheduleRaw = [], isLoading: coachScheduleLoading, error: coachScheduleError } = useQuery({
+    ...coachScheduleQueryOptions<CoachScheduleRecord>(mobileApiClient, user?.id),
     enabled: !!user?.id && isCoach,
     staleTime: 60_000,
-    gcTime: 300_000,
-    queryFn: async () => {
-      const { data } = await mobileApi.get<CoachScheduleRecord[]>("/coaches/appointments/schedule");
-      return data;
-    }
+    gcTime: 300_000
   });
 
   const reservations = useMemo<DetailBooking[]>(
@@ -297,62 +291,11 @@ export default function BookingsScreen() {
   const contentStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
   const dividerStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.border }));
 
-  const cancelBookingMutation = useMutation({
-    mutationFn: async (bookingId: string) => {
-      await mobileApi.patch(`/bookings/${bookingId}/cancel`, { cancelReason: "Cancelled by user" });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.bookings(user?.id) });
-    }
-  });
-
-  const cancelAppointmentMutation = useMutation({
-    mutationFn: async (appointmentId: string) => {
-      await mobileApi.patch(`/appointments/${appointmentId}/cancel`, { cancelReason: "Cancelled by user" });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointments(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule() })
-      ]);
-    }
-  });
-
-  const confirmCoachMutation = useMutation({
-    mutationFn: async (appointmentId: string) => {
-      await mobileApi.patch(`/coaches/appointments/${appointmentId}/confirm`, {});
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointments() })
-      ]);
-    }
-  });
-
-  const declineCoachMutation = useMutation({
-    mutationFn: async (appointmentId: string) => {
-      await mobileApi.patch(`/coaches/appointments/${appointmentId}/decline`, { reason: "Declined by coach." });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointments() })
-      ]);
-    }
-  });
-
-  const completeCoachMutation = useMutation({
-    mutationFn: async (appointmentId: string) => {
-      await mobileApi.patch(`/coaches/appointments/${appointmentId}/complete`, {});
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointments() })
-      ]);
-    }
-  });
+  const cancelBookingMutation = useMutation(cancelBookingMutationOptions(mobileApiClient, queryClient));
+  const cancelAppointmentMutation = useMutation(cancelAppointmentMutationOptions(mobileApiClient, queryClient));
+  const confirmCoachMutation = useMutation(confirmCoachAppointmentMutationOptions(mobileApiClient, queryClient));
+  const declineCoachMutation = useMutation(declineCoachAppointmentMutationOptions(mobileApiClient, queryClient));
+  const completeCoachMutation = useMutation(completeCoachAppointmentMutationOptions(mobileApiClient, queryClient));
 
   const cancellingReservationLabel = useLoadingText("CANCELLING", cancelBookingMutation.isPending);
   const cancellingAppointmentLabel = useLoadingText("CANCELLING", cancelAppointmentMutation.isPending);
@@ -381,23 +324,31 @@ export default function BookingsScreen() {
     if (booking.status === "cancelled") return;
     setIsCancelling(true);
     try {
-      await cancelBookingMutation.mutateAsync(booking.id);
+      await cancelBookingMutation.mutateAsync({
+        bookingId: booking.id,
+        cancelReason: "Cancelled by user",
+        userId: user?.id
+      });
       setDetailBooking(null);
     } finally {
       setIsCancelling(false);
     }
-  }, [cancelBookingMutation]);
+  }, [cancelBookingMutation, user?.id]);
 
   const handleCancelAppointment = useCallback(async (booking: DetailBooking) => {
     if (booking.status === "cancelled" || booking.status === "completed" || booking.status === "declined") return;
     setIsCancelling(true);
     try {
-      await cancelAppointmentMutation.mutateAsync(booking.id);
+      await cancelAppointmentMutation.mutateAsync({
+        appointmentId: booking.id,
+        cancelReason: "Cancelled by user",
+        userId: user?.id
+      });
       setDetailBooking(null);
     } finally {
       setIsCancelling(false);
     }
-  }, [cancelAppointmentMutation]);
+  }, [cancelAppointmentMutation, user?.id]);
 
   const activeItems = useMemo(() => {
     if (isCoach) return coachSchedule;
@@ -439,7 +390,10 @@ export default function BookingsScreen() {
             variant: "primary" as const,
             icon: CheckCircle2,
             onPress: async (booking: DetailBooking) => {
-              await confirmCoachMutation.mutateAsync(booking.id);
+              await confirmCoachMutation.mutateAsync({
+                appointmentId: booking.id,
+                userId: user?.id
+              });
               setDetailBooking(null);
             },
             disabled: confirmCoachMutation.isPending || declineCoachMutation.isPending || completeCoachMutation.isPending,
@@ -452,7 +406,11 @@ export default function BookingsScreen() {
             variant: "danger" as const,
             icon: CircleOff,
             onPress: async (booking: DetailBooking) => {
-              await declineCoachMutation.mutateAsync(booking.id);
+              await declineCoachMutation.mutateAsync({
+                appointmentId: booking.id,
+                reason: "Declined by coach.",
+                userId: user?.id
+              });
               setDetailBooking(null);
             },
             disabled: confirmCoachMutation.isPending || declineCoachMutation.isPending || completeCoachMutation.isPending,
@@ -469,7 +427,10 @@ export default function BookingsScreen() {
             variant: "primary" as const,
             icon: CheckCircle2,
             onPress: async (booking: DetailBooking) => {
-              await completeCoachMutation.mutateAsync(booking.id);
+              await completeCoachMutation.mutateAsync({
+                appointmentId: booking.id,
+                userId: user?.id
+              });
               setDetailBooking(null);
             },
             disabled: completeCoachMutation.isPending,
@@ -520,7 +481,8 @@ export default function BookingsScreen() {
     handleCancelAppointment,
     handleCancelReservation,
     isCancelling,
-    isCoach
+    isCoach,
+    user?.id
   ]);
 
   const sectionOptions = isCoach ? COACH_SECTION_OPTIONS : MEMBER_SECTION_OPTIONS;
@@ -646,7 +608,6 @@ export default function BookingsScreen() {
           onClose={() => setIsAppointmentOpen(false)}
           onSuccess={() => {
             setIsAppointmentOpen(false);
-            void queryClient.invalidateQueries({ queryKey: queryKeys.appointments(user?.id) });
             setActiveSection("appointments");
           }}
         />

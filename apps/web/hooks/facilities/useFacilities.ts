@@ -2,8 +2,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
-import { queryKeys } from "@fittrack/query";
-import { api } from "@/lib/axios";
+import {
+  createVenueMutationOptions,
+  deleteVenueMutationOptions,
+  updateVenueMutationOptions,
+  venuesQueryOptions
+} from "@fittrack/query";
+import { webApiClient } from "@/lib/api-client";
 
 import { COLS, ROWS, LAYOUT_KEY, EQUIPMENT } from "@/data/facilities/mapTypes";
 import type { VenueRecord, VenueEquipmentAssignments, EquipmentDef } from "@/data/facilities/mapTypes";
@@ -139,34 +144,13 @@ export function useVenueMutations() {
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(2200);
 
-  const { data: venues = [], isLoading: venuesLoading } = useQuery<VenueRecord[]>({
-    queryKey: queryKeys.venues(),
-    queryFn: async () => {
-      const { data } = await api.get<VenueRecord[]>("/venues?active=true");
-      return data;
-    }
-  });
+  const { data: venues = [], isLoading: venuesLoading } = useQuery(venuesQueryOptions(webApiClient));
 
-  const createVenueMutation = useMutation({
-    mutationFn: async (payload: VenuePayload) => {
-      await api.post("/admin/venues", payload);
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
-  });
+  const createVenueMutation = useMutation(createVenueMutationOptions(webApiClient, queryClient));
 
-  const updateVenueMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: number; payload: VenuePayload }) => {
-      await api.patch(`/admin/venues/${id}`, payload);
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
-  });
+  const updateVenueMutation = useMutation(updateVenueMutationOptions(webApiClient, queryClient));
 
-  const deleteVenueMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/admin/venues/${id}`);
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
-  });
+  const deleteVenueMutation = useMutation(deleteVenueMutationOptions(webApiClient, queryClient));
 
   const isVenueSubmitting = createVenueMutation.isPending || updateVenueMutation.isPending;
   const venueSavingLabel = useLoadingText("SAVING VENUE", isVenueSubmitting);

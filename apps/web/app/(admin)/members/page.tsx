@@ -2,13 +2,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, Briefcase, Mail, Pencil, Skull, SlidersHorizontal, TrendingUp, UserPlus, UserX, Users } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@fittrack/query";
+import {
+  adminDeletionRequestsQueryOptions,
+  approveDeletionRequestMutationOptions,
+  rejectDeletionRequestMutationOptions,
+  staffCoachesQueryOptions,
+  staffUsersQueryOptions,
+  upgradeToCoachMutationOptions
+} from "@fittrack/query";
 import { upgradeCoachSchema } from "@fittrack/validators";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useMembers } from "@/contexts/MemberContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -82,31 +89,19 @@ export default function MembersPage() {
   const tableViewportRef = useRef<HTMLDivElement | null>(null);
   const [tableMaxHeight, setTableMaxHeight] = useState<number | null>(null);
 
-  const { data: deletionRequests = [] } = useQuery<DeletionRequest[]>({
-    queryKey: queryKeys.adminDeletionRequests(),
-    enabled: isAdmin,
-    queryFn: async () => {
-      const { data } = await api.get<DeletionRequestResponse>("/admin/deletion-requests");
-      return data.requests ?? [];
-    }
+  const { data: deletionRequests = [] } = useQuery({
+    ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
+    enabled: isAdmin
   });
 
-  const { data: staffUsers = [], isLoading: staffUsersLoading } = useQuery<MemberRecord[]>({
-    queryKey: queryKeys.staffUsers(),
-    enabled: isStaff,
-    queryFn: async () => {
-      const { data } = await api.get<MemberRecord[]>("/staff/users");
-      return data;
-    }
+  const { data: staffUsers = [], isLoading: staffUsersLoading } = useQuery({
+    ...staffUsersQueryOptions(webApiClient),
+    enabled: isStaff
   });
 
-  const { data: staffCoaches = [], isLoading: staffCoachesLoading } = useQuery<StaffCoachRecord[]>({
-    queryKey: queryKeys.staffCoaches(),
-    enabled: isStaff,
-    queryFn: async () => {
-      const { data } = await api.get<StaffCoachRecord[]>("/staff/coaches");
-      return data;
-    }
+  const { data: staffCoaches = [], isLoading: staffCoachesLoading } = useQuery({
+    ...staffCoachesQueryOptions(webApiClient),
+    enabled: isStaff
   });
 
   useEffect(() => {
@@ -216,49 +211,23 @@ export default function MembersPage() {
     showMessage(result.error ?? "Failed to add staff.");
   };
 
-  const approveDeletionMutation = useMutation({
-    mutationFn: async (requestId: string) => {
-      await api.patch(`/admin/deletion-requests/${requestId}/approve`, { reviewNotes: "Approved via members panel." });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminDeletionRequests() })
-      ]);
-    }
-  });
+  const approveDeletionMutation = useMutation(
+    approveDeletionRequestMutationOptions(
+      webApiClient,
+      queryClient,
+      { reviewNotes: "Approved via members panel." }
+    )
+  );
 
-  const rejectDeletionMutation = useMutation({
-    mutationFn: async (requestId: string) => {
-      await api.patch(`/admin/deletion-requests/${requestId}/reject`, { reviewNotes: "Rejected via members panel." });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminDeletionRequests() })
-      ]);
-    }
-  });
+  const rejectDeletionMutation = useMutation(
+    rejectDeletionRequestMutationOptions(
+      webApiClient,
+      queryClient,
+      { reviewNotes: "Rejected via members panel." }
+    )
+  );
 
-  const upgradeCoachMutation = useMutation({
-    mutationFn: async (payload: {
-      userId: string;
-      specialties: string[];
-      bio?: string;
-      certifications?: string[];
-      yearsExperience: number;
-      hourlyRate: number;
-    }) => {
-      await api.post("/admin/upgrade-to-coach", payload);
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() })
-      ]);
-    }
-  });
+  const upgradeCoachMutation = useMutation(upgradeToCoachMutationOptions(webApiClient, queryClient));
 
   const rejectLoadingLabel = useLoadingText("REJECTING REQUEST", rejectDeletionMutation.isPending);
   const upgradeLoadingLabel = useLoadingText("UPGRADING TO COACH", upgradeCoachMutation.isPending);

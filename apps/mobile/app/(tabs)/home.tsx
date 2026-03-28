@@ -6,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, User, Zap } from "lucide-react-native";
 import type { Booking } from "@fittrack/types";
-import { queryKeys } from "@fittrack/query";
+import { bookingsQueryOptions, venuesQueryOptions } from "@fittrack/query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -19,8 +19,8 @@ import { makeScreenStyles, makeHomeStyles } from "@/styles/shared/ScreenStyles";
 import { getTodayString } from "@/data/bookings";
 import { GOAL_ROWS, HOME_STAT_CARDS, HOME_BADGE_BANNER } from "@/data/home";
 import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
-import { mobileApi } from "@/lib/api";
-import { toMobileBookings, type VenueBookingRecord, type VenueRecord } from "@/utils/venueBookings";
+import { mobileApiClient } from "@/lib/api";
+import { toMobileBookings, type VenueBookingRecord } from "@/utils/venueBookings";
 import type { NutritionGoal } from "@/components/modals/nutrition/GoalsModal";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
@@ -65,21 +65,8 @@ export default function HomeScreen() {
   const goalTarget = activeGoal?.targetCalories ?? 2000;
   const todayString = getTodayString();
 
-  const { data: venues = [] } = useQuery<VenueRecord[]>({
-    queryKey: queryKeys.venues(user?.id),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
-      return data;
-    }
-  });
-
-  const { data: bookingRecords = [] } = useQuery<VenueBookingRecord[]>({
-    queryKey: queryKeys.bookings(user?.id),
-    queryFn: async () => {
-      const { data } = await mobileApi.get<VenueBookingRecord[]>("/bookings");
-      return data;
-    }
-  });
+  const { data: venues = [] } = useQuery(venuesQueryOptions(mobileApiClient, user?.id));
+  const { data: bookingRecords = [] } = useQuery(bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id));
 
   const bookings = useMemo(() => toMobileBookings(bookingRecords, venues), [bookingRecords, venues]);
   const todayBookings = useMemo(

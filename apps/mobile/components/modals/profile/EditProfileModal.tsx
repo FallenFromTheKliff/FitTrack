@@ -5,15 +5,15 @@ import { CalendarDays, Camera, Dumbbell, User } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
 import { calcBMI, formatDate, formatBookingDate, splitFullName } from "@fittrack/utils";
 import { coachProfileSchema, editProfilePersonalSchema, type EditProfilePersonalData } from "@fittrack/validators";
-import { queryKeys } from "@fittrack/query";
+import { updateCoachProfileMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { mobileApi } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
@@ -41,6 +41,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const { user, updateUser, logout } = useAuth();
   const queryClient = useQueryClient();
   const isCoach = user?.role === "COACH";
+  const updateCoachProfileMutation = useMutation(updateCoachProfileMutationOptions(mobileApiClient, queryClient));
 
   const [activeTab, setActiveTab] = useState<"personal" | "fitness">("personal");
   const [isDobCalOpen, setIsDobCalOpen] = useState(false);
@@ -219,7 +220,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       });
       const wKgNum = parseFloat(weightInput);
       const hCmNum = parseFloat(heightInput);
-      await mobileApi.patch("/users/profile", {
+      await mobileApiClient.users.updateProfile({
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
         dateOfBirth: personal.dateOfBirth || undefined,
@@ -227,24 +228,23 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
       });
       if (emailChanged || phoneChanged) {
-        await mobileApi.patch("/users/account", {
+        await mobileApiClient.users.updateAccount({
           ...(emailChanged ? { email: personal.email.trim() } : {}),
           ...(phoneChanged ? { phone_no: personal.phone.trim() } : {})
         });
       }
       if (isCoach) {
-        await mobileApi.patch("/coaches/profile", {
-          bio: coachPayload.bio || undefined,
-          specialties: coachPayload.specialties,
-          certifications: coachPayload.certifications,
-          yearsExperience: coachPayload.yearsExperience,
-          hourlyRate: coachPayload.hourlyRate
+        await updateCoachProfileMutation.mutateAsync({
+          payload: {
+            bio: coachPayload.bio || undefined,
+            specialties: coachPayload.specialties,
+            certifications: coachPayload.certifications,
+            yearsExperience: coachPayload.yearsExperience,
+            hourlyRate: coachPayload.hourlyRate
+          },
+          userId: user?.id,
+          coachId: coachProfile?.id
         });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: queryKeys.coachSelfProfile(user?.id) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) })
-        ]);
       }
       await Promise.all([
         updateUser({
@@ -291,22 +291,26 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         hourlyRate: coachHourlyRate
       });
       showEmailStatus("Verifying request");
-      await mobileApi.patch("/users/profile", {
+      await mobileApiClient.users.updateProfile({
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
         dateOfBirth: personal.dateOfBirth || undefined
       });
       if (isCoach) {
-        await mobileApi.patch("/coaches/profile", {
-          bio: coachPayload.bio || undefined,
-          specialties: coachPayload.specialties,
-          certifications: coachPayload.certifications,
-          yearsExperience: coachPayload.yearsExperience,
-          hourlyRate: coachPayload.hourlyRate
+        await updateCoachProfileMutation.mutateAsync({
+          payload: {
+            bio: coachPayload.bio || undefined,
+            specialties: coachPayload.specialties,
+            certifications: coachPayload.certifications,
+            yearsExperience: coachPayload.yearsExperience,
+            hourlyRate: coachPayload.hourlyRate
+          },
+          userId: user?.id,
+          coachId: coachProfile?.id
         });
       }
       showEmailStatus("Updating email");
-      await mobileApi.patch("/users/account", {
+      await mobileApiClient.users.updateAccount({
         email: personal.email.trim()
       });
       await updateUser(buildPatch(personal));

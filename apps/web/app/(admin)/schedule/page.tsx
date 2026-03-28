@@ -4,19 +4,18 @@ import { DndContext, DragOverlay, type DragStartEvent, type DragEndEvent } from 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { MotionStyle } from "framer-motion";
-import { queryKeys } from "@fittrack/query";
+import { adminMembersQueryOptions } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSchedule, type VenueBookingRecord } from "@/contexts/ScheduleContext";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useTimedMessage } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
 import { useFitSensors } from "@/hooks/useFitSensors";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
-import type { MemberRecord } from "@fittrack/types";
 import { formatWeekRange, toYmd } from "@fittrack/utils";
 
 import { FitButton, FitPill, FitSection, FitTable, FitText } from "@/components/fit";
@@ -70,12 +69,8 @@ export default function SchedulePage() {
   const [manualBookings, setManualBookings] = useState<Booking[]>([]);
   const [draggingStaff, setDraggingStaff] = useState<Resource | null>(null);
 
-  const { data: allMembers = [] } = useQuery<MemberRecord[]>({
-    queryKey: queryKeys.adminMembers(),
-    queryFn: async () => {
-      const { data } = await api.get<MemberRecord[]>("/admin/users");
-      return data;
-    },
+  const { data: allMembers = [] } = useQuery({
+    ...adminMembersQueryOptions(webApiClient),
     staleTime: 60_000
   });
 

@@ -1,10 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { api } from "@/lib/axios";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "@fittrack/query";
 import { modalStyles } from "@/styles/modalStyles";
+import { webApiClient } from "@/lib/api-client";
 import type { ForgotPasswordStep } from "@/data/auth/auth";
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
@@ -19,21 +21,7 @@ type Props = {
 };
 
 function extractErrorMessage(error: unknown, fallback: string) {
-  if (typeof error !== "object" || error === null) {
-    return fallback;
-  }
-  if (!("response" in error)) {
-    return fallback;
-  }
-  const response = (error as { response?: { data?: unknown } }).response;
-  if (!response || typeof response.data !== "object" || response.data === null) {
-    return fallback;
-  }
-  if (!("message" in response.data)) {
-    return fallback;
-  }
-  const message = (response.data as { message?: unknown }).message;
-  return typeof message === "string" && message.trim() !== "" ? message : fallback;
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
 export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
@@ -45,9 +33,11 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
   const [token, setToken] = useState("");
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordValid, setPasswordValid] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
+  const forgotPasswordMutation = useMutation(forgotPasswordMutationOptions(webApiClient));
+  const resetPasswordMutation = useMutation(resetPasswordMutationOptions(webApiClient));
+  const isSubmitting = forgotPasswordMutation.isPending || resetPasswordMutation.isPending;
 
   const sendingLabel = useLoadingText("SENDING CODE", isSubmitting && step === "email");
   const resettingLabel = useLoadingText("RESETTING PASSWORD", isSubmitting && step === "password");
@@ -78,7 +68,6 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     setToken("");
     setPasswordDraft("");
     setPasswordValid(false);
-    setIsSubmitting(false);
     setErrorText("");
     setSuccessText("");
   }, []);
@@ -103,17 +92,14 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     }
     setErrorText("");
     setSuccessText("");
-    setIsSubmitting(true);
     try {
-      await api.post("/auth/forgot-password", {
+      await forgotPasswordMutation.mutateAsync({
         email: data.email?.trim() ?? ""
       });
-      setIsSubmitting(false);
       setEmail(data.email?.trim() ?? "");
       showMessage("Verification code sent.");
       setStep("otp");
     } catch (error: unknown) {
-      setIsSubmitting(false);
       setErrorText(extractErrorMessage(error, "Unable to send verification code."));
     }
   };
@@ -139,19 +125,16 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     }
     setErrorText("");
     setSuccessText("");
-    setIsSubmitting(true);
     try {
-      const { data: response } = await api.post<{ message?: string }>("/auth/reset-password", {
+      const response = await resetPasswordMutation.mutateAsync({
         token,
         newPassword: data.newPassword ?? ""
       });
-      setIsSubmitting(false);
       setSuccessText(response.message ?? "Password reset successful.");
       setTimeout(() => {
         closeModal();
       }, 800);
     } catch (error: unknown) {
-      setIsSubmitting(false);
       setErrorText(extractErrorMessage(error, "Unable to reset password."));
     }
   };

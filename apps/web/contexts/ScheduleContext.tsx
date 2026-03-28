@@ -1,10 +1,9 @@
 "use client";
 import { createContext, useContext, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import { queryKeys } from "@fittrack/query";
-import { api } from "@/lib/axios";
 import type { Booking } from "@fittrack/types";
+import { webApiClient } from "@/lib/api-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -36,15 +35,6 @@ export type VenueBookingRecord = {
       lastName?: string | null;
     } | null;
   };
-};
-
-type AllBookingsResponse = {
-  total: number;
-  pending: number;
-  confirmed: number;
-  cancelled: number;
-  completed: number;
-  bookings: VenueBookingRecord[];
 };
 
 export type ScheduleBooking = {
@@ -98,12 +88,7 @@ function toScheduleBooking(
 }
 
 function toMessage(error: unknown, fallback: string): string {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) return data.message.join(" ");
-    if (typeof data?.message === "string") return data.message;
-  }
-  return fallback;
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
 const ScheduleContext = createContext<IScheduleContext | undefined>(undefined);
@@ -121,16 +106,14 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
     completed: colors.textMuted
   };
 
-  const { data: response, isLoading } = useQuery<AllBookingsResponse>({
+  const { data: rawBookings = [], isLoading } = useQuery<VenueBookingRecord[]>({
     queryKey: bookingsQueryKey,
-    queryFn: async () => {
-      const { data } = await api.get<AllBookingsResponse>(isStaff ? "/staff/bookings" : "/admin/bookings");
-      return data;
-    },
+    queryFn: () => isStaff
+      ? webApiClient.staff.listBookings<VenueBookingRecord>()
+      : webApiClient.admin.listBookings<VenueBookingRecord>(),
     staleTime: 30_000
   });
 
-  const rawBookings = response?.bookings ?? [];
   const bookings = rawBookings.map((record) => toScheduleBooking(record, statusColors));
 
   const addBooking = useCallback((_booking: Booking) => {
@@ -151,7 +134,11 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
 
   const confirmMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      await api.patch(`${isStaff ? "/staff" : "/admin"}/bookings/${bookingId}/confirm`);
+      if (isStaff) {
+        await webApiClient.staff.confirmBooking(bookingId);
+        return;
+      }
+      await webApiClient.admin.confirmBooking(bookingId);
     },
     onSuccess: async () => {
       await Promise.all([
@@ -163,7 +150,11 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
 
   const rejectMutation = useMutation({
     mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => {
-      await api.patch(`${isStaff ? "/staff" : "/admin"}/bookings/${bookingId}/reject`, reason ? { reason } : {});
+      if (isStaff) {
+        await webApiClient.staff.rejectBooking(bookingId, reason);
+        return;
+      }
+      await webApiClient.admin.rejectBooking(bookingId, reason);
     },
     onSuccess: async () => {
       await Promise.all([

@@ -6,7 +6,7 @@ import { calcBMI, formatDate, formatMonthYear, splitFullName } from "@fittrack/u
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { sleep } from "@/utils/sleep";
-import { api } from "@/lib/axios";
+import { webApiClient } from "@/lib/api-client";
 import type { PersonalFieldKey } from "@/data/profile/profile";
 
 export type PersonalData = Record<PersonalFieldKey, string>;
@@ -97,7 +97,7 @@ export function useProfilePage() {
     const w = parseFloat(weightKg);
     const h = parseFloat(heightCm);
 
-    await api.patch("/users/profile", {
+    await webApiClient.users.updateProfile({
       firstName: personalData.firstName.trim() || undefined,
       lastName: personalData.lastName.trim() || undefined,
       dateOfBirth: personalData.dateOfBirth || undefined,
@@ -108,7 +108,7 @@ export function useProfilePage() {
     const emailChanged = personalData.email.trim() !== (user?.email ?? "");
     const phoneChanged = personalData.phone.trim() !== (user?.phone_no ?? "");
     if (emailChanged || phoneChanged) {
-      await api.patch("/users/account", {
+      await webApiClient.users.updateAccount({
         ...(emailChanged ? { email: personalData.email.trim() } : {}),
         ...(phoneChanged ? { phone_no: personalData.phone.trim() } : {})
       });
