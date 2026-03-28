@@ -292,10 +292,9 @@ export default function ProfileSettingsPage() {
         </div>
         <ConfirmModal
             isOpen={showTerminateConfirm}
-            title="Terminate Account"
+            title="Request Account Termination?"
             message="This will permanently delete your account. This action cannot be undone."
             confirmLabel={CONFIRM_COPY.terminateAccount.confirmLabel}
-            cancelLabel="KEEP ACCOUNT"
             loadingLabel={CONFIRM_COPY.terminateAccount.loadingLabel}
             loadingTitle="TERMINATING ACCOUNT"
             isDanger
@@ -305,14 +304,13 @@ export default function ProfileSettingsPage() {
         />
         <ConfirmModal
             isOpen={showSensitiveConfirm}
-            title="Sensitive Information Changed"
+            title="Changing Sensitive Info"
             message={
               sensitiveAction === "email"
                   ? "You are changing your email address. For account security, you must log in again after this update. Continue?"
                   : "You changed your password. For account security, you must log in again. Continue?"
             }
             confirmLabel={CONFIRM_COPY.sensitiveLogout.confirmLabel}
-            cancelLabel="CANCEL"
             loadingLabel={CONFIRM_COPY.sensitiveLogout.loadingLabel}
             loadingTitle="LOGGING OUT"
             isLoading={sensitiveLoading}
@@ -326,7 +324,6 @@ export default function ProfileSettingsPage() {
             selectedDate={personalData.dateOfBirth}
             onSelect={(dateYmd) => setPersonalData((prev) => ({ ...prev, dateOfBirth: dateYmd }))}
             onClose={() => setShowDobCalendar(false)}
-            title="Date of Birth"
         />
         <SecurityModal
             isOpen={showSecurityModal}

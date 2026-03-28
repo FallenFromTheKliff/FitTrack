@@ -6,11 +6,14 @@ import {
   type DragEndEvent,
   type DragStartEvent
 } from "@dnd-kit/core";
+import { motion } from "framer-motion";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
+import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { facilitiesMapStyles } from "@/styles/pageStyles";
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
@@ -18,26 +21,23 @@ import { api } from "@/lib/axios";
 import { useFitSensors } from "@/hooks/useFitSensors";
 import { sleep } from "@/utils/sleep";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
-import { FACILITY_TABS, type FacilityTab } from "@/data/facilities/venueFields";
 import {
   type BookingRecord,
   SCHEDULE_EMOJI_OPTIONS,
   type ScheduleResource
 } from "@/data/facilities/resources";
 
-import FitPill from "@/components/fit/FitPill";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
-import { ConfirmModal, FitModal } from "@/components/modals";
+import { ConfirmModal, FitModal, VenueDetailsModal } from "@/components/modals";
 
 import {
   EQUIPMENT,
   CompactFloorLayout,
   EditVenueModal,
   EquipmentPanel,
-  FloorToggle,
   FloorPlanPanel,
   LayoutEditorPanel,
   LayoutStatusPanel,
@@ -45,7 +45,7 @@ import {
 } from "@/components/map";
 import type { VenueRecord } from "@/components/map";
 import { useVenueMutations, useFloorLayout } from "@/hooks/facilities/useFacilities";
-import { FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FloorVenueRecord } from "@/data/facilities/floorPlans";
+import { FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FacilityFloorId, type FloorVenueRecord } from "@/data/facilities/floorPlans";
 import {
   buildVenueInitialValues,
   createScheduleResourceId,
@@ -58,8 +58,11 @@ export default function FacilitiesMapPage() {
   const fs = facilitiesMapStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const [activeTab, setActiveTab] = useState<FacilityTab>("floor");
+  const [activeTab, setActiveTab] = useState<"floor" | "venues">("floor");
+  const [viewMotionKey, setViewMotionKey] = useState(0);
+  const [viewMotionDirection, setViewMotionDirection] = useState<"left" | "right">("right");
   const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.standard);
+  const { style: viewSlideStyle } = usePowerSlide(viewMotionKey, viewMotionDirection);
 
   const {
     venues,
@@ -85,22 +88,21 @@ export default function FacilitiesMapPage() {
     layoutType,
     setLayoutType,
     gridSize,
-    setGridSize,
-    deleteTargetCell,
-    setDeleteTargetCell,
-    placedItems,
+    deleteTarget,
+    setDeleteTarget,
+    assignedEquipment,
     equipmentById,
-    placedCount,
+    assignedCount,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
     handleClearFloor,
     handleExport,
-    placeDraggedItem
+    assignEquipmentToVenue
   } = useFloorLayout();
 
-  const [venueModalOpen, setVenueModalOpen] = useState(false);
+  const [venueEditorMode, setVenueEditorMode] = useState<"create" | "edit" | null>(null);
   const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(null);
   const [venueDeleteTarget, setVenueDeleteTarget] = useState<VenueRecord | null>(null);
   const [selectedFloorVenue, setSelectedFloorVenue] = useState<FloorVenueRecord | null>(null);
@@ -137,12 +139,11 @@ export default function FacilitiesMapPage() {
   };
 
   const { data: activeBookings = [] } = useQuery<BookingRecord[]>({
-    queryKey: ["admin-bookings-active"],
+    queryKey: queryKeys.adminBookings(),
     queryFn: async () => {
-      const { data } = await api.get<{ bookings?: BookingRecord[] } | BookingRecord[]>(
-        "/admin/bookings?status=confirmed"
-      );
-      return Array.isArray(data) ? data : (data.bookings ?? []);
+      const { data } = await api.get<{ bookings?: BookingRecord[] } | BookingRecord[]>("/admin/bookings");
+      const bookings = Array.isArray(data) ? data : (data.bookings ?? []);
+      return bookings.filter((booking) => booking.status === "confirmed");
     }
   });
 
@@ -167,10 +168,9 @@ export default function FacilitiesMapPage() {
   const handleDragEnd = (event: DragEndEvent) => {
     if (!isEditMode) return;
     const equipmentId = event.active.data.current?.equipmentId as string | undefined;
-    const sourceCellId = event.active.data.current?.sourceCellId as string | undefined;
-    const cellId = event.over?.id as string | undefined;
-    if (!equipmentId || !cellId || !cellId.startsWith("cell-")) return;
-    placeDraggedItem(equipmentId, cellId, sourceCellId);
+    const dropTargetId = event.over?.id as string | undefined;
+    if (!equipmentId || !dropTargetId || !dropTargetId.startsWith("venue-")) return;
+    assignEquipmentToVenue(equipmentId, dropTargetId.replace("venue-", ""));
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -186,8 +186,8 @@ export default function FacilitiesMapPage() {
     setVenueDeleteTarget(venue);
   };
 
-  const deleteTargetEquipment = deleteTargetCell
-    ? equipmentById[placedItems[deleteTargetCell]]
+  const deleteTargetEquipment = deleteTarget
+    ? equipmentById[deleteTarget.equipmentId]
     : null;
   const drawerButtonWidth = 44;
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
@@ -208,8 +208,8 @@ export default function FacilitiesMapPage() {
     <LayoutStatusPanel
       colors={colors}
       panelPadding={isCompact ? 12 : 14}
-      placedCount={placedCount}
-      gridSize={gridSize}
+      assignedCount={assignedCount}
+      activeFloor={activeFloor}
     />
   );
 
@@ -219,14 +219,19 @@ export default function FacilitiesMapPage() {
       floor={activeFloorConfig}
       isCompact={isCompact}
       isEditMode={isEditMode}
-      placedItems={placedItems}
+      assignedEquipment={assignedEquipment}
       equipmentById={equipmentById}
       venues={activeFloorVenues}
       floorPlanPadding={isCompact ? 10 : 14}
       floorPlanMinHeight={isCompact ? 360 : 560}
       selectedVenueMapId={selectedFloorVenue?.mapId}
-      onRequestDelete={setDeleteTargetCell}
+      onRequestDelete={(venueMapId, equipmentId) => setDeleteTarget({ venueMapId, equipmentId })}
       onSelectVenue={setSelectedFloorVenue}
+      onOpenVenues={() => {
+        setViewMotionDirection("right");
+        setViewMotionKey((prev) => prev + 1);
+        setActiveTab("venues");
+      }}
     />
   );
 
@@ -238,16 +243,17 @@ export default function FacilitiesMapPage() {
       hasUnsavedChanges={hasUnsavedChanges}
       layoutName={layoutName}
       layoutType={layoutType}
-      gridSize={gridSize}
+      activeFloor={activeFloor}
       onToggleEditMode={handleToggleEditMode}
       onLayoutNameChange={(value) => setLayoutName(value)}
       onLayoutTypeChange={(e: ChangeEvent<HTMLSelectElement>) => {
         if (!isEditMode) return;
         setLayoutType(e.target.value);
       }}
-      onGridSizeChange={(e: ChangeEvent<HTMLSelectElement>) => {
+      onFloorChange={(e: ChangeEvent<HTMLSelectElement>) => {
         if (!isEditMode) return;
-        setGridSize(e.target.value);
+        setActiveFloor(e.target.value as FacilityFloorId);
+        setSelectedFloorVenue(null);
       }}
       onSave={() => handleSaveLayout(() => showVenueMessage("Layout saved."))}
       onClearFloor={handleClearFloor}
@@ -257,28 +263,42 @@ export default function FacilitiesMapPage() {
 
   const venueInitialValues = buildVenueInitialValues(venueEditTarget);
   const combinedMessage = message || venueMessage;
+  const isVenueEditorOpen = activeTab === "venues" && venueEditorMode !== null;
+
+  const handleCloseVenueEditor = () => {
+    if (isVenueSubmitting) return;
+    setViewMotionDirection("left");
+    setViewMotionKey((prev) => prev + 1);
+    setVenueEditorMode(null);
+    setVenueEditTarget(null);
+  };
+
+  const handleOpenVenueEditor = (mode: "create" | "edit", venue: VenueRecord | null = null) => {
+    setViewMotionDirection("right");
+    setViewMotionKey((prev) => prev + 1);
+    setVenueEditTarget(venue);
+    setVenueEditorMode(mode);
+  };
+
+  const handleOpenMap = () => {
+    setSelectedFloorVenue(null);
+    setViewMotionDirection("left");
+    setViewMotionKey((prev) => prev + 1);
+    setActiveTab("floor");
+    setVenueEditorMode(null);
+    setVenueEditTarget(null);
+  };
 
   return (
     <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
       <div style={{ ...fs.mapCard, marginBottom: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "4px 0 12px",
-            borderBottom: `1px solid ${colors.border}`,
-            marginBottom: 14,
-            gap: 10
-          }}
-        >
-          <FitPill
-            options={[...FACILITY_TABS]}
-            active={activeTab}
-            onChange={setActiveTab}
-          />
-          {activeTab === "venues" ? (
-            <div style={{ display: "flex", gap: 10 }}>
+        {activeTab === "venues" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+            <FitButton variant="ghost" label="< FACILITIES MAP" onClick={handleOpenMap} />
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {isVenueEditorOpen ? (
+                <FitButton variant="ghost" label="BACK TO VENUES" onClick={handleCloseVenueEditor} />
+              ) : null}
               <FitButton
                 variant="ghost"
                 label="MANAGE RESOURCES"
@@ -287,80 +307,79 @@ export default function FacilitiesMapPage() {
               <FitButton
                 variant="primary"
                 label="ADD VENUE"
-                onClick={() => {
-                  setVenueEditTarget(null);
-                  setVenueModalOpen(true);
-                }}
+                onClick={() => handleOpenVenueEditor("create")}
               />
             </div>
-          ) : (
-            <FloorToggle
-              colors={colors}
-              activeFloor={activeFloor}
-              onChange={(floorId) => {
-                setActiveFloor(floorId);
-                setSelectedFloorVenue(null);
-              }}
-            />
-          )}
-        </div>
-        {activeTab === "venues" ? (
-          <VenueManagementTable
-            colors={colors}
-            venues={venues}
-            isLoading={venuesLoading}
-            onAddVenue={() => {
-              setVenueEditTarget(null);
-              setVenueModalOpen(true);
-            }}
-            onEditVenue={(venue) => {
-              setVenueEditTarget(venue);
-              setVenueModalOpen(true);
-            }}
-          />
-        ) : (
-          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            {isCompact ? (
-              <CompactFloorLayout
-                colors={colors}
-                isDrawerOpen={isDrawerOpen}
-                drawerButtonWidth={drawerButtonWidth}
-                onToggleDrawer={() => setIsDrawerOpen((prev) => !prev)}
-                floorPlanNode={floorPlanNode}
-                drawerNode={<>{equipmentPanelNode}{layoutStatusNode}</>}
-                editorNode={editorNode}
+          </div>
+        ) : null}
+        <motion.div style={viewSlideStyle}>
+          {activeTab === "venues" ? (
+            isVenueEditorOpen ? (
+              <EditVenueModal
+                isVisible={isVenueEditorOpen}
+                editTarget={venueEditTarget}
+                initialValues={venueInitialValues}
+                submitLabel={isVenueSubmitting ? venueSavingLabel : "SAVE VENUE"}
+                isLoading={isVenueSubmitting}
+                onSubmit={(data) => handleVenueSubmit(data, venueEditTarget, handleCloseVenueEditor)}
+                onDelete={() => {
+                  if (!venueEditTarget) return;
+                  handleCloseVenueEditor();
+                  handleDeleteVenueRequest(venueEditTarget);
+                }}
               />
             ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) 300px",
-                  gap: 12,
-                  alignItems: "start"
-                }}
-              >
+              <VenueManagementTable
+                colors={colors}
+                venues={venues}
+                isLoading={venuesLoading}
+                onEditVenue={(venue) => handleOpenVenueEditor("edit", venue)}
+              />
+            )
+          ) : (
+            <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              {isCompact ? (
+                <CompactFloorLayout
+                  colors={colors}
+                  isDrawerOpen={isDrawerOpen}
+                  drawerButtonWidth={drawerButtonWidth}
+                  onToggleDrawer={() => setIsDrawerOpen((prev) => !prev)}
+                  floorPlanNode={floorPlanNode}
+                  drawerNode={<>{equipmentPanelNode}{layoutStatusNode}</>}
+                  editorNode={editorNode}
+                />
+              ) : (
                 <div
                   style={{
-                    backgroundColor: colors.border,
-                    borderRadius: 12,
-                    padding: 14,
                     display: "grid",
-                    gridTemplateColumns: "220px 1fr",
+                    gridTemplateColumns: "minmax(0, 1fr) 300px",
                     gap: 12,
-                    alignItems: "stretch"
+                    alignItems: "start"
                   }}
                 >
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {equipmentPanelNode}
-                    {layoutStatusNode}
+                  <div
+                    style={{
+                      backgroundColor: colors.border,
+                      borderRadius: 12,
+                      padding: 14,
+                      display: "grid",
+                      gridTemplateColumns: "220px 1fr",
+                      gap: 12,
+                      alignItems: "stretch"
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {equipmentPanelNode}
+                      {layoutStatusNode}
+                    </div>
+                    {floorPlanNode}
                   </div>
-                  {floorPlanNode}
+                  {editorNode}
                 </div>
-                {editorNode}
-              </div>
-            )}
-          </DndContext>
-        )}
+              )}
+            </DndContext>
+          )}
+        </motion.div>
       </div>
 
       {combinedMessage && (
@@ -368,95 +387,11 @@ export default function FacilitiesMapPage() {
           {combinedMessage}
         </FitText>
       )}
-      <EditVenueModal
-        isOpen={venueModalOpen}
-        editTarget={venueEditTarget}
-        initialValues={venueInitialValues}
-        submitLabel={isVenueSubmitting ? venueSavingLabel : "SAVE VENUE"}
-        isLoading={isVenueSubmitting}
-        onSubmit={(data) => handleVenueSubmit(data, venueEditTarget, () => {
-          setVenueModalOpen(false);
-          setVenueEditTarget(null);
-        })}
-        onDelete={() => {
-          if (!venueEditTarget) return;
-          setVenueModalOpen(false);
-          handleDeleteVenueRequest(venueEditTarget);
-        }}
-        onCancel={() => {
-          if (isVenueSubmitting) return;
-          setVenueModalOpen(false);
-          setVenueEditTarget(null);
-        }}
-      />
-      <FitModal
+      <VenueDetailsModal
+        venue={selectedFloorVenue}
         isOpen={!!selectedFloorVenue}
         onClose={() => setSelectedFloorVenue(null)}
-        title={selectedFloorVenue?.name ?? "Venue Details"}
-        subtitle={selectedFloorVenue ? `${FACILITY_FLOOR_MAP[selectedFloorVenue.floorId].label} - ${selectedFloorVenue.isReservable === false ? "Facility zone" : "Reservable venue"}` : undefined}
-        maxWidth={460}
-        closeAriaLabel="Close venue details"
-        footer={
-          selectedFloorVenue ? (
-            <FitButton
-              variant="primary"
-              label="CLOSE"
-              onClick={() => setSelectedFloorVenue(null)}
-              style={{ flex: 1 }}
-            />
-          ) : null
-        }
-      >
-        {selectedFloorVenue ? (
-          <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 10
-              }}
-            >
-              {[
-                { label: "Capacity", value: String(selectedFloorVenue.capacity ?? "N/A") },
-                { label: "Minimum Hours", value: `${selectedFloorVenue.minimumHours ?? 1}` },
-                { label: "Rate", value: selectedFloorVenue.hourlyRate ? `$${selectedFloorVenue.hourlyRate}/hr` : "Facility only" },
-                {
-                  label: "Grid Zone",
-                  value: `C${selectedFloorVenue.gridColumn ?? 1}/R${selectedFloorVenue.gridRow ?? 1}`
-                }
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  style={{
-                    borderRadius: 10,
-                    border: `1px solid ${colors.border}`,
-                    backgroundColor: colors.surfaceRaised,
-                    padding: "12px 14px"
-                  }}
-                >
-                  <FitText style={{ fontSize: 11, color: colors.textMuted, fontWeight: 700 }}>{item.label}</FitText>
-                  <FitText style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{item.value}</FitText>
-                </div>
-              ))}
-            </div>
-            <div
-              style={{
-                borderRadius: 12,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surfaceRaised,
-                padding: "14px 16px"
-              }}
-            >
-              <FitText style={{ fontSize: 12, color: colors.textMuted, fontWeight: 700, marginBottom: 6 }}>
-                Description
-              </FitText>
-              <FitText style={{ fontSize: 14, lineHeight: 1.5 }}>
-                {selectedFloorVenue.description ?? "No description provided for this venue yet."}
-              </FitText>
-            </div>
-          </div>
-        ) : null}
-      </FitModal>
+      />
       <FitModal
         isOpen={resourceModalOpen}
         onClose={() => setResourceModalOpen(false)}
@@ -478,7 +413,7 @@ export default function FacilitiesMapPage() {
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 8, display: "block" }}
+              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 4, display: "block" }}
             >
               Resource Name <FitText as="span" style={{ color: colors.danger }}>*</FitText>
             </FitText>
@@ -499,7 +434,7 @@ export default function FacilitiesMapPage() {
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 8, display: "block" }}
+              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 4, display: "block" }}
             >
               Type <FitText as="span" style={{ color: colors.danger }}>*</FitText>
             </FitText>
@@ -518,7 +453,7 @@ export default function FacilitiesMapPage() {
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 8, display: "block" }}
+              style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 4, display: "block" }}
             >
               Icon
             </FitText>
@@ -555,7 +490,7 @@ export default function FacilitiesMapPage() {
                   color: colors.textMuted,
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
-                  marginBottom: 8,
+                  marginBottom: 4,
                   display: "block"
                 }}
               >
@@ -598,7 +533,6 @@ export default function FacilitiesMapPage() {
               : `Delete ${venueDeleteTarget?.name ?? "this venue"}?`
         }
         confirmLabel="DELETE VENUE"
-        cancelLabel="KEEP VENUE"
         loadingLabel="DELETING VENUE"
         loadingTitle="DELETING VENUE"
         isLoading={deleteVenueMutation.isPending}
@@ -619,21 +553,18 @@ export default function FacilitiesMapPage() {
         title="Unsaved Changes"
         message="You have unsaved placed equipment. Save changes before leaving Edit Mode?"
         confirmLabel={CONFIRM_COPY.saveAndExit.confirmLabel}
-        cancelLabel="KEEP EDITING"
         onConfirm={() => handleSaveAndExit(() => showVenueMessage("Layout saved."))}
         onCancel={() => setShowUnsavedConfirm(false)}
       />
       <ConfirmModal
-        isOpen={!!deleteTargetCell}
+        isOpen={!!deleteTarget}
         title="Remove Equipment"
         message={`Remove ${deleteTargetEquipment?.name ?? "this equipment"} from the floor plan?`}
         confirmLabel="REMOVE"
-        cancelLabel="KEEP EQUIPMENT"
         isDanger
         onConfirm={handleConfirmCellDelete}
-        onCancel={() => setDeleteTargetCell(null)}
+        onCancel={() => setDeleteTarget(null)}
       />
     </FitSection>
   );
 }
-

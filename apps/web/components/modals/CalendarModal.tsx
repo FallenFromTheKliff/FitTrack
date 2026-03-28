@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { addMonths, addYears, getDay, getDaysInMonth, startOfMonth } from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { format, getDay, getDaysInMonth, startOfMonth } from "date-fns";
+import { CalendarDays } from "lucide-react";
 import type { CalendarViewMode } from "@fittrack/types";
 import { formatDateYMD, parseDateYMD } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -16,10 +16,9 @@ type Props = {
   selectedDate?: string;
   onSelect: (dateYmd: string) => void;
   onClose: () => void;
-  title?: string;
 };
 
-export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose, title = "Select Date" }: Props) {
+export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose }: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const s = modalStyles(colors);
   const selected = useMemo(() => parseDateYMD(selectedDate), [selectedDate]);
@@ -41,6 +40,7 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose,
   const selectedYmd = selectedDate ?? "";
   const yearRangeStart = year - 7;
   const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
+  const headerTitle = format(cursor, "MMMM yyyy");
   const dayCells = Array.from({ length: 42 }, (_, index) => {
     const dayNumber = index - offset + 1;
     if (dayNumber < 1 || dayNumber > monthDays) return null;
@@ -48,42 +48,11 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose,
     return { dayNumber, ymd: formatDateYMD(nextDate) };
   });
 
-  const navLabel =
-    currentView === "DAYS"
-      ? `${MONTH_NAMES[monthIndex]} ${year}`
-      : currentView === "MONTHS"
-        ? String(year)
-        : `${yearRangeStart} - ${yearRangeStart + 15}`;
-
-  const handlePrev = () => {
-    if (currentView === "DAYS") {
-      setCursor((value) => addMonths(value, -1));
-      return;
-    }
-    if (currentView === "MONTHS") {
-      setCursor((value) => addYears(value, -1));
-      return;
-    }
-    setCursor((value) => addYears(value, -16));
-  };
-
-  const handleNext = () => {
-    if (currentView === "DAYS") {
-      setCursor((value) => addMonths(value, 1));
-      return;
-    }
-    if (currentView === "MONTHS") {
-      setCursor((value) => addYears(value, 1));
-      return;
-    }
-    setCursor((value) => addYears(value, 16));
-  };
-
   return (
     <FitModal
       isOpen={isOpen}
       onClose={onClose}
-      title={title}
+      title={headerTitle}
       iconNode={<CalendarDays size={16} color={onBrandTextColor} strokeWidth={2} />}
       titleStyle={{ fontSize: 16, fontWeight: 700 }}
       maxWidth={500}
@@ -91,29 +60,6 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose,
       noScroll
     >
       <div style={s.calendarPadding}>
-        <div style={s.calendarNavRow}>
-          <FitButton
-            variant="ghost"
-            iconOnly
-            icon={ChevronLeft}
-            iconSize={17}
-            onClick={handlePrev}
-            style={s.calendarNavBtn}
-            aria-label={`Previous ${currentView.toLowerCase()}`}
-          />
-          <FitText style={{ fontSize: 14, fontWeight: 700, color: colors.brand, minWidth: 180, textAlign: "center" }}>
-            {navLabel}
-          </FitText>
-          <FitButton
-            variant="ghost"
-            iconOnly
-            icon={ChevronRight}
-            iconSize={17}
-            onClick={handleNext}
-            style={s.calendarNavBtn}
-            aria-label={`Next ${currentView.toLowerCase()}`}
-          />
-        </div>
         <div style={s.calendarViewRow}>
           {CALENDAR_VIEW_OPTIONS.map((option) => {
             const isActive = option.value === currentView;

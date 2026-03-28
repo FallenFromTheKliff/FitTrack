@@ -22,7 +22,7 @@ export function authStyles(colors: ThemeColors) {
       display: "flex",
       width: "100%",
       alignItems: "center",
-      justifyContent: "flex-end",
+      justifyContent: "space-between",
       padding: "0",
       maxWidth: "100%",
       margin: "0"
@@ -75,9 +75,9 @@ export function authStyles(colors: ThemeColors) {
       border: `1px solid ${colors.border}`,
       borderRadius: 0,
       padding: "48px 41px",
-      width: "100%",
-      maxWidth: 600,
-      minWidth: 380,
+      width: "min(100%, 560px)",
+      maxWidth: 560,
+      minWidth: 320,
       minHeight: "100vh",
       display: "flex",
       flexDirection: "column",
@@ -214,8 +214,8 @@ export function authStyles(colors: ThemeColors) {
       minHeight: 64,
       paddingTop: 18,
       paddingBottom: 18,
-      fontSize: 16,
-      fontWeight: 700
+      fontSize: 17,
+      fontWeight: 800
     } as CSSProperties
   };
 }

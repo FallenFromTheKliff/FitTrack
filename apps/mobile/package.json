@@ -7,6 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "lint": "..\\web\\node_modules\\.bin\\eslint.cmd . --ext .ts,.tsx --config ..\\web\\eslint.config.mjs --rule no-empty:warn --rule @typescript-eslint/no-unused-expressions:warn --rule @typescript-eslint/no-require-imports:off",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

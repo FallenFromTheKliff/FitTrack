@@ -27,8 +27,8 @@ export function makeFitButtonVariants(
       color: onBrand,
       padding: iconOnly ? "8px" : "11px 18px",
       border: "none",
-      fontSize: 14,
-      fontWeight: 600,
+      fontSize: 15,
+      fontWeight: 700,
       borderRadius: BORDER_RADIUS.input
     },
     ghost: {
@@ -36,8 +36,8 @@ export function makeFitButtonVariants(
       color: colors.textSecondary,
       padding: iconOnly ? "8px" : "10px 18px",
       border: `1px solid ${colors.border}`,
-      fontSize: 14,
-      fontWeight: 500,
+      fontSize: 15,
+      fontWeight: 600,
       borderRadius: BORDER_RADIUS.input
     },
     danger: {
@@ -45,8 +45,8 @@ export function makeFitButtonVariants(
       color: colors.danger,
       padding: iconOnly ? "8px" : "10px 18px",
       border: `1px solid ${colors.danger}`,
-      fontSize: 14,
-      fontWeight: 500,
+      fontSize: 15,
+      fontWeight: 600,
       borderRadius: BORDER_RADIUS.input
     },
     link: {
@@ -251,7 +251,7 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
     wrapper: {
       display: "flex",
       flexDirection: "column",
-      gap: compact ? 2 : 4
+      gap: compact ? 2 : 3
     } as CSSProperties,
     labelRow: {
       display: "flex",
@@ -285,12 +285,12 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
 
 export function makeFitSectionStyles(colors: ThemeColors) {
   return {
-    section: { marginBottom: 24 } as CSSProperties,
+    section: { marginBottom: 16 } as CSSProperties,
     headingRow: {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 24
+      marginBottom: 12
     } as CSSProperties,
     heading: {
       fontSize: 11,

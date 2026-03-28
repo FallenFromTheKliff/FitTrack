@@ -4,10 +4,11 @@ import { DndContext, DragOverlay, type DragStartEvent, type DragEndEvent } from 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { MotionStyle } from "framer-motion";
+import { queryKeys } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSchedule } from "@/contexts/ScheduleContext";
+import { useSchedule, type VenueBookingRecord } from "@/contexts/ScheduleContext";
 import { api } from "@/lib/axios";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useTimedMessage } from "@fittrack/hooks";
@@ -16,22 +17,28 @@ import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
 import { useFitSensors } from "@/hooks/useFitSensors";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import type { MemberRecord } from "@fittrack/types";
+import { formatWeekRange, toYmd } from "@fittrack/utils";
 
-import { FitText } from "@/components/fit/FitText";
-import FitButton from "@/components/fit/FitButton";
-import FitSection from "@/components/fit/FitSection";
+import { FitButton, FitPill, FitSection, FitTable, FitText } from "@/components/fit";
+import type { FitTableColumn } from "@/components/fit/FitTable";
 import { BlockDetailModal, CalendarModal, StaffDetailsModal } from "@/components/modals";
 
 import { RosterPanel, WeeklyTimeline } from "@/components/schedule";
 import type { Booking, Resource } from "@/components/schedule";
 
-import { HOURS, getWeekStart, addDays, toYmd, formatWeekRange, mapMembersToStaff, buildManualBooking } from "./helpers";
+import { HOURS, getWeekStart, addDays, mapMembersToStaff, buildManualBooking } from "./helpers";
 
 export default function SchedulePage() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
-  const { bookings: scheduleBookings, isLoading: scheduleLoading } = useSchedule();
+  const {
+    bookings: scheduleBookings,
+    rawBookings,
+    isLoading: scheduleLoading,
+    confirmBooking,
+    rejectBooking
+  } = useSchedule();
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.standard);
@@ -64,7 +71,7 @@ export default function SchedulePage() {
   const [draggingStaff, setDraggingStaff] = useState<Resource | null>(null);
 
   const { data: allMembers = [] } = useQuery<MemberRecord[]>({
-    queryKey: ["members"],
+    queryKey: queryKeys.adminMembers(),
     queryFn: async () => {
       const { data } = await api.get<MemberRecord[]>("/admin/users");
       return data;
@@ -150,7 +157,7 @@ export default function SchedulePage() {
   useEffect(() => {
     const recalc = () => {
       const logoutBtn = document.querySelector(
-        'button[aria-label="LOG OUT"]'
+        'button[aria-label="SIGN OUT"]'
       ) as HTMLElement | null;
       if (!logoutBtn) return;
       const bottom = logoutBtn.getBoundingClientRect().bottom;
@@ -177,6 +184,118 @@ export default function SchedulePage() {
   }, []);
 
   const activeStaff = staffMembers.find((s) => s.id === activeStaffId);
+
+  const staffColumns: FitTableColumn<VenueBookingRecord>[] = [
+    {
+      key: "member",
+      heading: "MEMBER",
+      render: (booking, c) => {
+        const firstName = booking.user?.profile?.firstName?.trim() ?? "";
+        const lastName = booking.user?.profile?.lastName?.trim() ?? "";
+        const label = `${firstName} ${lastName}`.trim() || booking.user?.email || "Member";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <FitText style={{ fontSize: 14, fontWeight: 700, color: c.textPrimary }}>{label}</FitText>
+            <FitText style={{ fontSize: 12, color: c.textMuted }}>{booking.user?.email ?? "-"}</FitText>
+          </div>
+        );
+      }
+    },
+    {
+      key: "venue",
+      heading: "VENUE",
+      render: (booking, c) => <FitText style={{ fontSize: 14, color: c.textPrimary }}>{booking.venue?.name ?? `Venue ${booking.venueId}`}</FitText>
+    },
+    {
+      key: "time",
+      heading: "SCHEDULE",
+      render: (booking, c) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <FitText style={{ fontSize: 14, color: c.textPrimary }}>{new Date(booking.startTime).toLocaleDateString()}</FitText>
+          <FitText style={{ fontSize: 12, color: c.textMuted }}>
+            {new Date(booking.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - {new Date(booking.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </FitText>
+        </div>
+      )
+    },
+    {
+      key: "status",
+      heading: "STATUS",
+      render: (booking, c) => {
+        const color = booking.status === "pending"
+          ? c.warning
+          : booking.status === "confirmed"
+            ? c.success
+            : booking.status === "completed"
+              ? c.textMuted
+              : c.danger;
+        return <FitPill mode="status" label={booking.status.toUpperCase()} color={color} fontSize={13} />;
+      }
+    },
+    {
+      key: "purpose",
+      heading: "PURPOSE",
+      render: (booking, c) => <FitText style={{ fontSize: 13, color: c.textMuted }}>{booking.purpose ?? "-"}</FitText>
+    }
+  ];
+
+  if (!isAdmin) {
+    const pendingBookings = rawBookings.filter((booking) => booking.status === "pending");
+
+    return (
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
+        {message ? (
+          <div style={{ marginBottom: 12 }}>
+            <FitText style={{ fontSize: 14, color: colors.success, fontWeight: 500 }}>{message}</FitText>
+          </div>
+        ) : null}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 16 }}>
+          <div style={{ padding: 14, border: `1px solid ${colors.border}`, borderRadius: 12, backgroundColor: colors.surface }}>
+            <FitText style={{ fontSize: 12, color: colors.textMuted }}>Pending Approvals</FitText>
+            <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{pendingBookings.length}</FitText>
+          </div>
+          <div style={{ padding: 14, border: `1px solid ${colors.border}`, borderRadius: 12, backgroundColor: colors.surface }}>
+            <FitText style={{ fontSize: 12, color: colors.textMuted }}>Confirmed Bookings</FitText>
+            <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{rawBookings.filter((booking) => booking.status === "confirmed").length}</FitText>
+          </div>
+          <div style={{ padding: 14, border: `1px solid ${colors.border}`, borderRadius: 12, backgroundColor: colors.surface }}>
+            <FitText style={{ fontSize: 12, color: colors.textMuted }}>All Visible Bookings</FitText>
+            <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{rawBookings.length}</FitText>
+          </div>
+        </div>
+        <FitSection heading="Booking Operations" className="mb-0">
+          <FitTable
+            columns={staffColumns}
+            rows={rawBookings}
+            getRowKey={(booking) => booking.id}
+            isLoading={scheduleLoading}
+            loadingMessage="Loading staff bookings..."
+            emptyMessage="No bookings available."
+            actions={[
+              {
+                label: "Confirm",
+                variant: "primary",
+                disabled: (booking: VenueBookingRecord) => booking.status !== "pending",
+                onClick: async (booking: VenueBookingRecord) => {
+                  const result = await confirmBooking(booking.id);
+                  showMessage(result.success ? "Booking confirmed." : result.error ?? "Failed to confirm booking.");
+                }
+              },
+              {
+                label: "Reject",
+                variant: "danger",
+                disabled: (booking: VenueBookingRecord) => booking.status !== "pending",
+                onClick: async (booking: VenueBookingRecord) => {
+                  const result = await rejectBooking(booking.id, "Rejected by staff.");
+                  showMessage(result.success ? "Booking rejected." : result.error ?? "Failed to reject booking.");
+                }
+              }
+            ]}
+          />
+        </FitSection>
+      </FitSection>
+    );
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -284,7 +403,6 @@ export default function SchedulePage() {
             }
           }}
           onClose={() => setCalendarOpen(false)}
-          title="Jump to week"
         />
       </FitSection>
       <DragOverlay>

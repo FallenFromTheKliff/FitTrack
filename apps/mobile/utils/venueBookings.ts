@@ -1,27 +1,8 @@
-import type { Booking } from "@fittrack/types";
+import type { Booking, FacilityFloorId, FloorVenueRecord, VenueRecord } from "@fittrack/types";
 
 import { AMENITIES } from "@/data/bookings";
 import { normalizeVenueIconKey, type VenueIconKey } from "@/utils/venueMap";
-
-export type VenueRecord = {
-  id: number;
-  slug: string;
-  name: string;
-  description?: string | null;
-  capacity?: number | null;
-  hourlyRate?: number | null;
-  minimumHours?: number | null;
-  amenities?: string[];
-  iconKey?: string | null;
-  gridColumn?: number | null;
-  gridRow?: number | null;
-  gridWidth?: number | null;
-  gridHeight?: number | null;
-  isReservable?: boolean;
-  isSystem?: boolean;
-  displayOrder?: number | null;
-  isActive: boolean;
-};
+export type { VenueRecord } from "@fittrack/types";
 
 export type VenueBookingRecord = {
   id: string;
@@ -34,6 +15,9 @@ export type VenueBookingRecord = {
 
 export type VenuePresentation = {
   id: string;
+  mapId?: string;
+  floorId?: FacilityFloorId;
+  sourceVenueId?: number;
   name: string;
   iconKey: VenueIconKey;
   emoji: string;
@@ -54,10 +38,14 @@ function findVenueMeta(venue: VenueRecord) {
 
 export function getVenuePresentation(venue: VenueRecord): VenuePresentation {
   const match = findVenueMeta(venue);
+  const floorVenue = venue as Partial<FloorVenueRecord>;
   const price = venue.hourlyRate ?? match?.price ?? 0;
   const unit = venue.hourlyRate != null ? "hr" : match?.unit ?? "session";
   return {
     id: venue.slug ?? match?.id ?? `venue-${venue.id}`,
+    mapId: floorVenue.mapId,
+    floorId: floorVenue.floorId,
+    sourceVenueId: floorVenue.sourceVenueId,
     name: venue.name,
     iconKey: normalizeVenueIconKey(venue.iconKey ?? match?.iconKey),
     emoji: venue.name.slice(0, 1),

@@ -20,7 +20,7 @@ export function FitSquareToggle({ value, onValueChange, activeColor, inactiveCol
     progress.value = useAnimations
       ? withTiming(value ? 1 : 0, { duration: 200 })
       : (value ? 1 : 0);
-  }, [value, useAnimations]);
+  }, [progress, useAnimations, value]);
 
   const trackStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(progress.value, [0, 1], [inactiveColor, activeColor])

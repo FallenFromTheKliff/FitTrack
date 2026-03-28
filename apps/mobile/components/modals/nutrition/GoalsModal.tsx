@@ -9,10 +9,9 @@ import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransiti
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useLoadingText } from "@fittrack/hooks";
 import { getTodayString } from "@/data/bookings";
-import { MONTH_NAMES_SHORT } from "@/data/calendar";
+import { formatLongDate, nextDate } from "@fittrack/utils";
 import { GOAL_TYPES, type GoalType } from "@/data/nutrition";
 import { makeGoalsModalStyles } from "@/styles/modals/GoalsStyles";
-import { nextDate } from "@/utils/date";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -33,11 +32,6 @@ type Props = {
   onClose: () => void;
   onSuccess: (goal: NutritionGoal) => void;
 };
-
-function formatDueDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${MONTH_NAMES_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-}
 
 export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const { colors } = useTheme();
@@ -208,10 +202,10 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               >
                 <CalendarDays size={16} color={dueDate ? colors.brand : colors.textMuted} strokeWidth={2} />
                 <FitText style={[s.fieldBtnText, dueDate ? { color: colors.brand } : {}]}>
-                  {dueDate ? formatDueDate(dueDate) : "Select due date"}
+                  {dueDate ? formatLongDate(dueDate) : "Select due date"}
                 </FitText>
               </Pressable>
-              <FitText style={s.fieldNote}>Optional â€” defaults to tomorrow if left blank.</FitText>
+              <FitText style={s.fieldNote}>Optional - defaults to tomorrow if left blank.</FitText>
             </View>
           </ScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>

@@ -10,7 +10,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useWorkoutTimer } from "@/hooks/workout/useWorkoutTimer";
 import { useCameraCountdown } from "@/hooks/workout/useCameraCountdown";
-import { formatTime } from "@fittrack/utils/index";
+import { formatTime } from "@fittrack/utils";
 import { makeScreenStyles, makeWorkoutStyles } from "@/styles/shared/ScreenStyles";
 
 import { FitText } from "@/components/fit/FitText";

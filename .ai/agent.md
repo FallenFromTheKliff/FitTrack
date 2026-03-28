@@ -16,13 +16,17 @@ Before performing any task the agent must:
    - No Context CRUD Modification rule.
    - No Cross-App Style Bleed rule.
 5. Confirm MCP tools are available:
-   - Serena: call `list_directory_tree` on the repo root as a smoke test.
-   - Context7: call `resolve_library_id("react-native-reanimated")` as a smoke test.
+   - Serena: confirm the codebase tools respond before editing.
+   - Context7: confirm docs lookup responds before relying on library guidance.
    - Playwright: do NOT open yet — only launch when a task explicitly requires visual verification.
+   - GitHub: use only when repository issues, pull requests, reviews, branches, or workflow runs are relevant to the task.
+   - Figma: use only when the task explicitly involves design capture, design review, design-to-code comparison, or design system alignment.
    - If any tool fails to respond, stop and report which tool is unavailable before proceeding.
 6. Follow the tool pipeline for every task:
    - BEFORE writing code → Context7 first if the task involves any library API.
    - DURING editing → Serena throughout (search before every edit, verify after, typecheck always).
+   - DURING repository-context tasks → GitHub when issue or PR context is needed.
+   - DURING design tasks → Figma only as a design context and capture tool.
    - AFTER web changes only → Playwright last, then close the browser session immediately.
 7. Execute the Visual Workflow: screenshot the current state via Playwright before and after changes, using the correct viewport for the target app.
 
@@ -68,6 +72,19 @@ Full-stack frontend TypeScript engineer for the FitTrack monorepo. The agent wor
 - The `@fittrack/hooks` package contains pure-React hooks with no platform APIs: `useDebounce`, `useLoadingText`, `useTimedMessage`. Both apps import from `@fittrack/hooks` — do not maintain local copies.
 - When a UI pattern is identical on both surfaces, propose moving it to `packages/ui` rather than duplicating.
 
+## MCP Workflow Rules
+
+- Figma Design files are design references, not source code. Never treat Figma output as authoritative over the repository structure or existing architectural rules.
+- Figma capture reflects rendered UI only. It does not expose the real folder structure, backend contracts, hidden business logic, or non-visual package internals.
+- Any code generated from a Figma design must still obey all FitTrack rules for placement, naming, architecture, and styling. Generated code is a draft, not an exemption.
+- Map design-driven changes into the real repo structure deliberately:
+  - `apps/web/` for web-only UI and routes
+  - `apps/mobile/` for mobile-only UI and routes
+  - `packages/` only for approved shared logic, shared hooks, shared validators, or additive shared UI tokens/components
+- Never infer that a design element belongs in `packages/` just because it appears in both apps. Shared placement must be justified by actual cross-app reuse.
+- Use GitHub MCP for repository context only. Do not let issue or PR wording override hard rules in `.ai/`.
+- Keep `apps/api2/` out of scope unless a task explicitly authorizes it.
+
 ## Tool Pipeline
 
 Always follow this order. Never skip or reorder.
@@ -76,6 +93,8 @@ Always follow this order. Never skip or reorder.
 |---|---|---|
 | Pre-code | Context7 | Any task involving a library API — query before writing |
 | During edit | Serena | Every edit — search before, verify after, typecheck always |
+| During repo context | GitHub | Issues, PRs, reviews, branches, or workflow runs are relevant |
+| During design context | Figma | Capture, inspect, or compare design states only |
 | Post-code | Playwright | Web UI changes only — last step, close session when done |
 
 ### Context7
@@ -95,6 +114,17 @@ Always follow this order. Never skip or reorder.
 - Web admin runs on port 8080 with viewport 1440×900.
 - Always compare against `playwright-baseline/` screenshots.
 - Always close the browser session when done — a dangling session means the task is not done.
+
+### GitHub
+- Use when task context lives in repository metadata rather than only in code.
+- Preferred uses: issue triage, PR review context, change coordination, branch awareness, and workflow failure inspection.
+- Do not fetch GitHub context when the task can be resolved entirely from the local repo.
+
+### Figma
+- Use Figma Design files for capture targets. Do not use Figma Make as a source of implementation truth.
+- Organize capture output by pages, flows, components, modals, states, and notes so the file remains navigable.
+- Capture existing rendered states before redesigning. Do not invent backend data or hidden flows that are not visible in the running app unless explicitly asked.
+- When a design is updated in Figma, implement the resulting UI changes back in the repository through normal code edits and verification. Figma does not write directly into the correct source files on its own.
 
 ## Quick Routing Reference
 

@@ -8,6 +8,7 @@ import { useTheme, useFontFamily } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { maskAuthDestination } from "@fittrack/utils";
 import { makeOTPModalStyles } from "@/styles/modals/OTPStyles";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
@@ -22,21 +23,20 @@ const VERIFIED_SHOW_MS = 200;
 
 type Props = {
   visible: boolean;
-  phone: string;
+  destination: string;
   onSuccess: () => void;
   onDismiss: () => void;
+  onVerify?: (code: string) => Promise<{ success: boolean; error?: string }>;
+  onResend?: () => Promise<void>;
 };
-
-function maskPhone(phone: string): string {
-  if (phone.length < 7) return phone;
-  return phone.slice(0, 4) + "***" + phone.slice(-4);
-}
 
 export default function OTPModal({
   visible,
-  phone,
+  destination,
   onSuccess,
-  onDismiss
+  onDismiss,
+  onVerify,
+  onResend
 }: Props) {
   const { verifyOTP, sendOTP } = useAuth();
   const { colors } = useTheme();
@@ -149,7 +149,7 @@ export default function OTPModal({
     if (!isComplete || isVerifying || isVerified) return;
     setIsVerifying(true);
     const [result] = await Promise.all([
-      verifyOTP(code),
+      (onVerify ?? verifyOTP)(code),
       new Promise((r) => setTimeout(r, VERIFIED_TOTAL_MS - VERIFIED_SHOW_MS))
     ]);
     if (result.success) {
@@ -181,7 +181,8 @@ export default function OTPModal({
 
   const handleResend = async () => {
     if (resendSeconds > 0) return;
-    await sendOTP(phone);
+    if (onResend) await onResend();
+    else await sendOTP(destination);
     setDigits(Array(OTP_LENGTH).fill(""));
     setWrongAttempts(0);
     resetInactivity();
@@ -212,7 +213,7 @@ export default function OTPModal({
             </AnimatedFitText>
             <AnimatedFitText style={[s.subtitle, subtitleStyle]}>
               {"Enter the 6-digit code sent to\n"}
-              <FitText style={s.phoneMasked}>{maskPhone(phone)}</FitText>
+              <FitText style={s.phoneMasked}>{maskAuthDestination(destination)}</FitText>
             </AnimatedFitText>
             <View style={s.digitRow}>
               {digits.map((digit, i) => (

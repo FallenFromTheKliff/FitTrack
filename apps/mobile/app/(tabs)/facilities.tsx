@@ -4,6 +4,8 @@ import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } 
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dumbbell, RefreshCw, MessageCircle, CalendarPlus } from "lucide-react-native";
+import { queryKeys } from "@fittrack/query";
+import { FACILITY_FLOORS, FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FacilityFloorId, type VenueRecord } from "@fittrack/types";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -11,9 +13,10 @@ import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeGymMapStyles } from "@/styles/shared/ScreenStyles";
 import { mobileApi } from "@/lib/api";
-import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
+import { getVenuePresentation } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
+import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
 import FitSection from "@/components/fit/FitSection";
 import DetailsModal from "@/components/modals/booking/DetailsModal";
@@ -32,7 +35,8 @@ export default function FacilitiesScreen() {
   const s = useMemo(() => makeGymMapStyles(colors), [colors]);
   const isFrozen = user?.status === "frozen";
   const [isRefreshing, setRefreshing] = useState(false);
-  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
+  const [selectedVenueMapId, setSelectedVenueMapId] = useState<string | null>(null);
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -62,25 +66,28 @@ export default function FacilitiesScreen() {
         onPress: () => setReservationOpen(true)
       }
     ];
-  }, [colors.brand, colors.textSecondary, router, setReservationOpen]);
+  }, [colors.brand, colors.textSecondary, isFrozen, router, setReservationOpen]);
 
   useFocusEffect(useCallback(() => {
     registerFAB({ screenIcon: Dumbbell, menuItems, scrollY, visible: !isFrozen });
     return () => unregisterFAB();
-  }, [menuItems, registerFAB, scrollY, unregisterFAB]));
+  }, [isFrozen, menuItems, registerFAB, scrollY, unregisterFAB]));
 
   const { data: venues = [], refetch } = useQuery<VenueRecord[]>({
-    queryKey: ["venues"],
+    queryKey: queryKeys.venues(user?.id),
     queryFn: async () => {
       const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
       return data;
     }
   });
 
-  const venueZones = useMemo(() => venues.map(getVenuePresentation), [venues]);
+  const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
+  const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
+  const activeFloorVenues = floorVenues[activeFloor];
+  const venueZones = useMemo(() => activeFloorVenues.map(getVenuePresentation), [activeFloorVenues]);
   const activeVenue = useMemo(
-      () => venueZones.find((venue) => venue.id === selectedVenueId) ?? null,
-      [selectedVenueId, venueZones]
+      () => venueZones.find((venue) => venue.mapId === selectedVenueMapId) ?? null,
+      [selectedVenueMapId, venueZones]
   );
 
   const screenStyle = useAnimatedStyle(() => ({
@@ -91,12 +98,12 @@ export default function FacilitiesScreen() {
   const doRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: ["venues"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.venues(user?.id) });
       await refetch();
     } finally {
       setRefreshing(false);
     }
-  }, [queryClient, refetch]);
+  }, [queryClient, refetch, user?.id]);
 
   return (
       <Animated.View style={base.screen}>
@@ -110,15 +117,34 @@ export default function FacilitiesScreen() {
           <View style={s.sectionHeader}>
             <View>
               <FitText style={s.sectionTitle}>Gym Facilities</FitText>
-              <FitText style={s.sectionSubtitle}>Real-time venue availability</FitText>
+              <FitText style={s.sectionSubtitle}>{activeFloorConfig.subtitle}</FitText>
             </View>
-            <Pressable onPress={() => void doRefresh()} style={s.refreshBtn}>
-              <RefreshCw
-                  size={20}
-                  color={isRefreshing ? colors.textMuted : colors.brand}
-                  strokeWidth={2}
-              />
-            </Pressable>
+            <FitButton
+              onPress={() => void doRefresh()}
+              variant="ghost"
+              icon={RefreshCw}
+              iconOnly
+              disabled={isRefreshing}
+              style={s.refreshBtn}
+            />
+          </View>
+          <View style={s.floorToggleWrap}>
+            <FitText style={s.floorToggleLabel}>LEVEL</FitText>
+            <View style={s.floorToggleRow}>
+              {FACILITY_FLOORS.map((floor) => (
+                <FitButton
+                  key={floor.id}
+                  label={floor.label}
+                  onPress={() => {
+                    setActiveFloor(floor.id);
+                    setSelectedVenueMapId(null);
+                  }}
+                  variant={activeFloor === floor.id ? "primary" : "ghost"}
+                  style={s.floorToggleButton}
+                  textStyle={s.floorToggleButtonText}
+                />
+              ))}
+            </View>
           </View>
           <View style={s.mapCanvas}>
             {Array.from({ length: GRID_COLUMNS - 1 }).map((_, index) => (
@@ -151,19 +177,21 @@ export default function FacilitiesScreen() {
             ))}
             {venueZones.map((venue) => {
               const Icon = getVenueIcon(venue.iconKey);
+              const isSelected = selectedVenueMapId === venue.mapId;
               return (
                   <Pressable
-                      key={venue.id}
+                      key={venue.mapId ?? venue.id}
                       style={[
                         s.mapZone,
                         {
                           left: `${((venue.gridColumn - 1) / GRID_COLUMNS) * 100}%` as never,
                           top: `${((venue.gridRow - 1) / GRID_ROWS) * 100}%` as never,
                           width: `${(venue.gridWidth / GRID_COLUMNS) * 100}%` as never,
-                          height: `${(venue.gridHeight / GRID_ROWS) * 100}%` as never
+                          height: `${(venue.gridHeight / GRID_ROWS) * 100}%` as never,
+                          borderColor: isSelected ? colors.brand : colors.brand + "66"
                         }
                       ]}
-                      onPress={() => setSelectedVenueId(venue.id)}
+                      onPress={() => setSelectedVenueMapId(venue.mapId ?? venue.id)}
                   >
                     <View style={s.mapZoneBackdrop} />
                     <View style={s.mapZoneBadge}>
@@ -184,7 +212,7 @@ export default function FacilitiesScreen() {
               {venueZones.map((venue) => {
                 const Icon = getVenueIcon(venue.iconKey);
                 return (
-                    <View key={venue.id} style={s.mapLegendItem}>
+                    <View key={venue.mapId ?? venue.id} style={s.mapLegendItem}>
                       <Icon size={16} color={colors.brand} strokeWidth={2} />
                       <FitText style={s.mapLegendLabel}>{venue.name}</FitText>
                     </View>
@@ -192,12 +220,12 @@ export default function FacilitiesScreen() {
               })}
             </View>
           </FitSection>
-          <FitText style={s.mapTip}>Tap any venue zone to view details about that facility.</FitText>
+          <FitText style={s.mapTip}>Tap any venue zone to view details for {activeFloorConfig.label.toLowerCase()}.</FitText>
         </Animated.ScrollView>
         <DetailsModal
             isVisible={activeVenue !== null}
             venue={activeVenue}
-            onClose={() => setSelectedVenueId(null)}
+            onClose={() => setSelectedVenueMapId(null)}
         />
       </Animated.View>
   );

@@ -71,6 +71,11 @@ export default React.memo(function FitCard({
         else onPress?.();
     };
 
+    const badgeSize = iconSize > 20 ? iconSize + 22 : undefined;
+    const iconBadgeSizeStyle = React.useMemo(
+        () => (badgeSize ? { width: badgeSize, height: badgeSize } : undefined),
+        [badgeSize]
+    );
     if (statValue !== undefined) {
         return (
             <Animated.View style={[s.statTile, statTileStyle]}>
@@ -84,11 +89,6 @@ export default React.memo(function FitCard({
     }
 
     const showChevron = !noChevron && (hasDropdown || onPress !== undefined);
-    const badgeSize = iconSize > 20 ? iconSize + 22 : undefined;
-    const iconBadgeSizeStyle = React.useMemo(
-        () => (badgeSize ? { width: badgeSize, height: badgeSize } : undefined),
-        [badgeSize]
-    );
 
     const iconContent = emoji ? (
         <Text>{emoji}</Text>

@@ -12,6 +12,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "db:bootstrap": "ts-node prisma/bootstrap-defaults.ts",
     "db:purge": "ts-node prisma/purge-dev-accounts.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

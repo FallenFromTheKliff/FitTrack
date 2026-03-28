@@ -120,7 +120,13 @@ Both surfaces use the same:
 - **Font system**: Mobile uses `FONT_FAMILIES[activeFont]` via `useFontFamily()`. Web uses `WEB_FONT_CLASSES[activeFont]` via `useFontClass()` returning a Tailwind class string.
 - **Pure-React hooks**: `useDebounce`, `useLoadingText`, `useTimedMessage` from `@fittrack/hooks` — no platform APIs, shared by both apps.
 
----
+## Design Capture Notes
+
+- Figma captures should be treated as an as-built or proposed UI reference, not as a replacement for source control or architecture docs.
+- A captured screen includes whatever is visibly rendered from `apps/web`, `apps/mobile`, and approved shared packages. Shared package behavior appears only through rendered output.
+- Captures do not reveal hidden business logic, backend schemas, query contracts, storage formats, or non-visual utility behavior unless those are already visible in the UI.
+- If realistic data is needed in a design capture, the app must already render that data through live, seeded, or explicit mock states.
+- Design changes discovered or proposed in Figma must still be mapped back into the real repository structure by intent rather than by screenshot similarity alone.
 
 ## Audience Split
 
@@ -153,4 +159,10 @@ The following API modules exist in `apps/api` but are not yet connected to eithe
 
 ## MCP Tools
 
-Serena, Context7, and Playwright are all configured in `.vscode/mcp.json` and verified. See `.ai/agent.md` for the tool pipeline and usage patterns.
+Serena, Context7, Playwright, GitHub, and Figma are configured in `.vscode/mcp.json` when available for the workspace. See `.ai/agent.md` for the task pipeline and usage patterns.
+
+- **Serena**: primary codebase understanding and editing tool
+- **Context7**: primary documentation lookup tool for library APIs
+- **Playwright**: runtime verification for web and browser-rendered mobile states
+- **GitHub**: repository context for issues, pull requests, reviews, branches, and workflows
+- **Figma**: design capture and design comparison tool using Figma Design files

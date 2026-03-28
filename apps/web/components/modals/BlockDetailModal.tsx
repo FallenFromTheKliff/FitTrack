@@ -5,7 +5,7 @@ import { BORDER_RADIUS } from "@fittrack/ui";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Booking, Resource } from "@/data/schedule-constants";
 
-import { FitText } from "@/components/fit/FitText";
+import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
 import { FitSelect } from "@/components/fit/FitCard";
@@ -90,12 +90,6 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
             style={{ flex: 1 }}
           />
           <FitButton
-            variant="ghost"
-            label="CANCEL"
-            onClick={onClose}
-            style={{ flex: 1 }}
-          />
-          <FitButton
             variant="primary"
             label="SAVE"
             onClick={handleSave}
@@ -107,7 +101,7 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <FitText as="label" style={labelStyle}>Title</FitText>
-          <input
+          <FitTextInput
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Morning Shift"
@@ -116,7 +110,7 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
         </div>
         <div>
           <FitText as="label" style={labelStyle}>Venue Assigned</FitText>
-          <input
+          <FitTextInput
             value={venueLabel}
             onChange={(e) => setVenueLabel(e.target.value)}
             placeholder="e.g. Basketball Court"
@@ -125,7 +119,7 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
         </div>
         <div>
           <FitText as="label" style={labelStyle}>Duration (minutes)</FitText>
-          <input
+          <FitTextInput
             type="number"
             min={15}
             step={15}

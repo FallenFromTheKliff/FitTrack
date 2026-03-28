@@ -6,7 +6,8 @@ export const VENUE_ICON_OPTIONS = [
     { label: "Volleyball", value: "volleyball" },
     { label: "Boxing", value: "boxing" },
     { label: "Reception", value: "reception" },
-    { label: "Gym Area", value: "gym-area" }
+    { label: "Gym Area", value: "gym-area" },
+    { label: "Yoga", value: "yoga" }
 ];
 
 export const VENUE_BOOKING_OPTIONS = [

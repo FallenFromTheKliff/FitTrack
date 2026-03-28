@@ -1,6 +1,6 @@
 "use client";
 import type { ButtonHTMLAttributes, ReactNode, CSSProperties, Ref } from "react";
-import { ChevronRight, LoaderCircle } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
@@ -42,7 +42,9 @@ export default function FitButton({
   const fontClass = useFontClass();
   const accentColor = activeIconColor ?? colors.brand;
   const isDisabled = disabled || loading;
-  const displayLabel = loading && loadingLabel ? loadingLabel : label;
+  const displayLabel = loading
+    ? loadingLabel ?? label ?? ". . ."
+    : label;
   const flexStyle: CSSProperties = flex !== undefined ? { flex } : {};
 
   const base = cn(
@@ -64,7 +66,7 @@ export default function FitButton({
 
   const needsTrailing = showTrailing || variant === "field";
   const isCard = variant === "card";
-  const LeadingIcon = loading ? LoaderCircle : Icon;
+  const LeadingIcon = loading ? undefined : Icon;
 
   return (
       <button
@@ -75,7 +77,10 @@ export default function FitButton({
           className={base}
           style={{ ...variants[variant], ...flexStyle, ...style }}
       >
-        {LeadingIcon && variant !== "field" && <LeadingIcon size={iconSize} strokeWidth={2} className={loading ? "animate-spin" : undefined} />}
+        {LeadingIcon && variant !== "field" && <LeadingIcon size={iconSize} strokeWidth={2} />}
+        {loading && iconOnly && (
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>. . .</span>
+        )}
         {!iconOnly && (
             <span style={{
               flex: needsTrailing ? 1 : undefined,

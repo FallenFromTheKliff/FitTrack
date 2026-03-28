@@ -4,8 +4,9 @@ import { ShieldCheck } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoadingText } from "@fittrack/hooks";
+import { maskAuthDestination } from "@fittrack/utils";
 import { modalStyles } from "@/styles/modalStyles";
-import { FitText } from "@/components/fit/FitText";
+import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
 
@@ -112,19 +113,19 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, onVerify
       >
         <FitText as="p" style={s.otpInstruction}>
           {email
-              ? `Enter the 6-digit code sent to ${email}.`
+              ? `Enter the 6-digit code sent to ${maskAuthDestination(email)}.`
               : "Enter the 6-digit code sent to your registered device."}
         </FitText>
         <div style={s.otpRow}>
           {digits.map((d, i) => (
-              <input
-                  key={i}
-                  ref={(el) => { refs.current[i] = el; }}
-                  value={d}
-                  maxLength={1}
-                  onChange={(e) => handleChange(e.target.value, i)}
-                  onKeyDown={(e) => handleKeyDown(e, i)}
-                  style={s.otpBox(!!d)}
+              <FitTextInput
+                key={i}
+                ref={(el) => { refs.current[i] = el; }}
+                value={d}
+                maxLength={1}
+                onChange={(e) => handleChange(e.target.value, i)}
+                onKeyDown={(e) => handleKeyDown(e, i)}
+                style={s.otpBox(!!d)}
               />
           ))}
         </div>

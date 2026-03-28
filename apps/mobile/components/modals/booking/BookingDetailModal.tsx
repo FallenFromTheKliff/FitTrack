@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, XCircle } from "lucide-react-native";
+import { CalendarDays } from "lucide-react-native";
 
-import type { Booking } from "@fittrack/types";
+import type { LucideIcon } from "lucide-react-native";
+import type { FitButtonVariant } from "@/components/fit";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
@@ -13,16 +14,43 @@ import { makeBookingDetailModalStyles } from "@/styles/modals/BookingDetailStyle
 import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
-import { FitText } from "@/components/fit/FitText";
-import FitButton from "@/components/fit/FitButton";
+import { FitButton, FitText } from "@/components/fit";
+
+export type DetailBooking = {
+  id: string;
+  resourceId?: string;
+  resourceName: string;
+  date: string;
+  time: string;
+  startTime?: string;
+  endTime?: string;
+  status: string;
+  price: number;
+  trainerName?: string;
+  description?: string;
+  participantLabel?: string;
+  participantName?: string;
+  detailTitle?: string;
+  detailSubtitle?: string;
+};
+
+type DetailAction = {
+  key: string;
+  label: string;
+  variant: FitButtonVariant;
+  icon?: LucideIcon;
+  onPress: (booking: DetailBooking) => void;
+  disabled?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
+};
 
 type Props = {
   isVisible: boolean;
-  booking: Booking | null;
+  booking: DetailBooking | null;
   venue?: VenueRecord | null;
   onClose: () => void;
-  onCancelReservation?: (booking: Booking) => void;
-  isCancelling?: boolean;
+  actions?: DetailAction[];
 };
 
 function parseTimeToMinutes(value: string): number | null {
@@ -37,7 +65,7 @@ function parseTimeToMinutes(value: string): number | null {
   return hour * 60 + minute;
 }
 
-export default function BookingDetailModal({ isVisible, booking, venue = null, onClose, onCancelReservation, isCancelling = false }: Props) {
+export default function BookingDetailModal({ isVisible, booking, venue = null, onClose, actions = [] }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -63,15 +91,14 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
   const timeValue = booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time;
   const statusColor = STATUS_COLORS[booking.status] ?? colors.textMuted;
   const statusValue = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
-  const coachInitials = booking.trainerName
-    ? booking.trainerName
-        .split(" ")
-        .map((part: string) => part[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase()
-    : "-";
-
+  const participantName = booking.participantName ?? booking.trainerName ?? "No linked person";
+  const participantLabel = booking.participantLabel ?? "Coach";
+  const participantInitials = participantName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "-";
   const VenueIcon = venuePresentation ? getVenueIcon(venuePresentation.iconKey) : null;
 
   const pricing = (() => {
@@ -81,7 +108,6 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
         parsed: false,
         hours: 1,
         venueTotal: venueRate,
-        trainerFee: 0,
         finalPrice: booking.price ?? venueRate
       };
     }
@@ -92,19 +118,16 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
         parsed: false,
         hours: 1,
         venueTotal: venueRate,
-        trainerFee: 0,
         finalPrice: booking.price ?? venueRate
       };
     }
     const hours = Math.max(1, Math.round((endTotal - startTotal) / 60));
     const venueTotal = venueRate * hours;
-    const trainerFee = booking.trainerName && booking.price != null ? booking.price - venueTotal : 0;
     return {
       parsed: true,
       hours,
       venueTotal,
-      trainerFee,
-      finalPrice: booking.trainerName ? venueTotal + trainerFee : venueTotal
+      finalPrice: booking.price || venueTotal
     };
   })();
 
@@ -124,21 +147,23 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
               <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
             </Animated.View>
             <View style={s.headerText}>
-              <FitText style={s.headerTitle}>Booking Details</FitText>
-              <FitText style={s.headerSubtitle}>{booking.resourceName}</FitText>
+              <FitText style={s.headerTitle}>{booking.detailTitle ?? "Booking Details"}</FitText>
+              <FitText style={s.headerSubtitle}>{booking.detailSubtitle ?? booking.resourceName}</FitText>
             </View>
           </Animated.View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
-            {/* Resource card — renders actual venue icon, not a letter */}
             <View style={[s.resourceCard, localStyles.resourceIconCard]}>
-              <View style={[
-                localStyles.venueIconWrap,
-                { backgroundColor: colors.brand + "18", borderColor: colors.brand + "44" }
-              ]}>
-                {VenueIcon
-                  ? <VenueIcon size={40} color={colors.brand} strokeWidth={1.8} />
-                  : <CalendarDays size={40} color={colors.textDisabled} strokeWidth={1.5} />
-                }
+              <View
+                style={[
+                  localStyles.venueIconWrap,
+                  { backgroundColor: colors.brand + "18", borderColor: colors.brand + "44" }
+                ]}
+              >
+                {VenueIcon ? (
+                  <VenueIcon size={40} color={colors.brand} strokeWidth={1.8} />
+                ) : (
+                  <CalendarDays size={40} color={colors.brand} strokeWidth={1.8} />
+                )}
               </View>
               <FitText style={s.resourceName}>{booking.resourceName}</FitText>
             </View>
@@ -154,41 +179,48 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
               </View>
             </View>
             <View style={s.coachCard}>
-              <View style={[s.coachAvatar, booking.trainerName && { backgroundColor: colors.brand }]}>
-                <FitText style={[s.coachAvatarText, booking.trainerName && { color: colors.onBrand }]}>
-                  {coachInitials}
+              <View style={[s.coachAvatar, participantName !== "No linked person" && { backgroundColor: colors.brand }]}>
+                <FitText style={[s.coachAvatarText, participantName !== "No linked person" && { color: colors.onBrand }]}>
+                  {participantInitials}
                 </FitText>
               </View>
               <View style={s.coachInfo}>
-                <FitText style={s.coachName}>{booking.trainerName ?? "No Coach Assigned"}</FitText>
-                <FitText style={s.coachSub}>Coach</FitText>
+                <FitText style={s.coachName}>{participantName}</FitText>
+                <FitText style={s.coachSub}>{participantLabel}</FitText>
               </View>
             </View>
             <View style={[s.statusBadge, { borderColor: statusColor + "44", backgroundColor: statusColor + "12" }]}>
               <View style={[s.statusDot, { backgroundColor: statusColor }]} />
               <FitText style={[s.statusText, { color: statusColor }]}>{statusValue}</FitText>
             </View>
+            {booking.description ? (
+              <View style={s.priceCard}>
+                <FitText style={s.detailLabel}>NOTES</FitText>
+                <FitText style={s.detailValue}>{booking.description}</FitText>
+              </View>
+            ) : null}
             <View style={s.priceCard}>
               <FitText style={s.detailLabel}>PRICE</FitText>
-              <FitText style={s.priceValue}>{"\u20B1"}{pricing.finalPrice.toLocaleString()}</FitText>
+              <FitText style={s.priceValue}>₱{pricing.finalPrice.toLocaleString()}</FitText>
               <FitText style={s.priceSub}>
-                {pricing.parsed && venuePresentation
-                  ? `\u20B1${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr`
-                  : ""}
-                {booking.trainerName ? " + coach session" : ""}
+                {pricing.parsed && venuePresentation ? `₱${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr` : ""}
               </FitText>
             </View>
           </ScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
-            <FitButton
-              label="CANCEL RESERVATION"
-              variant="danger"
-              icon={XCircle}
-              iconSize={18}
-              onPress={() => booking && onCancelReservation?.(booking)}
-              disabled={!onCancelReservation || isCancelling || booking.status === "cancelled"}
-              flex={1}
-            />
+            {actions.map((action) => (
+              <FitButton
+                key={action.key}
+                label={action.label}
+                variant={action.variant}
+                icon={action.icon}
+                onPress={() => action.onPress(booking)}
+                disabled={action.disabled}
+                loading={action.loading}
+                loadingLabel={action.loadingLabel}
+                flex={1}
+              />
+            ))}
             <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
           </Animated.View>
         </Animated.View>

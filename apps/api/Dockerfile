@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 COPY --from=installer /app/ .
 COPY --from=pruner /app/out/full/ .
-RUN pnpm --filter @fittrack/api exec npx prisma generate && pnpm --filter @fittrack/api run build && mkdir -p apps/api/node_modules
+RUN pnpm --filter @fittrack/api exec npx prisma generate && pnpm --filter @fittrack/api run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -25,9 +25,9 @@ COPY --from=builder --chown=fittrack:fittrack /app/node_modules ./node_modules
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/dist ./dist
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma ./prisma
+COPY --from=builder --chown=fittrack:fittrack /app/apps/api/env-path.ts ./env-path.ts
 COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/tsconfig.json ./tsconfig.json
-ENV NODE_PATH=/app/apps/api/node_modules
+ENV NODE_PATH=/app/apps/api/node_modules:/app/node_modules
 USER fittrack
 EXPOSE 3001
 CMD ["node", "dist/src/main.js"]

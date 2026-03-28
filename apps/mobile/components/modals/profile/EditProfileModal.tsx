@@ -5,10 +5,12 @@ import { CalendarDays, Camera, Dumbbell, User } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 
-import type { AuthUser } from "@fittrack/types";
+import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
 import { calcBMI, formatDate, formatBookingDate, splitFullName } from "@fittrack/utils";
-import { editProfilePersonalSchema, type EditProfilePersonalData } from "@fittrack/validators";
+import { coachProfileSchema, editProfilePersonalSchema, type EditProfilePersonalData } from "@fittrack/validators";
+import { queryKeys } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { mobileApi } from "@/lib/api";
@@ -17,15 +19,13 @@ import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransiti
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { makeEditProfileModalStyles } from "@/styles/modals/EditProfileStyles";
 
-import { FitText, FitTextInput } from "@/components/fit/FitText";
-import FitButton from "@/components/fit/FitButton";
-import FitInputField from "@/components/fit/FitInputField";
-import CalendarModal from "@/components/modals/shared/CalendarModal";
-import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import { CalendarModal, ConfirmModal } from "@/components/modals";
+import { FitButton, FitInputField, FitText, FitTextInput } from "@/components/fit";
 
 type Props = {
   isVisible: boolean;
   onClose: () => void;
+  coachProfile?: CoachProfileRecord | null;
 };
 
 const capitalize = (value: string) => {
@@ -33,12 +33,14 @@ const capitalize = (value: string) => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
-export default function EditProfileModal({ isVisible, onClose }: Props) {
+export default function EditProfileModal({ isVisible, onClose, coachProfile = null }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeEditProfileModalStyles(colors), [colors]);
   const { user, updateUser, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const isCoach = user?.role === "COACH";
 
   const [activeTab, setActiveTab] = useState<"personal" | "fitness">("personal");
   const [isDobCalOpen, setIsDobCalOpen] = useState(false);
@@ -46,6 +48,11 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailLogoutVisible, setEmailLogoutVisible] = useState(false);
   const [isEmailLogoutLoading, setIsEmailLogoutLoading] = useState(false);
+  const [coachBio, setCoachBio] = useState("");
+  const [coachSpecialties, setCoachSpecialties] = useState("");
+  const [coachCertifications, setCoachCertifications] = useState("");
+  const [coachYearsExperience, setCoachYearsExperience] = useState("");
+  const [coachHourlyRate, setCoachHourlyRate] = useState("");
   const { message: emailStatus, showMessage: showEmailStatus, clearMessage: clearEmailStatus } = useTimedMessage(1800);
   const personalForm = useForm<EditProfilePersonalData>({
     resolver: zodResolver(editProfilePersonalSchema),
@@ -63,6 +70,13 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
   const wasVisibleRef = useRef(false);
   const [weightInput, setWeightInput] = useState("");
   const [heightInput, setHeightInput] = useState("");
+  const coachSnapshot = useRef({
+    bio: "",
+    specialties: "",
+    certifications: "",
+    yearsExperience: "",
+    hourlyRate: ""
+  });
   const userName = user?.name ?? "";
   const userEmail = user?.email ?? "";
   const userPhone = user?.phone_no ?? "";
@@ -93,6 +107,19 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
       setIsEmailLogoutLoading(false);
       setIsSubmitting(false);
       clearEmailStatus();
+      const nextCoachState = {
+        bio: coachProfile?.bio ?? "",
+        specialties: coachProfile?.specialties?.join(", ") ?? "",
+        certifications: coachProfile?.certifications?.join(", ") ?? "",
+        yearsExperience: coachProfile?.yearsExperience != null ? String(coachProfile.yearsExperience) : "",
+        hourlyRate: coachProfile?.hourlyRate != null ? String(coachProfile.hourlyRate) : ""
+      };
+      coachSnapshot.current = nextCoachState;
+      setCoachBio(nextCoachState.bio);
+      setCoachSpecialties(nextCoachState.specialties);
+      setCoachCertifications(nextCoachState.certifications);
+      setCoachYearsExperience(nextCoachState.yearsExperience);
+      setCoachHourlyRate(nextCoachState.hourlyRate);
     }
 
     if (!isVisible) {
@@ -103,7 +130,9 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
     wasVisibleRef.current = isVisible;
   }, [
     clearEmailStatus,
+    coachProfile,
     isVisible,
+    resetPersonal,
     userDob,
     userEmail,
     userHeight,
@@ -149,7 +178,14 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
     "?";
   const displayedAvatarUri = avatarUri ?? user?.avatarUri ?? null;
   const isFitnessDirty = weightInput !== String(userWeight ?? "") || heightInput !== String(userHeight ?? "");
-  const isDirty = personalForm.formState.isDirty || isFitnessDirty || !!avatarUri;
+  const isCoachDirty = isCoach && (
+    coachBio !== coachSnapshot.current.bio ||
+    coachSpecialties !== coachSnapshot.current.specialties ||
+    coachCertifications !== coachSnapshot.current.certifications ||
+    coachYearsExperience !== coachSnapshot.current.yearsExperience ||
+    coachHourlyRate !== coachSnapshot.current.hourlyRate
+  );
+  const isDirty = personalForm.formState.isDirty || isFitnessDirty || !!avatarUri || isCoachDirty;
 
   const buildPatch = (personal: EditProfilePersonalData): Partial<AuthUser> => {
     const fullName = [personal.firstName.trim(), personal.lastName.trim()].filter(Boolean).join(" ");
@@ -174,20 +210,41 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
     const phoneChanged = personal.phone.trim() !== (user?.phone_no ?? "");
     const patch = buildPatch(personal);
     try {
+      const coachPayload = coachProfileSchema.parse({
+        bio: coachBio,
+        specialties: coachSpecialties,
+        certifications: coachCertifications,
+        yearsExperience: coachYearsExperience,
+        hourlyRate: coachHourlyRate
+      });
       const wKgNum = parseFloat(weightInput);
       const hCmNum = parseFloat(heightInput);
       await mobileApi.patch("/users/profile", {
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
         dateOfBirth: personal.dateOfBirth || undefined,
-        currentWeightKg: wKgNum > 0 ? wKgNum : undefined,
-        heightCm: hCmNum > 0 ? hCmNum : undefined
+        currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : undefined,
+        heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
       });
       if (emailChanged || phoneChanged) {
         await mobileApi.patch("/users/account", {
           ...(emailChanged ? { email: personal.email.trim() } : {}),
           ...(phoneChanged ? { phone_no: personal.phone.trim() } : {})
         });
+      }
+      if (isCoach) {
+        await mobileApi.patch("/coaches/profile", {
+          bio: coachPayload.bio || undefined,
+          specialties: coachPayload.specialties,
+          certifications: coachPayload.certifications,
+          yearsExperience: coachPayload.yearsExperience,
+          hourlyRate: coachPayload.hourlyRate
+        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.coachSelfProfile(user?.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) })
+        ]);
       }
       await Promise.all([
         updateUser({
@@ -197,8 +254,8 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
             firstName: personal.firstName.trim() || null,
             lastName: personal.lastName.trim() || null,
             dateOfBirth: personal.dateOfBirth || null,
-            currentWeightKg: wKgNum > 0 ? wKgNum : null,
-            heightCm: hCmNum > 0 ? hCmNum : null
+            currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : null,
+            heightCm: !isCoach && hCmNum > 0 ? hCmNum : null
           }
         }),
         new Promise((resolve) => setTimeout(resolve, 1200))
@@ -226,22 +283,33 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
     setIsSubmitting(true);
     try {
       const personal = personalForm.getValues();
-      const patch = buildPatch(personal);
-      const wKgNum = parseFloat(weightInput);
-      const hCmNum = parseFloat(heightInput);
+      const coachPayload = coachProfileSchema.parse({
+        bio: coachBio,
+        specialties: coachSpecialties,
+        certifications: coachCertifications,
+        yearsExperience: coachYearsExperience,
+        hourlyRate: coachHourlyRate
+      });
       showEmailStatus("Verifying request");
       await mobileApi.patch("/users/profile", {
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
-        dateOfBirth: personal.dateOfBirth || undefined,
-        currentWeightKg: wKgNum > 0 ? wKgNum : undefined,
-        heightCm: hCmNum > 0 ? hCmNum : undefined
+        dateOfBirth: personal.dateOfBirth || undefined
       });
+      if (isCoach) {
+        await mobileApi.patch("/coaches/profile", {
+          bio: coachPayload.bio || undefined,
+          specialties: coachPayload.specialties,
+          certifications: coachPayload.certifications,
+          yearsExperience: coachPayload.yearsExperience,
+          hourlyRate: coachPayload.hourlyRate
+        });
+      }
       showEmailStatus("Updating email");
       await mobileApi.patch("/users/account", {
         email: personal.email.trim()
       });
-      await updateUser(patch);
+      await updateUser(buildPatch(personal));
       await logout();
       return;
     } catch {
@@ -261,7 +329,7 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
 
   const roleValue = capitalize(user?.role ?? "");
   const tierValue = capitalize(user?.tier ?? "");
-  const memberSinceValue = user?.memberSince ? formatDate(user.memberSince) : "\u2014";
+  const memberSinceValue = user?.memberSince ? formatDate(user.memberSince) : "--";
 
   return (
     <Modal
@@ -281,7 +349,7 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
               </Pressable>
               <Pressable style={[s.tabBtn, activeTab === "fitness" && s.tabBtnActive]} onPress={() => setActiveTab("fitness")}>
                 <Dumbbell size={14} color={activeTab === "fitness" ? colors.textPrimary : colors.textSecondary} strokeWidth={2} />
-                <FitText style={[s.tabLabel, activeTab === "fitness" && s.tabLabelActive]}>Fitness</FitText>
+                <FitText style={[s.tabLabel, activeTab === "fitness" && s.tabLabelActive]}>{isCoach ? "Coach" : "Fitness"}</FitText>
               </Pressable>
             </View>
           </View>
@@ -356,20 +424,78 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
                   errors={personalForm.formState.errors}
                   pressable
                   trailingIcon={CalendarDays}
-                  displayValue={
-                    dateOfBirth ? formatBookingDate(dateOfBirth) : undefined
-                  }
+                  displayValue={dateOfBirth ? formatBookingDate(dateOfBirth) : undefined}
                   onPress={() => setIsDobCalOpen(true)}
                   compact
                   editable={!isSubmitting}
                 />
+              </>
+            ) : isCoach ? (
+              <>
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Role</FitText>
+                  <FitTextInput value={roleValue || "--"} editable={false} style={[s.fitInput, { color: colors.brand }]} />
+                </View>
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Hourly Rate</FitText>
+                  <FitTextInput
+                    value={coachHourlyRate}
+                    placeholder="e.g. 850"
+                    keyboardType="phone-pad"
+                    editable={!isSubmitting}
+                    onChangeText={(text) => setCoachHourlyRate(text.replace(/[^0-9]/g, ""))}
+                    style={s.fitInput}
+                  />
+                </View>
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Experience</FitText>
+                  <FitTextInput
+                    value={coachYearsExperience}
+                    placeholder="e.g. 4"
+                    keyboardType="phone-pad"
+                    editable={!isSubmitting}
+                    onChangeText={(text) => setCoachYearsExperience(text.replace(/[^0-9]/g, ""))}
+                    style={s.fitInput}
+                  />
+                </View>
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Specialties</FitText>
+                  <FitTextInput
+                    value={coachSpecialties}
+                    placeholder="Strength, Boxing"
+                    editable={!isSubmitting}
+                    onChangeText={setCoachSpecialties}
+                    style={s.fitInput}
+                  />
+                </View>
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Certifications</FitText>
+                  <FitTextInput
+                    value={coachCertifications}
+                    placeholder="NASM, CPR"
+                    editable={!isSubmitting}
+                    onChangeText={setCoachCertifications}
+                    style={s.fitInput}
+                  />
+                </View>
+                <View style={s.bmiCard}>
+                  <FitText style={s.fitLabel}>Bio</FitText>
+                  <FitTextInput
+                    value={coachBio}
+                    placeholder="Tell members about your coaching style"
+                    editable={!isSubmitting}
+                    onChangeText={setCoachBio}
+                    multiline
+                    style={[s.fitInput, { minHeight: 72, textAlignVertical: "top" }]}
+                  />
+                </View>
               </>
             ) : (
               <>
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Role</FitText>
                   <FitTextInput
-                    value={roleValue || "\u2014"}
+                    value={roleValue || "--"}
                     editable={false}
                     style={[s.fitInput, { color: colors.brand }]}
                   />
@@ -377,7 +503,7 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Tier</FitText>
                   <FitTextInput
-                    value={tierValue || "\u2014"}
+                    value={tierValue || "--"}
                     editable={false}
                     style={[s.fitInput, { color: colors.brand }]}
                   />
@@ -418,9 +544,9 @@ export default function EditProfileModal({ isVisible, onClose }: Props) {
                   <FitText style={s.fitLabel}>BMI</FitText>
                   <View style={s.bmiRow}>
                     <FitText style={[s.bmiValue, { color: bmiResult ? colors.brand : colors.textDisabled }]}>
-                      {bmiResult ? String(bmiResult.bmi) : "\u2014"}
+                      {bmiResult ? String(bmiResult.bmi) : "--"}
                     </FitText>
-                    {bmiResult && <FitText style={s.bmiLabel}>{bmiResult.status}</FitText>}
+                    {bmiResult ? <FitText style={s.bmiLabel}>{bmiResult.status}</FitText> : null}
                   </View>
                 </View>
               </>

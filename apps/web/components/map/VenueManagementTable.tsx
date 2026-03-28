@@ -9,7 +9,6 @@ type Props = {
   colors: ThemeColors;
   venues: VenueRecord[];
   isLoading: boolean;
-  onAddVenue: () => void;
   onEditVenue: (venue: VenueRecord) => void;
 };
 

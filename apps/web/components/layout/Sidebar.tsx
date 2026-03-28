@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Dumbbell, LayoutDashboard, Users, CalendarDays, Grid2X2, Package, BarChart2, Settings, LogOut, ChevronRight } from "lucide-react";
@@ -17,15 +17,15 @@ import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import { ConfirmModal } from "@/components/modals";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; roles?: ("ADMIN" | "STAFF")[] };
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/members", label: "Members", icon: Users },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
-  { href: "/facilities", label: "Facilities", icon: Grid2X2 },
-  { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/analytics", label: "Analytics", icon: BarChart2 },
+  { href: "/facilities", label: "Facilities", icon: Grid2X2, roles: ["ADMIN"] },
+  { href: "/inventory", label: "Inventory", icon: Package, roles: ["ADMIN"] },
+  { href: "/analytics", label: "Analytics", icon: BarChart2, roles: ["ADMIN"] },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
@@ -36,7 +36,7 @@ type Props = {
 
 export default function Sidebar({ isMobileOverlay = false, onClose }: Props) {
   const path = usePathname() ?? "/";
-  const { colors, activeThemeKey, onBrandTextColor } = useTheme();
+  const { colors, activeThemeKey } = useTheme();
   const { user, logout } = useAuth();
   const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.standard);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -45,6 +45,11 @@ export default function Sidebar({ isMobileOverlay = false, onClose }: Props) {
   const s = sidebarStyles(colors, activeThemeKey);
   const initials = user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
   const isProfileActive = path.startsWith("/profile");
+  const portalLabel = user?.role === "STAFF" ? "Staff Portal" : "Admin Portal";
+  const visibleNav = useMemo(
+    () => NAV.filter((item) => !item.roles || item.roles.includes((user?.role as "ADMIN" | "STAFF") ?? "ADMIN")),
+    [user?.role]
+  );
 
   const handleLogout = async () => {
     if (logoutLoading) return;
@@ -94,7 +99,7 @@ export default function Sidebar({ isMobileOverlay = false, onClose }: Props) {
             }}
             excludeGlobalScale
           >
-            Admin Portal
+            {portalLabel}
           </FitText>
         </div>
       </div>
@@ -135,7 +140,7 @@ export default function Sidebar({ isMobileOverlay = false, onClose }: Props) {
       </Link>
       <div style={s.profileSeparator} />
       <nav style={s.navList}>
-        {NAV.map((item) => {
+        {visibleNav.map((item) => {
           const isActive =
             item.href === "/dashboard"
               ? path === "/dashboard"
@@ -174,10 +179,10 @@ export default function Sidebar({ isMobileOverlay = false, onClose }: Props) {
         icon={LogOut}
         iconSize={21}
         onClick={() => setLogoutOpen(true)}
-        aria-label="LOG OUT"
+        aria-label="SIGN OUT"
         style={s.logoutBtn}
       >
-        LOG OUT
+        SIGN OUT
       </FitButton>
       <ConfirmModal
         isOpen={logoutOpen}

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
@@ -9,41 +9,49 @@ import type { VenueRecord } from "@/data/facilities/mapTypes";
 import FitButton from "@/components/fit/FitButton";
 import { FitSelect } from "@/components/fit/FitCard";
 import { FitText, FitTextInput, FitTextArea } from "@/components/fit/FitText";
-import FitModal from "@/components/modals/FitModal";
 
 type Props = {
-  isOpen: boolean;
+  isVisible: boolean;
   editTarget: VenueRecord | null;
   initialValues: Record<string, string>;
   submitLabel: string;
   isLoading: boolean;
   onSubmit: (data: Record<string, string>) => void;
-  onCancel: () => void;
   onDelete: () => void;
 };
 
 const REQUIRED_FIELDS = ["name", "capacity", "gridColumn", "gridRow", "gridWidth", "gridHeight"] as const;
 
 export function EditVenueModal({
-  isOpen,
+  isVisible,
   editTarget,
   initialValues,
   submitLabel,
   isLoading,
   onSubmit,
-  onCancel,
   onDelete
 }: Props) {
   const { colors } = useTheme();
   const s = modalStyles(colors);
   const [formData, setFormData] = useState<Record<string, string>>(initialValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const panelStyle = useMemo(() => ({
+    border: `1px solid ${colors.border}`,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    padding: 18,
+    display: "grid",
+    gap: 16,
+    opacity: isVisible ? 1 : 0,
+    transform: isVisible ? "translateY(0)" : "translateY(10px)",
+    transition: "opacity 180ms ease, transform 180ms ease"
+  }), [colors.border, colors.surface, isVisible]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isVisible) return;
     setFormData(initialValues);
     setErrors({});
-  }, [initialValues, isOpen]);
+  }, [initialValues, isVisible]);
 
   const handleChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -81,7 +89,7 @@ export function EditVenueModal({
     type?: "text" | "textarea" | "select";
     placeholder?: string;
   }) => (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gap: 6 }}>
       <FitText as="label" style={s.fieldLabel}>
         {label}
         {required ? <FitText as="span" style={s.requiredAsterisk}>*</FitText> : null}
@@ -115,78 +123,28 @@ export function EditVenueModal({
   );
 
   return (
-    <FitModal
-      isOpen={isOpen}
-      onClose={onCancel}
-      title={editTarget ? "Edit Venue" : "Add Venue"}
-      subtitle="Create or update active venues used for reservations."
-      maxWidth={620}
-      footer={
-        <div style={{ display: "grid", gap: 14, width: "100%" }}>
-          <FitButton
-            variant="primary"
-            label={submitLabel}
-            loading={isLoading}
-            onClick={handleSubmit}
-            fullWidth
-          />
-          {editTarget ? (
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                borderTop: `1px solid ${colors.border}`,
-                paddingTop: 14
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.danger, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Danger Zone
-                </FitText>
-                <FitText style={{ fontSize: 13, color: colors.textMuted }}>
-                  {editTarget.isSystem
-                    ? "This venue is part of the core floor plan. It stays locked and cannot be deleted."
-                    : "Delete this venue only if you are certain it should be removed from the reservation system."}
-                </FitText>
-              </div>
-              {editTarget.isSystem ? (
-                <FitButton
-                  variant="danger"
-                  label="LOCKED CORE VENUE"
-                  disabled
-                  fullWidth
-                />
-              ) : (
-                <FitButton
-                  variant="danger"
-                  label="DELETE VENUE"
-                  onClick={onDelete}
-                  fullWidth
-                />
-              )}
-            </div>
-          ) : null}
-        </div>
-      }
-      footerStyle={{ width: "100%" }}
-    >
-      <div style={{ display: "grid", gap: 18 }}>
+    <div style={panelStyle}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <FitText as="h3" style={{ fontSize: 18, fontWeight: 700 }}>
+          {editTarget ? "Edit Venue" : "Add Venue"}
+        </FitText>
+        <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+          Create or update active venues used for reservations.
+        </FitText>
+      </div>
+      <div style={{ display: "grid", gap: 16 }}>
         {renderField({ name: "name", label: "Name", required: true, placeholder: "e.g., Boxing Ring" })}
         {renderField({ name: "description", label: "Description", type: "textarea", placeholder: "Optional venue description" })}
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
           {renderField({ name: "capacity", label: "Capacity", required: true, placeholder: "e.g., 25" })}
           {renderField({ name: "hourlyRate", label: "Hourly Rate", placeholder: "Leave blank for facility-only zones" })}
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
           {renderField({ name: "minimumHours", label: "Minimum Hours", placeholder: "Default 1" })}
           {renderField({ name: "displayOrder", label: "Display Order", placeholder: "Lower numbers appear first" })}
         </div>
-
         {renderField({ name: "iconKey", label: "Icon", type: "select" })}
-
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 8 }}>
           <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Dimensions
           </FitText>
@@ -197,8 +155,7 @@ export function EditVenueModal({
             {renderField({ name: "gridHeight", label: "Grid Height", required: true, placeholder: "e.g., 2" })}
           </div>
         </div>
-
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 6 }}>
           <FitText as="label" style={s.fieldLabel}>User Booking</FitText>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             {VENUE_BOOKING_OPTIONS.map((option) => {
@@ -216,6 +173,51 @@ export function EditVenueModal({
           </div>
         </div>
       </div>
-    </FitModal>
+      <div style={{ display: "grid", gap: 14, width: "100%" }}>
+        <FitButton
+          variant="primary"
+          label={submitLabel}
+          loading={isLoading}
+          onClick={handleSubmit}
+          fullWidth
+        />
+        {editTarget ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              borderTop: `1px solid ${colors.border}`,
+              paddingTop: 14
+            }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.danger, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Danger Zone
+              </FitText>
+              <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+                {editTarget.isSystem
+                  ? "This venue is part of the core floor plan. It stays locked and cannot be deleted."
+                  : "Delete this venue only if you are certain it should be removed from the reservation system."}
+              </FitText>
+            </div>
+            {editTarget.isSystem ? (
+              <FitButton
+                variant="danger"
+                label="LOCKED CORE VENUE"
+                disabled
+                fullWidth
+              />
+            ) : (
+              <FitButton
+                variant="danger"
+                label="DELETE VENUE"
+                onClick={onDelete}
+                fullWidth
+              />
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

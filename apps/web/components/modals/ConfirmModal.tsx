@@ -13,7 +13,6 @@ type Props = {
   onConfirm: () => void;
   onCancel: () => void;
   confirmLabel?: string;
-  cancelLabel?: string;
   loadingLabel?: string;
   loadingTitle?: string;
   confirmIcon?: LucideIcon;
@@ -28,7 +27,6 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
   confirmLabel = "CONFIRM",
-  cancelLabel = "CANCEL",
   loadingLabel,
   loadingTitle,
   confirmIcon,
@@ -51,21 +49,13 @@ export default function ConfirmModal({
       hideCloseButton={isLoading}
       headerStyle={{ alignItems: "flex-start", paddingBottom: 8 }}
       footer={isLoading ? undefined : (
-        <>
-          <FitButton
-            variant="ghost"
-            label={cancelLabel}
-            onClick={onCancel}
-            style={{ flex: 1 }}
-          />
-          <FitButton
-            variant={isDanger ? "danger" : "primary"}
-            label={confirmLabel}
-            icon={confirmIcon}
-            onClick={onConfirm}
-            style={{ flex: 1 }}
-          />
-        </>
+        <FitButton
+          variant={isDanger ? "danger" : "primary"}
+          label={confirmLabel}
+          icon={confirmIcon}
+          onClick={onConfirm}
+          style={{ flex: 1 }}
+        />
       )}
     >
       <FitText

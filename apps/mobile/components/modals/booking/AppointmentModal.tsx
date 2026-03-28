@@ -4,7 +4,9 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { Trainer } from "@fittrack/types";
+import type { CoachProfileRecord, Trainer } from "@fittrack/types";
+import { queryKeys } from "@fittrack/query";
+import { formatBookingDate, getDurationMinutes, to12HourLabel } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApi } from "@/lib/api";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
@@ -12,7 +14,6 @@ import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransiti
 import { useLoadingText } from "@fittrack/hooks";
 import { getTodayString } from "@/data/bookings";
 import { WEEKDAY_NAMES } from "@/data/calendar";
-import { formatBookingDate } from "@fittrack/utils";
 import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
 
 import { FitText } from "@/components/fit/FitText";
@@ -26,18 +27,7 @@ type Props = {
   onSuccess?: () => void;
 };
 
-type CoachRecord = {
-  id: string | number;
-  specialties?: string[];
-  hourlyRate?: number;
-  user?: {
-    email?: string;
-    profile?: {
-      firstName?: string | null;
-      lastName?: string | null;
-    } | null;
-  } | null;
-};
+type CoachRecord = CoachProfileRecord;
 
 type CoachAvailability = {
   dayOfWeek: number | string;
@@ -58,30 +48,6 @@ type SlotOption = {
   startTime: string;
   durationMin: number;
 };
-
-function to12HourLabel(value: string) {
-  const [hourText, minuteText] = value.split(":");
-  const hour = Number(hourText);
-  const minute = Number(minuteText ?? "0");
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
-    return value;
-  }
-  const suffix = hour >= 12 ? "PM" : "AM";
-  const normalizedHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${suffix}`;
-}
-
-function toDurationMinutes(startTime: string, endTime: string) {
-  const [startHour, startMinute] = startTime.split(":").map(Number);
-  const [endHour, endMinute] = endTime.split(":").map(Number);
-  if (!Number.isFinite(startHour) || !Number.isFinite(startMinute) || !Number.isFinite(endHour) || !Number.isFinite(endMinute)) {
-    return 60;
-  }
-  const start = startHour * 60 + startMinute;
-  const end = endHour * 60 + endMinute;
-  const duration = end - start;
-  return duration > 0 ? duration : 60;
-}
 
 function mapCoachToTrainer(coach: CoachRecord): Trainer {
   const firstName = coach.user?.profile?.firstName?.trim() ?? "";
@@ -128,7 +94,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
   const [errorText, setErrorText] = useState("");
 
   const { data: coaches = [] } = useQuery<CoachRecord[]>({
-    queryKey: ["coaches"],
+    queryKey: queryKeys.coaches(),
     queryFn: async () => {
       const { data } = await mobileApi.get<CoachRecord[]>("/coaches?active=true");
       return data;
@@ -139,7 +105,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
   const trainers = useMemo(() => coaches.map(mapCoachToTrainer), [coaches]);
 
   const { data: availability } = useQuery<AvailabilityResponse>({
-    queryKey: ["coach-availability", selectedCoach?.id],
+    queryKey: queryKeys.coachAvailability(selectedCoach?.id),
     queryFn: async () => {
       const { data } = await mobileApi.get<AvailabilityResponse>(`/coaches/${selectedCoach?.id}/availability`);
       return data;
@@ -156,7 +122,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
       .map((slot) => ({
         label: to12HourLabel(slot.startTime),
         startTime: slot.startTime,
-        durationMin: toDurationMinutes(slot.startTime, slot.endTime)
+        durationMin: getDurationMinutes(slot.startTime, slot.endTime)
       }));
   }, [availability, selectedDate]);
 
@@ -184,7 +150,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments() });
     }
   });
 

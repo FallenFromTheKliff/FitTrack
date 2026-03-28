@@ -1,4 +1,5 @@
 import { Activity, Bell, Dumbbell, Swords, type LucideIcon } from "lucide-react-native";
+import { Waves } from "lucide-react-native";
 
 export type VenueIconKey =
   | "basketball"
@@ -6,7 +7,8 @@ export type VenueIconKey =
   | "boxing"
   | "reception"
   | "gym-area"
-  | "dumbbell";
+  | "dumbbell"
+  | "yoga";
 
 const VENUE_ICONS: Record<VenueIconKey, LucideIcon> = {
   basketball: Activity,
@@ -14,7 +16,8 @@ const VENUE_ICONS: Record<VenueIconKey, LucideIcon> = {
   boxing: Swords,
   reception: Bell,
   "gym-area": Dumbbell,
-  dumbbell: Dumbbell
+  dumbbell: Dumbbell,
+  yoga: Waves
 };
 
 export function normalizeVenueIconKey(value?: string | null): VenueIconKey {
@@ -23,6 +26,7 @@ export function normalizeVenueIconKey(value?: string | null): VenueIconKey {
   if (value === "boxing") return value;
   if (value === "reception") return value;
   if (value === "gym-area") return value;
+  if (value === "yoga") return value;
   return "dumbbell";
 }
 

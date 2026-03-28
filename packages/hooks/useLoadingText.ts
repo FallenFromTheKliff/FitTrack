@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
+const DOT_FRAMES = ["", ".", ". .", ". . ."] as const;
+
 export function useLoadingText(baseText: string, isLoading: boolean): string {
   const [dotCount, setDotCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -23,5 +25,7 @@ export function useLoadingText(baseText: string, isLoading: boolean): string {
       }
     };
   }, [isLoading]);
-  return isLoading ? `${baseText}${".".repeat(dotCount)}` : baseText;
+  return isLoading
+    ? `${baseText}${DOT_FRAMES[dotCount] ? ` ${DOT_FRAMES[dotCount]}` : ""}`
+    : baseText;
 }

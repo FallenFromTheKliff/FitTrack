@@ -1,5 +1,5 @@
 "use client";
-import type { HTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, CSSProperties } from "react";
+import { forwardRef, type HTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type CSSProperties } from "react";
 
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { cn } from "@/utils/cn";
@@ -73,13 +73,17 @@ export function StaticFitText({ as: Tag = "span", fontKey = "standard", classNam
 }
 
 type FitTextInputProps = InputHTMLAttributes<HTMLInputElement>;
-export function FitTextInput({ className = "", style, ...props }: FitTextInputProps) {
+export const FitTextInput = forwardRef<HTMLInputElement, FitTextInputProps>(function FitTextInput(
+  { className = "", style, ...props },
+  ref
+) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
   const s = makeFitTextStyles(colors);
   return (
     <input
       {...props}
+      ref={ref}
       className={cn("flex-1 bg-transparent outline-none text-sm border-none", fontClass, className)}
       style={{
         ...s.input(props.disabled),
@@ -87,18 +91,22 @@ export function FitTextInput({ className = "", style, ...props }: FitTextInputPr
       }}
     />
   );
-}
+});
 
 type FitTextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
-export function FitTextArea({ className = "", style, ...props }: FitTextAreaProps) {
+export const FitTextArea = forwardRef<HTMLTextAreaElement, FitTextAreaProps>(function FitTextArea(
+  { className = "", style, ...props },
+  ref
+) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
   const s = makeFitTextStyles(colors);
   return (
     <textarea
       {...props}
+      ref={ref}
       className={cn("flex-1 bg-transparent outline-none text-sm resize-none border-none", fontClass, className)}
       style={{ ...s.area(props.disabled), ...style }}
     />
   );
-}
+});

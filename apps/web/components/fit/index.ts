@@ -8,6 +8,7 @@ export { default as FitPill } from "./FitPill";
 export type { FitPillOption } from "./FitPill";
 export { default as FitSearch } from "./FitSearch";
 export { default as FitSection } from "./FitSection";
+export { default as FitTable } from "./FitTable";
 export { FitInlineFilterChips } from "./FitFilter";
 export { FitSearchActionBar } from "./FitSearch";
 export { FitText, StaticFitText, FitTextInput, FitTextArea } from "./FitText";

@@ -4,9 +4,11 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
+import { AxiosError } from "axios";
 import { ArrowLeft, Dumbbell, Lock, Mail, Phone } from "lucide-react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { mobileApi } from "@/lib/api";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuthEntrance } from "@/hooks/animations/feature/useAuthEntrance";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
@@ -17,23 +19,36 @@ import { registerSchema, type RegisterData } from "@fittrack/validators";
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
+import BufferScreen from "@/components/loading/BufferScreen";
 import OTPModal from "@/components/modals/auth/OTPModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
 
 const PASS_REQ_HEIGHT = 210;
 
+function toRegisterErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    const data = error.response?.data as { message?: string | string[] } | undefined;
+    if (Array.isArray(data?.message)) return data.message.join(" ");
+    if (typeof data?.message === "string") return data.message;
+  }
+  return "Could not create account. Please try again.";
+}
+
 export default function RegisterScreen() {
-  const { register } = useAuth();
+  const { login, commitLogin } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
   const s = useMemo(() => makeAuthStyles(colors), [colors]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [showBuffer, setShowBuffer] = useState(false);
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingPhone, setPendingPhone] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
 
   const loadingText = useLoadingText("Creating account", isLoading);
   const { message: statusText, showMessage: showStatus } = useTimedMessage(2000);
@@ -58,32 +73,85 @@ export default function RegisterScreen() {
     setIsLoading(true);
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      const newUser = await register({
+      await mobileApi.post("/auth/register", {
         email: data.email,
-        phone: data.phone,
+        phone_no: data.phone,
         password: data.password
       });
+      setPendingEmail(data.email);
+      setPendingPhone(data.phone);
+      setPendingPassword(data.password);
+      setShowOTP(true);
       setIsLoading(false);
-      if (newUser) {
+    } catch (error: unknown) {
+      const message = toRegisterErrorMessage(error);
+      const shouldContinueToOtp = message === "Failed to send OTP email";
+      if (shouldContinueToOtp) {
         setPendingEmail(data.email);
+        setPendingPhone(data.phone);
+        setPendingPassword(data.password);
         setShowOTP(true);
+        showStatus("Account created. OTP email failed, but you can still verify.");
       } else {
-        showStatus("Email already in use.");
+        showStatus(message);
       }
-    } catch {
       setIsLoading(false);
-      showStatus("Something went wrong.");
     }
   };
 
-  const handleOTPSuccess = () => {
+  const handleOTPSuccess = async () => {
     setShowOTP(false);
-    showStatus("Account verified!");
-    setTimeout(() => router.replace("/(auth)/login"), 600);
+    if (!pendingEmail || !pendingPassword) {
+      setPendingEmail("");
+      setPendingPhone("");
+      setPendingPassword("");
+      showStatus("Verification complete. Please sign in.");
+      router.replace("/(auth)/login");
+      return;
+    }
+    setIsLoading(true);
+    const result = await login(pendingEmail, pendingPassword);
+    if (!result || result.needsOTP) {
+      setIsLoading(false);
+      setPendingEmail("");
+      setPendingPhone("");
+      setPendingPassword("");
+      showStatus("Verification complete. Please sign in.");
+      router.replace("/(auth)/login");
+      return;
+    }
+    setPendingEmail("");
+    setPendingPhone("");
+    setPendingPassword("");
+    setShowBuffer(true);
+  };
+
+  const handleOTPVerify = async (code: string) => {
+    if (!pendingEmail) {
+      return { success: false as const, error: "No pending email." };
+    }
+    try {
+      await mobileApi.post("/auth/verify-email", { email: pendingEmail, otp: code });
+      return { success: true as const };
+    } catch (error: unknown) {
+      return { success: false as const, error: toRegisterErrorMessage(error) };
+    }
+  };
+
+  const handleOTPResend = async () => {
+    if (!pendingEmail) return;
+    await mobileApi.post("/auth/register", {
+      email: pendingEmail,
+      phone_no: pendingPhone || undefined,
+      password: pendingPassword
+    });
   };
 
   const handleOTPDismiss = () => {
     setShowOTP(false);
+    setPendingEmail("");
+    setPendingPhone("");
+    setPendingPassword("");
     showStatus("Verification cancelled. Please try again.");
   };
 
@@ -97,6 +165,15 @@ export default function RegisterScreen() {
     height: reqHeight.value,
     opacity: reqOpacity.value
   }));
+
+  if (showBuffer) {
+    return (
+      <BufferScreen
+        onCommit={commitLogin}
+        onDone={() => router.replace("/(tabs)/home")}
+      />
+    );
+  }
 
   return (
     <>
@@ -201,7 +278,9 @@ export default function RegisterScreen() {
       </KeyboardAvoidingView>
       <OTPModal
         visible={showOTP}
-        phone={pendingEmail}
+        destination={pendingEmail}
+        onVerify={handleOTPVerify}
+        onResend={handleOTPResend}
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}
       />

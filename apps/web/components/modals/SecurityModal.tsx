@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, type ReactNode } from "react";
-import { Eye, EyeOff, KeyRound, Lock, LogOut } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Lock } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -45,16 +45,16 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
   }, [isOpen]);
 
   const renderPasswordField = ({
-                                 label,
-                                 value,
-                                 onChange,
-                                 show,
-                                 onToggle,
-                                 error,
-                                 showLabel,
-                                 hideLabel,
-                                 extra
-                               }: {
+    label,
+    value,
+    onChange,
+    show,
+    onToggle,
+    error,
+    showLabel,
+    hideLabel,
+    extra
+  }: {
     label: string;
     value: string;
     onChange: (value: string) => void;
@@ -65,30 +65,30 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
     hideLabel: string;
     extra?: ReactNode;
   }) => (
-      <div style={s.securityFieldWrap}>
-        <FitText style={s.fieldLabel}>{label}</FitText>
-        <div style={s.securityInputRow(error ? colors.danger : colors.fieldBorder)}>
-          <Lock size={15} color={colors.textMuted} />
-          <FitTextInput
-              type={show ? "text" : "password"}
-              value={value}
-              onChange={(event) => onChange(event.target.value)}
-              placeholder="••••••••"
-              style={s.securityInput}
-          />
-          <FitButton
-              variant="link"
-              iconOnly
-              icon={show ? EyeOff : Eye}
-              iconSize={16}
-              onClick={onToggle}
-              style={s.securityVisibilityToggle}
-              aria-label={show ? hideLabel : showLabel}
-          />
-        </div>
-        {extra ?? null}
-        {error ? <FitText style={s.securityErrorText}>{error}</FitText> : null}
+    <div style={s.securityFieldWrap}>
+      <FitText style={s.fieldLabel}>{label}</FitText>
+      <div style={s.securityInputRow(error ? colors.danger : colors.fieldBorder)}>
+        <Lock size={15} color={colors.textMuted} />
+        <FitTextInput
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="••••••••"
+          style={s.securityInput}
+        />
+        <FitButton
+          variant="link"
+          iconOnly
+          icon={show ? EyeOff : Eye}
+          iconSize={16}
+          onClick={onToggle}
+          style={s.securityVisibilityToggle}
+          aria-label={show ? hideLabel : showLabel}
+        />
       </div>
+      {extra ?? null}
+      {error ? <FitText style={s.securityErrorText}>{error}</FitText> : null}
+    </div>
   );
 
   const resetFields = () => {
@@ -161,82 +161,81 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
   };
 
   return (
-      <>
-        <FitModal
-            isOpen={isOpen}
-            onClose={resetAndClose}
-            title="Change Password"
-            iconNode={<KeyRound size={15} color={onBrandTextColor} strokeWidth={2} />}
-            maxWidth={560}
-            closeAriaLabel="Close change password modal"
-            noScroll
-            hideFooterDivider
-            footer={
-              <FitButton
-                  variant="primary"
-                  label={isSubmitting ? submitLabel : "SAVE CHANGES"}
-                  loading={isSubmitting}
-                  onClick={handleSubmit}
-                  style={{ flex: 1 }}
-              />
-            }
-        >
-          <div style={{ display: "grid", gap: 12 }}>
-            {renderPasswordField({
-              label: "Confirm Old Password",
-              value: currentPassword,
-              onChange: (value) => {
-                setCurrentPassword(value);
-                if (errors.currentPassword) setErrors((prev) => ({ ...prev, currentPassword: "" }));
-              },
-              show: showCurrentPassword,
-              onToggle: () => setShowCurrentPassword((prev) => !prev),
-              error: errors.currentPassword,
-              showLabel: "Show current password",
-              hideLabel: "Hide current password"
-            })}
-            {renderPasswordField({
-              label: "New Password",
-              value: newPassword,
-              onChange: (value) => {
-                setNewPassword(value);
-                if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: "" }));
-              },
-              show: showNewPassword,
-              onToggle: () => setShowNewPassword((prev) => !prev),
-              error: errors.newPassword,
-              showLabel: "Show new password",
-              hideLabel: "Hide new password",
-              extra: showRequirements ? <PasswordRequirements password={newPassword} onValidationChange={setIsPasswordValid} /> : undefined
-            })}
-            {renderPasswordField({
-              label: "Confirm New Password",
-              value: confirmNewPassword,
-              onChange: (value) => {
-                setConfirmNewPassword(value);
-                if (errors.confirmNewPassword) setErrors((prev) => ({ ...prev, confirmNewPassword: "" }));
-              },
-              show: showConfirmNewPassword,
-              onToggle: () => setShowConfirmNewPassword((prev) => !prev),
-              error: errors.confirmNewPassword,
-              showLabel: "Show confirm new password",
-              hideLabel: "Hide confirm new password"
-            })}
-          </div>
-        </FitModal>
-        <ConfirmModal
-            isOpen={showLogoutConfirm}
-            title="Password Changed"
-            message="Your password has been updated. For account security, you will be logged out and must sign in again."
-            confirmLabel={isLoggingOut ? logoutLabel : "SIGN OUT"}
-            cancelLabel="SIGN OUT"
-            loadingLabel={logoutLabel}
-            loadingTitle="LOGGING OUT"
-            isLoading={isLoggingOut}
-            isDanger={false}
-            onConfirm={handleLogoutConfirm}
-            onCancel={handleLogoutConfirm}
-        />
-      </>
+    <>
+      <FitModal
+        isOpen={isOpen}
+        onClose={resetAndClose}
+        title="Change Password"
+        iconNode={<KeyRound size={15} color={onBrandTextColor} strokeWidth={2} />}
+        maxWidth={560}
+        closeAriaLabel="Close change password modal"
+        noScroll
+        hideFooterDivider
+        footer={
+          <FitButton
+            variant="primary"
+            label={isSubmitting ? submitLabel : "SAVE CHANGES"}
+            loading={isSubmitting}
+            onClick={handleSubmit}
+            style={{ flex: 1 }}
+          />
+        }
+      >
+        <div style={{ display: "grid", gap: 12 }}>
+          {renderPasswordField({
+            label: "Confirm Old Password",
+            value: currentPassword,
+            onChange: (value) => {
+              setCurrentPassword(value);
+              if (errors.currentPassword) setErrors((prev) => ({ ...prev, currentPassword: "" }));
+            },
+            show: showCurrentPassword,
+            onToggle: () => setShowCurrentPassword((prev) => !prev),
+            error: errors.currentPassword,
+            showLabel: "Show current password",
+            hideLabel: "Hide current password"
+          })}
+          {renderPasswordField({
+            label: "New Password",
+            value: newPassword,
+            onChange: (value) => {
+              setNewPassword(value);
+              if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: "" }));
+            },
+            show: showNewPassword,
+            onToggle: () => setShowNewPassword((prev) => !prev),
+            error: errors.newPassword,
+            showLabel: "Show new password",
+            hideLabel: "Hide new password",
+            extra: showRequirements ? <PasswordRequirements password={newPassword} onValidationChange={setIsPasswordValid} /> : undefined
+          })}
+          {renderPasswordField({
+            label: "Confirm New Password",
+            value: confirmNewPassword,
+            onChange: (value) => {
+              setConfirmNewPassword(value);
+              if (errors.confirmNewPassword) setErrors((prev) => ({ ...prev, confirmNewPassword: "" }));
+            },
+            show: showConfirmNewPassword,
+            onToggle: () => setShowConfirmNewPassword((prev) => !prev),
+            error: errors.confirmNewPassword,
+            showLabel: "Show confirm new password",
+            hideLabel: "Hide confirm new password"
+          })}
+        </div>
+      </FitModal>
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Changing Sensitive Info"
+        message="Your password has been updated. For account security, you will be logged out and must sign in again."
+        confirmLabel={isLoggingOut ? logoutLabel : "SIGN OUT"}
+        loadingLabel={logoutLabel}
+        loadingTitle="LOGGING OUT"
+        isLoading={isLoggingOut}
+        isDanger={false}
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutConfirm}
+      />
+    </>
   );
 }

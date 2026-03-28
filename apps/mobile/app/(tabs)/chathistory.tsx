@@ -10,8 +10,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useDebounce } from "@fittrack/hooks";
+import { formatGroupLabel, nextDate } from "@fittrack/utils";
 import { getTodayString } from "@/data/bookings";
-import { formatGroupLabel, nextDate } from "@/utils/date";
 import { groupByDate } from "@/utils/grouping";
 import { makeScreenStyles, makeBookingsScreenStyles } from "@/styles/shared/ScreenStyles";
 
@@ -93,7 +93,8 @@ export default function ChatHistoryScreen() {
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -213,7 +214,7 @@ export default function ChatHistoryScreen() {
                           <FitCard
                             icon={Bot}
                             label={session.title}
-                            subtitle={`${session.messageCount} messages · ${session.preview.slice(0, 40)}...`}
+                            subtitle={`${session.messageCount} messages | ${session.preview.slice(0, 40)}...`}
                             hasBorder={index < sessions.length - 1}
                             noChevron={deleteMode}
                             onPress={deleteMode

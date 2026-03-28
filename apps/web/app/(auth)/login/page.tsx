@@ -124,7 +124,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-        <div style={s.card}>
+        <div className="login-card" style={s.card}>
           <div style={s.cardInner}>
             <div style={s.cardHeader}>
               <motion.div initial={itemInitial} animate={{ opacity: 1, y: 0 }} transition={itemTransition(0)} style={s.brandRowWrap}>
@@ -232,6 +232,17 @@ export default function LoginPage() {
             justify-content: flex-start;
             padding-right: 0;
             padding-left: 0;
+          }
+        }
+        @media (min-width: 900px) and (max-aspect-ratio: 3/5) {
+          .login-card {
+            width: min(42vw, 420px) !important;
+            min-width: 0 !important;
+            padding: 40px 28px !important;
+          }
+          .hero-panel {
+            padding-left: 32px !important;
+            padding-right: 18px !important;
           }
         }
       `}</style>

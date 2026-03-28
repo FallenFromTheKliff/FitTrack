@@ -51,7 +51,7 @@ export default function SettingsModal({ visible, title, icon: Icon, onClose, chi
           visible={visible}
           transparent
           animationType="none"
-          onRequestClose={undefined}
+          onRequestClose={onClose}
           statusBarTranslucent
       >
         <Animated.View style={[s.backdrop, backdropStyle]}>

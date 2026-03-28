@@ -1,5 +1,24 @@
 {
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_mcp_pat_v2",
+      "description": "GitHub Personal Access Token",
+      "password": true
+    }
+  ],
   "servers": {
+    "Figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "GitHub": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${input:github_mcp_pat_v2}"
+      }
+    },
     "oraios/serena": {
       "type": "stdio",
       "command": "uvx",
@@ -16,8 +35,8 @@
     },
     "FitTrack Playwright": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"],
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest"],
       "env": {
         "PLAYWRIGHT_BROWSERS_PATH": "0"
       }

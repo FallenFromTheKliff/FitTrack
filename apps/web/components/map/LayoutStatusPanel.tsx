@@ -1,16 +1,17 @@
 "use client";
 import type { ThemeColors } from "@fittrack/types";
+import { FACILITY_FLOOR_MAP, type FacilityFloorId } from "@/data/facilities/floorPlans";
 
 import { FitText } from "@/components/fit/FitText";
 
 type Props = {
   colors: ThemeColors;
   panelPadding: number;
-  placedCount: number;
-  gridSize: string;
+  assignedCount: number;
+  activeFloor: FacilityFloorId;
 };
 
-export function LayoutStatusPanel({ colors, panelPadding, placedCount, gridSize }: Props) {
+export function LayoutStatusPanel({ colors, panelPadding, assignedCount, activeFloor }: Props) {
   return (
     <div
       style={{
@@ -25,12 +26,12 @@ export function LayoutStatusPanel({ colors, panelPadding, placedCount, gridSize 
       </FitText>
       <div style={{ display: "grid", gap: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <FitText style={{ fontSize: 13, color: colors.textMuted }}>Equipment Placed</FitText>
-          <FitText style={{ fontSize: 13, fontWeight: 600 }}>{placedCount}</FitText>
+          <FitText style={{ fontSize: 13, color: colors.textMuted }}>Equipment Assigned</FitText>
+          <FitText style={{ fontSize: 13, fontWeight: 600 }}>{assignedCount}</FitText>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <FitText style={{ fontSize: 13, color: colors.textMuted }}>Grid Size</FitText>
-          <FitText style={{ fontSize: 13, fontWeight: 600 }}>{gridSize}px</FitText>
+          <FitText style={{ fontSize: 13, color: colors.textMuted }}>Floor Level</FitText>
+          <FitText style={{ fontSize: 13, fontWeight: 600 }}>{FACILITY_FLOOR_MAP[activeFloor].label}</FitText>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <FitText style={{ fontSize: 13, color: colors.textMuted }}>Status</FitText>

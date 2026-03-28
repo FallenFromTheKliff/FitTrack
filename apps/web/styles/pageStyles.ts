@@ -3,7 +3,6 @@ import { themes, type ThemeColors } from "@fittrack/ui";
 import { getReadableTextColor } from "@/utils/contrast";
 
 export function profileStyles(colors: ThemeColors) {
-    const onBrand = colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface);
     const onBrandLight = getReadableTextColor(colors.brandLight, colors.textPrimary, themes.sunlight.surface);
 
     return {
@@ -45,17 +44,17 @@ export function profileStyles(colors: ThemeColors) {
         bannerName: {
             fontSize: 20,
             fontWeight: 700,
-            color: onBrand
+            color: colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface)
         } as CSSProperties,
         bannerEmail: {
             fontSize: 13,
-            color: onBrand,
+            color: colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface),
             opacity: 0.85,
             marginTop: 2
         } as CSSProperties,
         bannerMeta: {
             fontSize: 12,
-            color: onBrand,
+            color: colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface),
             opacity: 0.7,
             marginTop: 3
         } as CSSProperties,
@@ -331,8 +330,6 @@ export function facilitiesMapStyles(colors: ThemeColors) {
 }
 
 export function chatbotStyles(colors: ThemeColors) {
-    const onBrand = colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface);
-
     return {
         page: {
             display: "flex",

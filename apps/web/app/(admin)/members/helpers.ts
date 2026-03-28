@@ -1,7 +1,7 @@
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import type { DeletionRequest } from "@/data/members/members";
 import type { MemberRecord } from "@fittrack/types";
-import { fullName } from "@/utils/members";
+import { fullName } from "@fittrack/utils";
 
 export const MIN_ACTION_DELAY_MS = FEEDBACK_DURATION_MS.standard;
 
@@ -39,9 +39,11 @@ export function filterMembers(
         ? role === "ADMIN"
         : activeChip === "Staff"
           ? role === "STAFF"
-          : activeChip === "Member"
-            ? role === "USER"
-            : true);
+          : activeChip === "Coach"
+            ? role === "COACH"
+            : activeChip === "Member"
+              ? role === "USER"
+              : true);
 
     return !member.deletedAt && matchesSearch && matchesChip && matchesStatus;
   });

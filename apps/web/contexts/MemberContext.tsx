@@ -3,6 +3,7 @@ import { createContext, useContext, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { api } from "@/lib/axios";
+import { queryKeys } from "@fittrack/query";
 import type { MemberRecord, IMemberContext, CreateStaffInput } from "@fittrack/types";
 
 const MemberContext = createContext<IMemberContext | null>(null);
@@ -24,7 +25,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
     isLoading,
     error: queryError
   } = useQuery<MemberRecord[]>({
-    queryKey: ["members"],
+    queryKey: queryKeys.adminMembers(),
     queryFn: async () => {
       const { data } = await api.get<MemberRecord[]>("/admin/users");
       return data;
@@ -34,7 +35,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const error = queryError ? toMessage(queryError, "Failed to fetch members.") : null;
 
   const fetchMembers = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["members"] });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() });
   }, [queryClient]);
 
   const createStaffMutation = useMutation({
@@ -42,7 +43,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
       await api.post("/admin/create-staff", input);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["members"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() });
     }
   });
 
@@ -60,7 +61,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
       await api.delete(`/admin/users/${id}`);
     },
     onSuccess: (_data, id) => {
-      queryClient.setQueryData<MemberRecord[]>(["members"], (prev) =>
+      queryClient.setQueryData<MemberRecord[]>(queryKeys.adminMembers(), (prev) =>
         prev ? prev.filter((m) => m.id !== id) : []
       );
     }

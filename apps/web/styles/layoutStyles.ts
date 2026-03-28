@@ -57,7 +57,7 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flex: 1,
             minHeight: 0,
             overflowY: "auto",
-            padding: "16px 24px 24px",
+            padding: "12px 24px 24px",
             backgroundColor: layoutBg
         } as CSSProperties,
         mobileSidebarBackdrop: {
@@ -137,6 +137,9 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "flex",
             alignItems: "center",
             flexShrink: 0,
+            position: "sticky",
+            top: 0,
+            zIndex: 30,
             borderBottom: `1px solid ${colors.border}`,
             backgroundColor: headerBg
         } as CSSProperties,

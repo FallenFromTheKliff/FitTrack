@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, User, Zap } from "lucide-react-native";
 import type { Booking } from "@fittrack/types";
+import { queryKeys } from "@fittrack/query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -52,7 +53,9 @@ export default function HomeScreen() {
         const key = `fittrack_active_nutrition_goal_${user?.id ?? "guest"}`;
         const raw = await AsyncStorage.getItem(key);
         if (raw) setActiveGoal(JSON.parse(raw));
-      } catch {}
+      } catch {
+        return;
+      }
     })();
     return () => unregisterFAB();
   }, [menuItems, registerFAB, scrollY, unregisterFAB, user?.id]));
@@ -63,19 +66,21 @@ export default function HomeScreen() {
   const todayString = getTodayString();
 
   const { data: venues = [] } = useQuery<VenueRecord[]>({
-    queryKey: ["venues"],
+    queryKey: queryKeys.venues(user?.id),
     queryFn: async () => {
       const { data } = await mobileApi.get<VenueRecord[]>("/venues?active=true");
       return data;
     }
   });
+
   const { data: bookingRecords = [] } = useQuery<VenueBookingRecord[]>({
-    queryKey: ["bookings"],
+    queryKey: queryKeys.bookings(user?.id),
     queryFn: async () => {
       const { data } = await mobileApi.get<VenueBookingRecord[]>("/bookings");
       return data;
     }
   });
+
   const bookings = useMemo(() => toMobileBookings(bookingRecords, venues), [bookingRecords, venues]);
   const todayBookings = useMemo(
     () => bookings.filter((b) => b.date === todayString && b.status !== "cancelled"),

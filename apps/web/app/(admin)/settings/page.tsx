@@ -134,10 +134,10 @@ export default function GymSettingsPage() {
             <div style={appearanceFade}>
                 <FitSection heading="Appearance" headingStyle={{ fontSize: 13 }} action={<Palette size={13} color={colors.brand} />}>
                     <div style={{ padding: "20px 20px" }}>
-                        <FitText style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: colors.textMuted, display: "block", marginBottom: 12 }}>
+                        <FitText style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: colors.textMuted, display: "block", marginBottom: 8 }}>
                             Theme
                         </FitText>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                        <div className="settings-theme-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginBottom: 16 }}>
                             {THEME_KEYS.map((key) => {
                                 const t = themes[key];
                                 const isSelected = pendingTheme === key;
@@ -155,7 +155,7 @@ export default function GymSettingsPage() {
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "space-between",
-                                            padding: "14px 14px",
+                                            padding: "12px 12px",
                                             borderRadius: 10,
                                             border: `1.5px solid ${isSelected ? colors.brand : colors.border}`,
                                             backgroundColor: rowBg,
@@ -178,10 +178,10 @@ export default function GymSettingsPage() {
                                 );
                             })}
                         </div>
-                        <FitText style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: colors.textMuted, display: "block", marginBottom: 12 }}>
+                        <FitText style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: colors.textMuted, display: "block", marginBottom: 8 }}>
                             Font
                         </FitText>
-                        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                        <div className="settings-font-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 16 }}>
                             {FONT_KEYS.map((key) => {
                                 const isSelected = pendingFont === key;
                                 const selectedBg = `${colors.brand}12`;
@@ -196,7 +196,7 @@ export default function GymSettingsPage() {
                                         variant={isSelected ? "primary" : "ghost"}
                                         style={{
                                             flex: 1,
-                                            padding: "14px 0",
+                                            padding: "12px 0",
                                             borderRadius: 8,
                                             border: `1.5px solid ${isSelected ? colors.brand : colors.border}`,
                                             backgroundColor: fontButtonBg,
@@ -212,7 +212,7 @@ export default function GymSettingsPage() {
                                 );
                             })}
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, paddingTop: 4, paddingBottom: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingTop: 2, paddingBottom: 2 }}>
                             <div>
                                 <FitText style={{ fontSize: 15, fontWeight: 500 }}>Animations</FitText>
                                 <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>Transitions and motion effects</FitText>
@@ -294,6 +294,12 @@ export default function GymSettingsPage() {
                     </div>
                 </FitSection>
             </div>
+            <style>{`
+              @media (max-width: 900px) {
+                .settings-theme-grid { grid-template-columns: 1fr !important; }
+                .settings-font-grid { grid-template-columns: 1fr !important; }
+              }
+            `}</style>
         </FitSection>
     );
 }

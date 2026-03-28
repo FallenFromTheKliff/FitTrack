@@ -10,7 +10,7 @@ export const modalStyles = (colors: ThemeColors) => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 1000,
+    zIndex: 1200,
     padding: 20
   },
   container: {
@@ -88,13 +88,13 @@ export const modalStyles = (colors: ThemeColors) => ({
     justifyContent: "flex-end"
   },
   field: {
-    marginBottom: 16
+    marginBottom: 12
   },
   fieldLabel: {
     fontSize: 13,
     fontWeight: 600,
     color: colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 4,
     display: "block"
   },
   fieldInput: {
@@ -262,7 +262,7 @@ export const modalStyles = (colors: ThemeColors) => ({
   } as CSSProperties,
   securityFieldWrap: {
     display: "grid",
-    gap: 6
+    gap: 4
   } as CSSProperties,
   securityInputRow: (borderColor: string): CSSProperties => ({
     display: "flex",
@@ -297,36 +297,17 @@ export const modalStyles = (colors: ThemeColors) => ({
   calendarPadding: {
     padding: 14
   } as CSSProperties,
-  calendarNavRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 10
-  } as CSSProperties,
   calendarViewRow: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 8,
-    marginBottom: 12
+    marginBottom: 10
   } as CSSProperties,
   calendarBody: {
     minHeight: 316,
     display: "flex",
     flexDirection: "column" as const,
     justifyContent: "flex-start"
-  } as CSSProperties,
-  calendarNavBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: colors.surfaceRaised,
-    color: colors.textPrimary,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer"
   } as CSSProperties,
   calendarMonthLabel: {
     fontSize: 13,

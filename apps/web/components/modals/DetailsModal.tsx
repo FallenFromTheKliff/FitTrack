@@ -111,7 +111,7 @@ export default function DetailsModal({
       subtitle={subtitle}
       icon={FileText}
       hideFooterDivider
-      footer={
+      footer={readOnly ? undefined : (
         <FitButton
           variant="primary"
           label={submitLabel}
@@ -120,7 +120,7 @@ export default function DetailsModal({
           disabled={disableSubmit}
           style={{ flex: 1 }}
         />
-      }
+      )}
     >
       {readOnly && readOnlyBanner && (
         <div style={s.readOnlyBanner}>

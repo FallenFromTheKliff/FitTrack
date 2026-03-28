@@ -36,6 +36,7 @@ export const MEMBER_FILTER_OPTIONS = [
   { label: "All", value: "all" },
   { label: "Admin", value: "Admin" },
   { label: "Staff", value: "Staff" },
+  { label: "Coach", value: "Coach" },
   { label: "Member", value: "Member" }
 ];
 
@@ -62,4 +63,12 @@ export const EDIT_MEMBER_FIELDS: FieldConfig[] = [
       { label: "VIP", value: "vip" }
     ]
   }
+];
+
+export const UPGRADE_COACH_FIELDS: FieldConfig[] = [
+  { name: "specialties", label: "Specialties", type: "textarea", required: true, placeholder: "Strength, Boxing, Conditioning" },
+  { name: "bio", label: "Bio", type: "textarea", placeholder: "Short coach introduction" },
+  { name: "certifications", label: "Certifications", type: "textarea", placeholder: "NASM, CPR, First Aid" },
+  { name: "yearsExperience", label: "Years of Experience", type: "text", required: true, placeholder: "e.g., 4" },
+  { name: "hourlyRate", label: "Hourly Rate", type: "text", required: true, placeholder: "e.g., 850" }
 ];

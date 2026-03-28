@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Activity, DollarSign } from "lucide-react";
+import { Activity, CalendarClock, CircleOff, DollarSign } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -18,14 +18,8 @@ import {
   DASHBOARD_REVENUE
 } from "@/data/charts/dashboard";
 
-import { FitText } from "@/components/fit/FitText";
-import FitButton from "@/components/fit/FitButton";
-import FitPill from "@/components/fit/FitPill";
-import FitSection from "@/components/fit/FitSection";
-import FitTable from "@/components/fit/FitTable";
+import { FitButton, FitChartContainer, FitPill, FitSection, FitSelect, FitTable, FitText } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
-import { FitSelect } from "@/components/fit/FitCard";
-import FitChartContainer from "@/components/fit/FitChartContainer";
 import {
   DASHBOARD_DEFAULT_ACTIVITY_FILTER,
   DASHBOARD_DEFAULT_PERIOD,
@@ -37,7 +31,7 @@ export default function DashboardPage() {
   const s = dashboardStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const { kpis } = useDashboardStats();
+  const { isStaff, kpis, staffStats } = useDashboardStats();
   const [period, setPeriod] = useState(DASHBOARD_DEFAULT_PERIOD);
   const [activityFilter, setActivityFilter] = useState(DASHBOARD_DEFAULT_ACTIVITY_FILTER);
 
@@ -45,7 +39,7 @@ export default function DashboardPage() {
     {
       key: "member",
       heading: "MEMBER",
-      render: (row) => <FitText style={{ fontSize: 14, fontWeight: 600 }}>{row.member}</FitText>
+      render: (row: DashboardActivityItem) => <FitText style={{ fontSize: 14, fontWeight: 600 }}>{row.member}</FitText>
     },
     {
       key: "action",
@@ -66,6 +60,78 @@ export default function DashboardPage() {
       }
     }
   ];
+
+  if (isStaff) {
+    const staffCards = [
+      {
+        icon: CalendarClock,
+        label: "Upcoming Confirmed Bookings",
+        value: String(staffStats?.upcomingBookings ?? 0),
+        helper: "Confirmed reservations still ahead"
+      },
+      {
+        icon: CircleOff,
+        label: "Cancelled Bookings",
+        value: String(staffStats?.byStatus.cancelled ?? 0),
+        helper: "Rejected or cancelled booking requests"
+      }
+    ];
+
+    return (
+      <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
+        <FitSection heading="Booking Operations" bare>
+          <div style={s.kpiGrid}>
+            {kpis.map((k) => (
+              <div key={k.label} style={s.kpiCard}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={s.kpiIconWrap}>
+                    <k.icon size={18} color={colors.brand} />
+                  </div>
+                  <FitText style={{ fontSize: 12, fontWeight: 600, color: colors.success }}>{k.delta}</FitText>
+                </div>
+                <FitText as="p" style={{ fontSize: 12, color: colors.textMuted, marginTop: 12 }}>{k.label}</FitText>
+                <FitText as="p" style={{ fontSize: 24, fontWeight: 700, marginTop: 2 }}>{k.value}</FitText>
+              </div>
+            ))}
+          </div>
+        </FitSection>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+          {staffCards.map((card) => (
+            <div key={card.label} style={s.kpiCard}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={s.kpiIconWrap}>
+                  <card.icon size={18} color={colors.brand} />
+                </div>
+                <FitText style={{ fontSize: 24, fontWeight: 700 }}>{card.value}</FitText>
+              </div>
+              <FitText as="p" style={{ fontSize: 13, fontWeight: 600, marginTop: 12 }}>{card.label}</FitText>
+              <FitText as="p" style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{card.helper}</FitText>
+            </div>
+          ))}
+        </div>
+        <FitSection heading="Status Breakdown" className="mb-0">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, padding: "0 16px 16px" }}>
+            <div style={s.kpiCard}>
+              <FitText style={{ fontSize: 12, color: colors.textMuted }}>Pending</FitText>
+              <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{staffStats?.byStatus.pending ?? 0}</FitText>
+            </div>
+            <div style={s.kpiCard}>
+              <FitText style={{ fontSize: 12, color: colors.textMuted }}>Confirmed</FitText>
+              <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{staffStats?.byStatus.confirmed ?? 0}</FitText>
+            </div>
+            <div style={s.kpiCard}>
+              <FitText style={{ fontSize: 12, color: colors.textMuted }}>Completed</FitText>
+              <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{staffStats?.byStatus.completed ?? 0}</FitText>
+            </div>
+            <div style={s.kpiCard}>
+              <FitText style={{ fontSize: 12, color: colors.textMuted }}>Cancelled</FitText>
+              <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{staffStats?.byStatus.cancelled ?? 0}</FitText>
+            </div>
+          </div>
+        </FitSection>
+      </FitSection>
+    );
+  }
 
   return (
       <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>

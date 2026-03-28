@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { Bot, Search } from "lucide-react";
 
-import { formatDate } from "@fittrack/utils";
+import { formatRelativeDateLabel } from "@fittrack/utils";
 import type { ChatSession } from "@/data/chat/chat";
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { useDebounce } from "@fittrack/hooks";
@@ -24,15 +24,6 @@ function groupByDateLabel(sessions: ChatSession[]): [string, ChatSession[]][] {
     map.set(s.date, existing);
   }
   return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-}
-
-function formatDateLabel(dateStr: string): string {
-  const today = new Date();
-  const d = new Date(dateStr + "T00:00:00");
-  const diff = Math.floor((today.getTime() - d.getTime()) / 86400000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
-  return formatDate(dateStr, "MMM d, yyyy");
 }
 
 export default function HistoryPanel({ sessions, activeId, onSelect }: Props) {
@@ -78,7 +69,7 @@ export default function HistoryPanel({ sessions, activeId, onSelect }: Props) {
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 4px" }}>
                       <div style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                       <FitText as="span" style={{ fontSize: 10, fontWeight: 600, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
-                        {formatDateLabel(dateKey)}
+                        {formatRelativeDateLabel(dateKey)}
                       </FitText>
                       <div style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                     </div>

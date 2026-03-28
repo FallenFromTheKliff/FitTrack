@@ -2,11 +2,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { queryKeys } from "@fittrack/query";
 import { api } from "@/lib/axios";
 
 import { COLS, ROWS, LAYOUT_KEY, EQUIPMENT } from "@/data/facilities/mapTypes";
-import type { VenueRecord, PlacedMap, EquipmentDef } from "@/data/facilities/mapTypes";
-import type { FacilityFloorId } from "@/data/facilities/floorPlans";
+import type { VenueRecord, VenueEquipmentAssignments, EquipmentDef } from "@/data/facilities/mapTypes";
+import { buildFacilityFloorVenues, type FacilityFloorId } from "@/data/facilities/floorPlans";
 
 export type VenuePayload = {
   name: string;
@@ -22,6 +23,81 @@ export type VenuePayload = {
   isReservable: boolean;
   displayOrder: number;
 };
+
+type VenueEquipmentAssignmentsByFloor = Record<FacilityFloorId, VenueEquipmentAssignments>;
+
+function createEmptyAssignments(): VenueEquipmentAssignmentsByFloor {
+  return { "floor-1": {}, "floor-2": {}, "floor-3": {} };
+}
+
+function isCellMap(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function isVenueAssignmentMap(value: unknown): value is VenueEquipmentAssignments {
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).every((entry) => Array.isArray(entry) && entry.every((item) => typeof item === "string"));
+}
+
+function resolveVenueForCell(floorId: FacilityFloorId, cellId: string) {
+  const [, rowValue, colValue] = cellId.split("-");
+  const row = Number(rowValue) + 1;
+  const column = Number(colValue) + 1;
+  if (!Number.isFinite(row) || !Number.isFinite(column)) return null;
+  const floorVenues = buildFacilityFloorVenues([])[floorId];
+  return floorVenues.find((venue) => {
+    const gridColumn = venue.gridColumn ?? 1;
+    const gridRow = venue.gridRow ?? 1;
+    const gridWidth = venue.gridWidth ?? 2;
+    const gridHeight = venue.gridHeight ?? 2;
+    return (
+      column >= gridColumn &&
+      column <= gridColumn + gridWidth - 1 &&
+      row >= gridRow &&
+      row <= gridRow + gridHeight - 1
+    );
+  }) ?? null;
+}
+
+function migrateLegacyAssignments(floorId: FacilityFloorId, legacyMap: Record<string, string>): VenueEquipmentAssignments {
+  const nextAssignments: VenueEquipmentAssignments = {};
+  Object.entries(legacyMap).forEach(([cellId, equipmentId]) => {
+    const venue = resolveVenueForCell(floorId, cellId);
+    if (!venue?.mapId) return;
+    const current = nextAssignments[venue.mapId] ?? [];
+    nextAssignments[venue.mapId] = current.includes(equipmentId) ? current : [...current, equipmentId];
+  });
+  return nextAssignments;
+}
+
+function normalizeStoredAssignments(value: unknown): VenueEquipmentAssignmentsByFloor {
+  const emptyAssignments = createEmptyAssignments();
+  if (!value || typeof value !== "object") return emptyAssignments;
+  const rawFloors = "floors" in (value as Record<string, unknown>)
+    ? (value as { floors?: Partial<Record<FacilityFloorId, unknown>> }).floors
+    : value as Partial<Record<FacilityFloorId, unknown>>;
+
+  return {
+    "floor-1": isVenueAssignmentMap(rawFloors?.["floor-1"])
+      ? rawFloors["floor-1"]
+      : isCellMap(rawFloors?.["floor-1"])
+        ? migrateLegacyAssignments("floor-1", rawFloors["floor-1"])
+        : isCellMap(value)
+          ? migrateLegacyAssignments("floor-1", value)
+          : {},
+    "floor-2": isVenueAssignmentMap(rawFloors?.["floor-2"])
+      ? rawFloors["floor-2"]
+      : isCellMap(rawFloors?.["floor-2"])
+        ? migrateLegacyAssignments("floor-2", rawFloors["floor-2"])
+        : {},
+    "floor-3": isVenueAssignmentMap(rawFloors?.["floor-3"])
+      ? rawFloors["floor-3"]
+      : isCellMap(rawFloors?.["floor-3"])
+        ? migrateLegacyAssignments("floor-3", rawFloors["floor-3"])
+        : {}
+  };
+}
 
 function venuesOverlap(
     a: { gridColumn: number; gridRow: number; gridWidth: number; gridHeight: number },
@@ -64,7 +140,7 @@ export function useVenueMutations() {
   const { message, showMessage } = useTimedMessage(2200);
 
   const { data: venues = [], isLoading: venuesLoading } = useQuery<VenueRecord[]>({
-    queryKey: ["venues"],
+    queryKey: queryKeys.venues(),
     queryFn: async () => {
       const { data } = await api.get<VenueRecord[]>("/venues?active=true");
       return data;
@@ -75,21 +151,21 @@ export function useVenueMutations() {
     mutationFn: async (payload: VenuePayload) => {
       await api.post("/admin/venues", payload);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["venues"] }); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
   });
 
   const updateVenueMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: number; payload: VenuePayload }) => {
       await api.patch(`/admin/venues/${id}`, payload);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["venues"] }); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
   });
 
   const deleteVenueMutation = useMutation({
     mutationFn: async (id: number) => {
       await api.delete(`/admin/venues/${id}`);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["venues"] }); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.venues() }); }
   });
 
   const isVenueSubmitting = createVenueMutation.isPending || updateVenueMutation.isPending;
@@ -190,25 +266,15 @@ export function useFloorLayout() {
   const [layoutName, setLayoutName] = useState("Main Floor Plan");
   const [layoutType, setLayoutType] = useState("custom");
   const [gridSize, setGridSize] = useState("40");
-  const [deleteTargetCell, setDeleteTargetCell] = useState<string | null>(null);
-  const [placedItemsByFloor, setPlacedItemsByFloor] = useState<Record<FacilityFloorId, PlacedMap>>(() => {
-    if (typeof window === "undefined") return { "floor-1": {}, "floor-2": {} };
+  const [deleteTarget, setDeleteTarget] = useState<{ venueMapId: string; equipmentId: string } | null>(null);
+  const [equipmentAssignmentsByFloor, setEquipmentAssignmentsByFloor] = useState<VenueEquipmentAssignmentsByFloor>(() => {
+    if (typeof window === "undefined") return createEmptyAssignments();
     try {
       const raw = localStorage.getItem(LAYOUT_KEY);
-      if (!raw) {
-        return { "floor-1": {}, "floor-2": {} };
-      }
-      const parsed = JSON.parse(raw) as unknown;
-      if (parsed && typeof parsed === "object" && "floors" in parsed) {
-        const floors = (parsed as { floors?: Partial<Record<FacilityFloorId, PlacedMap>> }).floors;
-        return {
-          "floor-1": floors?.["floor-1"] ?? {},
-          "floor-2": floors?.["floor-2"] ?? {}
-        };
-      }
-      return { "floor-1": parsed as PlacedMap, "floor-2": {} };
+      if (!raw) return createEmptyAssignments();
+      return normalizeStoredAssignments(JSON.parse(raw) as unknown);
     } catch {
-      return { "floor-1": {}, "floor-2": {} };
+      return createEmptyAssignments();
     }
   });
 
@@ -216,12 +282,12 @@ export function useFloorLayout() {
       () => Object.fromEntries(EQUIPMENT.map((item) => [item.id, item])) as Record<string, EquipmentDef>,
       []
   );
-  const placedItems = placedItemsByFloor[activeFloor] ?? {};
-  const placedCount = Object.keys(placedItems).length;
+  const assignedEquipment = equipmentAssignmentsByFloor[activeFloor] ?? {};
+  const assignedCount = Object.values(assignedEquipment).reduce((count, items) => count + items.length, 0);
 
   const handleSaveLayout = (onSaved?: () => void) => {
     if (typeof window !== "undefined") {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ floors: placedItemsByFloor }));
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ floors: equipmentAssignmentsByFloor }));
     }
     setHasUnsavedChanges(false);
     onSaved?.();
@@ -229,7 +295,7 @@ export function useFloorLayout() {
 
   const handleToggleEditMode = () => {
     if (!isEditMode) { setIsEditMode(true); return; }
-    if (hasUnsavedChanges && placedCount > 0) { setShowUnsavedConfirm(true); return; }
+    if (hasUnsavedChanges && assignedCount > 0) { setShowUnsavedConfirm(true); return; }
     setIsEditMode(false);
   };
 
@@ -240,19 +306,25 @@ export function useFloorLayout() {
   };
 
   const handleConfirmCellDelete = () => {
-    if (!deleteTargetCell) return;
-    setPlacedItemsByFloor((prev) => {
-      const nextFloorItems = { ...(prev[activeFloor] ?? {}) };
-      delete nextFloorItems[deleteTargetCell];
-      return { ...prev, [activeFloor]: nextFloorItems };
+    if (!deleteTarget) return;
+    setEquipmentAssignmentsByFloor((prev) => {
+      const nextFloorAssignments = { ...(prev[activeFloor] ?? {}) };
+      const currentItems = nextFloorAssignments[deleteTarget.venueMapId] ?? [];
+      const nextItems = currentItems.filter((itemId, index) => itemId !== deleteTarget.equipmentId || index !== currentItems.indexOf(deleteTarget.equipmentId));
+      if (nextItems.length === 0) {
+        delete nextFloorAssignments[deleteTarget.venueMapId];
+      } else {
+        nextFloorAssignments[deleteTarget.venueMapId] = nextItems;
+      }
+      return { ...prev, [activeFloor]: nextFloorAssignments };
     });
     setHasUnsavedChanges(true);
-    setDeleteTargetCell(null);
+    setDeleteTarget(null);
   };
 
   const handleClearFloor = () => {
     if (!isEditMode) return;
-    setPlacedItemsByFloor((prev) => ({ ...prev, [activeFloor]: {} }));
+    setEquipmentAssignmentsByFloor((prev) => ({ ...prev, [activeFloor]: {} }));
     setHasUnsavedChanges(true);
   };
 
@@ -264,7 +336,7 @@ export function useFloorLayout() {
       rows: ROWS,
       cols: COLS,
       activeFloor,
-      floors: placedItemsByFloor
+      floors: equipmentAssignmentsByFloor
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -277,12 +349,14 @@ export function useFloorLayout() {
     URL.revokeObjectURL(url);
   };
 
-  const placeDraggedItem = (equipmentId: string, cellId: string, sourceCellId?: string) => {
-    setPlacedItemsByFloor((prev) => {
-      const nextFloorItems = { ...(prev[activeFloor] ?? {}) };
-      if (sourceCellId?.startsWith("cell-")) delete nextFloorItems[sourceCellId];
-      nextFloorItems[cellId] = equipmentId;
-      return { ...prev, [activeFloor]: nextFloorItems };
+  const assignEquipmentToVenue = (equipmentId: string, venueMapId: string) => {
+    setEquipmentAssignmentsByFloor((prev) => {
+      const nextFloorAssignments = { ...(prev[activeFloor] ?? {}) };
+      const currentItems = nextFloorAssignments[venueMapId] ?? [];
+      nextFloorAssignments[venueMapId] = currentItems.includes(equipmentId)
+        ? currentItems
+        : [...currentItems, equipmentId];
+      return { ...prev, [activeFloor]: nextFloorAssignments };
     });
     setHasUnsavedChanges(true);
   };
@@ -300,18 +374,18 @@ export function useFloorLayout() {
     setLayoutType,
     gridSize,
     setGridSize,
-    deleteTargetCell,
-    setDeleteTargetCell,
-    placedItems,
-    placedItemsByFloor,
+    deleteTarget,
+    setDeleteTarget,
+    assignedEquipment,
+    equipmentAssignmentsByFloor,
     equipmentById,
-    placedCount,
+    assignedCount,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
     handleClearFloor,
     handleExport,
-    placeDraggedItem
+    assignEquipmentToVenue
   };
 }

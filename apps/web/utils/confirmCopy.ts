@@ -18,7 +18,7 @@ export const CONFIRM_COPY = {
   },
   sensitiveLogout: {
     confirmLabel: "SIGN OUT",
-    loadingLabel: "LOGGING OUT"
+    loadingLabel: "SIGNING OUT"
   },
   saveAndExit: {
     confirmLabel: "SAVE & EXIT"

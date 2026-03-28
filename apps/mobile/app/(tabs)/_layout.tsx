@@ -11,12 +11,10 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { FABStateProvider, useFABState } from "@/contexts/FABStateContext";
 import { type TabKey } from "@/data/labels";
 
-import FitFAB from "@/components/fit/FitFAB";
-import FitFABMenu from "@/components/fit/FitFABMenu";
+import { FitFAB, FitFABMenu } from "@/components/fit";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import ReservationModal from "@/components/modals/booking/ReservationModal";
-import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import { ConfirmModal, ReservationModal } from "@/components/modals";
 
 const TAB_ROUTES: TabKey[] = [
   "home", "facilities", "bookings", "nutrition", "workout",
@@ -80,7 +78,7 @@ function TabsLayoutInner() {
       router.replace("/(auth)/login");
       return;
     }
-    if (user?.role === "ADMIN") {
+    if (user?.role === "ADMIN" || user?.role === "STAFF") {
       router.replace("/(auth)/login");
     }
   }, [isAuthenticated, isLoading, router, user?.role]);

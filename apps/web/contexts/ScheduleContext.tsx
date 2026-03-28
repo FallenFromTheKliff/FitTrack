@@ -2,11 +2,13 @@
 import { createContext, useContext, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
+import { queryKeys } from "@fittrack/query";
 import { api } from "@/lib/axios";
 import type { Booking } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
-type VenueBookingRecord = {
+export type VenueBookingRecord = {
   id: string;
   venueId: number;
   userId: string;
@@ -108,7 +110,10 @@ const ScheduleContext = createContext<IScheduleContext | undefined>(undefined);
 
 export function ScheduleProvider({ children }: { children: ReactNode }) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isStaff = user?.role === "STAFF";
+  const bookingsQueryKey = isStaff ? queryKeys.staffBookings("all") : queryKeys.adminBookings();
   const statusColors: Record<VenueBookingRecord["status"], string> = {
     pending: colors.warning,
     confirmed: colors.success,
@@ -117,9 +122,9 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   };
 
   const { data: response, isLoading } = useQuery<AllBookingsResponse>({
-    queryKey: ["bookings"],
+    queryKey: bookingsQueryKey,
     queryFn: async () => {
-      const { data } = await api.get<AllBookingsResponse>("/admin/bookings");
+      const { data } = await api.get<AllBookingsResponse>(isStaff ? "/staff/bookings" : "/admin/bookings");
       return data;
     },
     staleTime: 30_000
@@ -129,36 +134,42 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const bookings = rawBookings.map((record) => toScheduleBooking(record, statusColors));
 
   const addBooking = useCallback((_booking: Booking) => {
-    queryClient.invalidateQueries({ queryKey: ["bookings"] });
-  }, [queryClient]);
+    queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
+  }, [bookingsQueryKey, queryClient]);
 
   const removeBooking = useCallback((_bookingId: string) => {
-    queryClient.invalidateQueries({ queryKey: ["bookings"] });
-  }, [queryClient]);
+    queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
+  }, [bookingsQueryKey, queryClient]);
 
   const updateBooking = useCallback((_bookingId: string, _updates: Partial<Booking>) => {
-    queryClient.invalidateQueries({ queryKey: ["bookings"] });
-  }, [queryClient]);
+    queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
+  }, [bookingsQueryKey, queryClient]);
 
   const clearBookings = useCallback(() => {
-    queryClient.setQueryData(["bookings"], null);
-  }, [queryClient]);
+    queryClient.setQueryData(bookingsQueryKey, null);
+  }, [bookingsQueryKey, queryClient]);
 
   const confirmMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      await api.patch(`/admin/bookings/${bookingId}/confirm`);
+      await api.patch(`${isStaff ? "/staff" : "/admin"}/bookings/${bookingId}/confirm`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: bookingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
     }
   });
 
   const rejectMutation = useMutation({
     mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => {
-      await api.patch(`/admin/bookings/${bookingId}/reject`, reason ? { reason } : {});
+      await api.patch(`${isStaff ? "/staff" : "/admin"}/bookings/${bookingId}/reject`, reason ? { reason } : {});
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: bookingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
     }
   });
 

@@ -38,10 +38,12 @@ export const TIME_SLOTS: TimeSlot[] = [
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
+  pending: "#3B82F6",
   confirmed: "#22C55E",
+  completed: "#64748B",
+  declined: "#F97316",
   waitlisted: "#F59E0B",
-  cancelled: "#EF4444",
-  pending: "#3B82F6"
+  cancelled: "#EF4444"
 };
 
 export type StatusFilter = "all" | "confirmed" | "cancelled";

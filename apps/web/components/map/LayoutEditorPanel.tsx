@@ -3,6 +3,7 @@ import { Download, Lock, LockOpen, RotateCcw, Save } from "lucide-react";
 import type { ChangeEvent } from "react";
 
 import type { ThemeColors } from "@fittrack/types";
+import type { FacilityFloorId } from "@/data/facilities/floorPlans";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -15,11 +16,11 @@ type Props = {
   hasUnsavedChanges: boolean;
   layoutName: string;
   layoutType: string;
-  gridSize: string;
+  activeFloor: FacilityFloorId;
   onToggleEditMode: () => void;
   onLayoutNameChange: (value: string) => void;
   onLayoutTypeChange: (e: ChangeEvent<HTMLSelectElement>) => void;
-  onGridSizeChange: (e: ChangeEvent<HTMLSelectElement>) => void;
+  onFloorChange: (e: ChangeEvent<HTMLSelectElement>) => void;
   onSave: () => void;
   onClearFloor: () => void;
   onExport: () => void;
@@ -32,11 +33,11 @@ export function LayoutEditorPanel({
   hasUnsavedChanges,
   layoutName,
   layoutType,
-  gridSize,
+  activeFloor,
   onToggleEditMode,
   onLayoutNameChange,
   onLayoutTypeChange,
-  onGridSizeChange,
+  onFloorChange,
   onSave,
   onClearFloor,
   onExport
@@ -88,47 +89,49 @@ export function LayoutEditorPanel({
           }}
         />
       </div>
-      <div>
-        <FitText as="label" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 7, display: "block" }}>
-          Layout Type
-        </FitText>
-        <FitSelect
-          fullWidth
-          compact
-          value={layoutType}
-          onChange={(e) => {
-            if (!isEditMode) return;
-            onLayoutTypeChange(e);
-          }}
-          disabled={!isEditMode}
-          options={[
-            { label: "Custom Layout", value: "custom" },
-            { label: "Strength Focus", value: "strength" },
-            { label: "Cardio Focus", value: "cardio" }
-          ]}
-          style={{ height: 40, fontSize: 14 }}
-        />
-      </div>
-      <div>
-        <FitText as="label" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 7, display: "block" }}>
-          Grid Size
-        </FitText>
-        <FitSelect
-          fullWidth
-          compact
-          value={gridSize}
-          onChange={(e) => {
-            if (!isEditMode) return;
-            onGridSizeChange(e);
-          }}
-          disabled={!isEditMode}
-          options={[
-            { label: "Small Grid (30px)", value: "30" },
-            { label: "Medium Grid (40px)", value: "40" },
-            { label: "Large Grid (50px)", value: "50" }
-          ]}
-          style={{ height: 40, fontSize: 14 }}
-        />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+        <div>
+          <FitText as="label" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 7, display: "block" }}>
+            Layout Type
+          </FitText>
+          <FitSelect
+            fullWidth
+            compact
+            value={layoutType}
+            onChange={(e) => {
+              if (!isEditMode) return;
+              onLayoutTypeChange(e);
+            }}
+            disabled={!isEditMode}
+            options={[
+              { label: "Custom Layout", value: "custom" },
+              { label: "Strength Focus", value: "strength" },
+              { label: "Cardio Focus", value: "cardio" }
+            ]}
+            style={{ height: 40, fontSize: 14 }}
+          />
+        </div>
+        <div>
+          <FitText as="label" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 7, display: "block" }}>
+            Floor Level
+          </FitText>
+          <FitSelect
+            fullWidth
+            compact
+            value={activeFloor}
+            onChange={(e) => {
+              if (!isEditMode) return;
+              onFloorChange(e);
+            }}
+            disabled={!isEditMode}
+            options={[
+              { label: "Floor 1", value: "floor-1" },
+              { label: "Floor 2", value: "floor-2" },
+              { label: "Floor 3", value: "floor-3" }
+            ]}
+            style={{ height: 40, fontSize: 14 }}
+          />
+        </div>
       </div>
       <FitButton
         variant="primary"

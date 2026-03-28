@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Controller } from "react-hook-form";
-import type { Control, FieldErrors, RegisterOptions } from "react-hook-form";
+import type { Control, FieldErrors, FieldValues, Path, RegisterOptions } from "react-hook-form";
 import { Eye, EyeOff, type LucideIcon } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -10,13 +10,13 @@ import { makeFitInputFieldStyles } from "@/styles/components/FitStyles";
 import { FitText, FitTextInput } from "./FitText";
 import FitButton from "./FitButton";
 
-type FitInputFieldProps = {
-  control: Control<any>;
-  name: string;
+type FitInputFieldProps<TFieldValues extends FieldValues> = {
+  control: Control<TFieldValues>;
+  name: Path<TFieldValues>;
   label: string;
   placeholder: string;
-  errors: FieldErrors;
-  rules?: RegisterOptions;
+  errors: FieldErrors<TFieldValues>;
+  rules?: RegisterOptions<TFieldValues, Path<TFieldValues>>;
   icon?: LucideIcon;
   secureTextEntry?: boolean;
   keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
@@ -41,7 +41,7 @@ const filterInput = (text: string, keyboardType: string) => {
   return text;
 };
 
-export default function FitInputField({
+export default function FitInputField<TFieldValues extends FieldValues>({
   control,
   name,
   label,
@@ -63,7 +63,7 @@ export default function FitInputField({
   onPress,
   displayValue,
   trailingIcon: TrailingIcon
-}: FitInputFieldProps) {
+}: FitInputFieldProps<TFieldValues>) {
   const { colors } = useTheme();
   const s = useMemo(() => makeFitInputFieldStyles(colors, compact), [colors, compact]);
   const [focused, setFocused] = useState(false);

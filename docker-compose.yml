@@ -25,7 +25,19 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["sh", "-c", "node /app/apps/api/node_modules/prisma/build/index.js migrate deploy && node /app/node_modules/.pnpm/ts-node@10.9.2_@types+node@22.19.15_typescript@5.9.3/node_modules/ts-node/dist/bin.js --project /app/tsconfig.json --transpile-only /app/prisma/seed.ts"]
+    command: ["node", "/app/apps/api/node_modules/prisma/build/index.js", "migrate", "deploy", "--schema=/app/prisma/schema.prisma"]
+    restart: "no"
+
+  init:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.docker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["node", "/app/dist/prisma/bootstrap-defaults.js"]
     restart: "no"
 
   api:
@@ -39,7 +51,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate:
+      init:
         condition: service_completed_successfully
 
   web:

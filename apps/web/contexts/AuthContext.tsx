@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, createContext, useContext, type ReactNod
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import type { IAuthContext, AuthUser, Role } from "@fittrack/types";
+import { queryKeys } from "@fittrack/query";
 import { api } from "@/lib/axios";
 
 type Props = {
@@ -52,7 +53,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     data: user = null,
     isLoading
   } = useQuery<AuthUser | null>({
-    queryKey: ["auth-user"],
+    queryKey: queryKeys.authUser(),
     queryFn: async () => {
       const token = localStorage.getItem("fittrack_access_token");
       if (!token) return null;
@@ -74,7 +75,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const isAuthenticated = !!user;
 
   const setUser = useCallback((next: AuthUser | null) => {
-    queryClient.setQueryData<AuthUser | null>(["auth-user"], next);
+    queryClient.setQueryData<AuthUser | null>(queryKeys.authUser(), next);
   }, [queryClient]);
 
   const loginMutation = useMutation({
@@ -190,7 +191,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   }, [logout]);
 
   const updateUser = useCallback(async (patch: Partial<AuthUser>) => {
-    queryClient.setQueryData<AuthUser | null>(["auth-user"], (prev) => {
+    queryClient.setQueryData<AuthUser | null>(queryKeys.authUser(), (prev) => {
       if (!prev) return prev;
       return { ...prev, ...patch };
     });

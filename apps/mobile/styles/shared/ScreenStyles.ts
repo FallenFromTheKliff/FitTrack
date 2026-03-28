@@ -219,7 +219,34 @@ export function makeGymMapStyles(colors: ThemeColors) {
     },
     sectionTitle: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },
     sectionSubtitle: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-    refreshBtn: { padding: 4 },
+    refreshBtn: { width: 40, height: 40, paddingHorizontal: 0 },
+    floorToggleWrap: {
+      gap: 10,
+      padding: 10,
+      borderRadius: R.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      marginBottom: 16
+    },
+    floorToggleLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.textMuted
+    },
+    floorToggleRow: {
+      flexDirection: "row",
+      gap: 8
+    },
+    floorToggleButton: {
+      flex: 1,
+      minHeight: 40
+    },
+    floorToggleButtonText: {
+      fontSize: 12,
+      fontWeight: "700"
+    },
     mapCanvas: {
       height: 480,
       position: "relative" as const,
@@ -237,20 +264,22 @@ export function makeGymMapStyles(colors: ThemeColors) {
     },
     mapZone: {
       position: "absolute" as const,
-      padding: 6
+      padding: 6,
+      borderWidth: 1,
+      borderRadius: R.lg
     },
     mapZoneBackdrop: {
       ...StyleSheet.absoluteFill,
       borderRadius: R.lg,
-      backgroundColor: colors.brand + "14",
-      borderWidth: 1,
-      borderColor: colors.brand + "55"
+      backgroundColor: colors.surfaceRaised,
+      opacity: 0.5
     },
     mapZoneBadge: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      gap: 6
+      gap: 6,
+      zIndex: 1
     },
     mapZoneLabel: {
       fontSize: 11,

@@ -1,3 +1,5 @@
+export type { VenueRecord } from "@fittrack/types";
+import type { VenueRecord } from "@fittrack/types";
 import type { LucideIcon } from "lucide-react";
 import { Activity, Bell, Bike, CircleDot, Dumbbell, Timer, Waves, Square, Flame, Swords } from "lucide-react";
 
@@ -13,34 +15,15 @@ export type EquipmentDef = {
   color: string;
 };
 
-export type PlacedMap = Record<string, string>;
-
-export type VenueRecord = {
-  id: number;
-  slug: string;
-  name: string;
-  description?: string | null;
-  capacity?: number | null;
-  hourlyRate?: number | null;
-  minimumHours?: number | null;
-  amenities?: string[];
-  iconKey?: string | null;
-  gridColumn?: number | null;
-  gridRow?: number | null;
-  gridWidth?: number | null;
-  gridHeight?: number | null;
-  isReservable?: boolean;
-  isSystem?: boolean;
-  displayOrder?: number | null;
-  isActive?: boolean;
-};
+export type VenueEquipmentAssignments = Record<string, string[]>;
 
 export const VENUE_ICONS: Record<string, LucideIcon> = {
   basketball: Activity,
   volleyball: Activity,
   boxing: Swords,
   reception: Bell,
-  "gym-area": Dumbbell
+  "gym-area": Dumbbell,
+  yoga: Waves
 };
 
 export function getVenueIcon(iconKey?: string | null): LucideIcon {
@@ -48,14 +31,14 @@ export function getVenueIcon(iconKey?: string | null): LucideIcon {
 }
 
 export const EQUIPMENT: EquipmentDef[] = [
-  { id: "treadmill", name: "Treadmill", category: "Cardio", icon: Activity, color: "var(--fit-brand)" },
-  { id: "bike", name: "Bike", category: "Cardio", icon: Bike, color: "var(--fit-success)" },
-  { id: "elliptical", name: "Elliptical", category: "Cardio", icon: CircleDot, color: "var(--fit-warning)" },
-  { id: "bench", name: "Bench", category: "Strength", icon: Dumbbell, color: "var(--fit-text-muted)" },
-  { id: "squat-rack", name: "Squat Rack", category: "Strength", icon: Square, color: "var(--fit-danger)" },
-  { id: "dumbbells", name: "Dumbbells", category: "Strength", icon: Dumbbell, color: "var(--fit-warning)" },
+  { id: "treadmill", name: "Treadmill", category: "Cardio", icon: Activity, color: "var(--fit-danger)" },
+  { id: "bike", name: "Bike", category: "Cardio", icon: Bike, color: "var(--fit-danger)" },
+  { id: "elliptical", name: "Elliptical", category: "Cardio", icon: CircleDot, color: "var(--fit-danger)" },
+  { id: "bench", name: "Bench", category: "Strength", icon: Dumbbell, color: "var(--fit-brand-light)" },
+  { id: "squat-rack", name: "Squat Rack", category: "Strength", icon: Square, color: "var(--fit-brand-light)" },
+  { id: "dumbbells", name: "Dumbbells", category: "Strength", icon: Dumbbell, color: "var(--fit-brand-light)" },
   { id: "yoga-area", name: "Yoga Area", category: "Accessories", icon: Waves, color: "var(--fit-success)" },
-  { id: "cable-machine", name: "Cable Machine", category: "Strength", icon: Timer, color: "var(--fit-text-muted)" },
+  { id: "cable-machine", name: "Cable Machine", category: "Strength", icon: Timer, color: "var(--fit-brand-light)" },
   { id: "recovery-zone", name: "Recovery Zone", category: "Mobility", icon: Waves, color: "var(--fit-brand-light)" },
   { id: "hiit-zone", name: "HIIT Zone", category: "Conditioning", icon: Flame, color: "var(--fit-warning)" }
 ];
