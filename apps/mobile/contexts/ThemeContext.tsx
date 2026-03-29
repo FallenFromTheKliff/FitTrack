@@ -3,10 +3,15 @@ import { useSharedValue, withTiming } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { themes, THEME_IS_DARK, THEME_ACCENT_COLOR, DEFAULT_THEME, FONT_FAMILIES, DEFAULT_FONT } from "@fittrack/ui";
+import {
+  themes,
+  THEME_IS_DARK,
+  THEME_ACCENT_COLOR,
+  DEFAULT_THEME
+} from "@fittrack/ui/theme";
+import { FONT_FAMILIES, DEFAULT_FONT } from "@fittrack/ui/styles";
 import type { AnimationLevel, IThemeContext, ThemeKey, FontKey, ThemeSettings } from "@fittrack/types";
 import { createMobileThemePreferenceKey, createThemeController, type ThemeControllerState } from "@fittrack/app-core";
-
 interface IMobileThemeContext extends IThemeContext {
   themeTransitionAnim: SharedValue<number>;
 }

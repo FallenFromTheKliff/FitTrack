@@ -5,7 +5,7 @@ import { ChevronRight, type LucideIcon } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
-import { R } from "@fittrack/ui";
+import { R } from "@fittrack/ui/tokens";
 
 import { FitText, AnimatedFitText } from "./FitText";
 

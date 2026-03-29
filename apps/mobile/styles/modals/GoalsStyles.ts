@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
 
 import type { ThemeColors } from "@fittrack/types";
-import { R, MAX_WIDTH } from "@fittrack/ui";
+import { R, MAX_WIDTH } from "@fittrack/ui/tokens";
 
 export function makeGoalsModalStyles(colors: ThemeColors) {
   return StyleSheet.create({

@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { VenueMutationPayload } from "@fittrack/api-client";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import {
   createVenueMutationOptions,
@@ -14,20 +15,7 @@ import { COLS, ROWS, LAYOUT_KEY, EQUIPMENT } from "@/data/facilities/mapTypes";
 import type { VenueRecord, VenueEquipmentAssignments, EquipmentDef } from "@/data/facilities/mapTypes";
 import { buildFacilityFloorVenues, type FacilityFloorId } from "@/data/facilities/floorPlans";
 
-export type VenuePayload = {
-  name: string;
-  description?: string;
-  capacity: number;
-  hourlyRate?: number;
-  minimumHours: number;
-  iconKey: string;
-  gridColumn: number;
-  gridRow: number;
-  gridWidth: number;
-  gridHeight: number;
-  isReservable: boolean;
-  displayOrder: number;
-};
+export type VenuePayload = VenueMutationPayload;
 
 type VenueEquipmentAssignmentsByFloor = Record<FacilityFloorId, VenueEquipmentAssignments>;
 

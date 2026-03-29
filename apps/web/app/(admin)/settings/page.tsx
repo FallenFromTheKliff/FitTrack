@@ -4,7 +4,7 @@ import { Building2, Bell, Pencil, Palette } from "lucide-react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { GYM_FIELDS, type GymData } from "@fittrack/app-config";
 
-import { themes, THEME_LABELS } from "@fittrack/ui";
+import { themes, THEME_LABELS } from "@fittrack/ui/theme";
 import type { FontKey, ThemeKey } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";

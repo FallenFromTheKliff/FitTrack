@@ -7,7 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "@fittrack/query";
 
 import { useTheme, useFontFamily } from "@/contexts/ThemeContext";
-import { mobileApiClient } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";

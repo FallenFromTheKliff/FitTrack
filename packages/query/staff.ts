@@ -1,5 +1,6 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "@fittrack/api-client";
+import { invalidateStaffBookingQueries } from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function staffDashboardStatsQueryOptions<T>(client: Pick<ApiClient, "staff">) {
@@ -34,10 +35,7 @@ export function confirmStaffBookingMutationOptions(client: Pick<ApiClient, "staf
   return mutationOptions({
     mutationFn: (bookingId: string) => client.staff.confirmBooking(bookingId),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("all") }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
-      ]);
+      await invalidateStaffBookingQueries(queryClient);
     }
   });
 }
@@ -47,10 +45,7 @@ export function rejectStaffBookingMutationOptions(client: Pick<ApiClient, "staff
     mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
       client.staff.rejectBooking(bookingId, reason),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("all") }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
-      ]);
+      await invalidateStaffBookingQueries(queryClient);
     }
   });
 }

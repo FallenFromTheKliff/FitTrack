@@ -7,6 +7,7 @@ import {
   type DragStartEvent
 } from "@dnd-kit/core";
 import { motion } from "framer-motion";
+import type { VenueBookingRecord } from "@fittrack/api-client";
 import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { adminBookingsQueryOptions } from "@fittrack/query";
@@ -22,7 +23,6 @@ import { useFitSensors } from "@/hooks/useFitSensors";
 import { sleep } from "@/utils/sleep";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import {
-  type BookingRecord,
   SCHEDULE_EMOJI_OPTIONS,
   type ScheduleResource
 } from "@/data/facilities/resources";
@@ -139,7 +139,7 @@ export default function FacilitiesMapPage() {
   };
 
   const { data: activeBookings = [] } = useQuery({
-    ...adminBookingsQueryOptions<BookingRecord>(webApiClient),
+    ...adminBookingsQueryOptions<VenueBookingRecord>(webApiClient),
     select: (bookings) => bookings.filter((booking) => booking.status === "confirmed")
   });
 

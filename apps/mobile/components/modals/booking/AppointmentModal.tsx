@@ -5,6 +5,7 @@ import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WEEKDAY_NAMES } from "@fittrack/app-config";
 
+import type { CoachAvailabilityResponse } from "@fittrack/api-client";
 import type { CoachProfileRecord, Trainer } from "@fittrack/types";
 import {
   activeCoachesQueryOptions,
@@ -13,7 +14,7 @@ import {
 } from "@fittrack/query";
 import { formatBookingDate, getDurationMinutes, to12HourLabel } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
-import { mobileApiClient } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
@@ -32,18 +33,6 @@ type Props = {
 };
 
 type CoachRecord = CoachProfileRecord;
-
-type CoachAvailability = {
-  dayOfWeek: number | string;
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
-};
-
-type AvailabilityResponse = {
-  coachId: string;
-  availability: CoachAvailability[];
-};
 
 type AppointmentStep = "coach" | "time";
 
@@ -105,7 +94,7 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
   const trainers = useMemo(() => coaches.map(mapCoachToTrainer), [coaches]);
 
   const { data: availability } = useQuery({
-    ...coachAvailabilityQueryOptions<AvailabilityResponse>(mobileApiClient, selectedCoach?.id),
+    ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(mobileApiClient, selectedCoach?.id),
     enabled: isVisible && !!selectedCoach
   });
 

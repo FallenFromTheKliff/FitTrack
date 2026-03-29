@@ -463,6 +463,10 @@ importers:
   packages/types: {}
 
   packages/ui:
+    dependencies:
+      '@fittrack/types':
+        specifier: workspace:*
+        version: link:../types
     devDependencies:
       tailwindcss:
         specifier: ^3.4.19
@@ -470,6 +474,9 @@ importers:
 
   packages/utils:
     dependencies:
+      '@fittrack/types':
+        specifier: workspace:*
+        version: link:../types
       date-fns:
         specifier: ^3.6.0
         version: 3.6.0

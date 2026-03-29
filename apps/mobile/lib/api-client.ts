@@ -1,53 +1,31 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@fittrack/app-core";
-import { createApiClient } from "@fittrack/api-client";
+import { createApiClient, createTokenStore, resolveApiBaseUrl } from "@fittrack/api-client";
 
-const BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const BASE = resolveApiBaseUrl(process.env.EXPO_PUBLIC_API_URL);
 
-let accessTokenCache: string | null = null;
-let refreshTokenCache: string | null = null;
-let hydrationPromise: Promise<void> | null = null;
-
-function setTokenCache(accessToken: string | null, refreshToken: string | null = refreshTokenCache) {
-  accessTokenCache = accessToken;
-  refreshTokenCache = refreshToken;
-}
-
-const mobileTokenStore = {
-  hydrate() {
-    if (!hydrationPromise) {
-      hydrationPromise = AsyncStorage.multiGet([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]).then((entries) => {
-        const accessToken = entries.find(([key]) => key === ACCESS_TOKEN_KEY)?.[1] ?? null;
-        const refreshToken = entries.find(([key]) => key === REFRESH_TOKEN_KEY)?.[1] ?? null;
-        setTokenCache(accessToken, refreshToken);
-      });
+export const mobileSessionStore = createTokenStore({
+  accessTokenKey: ACCESS_TOKEN_KEY,
+  cache: "memory",
+  refreshTokenKey: REFRESH_TOKEN_KEY,
+  storage: {
+    getItem(key) {
+      return AsyncStorage.getItem(key);
+    },
+    removeItem(key) {
+      return AsyncStorage.removeItem(key);
+    },
+    setItem(key, value) {
+      return AsyncStorage.setItem(key, value);
     }
-    return hydrationPromise;
-  },
-  getAccessToken() {
-    return accessTokenCache;
-  },
-  getRefreshToken() {
-    return refreshTokenCache;
-  },
-  async setTokens({ accessToken, refreshToken }: { accessToken: string; refreshToken?: string | null }) {
-    setTokenCache(accessToken, typeof refreshToken === "string" ? refreshToken : refreshTokenCache);
-    await AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    if (typeof refreshToken === "string" && refreshToken.trim() !== "") {
-      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    }
-  },
-  async clearTokens() {
-    setTokenCache(null, null);
-    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
   }
-};
+});
 
 export function hydrateMobileApiAuth() {
-  return mobileTokenStore.hydrate();
+  return mobileSessionStore.hydrate?.() ?? Promise.resolve();
 }
 
 export const mobileApiClient = createApiClient({
   baseURL: BASE,
-  tokenStore: mobileTokenStore
+  tokenStore: mobileSessionStore
 });

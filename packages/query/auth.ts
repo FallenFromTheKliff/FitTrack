@@ -8,12 +8,22 @@ import type {
   ResetPasswordPayload,
   VerifyEmailPayload
 } from "@fittrack/api-client";
+import type { AuthUser } from "@fittrack/types";
 import { queryKeys } from "./query-keys";
 
 export function authUserQueryOptions(client: Pick<ApiClient, "users">) {
   return queryOptions({
     queryKey: queryKeys.authUser(),
     queryFn: () => client.users.getProfile()
+  });
+}
+
+export function authCurrentUserQueryOptions(loadCurrentUser: () => Promise<AuthUser | null>) {
+  return queryOptions({
+    queryKey: queryKeys.authUser(),
+    queryFn: loadCurrentUser,
+    retry: false,
+    staleTime: Infinity
   });
 }
 
@@ -65,5 +75,47 @@ export function forgotPasswordMutationOptions(client: Pick<ApiClient, "auth">) {
 export function resetPasswordMutationOptions(client: Pick<ApiClient, "auth">) {
   return mutationOptions({
     mutationFn: (payload: ResetPasswordPayload) => client.auth.resetPassword(payload)
+  });
+}
+
+export function loginActionMutationOptions<TResult>(login: (email: string, password: string) => Promise<TResult>) {
+  return mutationOptions({
+    mutationFn: ({ email, password }: { email: string; password: string }) => login(email, password)
+  });
+}
+
+export function registerActionMutationOptions<TPayload extends RegisterPayload, TResult>(
+  register: (payload: TPayload) => Promise<TResult>
+) {
+  return mutationOptions({
+    mutationFn: (payload: TPayload) => register(payload)
+  });
+}
+
+export function verifyCurrentPasswordActionMutationOptions<TResult>(
+  verifyCurrentPassword: (password: string) => Promise<TResult>
+) {
+  return mutationOptions({
+    mutationFn: (currentPassword: string) => verifyCurrentPassword(currentPassword)
+  });
+}
+
+export function changePasswordActionMutationOptions<TResult>(
+  changePassword: (email: string, password: string) => Promise<TResult>
+) {
+  return mutationOptions({
+    mutationFn: ({ email, password }: { email: string; password: string }) => changePassword(email, password)
+  });
+}
+
+export function logoutActionMutationOptions<TResult>(logout: () => Promise<TResult>) {
+  return mutationOptions({
+    mutationFn: () => logout()
+  });
+}
+
+export function verifyOtpActionMutationOptions<TResult>(verifyOtp: (code: string) => Promise<TResult>) {
+  return mutationOptions({
+    mutationFn: (code: string) => verifyOtp(code)
   });
 }

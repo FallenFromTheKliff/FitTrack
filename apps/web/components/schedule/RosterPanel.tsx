@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { BORDER_RADIUS } from "@fittrack/ui";
+import { BORDER_RADIUS } from "@fittrack/ui/tokens";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Booking, Resource } from "@/data/schedule-constants";

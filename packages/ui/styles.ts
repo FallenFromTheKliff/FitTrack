@@ -1,4 +1,4 @@
-import type { FontKey } from "../types";
+import type { FontKey } from "@fittrack/types";
 
 export const FONT_FAMILIES: Record<FontKey, string> = {
   standard: "System",

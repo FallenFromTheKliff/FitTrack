@@ -17,6 +17,12 @@ export type VenueMutationPayload = {
   name: string;
 };
 
+export type VenueAvailabilityRecord = {
+  endTime: string;
+  startTime: string;
+  status: string;
+};
+
 export function createVenuesApi(transport: ApiTransport) {
   return {
     listActive() {

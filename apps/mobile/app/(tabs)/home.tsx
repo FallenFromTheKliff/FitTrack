@@ -5,6 +5,7 @@ import { useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, User, Zap } from "lucide-react-native";
+import type { VenueBookingRecord } from "@fittrack/api-client";
 import type { Booking } from "@fittrack/types";
 import { bookingsQueryOptions, venuesQueryOptions } from "@fittrack/query";
 
@@ -19,8 +20,8 @@ import { makeScreenStyles, makeHomeStyles } from "@/styles/shared/ScreenStyles";
 import { getTodayString } from "@/data/bookings";
 import { GOAL_ROWS, HOME_STAT_CARDS, HOME_BADGE_BANNER } from "@/data/home";
 import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
-import { mobileApiClient } from "@/lib/api";
-import { toMobileBookings, type VenueBookingRecord } from "@/utils/venueBookings";
+import { mobileApiClient } from "@/lib/api-client";
+import { toMobileBookings } from "@/utils/venueBookings";
 import type { NutritionGoal } from "@/components/modals/nutrition/GoalsModal";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";

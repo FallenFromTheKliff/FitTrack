@@ -12,15 +12,15 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeProfileStyles } from "@/styles/shared/ScreenStyles";
 import { BADGE_COLORS, MOCK_ACHIEVEMENTS, MOCK_BADGES, PROFILE_STATS, TIER_LABELS, TIER_LEVELS } from "@/data/member";
 import { TIME_SLOTS } from "@/data/bookings";
-import { mobileApiClient } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api-client";
 import {
   cancelDeletionRequestMutationOptions,
   coachSelfProfileQueryOptions,
   createCoachAvailabilityMutationOptions,
   deleteCoachAvailabilityMutationOptions,
   profileDeletionStatusQueryOptions,
-  queryKeys,
   requestDeletionMutationOptions,
+  setProfileDeletionStatusQueryData,
   updateCoachAvailabilityMutationOptions
 } from "@fittrack/query";
 import { coachAvailabilitySchema } from "@fittrack/validators";
@@ -86,7 +86,6 @@ export default function ProfileScreen() {
   const [isAvailabilityTimeOpen, setIsAvailabilityTimeOpen] = useState(false);
   const [availabilityTimeTarget, setAvailabilityTimeTarget] = useState<"start" | "end">("start");
   const isMounted = useRef(true);
-  const deletionStatusKey = useMemo(() => queryKeys.profileDeletionStatus(user?.id), [user?.id]);
 
   useEffect(() => {
     return () => { isMounted.current = false; };
@@ -140,7 +139,7 @@ export default function ProfileScreen() {
       await updateUser({ status: "frozen" });
       if (!isMounted.current) return;
       resetAppearance();
-      queryClient.setQueryData(deletionStatusKey, "pending");
+      setProfileDeletionStatusQueryData(queryClient, user?.id, "pending");
       setTerminateVisible(false);
     } catch {
       return;
@@ -155,7 +154,7 @@ export default function ProfileScreen() {
       await cancelDeletionMutation.mutateAsync({ userId: user?.id });
       await updateUser({ status: "active" });
       if (!isMounted.current) return;
-      queryClient.setQueryData(deletionStatusKey, "none");
+      setProfileDeletionStatusQueryData(queryClient, user?.id, "none");
       setCancelVisible(false);
     } catch {
       return;

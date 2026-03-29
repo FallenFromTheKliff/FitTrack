@@ -6,8 +6,8 @@ import { useTypewriter } from "@fittrack/hooks";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
-import { FONT_FAMILIES, R } from "@fittrack/ui";
-
+import { FONT_FAMILIES } from "@fittrack/ui/styles";
+import { R } from "@fittrack/ui/tokens";
 const ReanimatedText = createAnimatedComponent(Text);
 
 const APP_NAME = "FitTrack";

@@ -1,11 +1,13 @@
 "use client";
 import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { VenueBookingRecord as ApiVenueBookingRecord } from "@fittrack/api-client";
 import {
   adminBookingsQueryOptions,
+  clearScheduleBookingsQuery,
   confirmAdminBookingMutationOptions,
   confirmStaffBookingMutationOptions,
-  queryKeys,
+  invalidateScheduleBookingsQuery,
   rejectAdminBookingMutationOptions,
   rejectStaffBookingMutationOptions,
   staffBookingsQueryOptions
@@ -16,34 +18,8 @@ import { webApiClient } from "@/lib/api-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type VenueBookingRecord = {
-  id: string;
-  venueId: number;
-  userId: string;
-  startTime: string;
-  endTime: string;
-  durationHours: number;
-  purpose?: string | null;
-  participants?: number | null;
+export type VenueBookingRecord = ApiVenueBookingRecord & {
   status: "pending" | "confirmed" | "cancelled" | "completed";
-  cancelReason?: string | null;
-  cancelledAt?: string | null;
-  createdAt: string;
-  venue?: {
-    id: number;
-    name: string;
-    capacity?: number | null;
-    hourlyRate?: number | null;
-  };
-  user?: {
-    id: string;
-    email: string;
-    phone_no?: string | null;
-    profile?: {
-      firstName?: string | null;
-      lastName?: string | null;
-    } | null;
-  };
 };
 
 export type ScheduleBooking = {
@@ -79,7 +55,6 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const controller = useMemo(() => createScheduleController(), []);
   const isStaff = user?.role === "STAFF";
-  const bookingsQueryKey = isStaff ? queryKeys.staffBookings("all") : queryKeys.adminBookings();
   const statusColors: Record<VenueBookingRecord["status"], string> = {
     pending: colors.warning,
     confirmed: colors.success,
@@ -120,20 +95,20 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const rejectStaffMutation = useMutation(rejectStaffBookingMutationOptions(webApiClient, queryClient));
 
   const addBooking = useCallback((_booking: Booking) => {
-    void queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
-  }, [bookingsQueryKey, queryClient]);
+    void invalidateScheduleBookingsQuery(queryClient, isStaff ? "staff" : "admin");
+  }, [isStaff, queryClient]);
 
   const removeBooking = useCallback((_bookingId: string) => {
-    void queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
-  }, [bookingsQueryKey, queryClient]);
+    void invalidateScheduleBookingsQuery(queryClient, isStaff ? "staff" : "admin");
+  }, [isStaff, queryClient]);
 
   const updateBooking = useCallback((_bookingId: string, _updates: Partial<Booking>) => {
-    void queryClient.invalidateQueries({ queryKey: bookingsQueryKey });
-  }, [bookingsQueryKey, queryClient]);
+    void invalidateScheduleBookingsQuery(queryClient, isStaff ? "staff" : "admin");
+  }, [isStaff, queryClient]);
 
   const clearBookings = useCallback(() => {
-    queryClient.setQueryData<VenueBookingRecord[] | null>(bookingsQueryKey, null);
-  }, [bookingsQueryKey, queryClient]);
+    clearScheduleBookingsQuery(queryClient, isStaff ? "staff" : "admin");
+  }, [isStaff, queryClient]);
 
   const confirmBooking = useCallback(async (bookingId: string) => {
     return controller.runAction(async () => {

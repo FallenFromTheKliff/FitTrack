@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import type { AuthEvents } from "../auth/auth-events";
 import type { TokenSet, TokenStore } from "../auth/token-store";
+import { resolveApiBaseUrl } from "../base-url";
 
 export type ApiTransportConfig = {
   authEvents?: AuthEvents;
@@ -34,6 +35,13 @@ function isPathMatch(url: string | undefined, path: string) {
   return url === path || url.endsWith(path);
 }
 
+function normalizeRequestHeaders(headers?: Record<string, string>) {
+  return {
+    "Content-Type": "application/json",
+    ...headers
+  };
+}
+
 export function createAxiosTransport({
   authEvents,
   baseURL,
@@ -42,12 +50,10 @@ export function createAxiosTransport({
   refreshPath = "/auth/refresh",
   tokenStore
 }: ApiTransportConfig) {
+  const resolvedBaseURL = resolveApiBaseUrl(baseURL);
   const transport = axios.create({
-    baseURL,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers
-    }
+    baseURL: resolvedBaseURL,
+    headers: normalizeRequestHeaders(headers)
   });
 
   let hydrationPromise: Promise<void> | null = null;
@@ -70,13 +76,10 @@ export function createAxiosTransport({
     const refreshToken = await tokenStore.getRefreshToken();
     if (!refreshToken) return null;
     const response = await axios.post(
-      `${baseURL}${refreshPath}`,
+      `${resolvedBaseURL}${refreshPath}`,
       { refresh_token: refreshToken },
       {
-        headers: {
-          "Content-Type": "application/json",
-          ...headers
-        }
+        headers: normalizeRequestHeaders(headers)
       }
     );
     const nextTokens = extractTokenSet(response.data);

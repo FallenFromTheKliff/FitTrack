@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ThemeColors } from "@fittrack/ui";
+import type { ThemeColors } from "@fittrack/ui/tokens";
 
 export function authStyles(colors: ThemeColors) {
   return {

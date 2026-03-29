@@ -5,10 +5,10 @@ import {
   adminMembersQueryOptions,
   createStaffMutationOptions,
   deleteUserMutationOptions,
-  queryKeys
+  invalidateAdminMembersQuery
 } from "@fittrack/query";
 import { createMemberController } from "@fittrack/app-core";
-import type { MemberRecord, IMemberContext, CreateStaffInput } from "@fittrack/types";
+import type { IMemberContext, CreateStaffInput } from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 
 const MemberContext = createContext<IMemberContext | null>(null);
@@ -26,7 +26,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const error = queryError ? controller.toMessage(queryError, "Failed to fetch members.") : null;
 
   const fetchMembers = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() });
+    await invalidateAdminMembersQuery(queryClient);
   }, [queryClient]);
 
   const createStaffMutation = useMutation(createStaffMutationOptions(webApiClient, queryClient));

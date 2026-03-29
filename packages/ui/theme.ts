@@ -1,5 +1,5 @@
 import type { ThemeColors } from "./tokens";
-import type { ThemeKey } from "../types";
+import type { ThemeKey } from "@fittrack/types";
 
 export const themes: Record<ThemeKey, ThemeColors> = {
   night: {

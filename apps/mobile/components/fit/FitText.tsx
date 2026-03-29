@@ -5,7 +5,7 @@ import type { ComponentProps } from "react";
 import Animated from "react-native-reanimated";
 
 import { useTheme, useFontFamily } from "@/contexts/ThemeContext";
-import { FONT_FAMILIES } from "@fittrack/ui";
+import { FONT_FAMILIES } from "@fittrack/ui/styles";
 
 export const FitText = React.memo(function FitText({ style, ...props }: TextProps) {
   const { colors } = useTheme();

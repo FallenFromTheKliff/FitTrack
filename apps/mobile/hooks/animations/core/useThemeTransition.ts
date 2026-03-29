@@ -1,7 +1,7 @@
 import { useAnimatedStyle, useDerivedValue, interpolateColor } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 
-import { themes } from "@fittrack/ui";
+import { themes } from "@fittrack/ui/theme";
 import type { ThemeColors } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
 

@@ -1,4 +1,5 @@
 import type { Booking } from "@fittrack/types";
+import { runAsyncAction, toActionErrorMessage } from "../shared/action-helpers";
 
 export type ScheduleBooking<TRecord = unknown> = Booking & {
   color: string;
@@ -12,13 +13,9 @@ export type ScheduleBooking<TRecord = unknown> = Booking & {
 
 type StatusColors = Record<string, string>;
 
-function toMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
-}
-
 export function createScheduleController() {
   return {
-    toMessage,
+    toMessage: toActionErrorMessage,
     toScheduleBooking<TRecord extends {
       endTime: string;
       id: string;
@@ -65,12 +62,7 @@ export function createScheduleController() {
       };
     },
     async runAction(action: () => Promise<void>, fallback: string) {
-      try {
-        await action();
-        return { success: true as const };
-      } catch (error: unknown) {
-        return { success: false as const, error: toMessage(error, fallback) };
-      }
+      return runAsyncAction(action, fallback);
     }
   };
 }

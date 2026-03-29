@@ -7,12 +7,6 @@ export type ScheduleResource = {
   icon: string;
 };
 
-export type BookingRecord = {
-  id: string;
-  venueId: number;
-  status: string;
-};
-
 export type ResourceDraft = {
   name: string;
   type: "" | ScheduleResourceType;

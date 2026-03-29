@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, createContext, useContext, type ReactNode } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { AuthUser } from "@fittrack/types";
-import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, createAuthController } from "@fittrack/app-core";
-import { mobileApiClient } from "@/lib/api";
+import { createAuthController, toActionErrorMessage } from "@fittrack/app-core";
+import { mobileApiClient, mobileSessionStore } from "@/lib/api-client";
 
 type RegisterInput = { email: string; phone: string; password: string };
 type LoginResult = { user: AuthUser; needsOTP: boolean } | undefined;
@@ -31,26 +30,15 @@ type Props = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function toErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
-}
-
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const sessionStore = useMemo(() => ({
-    getAccessToken: () => AsyncStorage.getItem(ACCESS_TOKEN_KEY),
-    getRefreshToken: () => AsyncStorage.getItem(REFRESH_TOKEN_KEY),
-    setTokens: ({ accessToken, refreshToken }: { accessToken: string; refreshToken?: string | null }) =>
-      AsyncStorage.multiSet([[ACCESS_TOKEN_KEY, accessToken], [REFRESH_TOKEN_KEY, refreshToken ?? ""]]),
-    clearTokens: () => AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY])
-  }), []);
   const controller = useMemo(() => createAuthController({
     client: mobileApiClient,
     onUserLoaded,
     onUserCleared,
-    sessionStore
-  }), [onUserCleared, onUserLoaded, sessionStore]);
+    sessionStore: mobileSessionStore
+  }), [onUserCleared, onUserLoaded]);
   const isAuthenticated = !!user;
 
   useEffect(() => {
@@ -59,13 +47,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
         const nextUser = await controller.loadCurrentUser({ includeDeletionStatus: true });
         setUser(nextUser);
       } catch {
-        await sessionStore.clearTokens();
+        await mobileSessionStore.clearTokens();
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [controller, sessionStore]);
+  }, [controller]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
@@ -144,7 +132,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       await controller.changePassword(user.email, nextPassword);
       return { success: true };
     } catch (error: unknown) {
-      return { success: false, error: toErrorMessage(error, "Password change failed.") };
+      return { success: false, error: toActionErrorMessage(error, "Password change failed.") };
     }
   }, [controller, user?.email]);
 
@@ -156,7 +144,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       }
       return result;
     } catch (error: unknown) {
-      return { success: false as const, error: toErrorMessage(error, "Invalid OTP.") };
+      return { success: false as const, error: toActionErrorMessage(error, "Invalid OTP.") };
     }
   }, [controller]);
 

@@ -1,4 +1,4 @@
-import type { MemberRecord } from "../types";
+import type { MemberRecord } from "@fittrack/types";
 
 export function calcBMI(weightKg: number, heightCm: number) {
   const heightMeters = heightCm / 100;

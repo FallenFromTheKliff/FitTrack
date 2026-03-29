@@ -1,6 +1,45 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
 
+export type AppointmentCoachSummary = {
+  hourlyRate?: number | null;
+  user?: {
+    email?: string | null;
+    profile?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
+};
+
+export type AppointmentRecord = {
+  coach?: AppointmentCoachSummary | null;
+  coachId?: string;
+  duration: number;
+  id: string;
+  notes?: string | null;
+  scheduledAt: string;
+  sessionType?: string | null;
+  status?: string;
+};
+
+export type CoachScheduleRecord = {
+  coachId?: string;
+  duration: number;
+  endTime?: string;
+  id: string;
+  notes?: string | null;
+  scheduledAt: string;
+  status?: string;
+  user?: {
+    email?: string | null;
+    profile?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
+};
+
 export type CreateAppointmentPayload = {
   coachId: string;
   duration: number;

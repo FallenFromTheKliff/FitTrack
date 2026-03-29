@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Activity, Bell, CalendarCheck, CalendarDays, CalendarPlus, Dumbbell, Swords, Users, SlidersHorizontal, CheckCircle2, CircleOff } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AppointmentRecord, CoachScheduleRecord, VenueBookingRecord } from "@fittrack/api-client";
 
 import {
   appointmentsQueryOptions,
@@ -17,6 +18,7 @@ import {
   declineCoachAppointmentMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
+import { normalizeBookingStatus, toDateTimeRange } from "@fittrack/app-core";
 import { formatBookingDate, formatGroupLabel, groupItemsByDate, nextDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,8 +28,8 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import { makeScreenStyles, makeBookingsScreenStyles } from "@/styles/shared/ScreenStyles";
 import { STATUS_COLORS, FILTER_OPTIONS, type StatusFilter, getTodayString } from "@/data/bookings";
-import { mobileApiClient } from "@/lib/api";
-import { toMobileBookings, type VenueBookingRecord } from "@/utils/venueBookings";
+import { mobileApiClient } from "@/lib/api-client";
+import { toMobileBookings } from "@/utils/venueBookings";
 
 import { FitCard, FitFilter, FitSearch, FitText } from "@/components/fit";
 import { AppointmentModal, BookingDetailModal, CalendarModal, type DetailBooking } from "@/components/modals";
@@ -60,54 +62,6 @@ const COACH_FILTER_OPTIONS = [
 
 type BookingSection = "bookings" | "appointments" | "coach";
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
-
-type AppointmentRecord = {
-  id: string;
-  coachId?: string;
-  scheduledAt: string;
-  duration: number;
-  status?: string;
-  sessionType?: string | null;
-  notes?: string | null;
-  coach?: {
-    hourlyRate?: number | null;
-    user?: {
-      profile?: {
-        firstName?: string | null;
-        lastName?: string | null;
-      } | null;
-    } | null;
-  } | null;
-};
-
-type CoachScheduleRecord = {
-  id: string;
-  coachId?: string;
-  scheduledAt: string;
-  endTime?: string;
-  duration: number;
-  status?: string;
-  notes?: string | null;
-  user?: {
-    email?: string;
-    profile?: {
-      firstName?: string | null;
-      lastName?: string | null;
-    } | null;
-  } | null;
-};
-
-function normalizeStatus(status?: string) {
-  return (status ?? "pending").toLowerCase();
-}
-
-function toTimeRange(startIso: string, durationMinutes: number, explicitEnd?: string) {
-  const start = new Date(startIso);
-  const end = explicitEnd ? new Date(explicitEnd) : new Date(start.getTime() + durationMinutes * 60_000);
-  const startLabel = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const endLabel = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return { startLabel, endLabel, date: start.toISOString().slice(0, 10) };
-}
 
 export default function BookingsScreen() {
   const { colors } = useTheme();
@@ -182,7 +136,7 @@ export default function BookingsScreen() {
 
   const appointments = useMemo<DetailBooking[]>(
     () => appointmentsRaw.map((appointment) => {
-      const { startLabel, endLabel, date } = toTimeRange(appointment.scheduledAt, appointment.duration);
+      const { startLabel, endLabel, date } = toDateTimeRange(appointment.scheduledAt, appointment.duration);
       const firstName = appointment.coach?.user?.profile?.firstName?.trim() ?? "";
       const lastName = appointment.coach?.user?.profile?.lastName?.trim() ?? "";
       const coachName = `${firstName} ${lastName}`.trim() || "Coach Session";
@@ -194,7 +148,7 @@ export default function BookingsScreen() {
         startTime: startLabel,
         endTime: endLabel,
         date,
-        status: normalizeStatus(appointment.status),
+        status: normalizeBookingStatus(appointment.status),
         price: appointment.coach?.hourlyRate ?? 0,
         trainerName: coachName,
         participantName: coachName,
@@ -209,7 +163,7 @@ export default function BookingsScreen() {
 
   const coachSchedule = useMemo<DetailBooking[]>(
     () => coachScheduleRaw.map((appointment) => {
-      const { startLabel, endLabel, date } = toTimeRange(appointment.scheduledAt, appointment.duration, appointment.endTime);
+      const { startLabel, endLabel, date } = toDateTimeRange(appointment.scheduledAt, appointment.duration, appointment.endTime);
       const firstName = appointment.user?.profile?.firstName?.trim() ?? "";
       const lastName = appointment.user?.profile?.lastName?.trim() ?? "";
       const memberName = `${firstName} ${lastName}`.trim() || appointment.user?.email || "Member";
@@ -221,7 +175,7 @@ export default function BookingsScreen() {
         startTime: startLabel,
         endTime: endLabel,
         date,
-        status: normalizeStatus(appointment.status),
+        status: normalizeBookingStatus(appointment.status),
         price: 0,
         participantName: memberName,
         participantLabel: "Member",

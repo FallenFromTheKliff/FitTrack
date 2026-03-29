@@ -5,10 +5,10 @@ import { useFonts } from "expo-font";
 
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { hydrateMobileApiAuth } from "@/lib/api";
+import { hydrateMobileApiAuth } from "@/lib/api-client";
 import { QueryProvider } from "@/lib/queryClient";
 import { FitnessProvider, useFitness } from "@/contexts/FitnessContext";
-import { MAX_WIDTH } from "@fittrack/ui";
+import { MAX_WIDTH } from "@fittrack/ui/tokens";
 
 import SplashScreen from "@/components/loading/SplashScreen";
 

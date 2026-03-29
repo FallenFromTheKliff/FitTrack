@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ThemeColors } from "@fittrack/ui";
-import { BORDER_RADIUS } from "@fittrack/ui";
+import { BORDER_RADIUS, type ThemeColors } from "@fittrack/ui/tokens";
 
 export const modalStyles = (colors: ThemeColors) => ({
   overlay: {

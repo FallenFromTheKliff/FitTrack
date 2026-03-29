@@ -1,7 +1,13 @@
 "use client";
 import { createContext, useContext, useState, useRef, useMemo, useCallback, useEffect, type ReactNode } from "react";
 
-import { themes, THEME_IS_DARK, THEME_ACCENT_COLOR, DEFAULT_THEME, WEB_FONT_CLASSES, DEFAULT_FONT } from "@fittrack/ui";
+import {
+  themes,
+  THEME_IS_DARK,
+  THEME_ACCENT_COLOR,
+  DEFAULT_THEME
+} from "@fittrack/ui/theme";
+import { WEB_FONT_CLASSES, DEFAULT_FONT } from "@fittrack/ui/styles";
 import type { IThemeContext, ThemeKey, FontKey, ThemeSettings } from "@fittrack/types";
 import { createThemeController, type ThemeControllerState } from "@fittrack/app-core";
 import { getReadableTextColor } from "@fittrack/utils";
@@ -74,9 +80,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const theme = themes[activeThemeKey] as Record<string, string>;
     Object.entries(theme).forEach(([k, v]) => {
       const cssKey = `--fit-${k.replace(/([A-Z])/g, "-$1").toLowerCase()}`;
-      try { document.documentElement.style.setProperty(cssKey, v); } catch {}
+      try { document.documentElement.style.setProperty(cssKey, v); } catch { return; }
     });
-    try { document.documentElement.classList.toggle("dark", !!THEME_IS_DARK[activeThemeKey]); } catch {}
+    try { document.documentElement.classList.toggle("dark", !!THEME_IS_DARK[activeThemeKey]); } catch { return; }
   }, [activeThemeKey]);
 
   const loadUserSettings = useCallback(async (userId: string) => {

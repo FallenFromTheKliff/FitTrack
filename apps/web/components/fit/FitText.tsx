@@ -4,7 +4,7 @@ import { forwardRef, type HTMLAttributes, type InputHTMLAttributes, type Textare
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { cn } from "@/utils/cn";
 import { makeFitTextStyles } from "@/styles/fitStyles";
-import { WEB_FONT_CLASSES } from "@fittrack/ui";
+import { WEB_FONT_CLASSES } from "@fittrack/ui/styles";
 
 type FitTextSize = "xs" | "sm" | "md" | "lg" | "xl";
 const FIT_TEXT_SCALE = 1.2;

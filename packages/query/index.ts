@@ -1,12 +1,19 @@
 export {
+  authCurrentUserQueryOptions,
   authUserQueryOptions,
   changePasswordMutationOptions,
   forgotPasswordMutationOptions,
+  changePasswordActionMutationOptions,
+  loginActionMutationOptions,
   loginMutationOptions,
   logoutMutationOptions,
+  logoutActionMutationOptions,
+  registerActionMutationOptions,
   registerMutationOptions,
   resetPasswordMutationOptions,
+  verifyCurrentPasswordActionMutationOptions,
   verifyCurrentPasswordMutationOptions,
+  verifyOtpActionMutationOptions,
   verifyEmailMutationOptions
 } from "./auth";
 export {
@@ -46,6 +53,23 @@ export {
 } from "./coaches";
 export { makeQueryClient } from "./query-client";
 export { queryKeys } from "./query-keys";
+export {
+  clearScheduleBookingsQuery,
+  invalidateAdminDeletionRequestsQuery,
+  invalidateAdminBookingsQuery,
+  invalidateAdminMembersQuery,
+  invalidateAppointmentQueries,
+  invalidateBookingQueries,
+  invalidateCoachQueries,
+  invalidateCoachScheduleQueries,
+  invalidateProfileDeletionStatusQuery,
+  invalidateScheduleBookingsQuery,
+  invalidateStaffBookingQueries,
+  invalidateVenueQueries,
+  patchAuthUserQueryData,
+  setAuthUserQueryData,
+  setProfileDeletionStatusQueryData
+} from "./cache";
 export {
   confirmStaffBookingMutationOptions,
   rejectStaffBookingMutationOptions,

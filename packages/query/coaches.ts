@@ -1,21 +1,7 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient, UpdateCoachProfilePayload, UpsertCoachAvailabilityPayload } from "@fittrack/api-client";
+import { invalidateCoachQueries } from "./cache";
 import { queryKeys } from "./query-keys";
-
-function buildCoachInvalidations(queryClient: QueryClient, userId?: string, coachId?: string) {
-  const tasks = [
-    queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() })
-  ];
-  if (userId) {
-    tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.coachSelfProfile(userId) }));
-    tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(userId) }));
-  }
-  if (coachId) {
-    tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.coachAvailability(coachId) }));
-  }
-  return tasks;
-}
 
 export function activeCoachesQueryOptions<T>(client: Pick<ApiClient, "coaches">) {
   return queryOptions({
@@ -62,7 +48,7 @@ export function updateCoachProfileMutationOptions(client: Pick<ApiClient, "coach
     mutationFn: ({ payload }: { payload: UpdateCoachProfilePayload; userId?: string; coachId?: string }) =>
       client.coaches.updateProfile(payload),
     onSuccess: async (_data, variables) => {
-      await Promise.all(buildCoachInvalidations(queryClient, variables.userId, variables.coachId));
+      await invalidateCoachQueries(queryClient, variables.userId, variables.coachId);
     }
   });
 }
@@ -72,7 +58,7 @@ export function createCoachAvailabilityMutationOptions(client: Pick<ApiClient, "
     mutationFn: ({ payload }: { payload: UpsertCoachAvailabilityPayload; userId?: string; coachId?: string }) =>
       client.coaches.createAvailability(payload),
     onSuccess: async (_data, variables) => {
-      await Promise.all(buildCoachInvalidations(queryClient, variables.userId, variables.coachId));
+      await invalidateCoachQueries(queryClient, variables.userId, variables.coachId);
     }
   });
 }
@@ -82,7 +68,7 @@ export function updateCoachAvailabilityMutationOptions(client: Pick<ApiClient, "
     mutationFn: ({ id, payload }: { id: string; payload: UpsertCoachAvailabilityPayload; userId?: string; coachId?: string }) =>
       client.coaches.updateAvailability(id, payload),
     onSuccess: async (_data, variables) => {
-      await Promise.all(buildCoachInvalidations(queryClient, variables.userId, variables.coachId));
+      await invalidateCoachQueries(queryClient, variables.userId, variables.coachId);
     }
   });
 }
@@ -92,7 +78,7 @@ export function deleteCoachAvailabilityMutationOptions(client: Pick<ApiClient, "
     mutationFn: ({ id }: { id: string; userId?: string; coachId?: string }) =>
       client.coaches.deleteAvailability(id),
     onSuccess: async (_data, variables) => {
-      await Promise.all(buildCoachInvalidations(queryClient, variables.userId, variables.coachId));
+      await invalidateCoachQueries(queryClient, variables.userId, variables.coachId);
     }
   });
 }

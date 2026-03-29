@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CheckCircle, Clock, Plus, XCircle } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { VenueAvailabilityRecord } from "@fittrack/api-client";
 
 import {
   createBookingMutationOptions,
@@ -12,7 +13,7 @@ import {
 import { TIME_SLOTS, getTodayString } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
-import { mobileApiClient } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
@@ -76,7 +77,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   );
 
   const { data: availability = [] } = useQuery({
-    ...venueAvailabilityQueryOptions<{ startTime: string; endTime: string; status: string }>(mobileApiClient, selectedVenue?.id, date),
+    ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(mobileApiClient, selectedVenue?.id, date),
     enabled: isVisible && !!selectedVenue && !!date
   });
 

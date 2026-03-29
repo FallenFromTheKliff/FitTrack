@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
 
 import type { ThemeColors } from "@fittrack/types";
-import { MAX_WIDTH, R } from "@fittrack/ui";
+import { MAX_WIDTH, R } from "@fittrack/ui/tokens";
 
 export function makeBookingDetailModalStyles(colors: ThemeColors) {
   return StyleSheet.create({

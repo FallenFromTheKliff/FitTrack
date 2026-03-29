@@ -1,17 +1,10 @@
-function toMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
-}
+import { runAsyncAction, toActionErrorMessage } from "../shared/action-helpers";
 
 export function createMemberController() {
   return {
-    toMessage,
+    toMessage: toActionErrorMessage,
     async runAction(action: () => Promise<void>, fallback: string) {
-      try {
-        await action();
-        return { success: true as const };
-      } catch (error: unknown) {
-        return { success: false as const, error: toMessage(error, fallback) };
-      }
+      return runAsyncAction(action, fallback);
     }
   };
 }

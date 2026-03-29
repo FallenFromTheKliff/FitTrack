@@ -1,5 +1,11 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient, ReviewDeletionPayload, UpgradeToCoachPayload } from "@fittrack/api-client";
+import {
+  invalidateAdminBookingsQuery,
+  invalidateAdminDeletionRequestsQuery,
+  invalidateAdminMembersQuery,
+  invalidateStaffBookingQueries
+} from "./cache";
 import { queryKeys } from "./query-keys";
 
 type CreateStaffPayload = {
@@ -36,8 +42,8 @@ export function confirmAdminBookingMutationOptions(client: Pick<ApiClient, "admi
     mutationFn: (bookingId: string) => client.admin.confirmBooking(bookingId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+        invalidateAdminBookingsQuery(queryClient),
+        invalidateStaffBookingQueries(queryClient)
       ]);
     }
   });
@@ -49,8 +55,8 @@ export function rejectAdminBookingMutationOptions(client: Pick<ApiClient, "admin
       client.admin.rejectBooking(bookingId, reason),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+        invalidateAdminBookingsQuery(queryClient),
+        invalidateStaffBookingQueries(queryClient)
       ]);
     }
   });
@@ -60,7 +66,7 @@ export function createStaffMutationOptions(client: Pick<ApiClient, "admin">, que
   return mutationOptions({
     mutationFn: (payload: CreateStaffPayload) => client.admin.createStaff(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() });
+      await invalidateAdminMembersQuery(queryClient);
     }
   });
 }
@@ -85,8 +91,8 @@ export function approveDeletionRequestMutationOptions(
     mutationFn: (requestId: string) => client.admin.approveDeletionRequest(requestId, payload),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminDeletionRequests() })
+        invalidateAdminMembersQuery(queryClient),
+        invalidateAdminDeletionRequestsQuery(queryClient)
       ]);
     }
   });
@@ -101,8 +107,8 @@ export function rejectDeletionRequestMutationOptions(
     mutationFn: (requestId: string) => client.admin.rejectDeletionRequest(requestId, payload),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminDeletionRequests() })
+        invalidateAdminMembersQuery(queryClient),
+        invalidateAdminDeletionRequestsQuery(queryClient)
       ]);
     }
   });
@@ -113,7 +119,7 @@ export function upgradeToCoachMutationOptions(client: Pick<ApiClient, "admin">, 
     mutationFn: (payload: UpgradeToCoachPayload) => client.admin.upgradeToCoach(payload),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() }),
+        invalidateAdminMembersQuery(queryClient),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() })
       ]);

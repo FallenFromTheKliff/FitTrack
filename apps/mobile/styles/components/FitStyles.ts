@@ -2,7 +2,7 @@ import { StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 
 import type { ThemeColors } from "@fittrack/types";
-import { R } from "@fittrack/ui";
+import { R } from "@fittrack/ui/tokens";
 
 export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
   return StyleSheet.create({

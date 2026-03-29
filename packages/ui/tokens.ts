@@ -41,4 +41,4 @@ export const tokens = {
 
 export default tokens;
 
-export type { ThemeColors } from "../types";
+export type { ThemeColors } from "@fittrack/types";

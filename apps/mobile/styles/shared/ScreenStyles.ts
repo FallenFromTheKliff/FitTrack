@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
 
 import type { ThemeColors } from "@fittrack/types";
-import { R } from "@fittrack/ui";
+import { R } from "@fittrack/ui/tokens";
 
 export function makeScreenStyles(colors: ThemeColors) {
   return StyleSheet.create({

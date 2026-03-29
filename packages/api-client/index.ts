@@ -7,12 +7,16 @@ import { createAppointmentsApi } from "./domains/appointments";
 import { createCoachesApi } from "./domains/coaches";
 import { createAdminApi } from "./domains/admin";
 import { createStaffApi } from "./domains/staff";
+import { resolveApiBaseUrl } from "./base-url";
 import { createAxiosTransport, type ApiTransportConfig } from "./transport/createAxiosTransport";
 
 export type { AuthEvents } from "./auth/auth-events";
+export { createTokenStore } from "./auth/createTokenStore";
+export type { KeyValueStorageAdapter } from "./auth/createTokenStore";
 export type { Awaitable, TokenSet, TokenStore } from "./auth/token-store";
 export { ApiClientError, toApiClientError } from "./errors/api-client-error";
 export type { ApiClientErrorKind } from "./errors/api-client-error";
+export { resolveApiBaseUrl } from "./base-url";
 export { createAxiosTransport } from "./transport/createAxiosTransport";
 export type { ApiTransport, ApiTransportConfig } from "./transport/createAxiosTransport";
 export type {
@@ -28,21 +32,27 @@ export type {
   ResetPasswordPayload,
   VerifyEmailPayload
 } from "./domains/auth";
+export type { AppointmentRecord, CoachScheduleRecord, CreateAppointmentPayload } from "./domains/appointments";
+export type { CreateBookingPayload, VenueBookingRecord } from "./domains/bookings";
+export type { CoachAvailabilityResponse, CoachAvailabilitySlot, UpdateCoachProfilePayload, UpsertCoachAvailabilityPayload } from "./domains/coaches";
 export type { UpdateUserAccountPayload, UpdateUserProfilePayload, UserProfileResponse } from "./domains/users";
-export type { VenueMutationPayload } from "./domains/venues";
-export type { CreateBookingPayload } from "./domains/bookings";
-export type { CreateAppointmentPayload } from "./domains/appointments";
-export type { UpdateCoachProfilePayload, UpsertCoachAvailabilityPayload } from "./domains/coaches";
+export type { VenueAvailabilityRecord, VenueMutationPayload } from "./domains/venues";
 export type { ReviewDeletionPayload, UpgradeToCoachPayload } from "./domains/admin";
 
-type CreateApiClientConfig = ApiTransportConfig | {
+type CreateApiClientConfig = (Omit<ApiTransportConfig, "baseURL"> & {
+  baseURL?: string | null;
+  fallbackBaseURL?: string;
+}) | {
   transport: AxiosInstance;
 };
 
 export function createApiClient(config: CreateApiClientConfig) {
   const transport = "transport" in config
     ? config.transport
-    : createAxiosTransport(config);
+    : createAxiosTransport({
+        ...config,
+        baseURL: resolveApiBaseUrl(config.baseURL, config.fallbackBaseURL)
+      });
 
   return {
     transport,

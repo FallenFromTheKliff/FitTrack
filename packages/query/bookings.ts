@@ -1,5 +1,6 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient, CreateBookingPayload } from "@fittrack/api-client";
+import { invalidateBookingQueries, invalidateVenueQueries } from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function bookingsQueryOptions<T>(client: Pick<ApiClient, "bookings">, userId?: string) {
@@ -15,8 +16,8 @@ export function createBookingMutationOptions(client: Pick<ApiClient, "bookings">
       client.bookings.create(payload),
     onSuccess: async (_data, variables) => {
       const tasks = [
-        queryClient.invalidateQueries({ queryKey: queryKeys.bookings(variables.userId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.venues(variables.userId) })
+        invalidateBookingQueries(queryClient, variables.userId),
+        invalidateVenueQueries(queryClient, variables.userId)
       ];
       if (variables.venueId != null && variables.date) {
         tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.venueAvailability(variables.venueId, variables.date) }));
@@ -31,7 +32,7 @@ export function cancelBookingMutationOptions(client: Pick<ApiClient, "bookings">
     mutationFn: ({ bookingId, cancelReason }: { bookingId: string; cancelReason: string; userId?: string }) =>
       client.bookings.cancel(bookingId, cancelReason),
     onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.bookings(variables.userId) });
+      await invalidateBookingQueries(queryClient, variables.userId);
     }
   });
 }

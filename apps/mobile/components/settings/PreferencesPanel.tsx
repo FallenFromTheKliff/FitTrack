@@ -7,9 +7,9 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransition } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
-import { THEME_LABELS, FONT_LABELS, THEME_ACCENT_COLOR, FONT_FAMILIES, themes } from "@fittrack/ui";
+import { THEME_LABELS, THEME_ACCENT_COLOR, themes } from "@fittrack/ui/theme";
+import { FONT_LABELS, FONT_FAMILIES } from "@fittrack/ui/styles";
 import type { AnimationLevel, ThemeKey, FontKey } from "@fittrack/types";
-
 import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";

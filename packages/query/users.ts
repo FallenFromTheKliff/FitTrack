@@ -1,5 +1,6 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "@fittrack/api-client";
+import { invalidateProfileDeletionStatusQuery } from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function profileDeletionStatusQueryOptions(client: Pick<ApiClient, "users">, userId?: string) {
@@ -19,7 +20,7 @@ export function requestDeletionMutationOptions(client: Pick<ApiClient, "users">,
   return mutationOptions({
     mutationFn: ({ reason }: { reason?: string; userId?: string }) => client.users.requestDeletion(reason),
     onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.profileDeletionStatus(variables.userId) });
+      await invalidateProfileDeletionStatusQuery(queryClient, variables.userId);
     }
   });
 }
@@ -28,7 +29,7 @@ export function cancelDeletionRequestMutationOptions(client: Pick<ApiClient, "us
   return mutationOptions({
     mutationFn: ({ userId }: { userId?: string }) => client.users.cancelDeletionRequest(),
     onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.profileDeletionStatus(variables.userId) });
+      await invalidateProfileDeletionStatusQuery(queryClient, variables.userId);
     }
   });
 }

@@ -16,6 +16,18 @@ export type UpsertCoachAvailabilityPayload = {
   startTime: string;
 };
 
+export type CoachAvailabilitySlot = {
+  dayOfWeek: number | string;
+  endTime: string;
+  isAvailable: boolean;
+  startTime: string;
+};
+
+export type CoachAvailabilityResponse = {
+  availability: CoachAvailabilitySlot[];
+  coachId: string;
+};
+
 export function createCoachesApi(transport: ApiTransport) {
   return {
     listActive<T>() {

@@ -4,7 +4,7 @@ import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } 
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dumbbell, RefreshCw, MessageCircle, CalendarPlus } from "lucide-react-native";
-import { queryKeys, venuesQueryOptions } from "@fittrack/query";
+import { invalidateVenueQueries, venuesQueryOptions } from "@fittrack/query";
 import { FACILITY_FLOORS, FACILITY_FLOOR_MAP, buildFacilityFloorVenues, type FacilityFloorId } from "@fittrack/types";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,7 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeGymMapStyles } from "@/styles/shared/ScreenStyles";
-import { mobileApiClient } from "@/lib/api";
+import { mobileApiClient } from "@/lib/api-client";
 import { getVenuePresentation } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
@@ -92,7 +92,7 @@ export default function FacilitiesScreen() {
   const doRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.venues(user?.id) });
+      await invalidateVenueQueries(queryClient, user?.id);
       await refetch();
     } finally {
       setRefreshing(false);

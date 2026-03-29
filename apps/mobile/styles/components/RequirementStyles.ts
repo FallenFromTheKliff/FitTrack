@@ -1,7 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import type { ThemeColors } from "@fittrack/ui";
-import { R } from "@fittrack/ui";
+import { R, type ThemeColors } from "@fittrack/ui/tokens";
 
 export function makeRequirementStyles(colors: ThemeColors, allMet: boolean) {
   return StyleSheet.create({

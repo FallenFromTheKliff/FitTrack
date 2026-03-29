@@ -1,17 +1,10 @@
+import type { VenueBookingRecord } from "@fittrack/api-client";
+import { mapVenueBookingRecord, mapVenueBookingRecords } from "@fittrack/app-core";
 import type { Booking, FacilityFloorId, FloorVenueRecord, VenueRecord } from "@fittrack/types";
 
 import { AMENITIES } from "@/data/bookings";
 import { normalizeVenueIconKey, type VenueIconKey } from "@/utils/venueMap";
 export type { VenueRecord } from "@fittrack/types";
-
-export type VenueBookingRecord = {
-  id: string;
-  venueId: number;
-  startTime: string;
-  endTime: string;
-  status: "pending" | "confirmed" | "cancelled" | "completed";
-  durationHours: number;
-};
 
 export type VenuePresentation = {
   id: string;
@@ -61,35 +54,24 @@ export function getVenuePresentation(venue: VenueRecord): VenuePresentation {
   };
 }
 
-function toBookingStatus(status: VenueBookingRecord["status"]): Booking["status"] {
-  if (status === "cancelled") return "cancelled";
-  if (status === "pending") return "waitlisted";
-  return "confirmed";
-}
-
 export function toMobileBooking(record: VenueBookingRecord, venue?: VenueRecord): Booking {
-  const start = new Date(record.startTime);
-  const end = new Date(record.endTime);
-  const startLabel = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const endLabel = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const presentation = venue ? getVenuePresentation(venue) : null;
-  const hourlyRate = venue?.hourlyRate ?? presentation?.price ?? 0;
-
+  const booking = mapVenueBookingRecord(record, venue);
   return {
-    id: record.id,
-    resourceId: String(record.venueId),
-    resourceName: venue?.name ?? "[MOVED/DELETED]",
-    resourceType: "venue",
-    date: start.toISOString().slice(0, 10),
-    time: `${startLabel} - ${endLabel}`,
-    startTime: startLabel,
-    endTime: endLabel,
-    status: toBookingStatus(record.status),
-    price: hourlyRate * record.durationHours
+    ...booking,
+    price: (venue?.hourlyRate ?? presentation?.price ?? 0) * record.durationHours
   };
 }
 
 export function toMobileBookings(records: VenueBookingRecord[], venues: VenueRecord[]): Booking[] {
-  const venueMap = new Map(venues.map((venue) => [venue.id, venue]));
-  return records.map((record) => toMobileBooking(record, venueMap.get(record.venueId)));
+  const bookings = mapVenueBookingRecords(records, venues);
+  return bookings.map((booking) => {
+    const venue = venues.find((entry) => String(entry.id) === booking.resourceId);
+    const presentation = venue ? getVenuePresentation(venue) : null;
+    const durationHours = records.find((record) => record.id === booking.id)?.durationHours ?? 0;
+    return {
+      ...booking,
+      price: (venue?.hourlyRate ?? presentation?.price ?? 0) * durationHours
+    };
+  });
 }
