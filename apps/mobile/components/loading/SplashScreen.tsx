@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { createAnimatedComponent, useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, Easing } from "react-native-reanimated";
 import { Dumbbell } from "lucide-react-native";
+import { useTypewriter } from "@fittrack/hooks";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
-import { useTypewriter } from "@/hooks/animations/text/useTypewriter";
 import { FONT_FAMILIES, R } from "@fittrack/ui";
 
 const ReanimatedText = createAnimatedComponent(Text);

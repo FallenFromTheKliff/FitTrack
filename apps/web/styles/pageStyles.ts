@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { themes, type ThemeColors } from "@fittrack/ui";
-import { getReadableTextColor } from "@/utils/contrast";
+import { getReadableTextColor } from "@fittrack/utils";
 
 export function profileStyles(colors: ThemeColors) {
     const onBrandLight = getReadableTextColor(colors.brandLight, colors.textPrimary, themes.sunlight.surface);

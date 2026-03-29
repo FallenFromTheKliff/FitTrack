@@ -2,14 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Building2, Bell, Pencil, Palette } from "lucide-react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
+import { GYM_FIELDS, type GymData } from "@fittrack/app-config";
 
 import { themes, THEME_LABELS } from "@fittrack/ui";
 import type { FontKey, ThemeKey } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { GYM_FIELDS, type GymData } from "@/data/settings/settings";
-import { getReadableTextColor } from "@/utils/contrast";
+import { getReadableTextColor } from "@fittrack/utils";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";

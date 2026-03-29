@@ -12,6 +12,8 @@
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fittrack/app-config": "workspace:*",
+    "@fittrack/app-core": "workspace:*",
     "@fittrack/api-client": "workspace:*",
     "@fittrack/hooks": "workspace:*",
     "@fittrack/query": "workspace:*",

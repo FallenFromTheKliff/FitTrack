@@ -1,6 +1,11 @@
-import {BadRequestException, ForbiddenException, Injectable, NotFoundException,} from '@nestjs/common';
-import {PrismaService} from 'prisma/prisma.service';
-import {CreateBookingDto} from './dto/booking.dto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { CreateBookingDto } from './dto/booking.dto';
 
 @Injectable()
 export class BookingService {
@@ -21,7 +26,9 @@ export class BookingService {
     }
 
     if (!venue.isReservable) {
-      throw new BadRequestException('This venue is part of the facility layout and cannot be reserved');
+      throw new BadRequestException(
+        'This venue is part of the facility layout and cannot be reserved',
+      );
     }
 
     // Check minimum hours
@@ -98,11 +105,11 @@ export class BookingService {
 
   async getUserBookings(userId: string) {
     return await this.prisma.venueBooking.findMany({
-      where: {userId},
+      where: { userId },
       include: {
         venue: true,
       },
-      orderBy: {startTime: 'desc'},
+      orderBy: { startTime: 'desc' },
     });
   }
 
@@ -112,9 +119,9 @@ export class BookingService {
       include: {
         venue: true,
         user: {
-          include: { profile: true }
-        }
-      }
+          include: { profile: true },
+        },
+      },
     });
 
     if (!booking) {

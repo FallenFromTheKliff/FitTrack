@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fittrack/app-config": "workspace:*",
+    "@fittrack/app-core": "workspace:*",
     "@fittrack/api-client": "workspace:*",
     "@fittrack/hooks": "workspace:*",
     "@fittrack/query": "workspace:*",

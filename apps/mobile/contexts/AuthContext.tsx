@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, createContext, useContext, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { AuthUser, Role } from "@fittrack/types";
+import type { AuthUser } from "@fittrack/types";
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, createAuthController } from "@fittrack/app-core";
 import { mobileApiClient } from "@/lib/api";
 
 type RegisterInput = { email: string; phone: string; password: string };
@@ -34,163 +35,80 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
-function isLoginSuccess(
-  value: Awaited<ReturnType<typeof mobileApiClient.auth.login>>
-): value is Awaited<ReturnType<typeof mobileApiClient.auth.login>> & {
-  access_token: string;
-  refresh_token: string;
-  user: {
-    id: string;
-    email: string;
-    role: string;
-    phone_no?: string | null;
-    emailVerified?: boolean;
-    phoneVerified?: boolean;
-  };
-} {
-  return "access_token" in value;
-}
-
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const pendingUser = useRef<AuthUser | null>(null);
-  const pendingEmailRef = useRef<string | null>(null);
-  const pendingCredentialsRef = useRef<{ email: string; password: string } | null>(null);
-
+  const sessionStore = useMemo(() => ({
+    getAccessToken: () => AsyncStorage.getItem(ACCESS_TOKEN_KEY),
+    getRefreshToken: () => AsyncStorage.getItem(REFRESH_TOKEN_KEY),
+    setTokens: ({ accessToken, refreshToken }: { accessToken: string; refreshToken?: string | null }) =>
+      AsyncStorage.multiSet([[ACCESS_TOKEN_KEY, accessToken], [REFRESH_TOKEN_KEY, refreshToken ?? ""]]),
+    clearTokens: () => AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY])
+  }), []);
+  const controller = useMemo(() => createAuthController({
+    client: mobileApiClient,
+    onUserLoaded,
+    onUserCleared,
+    sessionStore
+  }), [onUserCleared, onUserLoaded, sessionStore]);
   const isAuthenticated = !!user;
-
-  const resolveAccountStatus = useCallback((deletedAt?: string | null, requestStatus?: string | null) => {
-    if (deletedAt) return "expired" as const;
-    const normalized = requestStatus?.toLowerCase() ?? "";
-    if (normalized === "pending") return "frozen" as const;
-    if (normalized === "approved") return "expired" as const;
-    return "active" as const;
-  }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const token = await AsyncStorage.getItem("fittrack_access_token");
-        if (token) {
-          const data = await mobileApiClient.users.getProfile();
-          let requestStatus: string | null = null;
-          try {
-            const req = await mobileApiClient.users.getDeletionRequestStatus();
-            requestStatus = req.status ?? null;
-          } catch {}
-          const status = resolveAccountStatus(data.deletedAt, requestStatus);
-          if (status === "expired") {
-            await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
-            onUserCleared();
-            setUser(null);
-            return;
-          }
-          const authUser: AuthUser = {
-            id: data.id,
-            email: data.email,
-            role: data.role?.name as Role,
-            phone_no: data.phone_no,
-            profile: data.profile ?? undefined,
-            status
-          };
-          await onUserLoaded(authUser.id);
-          setUser(authUser);
-        }
+        const nextUser = await controller.loadCurrentUser({ includeDeletionStatus: true });
+        setUser(nextUser);
       } catch {
-        await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
+        await sessionStore.clearTokens();
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [onUserCleared, onUserLoaded, resolveAccountStatus]);
+  }, [controller, sessionStore]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
       try {
-        const data = await mobileApiClient.auth.login({ email, password });
-        if ("otpRequired" in data && data.otpRequired) {
-          pendingEmailRef.current = email;
-          pendingCredentialsRef.current = { email, password };
-          const placeholder: AuthUser = { id: "", email, role: "USER" };
-          pendingUser.current = placeholder;
-          return { user: placeholder, needsOTP: true };
-        }
-        if (!isLoginSuccess(data)) {
+        const data = await controller.login(email, password, { placeholderRole: "USER" });
+        if (!data.success || !data.user) {
           return undefined;
         }
-        const authUser: AuthUser = {
-          id: data.user.id,
-          email: data.user.email,
-          role: data.user.role as Role,
-          phone_no: data.user.phone_no,
-          emailVerified: data.user.emailVerified,
-          phoneVerified: data.user.phoneVerified
-        };
-        pendingEmailRef.current = data.user.email;
-        pendingCredentialsRef.current = { email, password };
-        pendingUser.current = authUser;
-        return { user: authUser, needsOTP: false };
+        return { user: data.user, needsOTP: data.otpRequired };
       } catch {
         return undefined;
       }
-    }, []
+    }, [controller]
   );
 
   const commitLogin = useCallback(async () => {
-    if (!pendingUser.current) return;
-    const authUser = pendingUser.current;
-    pendingUser.current = null;
-    try {
-      const req = await mobileApiClient.users.getDeletionRequestStatus();
-      const status = resolveAccountStatus(null, req.status ?? null);
-      if (status === "expired") {
-        await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
-        onUserCleared();
-        setUser(null);
-        return;
-      }
-      await onUserLoaded(authUser.id);
-      setUser({ ...authUser, status });
-    } catch {
-      await onUserLoaded(authUser.id);
-      setUser({ ...authUser, status: "active" });
-    }
-  }, [onUserCleared, onUserLoaded, resolveAccountStatus]);
+    const nextUser = await controller.commitLogin({ includeDeletionStatus: true });
+    if (nextUser === undefined) return;
+    setUser(nextUser);
+  }, [controller]);
 
   const register = useCallback(
     async (data: RegisterInput): Promise<AuthUser | undefined> => {
       try {
-        const res = await mobileApiClient.auth.register({
+        const res = await controller.register({
           email: data.email,
           phone_no: data.phone,
           password: data.password
-        });
-        if (!res.userId || !res.email) {
+        }, { placeholderRole: "USER" });
+        if (!res.success || !res.user) {
           return undefined;
         }
-        pendingEmailRef.current = res.email;
-        pendingCredentialsRef.current = { email: data.email, password: data.password };
-        const placeholder: AuthUser = { id: res.userId, email: res.email, role: "USER" };
-        return placeholder;
+        return res.user;
       } catch {
         return undefined;
       }
-    }, []
+    }, [controller]
   );
 
   const logout = useCallback(async () => {
-    try {
-      const refresh = await AsyncStorage.getItem("fittrack_refresh_token");
-      if (refresh) {
-        await mobileApiClient.auth.logout({ refresh_token: refresh });
-      }
-    } catch {}
-    await AsyncStorage.multiRemove(["fittrack_access_token", "fittrack_refresh_token"]);
-    pendingUser.current = null;
-    onUserCleared();
+    await controller.logout();
     setUser(null);
-  }, [onUserCleared]);
+  }, [controller]);
 
   const deleteUser = useCallback(async () => {
     if (!user?.id) return;
@@ -214,52 +132,33 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const verifyCurrentPassword = useCallback(async (password: string) => {
     try {
-      const data = await mobileApiClient.auth.verifyCurrentPassword(password);
-      return !!data.verified;
+      return await controller.verifyCurrentPassword(password);
     } catch {
       return false;
     }
-  }, []);
+  }, [controller]);
 
   const changePassword = useCallback(async (_currentPassword: string, nextPassword: string): Promise<{ success: true } | { success: false; error: string }> => {
     try {
       if (!user?.email) return { success: false, error: "No user session." };
-      await mobileApiClient.auth.changePassword({ email: user.email, password: nextPassword });
+      await controller.changePassword(user.email, nextPassword);
       return { success: true };
     } catch (error: unknown) {
       return { success: false, error: toErrorMessage(error, "Password change failed.") };
     }
-  }, [user?.email]);
+  }, [controller, user?.email]);
 
   const verifyOTP = useCallback(async (code: string) => {
     try {
-      const email = pendingEmailRef.current;
-      if (!email) {
+      const result = await controller.verifyOTP(code);
+      if (!result.success && result.error === "No pending session.") {
         return { success: false as const, error: "No pending email." };
       }
-      await mobileApiClient.auth.verifyEmail({ email, otp: code });
-      if (pendingCredentialsRef.current) {
-        const creds = pendingCredentialsRef.current;
-        pendingCredentialsRef.current = null;
-        const data = await mobileApiClient.auth.login({ email: creds.email, password: creds.password });
-        if (!isLoginSuccess(data)) {
-          return { success: false as const, error: "OTP verification did not complete the session." };
-        }
-        const authUser: AuthUser = {
-          id: data.user.id,
-          email: data.user.email,
-          role: data.user.role as Role,
-          phone_no: data.user.phone_no,
-          emailVerified: data.user.emailVerified,
-          phoneVerified: data.user.phoneVerified
-        };
-        pendingUser.current = authUser;
-      }
-      return { success: true as const };
+      return result;
     } catch (error: unknown) {
       return { success: false as const, error: toErrorMessage(error, "Invalid OTP.") };
     }
-  }, []);
+  }, [controller]);
 
   return (
     <AuthContext.Provider

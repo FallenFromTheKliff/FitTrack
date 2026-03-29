@@ -2,13 +2,13 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { Menu, ChevronLeft } from "lucide-react-native";
+import { type TabKey } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { makeHeaderStyles } from "@/styles/shared/LayoutStyles";
 
 import HeaderMessage from "@/components/layout/HeaderMessage";
-import { type TabKey } from "@/data/labels";
 
 type HeaderProps = {
   onMenuPress: () => void;

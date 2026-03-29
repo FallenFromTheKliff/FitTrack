@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } fr
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { WEEKDAY_NAMES } from "@fittrack/app-config";
 
 import type { CoachProfileRecord, Trainer } from "@fittrack/types";
 import {
@@ -17,7 +18,6 @@ import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
 import { getTodayString } from "@/data/bookings";
-import { WEEKDAY_NAMES } from "@/data/calendar";
 import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
 
 import { FitText } from "@/components/fit/FitText";

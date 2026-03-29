@@ -1,11 +1,11 @@
 import React from "react";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { SCREEN_NAMES, TAB_SUBTITLES, type TabKey } from "@fittrack/app-config";
+import { useTypewriter } from "@fittrack/hooks";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
-import { useTypewriter } from "@/hooks/animations/text/useTypewriter";
 import { makeHeaderMessageStyles } from "@/styles/shared/LayoutStyles";
-import { SCREEN_NAMES, TAB_SUBTITLES, type TabKey } from "@/data/labels";
 
 import { AnimatedFitText } from "@/components/fit/FitText";
 

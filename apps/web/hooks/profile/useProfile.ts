@@ -1,9 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { calcBMI, formatDate, formatMonthYear, splitFullName } from "@fittrack/utils";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { updateAccountMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { sleep } from "@/utils/sleep";
 import { webApiClient } from "@/lib/api-client";
@@ -33,6 +35,8 @@ export function validateProfileFields(
 export function useProfilePage() {
   const { user, updateUser, logout, deleteUser } = useAuth();
   const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.sensitive);
+  const updateProfileMutation = useMutation(updateProfileMutationOptions(webApiClient));
+  const updateAccountMutation = useMutation(updateAccountMutationOptions(webApiClient));
 
   const initialName = splitFullName(user?.name ?? "");
 
@@ -97,7 +101,7 @@ export function useProfilePage() {
     const w = parseFloat(weightKg);
     const h = parseFloat(heightCm);
 
-    await webApiClient.users.updateProfile({
+    await updateProfileMutation.mutateAsync({
       firstName: personalData.firstName.trim() || undefined,
       lastName: personalData.lastName.trim() || undefined,
       dateOfBirth: personalData.dateOfBirth || undefined,
@@ -108,7 +112,7 @@ export function useProfilePage() {
     const emailChanged = personalData.email.trim() !== (user?.email ?? "");
     const phoneChanged = personalData.phone.trim() !== (user?.phone_no ?? "");
     if (emailChanged || phoneChanged) {
-      await webApiClient.users.updateAccount({
+      await updateAccountMutation.mutateAsync({
         ...(emailChanged ? { email: personalData.email.trim() } : {}),
         ...(phoneChanged ? { phone_no: personalData.phone.trim() } : {})
       });

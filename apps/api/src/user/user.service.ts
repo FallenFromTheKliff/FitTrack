@@ -1,7 +1,15 @@
-import {ConflictException, Injectable, NotFoundException,} from '@nestjs/common';
-import {PrismaService} from 'prisma/prisma.service';
-import {CreateProfileDto, UpdateProfileDto, UpdateUserDto,} from './dto/user.dto';
-import {CreateDeletionRequestDto} from './dto/deletion-request.dto';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import {
+  CreateProfileDto,
+  UpdateProfileDto,
+  UpdateUserDto,
+} from './dto/user.dto';
+import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
 
 @Injectable()
 export class UserService {
@@ -179,8 +187,8 @@ export class UserService {
 
   async getUserDeletionRequest(userId: string) {
     return await this.prisma.accountDeletionRequest.findFirst({
-      where: {userId},
-      orderBy: {createdAt: 'desc'}
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
     });
   }
 

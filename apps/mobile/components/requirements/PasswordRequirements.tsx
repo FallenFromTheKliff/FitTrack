@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { View } from "react-native";
 import { CheckCircle, XCircle } from "lucide-react-native";
+import { PASSWORD_REQUIREMENTS } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { PASSWORD_REQUIREMENT_ITEMS, revisePassword } from "@fittrack/utils";
+import { revisePassword } from "@fittrack/utils";
 import { makeRequirementStyles } from "@/styles/components/RequirementStyles";
 
 import { FitText } from "@/components/fit/FitText";
@@ -23,7 +24,7 @@ export default function PasswordRequirements({ password, onValidationChange }: P
     onValidationChange(allMet);
   }, [allMet, onValidationChange]);
 
-  const items: { met: boolean; label: string }[] = PASSWORD_REQUIREMENT_ITEMS.map((item) => ({
+  const items: { met: boolean; label: string }[] = PASSWORD_REQUIREMENTS.map((item) => ({
     met: r[item.key],
     label: item.label
   }));

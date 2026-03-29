@@ -2,11 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, getDay, getDaysInMonth, startOfMonth } from "date-fns";
 import { CalendarDays } from "lucide-react";
+import { CALENDAR_VIEW_OPTIONS, MONTH_NAMES, MONTH_NAMES_SHORT, WEEK_DAYS } from "@fittrack/app-config";
 import type { CalendarViewMode } from "@fittrack/types";
 import { formatDateYMD, parseDateYMD } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
-import { CALENDAR_VIEW_OPTIONS, MONTH_NAMES, MONTH_NAMES_SHORT, WEEK_DAYS } from "@/data/ui/calendar";
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";

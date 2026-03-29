@@ -1,5 +1,5 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
-import {PrismaService} from 'prisma/prisma.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
 
 @Injectable()
 export class VenueService {
@@ -7,8 +7,8 @@ export class VenueService {
 
   async getAllVenues(isActive?: boolean) {
     return await this.prisma.venue.findMany({
-      where: isActive !== undefined ? {isActive} : {},
-      orderBy: [{displayOrder: 'asc'}, {name: 'asc'}]
+      where: isActive !== undefined ? { isActive } : {},
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
     });
   }
 

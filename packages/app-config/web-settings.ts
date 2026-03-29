@@ -1,5 +1,4 @@
-import type { PasswordRequirementKey } from "@fittrack/utils";
-import { PASSWORD_REQUIREMENT_ITEMS } from "@fittrack/utils";
+import { PASSWORD_REQUIREMENTS } from "./shared-settings";
 
 export type GymField = {
   key: string;
@@ -9,9 +8,7 @@ export type GymField = {
 
 export type GymData = Record<string, string>;
 
-export type { PasswordRequirementKey };
-
-export const PASSWORD_REQUIREMENTS: Array<{ key: PasswordRequirementKey; label: string }> = PASSWORD_REQUIREMENT_ITEMS;
+export { PASSWORD_REQUIREMENTS };
 
 export const GYM_FIELDS: GymField[] = [
   { key: "name", label: "Gym Name", default: "SERTFIT Gym" },

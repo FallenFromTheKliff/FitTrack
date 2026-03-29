@@ -9,7 +9,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { FABStateProvider, useFABState } from "@/contexts/FABStateContext";
-import { type TabKey } from "@/data/labels";
+import { type TabKey } from "@fittrack/app-config";
 
 import { FitFAB, FitFABMenu } from "@/components/fit";
 import Sidebar from "@/components/layout/Sidebar";

@@ -1,16 +1,16 @@
-import { createContext, useContext, useState, useRef, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useRef, useMemo, useCallback, type ReactNode } from "react";
 import { useSharedValue, withTiming } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { themes, THEME_IS_DARK, THEME_ACCENT_COLOR, DEFAULT_THEME, FONT_FAMILIES, DEFAULT_FONT } from "@fittrack/ui";
 import type { AnimationLevel, IThemeContext, ThemeKey, FontKey, ThemeSettings } from "@fittrack/types";
+import { createMobileThemePreferenceKey, createThemeController, type ThemeControllerState } from "@fittrack/app-core";
 
 interface IMobileThemeContext extends IThemeContext {
   themeTransitionAnim: SharedValue<number>;
 }
 
-const STORAGE_KEY = (userId: string) => `fittrack_mobile_theme_${userId}`;
 const DEFAULT_SETTINGS: ThemeSettings = {
   themeKey: DEFAULT_THEME,
   fontKey: DEFAULT_FONT,
@@ -20,19 +20,36 @@ const DEFAULT_SETTINGS: ThemeSettings = {
 const ThemeContext = createContext<IMobileThemeContext | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<ThemeSettings>(DEFAULT_SETTINGS);
-  const [previewThemeKey, setPreviewThemeKey] = useState<ThemeKey | null>(null);
-  const [previewFontKey, setPreviewFontKey] = useState<FontKey | null>(null);
-
-  const currentUserId = useRef<string | null>(null);
+  const controller = useMemo(() => createThemeController({
+    defaultSettings: DEFAULT_SETTINGS,
+    storage: {
+      load: async (userId: string) => {
+        try {
+          const stored = await AsyncStorage.getItem(createMobileThemePreferenceKey(userId));
+          return stored ? JSON.parse(stored) as Partial<ThemeSettings> : {};
+        } catch {
+          return {};
+        }
+      },
+      save: async (userId: string, settings: ThemeSettings) => {
+        try {
+          await AsyncStorage.setItem(createMobileThemePreferenceKey(userId), JSON.stringify(settings));
+        } catch {}
+      }
+    }
+  }), []);
+  const [state, setState] = useState(() => controller.createInitialState());
   const themeTransitionAnim = useSharedValue(1);
+  const stateRef = useRef(state);
   const isFirstMount = useRef(true);
-  const prevThemeKeyRef = useRef<ThemeKey>(DEFAULT_SETTINGS.themeKey);
-
-  const activeThemeKey: ThemeKey = previewThemeKey ?? settings.themeKey;
-  const activeFont: FontKey = previewFontKey ?? settings.fontKey;
+  const { activeFont, activeThemeKey } = controller.getResolvedState(state);
   const activeFontColor = THEME_ACCENT_COLOR[activeThemeKey];
   const activeIconColor = activeFontColor;
+
+  const syncState = useCallback((nextState: ThemeControllerState) => {
+    stateRef.current = nextState;
+    setState(nextState);
+  }, []);
 
   const triggerTransitionAnim = useCallback(
     (useAnim: boolean) => {
@@ -50,78 +67,57 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [themeTransitionAnim]
   );
 
-  const saveSettings = useCallback(
-    async (updated: ThemeSettings) => {
-      prevThemeKeyRef.current = activeThemeKey;
-      setSettings(updated);
-      triggerTransitionAnim(updated.animationLevel !== "none");
-      if (!currentUserId.current) return;
-      try {
-        await AsyncStorage.setItem(
-          STORAGE_KEY(currentUserId.current),
-          JSON.stringify(updated),
-        );
-      } catch {}
-    },
-    [activeThemeKey, triggerTransitionAnim]
-  );
+  const runPersistedUpdate = useCallback((action: (currentState: ThemeControllerState) => Promise<ThemeControllerState>) => {
+    void action(stateRef.current).then((nextState) => {
+      syncState(nextState);
+      triggerTransitionAnim(nextState.settings.animationLevel !== "none");
+    });
+  }, [syncState, triggerTransitionAnim]);
 
   const loadUserSettings = useCallback(async (userId: string) => {
-    currentUserId.current = userId;
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY(userId));
-      if (stored) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) });
-      else setSettings(DEFAULT_SETTINGS);
-    } catch {
-      setSettings(DEFAULT_SETTINGS);
-    }
-  }, []);
+    syncState(await controller.loadUserSettings(stateRef.current, userId));
+  }, [controller, syncState]);
 
   const clearUserSettings = useCallback(() => {
-    currentUserId.current = null;
-    setSettings(DEFAULT_SETTINGS);
-    setPreviewThemeKey(null);
-    setPreviewFontKey(null);
-  }, []);
+    syncState(controller.clearUserSettings(stateRef.current));
+  }, [controller, syncState]);
 
-  const setTheme = useCallback(
-    (key: ThemeKey) => saveSettings({ ...settings, themeKey: key }),
-    [settings, saveSettings]
-  );
-  const setFont = useCallback(
-    (key: FontKey) => saveSettings({ ...settings, fontKey: key }),
-    [settings, saveSettings]
-  );
-  const setAppearance = useCallback(
-    (themeKey: ThemeKey, fontKey: FontKey) =>
-      saveSettings({ ...settings, themeKey, fontKey }),
-    [settings, saveSettings]
-  );
+  const setTheme = useCallback((key: ThemeKey) => {
+    runPersistedUpdate((currentState) => controller.setTheme(currentState, key));
+  }, [controller, runPersistedUpdate]);
+
+  const setFont = useCallback((key: FontKey) => {
+    runPersistedUpdate((currentState) => controller.setFont(currentState, key));
+  }, [controller, runPersistedUpdate]);
+
+  const setAppearance = useCallback((themeKey: ThemeKey, fontKey: FontKey) => {
+    runPersistedUpdate((currentState) => controller.setAppearance(currentState, themeKey, fontKey));
+  }, [controller, runPersistedUpdate]);
+
   const resetAppearance = useCallback(() => {
-    saveSettings(DEFAULT_SETTINGS);
-    setPreviewThemeKey(null);
-    setPreviewFontKey(null);
-  }, [saveSettings]);
-  const setAnimationLevel = useCallback(
-    (level: AnimationLevel) => saveSettings({ ...settings, animationLevel: level }),
-    [settings, saveSettings]
-  );
-  const saveAllAppearance = useCallback(
-    (themeKey: ThemeKey, fontKey: FontKey, animationLevel: AnimationLevel) =>
-      saveSettings({ ...settings, themeKey, fontKey, animationLevel }),
-    [settings, saveSettings]
-  );
+    runPersistedUpdate((currentState) => controller.resetAppearance(currentState));
+  }, [controller, runPersistedUpdate]);
+
+  const setAnimationLevel = useCallback((level: AnimationLevel) => {
+    runPersistedUpdate((currentState) => controller.setAnimationLevel(currentState, level));
+  }, [controller, runPersistedUpdate]);
+
+  const saveAllAppearance = useCallback((themeKey: ThemeKey, fontKey: FontKey, animationLevel: AnimationLevel) => {
+    runPersistedUpdate((currentState) => controller.saveAllAppearance(currentState, themeKey, fontKey, animationLevel));
+  }, [controller, runPersistedUpdate]);
 
   const previewTheme = useCallback(
     (key: ThemeKey | null) => {
-      prevThemeKeyRef.current = activeThemeKey;
-      triggerTransitionAnim(settings.animationLevel !== "none");
-      setPreviewThemeKey(key);
+      const currentState = stateRef.current;
+      syncState(controller.previewTheme(currentState, key));
+      triggerTransitionAnim(currentState.settings.animationLevel !== "none");
     },
-    [activeThemeKey, settings.animationLevel, triggerTransitionAnim]
+    [controller, syncState, triggerTransitionAnim]
   );
 
-  const previewFont = useCallback((key: FontKey | null) => setPreviewFontKey(key), []);
+  const previewFont = useCallback((key: FontKey | null) => {
+    syncState(controller.previewFont(stateRef.current, key));
+  }, [controller, syncState]);
 
   return (
     <ThemeContext.Provider
@@ -129,10 +125,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         colors: themes[activeThemeKey],
         activeFont,
         activeThemeKey,
-        prevThemeKey: prevThemeKeyRef.current,
+        prevThemeKey: state.prevThemeKey,
         activeFontColor,
         activeIconColor,
-        settings,
+        settings: state.settings,
         themeTransitionAnim,
         loadUserSettings,
         clearUserSettings,

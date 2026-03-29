@@ -3,16 +3,15 @@ import { Pressable, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Bot, MessageSquarePlus, Trash2, X, SlidersHorizontal } from "lucide-react-native";
+import { MOCK_CHAT_SESSIONS } from "@fittrack/app-config";
 
-import { MOCK_SESSIONS } from "@/data/chat";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useDebounce } from "@fittrack/hooks";
-import { formatGroupLabel, nextDate } from "@fittrack/utils";
+import { formatGroupLabel, groupItemsByDate, nextDate } from "@fittrack/utils";
 import { getTodayString } from "@/data/bookings";
-import { groupByDate } from "@/utils/grouping";
 import { makeScreenStyles, makeBookingsScreenStyles } from "@/styles/shared/ScreenStyles";
 
 import { FitText } from "@/components/fit/FitText";
@@ -122,7 +121,7 @@ export default function ChatHistoryScreen() {
   const dividerStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.border }));
 
   const filteredSessions = useMemo(() => {
-    let result = MOCK_SESSIONS.filter((session) => !deletedIds.has(session.id));
+    let result = MOCK_CHAT_SESSIONS.filter((session) => !deletedIds.has(session.id));
     if (debouncedSearchQuery.trim()) {
       const q = debouncedSearchQuery.toLowerCase();
       result = result.filter((session) =>
@@ -134,7 +133,7 @@ export default function ChatHistoryScreen() {
     return result;
   }, [debouncedSearchQuery, startDate, endDate, deletedIds]);
 
-  const grouped = groupByDate(filteredSessions, "desc");
+  const grouped = groupItemsByDate(filteredSessions, "desc");
   const isEmpty = filteredSessions.length === 0;
   const selectedCount = selectedIds.size;
 

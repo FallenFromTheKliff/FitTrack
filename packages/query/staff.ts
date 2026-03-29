@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "@fittrack/api-client";
 import { queryKeys } from "./query-keys";
 
@@ -27,5 +27,30 @@ export function staffBookingsQueryOptions<T>(client: Pick<ApiClient, "staff">, s
   return queryOptions({
     queryKey: queryKeys.staffBookings(scope),
     queryFn: () => client.staff.listBookings<T>()
+  });
+}
+
+export function confirmStaffBookingMutationOptions(client: Pick<ApiClient, "staff">, queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (bookingId: string) => client.staff.confirmBooking(bookingId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("all") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
+    }
+  });
+}
+
+export function rejectStaffBookingMutationOptions(client: Pick<ApiClient, "staff">, queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
+      client.staff.rejectBooking(bookingId, reason),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("all") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
+    }
   });
 }

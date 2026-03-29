@@ -183,6 +183,12 @@ importers:
       '@fittrack/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@fittrack/app-config':
+        specifier: workspace:*
+        version: link:../../packages/app-config
+      '@fittrack/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@fittrack/hooks':
         specifier: workspace:*
         version: link:../../packages/hooks
@@ -210,9 +216,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.0)
-      axios:
-        specifier: ^1.13.6
-        version: 1.13.6
       expo:
         specifier: ~55.0.0
         version: 55.0.5(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(@expo/metro-runtime@55.0.6)(expo-router@55.0.4)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
@@ -292,6 +295,12 @@ importers:
       '@fittrack/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@fittrack/app-config':
+        specifier: workspace:*
+        version: link:../../packages/app-config
+      '@fittrack/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@fittrack/hooks':
         specifier: workspace:*
         version: link:../../packages/hooks
@@ -322,9 +331,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
-      axios:
-        specifier: ^1.13.6
-        version: 1.13.6
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -411,6 +417,21 @@ importers:
         specifier: ^1.13.6
         version: 1.13.6
 
+  packages/app-config:
+    dependencies:
+      '@fittrack/utils':
+        specifier: workspace:*
+        version: link:../utils
+
+  packages/app-core:
+    dependencies:
+      '@fittrack/api-client':
+        specifier: workspace:*
+        version: link:../api-client
+      '@fittrack/types':
+        specifier: workspace:*
+        version: link:../types
+
   packages/hooks:
     dependencies:
       react:
@@ -426,9 +447,18 @@ importers:
       '@fittrack/api-client':
         specifier: workspace:*
         version: link:../api-client
+      '@fittrack/types':
+        specifier: workspace:*
+        version: link:../types
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
 
   packages/types: {}
 

@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { type PageKey } from "@fittrack/app-config";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useDebounce } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { layoutStyles } from "@/styles/layoutStyles";
-import type { PageKey } from "@/data/ui/labels";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";

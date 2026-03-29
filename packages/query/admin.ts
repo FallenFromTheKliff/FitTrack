@@ -31,6 +31,31 @@ export function adminBookingsQueryOptions<T>(client: Pick<ApiClient, "admin">) {
   });
 }
 
+export function confirmAdminBookingMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (bookingId: string) => client.admin.confirmBooking(bookingId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
+    }
+  });
+}
+
+export function rejectAdminBookingMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
+      client.admin.rejectBooking(bookingId, reason),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
+      ]);
+    }
+  });
+}
+
 export function createStaffMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: (payload: CreateStaffPayload) => client.admin.createStaff(payload),

@@ -2,12 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { ArrowUp } from "lucide-react-native";
+import { MOBILE_GREETING_MESSAGE } from "@fittrack/app-config";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeBrodigyStyles } from "@/styles/shared/ScreenStyles";
-import { GREETING_MESSAGE } from "@/data/chat";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 
@@ -21,7 +21,7 @@ export default function ChatbotScreen() {
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeBrodigyStyles(colors), [colors]);
 
-  const [messages, setMessages] = useState<Msg[]>([{ id: "m1", text: GREETING_MESSAGE, from: "ai" }]);
+  const [messages, setMessages] = useState<Msg[]>([{ id: "m1", text: MOBILE_GREETING_MESSAGE, from: "ai" }]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<ScrollView | null>(null);
   const isFrozen = user?.status === "frozen";

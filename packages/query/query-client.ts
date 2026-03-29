@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { QueryClient } from "@tanstack/react-query";
 
 export function makeQueryClient() {
@@ -10,4 +11,9 @@ export function makeQueryClient() {
       }
     }
   });
+}
+
+export function useStableQueryClient() {
+  const [client] = useState(() => makeQueryClient());
+  return client;
 }

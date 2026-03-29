@@ -1,10 +1,9 @@
 "use client";
 
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@fittrack/app-core";
 import { createApiClient } from "@fittrack/api-client";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-const ACCESS_TOKEN_KEY = "fittrack_access_token";
-const REFRESH_TOKEN_KEY = "fittrack_refresh_token";
 
 const webTokenStore = {
   getAccessToken() {

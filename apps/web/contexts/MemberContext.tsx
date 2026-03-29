@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   adminMembersQueryOptions,
@@ -7,17 +7,15 @@ import {
   deleteUserMutationOptions,
   queryKeys
 } from "@fittrack/query";
+import { createMemberController } from "@fittrack/app-core";
 import type { MemberRecord, IMemberContext, CreateStaffInput } from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 
 const MemberContext = createContext<IMemberContext | null>(null);
 
-function toMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
-}
-
 export function MemberProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const controller = useMemo(() => createMemberController(), []);
 
   const {
     data: members = [],
@@ -25,7 +23,7 @@ export function MemberProvider({ children }: { children: ReactNode }) {
     error: queryError
   } = useQuery(adminMembersQueryOptions(webApiClient));
 
-  const error = queryError ? toMessage(queryError, "Failed to fetch members.") : null;
+  const error = queryError ? controller.toMessage(queryError, "Failed to fetch members.") : null;
 
   const fetchMembers = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.adminMembers() });
@@ -34,24 +32,18 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const createStaffMutation = useMutation(createStaffMutationOptions(webApiClient, queryClient));
 
   const createStaff = useCallback(async (input: CreateStaffInput) => {
-    try {
+    return controller.runAction(async () => {
       await createStaffMutation.mutateAsync(input);
-      return { success: true as const };
-    } catch (err: unknown) {
-      return { success: false as const, error: toMessage(err, "Failed to create staff.") };
-    }
-  }, [createStaffMutation]);
+    }, "Failed to create staff.");
+  }, [controller, createStaffMutation]);
 
   const deleteUserMutation = useMutation(deleteUserMutationOptions(webApiClient, queryClient));
 
   const deleteUser = useCallback(async (id: string) => {
-    try {
+    return controller.runAction(async () => {
       await deleteUserMutation.mutateAsync(id);
-      return { success: true as const };
-    } catch (err: unknown) {
-      return { success: false as const, error: toMessage(err, "Failed to delete user.") };
-    }
-  }, [deleteUserMutation]);
+    }, "Failed to delete user.");
+  }, [controller, deleteUserMutation]);
 
   return (
     <MemberContext.Provider value={{ members, isLoading, error, fetchMembers, createStaff, deleteUser }}>

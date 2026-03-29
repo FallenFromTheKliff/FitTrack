@@ -1,6 +1,11 @@
-import {BadRequestException, ForbiddenException, Injectable, NotFoundException,} from '@nestjs/common';
-import {PrismaService} from 'prisma/prisma.service';
-import {CreateAppointmentDto} from './dto/appointment.dto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { CreateAppointmentDto } from './dto/appointment.dto';
 
 @Injectable()
 export class AppointmentService {
@@ -115,17 +120,17 @@ export class AppointmentService {
 
   async getUserAppointments(userId: string) {
     return await this.prisma.trainerAppointment.findMany({
-      where: {userId},
+      where: { userId },
       include: {
         coach: {
           include: {
             user: {
-              include: {profile: true}
-            }
-          }
-        }
+              include: { profile: true },
+            },
+          },
+        },
       },
-      orderBy: {scheduledAt: 'desc'}
+      orderBy: { scheduledAt: 'desc' },
     });
   }
 

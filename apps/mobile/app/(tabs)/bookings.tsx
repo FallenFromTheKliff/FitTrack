@@ -17,7 +17,7 @@ import {
   declineCoachAppointmentMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
-import { formatBookingDate, formatGroupLabel, nextDate } from "@fittrack/utils";
+import { formatBookingDate, formatGroupLabel, groupItemsByDate, nextDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
@@ -26,7 +26,6 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import { makeScreenStyles, makeBookingsScreenStyles } from "@/styles/shared/ScreenStyles";
 import { STATUS_COLORS, FILTER_OPTIONS, type StatusFilter, getTodayString } from "@/data/bookings";
-import { groupByDate } from "@/utils/grouping";
 import { mobileApiClient } from "@/lib/api";
 import { toMobileBookings, type VenueBookingRecord } from "@/utils/venueBookings";
 
@@ -370,7 +369,7 @@ export default function BookingsScreen() {
     return result;
   }, [activeItems, debouncedSearchQuery, endDate, startDate, statusFilter]);
 
-  const grouped = groupByDate(filtered, isCoach ? "desc" : "asc");
+  const grouped = groupItemsByDate(filtered, isCoach ? "desc" : "asc");
   const isEmpty = !isLoading && filtered.length === 0;
   const startLabel = startDate ? formatGroupLabel(startDate) : "All Dates";
   const endLabel = endDate ? formatGroupLabel(endDate) : "Due Date";

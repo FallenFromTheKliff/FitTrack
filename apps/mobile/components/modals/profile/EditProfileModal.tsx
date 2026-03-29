@@ -10,7 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
 import { calcBMI, formatDate, formatBookingDate, splitFullName } from "@fittrack/utils";
 import { coachProfileSchema, editProfilePersonalSchema, type EditProfilePersonalData } from "@fittrack/validators";
-import { updateCoachProfileMutationOptions } from "@fittrack/query";
+import { updateAccountMutationOptions, updateCoachProfileMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { mobileApiClient } from "@/lib/api";
@@ -41,6 +41,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const { user, updateUser, logout } = useAuth();
   const queryClient = useQueryClient();
   const isCoach = user?.role === "COACH";
+  const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
+  const updateAccountMutation = useMutation(updateAccountMutationOptions(mobileApiClient));
   const updateCoachProfileMutation = useMutation(updateCoachProfileMutationOptions(mobileApiClient, queryClient));
 
   const [activeTab, setActiveTab] = useState<"personal" | "fitness">("personal");
@@ -220,7 +222,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       });
       const wKgNum = parseFloat(weightInput);
       const hCmNum = parseFloat(heightInput);
-      await mobileApiClient.users.updateProfile({
+      await updateProfileMutation.mutateAsync({
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
         dateOfBirth: personal.dateOfBirth || undefined,
@@ -228,7 +230,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
       });
       if (emailChanged || phoneChanged) {
-        await mobileApiClient.users.updateAccount({
+        await updateAccountMutation.mutateAsync({
           ...(emailChanged ? { email: personal.email.trim() } : {}),
           ...(phoneChanged ? { phone_no: personal.phone.trim() } : {})
         });
@@ -291,7 +293,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         hourlyRate: coachHourlyRate
       });
       showEmailStatus("Verifying request");
-      await mobileApiClient.users.updateProfile({
+      await updateProfileMutation.mutateAsync({
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
         dateOfBirth: personal.dateOfBirth || undefined
@@ -310,7 +312,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         });
       }
       showEmailStatus("Updating email");
-      await mobileApiClient.users.updateAccount({
+      await updateAccountMutation.mutateAsync({
         email: personal.email.trim()
       });
       await updateUser(buildPatch(personal));

@@ -1,9 +1,9 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Bot, Search } from "lucide-react";
+import type { ChatSession } from "@fittrack/app-config";
 
-import { formatRelativeDateLabel } from "@fittrack/utils";
-import type { ChatSession } from "@/data/chat/chat";
+import { formatRelativeDateLabel, groupItemsByDate } from "@fittrack/utils";
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { useDebounce } from "@fittrack/hooks";
 import { chatbotStyles } from "@/styles/pageStyles";
@@ -15,16 +15,6 @@ type Props = {
   activeId: string;
   onSelect: (id: string) => void;
 };
-
-function groupByDateLabel(sessions: ChatSession[]): [string, ChatSession[]][] {
-  const map = new Map<string, ChatSession[]>();
-  for (const s of sessions) {
-    const existing = map.get(s.date) ?? [];
-    existing.push(s);
-    map.set(s.date, existing);
-  }
-  return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-}
 
 export default function HistoryPanel({ sessions, activeId, onSelect }: Props) {
   const { colors } = useTheme();
@@ -39,7 +29,7 @@ export default function HistoryPanel({ sessions, activeId, onSelect }: Props) {
     return sessions.filter((s) => s.title.toLowerCase().includes(q) || s.preview.toLowerCase().includes(q));
   }, [sessions, debouncedQuery]);
 
-  const grouped = useMemo(() => groupByDateLabel(filtered), [filtered]);
+  const grouped = useMemo(() => groupItemsByDate(filtered, "desc"), [filtered]);
 
   return (
       <>

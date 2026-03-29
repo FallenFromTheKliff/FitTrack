@@ -1,9 +1,9 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { makeQueryClient } from "@fittrack/query";
+import { useStableQueryClient } from "@fittrack/query";
 
 export function QueryProvider({ children }: { children: ReactNode }) {
-  const [client] = useState(() => makeQueryClient());
+  const client = useStableQueryClient();
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

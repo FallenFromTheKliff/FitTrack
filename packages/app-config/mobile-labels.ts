@@ -1,13 +1,13 @@
 export type TabKey =
-    | "home"
-    | "facilities"
-    | "bookings"
-    | "nutrition"
+  | "home"
+  | "facilities"
+  | "bookings"
+  | "nutrition"
   | "workout"
-    | "chathistory"
-    | "chatbot"
-    | "profile"
-    | "settings";
+  | "chathistory"
+  | "chatbot"
+  | "profile"
+  | "settings";
 
 export const SCREEN_NAMES: Record<TabKey, string> = {
   home: "Home",

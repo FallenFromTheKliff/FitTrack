@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { themes, type ThemeColors } from "@fittrack/ui";
 import type { ThemeKey } from "@fittrack/types";
-import { getReadableTextColor } from "@/utils/contrast";
+import { getReadableTextColor } from "@fittrack/utils";
 
 function getLayoutBackground(colors: ThemeColors, activeThemeKey?: ThemeKey): string {
     switch (activeThemeKey) {

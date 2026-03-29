@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { PASSWORD_REQUIREMENTS } from "@fittrack/app-config";
 
 import { revisePassword } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
-import { PASSWORD_REQUIREMENTS } from "@/data/settings/settings";
 import { FitText } from "@/components/fit/FitText";
 
 type Props = {

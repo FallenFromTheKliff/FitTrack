@@ -1,4 +1,14 @@
-export { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "./auth";
+export {
+  authUserQueryOptions,
+  changePasswordMutationOptions,
+  forgotPasswordMutationOptions,
+  loginMutationOptions,
+  logoutMutationOptions,
+  registerMutationOptions,
+  resetPasswordMutationOptions,
+  verifyCurrentPasswordMutationOptions,
+  verifyEmailMutationOptions
+} from "./auth";
 export {
   appointmentsQueryOptions,
   cancelAppointmentMutationOptions,
@@ -12,8 +22,10 @@ export {
   adminDeletionRequestsQueryOptions,
   adminMembersQueryOptions,
   approveDeletionRequestMutationOptions,
+  confirmAdminBookingMutationOptions,
   createStaffMutationOptions,
   deleteUserMutationOptions,
+  rejectAdminBookingMutationOptions,
   rejectDeletionRequestMutationOptions,
   upgradeToCoachMutationOptions
 } from "./admin";
@@ -35,6 +47,8 @@ export {
 export { makeQueryClient } from "./query-client";
 export { queryKeys } from "./query-keys";
 export {
+  confirmStaffBookingMutationOptions,
+  rejectStaffBookingMutationOptions,
   staffBookingsQueryOptions,
   staffCoachesQueryOptions,
   staffDashboardStatsQueryOptions,
@@ -47,6 +61,8 @@ export {
   updateVenueMutationOptions,
   venuesQueryOptions
 } from "./venues";
+export { useStableQueryClient } from "./query-client";
+export { updateAccountMutationOptions, updateProfileMutationOptions } from "./profile";
 export {
   cancelDeletionRequestMutationOptions,
   profileDeletionStatusQueryOptions,

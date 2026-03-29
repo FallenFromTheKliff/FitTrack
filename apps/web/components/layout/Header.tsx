@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Bell, Menu } from "lucide-react";
+import { type PageKey } from "@fittrack/app-config";
 import type { Notification } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -8,7 +9,6 @@ import { headerStyles } from "@/styles/layoutStyles";
 import HeaderMessage from "@/components/layout/HeaderMessage";
 import NotificationsPanel from "@/components/layout/NotificationsPanel";
 import FitButton from "@/components/fit/FitButton";
-import type { PageKey } from "@/data/ui/labels";
 
 type Props = {
   onMenuToggle: () => void;
