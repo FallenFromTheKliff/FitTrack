@@ -7,9 +7,12 @@ apps/mobile/.env
 
 # Environment files
 .env
-.env.docker
+.env.*
 !.env.format
 !.env.docker.format
+
+# Agent prompts and working docs
+agents/
 
 # Build outputs
 .next/
