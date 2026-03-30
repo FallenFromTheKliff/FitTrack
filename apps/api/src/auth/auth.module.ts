@@ -1,37 +1,42 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-
+import { AuthController, AdminAuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { JwtStrategy } from './jwt.strategy/jwt.strategy';
-import { OtpService } from './otp/otp/otp.service';
+import { ConfigModule } from '@nestjs/config';
+import { AuthRepository } from './auth.repository';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { PassportModule } from '@nestjs/passport';
+import type { StringValue } from 'ms';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { QueueModule } from '../queue/queue.module';
+import { AuthOtpService } from './otp/auth-otp.service';
 
 @Module({
   imports: [
-    PassportModule,
-    ConfigModule,
-
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-
-        if (!secret) {
-          throw new Error('JWT_SECRET is missing');
-        }
-
-        return {
-          secret,
-          signOptions: { expiresIn: '1h' },
-        };
-      },
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('jwt.secret') ?? '',
+        signOptions: {
+          algorithm: 'HS256' as const,
+          expiresIn: (config.get<string>('jwt.accessExpiresIn') ??
+            '15m') as StringValue,
+        },
+      }),
     }),
+    QueueModule,
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, OtpService],
+  controllers: [AuthController, AdminAuthController],
+  providers: [
+    AuthService,
+    AuthOtpService,
+    AuthRepository,
+    JwtStrategy,
+    GoogleStrategy,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

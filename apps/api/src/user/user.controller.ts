@@ -1,62 +1,210 @@
 import {
   Controller,
   Get,
+  Patch,
   Post,
   Body,
-  Patch,
+  Param,
+  Query,
   UseGuards,
-  Request,
-  Delete,
+  HttpCode,
+  HttpStatus,
+  ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  Req,
 } from '@nestjs/common';
-import { UserService } from './user.service';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard/jwt-auth.guard';
+import type { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  CreateProfileDto,
-  UpdateProfileDto,
-  UpdateUserDto,
-} from './dto/user.dto';
-import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiConsumes,
+} from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
+import { UserService, AttendanceService } from './user.service';
+import {
+  UpdateProfileDTO,
+  LogProgressDTO,
+  DateRangeDTO,
+  UserFilterDTO,
+  UpdateUserStatusDTO,
+  ScanQrDTO,
+  AttendanceFilterDTO,
+  UpdatePhoneDTO,
+} from './dto/user-dto';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { CurrentUser, Roles } from '../common/decorators';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { UploadedImageFile } from '../files/files.types';
+
+@ApiTags('Users')
+@ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly usersService: UserService) {}
 
-  @Get('profile')
-  async getProfile(@Request() req) {
-    return this.userService.getProfile(req.user.id);
+  @Get('me')
+  @ApiOperation({ summary: 'Get own full profile.' })
+  getMyProfile(@CurrentUser() user: JwtPayload) {
+    return this.usersService.getMyProfile(user.sub);
   }
 
-  @Patch('profile')
-  async updateProfile(@Request() req, @Body() dto: UpdateProfileDto) {
-    return this.userService.updateProfile(req.user.id, dto);
-  }
-
-  @Post('profile')
-  async createProfile(@Request() req, @Body() dto: CreateProfileDto) {
-    return this.userService.createProfile(req.user.id, dto);
-  }
-
-  @Patch('account')
-  async updateAccount(@Request() req, @Body() dto: UpdateUserDto) {
-    return this.userService.updateAccount(req.user.id, dto);
-  }
-
-  @Post('request-deletion')
-  async requestAccountDeletion(
-    @Request() req,
-    @Body() dto: CreateDeletionRequestDto,
+  @Patch('me')
+  @ApiOperation({ summary: 'Update own profile.' })
+  updateMyProfile(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateProfileDTO,
   ) {
-    return this.userService.requestAccountDeletion(req.user.id, dto);
+    return this.usersService.updateMyProfile(user.sub, dto);
   }
 
-  @Get('deletion-request')
-  async getDeletionRequest(@Request() req) {
-    return this.userService.getUserDeletionRequest(req.user.id);
+  @Patch('me/avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Deprecated convenience avatar upload. Prefer POST /v1/files/upload for new clients.',
+    deprecated: true,
+  })
+  async uploadAvatar(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file: UploadedImageFile | undefined,
+  ) {
+    return this.usersService.uploadAvatarFile(user.sub, file);
   }
 
-  @Delete('deletion-request')
-  async cancelDeletionRequest(@Request() req) {
-    return this.userService.cancelDeletionRequest(req.user.id);
+  @Patch('me/phone')
+  @ApiOperation({
+    summary: 'Update phone number. Triggers auth/send-phone-otp to verify.',
+  })
+  updatePhone(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePhoneDTO) {
+    return this.usersService.updatePhone(user.sub, dto);
+  }
+
+  @Post('me/progress')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({ summary: 'Append a body measurement. Member only.' })
+  @ApiResponse({ status: 201, description: 'Progress metric logged.' })
+  @ApiResponse({ status: 422, description: 'No measurement fields provided.' })
+  logProgress(@CurrentUser() user: JwtPayload, @Body() dto: LogProgressDTO) {
+    return this.usersService.logProgress(user.sub, dto);
+  }
+
+  @Get('me/progress')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({ summary: 'Get own progress history. Member only.' })
+  getProgressHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: DateRangeDTO,
+  ) {
+    return this.usersService.getProgressHistory(user.sub, dto);
+  }
+
+  @Get('me/attendance')
+  @ApiOperation({ summary: 'Get own attendance history.' })
+  getMyAttendance(@CurrentUser() user: JwtPayload, @Query() dto: DateRangeDTO) {
+    return this.usersService.getMyAttendance(user.sub, dto);
+  }
+
+  @Post('me/refresh-qr')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Manually regenerate own QR token.' })
+  refreshQrToken(@CurrentUser() user: JwtPayload) {
+    return this.usersService.refreshQrToken(user.sub);
+  }
+
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'List all users (paginated). Admin/Staff only.' })
+  getAllUsers(@Query() dto: UserFilterDTO) {
+    return this.usersService.getAllUsers(dto);
+  }
+
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({
+    summary: 'Get a single user full profile. Admin/Staff only.',
+  })
+  getUserById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.getUserById(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'Edit any user profile. Admin/Staff only.' })
+  adminUpdateUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProfileDTO,
+  ) {
+    return this.usersService.adminUpdateUser(id, dto);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change user account status. Admin only.' })
+  @ApiResponse({ status: 200, description: 'Status updated.' })
+  updateUserStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserStatusDTO,
+    @CurrentUser() actor: JwtPayload,
+    @Req() req: Request,
+  ) {
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+      req.socket?.remoteAddress ??
+      '';
+    return this.usersService.updateUserStatus(id, dto, actor.sub, ip);
+  }
+}
+
+@ApiTags('Attendance')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('attendance')
+export class AttendanceController {
+  constructor(private readonly attendanceService: AttendanceService) {}
+
+  @Post('scan')
+  @Roles(UserRole.staff, UserRole.admin)
+  @ApiOperation({
+    summary:
+      'Scan QR code for check-in. Staff/Admin only. Returns stub - full logic in AttendanceService.',
+  })
+  @ApiResponse({ status: 201, description: 'Check-in logged.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Member has no active subscription.',
+  })
+  @ApiResponse({ status: 404, description: 'Invalid QR token.' })
+  @ApiResponse({ status: 409, description: 'Already checked in today.' })
+  scanQr(@CurrentUser() user: JwtPayload, @Body() dto: ScanQrDTO) {
+    return this.attendanceService.scanQr(user.sub, dto);
+  }
+
+  @Patch(':id/checkout')
+  @Roles(UserRole.staff, UserRole.admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set check-out time on an attendance log.' })
+  checkout(@Param('id', ParseUUIDPipe) id: string) {
+    return this.attendanceService.checkout(id);
+  }
+
+  @Get()
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'Get all attendance logs. Admin/Staff only.' })
+  getAllAttendance(@Query() dto: AttendanceFilterDTO) {
+    return this.attendanceService.getAttendanceLogs(dto);
   }
 }

@@ -1,0 +1,19 @@
+# =============================================================================
+# FitTrack — Railway Deployment Config (NestJS)
+# =============================================================================
+# Docs: https://docs.railway.app/reference/railway-toml
+#
+# Each Railway service has its own railway.toml.
+# This one is for the NestJS backend.
+# The Python AI service lives in its own Railway service — point it to Dockerfile.ai
+# =============================================================================
+
+[build]
+# Tell Railway to use our Dockerfile instead of Nixpacks auto-detect
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Railway injects $PORT automatically — NestJS reads it via app.port config
+startCommand   = "sh -c 'npx prisma migrate deploy && node dist/main'"
+restartPolicyType          = "ON_FAILURE"
+restartPolicyMaxRetries    = 3

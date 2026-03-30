@@ -1,33 +1,52 @@
-FROM node:20-alpine AS base
-WORKDIR /app
-ENV PNPM_HOME=/pnpm
-ENV PATH=/pnpm:$PATH
-RUN corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm add -g turbo
+# =============================================================================
+# FitTrack NestJS — Production Dockerfile (Multi-Stage)
+# =============================================================================
+# Stage 1 (builder): Install all deps, compile TypeScript
+# Stage 2 (runner):  Copy only compiled output + prod deps — lean final image
+# =============================================================================
 
-FROM base AS pruner
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files first — layer cache means npm install
+# only re-runs when package.json or lock file changes
+COPY package*.json ./
+RUN npm ci
+
+# Copy source and compile
 COPY . .
-RUN turbo prune @fittrack/api --docker
+RUN npm run build
 
-FROM base AS installer
-COPY --from=pruner /app/out/json/ .
-COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile
+# Prune dev dependencies — only keep what production needs
+RUN npm prune --production
 
-FROM base AS builder
-COPY --from=installer /app/ .
-COPY --from=pruner /app/out/full/ .
-RUN pnpm --filter @fittrack/api exec npx prisma generate && pnpm --filter @fittrack/api run build
-
+# ── Stage 2: Runner ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
+
 WORKDIR /app
-RUN addgroup -S fittrack && adduser -S fittrack -G fittrack
-COPY --from=builder --chown=fittrack:fittrack /app/node_modules ./node_modules
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/dist ./dist
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma ./prisma
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/env-path.ts ./env-path.ts
-COPY --from=builder --chown=fittrack:fittrack /app/apps/api/prisma.config.ts ./prisma.config.ts
-ENV NODE_PATH=/app/apps/api/node_modules:/app/node_modules
-USER fittrack
-EXPOSE 3001
-CMD ["node", "dist/src/main.js"]
+
+# Non-root user for security
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser  --system --uid 1001 nestjs
+
+# Copy compiled output + pruned node_modules from builder
+COPY --from=builder --chown=nestjs:nodejs /app/dist         ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+
+# Prisma: copy schema so prisma generate works at runtime if needed
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+
+# Copy RSA keys if baked into image (alternatively inject via Railway env vars)
+# COPY --chown=nestjs:nodejs private.pem ./private.pem
+# COPY --chown=nestjs:nodejs public.pem  ./public.pem
+
+USER nestjs
+
+EXPOSE 3000
+
+# Run Prisma migrate then start the app
+# migrate deploy is safe to run on every startup — it is idempotent
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]

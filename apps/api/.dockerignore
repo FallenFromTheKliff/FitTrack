@@ -1,0 +1,53 @@
+# =============================================================================
+# .dockerignore — applies to both Dockerfile and Dockerfile.ai
+# =============================================================================
+
+# Dependencies (reinstalled inside image)
+node_modules
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+
+# Dev / build artifacts
+dist
+build
+.next
+
+# Logs
+logs
+*.log
+
+# Environment files — NEVER bake secrets into image
+.env
+.env.*
+!.env.example
+
+# RSA keys — inject via Railway env vars instead
+*.pem
+
+# Git
+.git
+.gitignore
+
+# Docker files themselves
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+**/*.spec.ts
+**/*.test.ts
+**/*.test.py
+coverage

@@ -1,0 +1,185 @@
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+import { TrimString } from '../../../common/validators';
+
+export class CreateEquipmentItemDTO {
+  @ApiProperty({ example: 'Adjustable Bench' })
+  @TrimString()
+  @IsString({ message: 'name must be a string' })
+  @IsNotEmpty({ message: 'name is required' })
+  @MaxLength(255, { message: 'name must not exceed 255 characters' })
+  name: string;
+
+  @ApiPropertyOptional({
+    example: 'Commercial-grade incline and flat workout bench.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  description?: string;
+
+  @ApiProperty({ example: 8 })
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_total must be an integer' })
+  @Min(0, { message: 'quantity_total must be at least 0' })
+  quantity_total: number;
+
+  @ApiProperty({ example: 6 })
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_current must be an integer' })
+  @Min(0, { message: 'quantity_current must be at least 0' })
+  quantity_current: number;
+
+  @ApiPropertyOptional({ example: 'units', default: 'units' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'unit must be a string' })
+  @MaxLength(50, { message: 'unit must not exceed 50 characters' })
+  unit?: string;
+}
+
+export class UpdateEquipmentItemDTO {
+  @ApiPropertyOptional({ example: 'Adjustable Bench' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'name must be a string' })
+  @MaxLength(255, { message: 'name must not exceed 255 characters' })
+  name?: string;
+
+  @ApiPropertyOptional({
+    example: 'Commercial-grade incline and flat workout bench.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  description?: string;
+
+  @ApiPropertyOptional({ example: 'units' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'unit must be a string' })
+  @MaxLength(50, { message: 'unit must not exceed 50 characters' })
+  unit?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({ message: 'is_active must be a boolean value' })
+  is_active?: boolean;
+}
+
+export class EquipmentWriteOffDTO {
+  @ApiProperty({ example: 4 })
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_set_to must be an integer' })
+  @Min(0, { message: 'quantity_set_to must be at least 0' })
+  quantity_set_to: number;
+
+  @ApiProperty({
+    example: 'Two benches were damaged and removed from the floor.',
+  })
+  @TrimString()
+  @IsString({ message: 'reason must be a string' })
+  @IsNotEmpty({ message: 'reason is required' })
+  @MaxLength(1000, { message: 'reason must not exceed 1000 characters' })
+  reason: string;
+}
+
+export class EquipmentWriteOffActorResponseDTO {
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  id: string;
+
+  @ApiPropertyOptional({ example: 'Morgan', nullable: true })
+  first_name: string | null;
+
+  @ApiPropertyOptional({ example: 'Reyes', nullable: true })
+  last_name: string | null;
+}
+
+export class EquipmentWriteOffResponseDTO {
+  @ApiProperty({ example: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })
+  id: string;
+
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  equipment_id: string;
+
+  @ApiProperty({ example: 6 })
+  quantity_before: number;
+
+  @ApiProperty({ example: 4 })
+  quantity_set_to: number;
+
+  @ApiProperty({ example: 2 })
+  quantity_lost: number;
+
+  @ApiProperty({
+    example: 'Two benches were damaged and removed from the floor.',
+  })
+  reason: string;
+
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  performed_by: string;
+
+  @ApiPropertyOptional({
+    type: EquipmentWriteOffActorResponseDTO,
+    nullable: true,
+  })
+  performer: EquipmentWriteOffActorResponseDTO | null;
+
+  @ApiProperty({ example: '2026-03-27T04:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-03-27T04:00:00.000Z' })
+  updated_at: string;
+}
+
+export class EquipmentItemResponseDTO {
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  id: string;
+
+  @ApiProperty({ example: 'Adjustable Bench' })
+  name: string;
+
+  @ApiPropertyOptional({
+    example: 'Commercial-grade incline and flat workout bench.',
+    nullable: true,
+  })
+  description: string | null;
+
+  @ApiProperty({ example: 8 })
+  quantity_total: number;
+
+  @ApiProperty({ example: 6 })
+  quantity_current: number;
+
+  @ApiProperty({ example: 'units' })
+  unit: string;
+
+  @ApiProperty({ example: true })
+  is_active: boolean;
+
+  @ApiProperty({ example: '2026-03-27T02:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-03-27T03:00:00.000Z' })
+  updated_at: string;
+}
+
+export class EquipmentItemDetailResponseDTO extends EquipmentItemResponseDTO {
+  @ApiProperty({
+    type: EquipmentWriteOffResponseDTO,
+    isArray: true,
+  })
+  write_offs: EquipmentWriteOffResponseDTO[];
+}

@@ -1,0 +1,556 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Test, type TestingModule } from '@nestjs/testing';
+import {
+  ActivityLevel,
+  FitnessGoal,
+  Gender,
+  NutritionUnit,
+  Prisma,
+} from '@prisma/client';
+
+import { AiPythonClientService } from '../ai/ai-python-client.service';
+import { UserService } from '../user/user.service';
+import { NutritionRepository } from './nutrition.repository';
+import { NutritionService } from './nutrition.service';
+import { TDEE_RECALCULATED_EVENT } from './events/tdee-recalculated.event';
+
+describe('NutritionService', () => {
+  let service: NutritionService;
+
+  const repo = {
+    findActiveTdeeAggregateOrThrow: jest.fn(),
+    findActiveMacroTarget: jest.fn(),
+    listTdeeHistory: jest.fn(),
+    createNutritionLog: jest.fn(),
+    listNutritionLogs: jest.fn(),
+    updateNutritionLog: jest.fn(),
+    deleteNutritionLog: jest.fn(),
+    getDailyNutritionSummary: jest.fn(),
+    rotateActiveTdeeSnapshot: jest.fn(),
+  };
+  const userService = {
+    getMyProfile: jest.fn(),
+  };
+  const aiClient = {
+    calculateTdee: jest.fn(),
+  };
+  const eventEmitter = {
+    emit: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        NutritionService,
+        { provide: NutritionRepository, useValue: repo },
+        { provide: UserService, useValue: userService },
+        { provide: AiPythonClientService, useValue: aiClient },
+        { provide: EventEmitter2, useValue: eventEmitter },
+      ],
+    }).compile();
+
+    service = module.get<NutritionService>(NutritionService);
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('maps the active tdee aggregate into the response contract', async () => {
+    repo.findActiveTdeeAggregateOrThrow.mockResolvedValue({
+      id: 'tdee-1',
+      user_id: 'user-1',
+      weight_kg: new Prisma.Decimal('75.5'),
+      height_cm: new Prisma.Decimal('175'),
+      age: 28,
+      gender: Gender.male,
+      activity_level: ActivityLevel.moderate,
+      fitness_goal: FitnessGoal.cutting,
+      bmr_calories: new Prisma.Decimal('1700.25'),
+      tdee_calories: new Prisma.Decimal('2450.5'),
+      is_active: true,
+      calculated_at: new Date('2026-03-27T05:00:00.000Z'),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+      macro_targets: [
+        {
+          id: 'macro-1',
+          user_id: 'user-1',
+          tdee_profile_id: 'tdee-1',
+          target_calories: new Prisma.Decimal('2200'),
+          protein_g: new Prisma.Decimal('180'),
+          carbs_g: new Prisma.Decimal('210'),
+          fat_g: new Prisma.Decimal('65'),
+          is_active: true,
+          created_at: new Date('2026-03-27T05:00:00.000Z'),
+          updated_at: new Date('2026-03-27T05:00:00.000Z'),
+        },
+      ],
+    });
+
+    const result = await service.getActiveTdee('user-1');
+
+    expect(result.tdee).toMatchObject({
+      id: 'tdee-1',
+      weight_kg: '75.50',
+      height_cm: '175.00',
+      bmr_calories: '1700.25',
+      tdee_calories: '2450.50',
+    });
+    expect(result.macros).toMatchObject({
+      id: 'macro-1',
+      target_calories: '2200.00',
+      protein_g: '180.00',
+      carbs_g: '210.00',
+      fat_g: '65.00',
+    });
+  });
+
+  it('maps paginated tdee history into response rows', async () => {
+    repo.listTdeeHistory.mockResolvedValue({
+      data: [
+        {
+          id: 'tdee-1',
+          user_id: 'user-1',
+          weight_kg: new Prisma.Decimal('75'),
+          height_cm: new Prisma.Decimal('175'),
+          age: 28,
+          gender: Gender.female,
+          activity_level: ActivityLevel.active,
+          fitness_goal: FitnessGoal.bulking,
+          bmr_calories: new Prisma.Decimal('1650'),
+          tdee_calories: new Prisma.Decimal('2550'),
+          is_active: false,
+          calculated_at: new Date('2026-03-25T05:00:00.000Z'),
+          created_at: new Date('2026-03-25T05:00:00.000Z'),
+          updated_at: new Date('2026-03-25T05:00:00.000Z'),
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 1,
+        total_pages: 1,
+      },
+    });
+
+    const result = await service.getTdeeHistory('user-1', {});
+
+    expect(result.meta).toEqual({
+      page: 1,
+      limit: 20,
+      total: 1,
+      total_pages: 1,
+    });
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      id: 'tdee-1',
+      is_active: false,
+      weight_kg: '75.00',
+      tdee_calories: '2550.00',
+    });
+  });
+
+  it('merges profile values and dto overrides, rotates active snapshots, and emits a bounded event', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-27T12:00:00.000Z'));
+
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: new Date('1998-03-10T00:00:00.000Z'),
+        gender: Gender.male,
+        weight_kg: new Prisma.Decimal('75'),
+        height_cm: new Prisma.Decimal('175'),
+        activity_level: ActivityLevel.light,
+        fitness_goal: FitnessGoal.maintenance,
+      },
+    });
+    aiClient.calculateTdee.mockResolvedValue({
+      bmr: 1700.25,
+      tdee: 2450.5,
+      target_calories: 2200,
+      protein_g: 180,
+      carbs_g: 210,
+      fat_g: 65,
+    });
+    repo.rotateActiveTdeeSnapshot.mockResolvedValue({
+      id: 'tdee-2',
+      user_id: 'user-1',
+      weight_kg: new Prisma.Decimal('76.5'),
+      height_cm: new Prisma.Decimal('175'),
+      age: 28,
+      gender: Gender.male,
+      activity_level: ActivityLevel.active,
+      fitness_goal: FitnessGoal.cutting,
+      bmr_calories: new Prisma.Decimal('1700.25'),
+      tdee_calories: new Prisma.Decimal('2450.5'),
+      is_active: true,
+      calculated_at: new Date('2026-03-27T05:00:00.000Z'),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+      macro_targets: [
+        {
+          id: 'macro-2',
+          user_id: 'user-1',
+          tdee_profile_id: 'tdee-2',
+          target_calories: new Prisma.Decimal('2200'),
+          protein_g: new Prisma.Decimal('180'),
+          carbs_g: new Prisma.Decimal('210'),
+          fat_g: new Prisma.Decimal('65'),
+          is_active: true,
+          created_at: new Date('2026-03-27T05:00:00.000Z'),
+          updated_at: new Date('2026-03-27T05:00:00.000Z'),
+        },
+      ],
+    });
+
+    const result = await service.recalculateTdee('user-1', {
+      weight_kg: 76.5,
+      activity_level: ActivityLevel.active,
+      fitness_goal: FitnessGoal.cutting,
+    });
+
+    expect(aiClient.calculateTdee).toHaveBeenCalledWith({
+      age: 28,
+      gender: Gender.male,
+      weight_kg: 76.5,
+      height_cm: 175,
+      activity_level: ActivityLevel.active,
+      fitness_goal: FitnessGoal.cutting,
+    });
+    expect(repo.rotateActiveTdeeSnapshot).toHaveBeenCalledWith({
+      userId: 'user-1',
+      calculatedAt: new Date('2026-03-27T12:00:00.000Z'),
+      snapshot: {
+        age: 28,
+        gender: Gender.male,
+        weightKg: 76.5,
+        heightCm: 175,
+        activityLevel: ActivityLevel.active,
+        fitnessGoal: FitnessGoal.cutting,
+      },
+      aiResult: {
+        bmr: 1700.25,
+        tdee: 2450.5,
+        targetCalories: 2200,
+        proteinG: 180,
+        carbsG: 210,
+        fatG: 65,
+      },
+    });
+    expect(eventEmitter.emit).toHaveBeenCalledWith(TDEE_RECALCULATED_EVENT, {
+      userId: 'user-1',
+      tdeeProfileId: 'tdee-2',
+      macroTargetId: 'macro-2',
+      recalculatedAt: '2026-03-27T12:00:00.000Z',
+    });
+    expect(result).toMatchObject({
+      tdee: {
+        id: 'tdee-2',
+        weight_kg: '76.50',
+      },
+      macros: {
+        id: 'macro-2',
+        target_calories: '2200.00',
+      },
+    });
+  });
+
+  it('rejects recalculation when the final profile snapshot is incomplete', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: null,
+        gender: null,
+        weight_kg: null,
+        height_cm: new Prisma.Decimal('175'),
+        activity_level: ActivityLevel.moderate,
+        fitness_goal: FitnessGoal.cutting,
+      },
+    });
+
+    await expect(service.recalculateTdee('user-1', {})).rejects.toMatchObject({
+      response: {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Incomplete Profile For TDEE Recalculation',
+        status: 422,
+      },
+    });
+    expect(aiClient.calculateTdee).not.toHaveBeenCalled();
+    expect(repo.rotateActiveTdeeSnapshot).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('links new nutrition logs to the active macro target when one exists', async () => {
+    repo.findActiveMacroTarget.mockResolvedValue({
+      id: 'macro-1',
+    });
+    repo.createNutritionLog.mockResolvedValue({
+      id: 'log-1',
+      user_id: 'user-1',
+      macro_target_id: 'macro-1',
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Breakfast',
+      food_item: 'Greek yogurt',
+      calories: new Prisma.Decimal('320'),
+      protein_g: new Prisma.Decimal('28'),
+      carbs_g: new Prisma.Decimal('22'),
+      fat_g: new Prisma.Decimal('11'),
+      quantity: new Prisma.Decimal('1'),
+      unit: NutritionUnit.serving,
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+
+    const result = await service.logNutrition('user-1', {
+      log_date: '2026-03-27',
+      meal_name: 'Breakfast',
+      food_item: 'Greek yogurt',
+      calories: 320,
+      protein_g: 28,
+      carbs_g: 22,
+      fat_g: 11,
+      quantity: 1,
+      unit: NutritionUnit.serving,
+    });
+
+    expect(repo.createNutritionLog).toHaveBeenCalledWith({
+      user: {
+        connect: { id: 'user-1' },
+      },
+      macro_target: {
+        connect: { id: 'macro-1' },
+      },
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Breakfast',
+      food_item: 'Greek yogurt',
+      calories: 320,
+      protein_g: 28,
+      carbs_g: 22,
+      fat_g: 11,
+      quantity: 1,
+      unit: NutritionUnit.serving,
+    });
+    expect(result).toMatchObject({
+      id: 'log-1',
+      macro_target_id: 'macro-1',
+      calories: '320.00',
+    });
+  });
+
+  it('creates nutrition logs without a macro link when no active target exists', async () => {
+    repo.findActiveMacroTarget.mockResolvedValue(null);
+    repo.createNutritionLog.mockResolvedValue({
+      id: 'log-2',
+      user_id: 'user-1',
+      macro_target_id: null,
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Snack',
+      food_item: 'Apple',
+      calories: new Prisma.Decimal('95'),
+      protein_g: new Prisma.Decimal('0'),
+      carbs_g: new Prisma.Decimal('25'),
+      fat_g: new Prisma.Decimal('0'),
+      quantity: new Prisma.Decimal('1'),
+      unit: NutritionUnit.piece,
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+
+    const result = await service.logNutrition('user-1', {
+      log_date: '2026-03-27',
+      meal_name: 'Snack',
+      food_item: 'Apple',
+      calories: 95,
+      protein_g: 0,
+      carbs_g: 25,
+      fat_g: 0,
+      quantity: 1,
+      unit: NutritionUnit.piece,
+    });
+
+    expect(repo.createNutritionLog).toHaveBeenCalledWith({
+      user: {
+        connect: { id: 'user-1' },
+      },
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Snack',
+      food_item: 'Apple',
+      calories: 95,
+      protein_g: 0,
+      carbs_g: 25,
+      fat_g: 0,
+      quantity: 1,
+      unit: NutritionUnit.piece,
+    });
+    expect(result).toMatchObject({
+      id: 'log-2',
+      macro_target_id: null,
+      unit: NutritionUnit.piece,
+    });
+  });
+
+  it('maps paginated nutrition logs into response rows', async () => {
+    repo.listNutritionLogs.mockResolvedValue({
+      data: [
+        {
+          id: 'log-1',
+          user_id: 'user-1',
+          macro_target_id: 'macro-1',
+          log_date: new Date('2026-03-27T00:00:00.000Z'),
+          meal_name: 'Lunch',
+          food_item: 'Chicken breast',
+          calories: new Prisma.Decimal('450'),
+          protein_g: new Prisma.Decimal('45'),
+          carbs_g: new Prisma.Decimal('15'),
+          fat_g: new Prisma.Decimal('18'),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+          created_at: new Date('2026-03-27T05:00:00.000Z'),
+          updated_at: new Date('2026-03-27T05:00:00.000Z'),
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 1,
+        total_pages: 1,
+      },
+    });
+
+    const result = await service.getNutritionLogs('user-1', {
+      start_date: '2026-03-01',
+      end_date: '2026-03-31',
+    });
+
+    expect(result.meta.total).toBe(1);
+    expect(result.data[0]).toMatchObject({
+      id: 'log-1',
+      macro_target_id: 'macro-1',
+      calories: '450.00',
+      unit: NutritionUnit.serving,
+    });
+  });
+
+  it('updates nutrition logs through the repository contract', async () => {
+    repo.updateNutritionLog.mockResolvedValue({
+      id: 'log-1',
+      user_id: 'user-1',
+      macro_target_id: 'macro-1',
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Dinner',
+      food_item: 'Salmon',
+      calories: new Prisma.Decimal('520'),
+      protein_g: new Prisma.Decimal('48'),
+      carbs_g: new Prisma.Decimal('12'),
+      fat_g: new Prisma.Decimal('24'),
+      quantity: new Prisma.Decimal('1'),
+      unit: NutritionUnit.serving,
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T06:00:00.000Z'),
+    });
+
+    const result = await service.updateNutritionLog('user-1', 'log-1', {
+      meal_name: 'Dinner',
+      calories: 520,
+    });
+
+    expect(repo.updateNutritionLog).toHaveBeenCalledWith('user-1', 'log-1', {
+      meal_name: 'Dinner',
+      calories: 520,
+    });
+    expect(result).toMatchObject({
+      id: 'log-1',
+      meal_name: 'Dinner',
+      calories: '520.00',
+    });
+  });
+
+  it('deletes nutrition logs through the repository contract', async () => {
+    repo.deleteNutritionLog.mockResolvedValue(undefined);
+
+    await service.deleteNutritionLog('user-1', 'log-1');
+
+    expect(repo.deleteNutritionLog).toHaveBeenCalledWith('user-1', 'log-1');
+  });
+
+  it('builds the daily summary with target comparison when an active macro target exists', async () => {
+    repo.getDailyNutritionSummary.mockResolvedValue({
+      date: '2026-03-27',
+      totals: {
+        calories: new Prisma.Decimal('900'),
+        protein_g: new Prisma.Decimal('70'),
+        carbs_g: new Prisma.Decimal('80'),
+        fat_g: new Prisma.Decimal('25'),
+      },
+      macroTarget: {
+        id: 'macro-1',
+        user_id: 'user-1',
+        tdee_profile_id: 'tdee-1',
+        target_calories: new Prisma.Decimal('2200'),
+        protein_g: new Prisma.Decimal('180'),
+        carbs_g: new Prisma.Decimal('210'),
+        fat_g: new Prisma.Decimal('65'),
+        is_active: true,
+        created_at: new Date('2026-03-27T05:00:00.000Z'),
+        updated_at: new Date('2026-03-27T05:00:00.000Z'),
+      },
+    });
+
+    const result = await service.getDailySummary('user-1', {
+      date: '2026-03-27',
+    });
+
+    expect(result).toEqual({
+      date: '2026-03-27',
+      macro_target_id: 'macro-1',
+      logged: {
+        calories: '900.00',
+        protein_g: '70.00',
+        carbs_g: '80.00',
+        fat_g: '25.00',
+      },
+      target: {
+        calories: '2200.00',
+        protein_g: '180.00',
+        carbs_g: '210.00',
+        fat_g: '65.00',
+      },
+      remaining: {
+        calories: '1300.00',
+        protein_g: '110.00',
+        carbs_g: '130.00',
+        fat_g: '40.00',
+      },
+    });
+  });
+
+  it('returns nullable target comparison when no active macro target exists', async () => {
+    repo.getDailyNutritionSummary.mockResolvedValue({
+      date: '2026-03-27',
+      totals: {
+        calories: null,
+        protein_g: null,
+        carbs_g: null,
+        fat_g: null,
+      },
+      macroTarget: null,
+    });
+
+    const result = await service.getDailySummary('user-1', {
+      date: '2026-03-27',
+    });
+
+    expect(result).toEqual({
+      date: '2026-03-27',
+      macro_target_id: null,
+      logged: {
+        calories: '0.00',
+        protein_g: '0.00',
+        carbs_g: '0.00',
+        fat_g: '0.00',
+      },
+      target: null,
+      remaining: null,
+    });
+  });
+});
