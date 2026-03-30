@@ -24,3 +24,10 @@ Thumbs.db
 
 # Editor
 .vscode/settings.json
+.history/
+
+# Python
+**/__pycache__/
+
+# Task runner scratch data
+tasks/backend-builder/tmp/

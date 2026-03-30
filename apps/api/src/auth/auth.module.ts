@@ -6,11 +6,12 @@ import { AuthRepository } from './auth.repository';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
-import type { StringValue } from 'ms';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { QueueModule } from '../queue/queue.module';
 import { AuthOtpService } from './otp/auth-otp.service';
+
+type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { AuthOtpService } from './otp/auth-otp.service';
         signOptions: {
           algorithm: 'HS256' as const,
           expiresIn: (config.get<string>('jwt.accessExpiresIn') ??
-            '15m') as StringValue,
+            '15m') as JwtExpiresIn,
         },
       }),
     }),

@@ -10,7 +10,7 @@ async function main() {
   const summary = await bootstrapDefaults(prisma);
   console.log(`[seed] admin ensured for ${summary.adminEmail}`);
   console.log(
-    `[seed] default venues: created=${summary.createdCount}, preserved=${summary.preservedCount}, customized-preserved=${summary.customizedCount}, total=${summary.defaultVenueCount}`,
+    `[seed] default amenities: created=${summary.createdCount}, existing=${summary.existingCount}, reactivated=${summary.reactivatedCount}, total=${summary.defaultAmenityCount}`,
   );
 }
 

@@ -17,17 +17,35 @@ async function main() {
   const result = await prisma.user.deleteMany({
     where: {
       OR: [
-        { email: { contains: "@test.", mode: "insensitive" } },
-        { email: { contains: "@dev.", mode: "insensitive" } },
-        { email: { contains: "@example.", mode: "insensitive" } },
+        {
+          auth_identities: {
+            some: {
+              identifier: { contains: "@test.", mode: "insensitive" },
+            },
+          },
+        },
+        {
+          auth_identities: {
+            some: {
+              identifier: { contains: "@dev.", mode: "insensitive" },
+            },
+          },
+        },
+        {
+          auth_identities: {
+            some: {
+              identifier: { contains: "@example.", mode: "insensitive" },
+            },
+          },
+        },
         {
           AND: [
-            { createdAt: { gte: cutoff } },
-            { emailVerified: false }
-          ]
-        }
-      ]
-    }
+            { created_at: { gte: cutoff } },
+            { email_verified_at: null },
+          ],
+        },
+      ],
+    },
   });
 
   console.log(`Deleted ${result.count} development accounts.`);

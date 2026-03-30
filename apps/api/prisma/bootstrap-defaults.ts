@@ -11,7 +11,7 @@ async function main() {
 
   console.log(`[bootstrap] admin ensured for ${summary.adminEmail}`);
   console.log(
-    `[bootstrap] default venues: created=${summary.createdCount}, preserved=${summary.preservedCount}, customized-preserved=${summary.customizedCount}, total=${summary.defaultVenueCount}`,
+    `[bootstrap] default amenities: created=${summary.createdCount}, existing=${summary.existingCount}, reactivated=${summary.reactivatedCount}, total=${summary.defaultAmenityCount}`,
   );
 }
 

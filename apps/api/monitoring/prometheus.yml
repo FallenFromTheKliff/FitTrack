@@ -1,16 +1,9 @@
-# =============================================================================
-# Prometheus — Scrape Config
-# =============================================================================
-# Scrapes metrics from NestJS running on the host.
-# host.docker.internal resolves to your machine from inside Docker.
-# =============================================================================
-
 global:
-  scrape_interval:     15s
+  scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: "fittrack-nestjs"
+  - job_name: "fittrack-api"
     static_configs:
-      - targets: ["host.docker.internal:3000"]
-    metrics_path: /metrics
+      - targets: ["api:3001"]
+    metrics_path: /v1/metrics

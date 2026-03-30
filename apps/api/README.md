@@ -36,33 +36,34 @@
 ## Project setup
 
 ```bash
-$ npm install
+pnpm install
+pnpm install --filter @fittrack/api...
 ```
 
 ## Compile and run the project
 
 ```bash
 # development
-$ npm run start
+pnpm --filter @fittrack/api run start
 
 # watch mode
-$ npm run start:dev
+pnpm --filter @fittrack/api run start:dev
 
 # production mode
-$ npm run start:prod
+pnpm --filter @fittrack/api run start:prod
 ```
 
 ## Run tests
 
 ```bash
 # unit tests
-$ npm run test
+pnpm --filter @fittrack/api run test
 
 # e2e tests
-$ npm run test:e2e
+pnpm --filter @fittrack/api run test:e2e
 
 # test coverage
-$ npm run test:cov
+pnpm --filter @fittrack/api run test:cov
 ```
 
 ## Deployment

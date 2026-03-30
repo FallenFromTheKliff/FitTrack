@@ -4,7 +4,6 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import type { TransformableInfo } from 'logform';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
@@ -13,10 +12,12 @@ import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
-interface LoggerInfo extends TransformableInfo {
+type LoggerInfo = {
+  level: string;
+  message: unknown;
   timestamp?: string;
   context?: string;
-}
+};
 
 function serializeLogMessage(message: unknown): string {
   if (typeof message === 'string') {
@@ -37,10 +38,11 @@ async function bootstrap(): Promise<void> {
         format: winston.format.combine(
           winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
           winston.format.colorize(),
-          winston.format.printf(
-            ({ timestamp, level, message, context }: LoggerInfo) =>
-              `[${timestamp ?? 'unknown-time'}] [${level}] [${context ?? 'App'}] ${serializeLogMessage(message)}`,
-          ),
+          winston.format.printf((info) => {
+            const { timestamp, level, message, context } = info as LoggerInfo;
+
+            return `[${timestamp ?? 'unknown-time'}] [${level}] [${context ?? 'App'}] ${serializeLogMessage(message)}`;
+          }),
         ),
       }),
       new DailyRotateFile({
@@ -119,7 +121,7 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = config.get<string>('app.nodeEnv');
   console.log(`FitTrack API running on http://localhost:${port}/${prefix}`);
   console.log(`Swagger docs: http://localhost:${port}/${prefix}/docs`);
-  console.log(`Health check: http://localhost:${port}/health`);
+  console.log(`Health check: http://localhost:${port}/${prefix}/health`);
   console.log(`Environment: ${nodeEnv ?? 'unknown'}`);
 }
 

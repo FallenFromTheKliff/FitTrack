@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -15,18 +14,13 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
-  private readonly pool: Pool;
 
   constructor(private readonly config: ConfigService) {
-    const pool = new Pool({
+    const adapter = new PrismaPg({
       connectionString: config.get<string>('app.databaseUrl'),
     });
-    const adapter = new PrismaPg(pool);
 
     super({ adapter });
-
-    // Keep a reference so we can end the pool on shutdown
-    this.pool = pool;
   }
 
   async onModuleInit(): Promise<void> {

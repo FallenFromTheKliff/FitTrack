@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "turbo run dev",
+    "install:api": "pnpm install --filter @fittrack/api...",
     "dev:api": "pnpm --filter @fittrack/api run start:dev",
     "dev:web": "pnpm --filter @fittrack/web run dev",
     "dev:mobile": "pnpm --filter @fittrack/mobile run dev",

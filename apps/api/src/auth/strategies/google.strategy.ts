@@ -15,10 +15,19 @@ export interface GoogleProfile {
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(config: ConfigService) {
+    const clientId =
+      config.get<string>('google.clientId') || 'fittrack-google-disabled';
+    const clientSecret =
+      config.get<string>('google.clientSecret') ||
+      'fittrack-google-disabled-secret';
+    const callbackUrl =
+      config.get<string>('google.callbackUrl') ||
+      'http://localhost:3001/v1/auth/google/callback';
+
     super({
-      clientID: config.get<string>('google.clientId') || '',
-      clientSecret: config.get<string>('google.clientSecret') || '',
-      callbackURL: config.get<string>('google.callbackUrl') || '',
+      clientID: clientId,
+      clientSecret: clientSecret,
+      callbackURL: callbackUrl,
       scope: ['email', 'profile'],
     });
   }

@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import type { StringValue } from 'ms';
 
 import { AiPythonClientService } from '../../ai/ai-python-client.service';
 import { PoseController } from './pose.controller';
 import { PoseGateway } from './pose.gateway';
 import { PoseRepository } from './pose.repository';
 import { PoseService } from './pose.service';
+
+type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { PoseService } from './pose.service';
         signOptions: {
           algorithm: 'HS256' as const,
           expiresIn: (config.get<string>('jwt.accessExpiresIn') ??
-            '15m') as StringValue,
+            '15m') as JwtExpiresIn,
         },
       }),
     }),

@@ -1,52 +1,36 @@
-# =============================================================================
-# FitTrack NestJS — Production Dockerfile (Multi-Stage)
-# =============================================================================
-# Stage 1 (builder): Install all deps, compile TypeScript
-# Stage 2 (runner):  Copy only compiled output + prod deps — lean final image
-# =============================================================================
-
-# ── Stage 1: Builder ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
-
+FROM node:20-alpine AS base
 WORKDIR /app
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:$PATH
+RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
-# Copy package files first — layer cache means npm install
-# only re-runs when package.json or lock file changes
-COPY package*.json ./
-RUN npm ci
+FROM base AS builder
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 
-# Copy source and compile
-COPY . .
-RUN npm run build
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
 
-# Prune dev dependencies — only keep what production needs
-RUN npm prune --production
+RUN pnpm install --frozen-lockfile --filter @fittrack/api...
 
-# ── Stage 2: Runner ───────────────────────────────────────────────────────────
+COPY apps/api ./apps/api
+
+RUN pnpm --filter @fittrack/api exec prisma generate --schema prisma/schema.prisma
+RUN pnpm --filter @fittrack/api run build
+
 FROM node:20-alpine AS runner
+WORKDIR /app/apps/api
+ENV NODE_ENV=production
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:$PATH
 
-WORKDIR /app
-
-# Non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
-    && adduser  --system --uid 1001 nestjs
+    && adduser --system --uid 1001 nestjs --ingroup nodejs
 
-# Copy compiled output + pruned node_modules from builder
-COPY --from=builder --chown=nestjs:nodejs /app/dist         ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
-
-# Prisma: copy schema so prisma generate works at runtime if needed
-COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-
-# Copy RSA keys if baked into image (alternatively inject via Railway env vars)
-# COPY --chown=nestjs:nodejs private.pem ./private.pem
-# COPY --chown=nestjs:nodejs public.pem  ./public.pem
+COPY --from=builder --chown=nestjs:nodejs /app /app
+COPY --from=builder --chown=nestjs:nodejs /pnpm /pnpm
 
 USER nestjs
 
-EXPOSE 3000
+EXPOSE 3001
 
-# Run Prisma migrate then start the app
-# migrate deploy is safe to run on every startup — it is idempotent
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["node", "dist/src/main.js"]
