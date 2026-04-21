@@ -4,8 +4,12 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.api.routes import router
-from app.errors import ServiceError
+from .env import load_local_env
+
+load_local_env()
+
+from .api.routes import router
+from .errors import ServiceError
 
 
 def create_app() -> FastAPI:

@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Pose Tuning"
+  short_description: "FitTrack rep counting, exercise classification, and ROM calibration"
+  default_prompt: "Use $ml-pose-tuning to tune a FitTrack pose flow with provider-normalized kinematics, adaptive ROM bands, confidence thresholds, and verification against real and partial reps."
+
+policy:
+  allow_implicit_invocation: true

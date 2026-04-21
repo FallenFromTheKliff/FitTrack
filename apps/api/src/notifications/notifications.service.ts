@@ -11,7 +11,7 @@ import {
 import type { Queue } from 'bull';
 
 import type { PaginatedResult } from '../common/base-repository/base-repository';
-import { QUEUE_MAIL, QUEUE_SMS } from '../queue/queue.constants';
+import { QUEUE_MAIL } from '../queue/queue.constants';
 import {
   UserService,
   type NotificationDispatchContext,
@@ -52,7 +52,6 @@ export class NotificationsService {
     private readonly repo: NotificationsRepository,
     private readonly userService: UserService,
     @InjectQueue(QUEUE_MAIL) private readonly mailQueue: Queue,
-    @InjectQueue(QUEUE_SMS) private readonly smsQueue: Queue,
   ) {}
 
   async dispatch(
@@ -181,14 +180,11 @@ export class NotificationsService {
   ): NotificationPreferencesResponseDTO {
     return {
       subscription_expiring_email: preferences.subscription_expiring_email,
-      subscription_expiring_sms: preferences.subscription_expiring_sms,
       subscription_expired_email: preferences.subscription_expired_email,
       booking_confirmed_email: preferences.booking_confirmed_email,
-      booking_confirmed_sms: preferences.booking_confirmed_sms,
       booking_cancelled_email: preferences.booking_cancelled_email,
       booking_no_show_email: preferences.booking_no_show_email,
       appointment_confirmed_email: preferences.appointment_confirmed_email,
-      appointment_confirmed_sms: preferences.appointment_confirmed_sms,
       appointment_completed_email: preferences.appointment_completed_email,
       appointment_cancelled_email: preferences.appointment_cancelled_email,
       rank_up_email: preferences.rank_up_email,
@@ -261,28 +257,6 @@ export class NotificationsService {
       });
     }
 
-    if (
-      payload.sms &&
-      context.preferred_phone &&
-      context.phone_verified_at &&
-      this.isSmsDeliveryEnabled(type, preferences)
-    ) {
-      plans.push({
-        notification: {
-          channel: NotificationChannel.sms,
-          title: payload.title,
-          body: payload.sms.body,
-          data: payload.data,
-          status: NotificationStatus.pending,
-        },
-        queue: {
-          channel: NotificationChannel.sms,
-          destination: context.preferred_phone,
-          body: payload.sms.body,
-        },
-      });
-    }
-
     return plans;
   }
 
@@ -325,22 +299,6 @@ export class NotificationsService {
     }
   }
 
-  private isSmsDeliveryEnabled(
-    type: NotificationType,
-    preferences: NotificationPreference,
-  ): boolean {
-    switch (type) {
-      case NotificationType.subscription_expiring:
-        return preferences.subscription_expiring_sms;
-      case NotificationType.booking_confirmed:
-        return preferences.booking_confirmed_sms;
-      case NotificationType.appointment_confirmed:
-        return preferences.appointment_confirmed_sms;
-      default:
-        return false;
-    }
-  }
-
   private async enqueueDelivery(
     delivery: QueuedNotificationDelivery,
   ): Promise<void> {
@@ -360,18 +318,6 @@ export class NotificationsService {
         );
         return;
       }
-
-      await this.smsQueue.add(
-        'send-generic',
-        {
-          to: delivery.destination,
-          body: delivery.body!,
-          notification: {
-            notification_id: delivery.notification_id,
-          },
-        },
-        GENERIC_QUEUE_OPTIONS,
-      );
     } catch (error) {
       await this.repo.markNotificationFailed(
         delivery.notification_id,

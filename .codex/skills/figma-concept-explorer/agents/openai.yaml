@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Figma Concept Explorer"
+  short_description: "Divergent premium admin concepts before scaffold lock"
+  default_prompt: "Use $figma-concept-explorer after a premium FitTrack direction is approved to create three clearly divergent Figma concepts for the same workflow model, document the divergence matrix, reject safe reskins, choose one concept, and hand that chosen concept to $figma-scaffold-builder."
+
+policy:
+  allow_implicit_invocation: false

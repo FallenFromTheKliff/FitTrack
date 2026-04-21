@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { Modal, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useQuery } from "@tanstack/react-query";
 import { Clock, Image as ImageIcon, Users } from "lucide-react-native";
+import { gymLayoutEquipmentQueryOptions } from "@fittrack/query";
+import { isEquipmentInsideVenue } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
@@ -9,6 +12,7 @@ import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { makeDetailsModalStyles } from "@/styles/modals/DetailsStyles";
 import { AMENITY_META, AMENITY_STATUS_META, type AmenityStatus, AMENITY_IMAGE_PLACEHOLDERS } from "@/data/amenities";
 import { formatCurrency } from "@fittrack/utils";
+import { mobileApiClient } from "@/lib/api-client";
 import { getVenueIcon } from "@/utils/venueMap";
 import type { VenuePresentation } from "@/utils/venueBookings";
 
@@ -27,6 +31,10 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeDetailsModalStyles(colors), [colors]);
+  const { data: liveEquipment = [] } = useQuery({
+    ...gymLayoutEquipmentQueryOptions(mobileApiClient, { refetchInterval: 5000 }),
+    enabled: isVisible && venue?.floorId !== undefined
+  });
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -53,6 +61,20 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   const Icon = getVenueIcon(venue.iconKey);
   const priceLabel = venue.isReservable ? `${formatCurrency(venue.price)} / ${venue.unit}` : "Core facility";
   const capacityLabel = venue.maxSlots > 0 ? `${venue.maxSlots} slots` : "Not specified";
+  const venueFloorId = venue.floorId ?? null;
+  const assignedEquipment = venueFloorId
+    ? liveEquipment
+        .filter((item) =>
+          isEquipmentInsideVenue(item, {
+            floorId: venueFloorId,
+            gridColumn: venue.gridColumn,
+            gridHeight: venue.gridHeight,
+            gridRow: venue.gridRow,
+            gridWidth: venue.gridWidth
+          })
+        )
+        .sort((left, right) => left.name.localeCompare(right.name))
+    : [];
 
   return (
     <Modal
@@ -102,6 +124,20 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
               <View style={[s.statusRow, { borderColor: statusMeta.color + "44", backgroundColor: statusMeta.color + "12" }]}>
                 <View style={[s.statusDot, { backgroundColor: statusMeta.color }]} />
                 <FitText style={[s.statusText, { color: statusMeta.color }]}>{statusMeta.label}</FitText>
+              </View>
+            </View>
+            <View>
+              <FitText style={s.sectionLabel}>Live Equipment</FitText>
+              <View style={s.fieldBlock}>
+                {assignedEquipment.length > 0 ? (
+                  assignedEquipment.map((item) => (
+                    <FitText key={item.id} style={s.fieldText}>
+                      * {item.name}
+                    </FitText>
+                  ))
+                ) : (
+                  <FitText style={s.fieldTextMuted}>No live equipment is assigned to this zone yet.</FitText>
+                )}
               </View>
             </View>
             <View>

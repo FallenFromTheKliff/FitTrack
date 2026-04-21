@@ -68,8 +68,8 @@ describe('PoseGateway', () => {
     jest.clearAllMocks();
   });
 
-  function makeSocket(): TestSocket {
-    return {
+function makeSocket(): TestSocket {
+  return {
       id: 'socket-1',
       handshake: {
         auth: { token: 'token-1' },
@@ -78,7 +78,7 @@ describe('PoseGateway', () => {
       },
       emit: jest.fn(),
       disconnect: jest.fn(),
-    } as unknown as Socket;
+    } as unknown as TestSocket;
   }
 
   function makeConnectedState() {
@@ -112,7 +112,7 @@ describe('PoseGateway', () => {
     });
   });
 
-  it('emits rep-count and feedback updates from analyzed frames', async () => {
+  it('emits movement-contract feedback updates from analyzed frames', async () => {
     const client = makeSocket();
     poseService.authenticateSocket.mockResolvedValue({ sub: 'user-1' });
     poseService.normalizeExerciseHint.mockReturnValue('Barbell Back Squat');
@@ -125,13 +125,20 @@ describe('PoseGateway', () => {
         confidenceSamples: 1,
       },
       analysis: {
-        rep_event: true,
-        rep_count_delta: 1,
         confidence: 0.93,
         exercise_class: 'squat',
         subject_locked: true,
-        phase: 'bottom',
         form_feedback: ['Drive through your heels.'],
+        movement_contract: {
+          exercise: 'squat',
+          dominant_joint: 'knee',
+          rep_thresholds: {
+            down: { angle: 88, tolerance: 12 },
+            up: { angle: 166, tolerance: 10 },
+          },
+          secondary_check: 'hip_depth',
+          oscillating_joints: ['hip', 'knee'],
+        },
       },
     });
 
@@ -140,17 +147,22 @@ describe('PoseGateway', () => {
       frame_b64: 'frame-data',
     });
 
-    expect(client.emit).toHaveBeenCalledWith('pose.rep-count', {
-      pose_session_id: 'pose-1',
-      rep_count_ai: 1,
-      confidence: 0.93,
-      exercise_class: 'squat',
-      phase: 'bottom',
-    });
     expect(client.emit).toHaveBeenCalledWith('pose.feedback', {
       pose_session_id: 'pose-1',
       subject_locked: true,
       form_feedback: ['Drive through your heels.'],
+      movement_contract: {
+        exercise: 'squat',
+        dominant_joint: 'knee',
+        rep_thresholds: {
+          down: { angle: 88, tolerance: 12 },
+          up: { angle: 166, tolerance: 10 },
+        },
+        secondary_check: 'hip_depth',
+        oscillating_joints: ['hip', 'knee'],
+      },
+      exercise_class: 'squat',
+      confidence: 0.93,
     });
   });
 
@@ -159,8 +171,6 @@ describe('PoseGateway', () => {
     const firstAnalysis = createDeferred<{
       nextState: ReturnType<typeof makeConnectedState>;
       analysis: {
-        rep_event: boolean;
-        rep_count_delta: number;
         confidence: number;
         exercise_class: string;
         subject_locked: boolean;
@@ -170,8 +180,6 @@ describe('PoseGateway', () => {
     const secondAnalysis = createDeferred<{
       nextState: ReturnType<typeof makeConnectedState>;
       analysis: {
-        rep_event: boolean;
-        rep_count_delta: number;
         confidence: number;
         exercise_class: string;
         subject_locked: boolean;
@@ -215,8 +223,6 @@ describe('PoseGateway', () => {
         confidenceSamples: 1,
       },
       analysis: {
-        rep_event: false,
-        rep_count_delta: 0,
         confidence: 0.9,
         exercise_class: 'squat',
         subject_locked: true,
@@ -242,8 +248,6 @@ describe('PoseGateway', () => {
         confidenceSamples: 2,
       },
       analysis: {
-        rep_event: false,
-        rep_count_delta: 0,
         confidence: 0.92,
         exercise_class: 'squat',
         subject_locked: true,

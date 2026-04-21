@@ -2,11 +2,14 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EquipmentStatus } from '@prisma/client';
@@ -28,15 +31,39 @@ export class CreateEquipmentDTO {
   @MaxLength(100, { message: 'type must not exceed 100 characters' })
   type: string;
 
-  @ApiProperty({ example: 12.5 })
+  @ApiProperty({ example: 'floor-1' })
+  @TrimString()
+  @IsString({ message: 'floor_id must be a string' })
+  @IsIn(['floor-1', 'floor-2', 'floor-3'], {
+    message: 'floor_id must be one of: floor-1, floor-2, floor-3',
+  })
+  floor_id: 'floor-1' | 'floor-2' | 'floor-3';
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_column must be an integer' })
+  @Min(1, { message: 'grid_column must be at least 1' })
+  grid_column?: number;
+
+  @ApiPropertyOptional({ example: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_row must be an integer' })
+  @Min(1, { message: 'grid_row must be at least 1' })
+  grid_row?: number;
+
+  @ApiPropertyOptional({ example: 67.86 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({}, { message: 'position_x must be a number' })
-  position_x: number;
+  position_x?: number;
 
-  @ApiProperty({ example: 7.25 })
+  @ApiPropertyOptional({ example: 35 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({}, { message: 'position_y must be a number' })
-  position_y: number;
+  position_y?: number;
 
   @ApiPropertyOptional({ example: 'leg-press', nullable: true })
   @IsOptional()
@@ -60,6 +87,29 @@ export class UpdateEquipmentDTO {
   @IsString({ message: 'type must be a string' })
   @MaxLength(100, { message: 'type must not exceed 100 characters' })
   type?: string;
+
+  @ApiPropertyOptional({ example: 'floor-2' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'floor_id must be a string' })
+  @IsIn(['floor-1', 'floor-2', 'floor-3'], {
+    message: 'floor_id must be one of: floor-1, floor-2, floor-3',
+  })
+  floor_id?: 'floor-1' | 'floor-2' | 'floor-3';
+
+  @ApiPropertyOptional({ example: 11 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_column must be an integer' })
+  @Min(1, { message: 'grid_column must be at least 1' })
+  grid_column?: number;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_row must be an integer' })
+  @Min(1, { message: 'grid_row must be at least 1' })
+  grid_row?: number;
 
   @ApiPropertyOptional({ example: 13 })
   @IsOptional()
@@ -105,6 +155,15 @@ export class GymLayoutEquipmentResponseDTO {
 
   @ApiProperty({ example: 'strength' })
   type: string;
+
+  @ApiProperty({ example: 'floor-1' })
+  floor_id: 'floor-1' | 'floor-2' | 'floor-3';
+
+  @ApiProperty({ example: 10 })
+  grid_column: number;
+
+  @ApiProperty({ example: 4 })
+  grid_row: number;
 
   @ApiProperty({ example: 12.5 })
   position_x: number;

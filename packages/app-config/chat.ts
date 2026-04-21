@@ -1,21 +1,52 @@
-export type ChatSession = {
-  id: string;
-  title: string;
-  preview: string;
-  date: string;
-  messageCount: number;
+import { ApiClientError } from "@fittrack/api-client";
+
+type AiSessionLike = {
+  context_type?: string | null;
+  title?: string | null;
 };
 
-export const MOCK_CHAT_SESSIONS: ChatSession[] = [
-  { id: "s1", title: "Chest day plan", preview: "Here's a 5-set chest routine...", date: "2026-03-14", messageCount: 8 },
-  { id: "s2", title: "Cutting diet advice", preview: "For a caloric deficit of 500...", date: "2026-03-14", messageCount: 5 },
-  { id: "s3", title: "Shoulder injury tips", preview: "Rest for 48 hours then...", date: "2026-03-12", messageCount: 12 },
-  { id: "s4", title: "Best cardio for HIIT", preview: "Intervals of 30s on / 30s off...", date: "2026-03-10", messageCount: 6 },
-  { id: "s5", title: "Protein intake goals", preview: "Aim for 1.8g per kg of body...", date: "2026-03-08", messageCount: 9 }
-];
+export const AI_CONTEXT_LABELS: Record<string, string> = {
+  general: "General coaching",
+  tdee_adjustment: "TDEE adjustment",
+  training_plan: "Training plan",
+  nutrition: "Nutrition"
+};
 
 export const WEB_GREETING_MESSAGE =
-  "Hello! I'm BrodigyAI, your personal fitness assistant. I'm not fully online yet, but I'll be ready soon to help you with workouts, nutrition, and your fitness goals. Stay tuned!";
+  "Hello! I'm BrodigyAI. Ask me about training plans, nutrition, or your next workout.";
 
 export const MOBILE_GREETING_MESSAGE =
-  "Hello! I'm BrodigyAI, your personal fitness assistant. I'm not fully online yet, but I'll be ready soon to help you with workouts, nutrition, and your fitness goals. Stay tuned! \uD83D\uDCAA";
+  "Hello! I'm BrodigyAI. Ask me about training plans, nutrition, or your next workout.";
+
+export function getAiChatErrorMessage(error: unknown, fallback = "Unable to send AI message.") {
+  if (error instanceof ApiClientError) {
+    if (error.kind === "timeout") {
+      return "BrodigyAI timed out before the server responded. Please try again.";
+    }
+
+    if (error.kind === "network") {
+      return "BrodigyAI is unreachable right now. Check the connection and try again.";
+    }
+
+    if (error.message.trim()) {
+      return error.message.trim();
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return fallback;
+}
+
+export function getAiContextLabel(contextType?: string | null) {
+  if (!contextType) return "AI chat";
+  return AI_CONTEXT_LABELS[contextType] ?? "AI chat";
+}
+
+export function getAiSessionDisplayTitle(session?: AiSessionLike | null) {
+  const title = session?.title?.trim();
+  if (title) return title;
+  return getAiContextLabel(session?.context_type);
+}

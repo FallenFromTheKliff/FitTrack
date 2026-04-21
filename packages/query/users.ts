@@ -1,6 +1,6 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "@fittrack/api-client";
-import { invalidateProfileDeletionStatusQuery } from "./cache";
+import { invalidateAttendanceQrQuery, invalidateProfileDeletionStatusQuery } from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function profileDeletionStatusQueryOptions(client: Pick<ApiClient, "users">, userId?: string) {
@@ -13,6 +13,28 @@ export function profileDeletionStatusQueryOptions(client: Pick<ApiClient, "users
       if (normalized === "approved") return "approved" as const;
       return "none" as const;
     }
+  });
+}
+
+export function attendanceQrQueryOptions(client: Pick<ApiClient, "users">, userId?: string) {
+  return queryOptions({
+    queryKey: queryKeys.attendanceQr(userId),
+    queryFn: () => client.users.getAttendanceQr(),
+    enabled: !!userId,
+    staleTime: 60_000,
+    gcTime: 300_000,
+  });
+}
+
+export function refreshAttendanceQrMutationOptions(
+  client: Pick<ApiClient, "users">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ userId }: { userId?: string }) => client.users.refreshQr(),
+    onSuccess: async (data, variables) => {
+      queryClient.setQueryData(queryKeys.attendanceQr(variables.userId), data);
+    },
   });
 }
 
@@ -32,4 +54,8 @@ export function cancelDeletionRequestMutationOptions(client: Pick<ApiClient, "us
       await invalidateProfileDeletionStatusQuery(queryClient, variables.userId);
     }
   });
+}
+
+export function invalidateAttendanceQrForUser(queryClient: QueryClient, userId?: string) {
+  return invalidateAttendanceQrQuery(queryClient, userId);
 }

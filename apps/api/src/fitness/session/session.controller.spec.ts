@@ -1,5 +1,6 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 
+import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkoutSessionController } from './session.controller';
 
@@ -43,7 +44,10 @@ describe('WorkoutSessionController', () => {
     'completeSession',
     'cancelSession',
   ] as const)('protects %s with JWT auth', (methodName) => {
-    expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
+    expect(getGuardMetadata(methodName)).toEqual([
+      JwtAuthGuard,
+      ActiveMemberCardGuard,
+    ]);
   });
 
   it('lists sessions through the service', async () => {

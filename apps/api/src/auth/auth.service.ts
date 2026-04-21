@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   ForbiddenException,
+  GoneException,
   NotFoundException,
   HttpException,
   HttpStatus,
@@ -32,11 +33,11 @@ import {
   RegisterDTO,
   VerifyEmailDTO,
   LoginDTO,
-  PhoneLoginRequestDTO,
-  PhoneLoginVerifyDTO,
   ForgotPasswordDTO,
+  VerifyCurrentPasswordDTO,
+  VerifyResetOtpDTO,
   ResetPasswordDTO,
-  VerifyPhoneDTO,
+  ChangePasswordDTO,
   AdminCreateUserDTO,
   ResendOtpDTO,
 } from './dto/auth.dto';
@@ -169,56 +170,6 @@ export class AuthService {
         detail: 'Email or password is incorrect.',
       });
     }
-
-    return this.issueTokenPair(user, deviceInfo, ip);
-  }
-
-  async phoneLoginRequest(dto: PhoneLoginRequestDTO): Promise<void> {
-    const identity = await this.repo.findIdentity(
-      AuthProvider.phone,
-      dto.phone,
-    );
-    if (!identity || !identity.verified_at) return;
-
-    const user = await this.repo.findUserById(identity.user_id);
-    if (!user || user.status !== UserStatus.active) return;
-
-    await this.otpService.issueOtp(
-      user.id,
-      OtpPurpose.login_2fa,
-      OtpChannel.sms,
-      dto.phone,
-    );
-  }
-
-  async phoneLoginVerify(
-    dto: PhoneLoginVerifyDTO,
-    deviceInfo: string,
-    ip: string,
-  ): Promise<InternalTokenPairResponse> {
-    const identity = await this.repo.findIdentity(
-      AuthProvider.phone,
-      dto.phone,
-    );
-
-    if (!identity || !identity.verified_at) {
-      throw new UnauthorizedException({
-        type: 'INVALID_CREDENTIALS',
-        title: 'Invalid Credentials',
-        status: 401,
-        detail: 'Phone number not registered or not verified.',
-      });
-    }
-
-    const user = this.requireActiveAuthUser(
-      await this.repo.findUserWithProfile(identity.user_id),
-    );
-
-    await this.otpService.consumeOtp(
-      identity.user_id,
-      dto.code,
-      OtpPurpose.login_2fa,
-    );
 
     return this.issueTokenPair(user, deviceInfo, ip);
   }
@@ -393,6 +344,51 @@ export class AuthService {
     );
   }
 
+  async verifyCurrentPassword(
+    userId: string,
+    dto: VerifyCurrentPasswordDTO,
+  ): Promise<boolean> {
+    const identity = await this.requirePasswordIdentity(userId);
+    const passwordMatch = await bcrypt.compare(
+      dto.current_password,
+      identity.credential_hash,
+    );
+
+    if (!passwordMatch) {
+      throw new UnauthorizedException({
+        type: 'INVALID_CURRENT_PASSWORD',
+        title: 'Invalid Current Password',
+        status: 401,
+        detail: 'Current password is incorrect.',
+      });
+    }
+
+    return true;
+  }
+
+  async verifyResetOtp(dto: VerifyResetOtpDTO): Promise<boolean> {
+    const identity = await this.repo.findIdentity(
+      AuthProvider.email,
+      dto.email,
+    );
+    if (!identity) {
+      throw new NotFoundException({
+        type: 'NOT_FOUND',
+        title: 'Not Found',
+        status: 404,
+        detail: 'No account found with this email.',
+      });
+    }
+
+    await this.otpService.assertOtpValid(
+      identity.user_id,
+      dto.code,
+      OtpPurpose.password_reset,
+    );
+
+    return true;
+  }
+
   async resetPassword(dto: ResetPasswordDTO): Promise<void> {
     const identity = await this.repo.findIdentity(
       AuthProvider.email,
@@ -406,6 +402,23 @@ export class AuthService {
         detail: 'No account found with this email.',
       });
     }
+    const credentialHash = identity.credential_hash;
+    if (!credentialHash) {
+      throw new UnauthorizedException({
+        type: 'INVALID_CURRENT_PASSWORD',
+        title: 'Invalid Current Password',
+        status: 401,
+        detail: 'Current password is incorrect.',
+      });
+    }
+
+    await this.otpService.assertOtpValid(
+      identity.user_id,
+      dto.code,
+      OtpPurpose.password_reset,
+    );
+
+    await this.assertPasswordDoesNotReuseCurrent(credentialHash, dto.new_password);
 
     await this.otpService.consumeOtp(
       identity.user_id,
@@ -425,33 +438,39 @@ export class AuthService {
     });
   }
 
-  async sendPhoneOtp(userId: string): Promise<void> {
-    const user = await this.repo.findUserWithProfileOrThrow(userId);
-    const phone = this.requirePhoneNumber(user);
-
-    await this.otpService.issueOtp(
-      userId,
-      OtpPurpose.phone_verify,
-      OtpChannel.sms,
-      phone,
+  async changePassword(userId: string, dto: ChangePasswordDTO): Promise<void> {
+    const identity = await this.requirePasswordIdentity(userId);
+    const currentPasswordMatch = await bcrypt.compare(
+      dto.current_password,
+      identity.credential_hash,
     );
-  }
 
-  async verifyPhone(userId: string, dto: VerifyPhoneDTO): Promise<void> {
-    const user = await this.repo.findUserWithProfileOrThrow(userId);
-    const phone = this.requirePhoneNumber(user);
+    if (!currentPasswordMatch) {
+      throw new UnauthorizedException({
+        type: 'INVALID_CURRENT_PASSWORD',
+        title: 'Invalid Current Password',
+        status: 401,
+        detail: 'Current password is incorrect.',
+      });
+    }
 
-    await this.otpService.consumeOtp(userId, dto.code, OtpPurpose.phone_verify);
+    const reusesCurrentPassword = await bcrypt.compare(
+      dto.new_password,
+      identity.credential_hash,
+    );
+    if (reusesCurrentPassword) {
+      this.throwPasswordReuseError();
+    }
 
-    await this.repo.updateUser(userId, { phone_verified_at: new Date() });
-    await this.repo.upsertPhoneIdentity(userId, phone);
+    const newHash = await bcrypt.hash(dto.new_password, PASSWORD_HASH_ROUNDS);
+    await this.repo.updateCredentialHash(userId, newHash);
+    await this.repo.revokeAllUserRefreshTokens(userId);
 
     this.emitAudit({
       userId,
-      action: AuditAction.PHONE_VERIFIED,
+      action: AuditAction.PASSWORD_RESET,
       entity: 'User',
       entityId: userId,
-      after: { phone },
     });
   }
 
@@ -497,20 +516,34 @@ export class AuthService {
       PASSWORD_HASH_ROUNDS,
     );
 
+    const isMemberAccount = dto.role === 'member';
+
     const user = await this.repo.createUserWithProfile({
       role: dto.role as UserRole,
-      status: UserStatus.active,
+      status: isMemberAccount ? UserStatus.pending : UserStatus.active,
       email: dto.email,
       credentialHash,
       firstName: dto.first_name,
       lastName: dto.last_name,
       phone: dto.phone,
-      emailVerifiedAt: new Date(),
-      qrCodeToken: this.generateQrToken(),
-      createCoachProfile: dto.role === 'coach',
+      ...(isMemberAccount
+        ? {}
+        : {
+            emailVerifiedAt: new Date(),
+            qrCodeToken: this.generateQrToken(),
+          }),
     });
 
-    await this.repo.markEmailIdentityVerified(user.id);
+    if (isMemberAccount) {
+      await this.otpService.issueOtp(
+        user.id,
+        OtpPurpose.registration,
+        OtpChannel.email,
+        dto.email,
+      );
+    } else {
+      await this.repo.markEmailIdentityVerified(user.id);
+    }
 
     this.emitAudit({
       userId: actorId,
@@ -520,12 +553,15 @@ export class AuthService {
       after: { email: dto.email, role: dto.role, createdBy: actorId },
       ipAddress: ip,
     });
-    this.emitUserRegistered({
-      userId: user.id,
-      role: dto.role as UserRole,
-      source: 'admin_create',
-      registeredAt: new Date().toISOString(),
-    });
+
+    if (!isMemberAccount) {
+      this.emitUserRegistered({
+        userId: user.id,
+        role: dto.role as UserRole,
+        source: 'admin_create',
+        registeredAt: new Date().toISOString(),
+      });
+    }
 
     return { user_id: user.id, email: dto.email, role: dto.role };
   }
@@ -561,6 +597,12 @@ export class AuthService {
       parent: rotatedFromId ? { connect: { id: rotatedFromId } } : undefined,
     });
 
+    const qrCodeReady =
+      typeof user.qr_code_token === 'string' &&
+      user.qr_code_token.trim() !== '';
+    const attendanceQrReady =
+      qrCodeReady && user.membership_card?.status === 'active';
+
     return {
       access_token: accessToken,
       _refresh_token: rawRefreshToken,
@@ -569,6 +611,11 @@ export class AuthService {
         role: user.role,
         status: user.status,
         email_verified_at: user.email_verified_at?.toISOString() ?? null,
+        phone_no: user.profile.phone ?? null,
+        membership_card: user.membership_card ?? null,
+        qr_code_token: user.qr_code_token ?? null,
+        qrCodeReady,
+        attendanceQrReady,
         profile: {
           first_name: user.profile.first_name,
           last_name: user.profile.last_name,
@@ -587,6 +634,16 @@ export class AuthService {
         title: 'Invalid Credentials',
         status: 401,
         detail: 'Account not found.',
+      });
+    }
+
+    if (user.deletedAt) {
+      throw new GoneException({
+        type: 'ACCOUNT_ARCHIVED',
+        title: 'Account Archived',
+        status: 410,
+        detail:
+          'This account has been archived and can no longer access FitTrack.',
       });
     }
 
@@ -614,22 +671,6 @@ export class AuthService {
     return user as AuthenticatedUser;
   }
 
-  private requirePhoneNumber(user: AuthenticatedUser): string {
-    if (!user.profile.phone) {
-      throw new HttpException(
-        {
-          type: 'BUSINESS_RULE_VIOLATION',
-          title: 'No Phone Number',
-          status: 422,
-          detail: 'Add a phone number to your profile before verifying.',
-        },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-
-    return user.profile.phone;
-  }
-
   private emitAudit(event: AuditEvent): void {
     this.eventEmitter.emit('audit.log', event);
   }
@@ -644,5 +685,52 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private async requirePasswordIdentity(userId: string) {
+    const identity = (await this.repo.findAllIdentitiesForUser(userId)).find(
+      (item) => item.provider === AuthProvider.email && !!item.credential_hash,
+    );
+    const credentialHash = identity?.credential_hash;
+
+    if (!identity || !credentialHash) {
+      throw new UnauthorizedException({
+        type: 'INVALID_CURRENT_PASSWORD',
+        title: 'Invalid Current Password',
+        status: 401,
+        detail: 'Current password is incorrect.',
+      });
+    }
+
+    return {
+      ...identity,
+      credential_hash: credentialHash,
+    };
+  }
+
+  private async assertPasswordDoesNotReuseCurrent(
+    credentialHash: string,
+    nextPassword: string,
+  ): Promise<void> {
+    const reusesCurrentPassword = await bcrypt.compare(
+      nextPassword,
+      credentialHash,
+    );
+
+    if (reusesCurrentPassword) {
+      this.throwPasswordReuseError();
+    }
+  }
+
+  private throwPasswordReuseError(): never {
+    throw new HttpException(
+      {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Password Reuse Not Allowed',
+        status: 422,
+        detail: 'Cannot change password to current password.',
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
   }
 }

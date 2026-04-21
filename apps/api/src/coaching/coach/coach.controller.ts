@@ -29,6 +29,8 @@ import {
   CoachDetailResponseDTO,
   CoachFilterDTO,
   CoachListItemResponseDTO,
+  CoachSelfDetailResponseDTO,
+  CoachSelfUserResponseDTO,
   CoachSelfUpdateProfileDTO,
   CoachUserProfileResponseDTO,
   UpdateCoachProfileDTO,
@@ -69,6 +71,8 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   CoachListItemResponseDTO,
   CoachDetailResponseDTO,
   AdminCoachDetailResponseDTO,
+  CoachSelfDetailResponseDTO,
+  CoachSelfUserResponseDTO,
   CoachUserProfileResponseDTO,
   CoachAvailabilitySlotResponseDTO,
 )
@@ -87,6 +91,20 @@ export class CoachController {
   })
   listCoaches(@Query() dto: CoachFilterDTO) {
     return this.coachService.listCoaches(dto);
+  }
+
+  @Get('coaches/me')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get the authenticated coach profile.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Coach profile returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(CoachSelfDetailResponseDTO)),
+  })
+  getMyProfile(@CurrentUser() user: JwtPayload) {
+    return this.coachService.getMyProfile(user.sub);
   }
 
   @Get('coaches/:id')

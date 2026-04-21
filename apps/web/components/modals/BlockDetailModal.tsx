@@ -17,9 +17,18 @@ type Props = {
   onSave: (updated: Booking) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  resourceLabel?: string;
 };
 
-export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, onDelete, onClose }: Props) {
+export default function BlockDetailModal({
+  isOpen,
+  block,
+  staffMembers,
+  onSave,
+  onDelete,
+  onClose,
+  resourceLabel = "Staff",
+}: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const [title, setTitle] = useState("");
   const [venueLabel, setVenueLabel] = useState("");
@@ -104,7 +113,7 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
           <FitTextInput
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Morning Shift"
+            placeholder="e.g. Strength Session"
             style={inputStyle}
           />
         </div>
@@ -129,7 +138,7 @@ export default function BlockDetailModal({ isOpen, block, staffMembers, onSave, 
           />
         </div>
         <div>
-          <FitText as="label" style={labelStyle}>Staff Assigned</FitText>
+          <FitText as="label" style={labelStyle}>{resourceLabel} Assigned</FitText>
           <FitSelect
             fullWidth
             value={assignedId}

@@ -46,10 +46,11 @@ export const STATUS_COLORS: Record<string, string> = {
   cancelled: "#EF4444"
 };
 
-export type StatusFilter = "all" | "confirmed" | "cancelled";
+export type StatusFilter = "all" | "pending" | "confirmed" | "cancelled";
 
 export const FILTER_OPTIONS: { label: string; value: StatusFilter }[] = [
   { label: "All", value: "all" },
+  { label: "Pending", value: "pending" },
   { label: "Active", value: "confirmed" },
   { label: "Cancelled", value: "cancelled" }
 ];

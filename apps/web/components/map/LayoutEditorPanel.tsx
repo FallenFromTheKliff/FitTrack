@@ -1,5 +1,6 @@
 "use client";
-import { Download, Lock, LockOpen, RotateCcw, Save } from "lucide-react";
+import { Lock, LockOpen, RotateCcw, Save } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ChangeEvent } from "react";
 
 import type { ThemeColors } from "@fittrack/types";
@@ -23,7 +24,10 @@ type Props = {
   onFloorChange: (e: ChangeEvent<HTMLSelectElement>) => void;
   onSave: () => void;
   onClearFloor: () => void;
-  onExport: () => void;
+  quickRegionNode?: ReactNode;
+  quickRegionSummaryNode?: ReactNode;
+  layoutStatusNode?: ReactNode;
+  equipmentPanelNode?: ReactNode;
 };
 
 export function LayoutEditorPanel({
@@ -40,17 +44,30 @@ export function LayoutEditorPanel({
   onFloorChange,
   onSave,
   onClearFloor,
-  onExport
+  quickRegionNode,
+  quickRegionSummaryNode,
+  layoutStatusNode,
+  equipmentPanelNode
 }: Props) {
+  const hasExtendedSections =
+    Boolean(quickRegionNode) ||
+    Boolean(quickRegionSummaryNode) ||
+    Boolean(layoutStatusNode) ||
+    Boolean(equipmentPanelNode);
+
   return (
     <div
       style={{
         backgroundColor: colors.surface,
         border: `1px solid ${colors.border}`,
         borderRadius: isCompact ? 16 : 12,
-        padding: isCompact ? 18 : 14,
+        padding: isCompact ? 18 : 16,
         display: "grid",
-        gap: 10
+        gap: isCompact ? 12 : 10,
+        minWidth: 0,
+        maxHeight: isCompact ? "none" : "calc(100vh - 166px)",
+        overflowY: isCompact ? "visible" : "auto",
+        paddingRight: isCompact ? 18 : 12,
       }}
     >
       <FitButton
@@ -89,7 +106,7 @@ export function LayoutEditorPanel({
           }}
         />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 10 }}>
         <div>
           <FitText as="label" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 7, display: "block" }}>
             Layout Type
@@ -108,7 +125,7 @@ export function LayoutEditorPanel({
               { label: "Strength Focus", value: "strength" },
               { label: "Cardio Focus", value: "cardio" }
             ]}
-            style={{ height: 40, fontSize: 14 }}
+            style={{ height: 40, fontSize: 14, minWidth: 0 }}
           />
         </div>
         <div>
@@ -129,13 +146,13 @@ export function LayoutEditorPanel({
               { label: "Floor 2", value: "floor-2" },
               { label: "Floor 3", value: "floor-3" }
             ]}
-            style={{ height: 40, fontSize: 14 }}
+            style={{ height: 40, fontSize: 14, minWidth: 0 }}
           />
         </div>
       </div>
       <FitButton
         variant="primary"
-        label="Save Layout"
+        label={hasUnsavedChanges ? "Save Layout" : "Live Sync Enabled"}
         icon={Save}
         onClick={onSave}
         fullWidth
@@ -149,17 +166,30 @@ export function LayoutEditorPanel({
         fullWidth
         disabled={!isEditMode}
       />
-      <FitButton
-        variant="ghost"
-        label="Export"
-        icon={Download}
-        onClick={onExport}
-        fullWidth
-        disabled={!isEditMode}
-      />
+      {hasExtendedSections ? (
+        <>
+          <div style={{ height: 1, backgroundColor: colors.border, margin: "2px 0 4px" }} />
+          {quickRegionNode}
+          {quickRegionSummaryNode || layoutStatusNode || equipmentPanelNode ? (
+            <div style={{ height: 1, backgroundColor: colors.border, margin: "2px 0 4px" }} />
+          ) : null}
+          {quickRegionSummaryNode}
+          {layoutStatusNode}
+          {equipmentPanelNode}
+        </>
+      ) : null}
+      <div style={{ height: 1, backgroundColor: colors.border, margin: "2px 0 4px" }} />
+      <FitText style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+        Floor-region authoring is live inside the current three-floor model. True add or delete floor support still needs a shared schema upgrade because the published floor IDs are fixed today.
+      </FitText>
       {!isEditMode && (
         <FitText style={{ fontSize: 12, color: colors.textMuted }}>
           Turn on EDIT MODE to unlock layout controls and dragging.
+        </FitText>
+      )}
+      {isEditMode && !hasUnsavedChanges && (
+        <FitText style={{ fontSize: 12, color: colors.textMuted }}>
+          Live sync is active. Equipment assignments save immediately.
         </FitText>
       )}
       {isEditMode && hasUnsavedChanges && (

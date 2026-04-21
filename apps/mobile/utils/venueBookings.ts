@@ -10,7 +10,7 @@ export type VenuePresentation = {
   id: string;
   mapId?: string;
   floorId?: FacilityFloorId;
-  sourceVenueId?: number;
+  sourceVenueId?: string | number;
   name: string;
   iconKey: VenueIconKey;
   emoji: string;
@@ -69,9 +69,10 @@ export function toMobileBookings(records: VenueBookingRecord[], venues: VenueRec
     const venue = venues.find((entry) => String(entry.id) === booking.resourceId);
     const presentation = venue ? getVenuePresentation(venue) : null;
     const durationHours = records.find((record) => record.id === booking.id)?.durationHours ?? 0;
+    const totalAmount = records.find((record) => record.id === booking.id)?.totalAmount;
     return {
       ...booking,
-      price: (venue?.hourlyRate ?? presentation?.price ?? 0) * durationHours
+      price: totalAmount ?? (venue?.hourlyRate ?? presentation?.price ?? 0) * durationHours
     };
   });
 }

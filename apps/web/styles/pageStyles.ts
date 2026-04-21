@@ -350,15 +350,18 @@ export function chatbotStyles(colors: ThemeColors) {
             border: `1px solid ${colors.border}`,
             borderRadius: 14,
             overflow: "hidden",
-            minHeight: 0
+            minHeight: 0,
+            height: "100%"
         } as CSSProperties,
         panelHeader: {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 12,
             padding: "14px 16px",
             borderBottom: `1px solid ${colors.border}`,
-            flexShrink: 0
+            flexShrink: 0,
+            minHeight: 56
         } as CSSProperties,
         aiAvatar: {
             width: 30,
@@ -372,7 +375,7 @@ export function chatbotStyles(colors: ThemeColors) {
         messagesArea: {
             flex: 1,
             overflowY: "auto",
-            padding: "16px 16px 8px",
+            padding: "18px 16px 10px",
             display: "flex",
             flexDirection: "column",
             gap: 12,
@@ -423,9 +426,9 @@ export function chatbotStyles(colors: ThemeColors) {
         } as CSSProperties,
         inputBar: {
             display: "flex",
-            alignItems: "flex-end",
+            alignItems: "stretch",
             gap: 8,
-            padding: "10px 12px",
+            padding: "12px",
             borderTop: `1px solid ${colors.border}`,
             flexShrink: 0
         } as CSSProperties,
@@ -456,7 +459,7 @@ export function chatbotStyles(colors: ThemeColors) {
         } as CSSProperties,
         searchWrap: {
             position: "relative",
-            padding: "8px 10px",
+            padding: "10px 12px",
             borderBottom: `1px solid ${colors.border}`,
             flexShrink: 0
         } as CSSProperties,
@@ -464,8 +467,8 @@ export function chatbotStyles(colors: ThemeColors) {
             width: "100%",
             backgroundColor: colors.fieldBg,
             border: `1px solid ${colors.fieldBorder}`,
-            borderRadius: 8,
-            padding: "7px 12px 7px 32px",
+            borderRadius: 10,
+            padding: "8px 12px 8px 32px",
             fontSize: 12,
             color: colors.textPrimary,
             outline: "none"
@@ -473,17 +476,22 @@ export function chatbotStyles(colors: ThemeColors) {
         sessionList: {
             flex: 1,
             overflowY: "auto",
-            padding: "4px 0"
+            padding: "6px 0 8px"
         } as CSSProperties,
         sessionItem: (isActive: boolean): CSSProperties => ({
             display: "flex",
             alignItems: "flex-start",
             gap: 10,
-            padding: "10px 14px",
+            padding: "11px 12px",
             cursor: "pointer",
-            backgroundColor: isActive ? `${colors.brand}14` : "transparent",
+            backgroundColor: isActive ? `${colors.brand}14` : colors.surface,
+            borderTop: `1px solid ${isActive ? `${colors.brand}26` : colors.border}`,
+            borderRight: `1px solid ${isActive ? `${colors.brand}26` : colors.border}`,
+            borderBottom: `1px solid ${isActive ? `${colors.brand}26` : colors.border}`,
             borderLeft: isActive ? `2px solid ${colors.brand}` : "2px solid transparent",
-            transition: "background 0.15s"
+            borderRadius: 12,
+            transition: "background 0.15s, border-color 0.15s, transform 0.15s",
+            margin: "0 8px 6px"
         }),
         sessionIconWrap: {
             width: 30,
@@ -516,7 +524,7 @@ export function chatbotStyles(colors: ThemeColors) {
             alignItems: "center",
             justifyContent: "center",
             gap: 10,
-            padding: "40px 20px"
+            padding: "44px 20px"
         } as CSSProperties
     };
 }

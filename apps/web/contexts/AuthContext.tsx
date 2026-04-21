@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback, useMemo, createContext, useContext, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { RegisterPayload } from "@fittrack/api-client";
 import type { IAuthContext, AuthUser } from "@fittrack/types";
 import { createAuthController, toActionErrorMessage } from "@fittrack/app-core";
 import {
@@ -15,6 +16,7 @@ import {
   verifyOtpActionMutationOptions
 } from "@fittrack/query";
 import { webApiClient, webSessionStore } from "@/lib/api-client";
+import { WEB_ROLE_GATE } from "@/lib/portal-access";
 
 type Props = {
   children: ReactNode;
@@ -23,7 +25,6 @@ type Props = {
 };
 
 const AuthContext = createContext<IAuthContext | null>(null);
-
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const queryClient = useQueryClient();
   const [loginAttempts, setAttempts] = useState(0);
@@ -31,6 +32,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     client: webApiClient,
     onUserLoaded,
     onUserCleared,
+    roleGate: WEB_ROLE_GATE,
     sessionStore: webSessionStore
   }), [onUserCleared, onUserLoaded]);
   const authUserOptions = useMemo(
@@ -57,7 +59,11 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       const data = await loginMutation.mutateAsync({ email, password });
       if (!data.success) {
         setAttempts((n) => n + 1);
-        return { success: false as const, error: data.error ?? "Invalid credentials." };
+        return {
+          success: false as const,
+          error: data.error ?? "Invalid credentials.",
+          reason: data.reason
+        };
       }
       setAttempts(0);
       return { success: true as const, otpRequired: data.otpRequired };
@@ -67,13 +73,25 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     }
   }, [loginAttempts, loginMutation]);
 
-  const registerMutation = useMutation(registerActionMutationOptions((payload: { email: string; phone_no?: string; password: string }) =>
-    controller.register(payload)
-  ));
+  const registerMutation = useMutation(
+    registerActionMutationOptions((payload: RegisterPayload) => controller.register(payload))
+  );
 
-  const register = useCallback(async (payload: { email: string; phone_no?: string; password: string }) => {
+  const register = useCallback(async (payload: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    phone?: string;
+  }) => {
     try {
-      const data = await registerMutation.mutateAsync(payload);
+      const data = await registerMutation.mutateAsync({
+        email: payload.email,
+        first_name: payload.firstName,
+        last_name: payload.lastName,
+        password: payload.password,
+        phone: payload.phone
+      });
       if (!data.success) return { success: false as const, error: data.error ?? "Registration failed." };
       return { success: true as const, userId: data.userId };
     } catch (error: unknown) {
@@ -94,18 +112,18 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   }, [verifyCurrentPasswordMutation]);
 
   const changePasswordMutation = useMutation(
-    changePasswordActionMutationOptions((email, password) => controller.changePassword(email, password))
+    changePasswordActionMutationOptions((currentPassword, newPassword) => controller.changePassword(currentPassword, newPassword))
   );
 
-  const changePassword = useCallback(async (_currentPassword: string, nextPassword: string) => {
+  const changePassword = useCallback(async (currentPassword: string, nextPassword: string) => {
     try {
-      if (!user?.email) return { success: false as const, error: "No user session." };
-      await changePasswordMutation.mutateAsync({ email: user.email, password: nextPassword });
+      if (!user?.id) return { success: false as const, error: "No user session." };
+      await changePasswordMutation.mutateAsync({ currentPassword, newPassword: nextPassword });
       return { success: true as const };
     } catch (error: unknown) {
       return { success: false as const, error: toActionErrorMessage(error, "Password change failed.") };
     }
-  }, [user?.email, changePasswordMutation]);
+  }, [user?.id, changePasswordMutation]);
 
   const logoutMutation = useMutation(logoutActionMutationOptions(() => controller.logout()));
 
@@ -128,8 +146,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   }, [queryClient]);
 
   const sendOTP = useCallback(async (_destination: string) => {
-    return { success: true as const };
-  }, []);
+    try {
+      const success = await controller.sendOTP();
+      return { success };
+    } catch {
+      return { success: false as const };
+    }
+  }, [controller]);
 
   const verifyOTPMutation = useMutation(verifyOtpActionMutationOptions((code: string) => controller.verifyOTP(code)));
 
@@ -150,7 +173,12 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       setUser(null);
       return;
     }
-    setUser(authUser);
+    try {
+      const hydratedUser = await controller.loadCurrentUser();
+      setUser(hydratedUser ?? authUser);
+    } catch {
+      setUser(authUser);
+    }
   }, [controller, setUser]);
 
   return (

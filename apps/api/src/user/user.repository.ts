@@ -4,6 +4,8 @@ import {
   ProgressMetric,
   NotificationPreference,
   AttendanceLog,
+  AccountDeletionRequest,
+  AccountDeletionRequestStatus,
   User,
   Prisma,
   UserRole,
@@ -21,7 +23,19 @@ import {
 } from './dto/user-dto';
 
 type UserWithProfileAndPrefs = Prisma.UserGetPayload<{
-  include: { profile: true; notification_prefs: true };
+  include: {
+    profile: true;
+    membership_card: true;
+    notification_prefs: true;
+    auth_identities: {
+      select: {
+        provider: true;
+        identifier: true;
+        verified_at: true;
+        is_primary: true;
+      };
+    };
+  };
 }>;
 
 type UserAggregate = UserWithProfileAndPrefs & {
@@ -46,7 +60,7 @@ export interface GamificationNotificationTargetRecord {
 
 export interface NotificationDispatchTargetRecord {
   user_id: string;
-  phone_verified_at: Date | null;
+  profile_phone: string | null;
   auth_identities: {
     provider: string;
     identifier: string;
@@ -69,10 +83,38 @@ export class UserRepository extends BaseRepository {
     return this.findByIdOrThrow<User>(this.prisma.user, id, 'User');
   }
 
+  async findActiveUserByIdOrThrow(id: string): Promise<User> {
+    const user = await this.findOne<User>(this.prisma.user, {
+      id,
+      status: 'active',
+    });
+
+    if (!user) {
+      throw new NotFoundException({
+        type: 'NOT_FOUND',
+        title: 'Active user not found',
+        status: 404,
+        detail: 'User not found or account is inactive.',
+      });
+    }
+
+    return user;
+  }
+
   findUserWithProfile(id: string): Promise<UserWithProfileAndPrefs | null> {
     return this.findById<UserWithProfileAndPrefs>(this.prisma.user, id, {
       profile: true,
+      membership_card: true,
       notification_prefs: true,
+      auth_identities: {
+        select: {
+          provider: true,
+          identifier: true,
+          verified_at: true,
+          is_primary: true,
+        },
+        orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+      },
     });
   }
 
@@ -83,7 +125,17 @@ export class UserRepository extends BaseRepository {
       'User',
       {
         profile: true,
+        membership_card: true,
         notification_prefs: true,
+        auth_identities: {
+          select: {
+            provider: true,
+            identifier: true,
+            verified_at: true,
+            is_primary: true,
+          },
+          orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+        },
       },
     );
 
@@ -99,7 +151,17 @@ export class UserRepository extends BaseRepository {
   async findActiveUserByQrTokenOrThrow(token: string): Promise<User> {
     const user = await this.findOne<User>(this.prisma.user, {
       qr_code_token: token,
+      qr_code_expires_at: {
+        gt: new Date(),
+      },
+      deletedAt: null,
+      role: UserRole.member,
       status: 'active',
+      membership_card: {
+        is: {
+          status: 'active',
+        },
+      },
     });
 
     if (!user) {
@@ -107,7 +169,32 @@ export class UserRepository extends BaseRepository {
         type: 'NOT_FOUND',
         title: 'Invalid QR',
         status: 404,
-        detail: 'QR token not found or account is inactive.',
+        detail: 'QR code not found or membership access is inactive.',
+      });
+    }
+
+    return user;
+  }
+
+  async findAttendanceEligibleUserByIdOrThrow(id: string): Promise<User> {
+    const user = await this.findOne<User>(this.prisma.user, {
+      id,
+      deletedAt: null,
+      role: UserRole.member,
+      status: UserStatus.active,
+      membership_card: {
+        is: {
+          status: 'active',
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException({
+        type: 'NOT_FOUND',
+        title: 'Invalid QR',
+        status: 404,
+        detail: 'QR code not found or membership access is inactive.',
       });
     }
 
@@ -266,12 +353,19 @@ export class UserRepository extends BaseRepository {
   ): Promise<NotificationDispatchTargetRecord> {
     const user = await this.findByIdOrThrow<{
       id: string;
-      phone_verified_at: Date | null;
+      profile: {
+        phone: string | null;
+      } | null;
       auth_identities: {
         provider: string;
         identifier: string;
       }[];
     }>(this.prisma.user, userId, 'User', {
+      profile: {
+        select: {
+          phone: true,
+        },
+      },
       auth_identities: {
         where: {
           provider: {
@@ -290,7 +384,7 @@ export class UserRepository extends BaseRepository {
 
     return {
       user_id: user.id,
-      phone_verified_at: user.phone_verified_at,
+      profile_phone: user.profile?.phone ?? null,
       auth_identities: user.auth_identities,
     };
   }
@@ -360,6 +454,47 @@ export class UserRepository extends BaseRepository {
         where: { user_id: userId, provider: 'phone' },
       });
     });
+  }
+
+  findLatestDeletionRequest(
+    userId: string,
+  ): Promise<AccountDeletionRequest | null> {
+    return this.prisma.accountDeletionRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findPendingDeletionRequestByUserId(
+    userId: string,
+  ): Promise<AccountDeletionRequest | null> {
+    return this.prisma.accountDeletionRequest.findFirst({
+      where: {
+        userId,
+        status: AccountDeletionRequestStatus.pending,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  createDeletionRequest(
+    data: Prisma.AccountDeletionRequestCreateInput,
+  ): Promise<AccountDeletionRequest> {
+    return this.create<AccountDeletionRequest>(
+      this.prisma.accountDeletionRequest,
+      data,
+    );
+  }
+
+  updateDeletionRequest(
+    id: string,
+    data: Prisma.AccountDeletionRequestUpdateInput,
+  ): Promise<AccountDeletionRequest> {
+    return this.updateById<AccountDeletionRequest>(
+      this.prisma.accountDeletionRequest,
+      id,
+      data,
+    );
   }
 
   // ProgressMetric

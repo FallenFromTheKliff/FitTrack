@@ -9,19 +9,27 @@ import { FitTextInput } from "./FitText";
 import FitButton from "./FitButton";
 
 type Props = {
+  id?: string;
+  name?: string;
+  ariaLabel?: string;
   placeholder?: string;
   value: string;
   onChangeText: (value: string) => void;
   isFabOpen?: boolean;
   className?: string;
+  compact?: boolean;
 };
 
 export default function FitSearch({
+  id,
+  name,
+  ariaLabel,
   placeholder = "Search...",
   value,
   onChangeText,
   isFabOpen = false,
-  className
+  className,
+  compact = false,
 }: Props) {
   const { colors } = useTheme();
   const s = makeFitSearchStyles(colors);
@@ -38,22 +46,37 @@ export default function FitSearch({
 
   return (
     <div
-      style={{ ...s.field, pointerEvents: isFabOpen ? "none" : "auto" }}
+      style={{
+        ...s.field,
+        ...(compact
+          ? {
+              paddingLeft: 12,
+              paddingRight: 10,
+              paddingTop: 9,
+              paddingBottom: 9,
+              gap: 8,
+            }
+          : null),
+        pointerEvents: isFabOpen ? "none" : "auto",
+      }}
       className={className}
     >
-      <Search size={20} color={colors.textMuted} strokeWidth={2} />
+      <Search size={compact ? 18 : 20} color={colors.textMuted} strokeWidth={2} />
       <FitTextInput
+        id={id}
+        name={name}
+        aria-label={ariaLabel}
         placeholder={placeholder}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
-        style={s.input}
+        style={{ ...s.input, ...(compact ? { fontSize: 14 } : null) }}
       />
       {inputValue.length > 0 && (
         <FitButton
           variant="iconClear"
           iconOnly
           icon={XCircle}
-          iconSize={18}
+          iconSize={compact ? 16 : 18}
           onClick={() => setInputValue("")}
         />
       )}

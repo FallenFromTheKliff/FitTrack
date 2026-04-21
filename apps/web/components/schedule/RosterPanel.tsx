@@ -3,11 +3,11 @@ import type { RefObject } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { BORDER_RADIUS } from "@fittrack/ui/tokens";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Booking, Resource } from "@/data/schedule-constants";
 
+import FitPill from "@/components/fit/FitPill";
 import { FitText } from "@/components/fit/FitText";
 import FitSearch from "@/components/fit/FitSearch";
 import FitSection from "@/components/fit/FitSection";
@@ -31,8 +31,13 @@ type Props = {
   filteredStaff: Resource[];
   bookings: Booking[];
   deletionRequestIds?: Set<string>;
-  isAdmin: boolean;
+  canDrag?: boolean;
+  canSelect?: boolean;
+  selectedStaffId?: string | null;
   onStaffClick: (staffId: string) => void;
+  resourceLabelPlural?: string;
+  resourceLabelSingular?: string;
+  searchPlaceholder?: string;
 };
 
 export default function RosterPanel({
@@ -43,73 +48,155 @@ export default function RosterPanel({
   filteredStaff,
   bookings,
   deletionRequestIds = new Set(),
-  isAdmin,
-  onStaffClick
+  canDrag = false,
+  canSelect = false,
+  selectedStaffId = null,
+  onStaffClick,
+  resourceLabelPlural = "Staff",
+  resourceLabelSingular = "staff",
+  searchPlaceholder = "Search staff..."
 }: Props) {
   const { colors } = useTheme();
+  const panelHeight = maxHeight ?? undefined;
 
   return (
-    <FitSection heading="Schedule Roster" hideHeading>
-      <div ref={scrollRef} style={{ maxHeight: maxHeight ?? undefined, overflowY: "auto" }}>
-        <div style={{ padding: 14, display: "grid", gap: 12 }}>
+    <FitSection
+      heading={`${resourceLabelPlural} Roster`}
+      hideHeading
+      noPadding
+      style={panelHeight ? { height: panelHeight } : undefined}
+    >
+      <div
+        style={{
+          height: panelHeight,
+          minHeight: panelHeight,
+          backgroundColor: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 16,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+      <div
+        ref={scrollRef}
+        style={{
+          height: "100%",
+          overflowY: "auto",
+        }}
+      >
+        <div style={{ minHeight: "100%", padding: 12, display: "grid", alignContent: "start", gap: 10 }}>
           <FitSearch
             value={staffQuery}
             onChangeText={onStaffQueryChange}
-            placeholder="Search staff..."
+            placeholder={searchPlaceholder}
+            compact
           />
           <FitText
             style={{
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
               color: colors.textMuted,
               letterSpacing: "0.08em",
               textTransform: "uppercase"
             }}
           >
-            STAFF
+            {resourceLabelPlural.toUpperCase()}
           </FitText>
           {filteredStaff.length === 0 ? (
             <FitText style={{ fontSize: 14, color: colors.textMuted }}>
-              No staff found.
+              No {resourceLabelSingular} found.
             </FitText>
           ) : (
             filteredStaff.map((staff) => {
               const bookingCount = bookings.filter((b) => b.resourceId === staff.id).length;
               const hasDeletion = deletionRequestIds.has(staff.id);
-              const borderColor = isAdmin
+              const borderColor = canDrag
                 ? urgencyBorderColor(bookingCount, hasDeletion, colors)
                 : colors.border;
+              const isCoachMeta = staff as Resource & {
+                availabilityCount?: number;
+                isActive?: boolean;
+                specialties?: string[];
+              };
+              const isVisible = isCoachMeta.isActive ?? true;
+              const availabilityCount = isCoachMeta.availabilityCount ?? 0;
+              const specialties = isCoachMeta.specialties ?? [];
+              const metaPrimary = specialties.length
+                ? specialties.slice(0, 2).join(" / ")
+                : `${bookingCount} booking${bookingCount !== 1 ? "s" : ""}`;
+              const metaSecondary = isVisible
+                ? `${availabilityCount} slot${availabilityCount !== 1 ? "s" : ""} / visible`
+                : `${availabilityCount} slot${availabilityCount !== 1 ? "s" : ""} / hidden`;
+              const statusLabel = hasDeletion
+                ? "review"
+                : !isVisible
+                  ? "hidden"
+                  : bookingCount >= 6
+                    ? "peak"
+                    : bookingCount >= 3
+                      ? "active"
+                      : "light";
               return (
                 <DraggableStaffCard
                   key={staff.id}
                   staff={staff}
                   bookingCount={bookingCount}
                   borderColor={borderColor}
-                  isAdmin={isAdmin}
+                  canDrag={canDrag}
+                  canSelect={canSelect}
+                  isSelected={staff.id === selectedStaffId}
                   colors={colors}
-                  onCardClick={() => isAdmin && onStaffClick(staff.id)}
+                  metaPrimary={metaPrimary}
+                  metaSecondary={metaSecondary}
+                  statusLabel={statusLabel}
+                  isVisible={isVisible}
+                  onCardClick={() => canSelect && onStaffClick(staff.id)}
                 />
               );
             })
           )}
         </div>
       </div>
+      </div>
     </FitSection>
   );
 }
 
-function DraggableStaffCard({ staff, bookingCount, borderColor, isAdmin, colors, onCardClick }: {
+function DraggableStaffCard({ staff, bookingCount, borderColor, canDrag, canSelect, isSelected, colors, onCardClick, metaPrimary, metaSecondary, statusLabel, isVisible }: {
   staff: Resource;
   bookingCount: number;
   borderColor: string;
-  isAdmin: boolean;
+  canDrag: boolean;
+  canSelect: boolean;
+  isSelected: boolean;
   colors: ReturnType<typeof useTheme>["colors"];
   onCardClick: () => void;
+  metaPrimary: string;
+  metaSecondary: string;
+  statusLabel: string;
+  isVisible: boolean;
 }) {
+  const { settings } = useTheme();
+  const canAnimate = settings.animationLevel !== "none";
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: staff.id,
-    disabled: !isAdmin
+    id: `coach:${staff.id}`,
+    data: {
+      kind: "coach",
+      coachId: staff.id,
+    },
+    disabled: !canDrag
   });
+  const isInteractive = canDrag || canSelect;
+  const statusTone = statusLabel === "hidden"
+    ? colors.textMuted
+    : statusLabel === "peak"
+      ? colors.warning
+      : statusLabel === "review"
+        ? colors.danger
+        : isVisible
+          ? colors.brand
+          : colors.textMuted;
 
   return (
     <div
@@ -119,36 +206,58 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, isAdmin, colors,
         opacity: isDragging ? 0.45 : 1,
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        padding: "11px 13px",
-        borderRadius: BORDER_RADIUS.card,
-        border: `1.5px solid ${borderColor}`,
-        backgroundColor: `${borderColor}0d`,
-        cursor: isAdmin ? "pointer" : "default",
-        transition: "border-color 0.2s ease, background-color 0.2s ease"
+        gap: 12,
+        padding: "10px 12px",
+        borderRadius: 14,
+        border: `1.5px solid ${isSelected ? colors.brand : borderColor}`,
+        backgroundColor: isSelected ? `${colors.brand}14` : colors.surface,
+        boxShadow: isSelected ? `0 0 0 1px ${colors.brand}1f inset` : "none",
+        cursor: isInteractive ? "pointer" : "default",
+        touchAction: canDrag ? "none" : "auto",
+        transformOrigin: "center",
+        transition: canAnimate
+          ? "border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, filter 0.18s ease"
+          : "border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, filter 0.18s ease"
       }}
       onClick={onCardClick}
-      role={isAdmin ? "button" : undefined}
-      tabIndex={isAdmin ? 0 : undefined}
-      onKeyDown={isAdmin ? (e) => { if (e.key === "Enter") onCardClick(); } : undefined}
+      role={isInteractive ? "button" : undefined}
+      aria-pressed={isInteractive ? isSelected : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onKeyDown={isInteractive ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onCardClick();
+        }
+      } : undefined}
+      onMouseEnter={(event) => {
+        if (!canAnimate || isDragging) return;
+        event.currentTarget.style.boxShadow = isSelected
+          ? `0 0 0 1px ${colors.brand}1f inset, 0 8px 18px rgba(0,0,0,0.16)`
+          : "0 8px 18px rgba(0,0,0,0.16)";
+        event.currentTarget.style.filter = "brightness(1.03)";
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.boxShadow = isSelected ? `0 0 0 1px ${colors.brand}1f inset` : "none";
+        event.currentTarget.style.filter = "none";
+      }}
     >
-      {isAdmin && (
-        <div
-          {...listeners}
-          {...attributes}
-          style={{ cursor: "grab", color: colors.textMuted, flexShrink: 0, lineHeight: 0 }}
-          onClick={(e) => e.stopPropagation()}
-          title="Drag to schedule"
-        >
-          <GripVertical size={18} strokeWidth={2} />
-        </div>
-      )}
       <div
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: 9,
-          backgroundColor: colors.brand,
+          width: 4,
+          alignSelf: "stretch",
+          borderRadius: 999,
+          backgroundColor: isSelected ? colors.brand : borderColor,
+          opacity: isSelected ? 1 : 0.9,
+          flexShrink: 0,
+        }}
+      />
+      <div
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          backgroundColor: isSelected ? `${colors.brand}24` : colors.surfaceRaised,
+          border: `1px solid ${isSelected ? colors.brand + "44" : colors.border}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -157,19 +266,19 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, isAdmin, colors,
       >
         <FitText
           style={{
-            fontSize: 13,
+            fontSize: 11,
             fontWeight: 700,
-            color: colors.onBrand ?? "#FFFFFF"
+            color: isSelected ? colors.brand : colors.textMuted
           }}
         >
           {staff.initials ?? staff.name.slice(0, 2).toUpperCase()}
         </FitText>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2 }}>
         <FitText
           style={{
-            fontSize: 15,
-            fontWeight: 600,
+            fontSize: 13,
+            fontWeight: 700,
             display: "block",
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -178,28 +287,49 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, isAdmin, colors,
         >
           {staff.name}
         </FitText>
-        <FitText style={{ fontSize: 13, color: colors.textMuted, display: "block", marginTop: 1 }}>
-          {bookingCount} booking{bookingCount !== 1 ? "s" : ""}
+        <FitText
+          style={{
+            fontSize: 11,
+            color: colors.textSecondary,
+            display: "block",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}
+        >
+          {metaPrimary}
+        </FitText>
+        <FitText style={{ fontSize: 10, color: colors.textMuted, display: "block" }}>
+          {metaSecondary}
         </FitText>
       </div>
-      {isAdmin && (
-        <div
-          style={{
-            width: 9,
-            height: 9,
-            borderRadius: "50%",
-            backgroundColor: borderColor,
-            flexShrink: 0
-          }}
-          title={
-            borderColor === colors.danger
-              ? "Maxed / deletion request"
-              : borderColor === colors.warning
-                ? "Busy"
-                : "Normal"
-          }
+      <div style={{ display: "grid", justifyItems: "end", gap: 8, flexShrink: 0 }}>
+        <FitPill
+          mode="status"
+          label={statusLabel.toUpperCase()}
+          color={statusTone}
+          fontSize={9}
+          fontWeight={700}
+          borderOpacity="35"
+          bgOpacity="14"
         />
-      )}
+        {canDrag && (
+          <div
+            {...listeners}
+            {...attributes}
+            style={{ cursor: "grab", color: colors.textMuted, lineHeight: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            title="Drag to schedule"
+          >
+            <GripVertical size={15} strokeWidth={2} />
+          </div>
+        )}
+        {!canDrag ? (
+          <FitText style={{ fontSize: 10, color: colors.textMuted }}>
+            {bookingCount} booked
+          </FitText>
+        ) : null}
+      </div>
     </div>
   );
 }

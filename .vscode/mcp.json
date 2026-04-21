@@ -19,32 +19,71 @@
         "Authorization": "Bearer ${input:github_mcp_pat_v2}"
       }
     },
+    "Notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "Prisma Remote": {
+      "type": "http",
+      "url": "https://mcp.prisma.io/mcp"
+    },
     "oraios/serena": {
       "type": "stdio",
-      "command": "uvx",
+      "command": "serena",
       "args": [
-        "--from",
-        "git+https://github.com/oraios/serena",
-        "serena",
         "start-mcp-server",
+        "--open-web-dashboard",
+        "false",
         "--context",
-        "ide",
+        "codex",
         "--project",
         "${workspaceFolder}"
       ]
     },
     "FitTrack Playwright": {
       "type": "stdio",
-      "command": "npx.cmd",
-      "args": ["-y", "@playwright/mcp@latest"],
+      "command": "pnpm.cmd",
+      "args": [
+        "exec",
+        "playwright-mcp",
+        "--config",
+        "${workspaceFolder}\\.playwright-mcp.json",
+        "--grant-permissions",
+        "camera",
+        "microphone"
+      ],
       "env": {
         "PLAYWRIGHT_BROWSERS_PATH": "0"
       }
     },
-    "Context7 Docs": {
+    "FitTrack Prisma Local": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"]
+      "command": "pnpm.cmd",
+      "args": [
+        "--dir",
+        "${workspaceFolder}\\apps\\api",
+        "exec",
+        "prisma",
+        "mcp"
+      ]
+    },
+    "FitTrack Swagger": {
+      "type": "stdio",
+      "command": "pnpm.cmd",
+      "args": [
+        "--dir",
+        "${workspaceFolder}",
+        "exec",
+        "swagger-mcp"
+      ],
+      "env": {
+        "API_BASE_URL": "http://127.0.0.1:3001",
+        "API_DOCS_URL": "http://127.0.0.1:3001/v1/docs-json"
+      }
+    },
+    "Context7 Docs": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
     }
   }
 }

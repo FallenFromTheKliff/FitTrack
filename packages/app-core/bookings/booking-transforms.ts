@@ -20,15 +20,28 @@ export function toDateTimeRange(startIso: string, durationMinutes: number, expli
 export function toVenueBookingStatus(status?: string): Booking["status"] {
   const normalized = normalizeBookingStatus(status);
   if (normalized === "cancelled") return "cancelled";
-  if (normalized === "pending") return "waitlisted";
+  if (normalized === "no_show") return "cancelled";
+  if (normalized === "pending") return "pending";
+  if (normalized === "completed") return "completed";
   return "confirmed";
 }
 
 export function mapVenueBookingRecord(record: VenueBookingRecord, venue?: VenueRecord): Booking {
   const { date, endLabel, startLabel } = toDateTimeRange(record.startTime, record.durationHours * 60, record.endTime);
   const hourlyRate = venue?.hourlyRate ?? 0;
+  const coachFirstName = record.coach?.user?.profile?.firstName?.trim() ?? "";
+  const coachLastName = record.coach?.user?.profile?.lastName?.trim() ?? "";
+  const coachName =
+    `${coachFirstName} ${coachLastName}`.trim() ||
+    record.coach?.user?.email ||
+    undefined;
 
   return {
+    totalAmount: record.totalAmount ?? undefined,
+    amountDueNow: record.amountDueNow ?? undefined,
+    remainingBalance: record.remainingBalance ?? undefined,
+    nextPaymentDate: record.nextPaymentDate ?? undefined,
+    paymentPlan: record.paymentPlan ?? undefined,
     id: record.id,
     resourceId: String(record.venueId),
     resourceName: venue?.name ?? "[MOVED/DELETED]",
@@ -37,8 +50,11 @@ export function mapVenueBookingRecord(record: VenueBookingRecord, venue?: VenueR
     time: `${startLabel} - ${endLabel}`,
     startTime: startLabel,
     endTime: endLabel,
+    description: record.purpose ?? undefined,
     status: toVenueBookingStatus(record.status),
-    price: hourlyRate * record.durationHours
+    price: hourlyRate * record.durationHours,
+    trainerId: record.coach?.id ?? record.coachId ?? undefined,
+    trainerName: coachName
   };
 }
 

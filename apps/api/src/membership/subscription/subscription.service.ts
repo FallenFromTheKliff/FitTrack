@@ -133,12 +133,16 @@ export class SubscriptionService {
     }
   }
 
-  getMySubscription(userId: string): Promise<SubscriptionWithPlan> {
-    return this.repo.findCurrentSubscriptionByUserIdOrThrow(userId);
+  getMySubscription(userId: string): Promise<SubscriptionWithPlan | null> {
+    return this.repo.findCurrentSubscriptionByUserId(userId);
   }
 
   hasSubscriptionAccess(userId: string): Promise<boolean> {
     return this.repo.hasSubscriptionAccess(userId);
+  }
+
+  hasActivePlanAccess(userId: string): Promise<boolean> {
+    return this.repo.hasActivePlanAccess(userId);
   }
 
   hasCoachingAccess(userId: string): Promise<boolean> {

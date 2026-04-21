@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, Camera, Dumbbell, User } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -8,19 +8,32 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
-import { calcBMI, formatDate, formatBookingDate, splitFullName } from "@fittrack/utils";
-import { coachProfileSchema, editProfilePersonalSchema, type EditProfilePersonalData } from "@fittrack/validators";
-import { updateAccountMutationOptions, updateCoachProfileMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
+import {
+  buildRenderableAssetUrl,
+  calcBMI,
+  formatDate,
+  formatBookingDate,
+  splitFullName
+} from "@fittrack/utils";
+import {
+  coachProfileSchema,
+  editProfilePersonalSchema,
+  formatPhilippineMobileForInput,
+  normalizePhilippineMobileNumber,
+  sanitizePhilippineMobileInput,
+  type EditProfilePersonalData
+} from "@fittrack/validators";
+import { updateCoachProfileMutationOptions, updatePhoneMutationOptions, updateProfileMutationOptions, uploadImageMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { mobileApiClient } from "@/lib/api-client";
+import { MOBILE_API_BASE_URL, mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
-import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { useLoadingText } from "@fittrack/hooks";
 import { makeEditProfileModalStyles } from "@/styles/modals/EditProfileStyles";
 
-import { CalendarModal, ConfirmModal } from "@/components/modals";
-import { FitButton, FitInputField, FitText, FitTextInput } from "@/components/fit";
+import CalendarModal from "@/components/modals/shared/CalendarModal";
+import { FitAvatarImage, FitButton, FitInputField, FitText, FitTextInput } from "@/components/fit";
 
 type Props = {
   isVisible: boolean;
@@ -33,30 +46,57 @@ const capitalize = (value: string) => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
+type SelectedAvatarAsset = {
+  file?: File | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  uri: string;
+};
+
+const createAvatarUploadPart = async (asset: SelectedAvatarAsset) => {
+  const fileName = asset.fileName ?? `avatar-${Date.now()}.jpg`;
+  const mimeType = asset.mimeType ?? "image/jpeg";
+
+  if (Platform.OS !== "web") {
+    return {
+      uri: asset.uri,
+      name: fileName,
+      type: mimeType
+    };
+  }
+
+  if (asset.file) {
+    return asset.file;
+  }
+
+  const response = await fetch(asset.uri);
+  const blob = await response.blob();
+  return new File([blob], fileName, {
+    type: blob.type || mimeType
+  });
+};
+
 export default function EditProfileModal({ isVisible, onClose, coachProfile = null }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeEditProfileModalStyles(colors), [colors]);
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const isCoach = user?.role === "COACH";
   const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
-  const updateAccountMutation = useMutation(updateAccountMutationOptions(mobileApiClient));
+  const updatePhoneMutation = useMutation(updatePhoneMutationOptions(mobileApiClient));
+  const uploadImageMutation = useMutation(uploadImageMutationOptions(mobileApiClient));
   const updateCoachProfileMutation = useMutation(updateCoachProfileMutationOptions(mobileApiClient, queryClient));
 
   const [activeTab, setActiveTab] = useState<"personal" | "fitness">("personal");
   const [isDobCalOpen, setIsDobCalOpen] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarAsset, setAvatarAsset] = useState<SelectedAvatarAsset | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [emailLogoutVisible, setEmailLogoutVisible] = useState(false);
-  const [isEmailLogoutLoading, setIsEmailLogoutLoading] = useState(false);
   const [coachBio, setCoachBio] = useState("");
   const [coachSpecialties, setCoachSpecialties] = useState("");
   const [coachCertifications, setCoachCertifications] = useState("");
-  const [coachYearsExperience, setCoachYearsExperience] = useState("");
   const [coachHourlyRate, setCoachHourlyRate] = useState("");
-  const { message: emailStatus, showMessage: showEmailStatus, clearMessage: clearEmailStatus } = useTimedMessage(1800);
   const personalForm = useForm<EditProfilePersonalData>({
     resolver: zodResolver(editProfilePersonalSchema),
     defaultValues: {
@@ -68,7 +108,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     }
   });
   const savingText = useLoadingText("Saving", isSubmitting);
-  const emailLoadingTitle = useLoadingText("Updating", isEmailLogoutLoading);
   const { reset: resetPersonal } = personalForm;
   const wasVisibleRef = useRef(false);
   const [weightInput, setWeightInput] = useState("");
@@ -77,7 +116,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     bio: "",
     specialties: "",
     certifications: "",
-    yearsExperience: "",
     hourlyRate: ""
   });
   const userName = user?.name ?? "";
@@ -98,41 +136,34 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         firstName: fn,
         lastName: ln,
         email: userEmail,
-        phone: userPhone,
+        phone: formatPhilippineMobileForInput(userPhone),
         dateOfBirth: userDob
       });
       setWeightInput(String(userWeight ?? ""));
       setHeightInput(String(userHeight ?? ""));
-      setAvatarUri(null);
+      setAvatarAsset(null);
       setActiveTab("personal");
       setIsDobCalOpen(false);
-      setEmailLogoutVisible(false);
-      setIsEmailLogoutLoading(false);
       setIsSubmitting(false);
-      clearEmailStatus();
       const nextCoachState = {
         bio: coachProfile?.bio ?? "",
         specialties: coachProfile?.specialties?.join(", ") ?? "",
         certifications: coachProfile?.certifications?.join(", ") ?? "",
-        yearsExperience: coachProfile?.yearsExperience != null ? String(coachProfile.yearsExperience) : "",
         hourlyRate: coachProfile?.hourlyRate != null ? String(coachProfile.hourlyRate) : ""
       };
       coachSnapshot.current = nextCoachState;
       setCoachBio(nextCoachState.bio);
       setCoachSpecialties(nextCoachState.specialties);
       setCoachCertifications(nextCoachState.certifications);
-      setCoachYearsExperience(nextCoachState.yearsExperience);
       setCoachHourlyRate(nextCoachState.hourlyRate);
     }
 
     if (!isVisible) {
       setIsDobCalOpen(false);
-      setEmailLogoutVisible(false);
     }
 
     wasVisibleRef.current = isVisible;
   }, [
-    clearEmailStatus,
     coachProfile,
     isVisible,
     resetPersonal,
@@ -148,13 +179,19 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: "images",
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8
     });
-    if (!result.canceled && result.assets[0]?.uri) {
-      setAvatarUri(result.assets[0].uri);
+    const nextAsset = result.canceled ? null : result.assets[0];
+    if (nextAsset?.uri) {
+      setAvatarAsset({
+        file: nextAsset.file ?? null,
+        fileName: nextAsset.fileName,
+        mimeType: nextAsset.mimeType,
+        uri: nextAsset.uri
+      });
     }
   };
 
@@ -179,60 +216,72 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       .toUpperCase() ||
     user?.avatarInitials ||
     "?";
-  const displayedAvatarUri = avatarUri ?? user?.avatarUri ?? null;
+  const displayedAvatarUri = buildRenderableAssetUrl({
+    apiBaseUrl: MOBILE_API_BASE_URL,
+    assetUrl: avatarAsset?.uri ?? user?.avatarUri ?? null
+  });
   const isFitnessDirty = weightInput !== String(userWeight ?? "") || heightInput !== String(userHeight ?? "");
   const isCoachDirty = isCoach && (
     coachBio !== coachSnapshot.current.bio ||
     coachSpecialties !== coachSnapshot.current.specialties ||
     coachCertifications !== coachSnapshot.current.certifications ||
-    coachYearsExperience !== coachSnapshot.current.yearsExperience ||
     coachHourlyRate !== coachSnapshot.current.hourlyRate
   );
-  const isDirty = personalForm.formState.isDirty || isFitnessDirty || !!avatarUri || isCoachDirty;
+  const isDirty = personalForm.formState.isDirty || isFitnessDirty || !!avatarAsset || isCoachDirty;
 
   const buildPatch = (personal: EditProfilePersonalData): Partial<AuthUser> => {
     const fullName = [personal.firstName.trim(), personal.lastName.trim()].filter(Boolean).join(" ");
+    const normalizedPhone = normalizePhilippineMobileNumber(personal.phone);
     const patch: Partial<AuthUser> = {
       name: fullName || user?.name,
-      email: personal.email.trim(),
-      phone_no: personal.phone.trim(),
+      email: user?.email ?? "",
+      phone_no: (normalizedPhone || user?.phone_no) ?? null,
       dateOfBirth: personal.dateOfBirth || undefined
     };
     const wKgNum = parseFloat(weightInput);
     const hCmNum = parseFloat(heightInput);
     if (wKgNum > 0) patch.weightKg = wKgNum;
     if (hCmNum > 0) patch.heightCm = hCmNum;
-    if (avatarUri) patch.avatarUri = avatarUri;
     return patch;
   };
 
   const commitSave = async (personal: EditProfilePersonalData) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    const emailChanged = personal.email.trim() !== (user?.email ?? "");
-    const phoneChanged = personal.phone.trim() !== (user?.phone_no ?? "");
+    const normalizedPhone = normalizePhilippineMobileNumber(personal.phone);
+    const currentPhone = normalizePhilippineMobileNumber(user?.phone_no ?? "");
+    const phoneChanged = normalizedPhone !== currentPhone;
     const patch = buildPatch(personal);
     try {
       const coachPayload = coachProfileSchema.parse({
         bio: coachBio,
         specialties: coachSpecialties,
         certifications: coachCertifications,
-        yearsExperience: coachYearsExperience,
         hourlyRate: coachHourlyRate
       });
       const wKgNum = parseFloat(weightInput);
       const hCmNum = parseFloat(heightInput);
+      let nextAvatarUri = user?.avatarUri;
+      if (avatarAsset) {
+        const formData = new FormData();
+        formData.append("file", await createAvatarUploadPart(avatarAsset) as never);
+        const avatarResult = await uploadImageMutation.mutateAsync(formData);
+        nextAvatarUri = avatarResult.url;
+      }
       await updateProfileMutation.mutateAsync({
         firstName: personal.firstName.trim() || undefined,
         lastName: personal.lastName.trim() || undefined,
+        avatarUrl: nextAvatarUri,
         dateOfBirth: personal.dateOfBirth || undefined,
         currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : undefined,
         heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
       });
-      if (emailChanged || phoneChanged) {
-        await updateAccountMutation.mutateAsync({
-          ...(emailChanged ? { email: personal.email.trim() } : {}),
-          ...(phoneChanged ? { phone_no: personal.phone.trim() } : {})
+      if (phoneChanged) {
+        if (!normalizedPhone) {
+          throw new Error("Phone number removal is not available in profile settings.");
+        }
+        await updatePhoneMutation.mutateAsync({
+          phone_number: normalizedPhone
         });
       }
       if (isCoach) {
@@ -241,7 +290,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
             bio: coachPayload.bio || undefined,
             specialties: coachPayload.specialties,
             certifications: coachPayload.certifications,
-            yearsExperience: coachPayload.yearsExperience,
             hourlyRate: coachPayload.hourlyRate
           },
           userId: user?.id,
@@ -251,8 +299,10 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       await Promise.all([
         updateUser({
           ...patch,
+          avatarUri: nextAvatarUri,
           profile: {
             ...user?.profile,
+            avatarUrl: nextAvatarUri ?? null,
             firstName: personal.firstName.trim() || null,
             lastName: personal.lastName.trim() || null,
             dateOfBirth: personal.dateOfBirth || null,
@@ -262,7 +312,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         }),
         new Promise((resolve) => setTimeout(resolve, 1200))
       ]);
-      if (!emailChanged) onClose();
+      setAvatarAsset(null);
+      onClose();
       return true;
     } finally {
       setIsSubmitting(false);
@@ -271,65 +322,12 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
 
   const handleSave = personalForm.handleSubmit(async (personal) => {
     if (isSubmitting) return;
-    const emailChanged = personal.email.trim() !== (user?.email ?? "");
-    if (emailChanged) {
-      setEmailLogoutVisible(true);
-      return;
-    }
     await commitSave(personal);
   });
-
-  const handleEmailLogoutConfirm = async () => {
-    if (isEmailLogoutLoading) return;
-    setIsEmailLogoutLoading(true);
-    setIsSubmitting(true);
-    try {
-      const personal = personalForm.getValues();
-      const coachPayload = coachProfileSchema.parse({
-        bio: coachBio,
-        specialties: coachSpecialties,
-        certifications: coachCertifications,
-        yearsExperience: coachYearsExperience,
-        hourlyRate: coachHourlyRate
-      });
-      showEmailStatus("Verifying request");
-      await updateProfileMutation.mutateAsync({
-        firstName: personal.firstName.trim() || undefined,
-        lastName: personal.lastName.trim() || undefined,
-        dateOfBirth: personal.dateOfBirth || undefined
-      });
-      if (isCoach) {
-        await updateCoachProfileMutation.mutateAsync({
-          payload: {
-            bio: coachPayload.bio || undefined,
-            specialties: coachPayload.specialties,
-            certifications: coachPayload.certifications,
-            yearsExperience: coachPayload.yearsExperience,
-            hourlyRate: coachPayload.hourlyRate
-          },
-          userId: user?.id,
-          coachId: coachProfile?.id
-        });
-      }
-      showEmailStatus("Updating email");
-      await updateAccountMutation.mutateAsync({
-        email: personal.email.trim()
-      });
-      await updateUser(buildPatch(personal));
-      await logout();
-      return;
-    } catch {
-      setIsEmailLogoutLoading(false);
-      setIsSubmitting(false);
-    }
-  };
 
   const handleClose = () => {
     if (isSubmitting) return;
     setIsDobCalOpen(false);
-    setEmailLogoutVisible(false);
-    setIsEmailLogoutLoading(false);
-    clearEmailStatus();
     onClose();
   };
 
@@ -359,14 +357,28 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
               </Pressable>
             </View>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={s.body}
+          >
             {activeTab === "personal" ? (
               <>
                 <View style={s.avatarRow}>
                   <Pressable onPress={handlePickImage}>
                     <View style={s.avatarWrap}>
                       {displayedAvatarUri ? (
-                        <Image source={{ uri: displayedAvatarUri }} style={s.avatarImage} />
+                        <FitAvatarImage
+                          alt={`${user?.name ?? "Member"} avatar`}
+                          borderRadius={16}
+                          uri={displayedAvatarUri}
+                          fallback={
+                            <View style={s.avatarCircle}>
+                              <FitText style={s.avatarInitialsText}>{avatarInitials}</FitText>
+                            </View>
+                          }
+                        />
                       ) : (
                         <View style={s.avatarCircle}>
                           <FitText style={s.avatarInitialsText}>{avatarInitials}</FitText>
@@ -409,8 +421,11 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                   errors={personalForm.formState.errors}
                   keyboardType="email-address"
                   compact
-                  editable={!isSubmitting}
+                  editable={false}
                 />
+                <FitText style={{ fontSize: 12, color: colors.textMuted, marginTop: -4, marginBottom: 4 }}>
+                  Email updates are managed outside profile settings.
+                </FitText>
                 <FitInputField
                   control={personalForm.control}
                   name="phone"
@@ -419,6 +434,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                   errors={personalForm.formState.errors}
                   keyboardType="phone-pad"
                   maxLength={11}
+                  sanitizeValue={sanitizePhilippineMobileInput}
                   compact
                   editable={!isSubmitting}
                 />
@@ -450,17 +466,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     keyboardType="phone-pad"
                     editable={!isSubmitting}
                     onChangeText={(text) => setCoachHourlyRate(text.replace(/[^0-9]/g, ""))}
-                    style={s.fitInput}
-                  />
-                </View>
-                <View style={s.fitRow}>
-                  <FitText style={s.fitLabel}>Experience</FitText>
-                  <FitTextInput
-                    value={coachYearsExperience}
-                    placeholder="e.g. 4"
-                    keyboardType="phone-pad"
-                    editable={!isSubmitting}
-                    onChangeText={(text) => setCoachYearsExperience(text.replace(/[^0-9]/g, ""))}
                     style={s.fitInput}
                   />
                 </View>
@@ -589,23 +594,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
           setIsDobCalOpen(false);
         }}
         onClose={() => setIsDobCalOpen(false)}
-      />
-      <ConfirmModal
-        isVisible={emailLogoutVisible}
-        title="Changing Sensitive Info"
-        message="You are about to change your email and you will be logged out right after the update."
-        yesLabel="Continue"
-        noLabel="Cancel"
-        isDestructive
-        isLoading={isEmailLogoutLoading}
-        loadingLabel={emailStatus || "PLEASE WAIT"}
-        loadingTitle={emailLoadingTitle}
-        onNo={() => {
-          if (isEmailLogoutLoading) return;
-          clearEmailStatus();
-          setEmailLogoutVisible(false);
-        }}
-        onYes={handleEmailLogoutConfirm}
       />
     </Modal>
   );

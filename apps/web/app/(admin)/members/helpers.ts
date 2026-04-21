@@ -1,4 +1,5 @@
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
+import type { MemberStatusTab } from "@/data/members/members";
 import type { DeletionRequest } from "@/data/members/members";
 import type { MemberRecord } from "@fittrack/types";
 import { fullName } from "@fittrack/utils";
@@ -18,11 +19,25 @@ export function getPendingRequestsByUserId(deletionRequests: DeletionRequest[]) 
   return map;
 }
 
+export function isArchivedMember(
+  member: MemberRecord,
+  pendingRequestsByUserId: Map<string, DeletionRequest>
+) {
+  return Boolean(member.deletedAt) || pendingRequestsByUserId.has(member.id);
+}
+
+export function getDirectoryMemberStatus(
+  member: MemberRecord,
+  pendingRequestsByUserId: Map<string, DeletionRequest>
+): MemberStatusTab {
+  return isArchivedMember(member, pendingRequestsByUserId) ? "Archived" : "Active";
+}
+
 export function filterMembers(
   members: MemberRecord[],
   query: string,
   activeChip: string,
-  activeStatus: "Active" | "Frozen",
+  activeStatus: MemberStatusTab,
   pendingRequestsByUserId: Map<string, DeletionRequest>
 ) {
   return members.filter((member) => {
@@ -30,21 +45,18 @@ export function filterMembers(
     const name = fullName(member).toLowerCase();
     const matchesSearch =
       name.includes(normalizedQuery) || member.email.toLowerCase().includes(normalizedQuery);
-    const isFrozen = pendingRequestsByUserId.has(member.id);
     const role = member.role?.name ?? "USER";
-    const matchesStatus = activeStatus === "Active" ? !isFrozen : isFrozen;
+    const matchesStatus = getDirectoryMemberStatus(member, pendingRequestsByUserId) === activeStatus;
     const matchesChip =
       activeChip === "all" ||
       (activeChip === "Admin"
         ? role === "ADMIN"
         : activeChip === "Staff"
           ? role === "STAFF"
-          : activeChip === "Coach"
-            ? role === "COACH"
-            : activeChip === "Member"
+          : activeChip === "Member"
               ? role === "USER"
               : true);
 
-    return !member.deletedAt && matchesSearch && matchesChip && matchesStatus;
+    return matchesSearch && matchesChip && matchesStatus;
   });
 }

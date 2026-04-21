@@ -53,20 +53,6 @@ export function makeOTPModalStyles(colors: ThemeColors) {
       color: colors.textPrimary
     },
     digitBoxFilled: { borderColor: colors.brand },
-    demoRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: R.sm,
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      marginBottom: 16,
-      width: "100%",
-      backgroundColor: colors.surfaceRaised
-    },
-    demoLabel: { fontSize: 12, fontWeight: "600", color: colors.brand },
-    demoValue: { fontSize: 12, color: colors.textMuted },
-    demoCode: { fontSize: 12, fontWeight: "700", color: colors.textPrimary },
     verifyBtn: { width: "100%", marginBottom: 16 },
     resendRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
     resendText: { fontSize: 13, color: colors.textMuted },

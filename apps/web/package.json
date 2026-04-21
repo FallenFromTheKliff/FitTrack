@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 8080",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build --webpack --experimental-build-mode compile",
+    "start": "next start --port 8080",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
@@ -36,7 +36,8 @@
     "recharts": "^3.7.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zxing-wasm": "^3.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

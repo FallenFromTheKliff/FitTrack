@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -26,6 +27,10 @@ function hasPaginationMeta(value: unknown): value is ApiResponse<unknown> {
   return 'data' in candidate && 'meta' in candidate;
 }
 
+function isStreamableFile(value: unknown): value is StreamableFile {
+  return value instanceof StreamableFile;
+}
+
 /**
  * ResponseInterceptor
  * Wraps every successful controller response into the standard envelope:
@@ -37,20 +42,20 @@ function hasPaginationMeta(value: unknown): value is ApiResponse<unknown> {
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor<
   unknown,
-  ApiResponse<unknown>
+  ApiResponse<unknown> | StreamableFile
 > {
   intercept(
     _context: ExecutionContext,
     next: CallHandler<unknown>,
-  ): Observable<ApiResponse<unknown>> {
+  ): Observable<ApiResponse<unknown> | StreamableFile> {
     return next.handle().pipe(
-      map((result: unknown) => {
-        if (hasPaginationMeta(result)) {
+      map((result: unknown): ApiResponse<unknown> | StreamableFile => {
+        if (hasPaginationMeta(result) || isStreamableFile(result)) {
           return result;
         }
 
         return { data: result };
       }),
-    );
+    ) as Observable<ApiResponse<unknown> | StreamableFile>;
   }
 }

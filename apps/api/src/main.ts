@@ -31,6 +31,37 @@ function serializeLogMessage(message: unknown): string {
   return JSON.stringify(message);
 }
 
+const LOCAL_BROWSER_ORIGIN_PATTERN =
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function parseAllowedBrowserOrigins(value: string | undefined): Set<string> {
+  return new Set(
+    (value ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin !== '')
+      .map((origin) => normalizeOrigin(origin)),
+  );
+}
+
+function isAllowedBrowserOrigin(
+  origin: string | undefined,
+  allowedOrigins: Set<string>,
+): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  return (
+    LOCAL_BROWSER_ORIGIN_PATTERN.test(origin) ||
+    allowedOrigins.has(normalizeOrigin(origin))
+  );
+}
+
 async function bootstrap(): Promise<void> {
   const winstonLogger = WinstonModule.createLogger({
     transports: [
@@ -73,10 +104,30 @@ async function bootstrap(): Promise<void> {
   });
   const config = app.get(ConfigService);
   const prefix = config.get<string>('app.apiPrefix', 'v1');
+  const allowedBrowserOrigins = parseAllowedBrowserOrigins(
+    config.get<string>('app.webAllowedOrigins', ''),
+  );
 
   app.use(helmet());
   app.use(cookieParser());
   app.setGlobalPrefix(prefix);
+  app.enableCors({
+    origin(
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) {
+      callback(null, isAllowedBrowserOrigin(origin, allowedBrowserOrigins));
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Idempotency-Key',
+      'idempotency-key',
+    ],
+    exposedHeaders: ['Set-Cookie'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -116,12 +167,16 @@ async function bootstrap(): Promise<void> {
   });
 
   const port = config.get<number>('app.port', 3000);
-  await app.listen(port);
+  const host = config.get<string>('app.host', '::');
+  await app.listen(port, host);
 
   const nodeEnv = config.get<string>('app.nodeEnv');
-  console.log(`FitTrack API running on http://localhost:${port}/${prefix}`);
-  console.log(`Swagger docs: http://localhost:${port}/${prefix}/docs`);
-  console.log(`Health check: http://localhost:${port}/${prefix}/health`);
+  const printableHost = host.includes(':') ? `[${host}]` : host;
+  console.log(
+    `FitTrack API running on http://${printableHost}:${port}/${prefix}`,
+  );
+  console.log(`Swagger docs: http://${printableHost}:${port}/${prefix}/docs`);
+  console.log(`Health check: http://${printableHost}:${port}/${prefix}/health`);
   console.log(`Environment: ${nodeEnv ?? 'unknown'}`);
 }
 

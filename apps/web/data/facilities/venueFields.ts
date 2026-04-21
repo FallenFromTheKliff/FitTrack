@@ -15,6 +15,12 @@ export const VENUE_BOOKING_OPTIONS = [
     { label: "Facility Only", value: "false" }
 ];
 
+export const VENUE_FLOOR_OPTIONS = [
+    { label: "Floor 1", value: "floor-1" },
+    { label: "Floor 2", value: "floor-2" },
+    { label: "Floor 3", value: "floor-3" }
+];
+
 export const VENUE_FIELDS: FieldConfig[] = [
     { name: "name", label: "Name", type: "text", required: true, placeholder: "e.g., Boxing Ring" },
     { name: "description", label: "Description", type: "textarea", placeholder: "Optional venue description" },
@@ -26,6 +32,12 @@ export const VENUE_FIELDS: FieldConfig[] = [
         label: "Icon",
         type: "select",
         options: VENUE_ICON_OPTIONS
+    },
+    {
+        name: "floorId",
+        label: "Floor",
+        type: "select",
+        options: VENUE_FLOOR_OPTIONS
     },
     { name: "gridColumn", label: "Grid Column", type: "text", required: true, placeholder: `1-${COLS}` },
     { name: "gridRow", label: "Grid Row", type: "text", required: true, placeholder: `1-${ROWS}` },
@@ -54,6 +66,7 @@ export const VENUE_INITIAL_VALUES = {
     hourlyRate: "",
     minimumHours: "1",
     iconKey: "gym-area",
+    floorId: "floor-1",
     gridColumn: "1",
     gridRow: "1",
     gridWidth: "2",

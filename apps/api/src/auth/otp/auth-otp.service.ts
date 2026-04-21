@@ -11,7 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { OtpChannel, OtpPurpose } from '@prisma/client';
 
 import { AuthRepository } from '../auth.repository';
-import { QUEUE_MAIL, QUEUE_SMS } from '../../queue/queue.constants';
+import { QUEUE_MAIL } from '../../queue/queue.constants';
 import {
   OTP_EXPIRY_MINUTES,
   OTP_HASH_ROUNDS,
@@ -26,7 +26,6 @@ export class AuthOtpService {
   constructor(
     private readonly repo: AuthRepository,
     @InjectQueue(QUEUE_MAIL) private readonly mailQueue: Queue,
-    @InjectQueue(QUEUE_SMS) private readonly smsQueue: Queue,
   ) {}
 
   async issueOtp(
@@ -35,6 +34,19 @@ export class AuthOtpService {
     channel: OtpChannel,
     destination: string,
   ): Promise<void> {
+    if (channel !== OtpChannel.email) {
+      throw new HttpException(
+        {
+          type: 'FEATURE_REMOVED',
+          title: 'SMS OTP Removed',
+          status: HttpStatus.GONE,
+          detail:
+            'SMS OTP delivery has been removed. Use email-based OTP flows instead.',
+        },
+        HttpStatus.GONE,
+      );
+    }
+
     const latest = await this.repo.findLatestOtp(userId, purpose);
 
     if (latest?.locked_until && latest.locked_until > new Date()) {
@@ -74,6 +86,22 @@ export class AuthOtpService {
     rawCode: string,
     purpose: OtpPurpose,
   ): Promise<void> {
+    const otp = await this.assertOtpValid(userId, rawCode, purpose);
+
+    await this.repo.updateOtp(otp.id, { consumed_at: new Date() });
+  }
+
+  async assertOtpValid(userId: string, rawCode: string, purpose: OtpPurpose) {
+    const otp = await this.findAndValidateOtp(userId, rawCode, purpose);
+
+    return otp;
+  }
+
+  private async findAndValidateOtp(
+    userId: string,
+    rawCode: string,
+    purpose: OtpPurpose,
+  ) {
     const otp = await this.repo.findLatestOtp(userId, purpose);
 
     if (!otp) {
@@ -148,7 +176,7 @@ export class AuthOtpService {
       );
     }
 
-    await this.repo.updateOtp(otp.id, { consumed_at: new Date() });
+    return otp;
   }
 
   private async enqueueOtp(
@@ -157,9 +185,7 @@ export class AuthOtpService {
     otp: string,
     purpose: OtpPurpose,
   ): Promise<void> {
-    const queue = channel === OtpChannel.email ? this.mailQueue : this.smsQueue;
-
-    await queue.add(
+    await this.mailQueue.add(
       'send-otp',
       { to: destination, otp, purpose },
       {

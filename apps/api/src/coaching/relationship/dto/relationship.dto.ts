@@ -23,7 +23,7 @@ const UPDATABLE_RELATIONSHIP_STATUSES = [
 
 export class RequestRelationshipDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  @IsUUID('4', { message: 'coach_id must be a valid UUID' })
+  @IsUUID('all', { message: 'coach_id must be a valid UUID' })
   coach_id: string;
 
   @ApiPropertyOptional({ example: 'Looking for boxing coaching twice a week.' })

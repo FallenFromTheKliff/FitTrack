@@ -134,7 +134,8 @@ def test_build_openrouter_insight_request_includes_schema_and_detected_anomalies
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/legacy-insight-model")
     provider = OpenRouterBusinessInsightProvider()
     request = _build_request(
         total_revenue="0.00",
@@ -163,7 +164,8 @@ def test_generate_business_insight_parses_provider_response_and_merges_anomalies
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/legacy-insight-model")
     provider = OpenRouterBusinessInsightProvider()
     request = _build_request(total_revenue="0.00", total_check_ins=0)
 
@@ -215,11 +217,163 @@ def test_generate_business_insight_parses_provider_response_and_merges_anomalies
     ]
 
 
+def test_generate_business_insight_retries_with_json_object_when_schema_mode_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/legacy-insight-model")
+    provider = OpenRouterBusinessInsightProvider()
+    request = _build_request()
+    calls: list[dict[str, object]] = []
+
+    class FakeRejectedResponse:
+        status_code = 400
+
+        def json(self) -> dict[str, object]:
+            return {"error": {"message": "json_schema unsupported"}}
+
+    class FakeAcceptedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/test-model",
+                "usage": {"total_tokens": 144},
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "Membership stayed stable.",
+                                    "highlights": ["Membership revenue led the window."],
+                                    "risks": ["Check-in volume is still concentrated."],
+                                    "opportunities": ["Promote retail items near peak hours."],
+                                    "anomaly_flags": [],
+                                    "recommended_actions": ["Review staffing around 06:00."],
+                                }
+                            )
+                        }
+                    }
+                ],
+            }
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return FakeRejectedResponse()
+        return FakeAcceptedResponse()
+
+    monkeypatch.setattr("app.services.business_insights.httpx.post", fake_post)
+
+    response = provider.generate_business_insight(request)
+
+    assert response.summary == "Membership stayed stable."
+    assert response.token_count == 144
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[1]["response_format"]["type"] == "json_object"
+
+
+def test_generate_business_insight_retries_with_openrouter_free_model_after_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/legacy-insight-model")
+    monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")
+    provider = OpenRouterBusinessInsightProvider()
+    request = _build_request()
+    calls: list[dict[str, object]] = []
+
+    class RateLimitedResponse:
+        status_code = 429
+
+        def json(self) -> dict[str, object]:
+            return {"error": {"message": "rate limited"}}
+
+    class FreeAcceptedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/free",
+                "usage": {"total_tokens": 88},
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "Fallback free-model insight.",
+                                    "highlights": ["Attendance is stable."],
+                                    "risks": ["Peak hours still need staffing review."],
+                                    "opportunities": ["Promote retail near check-in spikes."],
+                                    "anomaly_flags": [],
+                                    "recommended_actions": ["Review front-desk coverage."],
+                                }
+                            )
+                        }
+                    }
+                ],
+            }
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) < 3:
+            return RateLimitedResponse()
+        return FreeAcceptedResponse()
+
+    monkeypatch.setattr("app.services.business_insights.httpx.post", fake_post)
+
+    response = provider.generate_business_insight(request)
+
+    assert response.model_used == "openrouter/free"
+    assert response.token_count == 88
+    assert calls[0]["model"] == "openrouter/test-model"
+    assert calls[1]["model"] == "openrouter/test-model"
+    assert calls[2]["model"] == "openrouter/free"
+
+
+def test_generate_business_insight_parses_code_fenced_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    provider = OpenRouterBusinessInsightProvider()
+    request = _build_request()
+
+    class FencedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/test-model",
+                "usage": {"total_tokens": 77},
+                "choices": [
+                    {
+                        "message": {
+                            "content": "```json\n{\"summary\":\"Retail is healthy.\",\"highlights\":[\"Membership revenue led the window.\"],\"risks\":[\"Peak traffic is still concentrated.\"],\"opportunities\":[\"Push add-ons near check-in surges.\"],\"anomaly_flags\":[],\"recommended_actions\":[\"Review staffing around the top hour.\"]}\n```"
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.business_insights.httpx.post",
+        lambda *args, **kwargs: FencedResponse(),
+    )
+
+    response = provider.generate_business_insight(request)
+
+    assert response.summary == "Retail is healthy."
+    assert response.model_used == "openrouter/test-model"
+
+
 def test_generate_business_insight_rejects_invalid_provider_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    monkeypatch.setenv("OPENROUTER_INSIGHT_MODEL", "openrouter/legacy-insight-model")
     provider = OpenRouterBusinessInsightProvider()
     request = _build_request()
 
@@ -248,3 +402,28 @@ def test_generate_business_insight_rejects_invalid_provider_schema(
     assert error.value.type == "BAD_GATEWAY"
     assert error.value.status == 502
     assert "required schema" in error.value.detail
+
+
+def test_generate_insight_falls_back_to_grounded_summary_when_provider_is_unavailable() -> None:
+    request = _build_request(total_revenue="0.00", total_check_ins=0)
+
+    class FailingProvider:
+        def generate_business_insight(self, payload: object) -> object:
+            raise ServiceError(
+                type="SERVICE_UNAVAILABLE",
+                title="Business Insight Provider Unavailable",
+                status=503,
+                detail="OpenRouter business insight generation is unavailable.",
+            )
+
+    service = BusinessInsightService(provider=FailingProvider())
+
+    response = service.generate_insight(request)
+
+    assert response.model_used == "grounded-fallback"
+    assert response.summary.startswith("Fallback insight:")
+    assert (
+        "No attendance was recorded for the selected window."
+        in response.anomaly_flags
+    )
+    assert response.recommended_actions

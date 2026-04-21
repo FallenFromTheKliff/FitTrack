@@ -1,120 +1,375 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { VenueMutationPayload } from "@fittrack/api-client";
+import type {
+  GymLayoutEquipmentMutationInput,
+  InventoryEquipmentRecord,
+  VenueMutationPayload
+} from "@fittrack/api-client";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import {
+  createGymLayoutEquipmentMutationOptions,
   createVenueMutationOptions,
+  deleteGymLayoutEquipmentMutationOptions,
   deleteVenueMutationOptions,
+  gymLayoutEquipmentQueryOptions,
+  inventoryEquipmentQueryOptions,
   updateVenueMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
+import {
+  buildVenueEquipmentAssignmentsFromRecords,
+  gridColumnToPositionX,
+  gridRowToPositionY,
+  type GymLayoutEquipmentRecord,
+  isEquipmentInsideVenue,
+  resolveEquipmentCatalogKey,
+  resolveEquipmentGridPlacement
+} from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 
-import { COLS, ROWS, LAYOUT_KEY, EQUIPMENT } from "@/data/facilities/mapTypes";
-import type { VenueRecord, VenueEquipmentAssignments, EquipmentDef } from "@/data/facilities/mapTypes";
-import { buildFacilityFloorVenues, type FacilityFloorId } from "@/data/facilities/floorPlans";
+import { COLS, ROWS, EQUIPMENT } from "@/data/facilities/mapTypes";
+import type { VenueRecord, EquipmentDef } from "@/data/facilities/mapTypes";
+import {
+  buildFacilityFloorVenues,
+  type FacilityFloorId,
+  type FloorVenueRecord
+} from "@/data/facilities/floorPlans";
 
 export type VenuePayload = VenueMutationPayload;
+export type FloorLayoutEquipmentDisplay = EquipmentDef & {
+  status: string;
+};
 
-type VenueEquipmentAssignmentsByFloor = Record<FacilityFloorId, VenueEquipmentAssignments>;
+export type FacilityPaletteEquipment = EquipmentDef;
 
-function createEmptyAssignments(): VenueEquipmentAssignmentsByFloor {
-  return { "floor-1": {}, "floor-2": {}, "floor-3": {} };
+type FacilityPaletteEquipmentWithPlacement = FacilityPaletteEquipment & {
+  placementKey?: string;
+};
+
+export type QuickFloorRegionTemplate = {
+  capacity: number;
+  description: string;
+  gridHeight: number;
+  gridWidth: number;
+  iconKey: string;
+  key: string;
+  name: string;
+};
+
+type DisplayEquipmentSeed = Pick<GymLayoutEquipmentRecord, "iconKey" | "name" | "type">;
+
+function normalizeEquipmentKey(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function isCellMap(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((entry) => typeof entry === "string");
+function resolveDisplayEquipmentId(item: DisplayEquipmentSeed) {
+  const haystack = [
+    normalizeEquipmentKey(item.name),
+    normalizeEquipmentKey(item.iconKey),
+    normalizeEquipmentKey(item.type)
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (haystack.includes("tread") || haystack.includes("run")) return "treadmill";
+  if (haystack.includes("bike") || haystack.includes("cycle")) return "bike";
+  if (haystack.includes("ellipt")) return "elliptical";
+  if (haystack.includes("cable")) return "cable-machine";
+  if (haystack.includes("squat") || haystack.includes("rack")) return "squat-rack";
+  if (haystack.includes("bench")) return "bench";
+  if (haystack.includes("yoga")) return "yoga-area";
+  if (haystack.includes("recover") || haystack.includes("stretch")) return "recovery-zone";
+  if (haystack.includes("hiit") || haystack.includes("conditioning")) return "hiit-zone";
+  if (haystack.includes("cardio")) return "treadmill";
+  if (haystack.includes("strength") || haystack.includes("dumbbell")) return "dumbbells";
+  return "dumbbells";
 }
 
-function isVenueAssignmentMap(value: unknown): value is VenueEquipmentAssignments {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((entry) => Array.isArray(entry) && entry.every((item) => typeof item === "string"));
-}
-
-function resolveVenueForCell(floorId: FacilityFloorId, cellId: string) {
-  const [, rowValue, colValue] = cellId.split("-");
-  const row = Number(rowValue) + 1;
-  const column = Number(colValue) + 1;
-  if (!Number.isFinite(row) || !Number.isFinite(column)) return null;
-  const floorVenues = buildFacilityFloorVenues([])[floorId];
-  return floorVenues.find((venue) => {
-    const gridColumn = venue.gridColumn ?? 1;
-    const gridRow = venue.gridRow ?? 1;
-    const gridWidth = venue.gridWidth ?? 2;
-    const gridHeight = venue.gridHeight ?? 2;
-    return (
-      column >= gridColumn &&
-      column <= gridColumn + gridWidth - 1 &&
-      row >= gridRow &&
-      row <= gridRow + gridHeight - 1
-    );
-  }) ?? null;
-}
-
-function migrateLegacyAssignments(floorId: FacilityFloorId, legacyMap: Record<string, string>): VenueEquipmentAssignments {
-  const nextAssignments: VenueEquipmentAssignments = {};
-  Object.entries(legacyMap).forEach(([cellId, equipmentId]) => {
-    const venue = resolveVenueForCell(floorId, cellId);
-    if (!venue?.mapId) return;
-    const current = nextAssignments[venue.mapId] ?? [];
-    nextAssignments[venue.mapId] = current.includes(equipmentId) ? current : [...current, equipmentId];
-  });
-  return nextAssignments;
-}
-
-function normalizeStoredAssignments(value: unknown): VenueEquipmentAssignmentsByFloor {
-  const emptyAssignments = createEmptyAssignments();
-  if (!value || typeof value !== "object") return emptyAssignments;
-  const rawFloors = "floors" in (value as Record<string, unknown>)
-    ? (value as { floors?: Partial<Record<FacilityFloorId, unknown>> }).floors
-    : value as Partial<Record<FacilityFloorId, unknown>>;
+function resolveDisplayEquipment(
+  item: Pick<GymLayoutEquipmentRecord, "iconKey" | "id" | "name" | "status" | "type">,
+  paletteById: Record<string, EquipmentDef>
+): FloorLayoutEquipmentDisplay {
+  const paletteItem =
+    paletteById[resolveDisplayEquipmentId(item)] ?? paletteById.dumbbells;
 
   return {
-    "floor-1": isVenueAssignmentMap(rawFloors?.["floor-1"])
-      ? rawFloors["floor-1"]
-      : isCellMap(rawFloors?.["floor-1"])
-        ? migrateLegacyAssignments("floor-1", rawFloors["floor-1"])
-        : isCellMap(value)
-          ? migrateLegacyAssignments("floor-1", value)
-          : {},
-    "floor-2": isVenueAssignmentMap(rawFloors?.["floor-2"])
-      ? rawFloors["floor-2"]
-      : isCellMap(rawFloors?.["floor-2"])
-        ? migrateLegacyAssignments("floor-2", rawFloors["floor-2"])
-        : {},
-    "floor-3": isVenueAssignmentMap(rawFloors?.["floor-3"])
-      ? rawFloors["floor-3"]
-      : isCellMap(rawFloors?.["floor-3"])
-        ? migrateLegacyAssignments("floor-3", rawFloors["floor-3"])
-        : {}
+    ...paletteItem,
+    id: item.id,
+    name: item.name,
+    status: item.status
   };
 }
 
+function findNextOpenVenueCell(
+  venue: FloorVenueRecord,
+  liveEquipment: Array<{
+    floorId: FacilityFloorId;
+    gridColumn: number;
+    gridRow: number;
+    positionX: number;
+    positionY: number;
+  }>
+) {
+  const occupiedCells = new Set(
+    liveEquipment
+      .filter((item) => isEquipmentInsideVenue(item, venue))
+      .map((item) => {
+        const placement = resolveEquipmentGridPlacement(item);
+        return `${placement.gridColumn}:${placement.gridRow}`;
+      })
+  );
+
+  const firstColumn = venue.gridColumn ?? 1;
+  const lastColumn = firstColumn + (venue.gridWidth ?? 1) - 1;
+  const firstRow = venue.gridRow ?? 1;
+  const lastRow = firstRow + (venue.gridHeight ?? 1) - 1;
+
+  for (let gridRow = firstRow; gridRow <= lastRow; gridRow += 1) {
+    for (let gridColumn = firstColumn; gridColumn <= lastColumn; gridColumn += 1) {
+      const key = `${gridColumn}:${gridRow}`;
+      if (occupiedCells.has(key)) {
+        continue;
+      }
+
+      return {
+        gridColumn,
+        gridRow,
+        positionX: gridColumnToPositionX(gridColumn),
+        positionY: gridRowToPositionY(gridRow)
+      };
+    }
+  }
+
+  return null;
+}
+
+function isGridCellInsideVenue(
+  venue: FloorVenueRecord,
+  gridColumn: number,
+  gridRow: number,
+) {
+  const firstColumn = venue.gridColumn ?? 1;
+  const firstRow = venue.gridRow ?? 1;
+  const lastColumn = firstColumn + (venue.gridWidth ?? 1) - 1;
+  const lastRow = firstRow + (venue.gridHeight ?? 1) - 1;
+
+  return (
+    gridColumn >= firstColumn &&
+    gridColumn <= lastColumn &&
+    gridRow >= firstRow &&
+    gridRow <= lastRow
+  );
+}
+
+function isGridCellOccupiedInVenue(
+  venue: FloorVenueRecord,
+  gridColumn: number,
+  gridRow: number,
+  liveEquipment: Array<{
+    floorId: FacilityFloorId;
+    gridColumn: number;
+    gridRow: number;
+    positionX: number;
+    positionY: number;
+  }>,
+) {
+  return liveEquipment.some((item) => {
+    if (!isEquipmentInsideVenue(item, venue)) {
+      return false;
+    }
+
+    const placement = resolveEquipmentGridPlacement(item);
+    return (
+      placement.gridColumn === gridColumn &&
+      placement.gridRow === gridRow
+    );
+  });
+}
+
+function toGridPlacement(gridColumn: number, gridRow: number) {
+  return {
+    gridColumn,
+    gridRow,
+    positionX: gridColumnToPositionX(gridColumn),
+    positionY: gridRowToPositionY(gridRow),
+  };
+}
+
+function buildEquipmentMutationPayload(
+  equipment: FacilityPaletteEquipment,
+  venue: FloorVenueRecord,
+  placement: {
+    gridColumn: number;
+    gridRow: number;
+    positionX: number;
+    positionY: number;
+  }
+): GymLayoutEquipmentMutationInput {
+  return {
+    floorId: venue.floorId,
+    gridColumn: placement.gridColumn,
+    gridRow: placement.gridRow,
+    iconKey: equipment.iconKey ?? equipment.id,
+    name: equipment.name,
+    positionX: placement.positionX,
+    positionY: placement.positionY,
+    type: equipment.category.toLowerCase(),
+  };
+}
+
+function resolveInventoryEquipmentSeed(
+  item: Pick<InventoryEquipmentRecord, "description" | "name" | "unit">
+) {
+  return {
+    iconKey: null,
+    name: item.name,
+    type: `${item.description ?? ""} ${item.unit ?? ""}`.trim(),
+  };
+}
+
+function buildInventoryPaletteEquipment(
+  item: InventoryEquipmentRecord,
+  paletteById: Record<string, EquipmentDef>
+): FacilityPaletteEquipmentWithPlacement {
+  const fallback = paletteById.dumbbells;
+  const paletteMatch =
+    paletteById[resolveDisplayEquipmentId(resolveInventoryEquipmentSeed(item))] ??
+    fallback;
+  const placementKey = normalizeEquipmentKey(paletteMatch.iconKey ?? paletteMatch.id);
+
+  return {
+    ...paletteMatch,
+    id: item.id,
+    iconKey: paletteMatch.iconKey ?? paletteMatch.id,
+    name: item.name,
+    quantityAvailable: item.quantityCurrent,
+    detail: item.unit ? `${item.unit} inventory unit` : "Inventory tracked",
+    sourceLabel: "inventory",
+    placementKey,
+  };
+}
+
+function resolvePalettePlacementKey(
+  equipment: Pick<FacilityPaletteEquipmentWithPlacement, "iconKey" | "id" | "placementKey">,
+) {
+  return normalizeEquipmentKey(
+    equipment.placementKey ?? equipment.iconKey ?? equipment.id,
+  );
+}
+
 function venuesOverlap(
-    a: { gridColumn: number; gridRow: number; gridWidth: number; gridHeight: number },
-    b: { gridColumn: number; gridRow: number; gridWidth: number; gridHeight: number }
+  a: { gridColumn: number; gridRow: number; gridWidth: number; gridHeight: number },
+  b: { gridColumn: number; gridRow: number; gridWidth: number; gridHeight: number }
 ): boolean {
   const aRight = a.gridColumn + a.gridWidth - 1;
   const aBottom = a.gridRow + a.gridHeight - 1;
   const bRight = b.gridColumn + b.gridWidth - 1;
   const bBottom = b.gridRow + b.gridHeight - 1;
   return (
-      a.gridColumn <= bRight &&
-      aRight >= b.gridColumn &&
-      a.gridRow <= bBottom &&
-      aBottom >= b.gridRow
+    a.gridColumn <= bRight &&
+    aRight >= b.gridColumn &&
+    a.gridRow <= bBottom &&
+    aBottom >= b.gridRow
   );
 }
 
+function findNextOpenVenuePlacement(
+  floorId: FacilityFloorId,
+  gridWidth: number,
+  gridHeight: number,
+  venues: VenueRecord[],
+) {
+  const floorVenues = venues.filter((venue) => venue.floorId === floorId);
+
+  for (let gridRow = 1; gridRow <= ROWS - gridHeight + 1; gridRow += 1) {
+    for (let gridColumn = 1; gridColumn <= COLS - gridWidth + 1; gridColumn += 1) {
+      const candidate = { gridColumn, gridRow, gridWidth, gridHeight };
+      const overlaps = floorVenues.some((venue) =>
+        venuesOverlap(candidate, {
+          gridColumn: venue.gridColumn ?? 1,
+          gridRow: venue.gridRow ?? 1,
+          gridWidth: venue.gridWidth ?? 2,
+          gridHeight: venue.gridHeight ?? 2,
+        }),
+      );
+
+      if (!overlaps) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function createQuickRegionName(
+  baseName: string,
+  floorId: FacilityFloorId,
+  venues: VenueRecord[],
+) {
+  const normalizedBase = baseName.trim().toLowerCase();
+  const existingNames = venues
+    .filter((venue) => venue.floorId === floorId)
+    .map((venue) => venue.name.trim().toLowerCase());
+
+  if (!existingNames.includes(normalizedBase)) {
+    return baseName;
+  }
+
+  let suffix = 2;
+  while (existingNames.includes(`${normalizedBase} ${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${baseName} ${suffix}`;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeFloorId(value: string | null | undefined): FacilityFloorId {
+  if (value === "floor-1" || value === "floor-2" || value === "floor-3") {
+    return value;
+  }
+  return "floor-1";
+}
+
+function buildVenueMutationPayloadFromRecord(
+  venue: VenueRecord,
+  overrides: Partial<VenueMutationPayload> = {},
+): VenueMutationPayload {
+  return {
+    name: venue.name,
+    description: venue.description ?? undefined,
+    capacity: venue.capacity ?? 1,
+    hourlyRate: venue.hourlyRate ?? undefined,
+    minimumHours: venue.minimumHours ?? 1,
+    iconKey: venue.iconKey ?? "gym-area",
+    floorId: normalizeFloorId(venue.floorId),
+    gridColumn: venue.gridColumn ?? 1,
+    gridRow: venue.gridRow ?? 1,
+    gridWidth: venue.gridWidth ?? 2,
+    gridHeight: venue.gridHeight ?? 2,
+    isReservable: venue.isReservable ?? false,
+    displayOrder: venue.displayOrder ?? 0,
+    ...overrides,
+  };
+}
+
 export function checkVenueOverlap(
-    payload: Pick<VenuePayload, "gridColumn" | "gridRow" | "gridWidth" | "gridHeight">,
-    venues: VenueRecord[],
-    excludeId?: number
+  payload: Pick<VenuePayload, "floorId" | "gridColumn" | "gridRow" | "gridWidth" | "gridHeight">,
+  venues: VenueRecord[],
+  excludeId?: string | number
 ): string | null {
   for (const v of venues) {
     if (excludeId !== undefined && v.id === excludeId) continue;
+    if (v.floorId !== payload.floorId) continue;
     const existing = {
       gridColumn: v.gridColumn ?? 1,
       gridRow: v.gridRow ?? 1,
@@ -153,9 +408,11 @@ export function useVenueMutations() {
     const gridWidth = Number(data.gridWidth ?? "");
     const gridHeight = Number(data.gridHeight ?? "");
     const displayOrder = Number(data.displayOrder ?? "");
+    const floorId = (data.floorId ?? "").trim();
 
     if (!Number.isFinite(capacity) || capacity <= 0) return "Capacity must be greater than zero.";
     if (hourlyRate !== undefined && (!Number.isFinite(hourlyRate) || hourlyRate < 0)) return "Hourly rate must be zero or greater.";
+    if (floorId !== "floor-1" && floorId !== "floor-2" && floorId !== "floor-3") return "Select a valid floor.";
     if (!Number.isFinite(gridColumn) || gridColumn < 1 || gridColumn > COLS) return `Grid column must be between 1 and ${COLS}.`;
     if (!Number.isFinite(gridRow) || gridRow < 1 || gridRow > ROWS) return `Grid row must be between 1 and ${ROWS}.`;
     if (!Number.isFinite(gridWidth) || gridWidth < 1 || gridColumn + gridWidth - 1 > COLS) return `Grid width must keep the venue inside the ${COLS} column layout.`;
@@ -171,6 +428,7 @@ export function useVenueMutations() {
       hourlyRate,
       minimumHours: Number.isFinite(minHoursRaw) && minHoursRaw > 0 ? minHoursRaw : 1,
       iconKey: (data.iconKey ?? "").trim() || "gym-area",
+      floorId,
       gridColumn,
       gridRow,
       gridWidth,
@@ -181,14 +439,20 @@ export function useVenueMutations() {
   };
 
   const handleVenueSubmit = async (
-      data: Record<string, string>,
-      editTarget: VenueRecord | null,
-      onSuccess: () => void
+    data: Record<string, string>,
+    editTarget: VenueRecord | null,
+    onSuccess: () => void
   ) => {
     const result = buildPayload(data);
-    if (typeof result === "string") { showMessage(result); return; }
+    if (typeof result === "string") {
+      showMessage(result);
+      return false;
+    }
     const overlapError = checkVenueOverlap(result, venues, editTarget?.id);
-    if (overlapError) { showMessage(overlapError); return; }
+    if (overlapError) {
+      showMessage(overlapError);
+      return false;
+    }
     try {
       if (editTarget) {
         await updateVenueMutation.mutateAsync({ id: editTarget.id, payload: result });
@@ -198,14 +462,16 @@ export function useVenueMutations() {
         showMessage("Venue created.");
       }
       onSuccess();
+      return true;
     } catch {
       showMessage("Unable to save venue.");
+      return false;
     }
   };
 
   const handleDeleteVenue = async (
-      target: VenueRecord | null,
-      onSuccess: () => void
+    target: VenueRecord | null,
+    onSuccess: () => void
   ) => {
     if (!target) return;
     try {
@@ -217,6 +483,163 @@ export function useVenueMutations() {
     }
   };
 
+  const handleCreateQuickFloorRegion = async (
+    template: QuickFloorRegionTemplate,
+    floorId: FacilityFloorId,
+    onSuccess?: () => void,
+  ) => {
+    const placement = findNextOpenVenuePlacement(
+      floorId,
+      template.gridWidth,
+      template.gridHeight,
+      venues,
+    );
+
+    if (!placement) {
+      showMessage("No open floor area is available for that region template on the selected floor.");
+      return;
+    }
+
+    const payload: VenuePayload = {
+      name: createQuickRegionName(template.name, floorId, venues),
+      description: template.description,
+      capacity: template.capacity,
+      hourlyRate: undefined,
+      minimumHours: 1,
+      iconKey: template.iconKey,
+      floorId,
+      gridColumn: placement.gridColumn,
+      gridRow: placement.gridRow,
+      gridWidth: template.gridWidth,
+      gridHeight: template.gridHeight,
+      isReservable: false,
+      displayOrder: 90,
+    };
+
+    try {
+      await createVenueMutation.mutateAsync(payload);
+      showMessage(`${payload.name} added to ${floorId.replace("floor-", "Floor ")} and synced to member facilities.`);
+      onSuccess?.();
+    } catch {
+      showMessage("Unable to add this floor region right now.");
+    }
+  };
+
+  const handleCreateQuickFloorRegionAt = async (
+    template: QuickFloorRegionTemplate,
+    floorId: FacilityFloorId,
+    preferredPlacement: { gridColumn: number; gridRow: number },
+    onSuccess?: () => void,
+  ) => {
+    const gridColumn = clamp(
+      preferredPlacement.gridColumn,
+      1,
+      COLS - template.gridWidth + 1,
+    );
+    const gridRow = clamp(
+      preferredPlacement.gridRow,
+      1,
+      ROWS - template.gridHeight + 1,
+    );
+
+    const payload: VenuePayload = {
+      name: createQuickRegionName(template.name, floorId, venues),
+      description: template.description,
+      capacity: template.capacity,
+      hourlyRate: undefined,
+      minimumHours: 1,
+      iconKey: template.iconKey,
+      floorId,
+      gridColumn,
+      gridRow,
+      gridWidth: template.gridWidth,
+      gridHeight: template.gridHeight,
+      isReservable: false,
+      displayOrder: 90,
+    };
+
+    const overlapError = checkVenueOverlap(payload, venues);
+    if (overlapError) {
+      showMessage(overlapError);
+      return false;
+    }
+
+    try {
+      await createVenueMutation.mutateAsync(payload);
+      showMessage(
+        `${payload.name} placed on ${floorId.replace("floor-", "Floor ")} at C${gridColumn}/R${gridRow}.`,
+      );
+      onSuccess?.();
+      return true;
+    } catch {
+      showMessage("Unable to place this floor region right now.");
+      return false;
+    }
+  };
+
+  const handleUpdateVenueLayout = async (
+    venue: VenueRecord,
+    placement: Partial<
+      Pick<
+        VenueMutationPayload,
+        "floorId" | "gridColumn" | "gridRow" | "gridWidth" | "gridHeight"
+      >
+    >,
+    options?: { silent?: boolean },
+  ) => {
+    const currentPayload = buildVenueMutationPayloadFromRecord(venue);
+    const floorId = normalizeFloorId(placement.floorId ?? currentPayload.floorId);
+    const gridWidth = clamp(
+      placement.gridWidth ?? currentPayload.gridWidth,
+      1,
+      COLS,
+    );
+    const gridHeight = clamp(
+      placement.gridHeight ?? currentPayload.gridHeight,
+      1,
+      ROWS,
+    );
+    const gridColumn = clamp(
+      placement.gridColumn ?? currentPayload.gridColumn,
+      1,
+      COLS - gridWidth + 1,
+    );
+    const gridRow = clamp(
+      placement.gridRow ?? currentPayload.gridRow,
+      1,
+      ROWS - gridHeight + 1,
+    );
+
+    const payload = buildVenueMutationPayloadFromRecord(venue, {
+      floorId,
+      gridColumn,
+      gridRow,
+      gridWidth,
+      gridHeight,
+    });
+
+    const overlapError = checkVenueOverlap(payload, venues, venue.id);
+    if (overlapError) {
+      if (!options?.silent) {
+        showMessage(overlapError);
+      }
+      return false;
+    }
+
+    try {
+      await updateVenueMutation.mutateAsync({ id: venue.id, payload });
+      if (!options?.silent) {
+        showMessage(`${venue.name} layout updated.`);
+      }
+      return true;
+    } catch {
+      if (!options?.silent) {
+        showMessage("Unable to update venue layout.");
+      }
+      return false;
+    }
+  };
+
   return {
     venues,
     venuesLoading,
@@ -225,50 +648,142 @@ export function useVenueMutations() {
     deleteVenueMutation,
     message,
     showMessage,
+    handleUpdateVenueLayout,
     handleVenueSubmit,
-    handleDeleteVenue
+    handleDeleteVenue,
+    handleCreateQuickFloorRegion,
+    handleCreateQuickFloorRegionAt
   };
 }
 
 export function useFloorLayout() {
+  const queryClient = useQueryClient();
   const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
   const [isEditMode, setIsEditMode] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
   const [layoutName, setLayoutName] = useState("Main Floor Plan");
   const [layoutType, setLayoutType] = useState("custom");
   const [gridSize, setGridSize] = useState("40");
   const [deleteTarget, setDeleteTarget] = useState<{ venueMapId: string; equipmentId: string } | null>(null);
-  const [equipmentAssignmentsByFloor, setEquipmentAssignmentsByFloor] = useState<VenueEquipmentAssignmentsByFloor>(() => {
-    if (typeof window === "undefined") return createEmptyAssignments();
-    try {
-      const raw = localStorage.getItem(LAYOUT_KEY);
-      if (!raw) return createEmptyAssignments();
-      return normalizeStoredAssignments(JSON.parse(raw) as unknown);
-    } catch {
-      return createEmptyAssignments();
+  const { message, showMessage } = useTimedMessage(2200);
+  const { data: venues = [] } = useQuery(venuesQueryOptions(webApiClient));
+  const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
+  const { data: inventoryEquipmentPage } = useQuery(
+    inventoryEquipmentQueryOptions(webApiClient, { limit: 100, page: 1 })
+  );
+  const inventoryEquipment = inventoryEquipmentPage?.data ?? [];
+  const displayEquipmentCatalogById = useMemo(
+    () =>
+      Object.fromEntries(
+        EQUIPMENT.map((item) => [
+          item.id,
+          { ...item, iconKey: item.iconKey ?? item.id }
+        ])
+      ) as Record<string, EquipmentDef>,
+    []
+  );
+  const availableEquipment = useMemo(() => {
+    const activeInventoryEquipment = inventoryEquipment
+      .filter((item) => item.isActive && item.quantityCurrent > 0)
+      .map((item) => buildInventoryPaletteEquipment(item, displayEquipmentCatalogById));
+
+    if (activeInventoryEquipment.length > 0) {
+      const aggregatedByPlacementKey = new Map<string, FacilityPaletteEquipmentWithPlacement>();
+
+      activeInventoryEquipment.forEach((item) => {
+        const placementKey = resolvePalettePlacementKey(item);
+        const existing = aggregatedByPlacementKey.get(placementKey);
+
+        if (existing) {
+          existing.quantityAvailable =
+            (existing.quantityAvailable ?? 0) + (item.quantityAvailable ?? 0);
+          return;
+        }
+
+        aggregatedByPlacementKey.set(placementKey, {
+          ...item,
+          id: placementKey,
+          iconKey: item.iconKey ?? placementKey,
+          placementKey,
+          name: item.name,
+          quantityAvailable: item.quantityAvailable ?? 0,
+        });
+      });
+
+      return Array.from(aggregatedByPlacementKey.values()).sort((left, right) =>
+        left.name.localeCompare(right.name),
+      );
     }
-  });
+
+    return EQUIPMENT.map((item) => ({
+      ...item,
+      iconKey: item.iconKey ?? item.id,
+      placementKey: normalizeEquipmentKey(item.iconKey ?? item.id),
+    }));
+  }, [displayEquipmentCatalogById, inventoryEquipment]);
+  const equipmentPaletteById = useMemo(
+    () =>
+      Object.fromEntries(
+        availableEquipment.map((item) => [item.id, item])
+      ) as Record<string, FacilityPaletteEquipment>,
+    [availableEquipment]
+  );
+  const placedEquipmentCountByKey = useMemo(() => {
+    return liveEquipment.reduce<Record<string, number>>((accumulator, item) => {
+      const placementKey = normalizeEquipmentKey(resolveEquipmentCatalogKey(item));
+      if (!placementKey) {
+        return accumulator;
+      }
+
+      accumulator[placementKey] = (accumulator[placementKey] ?? 0) + 1;
+      return accumulator;
+    }, {});
+  }, [liveEquipment]);
+  const equipmentRemainingById = useMemo(() => {
+    return availableEquipment.reduce<Record<string, number | null>>((accumulator, item) => {
+      if (item.quantityAvailable === undefined) {
+        accumulator[item.id] = null;
+        return accumulator;
+      }
+
+      const placementKey = resolvePalettePlacementKey(item);
+      const placedCount = placedEquipmentCountByKey[placementKey] ?? 0;
+      accumulator[item.id] = Math.max(0, item.quantityAvailable - placedCount);
+      return accumulator;
+    }, {});
+  }, [availableEquipment, placedEquipmentCountByKey]);
+  const createEquipmentMutation = useMutation(
+    createGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
+  );
+  const deleteEquipmentMutation = useMutation(
+    deleteGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
+  );
 
   const equipmentById = useMemo(
-      () => Object.fromEntries(EQUIPMENT.map((item) => [item.id, item])) as Record<string, EquipmentDef>,
-      []
+    () =>
+      Object.fromEntries(
+        liveEquipment.map((item) => [
+          item.id,
+          resolveDisplayEquipment(item, displayEquipmentCatalogById)
+        ])
+      ) as Record<string, FloorLayoutEquipmentDisplay>,
+    [displayEquipmentCatalogById, liveEquipment]
   );
-  const assignedEquipment = equipmentAssignmentsByFloor[activeFloor] ?? {};
+  const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
+  const assignedEquipment = useMemo(
+    () =>
+      buildVenueEquipmentAssignmentsFromRecords(liveEquipment, floorVenues)[activeFloor] ?? {},
+    [activeFloor, floorVenues, liveEquipment]
+  );
   const assignedCount = Object.values(assignedEquipment).reduce((count, items) => count + items.length, 0);
+  const hasUnsavedChanges = false;
 
   const handleSaveLayout = (onSaved?: () => void) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ floors: equipmentAssignmentsByFloor }));
-    }
-    setHasUnsavedChanges(false);
     onSaved?.();
   };
 
   const handleToggleEditMode = () => {
-    if (!isEditMode) { setIsEditMode(true); return; }
-    if (hasUnsavedChanges && assignedCount > 0) { setShowUnsavedConfirm(true); return; }
-    setIsEditMode(false);
+    setIsEditMode((current) => !current);
   };
 
   const handleSaveAndExit = (onSaved?: () => void) => {
@@ -277,60 +792,84 @@ export function useFloorLayout() {
     setShowUnsavedConfirm(false);
   };
 
-  const handleConfirmCellDelete = () => {
+  const handleConfirmCellDelete = async () => {
     if (!deleteTarget) return;
-    setEquipmentAssignmentsByFloor((prev) => {
-      const nextFloorAssignments = { ...(prev[activeFloor] ?? {}) };
-      const currentItems = nextFloorAssignments[deleteTarget.venueMapId] ?? [];
-      const nextItems = currentItems.filter((itemId, index) => itemId !== deleteTarget.equipmentId || index !== currentItems.indexOf(deleteTarget.equipmentId));
-      if (nextItems.length === 0) {
-        delete nextFloorAssignments[deleteTarget.venueMapId];
-      } else {
-        nextFloorAssignments[deleteTarget.venueMapId] = nextItems;
-      }
-      return { ...prev, [activeFloor]: nextFloorAssignments };
-    });
-    setHasUnsavedChanges(true);
-    setDeleteTarget(null);
+    try {
+      await deleteEquipmentMutation.mutateAsync(deleteTarget.equipmentId);
+      showMessage("Equipment removed from the floor plan.");
+      setDeleteTarget(null);
+    } catch {
+      showMessage("Unable to remove equipment from the floor plan.");
+    }
   };
 
-  const handleClearFloor = () => {
+  const handleClearFloor = async () => {
     if (!isEditMode) return;
-    setEquipmentAssignmentsByFloor((prev) => ({ ...prev, [activeFloor]: {} }));
-    setHasUnsavedChanges(true);
+    const floorEquipment = liveEquipment.filter((item) => item.floorId === activeFloor);
+    if (floorEquipment.length === 0) {
+      showMessage("No equipment is assigned on this floor yet.");
+      return;
+    }
+
+    try {
+      await Promise.all(
+        floorEquipment.map((item) => deleteEquipmentMutation.mutateAsync(item.id))
+      );
+      showMessage("Floor equipment cleared.");
+    } catch {
+      showMessage("Unable to clear the current floor.");
+    }
   };
 
-  const handleExport = (name: string, type: string, size: string) => {
-    const payload = {
-      layoutName: name,
-      layoutType: type,
-      gridSize: size,
-      rows: ROWS,
-      cols: COLS,
-      activeFloor,
-      floors: equipmentAssignmentsByFloor
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `fittrack-layout-${Date.now()}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  };
+  const assignEquipmentToVenue = async (
+    equipmentId: string,
+    venueMapId: string,
+    preferredCell?: {
+      gridColumn: number;
+      gridRow: number;
+    },
+  ) => {
+    const equipment = equipmentPaletteById[equipmentId];
+    const venue = floorVenues[activeFloor].find((candidate) => candidate.mapId === venueMapId);
+    if (!equipment || !venue) return;
 
-  const assignEquipmentToVenue = (equipmentId: string, venueMapId: string) => {
-    setEquipmentAssignmentsByFloor((prev) => {
-      const nextFloorAssignments = { ...(prev[activeFloor] ?? {}) };
-      const currentItems = nextFloorAssignments[venueMapId] ?? [];
-      nextFloorAssignments[venueMapId] = currentItems.includes(equipmentId)
-        ? currentItems
-        : [...currentItems, equipmentId];
-      return { ...prev, [activeFloor]: nextFloorAssignments };
-    });
-    setHasUnsavedChanges(true);
+    if (equipment.quantityAvailable !== undefined) {
+      const placementKey = resolvePalettePlacementKey(equipment);
+      const placedCount = placedEquipmentCountByKey[placementKey] ?? 0;
+
+      if (placedCount >= equipment.quantityAvailable) {
+        showMessage(`${equipment.name} has no remaining inventory units available to place on the floor map.`);
+        return;
+      }
+    }
+
+    const preferredPlacement =
+      preferredCell &&
+        isGridCellInsideVenue(venue, preferredCell.gridColumn, preferredCell.gridRow) &&
+        !isGridCellOccupiedInVenue(
+          venue,
+          preferredCell.gridColumn,
+          preferredCell.gridRow,
+          liveEquipment,
+        )
+        ? toGridPlacement(preferredCell.gridColumn, preferredCell.gridRow)
+        : null;
+
+    const placement =
+      preferredPlacement ?? findNextOpenVenueCell(venue, liveEquipment);
+    if (!placement) {
+      showMessage(`${venue.name} has no open grid cells left. Remove equipment or enlarge the venue first.`);
+      return;
+    }
+
+    const payload = buildEquipmentMutationPayload(equipment, venue, placement);
+
+    try {
+      await createEquipmentMutation.mutateAsync(payload);
+      showMessage(`${equipment.name} assigned to ${venue.name}.`);
+    } catch {
+      showMessage("Unable to assign equipment to this venue.");
+    }
   };
 
   return {
@@ -349,15 +888,16 @@ export function useFloorLayout() {
     deleteTarget,
     setDeleteTarget,
     assignedEquipment,
-    equipmentAssignmentsByFloor,
+    availableEquipment,
+    equipmentRemainingById,
     equipmentById,
     assignedCount,
+    message,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
     handleClearFloor,
-    handleExport,
     assignEquipmentToVenue
   };
 }

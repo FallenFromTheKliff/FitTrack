@@ -2,8 +2,12 @@ import type { BookingStatus } from "./base";
 import type { MemberProfile } from "./member";
 
 export interface Booking {
+  amountDueNow?: number;
   id: string;
   memberId?: string;
+  nextPaymentDate?: string;
+  paymentPlan?: "downpayment" | "free" | "full";
+  remainingBalance?: number;
   resourceId?: string;
   resourceName: string;
   resourceType: "venue" | "amenity" | "trainer";
@@ -14,6 +18,7 @@ export interface Booking {
   description?: string;
   status: BookingStatus;
   price: number;
+  totalAmount?: number;
   trainerId?: string;
   trainerName?: string;
 }

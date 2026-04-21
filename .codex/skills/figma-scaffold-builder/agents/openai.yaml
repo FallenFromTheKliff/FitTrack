@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Figma Scaffold Builder"
+  short_description: "Contained implement-ready Figma scaffold authoring for premium FitTrack UI"
+  default_prompt: "Use $figma-scaffold-builder after a premium FitTrack UI direction is approved, a chosen concept exists, and the workspace-governor packet exists to create or update an implement-ready Figma scaffold in the master admin file while preserving the chosen concept's silhouette, material language, hierarchy, state coverage, node ids, overlay ownership, scroll ownership, product-frame separation from annotation boards, and allowed implementation deviations."
+
+policy:
+  allow_implicit_invocation: false

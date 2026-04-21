@@ -1,0 +1,280 @@
+import { View } from "react-native";
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg";
+
+import type {
+  PoseJointName,
+  PoseKeypointRecord,
+  PoseMovementContractRecord,
+  ThemeColors,
+} from "@fittrack/types";
+
+type PoseGuidanceOverlayProps = {
+  colors: ThemeColors;
+  currentAngle: number | null;
+  currentPhase: string;
+  guidanceLabel?: string | null;
+  keypoints: PoseKeypointRecord[] | null;
+  lowConfidenceLandmarks: string[];
+  movementContract: PoseMovementContractRecord | null;
+};
+
+const SKELETON_CONNECTIONS: Array<[number, number]> = [
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [12, 14],
+  [14, 16],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  [23, 25],
+  [25, 27],
+  [24, 26],
+  [26, 28],
+  [27, 31],
+  [28, 32],
+];
+
+const JOINT_POINTS: Record<PoseJointName, [number, number, number, number, number, number]> = {
+  elbow: [11, 13, 15, 12, 14, 16],
+  hip: [11, 23, 25, 12, 24, 26],
+  knee: [23, 25, 27, 24, 26, 28],
+  shoulder: [13, 11, 23, 14, 12, 24],
+};
+
+function normalizeAngle(value: number) {
+  let next = value;
+  while (next < 0) next += 360;
+  while (next > 360) next -= 360;
+  return next;
+}
+
+function describeArc(
+  x: number,
+  y: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+) {
+  const startRadians = (Math.PI / 180) * startAngle;
+  const endRadians = (Math.PI / 180) * endAngle;
+  const start = {
+    x: x + radius * Math.cos(startRadians),
+    y: y + radius * Math.sin(startRadians),
+  };
+  const end = {
+    x: x + radius * Math.cos(endRadians),
+    y: y + radius * Math.sin(endRadians),
+  };
+  const largeArcFlag = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+}
+
+function getRepresentativeJointPoints(
+  keypoints: PoseKeypointRecord[],
+  joint: PoseJointName,
+) {
+  const [la, lb, lc, ra, rb, rc] = JOINT_POINTS[joint];
+  const leftVisibility =
+    (keypoints[la]?.visibility ?? 0) +
+    (keypoints[lb]?.visibility ?? 0) +
+    (keypoints[lc]?.visibility ?? 0);
+  const rightVisibility =
+    (keypoints[ra]?.visibility ?? 0) +
+    (keypoints[rb]?.visibility ?? 0) +
+    (keypoints[rc]?.visibility ?? 0);
+  return leftVisibility >= rightVisibility
+    ? {
+        a: keypoints[la],
+        b: keypoints[lb],
+        c: keypoints[lc],
+      }
+    : {
+        a: keypoints[ra],
+        b: keypoints[rb],
+        c: keypoints[rc],
+      };
+}
+
+function buildAngleArc(
+  keypoints: PoseKeypointRecord[],
+  joint: PoseJointName,
+) {
+  const points = getRepresentativeJointPoints(keypoints, joint);
+  if (!points.a || !points.b || !points.c) {
+    return null;
+  }
+
+  const startAngle = normalizeAngle(
+    (Math.atan2(points.a.y - points.b.y, points.a.x - points.b.x) * 180) / Math.PI,
+  );
+  const endAngle = normalizeAngle(
+    (Math.atan2(points.c.y - points.b.y, points.c.x - points.b.x) * 180) / Math.PI,
+  );
+  return {
+    center: points.b,
+    path: describeArc(points.b.x, points.b.y, 0.05, startAngle, endAngle),
+  };
+}
+
+export function PoseGuidanceOverlay({
+  colors,
+  currentAngle,
+  currentPhase,
+  guidanceLabel,
+  keypoints,
+  lowConfidenceLandmarks,
+  movementContract,
+}: PoseGuidanceOverlayProps) {
+  if (!keypoints || keypoints.length !== 33) {
+    return null;
+  }
+
+  const angleArc =
+    movementContract ? buildAngleArc(keypoints, movementContract.dominantJoint) : null;
+  const phaseText = currentPhase === "down" ? "DOWN" : currentPhase === "up" ? "UP" : "READY";
+  const guidanceText = guidanceLabel
+    ? guidanceLabel.replace(/_/g, " ")
+    : movementContract
+      ? `${movementContract.exercise.replace(/_/g, " ")}`
+      : "Detecting movement";
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 2 }}
+    >
+      <Svg width="100%" height="100%" viewBox="0 0 1 1" preserveAspectRatio="none">
+        {SKELETON_CONNECTIONS.map(([start, end]) => {
+          const from = keypoints[start];
+          const to = keypoints[end];
+          if (!from || !to || from.visibility < 0.4 || to.visibility < 0.4) {
+            return null;
+          }
+          return (
+            <Line
+              key={`${start}-${end}`}
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke="rgba(255,255,255,0.68)"
+              strokeWidth={0.006}
+              strokeLinecap="round"
+            />
+          );
+        })}
+        {keypoints.map((point, index) => (
+          <Circle
+            key={`joint-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r={point.visibility >= 0.5 ? 0.01 : 0.007}
+            fill={point.visibility >= 0.5 ? colors.brand : "rgba(255,255,255,0.35)"}
+          />
+        ))}
+        {movementContract
+          ? getRepresentativeJointPoints(keypoints, movementContract.dominantJoint)
+              ? [getRepresentativeJointPoints(keypoints, movementContract.dominantJoint)].map((points, index) => (
+                  <Circle
+                    key={`dominant-${index}`}
+                    cx={points.b.x}
+                    cy={points.b.y}
+                    r={0.022}
+                    stroke={colors.success}
+                    strokeWidth={0.006}
+                    fill="rgba(0,0,0,0.0)"
+                  />
+                ))
+              : null
+          : null}
+        {angleArc ? (
+          <Path
+            d={angleArc.path}
+            stroke={colors.success}
+            strokeWidth={0.01}
+            fill="none"
+            strokeLinecap="round"
+          />
+        ) : null}
+        <Rect
+          x={0.04}
+          y={0.04}
+          rx={0.02}
+          width={0.42}
+          height={0.11}
+          fill="rgba(0,0,0,0.58)"
+        />
+        <SvgText
+          x={0.06}
+          y={0.085}
+          fill="#FFFFFF"
+          fontSize={0.034}
+          fontWeight="700"
+        >
+          {phaseText}
+        </SvgText>
+        <SvgText
+          x={0.18}
+          y={0.085}
+          fill="rgba(255,255,255,0.88)"
+          fontSize={0.026}
+          fontWeight="600"
+        >
+          {guidanceText}
+        </SvgText>
+        {movementContract && currentAngle !== null ? (
+          <>
+            <Rect
+              x={0.56}
+              y={0.04}
+              rx={0.02}
+              width={0.28}
+              height={0.11}
+              fill="rgba(0,0,0,0.58)"
+            />
+            <SvgText
+              x={0.59}
+              y={0.085}
+              fill={colors.success}
+              fontSize={0.034}
+              fontWeight="700"
+            >
+              {Math.round(currentAngle)}°
+            </SvgText>
+            <SvgText
+              x={0.69}
+              y={0.085}
+              fill="rgba(255,255,255,0.78)"
+              fontSize={0.022}
+              fontWeight="600"
+            >
+              {movementContract.dominantJoint}
+            </SvgText>
+          </>
+        ) : null}
+        {lowConfidenceLandmarks.length > 0 ? (
+          <>
+            <Rect
+              x={0.04}
+              y={0.86}
+              rx={0.018}
+              width={0.52}
+              height={0.08}
+              fill="rgba(0,0,0,0.58)"
+            />
+            <SvgText
+              x={0.06}
+              y={0.91}
+              fill={colors.warning}
+              fontSize={0.023}
+              fontWeight="600"
+            >
+              Low confidence: {lowConfidenceLandmarks.slice(0, 2).join(", ")}
+            </SvgText>
+          </>
+        ) : null}
+      </Svg>
+    </View>
+  );
+}

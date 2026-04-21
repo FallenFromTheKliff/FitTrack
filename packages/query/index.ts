@@ -1,4 +1,38 @@
 export {
+  deleteGymLayoutEquipmentMutationOptions,
+  gymLayoutEquipmentQueryOptions,
+  updateGymLayoutEquipmentMutationOptions,
+  createGymLayoutEquipmentMutationOptions,
+} from "./gym-layout";
+export {
+  deleteNotificationMutationOptions,
+  markAllNotificationsReadMutationOptions,
+  markNotificationReadMutationOptions,
+  notificationInboxQueryOptions,
+  notificationPreferencesQueryOptions,
+  notificationUnreadCountQueryOptions,
+  updateNotificationPreferencesMutationOptions,
+} from "./notifications";
+export { uploadImageMutationOptions } from "./files";
+export {
+  analyticsAttendanceQueryOptions,
+  analyticsCoachesQueryOptions,
+  analyticsInsightDetailQueryOptions,
+  analyticsInsightsQueryOptions,
+  analyticsMembersQueryOptions,
+  analyticsOverviewQueryOptions,
+  analyticsRevenueQueryOptions,
+  generateAnalyticsInsightMutationOptions,
+} from "./analytics";
+export {
+  aiChatMessagesQueryOptions,
+  aiChatMutationOptions,
+  aiChatSessionQueryOptions,
+  aiChatSessionsQueryOptions,
+  archiveAiChatSessionMutationOptions,
+  generateAiPlanMutationOptions,
+} from "./ai";
+export {
   authCurrentUserQueryOptions,
   authUserQueryOptions,
   changePasswordMutationOptions,
@@ -11,10 +45,11 @@ export {
   registerActionMutationOptions,
   registerMutationOptions,
   resetPasswordMutationOptions,
+  verifyResetOtpMutationOptions,
   verifyCurrentPasswordActionMutationOptions,
   verifyCurrentPasswordMutationOptions,
   verifyOtpActionMutationOptions,
-  verifyEmailMutationOptions
+  verifyEmailMutationOptions,
 } from "./auth";
 export {
   appointmentsQueryOptions,
@@ -22,7 +57,7 @@ export {
   completeCoachAppointmentMutationOptions,
   confirmCoachAppointmentMutationOptions,
   createAppointmentMutationOptions,
-  declineCoachAppointmentMutationOptions
+  declineCoachAppointmentMutationOptions,
 } from "./appointments";
 export {
   adminBookingsQueryOptions,
@@ -30,17 +65,77 @@ export {
   adminMembersQueryOptions,
   approveDeletionRequestMutationOptions,
   confirmAdminBookingMutationOptions,
-  createStaffMutationOptions,
+  createUserMutationOptions,
   deleteUserMutationOptions,
+  manualAttendanceCheckInMutationOptions,
   rejectAdminBookingMutationOptions,
   rejectDeletionRequestMutationOptions,
-  upgradeToCoachMutationOptions
+  restoreUserMutationOptions,
+  scanAttendanceQrMutationOptions,
+  updateAdminMemberMutationOptions,
+  updateAdminMembershipCardMutationOptions,
+  upgradeToCoachMutationOptions,
 } from "./admin";
 export {
   bookingsQueryOptions,
   cancelBookingMutationOptions,
-  createBookingMutationOptions
+  createBookingMutationOptions,
 } from "./bookings";
+export {
+  analyzePoseSessionMutationOptions,
+  cancelWorkoutSessionMutationOptions,
+  completeWorkoutSessionMutationOptions,
+  createFitnessExerciseMutationOptions,
+  fitnessExerciseReviewSubmissionsQueryOptions,
+  fitnessExercisesQueryOptions,
+  fitnessLeaderboardQueryOptions,
+  fitnessMasteryQueryOptions,
+  fitnessPlanDetailQueryOptions,
+  fitnessPlansQueryOptions,
+  fitnessPoseSessionQueryOptions,
+  fitnessSessionDetailQueryOptions,
+  fitnessSessionsQueryOptions,
+  finalizePoseSessionMutationOptions,
+  logWorkoutSetMutationOptions,
+  startPoseSessionMutationOptions,
+  startWorkoutSessionMutationOptions,
+  updateExerciseReviewSubmissionMutationOptions,
+  updateFitnessExerciseMutationOptions,
+} from "./fitness";
+export {
+  createInventoryEquipmentMutationOptions,
+  createInventoryProductMutationOptions,
+  inventoryEquipmentDetailQueryOptions,
+  inventoryEquipmentQueryOptions,
+  inventoryProductDetailQueryOptions,
+  inventoryProductsQueryOptions,
+  inventorySalesQueryOptions,
+  restockInventoryProductMutationOptions,
+  updateInventoryEquipmentMutationOptions,
+  updateInventoryProductMutationOptions,
+  writeOffInventoryEquipmentMutationOptions,
+} from "./inventory";
+export {
+  cancelMembershipMutationOptions,
+  membershipCurrentSubscriptionQueryOptions,
+  membershipPaymentsQueryOptions,
+  membershipPlansQueryOptions,
+  purchaseMembershipCardMutationOptions,
+  reviewMembershipPaymentsQueryOptions,
+  submitManualMembershipPaymentMutationOptions,
+  subscribeMembershipMutationOptions,
+  verifyMembershipPaymentMutationOptions,
+} from "./membership";
+export {
+  createNutritionLogMutationOptions,
+  deleteNutritionLogMutationOptions,
+  nutritionActiveTdeeQueryOptions,
+  nutritionDailySummaryQueryOptions,
+  nutritionHistoryQueryOptions,
+  nutritionLogsQueryOptions,
+  recalculateNutritionMutationOptions,
+  updateNutritionLogMutationOptions,
+} from "./nutrition";
 export {
   activeCoachesQueryOptions,
   coachAvailabilityQueryOptions,
@@ -49,46 +144,71 @@ export {
   createCoachAvailabilityMutationOptions,
   deleteCoachAvailabilityMutationOptions,
   updateCoachAvailabilityMutationOptions,
-  updateCoachProfileMutationOptions
+  updateCoachProfileMutationOptions,
 } from "./coaches";
 export { makeQueryClient } from "./query-client";
 export { queryKeys } from "./query-keys";
 export {
+  invalidateAiChatMessagesQuery,
+  invalidateAiChatSessionQuery,
+  invalidateAiChatSessionsQuery,
   clearScheduleBookingsQuery,
   invalidateAdminDeletionRequestsQuery,
   invalidateAdminBookingsQuery,
+  invalidateAdminMembershipPaymentQueries,
+  invalidateAnalyticsQueries,
   invalidateAdminMembersQuery,
   invalidateAppointmentQueries,
   invalidateBookingQueries,
   invalidateCoachQueries,
   invalidateCoachScheduleQueries,
+  invalidateFitnessPoseQuery,
+  invalidateFitnessQueries,
+  invalidateGymLayoutQueries,
+  invalidateInventoryQueries,
+  invalidateMembershipQueries,
+  invalidateNotificationQueries,
+  invalidateNutritionQueries,
+  invalidateAttendanceQrQuery,
   invalidateProfileDeletionStatusQuery,
   invalidateScheduleBookingsQuery,
   invalidateStaffBookingQueries,
+  invalidateStaffCoachManagementQueries,
   invalidateVenueQueries,
   patchAuthUserQueryData,
   setAuthUserQueryData,
-  setProfileDeletionStatusQueryData
+  setProfileDeletionStatusQueryData,
 } from "./cache";
 export {
+  cancelStaffAppointmentMutationOptions,
+  completeStaffAppointmentMutationOptions,
   confirmStaffBookingMutationOptions,
+  replaceStaffCoachAvailabilityMutationOptions,
+  respondToStaffAppointmentMutationOptions,
   rejectStaffBookingMutationOptions,
+  staffAppointmentsQueryOptions,
   staffBookingsQueryOptions,
   staffCoachesQueryOptions,
   staffDashboardStatsQueryOptions,
-  staffUsersQueryOptions
+  updateStaffCoachProfileMutationOptions,
+  staffUsersQueryOptions,
 } from "./staff";
 export {
   createVenueMutationOptions,
   deleteVenueMutationOptions,
   venueAvailabilityQueryOptions,
   updateVenueMutationOptions,
-  venuesQueryOptions
+  venuesQueryOptions,
 } from "./venues";
 export { useStableQueryClient } from "./query-client";
-export { updateAccountMutationOptions, updateProfileMutationOptions } from "./profile";
 export {
+  updatePhoneMutationOptions,
+  updateProfileMutationOptions,
+} from "./profile";
+export {
+  attendanceQrQueryOptions,
   cancelDeletionRequestMutationOptions,
   profileDeletionStatusQueryOptions,
-  requestDeletionMutationOptions
+  refreshAttendanceQrMutationOptions,
+  requestDeletionMutationOptions,
 } from "./users";

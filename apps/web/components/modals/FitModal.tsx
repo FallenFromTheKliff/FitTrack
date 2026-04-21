@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { X } from "lucide-react";
@@ -56,6 +56,7 @@ export default function FitModal({
   const shouldAnimate = settings.animationLevel !== "none";
   const [visible, setVisible] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const Icon = icon;
 
   useEffect(() => {
@@ -63,9 +64,29 @@ export default function FitModal({
   }, []);
 
   useEffect(() => {
-    if (isOpen) requestAnimationFrame(() => setVisible(true));
-    else setVisible(false);
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (isOpen) {
+      animationFrameRef.current = requestAnimationFrame(() => {
+        setVisible(true);
+        animationFrameRef.current = null;
+      });
+      return;
+    }
+
+    setVisible(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
 
   if ((!isOpen && !visible) || !portalRoot) return null;
 
@@ -74,6 +95,7 @@ export default function FitModal({
       style={{
         ...s.overlay,
         opacity: visible ? 1 : 0,
+        pointerEvents: isOpen && visible ? "auto" : "none",
         transition: shouldAnimate ? "opacity 180ms ease" : "none"
       }}
       onClick={onClose}
@@ -84,6 +106,7 @@ export default function FitModal({
           maxWidth,
           transform: visible ? "scale(1)" : "scale(0.96)",
           opacity: visible ? 1 : 0,
+          pointerEvents: isOpen && visible ? "auto" : "none",
           transition: shouldAnimate ? "transform 180ms ease, opacity 180ms ease" : "none"
         }}
         onClick={(e) => e.stopPropagation()}

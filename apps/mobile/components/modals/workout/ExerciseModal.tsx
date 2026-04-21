@@ -22,11 +22,26 @@ const LEVEL_OPTIONS: { label: string; value: "all" | ExerciseReference["level"] 
 ];
 
 type Props = {
+  currentSelectionLabel?: string | null;
+  emptyMessage?: string;
+  isLoading?: boolean;
   isVisible: boolean;
   onClose: () => void;
+  onSelectReference?: (label: string) => void;
+  onUseAutoDetect?: () => void;
+  references?: ExerciseReference[];
 };
 
-export default function ExerciseModal({ isVisible, onClose }: Props) {
+export default function ExerciseModal({
+  currentSelectionLabel = null,
+  emptyMessage = "No exercises match your search.",
+  isLoading = false,
+  isVisible,
+  onClose,
+  onSelectReference,
+  onUseAutoDetect,
+  references
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, translateY } = useOverlayAnim(isVisible, "slideUp");
@@ -49,9 +64,11 @@ export default function ExerciseModal({ isVisible, onClose }: Props) {
     return colors.danger;
   };
 
+  const sourceReferences = references ?? EXERCISE_REFERENCES;
+
   const filteredReferences = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    return EXERCISE_REFERENCES.filter((item) => {
+    return sourceReferences.filter((item) => {
       const matchesLevel = activeLevel === "all" || item.level === activeLevel;
       const matchesSearch =
           q.length === 0 ||
@@ -59,7 +76,7 @@ export default function ExerciseModal({ isVisible, onClose }: Props) {
           item.muscleGroup.toLowerCase().includes(q);
       return matchesLevel && matchesSearch;
     });
-  }, [activeLevel, debouncedQuery]);
+  }, [activeLevel, debouncedQuery, sourceReferences]);
 
   return (
       <Modal
@@ -134,12 +151,29 @@ export default function ExerciseModal({ isVisible, onClose }: Props) {
                 contentContainerStyle={s.listContent}
                 showsVerticalScrollIndicator={false}
             >
-              {filteredReferences.length === 0 ? (
-                  <FitText style={s.emptyText}>No exercises match your search.</FitText>
+              {isLoading ? (
+                  <FitText style={s.emptyText}>Loading live exercise library...</FitText>
+              ) : filteredReferences.length === 0 ? (
+                  <FitText style={s.emptyText}>{emptyMessage}</FitText>
               ) : filteredReferences.map((item) => {
                 const badgeColor = levelColor(item.level);
+                const isSelected =
+                  currentSelectionLabel?.trim().toLowerCase() === item.name.trim().toLowerCase();
                 return (
-                    <View key={item.id} style={s.referenceCard}>
+                    <Pressable
+                      key={item.id}
+                      style={[
+                        s.referenceCard,
+                        onSelectReference
+                          ? {
+                              borderColor: isSelected ? colors.brand : colors.border,
+                              backgroundColor: isSelected ? `${colors.brand}10` : colors.surfaceRaised
+                            }
+                          : null
+                      ]}
+                      disabled={!onSelectReference}
+                      onPress={() => onSelectReference?.(item.name)}
+                    >
                       <View style={s.cardHeadRow}>
                         <View style={s.cardTitleWrap}>
                           <FitText style={s.referenceName}>{item.name}</FitText>
@@ -150,11 +184,31 @@ export default function ExerciseModal({ isVisible, onClose }: Props) {
                         </View>
                       </View>
                       <FitText style={s.referenceRecommendation}>{item.recommendation}</FitText>
-                    </View>
+                      {onSelectReference ? (
+                        <FitText
+                          style={{
+                            color: isSelected ? colors.brand : colors.textMuted,
+                            fontSize: 12,
+                            fontWeight: "700",
+                            marginTop: 10
+                          }}
+                        >
+                          {isSelected ? "SELECTED FOR TRACKING" : "TAP TO USE FOR TRACKING"}
+                        </FitText>
+                      ) : null}
+                    </Pressable>
                 );
               })}
             </ScrollView>
             <View style={s.footer}>
+              {onUseAutoDetect ? (
+                <FitButton
+                  label="Auto Detect"
+                  variant="ghost"
+                  onPress={onUseAutoDetect}
+                  style={{ flex: 1 }}
+                />
+              ) : null}
               <FitButton label="Close" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
             </View>
           </Animated.View>

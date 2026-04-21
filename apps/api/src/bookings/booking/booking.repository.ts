@@ -4,6 +4,7 @@ import {
   BookingStatus,
   Payment,
   PaymentProvider,
+  PaymentStage,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
@@ -17,9 +18,28 @@ export const ACTIVE_CAPACITY_BOOKING_STATUSES = [
   BookingStatus.confirmed,
   BookingStatus.balance_pending,
 ] as const;
+type InitialBookingPaymentStage = Extract<
+  PaymentStage,
+  typeof PaymentStage.downpayment | typeof PaymentStage.full
+>;
+type PendingBookingPaymentStatus = Extract<
+  PaymentStatus,
+  typeof PaymentStatus.awaiting_verification | typeof PaymentStatus.pending
+>;
 
 type BookingWithAmenity = Prisma.AmenityBookingGetPayload<{
-  include: { amenity: true };
+  include: {
+    amenity: true;
+    coach: {
+      include: {
+        user: {
+          include: {
+            profile: true;
+          };
+        };
+      };
+    };
+  };
 }>;
 
 type BookingNotificationContext = Prisma.AmenityBookingGetPayload<{
@@ -47,6 +67,15 @@ type BookingNotificationContext = Prisma.AmenityBookingGetPayload<{
 type AdminBookingListItem = Prisma.AmenityBookingGetPayload<{
   include: {
     amenity: true;
+    coach: {
+      include: {
+        user: {
+          include: {
+            profile: true;
+          };
+        };
+      };
+    };
     user: {
       select: {
         id: true;
@@ -80,10 +109,28 @@ export class BookingRepository extends BaseRepository {
 
   private readonly bookingWithAmenityInclude = {
     amenity: true,
+    coach: {
+      include: {
+        user: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    },
   } as const;
 
   private readonly adminBookingInclude = {
     amenity: true,
+    coach: {
+      include: {
+        user: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    },
     user: {
       select: {
         id: true,
@@ -218,6 +265,7 @@ export class BookingRepository extends BaseRepository {
   async createConfirmedFreeBooking(input: {
     userId: string;
     amenityId: string;
+    coachId?: string;
     startsAt: Date;
     endsAt: Date;
     notes?: string;
@@ -237,6 +285,9 @@ export class BookingRepository extends BaseRepository {
         data: {
           user: { connect: { id: input.userId } },
           amenity: { connect: { id: input.amenityId } },
+          ...(input.coachId
+            ? { coach: { connect: { id: input.coachId } } }
+            : {}),
           status: BookingStatus.confirmed,
           starts_at: input.startsAt,
           ends_at: input.endsAt,
@@ -253,6 +304,7 @@ export class BookingRepository extends BaseRepository {
   async createPendingBookingWithPayment(input: {
     userId: string;
     amenityId: string;
+    coachId?: string;
     startsAt: Date;
     endsAt: Date;
     notes?: string;
@@ -260,7 +312,10 @@ export class BookingRepository extends BaseRepository {
     downpaymentAmount: Prisma.Decimal;
     balanceAmount: Prisma.Decimal;
     idempotencyKey: string;
-    provider: 'paymongo';
+    paymentAmount: Prisma.Decimal;
+    paymentStage: InitialBookingPaymentStage;
+    paymentStatus: PendingBookingPaymentStatus;
+    provider: PaymentProvider;
   }): Promise<BookingPaymentInitiationRecord> {
     return this.transaction(async (tx) => {
       await this.assertCapacityAvailable(
@@ -274,6 +329,9 @@ export class BookingRepository extends BaseRepository {
         data: {
           user: { connect: { id: input.userId } },
           amenity: { connect: { id: input.amenityId } },
+          ...(input.coachId
+            ? { coach: { connect: { id: input.coachId } } }
+            : {}),
           status: BookingStatus.pending,
           starts_at: input.startsAt,
           ends_at: input.endsAt,
@@ -289,11 +347,11 @@ export class BookingRepository extends BaseRepository {
           user: { connect: { id: input.userId } },
           payable_type: 'booking',
           payable_id: booking.id,
-          payment_stage: 'downpayment',
-          amount: input.downpaymentAmount,
+          payment_stage: input.paymentStage,
+          amount: input.paymentAmount,
           provider: input.provider,
           idempotency_key: input.idempotencyKey,
-          status: 'pending',
+          status: input.paymentStatus,
         },
       });
 
@@ -311,6 +369,21 @@ export class BookingRepository extends BaseRepository {
       {
         status: BookingStatus.confirmed,
         downpayment_paid_at: confirmedAt,
+      },
+    );
+  }
+
+  confirmBookingFullPayment(
+    bookingId: string,
+    confirmedAt: Date,
+  ): Promise<AmenityBooking> {
+    return this.updateById<AmenityBooking>(
+      this.prisma.amenityBooking,
+      bookingId,
+      {
+        status: BookingStatus.confirmed,
+        downpayment_paid_at: confirmedAt,
+        balance_paid_at: confirmedAt,
       },
     );
   }

@@ -147,7 +147,12 @@ describe('AiPythonClientService', () => {
         },
         allowedExercises: [],
       }),
-    ).rejects.toThrow(HttpException);
+    ).rejects.toMatchObject({
+      response: {
+        status: 502,
+        detail: 'The AI plan service returned an invalid payload.',
+      },
+    });
   });
 
   it('posts chat requests to the dedicated Python service boundary', async () => {
@@ -217,6 +222,139 @@ describe('AiPythonClientService', () => {
       token_count: 77,
       model_used: 'fittrack-llama',
     });
+  });
+
+  it('rejects malformed upstream chat payloads', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ content: '', action: 'NONE' }), {
+        status: 200,
+      }),
+    );
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+
+    await expect(
+      service.chat({
+        messages: [{ role: 'user', content: 'Help me with nutrition.' }],
+        userContext: {
+          age: 28,
+          gender: 'male',
+          weight_kg: 78,
+          height_cm: 175,
+          activity_level: 'moderate',
+          fitness_goal: 'cutting',
+        },
+        sessionContext: {
+          session_id: 'session-1',
+          context_type: 'nutrition',
+        },
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        status: 502,
+        detail: 'The AI chat service returned an invalid payload.',
+      },
+    });
+  });
+
+  it('surfaces upstream plan-generation failures instead of falling back locally', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      new Response('{"detail":"Not Found"}', { status: 404 }),
+    );
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+
+    await expect(
+      service.generatePlan({
+        userContext: {
+          age: 28,
+          gender: 'male',
+          weight_kg: 78,
+          height_cm: 175,
+          activity_level: 'moderate',
+          fitness_goal: 'cutting',
+        },
+        planInput: {
+          duration_weeks: 2,
+          days_per_week: 3,
+          preferences: 'Prefer dumbbells',
+        },
+        allowedExercises: [
+          {
+            name: 'Barbell Back Squat',
+            muscle_group: 'legs',
+            category: ExerciseCategory.strength,
+          },
+          {
+            name: 'Lat Pulldown',
+            muscle_group: 'back',
+            category: ExerciseCategory.strength,
+          },
+        ],
+      }),
+    ).rejects.toThrow(HttpException);
+  });
+
+  it('surfaces upstream chat failures instead of falling back locally', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      new Response('{"detail":"Not Found"}', { status: 404 }),
+    );
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+
+    await expect(
+      service.chat({
+        messages: [{ role: 'user', content: 'Help me with nutrition.' }],
+        userContext: {
+          age: 28,
+          gender: 'male',
+          weight_kg: 78,
+          height_cm: 175,
+          activity_level: 'moderate',
+          fitness_goal: 'cutting',
+        },
+        sessionContext: {
+          session_id: 'session-1',
+          context_type: 'nutrition',
+        },
+      }),
+    ).rejects.toThrow(HttpException);
   });
 
   it('rejects malformed upstream chat payloads', async () => {
@@ -496,6 +634,41 @@ describe('AiPythonClientService', () => {
     ).rejects.toThrow(HttpException);
   });
 
+  it('falls back to a local tdee calculation when the upstream route is missing', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(new Response('{"detail":"Not Found"}', { status: 404 }));
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+    const result = await service.calculateTdee({
+      age: 28,
+      gender: 'male',
+      weight_kg: 78,
+      height_cm: 175,
+      activity_level: 'moderate',
+      fitness_goal: 'cutting',
+    });
+
+    expect(result).toEqual({
+      bmr: 1738.75,
+      tdee: 2695.06,
+      target_calories: 2195,
+      protein_g: 172,
+      carbs_g: 240,
+      fat_g: 61,
+    });
+  });
+
   it('posts pose-analysis requests to the Python service boundary', async () => {
     const configValues = {
       'ai.apiBaseUrl': 'https://ai.fittrack.test',
@@ -547,7 +720,7 @@ describe('AiPythonClientService', () => {
     });
   });
 
-  it('rejects invalid pose-analysis payloads', async () => {
+  it('rejects invalid pose-sequence analysis payloads', async () => {
     const configValues = {
       'ai.apiBaseUrl': 'https://ai.fittrack.test',
       'ai.requestTimeoutMs': 10000,
@@ -562,10 +735,18 @@ describe('AiPythonClientService', () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          rep_event: true,
-          rep_count_delta: 1.5,
           confidence: 0.94,
           exercise_class: 'squat',
+          movement_contract: {
+            exercise: 'squat',
+            dominant_joint: 'ankle',
+            rep_thresholds: {
+              down: { angle: 88, tolerance: 12 },
+              up: { angle: 166, tolerance: 10 },
+            },
+            secondary_check: 'hip_depth',
+            oscillating_joints: ['hip', 'knee'],
+          },
         }),
         { status: 200 },
       ),
@@ -575,11 +756,177 @@ describe('AiPythonClientService', () => {
     const service = new AiPythonClientService(config as ConfigService);
 
     await expect(
-      service.analyzePoseFrame({
+      service.analyzePoseSequence({
         poseSessionId: 'pose-1',
-        frameBase64: 'frame-data',
+        landmarkSchema: 'mediapipe_pose_v1',
+        exerciseHint: 'Barbell Back Squat',
+        cameraFacingMode: 'user',
+        frames: [
+          {
+            captured_at_ms: 1712844369000,
+            keypoints: Array.from({ length: 33 }, () => ({
+              x: 0.1,
+              y: 0.2,
+              z: 0,
+              visibility: 0.95,
+            })),
+          },
+        ],
+        signals: {
+          angles: [
+            {
+              captured_at_ms: 1712844369000,
+              elbow: 150,
+              shoulder: 90,
+              hip: 120,
+              knee: 95,
+            },
+          ],
+          orientation: {
+            body_orientation: 'upright',
+            torso_slope_deg: 72,
+            vector: { x: 0.01, y: 0.18 },
+          },
+          visibility: {
+            average_visibility: 0.95,
+            feet_visibility: 0.92,
+            low_confidence_landmarks: [],
+            reliable_frame_count: 1,
+            wrist_visibility: 0.93,
+          },
+          hip: {
+            average_y: 0.52,
+            range_y: 0.01,
+            stable: true,
+          },
+          temporal: {
+            amplitudes: { hip: 4, knee: 15 },
+            oscillating_joints: ['knee'],
+          },
+        },
       }),
     ).rejects.toThrow(HttpException);
+  });
+
+  it('retries pose-sequence analysis without signals for legacy AI runtimes', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: 'INVALID_REQUEST',
+            title: 'Invalid Request',
+            status: 422,
+            detail: 'body.signals: Extra inputs are not permitted',
+          }),
+          { status: 422 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            confidence: 0.93,
+            exercise_class: 'squat',
+            matched_profile_id: 'profile-1',
+            subject_locked: true,
+            subject_lock_confidence: 0.98,
+            classification_source: 'preset',
+            needs_confirmation: false,
+            candidate_exercises: ['squat'],
+            form_feedback: ['Keep your chest up.'],
+          }),
+          { status: 200 },
+        ),
+      );
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+    const result = await service.analyzePoseSequence({
+      poseSessionId: 'pose-1',
+      landmarkSchema: 'mediapipe_pose_v1',
+      exerciseHint: 'Barbell Back Squat',
+      cameraFacingMode: 'user',
+      frames: [
+        {
+          captured_at_ms: 1712844369000,
+          keypoints: Array.from({ length: 33 }, () => ({
+            x: 0.1,
+            y: 0.2,
+            z: 0,
+            visibility: 0.95,
+          })),
+        },
+      ],
+      signals: {
+        angles: [
+          {
+            captured_at_ms: 1712844369000,
+            elbow: 150,
+            shoulder: 90,
+            hip: 120,
+            knee: 95,
+          },
+        ],
+        orientation: {
+          body_orientation: 'upright',
+          torso_slope_deg: 72,
+          vector: { x: 0.01, y: 0.18 },
+        },
+        visibility: {
+          average_visibility: 0.95,
+          feet_visibility: 0.92,
+          low_confidence_landmarks: [],
+          reliable_frame_count: 1,
+          wrist_visibility: 0.93,
+        },
+        hip: {
+          average_y: 0.52,
+          range_y: 0.01,
+          stable: true,
+        },
+        temporal: {
+          amplitudes: { hip: 4, knee: 15 },
+          oscillating_joints: ['knee'],
+        },
+      },
+    });
+
+    const calls = fetchMock.mock.calls as Array<
+      [RequestInfo | URL, RequestInit | undefined]
+    >;
+    const firstBody = JSON.parse(String(calls[0]?.[1]?.body)) as Record<
+      string,
+      unknown
+    >;
+    const secondBody = JSON.parse(String(calls[1]?.[1]?.body)) as Record<
+      string,
+      unknown
+    >;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(firstBody.signals).toBeDefined();
+    expect(secondBody.signals).toBeUndefined();
+    expect(result).toEqual({
+      confidence: 0.93,
+      exercise_class: 'squat',
+      matched_profile_id: 'profile-1',
+      subject_locked: true,
+      subject_lock_confidence: 0.98,
+      classification_source: 'preset',
+      needs_confirmation: false,
+      candidate_exercises: ['squat'],
+      form_feedback: ['Keep your chest up.'],
+    });
   });
 
   it('posts pose-session bootstrap requests to the Python service boundary', async () => {
@@ -618,6 +965,9 @@ describe('AiPythonClientService', () => {
           profile_kind: 'seed',
           landmark_signature: { left_shoulder: [0.1, 0.2] },
           angle_signature: { hip_knee_ankle: 92.4 },
+          orientation_signature: { body_orientation: 'upright' },
+          movement_pattern: { tracked_joint: 'knee_angle' },
+          visibility_pattern: { min_visibility: 0.5 },
           rep_rules: { rep_start_angle: 88 },
         },
       ],
@@ -675,6 +1025,9 @@ describe('AiPythonClientService', () => {
             canonical_name: 'squat',
             landmark_signature: { left_shoulder: [0.1, 0.2] },
             angle_signature: { hip_knee_ankle: 92.4 },
+            orientation_signature: { body_orientation: 'upright' },
+            movement_pattern: { tracked_joint: 'knee_angle' },
+            visibility_pattern: { min_visibility: 0.5 },
             rep_rules: { rep_start_angle: 88 },
           },
         }),
@@ -713,6 +1066,9 @@ describe('AiPythonClientService', () => {
         canonical_name: 'squat',
         landmark_signature: { left_shoulder: [0.1, 0.2] },
         angle_signature: { hip_knee_ankle: 92.4 },
+        orientation_signature: { body_orientation: 'upright' },
+        movement_pattern: { tracked_joint: 'knee_angle' },
+        visibility_pattern: { min_visibility: 0.5 },
         rep_rules: { rep_start_angle: 88 },
       },
     });

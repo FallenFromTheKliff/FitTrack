@@ -1,11 +1,18 @@
-import type { VenueRecord } from "@fittrack/types";
 import type { ApiTransport } from "../transport/createAxiosTransport";
-import { getListFromEnvelope, unwrapResponse, unwrapVoidResponse } from "../request";
+import { unwrapResponse, unwrapVoidResponse } from "../request";
+import {
+  mapAmenityAvailabilityToVenueAvailabilityRecord,
+  mapAmenityToVenueRecord,
+  mapVenueMutationPayloadToAmenityPayload,
+  resolveAmenityId,
+  type AmenityApiRecord
+} from "./venue-compat";
 
 export type VenueMutationPayload = {
   capacity: number;
   description?: string;
   displayOrder: number;
+  floorId: string;
   gridColumn: number;
   gridHeight: number;
   gridRow: number;
@@ -23,36 +30,56 @@ export type VenueAvailabilityRecord = {
   status: string;
 };
 
+type AmenityAvailabilitySlotApiRecord = {
+  available: boolean;
+  ends_at: string;
+  starts_at: string;
+};
+
+function requireAmenityId(value: string | number) {
+  const amenityId = resolveAmenityId(value);
+  if (!amenityId) {
+    throw new Error("This facility is not connected to a live amenity record yet.");
+  }
+  return amenityId;
+}
+
 export function createVenuesApi(transport: ApiTransport) {
   return {
     listActive() {
-      return unwrapResponse<VenueRecord[]>(
-        transport.get("/venues?active=true"),
+      return unwrapResponse<AmenityApiRecord[]>(
+        transport.get("/bookings/amenities"),
         "Unable to load venues."
-      );
+      ).then((data) => data.map((record) => mapAmenityToVenueRecord(record)));
     },
     async getAvailability<T>(venueId: string | number, date: string) {
-      const data = await unwrapResponse<{ bookings?: T[] } | T[]>(
-        transport.get(`/venues/${venueId}/availability?date=${date}`),
+      const amenityId = requireAmenityId(venueId);
+      const data = await unwrapResponse<AmenityAvailabilitySlotApiRecord[]>(
+        transport.get(`/bookings/amenities/availability?amenity_id=${amenityId}&date=${date}`),
         "Unable to load venue availability."
       );
-      return getListFromEnvelope<T>(data, "bookings");
+      return data.map((record) => mapAmenityAvailabilityToVenueAvailabilityRecord(record)) as T[];
     },
     create(payload: VenueMutationPayload) {
       return unwrapVoidResponse(
-        transport.post("/admin/venues", payload),
+        transport.post("/bookings/amenities", mapVenueMutationPayloadToAmenityPayload(payload)),
         "Unable to create venue."
       );
     },
-    update(id: number, payload: VenueMutationPayload) {
+    update(id: string | number, payload: VenueMutationPayload) {
+      const amenityId = requireAmenityId(id);
       return unwrapVoidResponse(
-        transport.patch(`/admin/venues/${id}`, payload),
+        transport.patch(
+          `/bookings/amenities/${amenityId}`,
+          mapVenueMutationPayloadToAmenityPayload(payload)
+        ),
         "Unable to update venue."
       );
     },
-    delete(id: number) {
+    delete(id: string | number) {
+      const amenityId = requireAmenityId(id);
       return unwrapVoidResponse(
-        transport.delete(`/admin/venues/${id}`),
+        transport.delete(`/bookings/amenities/${amenityId}`),
         "Unable to delete venue."
       );
     }

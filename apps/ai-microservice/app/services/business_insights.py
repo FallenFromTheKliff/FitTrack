@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 import httpx
 from pydantic import ValidationError
 
-from app.errors import ServiceError
-from app.models.business_insights import (
+from ..errors import ServiceError
+from ..models.business_insights import (
     BusinessAnalyticsGroundingPayload,
     BusinessAnalyticsInsightRequest,
     BusinessAnalyticsInsightResponse,
@@ -29,6 +29,7 @@ class OpenRouterInsightSettings:
     api_key: str
     base_url: str
     insight_model: str
+    fallback_model: str | None
     http_referer: str | None
     app_title: str | None
 
@@ -42,30 +43,17 @@ class OpenRouterBusinessInsightProvider:
         payload: BusinessAnalyticsInsightRequest,
     ) -> BusinessAnalyticsInsightResponse:
         settings = self._get_settings()
-        request_payload = self.build_openrouter_insight_request(payload)
-
-        try:
-            response = httpx.post(
-                f"{settings.base_url.rstrip('/')}/chat/completions",
-                json=request_payload,
-                headers=self._build_headers(settings),
-                timeout=self._REQUEST_TIMEOUT_SECONDS,
-            )
-        except httpx.HTTPError as exc:
-            raise ServiceError(
-                type="SERVICE_UNAVAILABLE",
-                title="Business Insight Provider Unavailable",
-                status=503,
-                detail="OpenRouter business insight generation is unavailable.",
-            ) from exc
-
-        if response.status_code >= 400:
-            raise ServiceError(
-                type="BAD_GATEWAY",
-                title="Business Insight Generation Failed",
-                status=502,
-                detail="OpenRouter rejected the business insight request.",
-            )
+        response = self._run_request_variants(
+            settings,
+            [
+                self.build_openrouter_insight_request(payload),
+                self.build_openrouter_insight_request(
+                    payload,
+                    response_format_type="json_object",
+                ),
+                *self._build_fallback_variants(payload),
+            ],
+        )
 
         try:
             response_payload = response.json()
@@ -97,21 +85,42 @@ class OpenRouterBusinessInsightProvider:
     def build_openrouter_insight_request(
         self,
         payload: BusinessAnalyticsInsightRequest,
+        *,
+        model_override: str | None = None,
+        response_format_type: Literal["json_object", "json_schema"] = "json_schema",
     ) -> dict[str, object]:
         settings = self._get_settings()
         anomaly_flags = BusinessInsightService.detect_anomalies(payload.grounding)
+        response_format = (
+            {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "business_analytics_insight",
+                    "strict": True,
+                    "schema": GeneratedBusinessInsight.model_json_schema(),
+                },
+            }
+            if response_format_type == "json_schema"
+            else {"type": "json_object"}
+        )
+        system_prompt = (
+            "You are a grounded gym business analyst. Use only the provided "
+            "analytics grounding. Return strict JSON only, with no markdown, no "
+            "prose outside the JSON object, and no extra keys."
+        )
+        if response_format_type == "json_object":
+            system_prompt += (
+                " Return a single JSON object with exactly these keys: "
+                "summary, highlights, risks, opportunities, anomaly_flags, "
+                "recommended_actions."
+            )
 
         return {
-            "model": settings.insight_model,
+            "model": model_override or settings.insight_model,
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are a grounded gym business analyst. Use only the "
-                        "provided analytics grounding. Return strict JSON only, "
-                        "with no markdown, no prose outside the JSON object, and "
-                        "no extra keys."
-                    ),
+                    "content": system_prompt,
                 },
                 {
                     "role": "user",
@@ -125,19 +134,139 @@ class OpenRouterBusinessInsightProvider:
                 },
             ],
             "temperature": 0.2,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "business_analytics_insight",
-                    "strict": True,
-                    "schema": GeneratedBusinessInsight.model_json_schema(),
-                },
-            },
+            "response_format": response_format,
         }
+
+    def _post_chat_completion(
+        self,
+        settings: OpenRouterInsightSettings,
+        request_payload: dict[str, object],
+    ) -> httpx.Response:
+        try:
+            return httpx.post(
+                f"{settings.base_url.rstrip('/')}/chat/completions",
+                json=request_payload,
+                headers=self._build_headers(settings),
+                timeout=self._REQUEST_TIMEOUT_SECONDS,
+            )
+        except httpx.TimeoutException as exc:
+            raise ServiceError(
+                type="SERVICE_UNAVAILABLE",
+                title="Business Insight Provider Timeout",
+                status=503,
+                detail=(
+                    "The business insight analysis timed out while waiting for "
+                    "OpenRouter."
+                ),
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ServiceError(
+                type="SERVICE_UNAVAILABLE",
+                title="Business Insight Provider Unavailable",
+                status=503,
+                detail="OpenRouter business insight generation is unavailable.",
+            ) from exc
+
+    def _run_request_variants(
+        self,
+        settings: OpenRouterInsightSettings,
+        payloads: list[dict[str, object]],
+    ) -> httpx.Response:
+        last_response: httpx.Response | None = None
+        for request_payload in payloads:
+            response = self._post_chat_completion(settings, request_payload)
+            if response.status_code < 400:
+                return response
+            last_response = response
+
+        assert last_response is not None
+        raise self._build_upstream_error(last_response)
+
+    def _build_fallback_variants(
+        self,
+        payload: BusinessAnalyticsInsightRequest,
+    ) -> list[dict[str, object]]:
+        settings = self._get_settings()
+        if (
+            not settings.fallback_model
+            or settings.fallback_model == settings.insight_model
+        ):
+            return []
+
+        return [
+            self.build_openrouter_insight_request(
+                payload,
+                model_override=settings.fallback_model,
+            ),
+            self.build_openrouter_insight_request(
+                payload,
+                model_override=settings.fallback_model,
+                response_format_type="json_object",
+            ),
+        ]
+
+    def _build_upstream_error(
+        self,
+        response: httpx.Response,
+    ) -> ServiceError:
+        status = response.status_code
+        if status == 429:
+            return ServiceError(
+                type="SERVICE_UNAVAILABLE",
+                title="Business Insight Usage Limited",
+                status=503,
+                detail=(
+                    "The business insight service is temporarily out of OpenRouter "
+                    "free-model capacity. Try again shortly."
+                ),
+            )
+
+        if status == 402:
+            return ServiceError(
+                type="SERVICE_UNAVAILABLE",
+                title="Business Insight Credits Unavailable",
+                status=503,
+                detail=(
+                    "The business insight service has exhausted the available "
+                    "OpenRouter credits or free usage for the selected models."
+                ),
+            )
+
+        upstream_message = self._extract_upstream_error_message(response)
+        return ServiceError(
+            type="BAD_GATEWAY",
+            title="Business Insight Generation Failed",
+            status=502,
+            detail=upstream_message or "OpenRouter rejected the business insight request.",
+        )
+
+    def _extract_upstream_error_message(self, response: httpx.Response) -> str | None:
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, dict):
+                message = error.get("message")
+                if isinstance(message, str) and message.strip():
+                    return message.strip()
+            detail = payload.get("detail")
+            if isinstance(detail, str) and detail.strip():
+                return detail.strip()
+        return None
 
     def _get_settings(self) -> OpenRouterInsightSettings:
         api_key = os.getenv("OPENROUTER_API_KEY")
-        insight_model = os.getenv("OPENROUTER_INSIGHT_MODEL")
+        insight_model = (
+            os.getenv("OPENROUTER_BUSINESS_INSIGHT_MODEL")
+            or os.getenv("OPENROUTER_INSIGHT_MODEL")
+        )
+        fallback_model = (
+            os.getenv("OPENROUTER_INSIGHT_FALLBACK_MODEL")
+            or os.getenv("OPENROUTER_FREE_MODEL_FALLBACK")
+        )
 
         if not api_key or not insight_model:
             raise ServiceError(
@@ -153,6 +282,7 @@ class OpenRouterBusinessInsightProvider:
             api_key=api_key,
             base_url=os.getenv("OPENROUTER_BASE_URL", self._DEFAULT_BASE_URL),
             insight_model=insight_model,
+            fallback_model=fallback_model.strip() if fallback_model and fallback_model.strip() else None,
             http_referer=os.getenv("OPENROUTER_HTTP_REFERER"),
             app_title=os.getenv("OPENROUTER_APP_TITLE"),
         )
@@ -214,7 +344,7 @@ class OpenRouterBusinessInsightProvider:
 
         content = self._normalize_message_content(message.get("content"))
         try:
-            parsed_content = json.loads(content)
+            parsed_content = self._load_json_content(content)
             return GeneratedBusinessInsight.model_validate(parsed_content)
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ServiceError(
@@ -250,6 +380,26 @@ class OpenRouterBusinessInsightProvider:
             status=502,
             detail="OpenRouter returned an unsupported business insight content shape.",
         )
+
+    def _load_json_content(self, content: str) -> object:
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            cleaned = content.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.removeprefix("```json").removeprefix("```JSON")
+                cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
+                try:
+                    return json.loads(cleaned)
+                except json.JSONDecodeError:
+                    pass
+
+            object_start = cleaned.find("{")
+            object_end = cleaned.rfind("}")
+            if object_start != -1 and object_end > object_start:
+                return json.loads(cleaned[object_start : object_end + 1])
+
+            raise
 
     def _extract_model_used(self, response_payload: object) -> str | None:
         if isinstance(response_payload, dict):
@@ -292,7 +442,12 @@ class BusinessInsightService:
         self,
         payload: BusinessAnalyticsInsightRequest,
     ) -> BusinessAnalyticsInsightResponse:
-        return self._provider.generate_business_insight(payload)
+        try:
+            return self._provider.generate_business_insight(payload)
+        except ServiceError as exc:
+            if exc.status not in {502, 503}:
+                raise
+            return self.build_grounded_fallback(payload.grounding)
 
     @staticmethod
     def detect_anomalies(
@@ -334,3 +489,127 @@ class BusinessInsightService:
             return float(value)
         except ValueError:
             return 0.0
+
+    @staticmethod
+    def build_grounded_fallback(
+        grounding: BusinessAnalyticsGroundingPayload,
+    ) -> BusinessAnalyticsInsightResponse:
+        total_revenue = BusinessInsightService._parse_money(
+            grounding.overview.total_revenue,
+        )
+        anomaly_flags = BusinessInsightService.detect_anomalies(grounding)
+        top_plan = grounding.membership.top_plans[0] if grounding.membership.top_plans else None
+        top_coach = grounding.coaching.coaches[0] if grounding.coaching.coaches else None
+        top_product = (
+            grounding.inventory.top_products[0]
+            if grounding.inventory and grounding.inventory.top_products
+            else None
+        )
+        peak_hour = grounding.attendance.peak_hours[0] if grounding.attendance.peak_hours else None
+
+        highlights = [
+            (
+                f"Total revenue for the selected {grounding.window.period} window "
+                f"reached {grounding.overview.total_revenue}."
+            ),
+            (
+                f"Attendance recorded {grounding.overview.total_check_ins} check-ins "
+                f"with {grounding.membership.active_members} active members."
+            ),
+        ]
+        if top_plan:
+            highlights.append(
+                f"Top membership plan is {top_plan.name} with {top_plan.subscriber_count} subscribers."
+            )
+        if top_coach:
+            highlights.append(
+                f"Top coach performer is {BusinessInsightService._coach_name(top_coach)} "
+                f"with {top_coach.completed_sessions} completed sessions."
+            )
+
+        risks = (
+            anomaly_flags.copy()
+            if anomaly_flags
+            else ["AI-generated narrative is currently degraded, so this fallback is rule-based."]
+        )
+        if peak_hour and peak_hour.check_ins > 0:
+            risks.append(
+                f"Traffic concentrates around {peak_hour.hour_label}, which can strain staffing and equipment."
+            )
+
+        opportunities = []
+        if top_product:
+            opportunities.append(
+                f"Promote {top_product.name} during peak hours to lift secondary spend."
+            )
+        if top_plan:
+            opportunities.append(
+                f"Use {top_plan.name} as the lead offer in retention and upgrade campaigns."
+            )
+        if top_coach:
+            opportunities.append(
+                f"Replicate the session pattern of {BusinessInsightService._coach_name(top_coach)} across the coaching team."
+            )
+        if not opportunities:
+            opportunities.append(
+                "Review the live analytics trends and schedule a manual business review for this window."
+            )
+
+        recommended_actions = []
+        if total_revenue <= 0:
+            recommended_actions.append(
+                "Audit the payment pipelines for the selected window before trusting revenue conclusions."
+            )
+        if grounding.overview.total_check_ins <= 0:
+            recommended_actions.append(
+                "Validate access-control and check-in capture because attendance is currently zero."
+            )
+        if peak_hour and peak_hour.check_ins > 0:
+            recommended_actions.append(
+                f"Align staffing, classes, and retail prompts around the {peak_hour.hour_label} peak."
+            )
+        if top_product:
+            recommended_actions.append(
+                f"Bundle {top_product.name} with memberships or coaching packages to improve spend per visit."
+            )
+        if not recommended_actions:
+            recommended_actions.append(
+                "Review this grounded fallback insight and regenerate once the external AI provider stabilizes."
+            )
+
+        summary = (
+            f"Fallback insight: revenue is {grounding.overview.total_revenue}, "
+            f"attendance is {grounding.overview.total_check_ins} check-ins, "
+            f"and active membership is {grounding.membership.active_members} for the selected window."
+        )
+
+        return BusinessAnalyticsInsightResponse(
+            summary=summary,
+            highlights=highlights,
+            risks=BusinessInsightService._unique_strings(risks),
+            opportunities=BusinessInsightService._unique_strings(opportunities),
+            anomaly_flags=anomaly_flags,
+            recommended_actions=BusinessInsightService._unique_strings(
+                recommended_actions
+            ),
+            model_used="grounded-fallback",
+            token_count=None,
+        )
+
+    @staticmethod
+    def _coach_name(coach: object) -> str:
+        if not hasattr(coach, "first_name") and not hasattr(coach, "last_name"):
+            return "the leading coach"
+
+        first_name = getattr(coach, "first_name", None)
+        last_name = getattr(coach, "last_name", None)
+        full_name = " ".join(part for part in [first_name, last_name] if part)
+        return full_name or "the leading coach"
+
+    @staticmethod
+    def _unique_strings(values: list[str]) -> list[str]:
+        deduped: list[str] = []
+        for value in values:
+            if value and value not in deduped:
+                deduped.append(value)
+        return deduped

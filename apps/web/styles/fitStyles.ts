@@ -385,16 +385,17 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       flexDirection: "column",
       gap: 4
     } as CSSProperties,
-    inlineWrap: (isOpen: boolean, maxWidth: number, canAnimate: boolean): CSSProperties => ({
-      display: "flex",
+    inlineWrap: (isOpen: boolean, maxWidth: number, _canAnimate: boolean): CSSProperties => ({
+      display: isOpen ? "flex" : "none",
       alignItems: "center",
-      gap: 8,
-      overflow: "hidden",
-      whiteSpace: "nowrap",
-      maxWidth: isOpen ? maxWidth : 0,
-      opacity: isOpen ? 1 : 0,
-      transform: isOpen ? "translateX(0)" : "translateX(-16px)",
-      transition: canAnimate ? "max-width 220ms ease, opacity 180ms ease, transform 220ms ease" : "none"
+      flexWrap: "wrap",
+      columnGap: 8,
+      rowGap: 8,
+      overflow: "visible",
+      whiteSpace: "normal",
+      width: "100%",
+      maxWidth,
+      minWidth: 0
     }),
     inlineChip: {
       padding: "8px 14px",

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useRouter, useSegments } from "expo-router";
-import { Home, Map, CalendarDays, Apple, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
+import { Home, Map, CalendarDays, Apple, Trophy, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { TIER_LABELS, TIER_LEVELS } from "@/data/member";
@@ -13,6 +14,8 @@ import { makeSidebarStyles, SIDEBAR_WIDTH } from "@/styles/shared/LayoutStyles";
 
 import { AnimatedFitText, FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitAvatarImage from "@/components/fit/FitAvatarImage";
+import { MOBILE_API_BASE_URL } from "@/lib/api-client";
 
 type NavItem = { label: string; icon: LucideIcon; route: string };
 const NAV_ITEMS: NavItem[] = [
@@ -20,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Bookings", icon: CalendarDays, route: "/(tabs)/bookings" },
   { label: "Facilities", icon: Map, route: "/(tabs)/facilities" },
   { label: "Nutrition", icon: Apple, route: "/(tabs)/nutrition" },
+  { label: "Muscle Mastery", icon: Trophy, route: "/(tabs)/mastery" },
   { label: "Workout", icon: Dumbbell, route: "/(tabs)/workout" },
   { label: "BrodigyAI", icon: Bot, route: "/(tabs)/chathistory" },
   { label: "Settings", icon: Settings, route: "/(tabs)/settings" }
@@ -86,18 +90,31 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const tierStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
   const bottomBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
-  const isActive = (route: string) => segments.includes(route.split("/").pop() as never);
-  const handleNav = (route: string) => {
+  const isActive = useCallback(
+    (route: string) => segments.includes(route.split("/").pop() as never),
+    [segments]
+  );
+  const navigateFromSidebar = useCallback((route: string) => {
+    if (isActive(route)) {
+      onClose();
+      return;
+    }
     onClose();
-    router.replace(route as any);
-  };
-  const handleProfilePress = () => {
-    onClose();
-    router.replace("/(tabs)/profile" as any);
-  };
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        router.navigate(route as any);
+      });
+    });
+  }, [isActive, onClose, router]);
+  const handleProfilePress = useCallback(() => {
+    navigateFromSidebar("/(tabs)/profile");
+  }, [navigateFromSidebar]);
 
   const initials = user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "FT";
-  const avatarUri = user?.avatarUri;
+  const avatarUri = buildRenderableAssetUrl({
+    apiBaseUrl: MOBILE_API_BASE_URL,
+    assetUrl: user?.avatarUri
+  });
   const tierLabel = user?.tier ? TIER_LABELS[user.tier] : "Fit Starter";
   const tierLevel = user?.tier ? TIER_LEVELS[user.tier] : 1;
   const ic2 = activeIconColor ?? colors.brand;
@@ -126,13 +143,16 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
               <Pressable onPress={handleProfilePress}>
                 <Animated.View style={[s.profileCard, profileCardStyle]}>
                   <View style={s.profileAvatar}>
-                    {avatarUri ? (
-                        <Image source={{ uri: avatarUri }} style={{ width: "100%", height: "100%", borderRadius: 12 }} />
-                    ) : (
+                    <FitAvatarImage
+                      alt={`${user?.name ?? "Member"} avatar`}
+                      borderRadius={12}
+                      uri={avatarUri}
+                      fallback={
                         <AnimatedFitText style={[s.profileAvatarText, profileNameStyle]}>
                           {initials}
                         </AnimatedFitText>
-                    )}
+                      }
+                    />
                   </View>
                   <View style={s.profileInfo}>
                     <AnimatedFitText style={[s.profileName, profileNameStyle]} numberOfLines={1}>
@@ -159,7 +179,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
                         iconSize={24}
                         variant={active ? "navActive" : "nav"}
                         showTrailing={active}
-                        onPress={() => handleNav(route)}
+                        onPress={() => navigateFromSidebar(route)}
                         style={s.navItem}
                     />
                 );

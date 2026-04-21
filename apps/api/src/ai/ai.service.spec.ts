@@ -341,6 +341,30 @@ describe('AiService', () => {
         interactionType: 'chat',
         modelUsed: 'fittrack-llama',
         tokenCount: 88,
+        requestPayload: expect.objectContaining({
+          promptBlueprint: expect.objectContaining({
+            domain: 'chat',
+            persona:
+              'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
+            context: expect.objectContaining({
+              sessionId: 'session-1',
+              contextType: ChatContext.general,
+              latestUserMessage: 'I want help with meal planning.',
+              messagePurpose: 'nutrition_guidance',
+              userContext: expect.objectContaining({
+                fitness_goal: FitnessGoal.cutting,
+              }),
+            }),
+            actionPolicy: expect.objectContaining({
+              allowedActions: [
+                'ADJUST_TDEE',
+                'GENERATE_PLAN',
+                'LOG_NUTRITION',
+                'NONE',
+              ],
+            }),
+          }),
+        }),
       }),
     );
   });
@@ -408,6 +432,72 @@ describe('AiService', () => {
     expect(
       updateCalls.some(([, input]) => typeof input.title === 'string'),
     ).toBe(false);
+  });
+
+  it('archives the current active context session when the client explicitly starts a new conversation', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: new Date('1998-03-26'),
+        gender: 'male',
+        weight_kg: { toNumber: () => 78 },
+        height_cm: { toNumber: () => 175 },
+        activity_level: 'moderate',
+        fitness_goal: FitnessGoal.cutting,
+      },
+    });
+    aiChatSessionRepository.findOwnedActiveSessionByContext.mockResolvedValue({
+      id: 'session-existing',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      title: 'Existing title',
+      is_active: true,
+      last_activity_at: new Date(),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+    aiChatSessionRepository.createSession.mockResolvedValue({
+      id: 'fresh-session',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      title: null,
+      is_active: true,
+      last_activity_at: new Date('2026-03-28T05:00:00.000Z'),
+      created_at: new Date('2026-03-28T05:00:00.000Z'),
+      updated_at: new Date('2026-03-28T05:00:00.000Z'),
+    });
+    aiChatMessageRepository.listRecentMessagesBySessionId.mockResolvedValue([]);
+    aiClient.chat.mockResolvedValue({
+      content: 'Fresh thread ready.',
+      action: 'NONE',
+      params: null,
+      token_count: 64,
+      model_used: 'fittrack-llama',
+    });
+    aiInteractionLogRepository.createInteractionLog.mockResolvedValue({
+      id: 'log-start-new',
+    });
+
+    await expect(
+      service.chat('user-1', {
+        context_type: ChatContext.general,
+        message: 'Start over please.',
+        start_new_session: true,
+      }),
+    ).resolves.toEqual({
+      session_id: 'fresh-session',
+      reply: 'Fresh thread ready.',
+      action_triggered: null,
+      action_result: null,
+    });
+
+    expect(aiChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
+      'session-existing',
+      { isActive: false },
+    );
+    expect(aiChatSessionRepository.createSession).toHaveBeenCalledWith({
+      userId: 'user-1',
+      contextType: ChatContext.general,
+    });
   });
 
   it('archives stale context sessions discovered during implicit reuse and creates a fresh replacement', async () => {
@@ -523,6 +613,35 @@ describe('AiService', () => {
         userId: 'user-1',
         sessionId: 'session-1',
         contextType: ChatContext.nutrition,
+      }),
+    );
+    expect(aiClient.chat).not.toHaveBeenCalled();
+  });
+
+  it('rejects explicitly requested archived sessions before reaching the AI client', async () => {
+    aiChatSessionRepository.findOwnedSessionByIdOrThrow.mockResolvedValue({
+      id: 'session-archived',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      title: 'Archived thread',
+      is_active: false,
+      last_activity_at: new Date(),
+      created_at: new Date('2026-03-28T05:00:00.000Z'),
+      updated_at: new Date('2026-03-28T05:00:00.000Z'),
+    });
+
+    await expect(
+      service.chat('user-1', {
+        session_id: 'session-archived',
+        message: 'Can we keep going here?',
+      }),
+    ).rejects.toBeInstanceOf(HttpException);
+
+    expect(aiChatSessionRepository.updateSessionById).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+      AI_SESSION_ARCHIVED_EVENT,
+      expect.objectContaining({
+        sessionId: 'session-archived',
       }),
     );
     expect(aiClient.chat).not.toHaveBeenCalled();
@@ -977,6 +1096,28 @@ describe('AiService', () => {
         userId: 'user-1',
         tokenCount: 321,
         modelUsed: 'fittrack-llama',
+        requestPayload: expect.objectContaining({
+          promptBlueprint: expect.objectContaining({
+            domain: 'generate-plan',
+            planConstraints: expect.objectContaining({
+              durationWeeks: 8,
+              daysPerWeek: 4,
+              exerciseCatalogSize: 1,
+              preferences: 'Prefer barbells',
+              userContext: expect.objectContaining({
+                fitnessGoal: FitnessGoal.bulking,
+                fitness_goal: 'bulking',
+              }),
+              allowedExerciseCatalog: [
+                {
+                  name: 'Barbell Back Squat',
+                  muscleGroup: 'legs',
+                  category: ExerciseCategory.strength,
+                },
+              ],
+            }),
+          }),
+        }),
       }),
     );
     expect(trainingPlanService.createAiGeneratedPlan).toHaveBeenCalledWith(
@@ -986,6 +1127,17 @@ describe('AiService', () => {
         title: 'AI Bulking Plan',
         durationWeeks: 8,
         daysPerWeek: 4,
+        aiGenerationPrompt: expect.objectContaining({
+          promptBlueprint: expect.objectContaining({
+            domain: 'generate-plan',
+            planConstraints: expect.objectContaining({
+              durationWeeks: 8,
+              daysPerWeek: 4,
+              exerciseCatalogSize: 1,
+              preferences: 'Prefer barbells',
+            }),
+          }),
+        }),
         schedule: [
           {
             weekNumber: 1,
@@ -1005,6 +1157,92 @@ describe('AiService', () => {
               },
             ],
           },
+        ],
+      }),
+    );
+  });
+
+  it('normalizes overfull AI schedule weeks before persisting the plan', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: new Date('1998-03-26'),
+        gender: 'male',
+        weight_kg: { toNumber: () => 78 },
+        height_cm: { toNumber: () => 175 },
+        activity_level: 'moderate',
+        fitness_goal: FitnessGoal.bulking,
+      },
+    });
+    exerciseService.listActiveExercisesForGeneration.mockResolvedValue([
+      {
+        id: 'exercise-1',
+        name: 'Barbell Back Squat',
+        muscle_group: 'legs',
+        category: ExerciseCategory.strength,
+      },
+    ]);
+    aiClient.assertHealthy.mockResolvedValue(undefined);
+    aiClient.generatePlan.mockResolvedValue({
+      weeks: [
+        {
+          week_number: 1,
+          days: [
+            {
+              day_of_week: 3,
+              focus_label: 'Midweek Strength',
+              exercises: [{ name: 'Barbell Back Squat', sets: 4, reps: 8 }],
+            },
+            {
+              day_of_week: 1,
+              focus_label: 'Week Opener',
+              exercises: [{ name: 'Barbell Back Squat', sets: 5, reps: 5 }],
+            },
+            {
+              day_of_week: 1,
+              focus_label: 'Duplicate Day',
+              exercises: [{ name: 'Barbell Back Squat', sets: 3, reps: 10 }],
+            },
+            {
+              day_of_week: 5,
+              focus_label: 'Should Be Trimmed',
+              exercises: [{ name: 'Barbell Back Squat', sets: 3, reps: 12 }],
+            },
+          ],
+        },
+      ],
+      token_count: 111,
+      model_used: 'fittrack-llama',
+    });
+    trainingPlanService.createAiGeneratedPlan.mockResolvedValue({
+      id: 'plan-2',
+      source: 'ai_generated',
+    });
+
+    await expect(
+      service.generatePlan('user-1', {
+        duration_weeks: 6,
+        days_per_week: 2,
+      }),
+    ).resolves.toEqual({
+      id: 'plan-2',
+      source: 'ai_generated',
+    });
+
+    expect(trainingPlanService.createAiGeneratedPlan).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        daysPerWeek: 2,
+        schedule: [
+          expect.objectContaining({
+            weekNumber: 1,
+            dayOfWeek: 1,
+            focusLabel: 'Week Opener',
+          }),
+          expect.objectContaining({
+            weekNumber: 1,
+            dayOfWeek: 3,
+            focusLabel: 'Midweek Strength',
+          }),
         ],
       }),
     );

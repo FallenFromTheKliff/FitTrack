@@ -39,11 +39,11 @@ import {
   RegisterDTO,
   VerifyEmailDTO,
   LoginDTO,
-  PhoneLoginRequestDTO,
-  PhoneLoginVerifyDTO,
   ForgotPasswordDTO,
+  VerifyCurrentPasswordDTO,
+  VerifyResetOtpDTO,
   ResetPasswordDTO,
-  VerifyPhoneDTO,
+  ChangePasswordDTO,
   AdminCreateUserDTO,
   ResendOtpDTO,
 } from './dto/auth.dto';
@@ -75,6 +75,7 @@ function clearRefreshCookie(res: Response): void {
 function stripRefreshToken(result: InternalTokenPairResponse) {
   return {
     access_token: result.access_token,
+    refresh_token: result._refresh_token,
     user: result.user,
   };
 }
@@ -147,6 +148,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
   @ApiResponse({ status: 403, description: 'Account suspended or banned.' })
+  @ApiResponse({ status: 410, description: 'Account archived.' })
   async login(
     @Body() dto: LoginDTO,
     @Req() req: Request,
@@ -154,41 +156,6 @@ export class AuthController {
   ) {
     const { deviceInfo, ip } = extractDeviceAndIp(req);
     const result = await this.authService.login(dto, deviceInfo, ip);
-    setRefreshCookie(res, result._refresh_token);
-    return stripRefreshToken(result);
-  }
-
-  @Post('login/phone')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60 } })
-  @ApiOperation({
-    summary: 'Step 1: Submit phone → receive SMS OTP.',
-    description:
-      'Always returns 200. Only works if phone is a verified identity on an account.',
-  })
-  async phoneLoginRequest(@Body() dto: PhoneLoginRequestDTO) {
-    await this.authService.phoneLoginRequest(dto);
-    return { message: 'If that phone is registered, an OTP has been sent.' };
-  }
-
-  @Post('login/phone/verify')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Step 2: Submit phone OTP → return token pair.' })
-  @ApiResponse({
-    status: 200,
-    description: 'TokenPairResponse + HttpOnly cookie.',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Phone not registered / OTP invalid.',
-  })
-  async phoneLoginVerify(
-    @Body() dto: PhoneLoginVerifyDTO,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { deviceInfo, ip } = extractDeviceAndIp(req);
-    const result = await this.authService.phoneLoginVerify(dto, deviceInfo, ip);
     setRefreshCookie(res, result._refresh_token);
     return stripRefreshToken(result);
   }
@@ -231,11 +198,13 @@ export class AuthController {
     status: 401,
     description: 'Missing, expired, or reused token.',
   })
+  @ApiResponse({ status: 410, description: 'Account archived.' })
   async refresh(
     @Req() req: RequestWithCookies,
+    @Body() body: { refresh_token?: string } | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const rawToken = req.cookies?.[COOKIE_NAME];
+    const rawToken = req.cookies?.[COOKIE_NAME] ?? body?.refresh_token?.trim();
     if (!rawToken) {
       throw new UnauthorizedException({
         type: 'MISSING_REFRESH_TOKEN',
@@ -259,12 +228,61 @@ export class AuthController {
   async logout(
     @CurrentUser() user: JwtPayload,
     @Req() req: RequestWithCookies,
+    @Body() body: { refresh_token?: string } | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const rawToken = req.cookies?.[COOKIE_NAME] ?? '';
+    const rawToken =
+      req.cookies?.[COOKIE_NAME] ?? body?.refresh_token?.trim() ?? '';
     await this.authService.logout(user.jti, rawToken);
     clearRefreshCookie(res);
     return { message: 'Logged out successfully.' };
+  }
+
+  @Post('verify-current-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Verify the current password for the authenticated account.',
+  })
+  @ApiResponse({ status: 200, description: '{ verified: true }' })
+  @ApiResponse({ status: 401, description: 'Current password is incorrect.' })
+  async verifyCurrentPassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: VerifyCurrentPasswordDTO,
+  ) {
+    const verified = await this.authService.verifyCurrentPassword(
+      user.sub,
+      dto,
+    );
+    return { verified };
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Change the current password for the authenticated account.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Password changed successfully. Existing sessions are revoked.',
+  })
+  @ApiResponse({ status: 401, description: 'Current password is incorrect.' })
+  @ApiResponse({
+    status: 422,
+    description: 'New password is invalid or matches the current password.',
+  })
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDTO,
+  ) {
+    await this.authService.changePassword(user.sub, dto);
+    return {
+      message: 'Password changed successfully. Please log in again.',
+    };
   }
 
   @Post('forgot-password')
@@ -278,6 +296,23 @@ export class AuthController {
     return { message: 'If that email exists, a reset code has been sent.' };
   }
 
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validate a password reset OTP without consuming it.',
+  })
+  @ApiResponse({ status: 200, description: '{ verified: true }' })
+  @ApiResponse({
+    status: 404,
+    description: 'No account found with this email.',
+  })
+  @ApiResponse({ status: 422, description: 'Invalid or expired OTP.' })
+  @ApiResponse({ status: 423, description: 'OTP locked.' })
+  async verifyResetOtp(@Body() dto: VerifyResetOtpDTO) {
+    const verified = await this.authService.verifyResetOtp(dto);
+    return { verified };
+  }
+
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -288,36 +323,6 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDTO) {
     await this.authService.resetPassword(dto);
     return { message: 'Password reset successfully. Please log in.' };
-  }
-
-  @Post('send-phone-otp')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: 'Send SMS OTP to verify phone on existing account.',
-  })
-  async sendPhoneOtp(@CurrentUser() user: JwtPayload) {
-    await this.authService.sendPhoneOtp(user.sub);
-    return { message: 'OTP sent to your phone number.' };
-  }
-
-  @Post('verify-phone')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary:
-      'Confirm phone OTP. Creates phone AuthIdentity — enables phone login.',
-  })
-  async verifyPhone(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: VerifyPhoneDTO,
-  ) {
-    await this.authService.verifyPhone(user.sub, dto);
-    return {
-      message: 'Phone verified. You can now log in with your phone number.',
-    };
   }
 
   @Post('resend-otp')
@@ -348,7 +353,7 @@ export class AdminAuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a staff, coach, or admin account.' })
+  @ApiOperation({ summary: 'Create an admin, staff, or member account.' })
   @ApiResponse({ status: 201, description: '{ user_id, email, role }' })
   @ApiResponse({ status: 409, description: 'Email already in use.' })
   createUser(

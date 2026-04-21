@@ -21,6 +21,14 @@ export class GymLayoutRepository extends BaseRepository {
     );
   }
 
+  findEquipmentByIdOrThrow(id: string): Promise<GymEquipment> {
+    return this.findByIdOrThrow<GymEquipment>(
+      this.prisma.gymEquipment,
+      id,
+      'GymEquipment',
+    );
+  }
+
   createEquipment(data: Prisma.GymEquipmentCreateInput): Promise<GymEquipment> {
     return this.create<GymEquipment>(this.prisma.gymEquipment, data);
   }

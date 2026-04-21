@@ -25,15 +25,20 @@ export default function BufferScreen({ onCommit, onDone }: Props) {
     } else {
       anim.value = 1;
     }
-    const commitTimer = setTimeout(async () => {
-      await onCommit();
-    }, 500);
-    const doneTimer = setTimeout(() => {
-      onDone();
-    }, 1000);
+    let cancelled = false;
+    const runTransition = async () => {
+      const minimumDelay = settings.animationLevel === "full" ? 500 : 0;
+      await Promise.all([
+        onCommit(),
+        new Promise((resolve) => setTimeout(resolve, minimumDelay))
+      ]);
+      if (!cancelled) {
+        onDone();
+      }
+    };
+    void runTransition();
     return () => {
-      clearTimeout(commitTimer);
-      clearTimeout(doneTimer);
+      cancelled = true;
     };
   }, [anim, onCommit, onDone, settings.animationLevel]);
   return <Animated.View style={containerStyle} />;

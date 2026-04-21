@@ -18,11 +18,12 @@ type Props = {
   onSuccess: () => void;
   onDismiss: () => void;
   email?: string;
+  initialError?: string;
   onVerify?: (code: string) => Promise<{ success: boolean; error?: string }>;
   onResend?: () => Promise<void>;
 };
 
-export default function OTPModal({ isOpen, onSuccess, onDismiss, email, onVerify, onResend }: Props) {
+export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialError = "", onVerify, onResend }: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const { verifyOTP } = useAuth();
   const s = modalStyles(colors);
@@ -43,10 +44,13 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, onVerify
       setResendSecs(RESEND_SECS);
       return;
     }
+    if (initialError) {
+      setErrorText(initialError);
+    }
     const id = setInterval(() => setResendSecs((prev) => (prev > 0 ? prev - 1 : 0)), 1000);
     setTimeout(() => refs.current[0]?.focus(), 80);
     return () => clearInterval(id);
-  }, [isOpen]);
+  }, [isOpen, initialError]);
 
   const handleChange = (val: string, i: number) => {
     const digit = val.replace(/\D/g, "").slice(-1);
@@ -135,7 +139,7 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, onVerify
             </div>
         )}
         <FitButton
-            label={verified ? "Verified!" : verifying ? verifyLabel : errorText || "VERIFY CODE"}
+            label={verified ? "Verified!" : verifying ? verifyLabel : "VERIFY CODE"}
             variant="primary"
             fullWidth
             loading={verifying}

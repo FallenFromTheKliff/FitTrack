@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack QA"
+  short_description: "FitTrack risk-aware verification with ordered runtime, DB, browser, and Playwright evidence"
+  default_prompt: "Use $quality-assurance to verify a FitTrack change with the correct order: runtime truth first, DB truth when needed, Swagger next, Browser DevTools for browser diagnostics, and Playwright last when the surface needs browser proof. For premium UI work, fail underpowered motion, inconsistent motion voice, ambient-motion overuse, pagination weakness, modal-or-drawer animation drift, annotation leakage, Figma workspace drift, clean-but-generic output, and admin-family inconsistency."
+
+policy:
+  allow_implicit_invocation: true

@@ -117,12 +117,16 @@ def test_analyze_returns_deterministic_pose_payload(client: TestClient) -> None:
     assert first_response.json() == {
         "rep_event": False,
         "rep_count_delta": 0,
+        "rep_count_total": 0,
         "confidence": 0.84,
         "exercise_class": "squat",
         "matched_profile_id": "profile-1",
         "subject_locked": True,
         "subject_lock_confidence": 0.92,
         "phase": "lowering",
+        "classification_source": "classifier",
+        "needs_confirmation": False,
+        "candidate_exercises": [],
         "form_feedback": ["Keep your chest up."],
     }
     assert second_response.status_code == 200
@@ -136,12 +140,16 @@ def test_analyze_returns_deterministic_pose_payload(client: TestClient) -> None:
     assert third_response.json() == {
         "rep_event": True,
         "rep_count_delta": 1,
+        "rep_count_total": 1,
         "confidence": 0.9,
         "exercise_class": "squat",
         "matched_profile_id": "profile-1",
         "subject_locked": True,
         "subject_lock_confidence": 0.84,
         "phase": "rising",
+        "classification_source": "classifier",
+        "needs_confirmation": False,
+        "candidate_exercises": [],
         "form_feedback": ["Keep your chest up.", "Rep counted cleanly."],
     }
 
@@ -261,6 +269,12 @@ def test_finalize_can_emit_learned_profile_without_candidate_match(
             "right_hip": [0.31, 0.4],
         },
         "angle_signature": {"shoulder_elbow_wrist": 88.5},
+        "orientation_signature": {"body_orientation": "prone_horizontal"},
+        "movement_pattern": {
+            "tracked_joint": "elbow_angle",
+            "cooldown_frames": 4,
+        },
+        "visibility_pattern": {"min_visibility": 0.5},
         "rep_rules": {"rep_interval_frames": 3, "phase_hint": "lowering"},
     }
 

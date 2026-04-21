@@ -85,10 +85,7 @@ export function makeExerciseModalStyles(colors: ThemeColors) {
       borderColor: colors.border,
       padding: 14,
       elevation: 12,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8
+      boxShadow: "0 4px 8px rgba(0,0,0,0.2)"
     },
     filterLabel: {
       fontSize: 11,

@@ -7,10 +7,12 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUrl,
   IsUUID,
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -78,6 +80,13 @@ export class UpdateProfileDTO {
     { message: 'date_of_birth must be a valid ISO 8601 date string' },
   )
   date_of_birth?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/avatars/user.png',
+  })
+  @IsOptional()
+  @IsUrl({ require_tld: false }, { message: 'avatar_url must be a valid URL' })
+  avatar_url?: string;
 
   @ApiPropertyOptional({ enum: Gender })
   @IsOptional()
@@ -222,12 +231,50 @@ export class UpdateUserStatusDTO {
 }
 
 export class ScanQrDTO {
-  @ApiProperty({ example: 'Xt8n2k...' })
+  @ApiPropertyOptional({
+    example:
+      'fittrack-attendance:9f6f7d18-1ed3-4d35-8f13-6b3770f0f5f8:1902360:abc123...',
+    description:
+      'Preferred camelCase attendance QR value shown on the member mobile profile.',
+  })
+  @ValidateIf(
+    (object: ScanQrDTO) => !object.qr_value && !object.qr_code_token,
+  )
+  @TrimString()
+  @IsString({ message: 'qrValue must be a string' })
+  @IsNotEmpty({ message: 'qrValue is required' })
+  @MaxLength(255, { message: 'qrValue must not exceed 255 characters' })
+  qrValue?: string;
+
+  @ApiPropertyOptional({
+    example:
+      'fittrack-attendance:9f6f7d18-1ed3-4d35-8f13-6b3770f0f5f8:1902360:abc123...',
+    description:
+      'Snake_case attendance QR value kept for compatibility during the scanner transition.',
+  })
+  @ValidateIf((object: ScanQrDTO) => !object.qrValue && !object.qr_code_token)
+  @TrimString()
+  @IsString({ message: 'qr_value must be a string' })
+  @IsNotEmpty({ message: 'qr_value is required' })
+  @MaxLength(255, { message: 'qr_value must not exceed 255 characters' })
+  qr_value?: string;
+
+  @ApiPropertyOptional({
+    example: 'Xt8n2k...',
+    description: 'Legacy raw QR token accepted during the scanner transition.',
+  })
+  @ValidateIf((object: ScanQrDTO) => !object.qrValue && !object.qr_value)
   @TrimString()
   @IsString({ message: 'qr_code_token must be a string' })
   @IsNotEmpty({ message: 'qr_code_token is required' })
   @MaxLength(64, { message: 'qr_code_token must not exceed 64 characters' })
-  qr_code_token: string;
+  qr_code_token?: string;
+}
+
+export class ManualAttendanceCheckInDTO {
+  @ApiProperty({ example: '2d1fb357-3ffd-4e5e-9f74-4546e408d0a2' })
+  @IsUUID('4', { message: 'user_id must be a valid UUID' })
+  user_id: string;
 }
 
 export class AttendanceFilterDTO extends DateRangeDTO {

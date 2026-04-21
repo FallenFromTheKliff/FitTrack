@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Chatbot AI"
+  short_description: "Grounded FitTrack chatbot behavior and strict reply contracts"
+  default_prompt: "Use $ai-chatbot-systems with $ai-contract-core when needed to tighten FitTrack gym-chat grounding, refusal behavior, follow-up suggestions, and strict reply schemas."
+
+policy:
+  allow_implicit_invocation: true

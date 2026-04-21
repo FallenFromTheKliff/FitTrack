@@ -1,6 +1,6 @@
 "use client";
 import type { ThemeColors } from "@fittrack/types";
-import type { VenueRecord } from "@/data/facilities/mapTypes";
+import { FACILITY_FLOOR_MAP, type VenueRecord } from "@/data/facilities/mapTypes";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -23,6 +23,14 @@ export function VenueManagementTable({ colors, venues, isLoading, onEditVenue }:
     return <FitText style={{ fontSize: 13, color: colors.textMuted }}>No active venues.</FitText>;
   }
 
+  const sortedVenues = [...venues].sort((a, b) => {
+    const floorDiff = (a.floorId ?? "floor-1").localeCompare(b.floorId ?? "floor-1");
+    if (floorDiff !== 0) return floorDiff;
+    const orderDiff = (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden" }}>
       <div style={{ display: "grid", gridTemplateColumns: COLS, backgroundColor: colors.surfaceRaised }}>
@@ -35,7 +43,7 @@ export function VenueManagementTable({ colors, venues, isLoading, onEditVenue }:
           </FitText>
         ))}
       </div>
-      {venues.map((venue) => (
+      {sortedVenues.map((venue) => (
         <div
           key={venue.id}
           style={{ display: "grid", gridTemplateColumns: COLS, borderTop: `1px solid ${colors.border}` }}
@@ -48,7 +56,7 @@ export function VenueManagementTable({ colors, venues, isLoading, onEditVenue }:
           </div>
           <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
             <FitText style={{ fontSize: 13 }}>
-              C{venue.gridColumn ?? 1}/R{venue.gridRow ?? 1} - {venue.gridWidth ?? 2}x{venue.gridHeight ?? 2}
+              {FACILITY_FLOOR_MAP[venue.floorId ?? "floor-1"].shortLabel} • C{venue.gridColumn ?? 1}/R{venue.gridRow ?? 1} - {venue.gridWidth ?? 2}x{venue.gridHeight ?? 2}
             </FitText>
           </div>
           <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>

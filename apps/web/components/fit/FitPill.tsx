@@ -106,7 +106,7 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
                         textStyle={{
                             fontSize: 12,
                             fontWeight: 600,
-                            color: isActive ? colors.brand : colors.textMuted
+                            color: isActive ? colors.brand : colors.textSecondary
                         }}
                     />
                 );

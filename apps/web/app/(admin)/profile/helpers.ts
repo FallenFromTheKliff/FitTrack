@@ -1,3 +1,5 @@
+import { sanitizePhilippineMobileInput } from "@fittrack/validators";
+
 export function buildProfileInfoRows(
   roleValue: string,
   tierValue: string,
@@ -30,5 +32,5 @@ export function buildProfileStatusRows(
 }
 
 export function sanitizePhoneInput(value: string) {
-  return value.replace(/\D/g, "").slice(0, 11);
+  return sanitizePhilippineMobileInput(value);
 }

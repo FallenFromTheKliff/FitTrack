@@ -69,8 +69,8 @@ export function getFirstDayOfWeek(year: number, month: number): number {
 
 export function formatBookingDate(dateStr: string): string {
   if (!dateStr) return "Select a date";
-  const { year, month, day } = parseYMD(dateStr);
-  const date = new Date(year, month - 1, day);
+  const date = parseIsoOrYmd(dateStr);
+  if (!date) return "Select a date";
   return date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",

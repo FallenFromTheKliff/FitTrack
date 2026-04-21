@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
+import { CoachingModule } from '../coaching/coaching.module';
 import { MembershipModule } from '../membership/membership.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { QueueModule } from '../queue/queue.module';
@@ -19,6 +20,7 @@ import { BookingService } from './booking/booking.service';
 @Module({
   imports: [
     MembershipModule,
+    CoachingModule,
     EventEmitterModule,
     NotificationsModule,
     QueueModule,

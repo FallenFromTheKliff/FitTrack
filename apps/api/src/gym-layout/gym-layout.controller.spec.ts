@@ -59,6 +59,7 @@ describe('GymLayoutController', () => {
     gymLayoutService.createEquipment.mockResolvedValue({ id: 'equipment-1' });
 
     await controller.createEquipment({
+      floor_id: 'floor-1',
       name: 'Leg Press Station',
       type: 'strength',
       position_x: 12.5,
@@ -66,6 +67,7 @@ describe('GymLayoutController', () => {
     } as never);
 
     expect(gymLayoutService.createEquipment).toHaveBeenCalledWith({
+      floor_id: 'floor-1',
       name: 'Leg Press Station',
       type: 'strength',
       position_x: 12.5,

@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Patch,
   Post,
@@ -17,6 +18,7 @@ import {
 import type { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiBody,
   ApiTags,
   ApiOperation,
   ApiResponse,
@@ -33,9 +35,11 @@ import {
   UserFilterDTO,
   UpdateUserStatusDTO,
   ScanQrDTO,
+  ManualAttendanceCheckInDTO,
   AttendanceFilterDTO,
   UpdatePhoneDTO,
 } from './dto/user-dto';
+import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -63,24 +67,65 @@ export class UserController {
     return this.usersService.updateMyProfile(user.sub, dto);
   }
 
+  @Get('deletion-request')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({ summary: 'Get own account deletion request status.' })
+  getDeletionRequestStatus(@CurrentUser() user: JwtPayload) {
+    return this.usersService.getDeletionRequestStatus(user.sub);
+  }
+
+  @Post('request-deletion')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({ summary: 'Create an account deletion request.' })
+  requestDeletion(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateDeletionRequestDto,
+  ) {
+    return this.usersService.requestDeletion(user.sub, dto);
+  }
+
+  @Delete('deletion-request')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({ summary: 'Cancel a pending account deletion request.' })
+  cancelDeletionRequest(@CurrentUser() user: JwtPayload) {
+    return this.usersService.cancelDeletionRequest(user.sub);
+  }
+
   @Patch('me/avatar')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
   @ApiOperation({
     summary:
       'Deprecated convenience avatar upload. Prefer POST /v1/files/upload for new clients.',
     deprecated: true,
   })
+  @ApiResponse({ status: 200, description: 'Avatar uploaded successfully.' })
+  @ApiResponse({
+    status: 413,
+    description: 'File exceeds the configured upload limit.',
+  })
   async uploadAvatar(
-    @CurrentUser() user: JwtPayload,
     @UploadedFile() file: UploadedImageFile | undefined,
+    @CurrentUser() user: JwtPayload,
   ) {
     return this.usersService.uploadAvatarFile(user.sub, file);
   }
 
   @Patch('me/phone')
   @ApiOperation({
-    summary: 'Update phone number. Triggers auth/send-phone-otp to verify.',
+    summary: 'Update phone number stored on the user profile.',
   })
   updatePhone(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePhoneDTO) {
     return this.usersService.updatePhone(user.sub, dto);
@@ -115,9 +160,25 @@ export class UserController {
 
   @Post('me/refresh-qr')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Manually regenerate own QR token.' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({
+    summary:
+      'Issue a fresh attendance QR for the authenticated member, subject to cooldown.',
+  })
   refreshQrToken(@CurrentUser() user: JwtPayload) {
     return this.usersService.refreshQrToken(user.sub);
+  }
+
+  @Get('me/attendance-qr')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({
+    summary:
+      'Get the current rotating attendance QR payload for the authenticated member.',
+  })
+  getAttendanceQr(@CurrentUser() user: JwtPayload) {
+    return this.usersService.getAttendanceQr(user.sub);
   }
 
   @Get()
@@ -180,17 +241,29 @@ export class AttendanceController {
   @Roles(UserRole.staff, UserRole.admin)
   @ApiOperation({
     summary:
-      'Scan QR code for check-in. Staff/Admin only. Returns stub - full logic in AttendanceService.',
+      'Scan a member attendance QR value for check-in. Staff/Admin only.',
   })
   @ApiResponse({ status: 201, description: 'Check-in logged.' })
-  @ApiResponse({
-    status: 403,
-    description: 'Member has no active subscription.',
-  })
-  @ApiResponse({ status: 404, description: 'Invalid QR token.' })
+  @ApiResponse({ status: 404, description: 'Invalid or expired QR value.' })
   @ApiResponse({ status: 409, description: 'Already checked in today.' })
   scanQr(@CurrentUser() user: JwtPayload, @Body() dto: ScanQrDTO) {
     return this.attendanceService.scanQr(user.sub, dto);
+  }
+
+  @Post('manual')
+  @Roles(UserRole.staff, UserRole.admin)
+  @ApiOperation({
+    summary:
+      'Manually create an attendance check-in for an active user. Staff/Admin only.',
+  })
+  @ApiResponse({ status: 201, description: 'Check-in logged.' })
+  @ApiResponse({ status: 404, description: 'User not found or inactive.' })
+  @ApiResponse({ status: 409, description: 'Already checked in today.' })
+  manualCheckIn(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ManualAttendanceCheckInDTO,
+  ) {
+    return this.attendanceService.manualCheckIn(user.sub, dto);
   }
 
   @Patch(':id/checkout')

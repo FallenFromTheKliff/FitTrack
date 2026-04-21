@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
-import { VENUE_BOOKING_OPTIONS, VENUE_ICON_OPTIONS } from "@/data/facilities/venueFields";
+import { VENUE_BOOKING_OPTIONS, VENUE_FLOOR_OPTIONS, VENUE_ICON_OPTIONS } from "@/data/facilities/venueFields";
 import type { VenueRecord } from "@/data/facilities/mapTypes";
 
 import FitButton from "@/components/fit/FitButton";
@@ -81,13 +81,15 @@ export function EditVenueModal({
     label,
     required = false,
     type = "text",
-    placeholder
+    placeholder,
+    options
   }: {
     name: string;
     label: string;
     required?: boolean;
     type?: "text" | "textarea" | "select";
     placeholder?: string;
+    options?: Array<{ label: string; value: string }>;
   }) => (
     <div style={{ display: "grid", gap: 6 }}>
       <FitText as="label" style={s.fieldLabel}>
@@ -107,7 +109,7 @@ export function EditVenueModal({
           fullWidth
           value={formData[name] ?? ""}
           onChange={(e) => handleChange(name, e.target.value)}
-          options={VENUE_ICON_OPTIONS}
+          options={options ?? VENUE_ICON_OPTIONS}
           style={{ borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg }}
         />
       ) : (
@@ -143,7 +145,10 @@ export function EditVenueModal({
           {renderField({ name: "minimumHours", label: "Minimum Hours", placeholder: "Default 1" })}
           {renderField({ name: "displayOrder", label: "Display Order", placeholder: "Lower numbers appear first" })}
         </div>
-        {renderField({ name: "iconKey", label: "Icon", type: "select" })}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+          {renderField({ name: "iconKey", label: "Icon", type: "select", options: VENUE_ICON_OPTIONS })}
+          {renderField({ name: "floorId", label: "Floor", type: "select", options: VENUE_FLOOR_OPTIONS })}
+        </div>
         <div style={{ display: "grid", gap: 8 }}>
           <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Dimensions

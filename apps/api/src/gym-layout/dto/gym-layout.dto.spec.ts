@@ -16,6 +16,7 @@ function extractMessages(
 describe('GymLayout DTO validation', () => {
   it('requires a name for equipment creation', async () => {
     const dto = plainToInstance(CreateEquipmentDTO, {
+      floor_id: 'floor-1',
       type: 'strength',
       position_x: 12.5,
       position_y: 7.25,
@@ -26,6 +27,7 @@ describe('GymLayout DTO validation', () => {
 
   it('requires numeric map positions on create', async () => {
     const dto = plainToInstance(CreateEquipmentDTO, {
+      floor_id: 'floor-1',
       name: 'Leg Press Station',
       type: 'strength',
       position_x: 'left',
@@ -37,6 +39,20 @@ describe('GymLayout DTO validation', () => {
         'position_x must be a number',
         'position_y must be a number',
       ]),
+    );
+  });
+
+  it('requires a supported floor on create', async () => {
+    const dto = plainToInstance(CreateEquipmentDTO, {
+      floor_id: 'basement',
+      name: 'Leg Press Station',
+      type: 'strength',
+      position_x: 12.5,
+      position_y: 7.25,
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'floor_id must be one of: floor-1, floor-2, floor-3',
     );
   });
 

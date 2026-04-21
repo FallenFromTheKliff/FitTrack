@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack UI Reference Lane"
+  short_description: "Contained premium UI evidence capture through Figma, Exa, and Chrome DevTools"
+  default_prompt: "Use $ui-reference-lane inside premium FitTrack UI work to capture component-level benchmark evidence through Figma, Exa, and Chrome DevTools, split the packet into structural and aesthetic reference lanes, tag every source by contribution axis, and return provenance, design-language seeds, banned generic patterns, and a sibling inheritance verdict by component instead of vibe-level inspiration."
+
+policy:
+  allow_implicit_invocation: false

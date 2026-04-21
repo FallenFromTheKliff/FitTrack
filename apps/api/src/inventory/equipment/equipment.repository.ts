@@ -70,6 +70,9 @@ export class EquipmentRepository extends BaseRepository {
     return this.paginate<GymEquipmentItem>(
       this.prisma.gymEquipmentItem,
       {
+        where: {
+          is_active: true,
+        },
         orderBy: equipmentOrderBy,
       },
       { page: dto.page, limit: dto.limit },

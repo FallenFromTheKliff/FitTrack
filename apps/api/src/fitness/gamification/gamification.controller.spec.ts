@@ -1,6 +1,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
+import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GamificationController } from './gamification.controller';
 
@@ -27,8 +28,14 @@ describe('GamificationController', () => {
   });
 
   it('protects mastery and leaderboard routes with JWT auth', () => {
-    expect(getGuardMetadata('listMastery')).toEqual([JwtAuthGuard]);
-    expect(getGuardMetadata('listLeaderboard')).toEqual([JwtAuthGuard]);
+    expect(getGuardMetadata('listMastery')).toEqual([
+      JwtAuthGuard,
+      ActiveMemberCardGuard,
+    ]);
+    expect(getGuardMetadata('listLeaderboard')).toEqual([
+      JwtAuthGuard,
+      ActiveMemberCardGuard,
+    ]);
   });
 
   it('loads mastery through the service for the current user', async () => {

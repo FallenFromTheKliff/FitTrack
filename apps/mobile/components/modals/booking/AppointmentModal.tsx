@@ -6,11 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WEEKDAY_NAMES } from "@fittrack/app-config";
 
 import type { CoachAvailabilityResponse } from "@fittrack/api-client";
-import type { CoachProfileRecord, Trainer } from "@fittrack/types";
+import type { CoachProfileRecord } from "@fittrack/types";
 import {
   activeCoachesQueryOptions,
   coachAvailabilityQueryOptions,
-  createAppointmentMutationOptions
+  createAppointmentMutationOptions,
 } from "@fittrack/query";
 import { formatBookingDate, getDurationMinutes, to12HourLabel } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -37,29 +37,36 @@ type CoachRecord = CoachProfileRecord;
 type AppointmentStep = "coach" | "time";
 
 type SlotOption = {
+  durationMin: number;
   label: string;
   startTime: string;
-  durationMin: number;
 };
 
-function mapCoachToTrainer(coach: CoachRecord): Trainer {
+function getCoachName(coach: CoachRecord) {
   const firstName = coach.user?.profile?.firstName?.trim() ?? "";
   const lastName = coach.user?.profile?.lastName?.trim() ?? "";
-  const fullName = `${firstName} ${lastName}`.trim() || coach.user?.email || "Coach";
-  const initials = fullName
+  return `${firstName} ${lastName}`.trim() || coach.user?.email || "Coach";
+}
+
+function getCoachInitials(coach: CoachRecord) {
+  return getCoachName(coach)
     .split(" ")
     .filter((part) => part.length > 0)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "C";
-  return {
-    id: String(coach.id),
-    name: fullName,
-    specialty: coach.specialties?.[0] ?? "General Coaching",
-    rating: 0,
-    pricePerSession: coach.hourlyRate ?? 0,
-    avatarInitials: initials
-  };
+}
+
+function getCoachPrimarySpecialty(coach: CoachRecord) {
+  return coach.specialties?.[0] ?? "General Coaching";
+}
+
+function getCoachPriceLabel(coach: CoachRecord) {
+  if (coach.hourlyRate == null || !Number.isFinite(coach.hourlyRate)) {
+    return "Rate pending";
+  }
+
+  return `PHP ${coach.hourlyRate.toLocaleString("en-PH")} / session`;
 }
 
 function matchesDay(selectedDate: string, dayValue: number | string) {
@@ -79,23 +86,37 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
   const s = useMemo(() => makeAppointmentModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
   const [step, setStep] = useState<AppointmentStep>("coach");
-  const [selectedCoach, setSelectedCoach] = useState<Trainer | null>(null);
+  const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [selectedSlotLabel, setSelectedSlotLabel] = useState("");
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [errorText, setErrorText] = useState("");
 
-  const { data: coaches = [] } = useQuery({
+  const {
+    data: coaches = [],
+    isLoading: coachesLoading,
+    error: coachesError,
+  } = useQuery({
     ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient),
-    enabled: isVisible
+    enabled: isVisible,
   });
 
-  const trainers = useMemo(() => coaches.map(mapCoachToTrainer), [coaches]);
+  const selectedCoach = useMemo(
+    () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
+    [coaches, selectedCoachId],
+  );
 
-  const { data: availability } = useQuery({
-    ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(mobileApiClient, selectedCoach?.id),
-    enabled: isVisible && !!selectedCoach
+  const {
+    data: availability,
+    isLoading: availabilityLoading,
+    error: availabilityError,
+  } = useQuery({
+    ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(
+      mobileApiClient,
+      selectedCoach ? String(selectedCoach.id) : undefined,
+    ),
+    enabled: isVisible && !!selectedCoach,
   });
 
   const slotOptions = useMemo<SlotOption[]>(() => {
@@ -107,42 +128,80 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
       .map((slot) => ({
         label: to12HourLabel(slot.startTime),
         startTime: slot.startTime,
-        durationMin: getDurationMinutes(slot.startTime, slot.endTime)
+        durationMin: getDurationMinutes(slot.startTime, slot.endTime),
       }));
   }, [availability, selectedDate]);
 
-  const timeSlots = useMemo<TimeSlot[]>(() => slotOptions.map((slot) => ({
-    time: slot.label,
-    duration: `${Math.max(1, Math.round(slot.durationMin / 60))} hr`,
-    status: "available",
-    spots: 1
-  })), [slotOptions]);
+  const timeSlots = useMemo<TimeSlot[]>(
+    () =>
+      slotOptions.map((slot) => ({
+        time: slot.label,
+        duration: `${Math.max(1, Math.round(slot.durationMin / 60))} hr`,
+        status: "available",
+        spots: 1,
+      })),
+    [slotOptions],
+  );
 
   const selectedSlot = useMemo(
     () => slotOptions.find((slot) => slot.label === selectedSlotLabel) ?? null,
-    [selectedSlotLabel, slotOptions]
+    [selectedSlotLabel, slotOptions],
   );
 
-  const createAppointmentMutation = useMutation(createAppointmentMutationOptions(mobileApiClient, queryClient));
+  const createAppointmentMutation = useMutation(
+    createAppointmentMutationOptions(mobileApiClient, queryClient),
+  );
 
-  const bookingLabel = useLoadingText("BOOKING APPOINTMENT", createAppointmentMutation.isPending);
+  const bookingLabel = useLoadingText(
+    "BOOKING APPOINTMENT",
+    createAppointmentMutation.isPending,
+  );
 
-  const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
+  const backdropStyle = useAnimatedStyle(() => ({
+    backgroundColor: ic.value.overlay,
+  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
     backgroundColor: ic.value.surface,
-    borderColor: ic.value.border
+    borderColor: ic.value.border,
   }));
-  const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
-  const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
+  const headerBorderStyle = useAnimatedStyle(() => ({
+    borderBottomColor: ic.value.border,
+  }));
+  const footerBorderStyle = useAnimatedStyle(() => ({
+    borderTopColor: ic.value.border,
+  }));
+
+  const coachLoadMessage =
+    coachesError instanceof Error
+      ? coachesError.message
+      : "Unable to load coach profiles right now.";
+
+  const availabilityStatusMessage = useMemo(() => {
+    if (!selectedCoach) {
+      return "Select a coach to inspect their profile and live availability.";
+    }
+    if (availabilityLoading) {
+      return "Loading live availability for this coach.";
+    }
+    if (availabilityError) {
+      return availabilityError instanceof Error
+        ? availabilityError.message
+        : "Unable to load live availability for this coach.";
+    }
+    if (slotOptions.length === 0) {
+      return `No active slots are available on ${formatBookingDate(selectedDate)}. Try another date or another coach.`;
+    }
+    return `${slotOptions.length} available slot${slotOptions.length === 1 ? "" : "s"} on ${formatBookingDate(selectedDate)}.`;
+  }, [availabilityError, availabilityLoading, selectedCoach, selectedDate, slotOptions.length]);
 
   const resetAndClose = () => {
     if (createAppointmentMutation.isPending) {
       return;
     }
     setStep("coach");
-    setSelectedCoach(null);
+    setSelectedCoachId(null);
     setSelectedDate(getTodayString());
     setSelectedSlotLabel("");
     setIsCalOpen(false);
@@ -169,15 +228,17 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
     try {
       await createAppointmentMutation.mutateAsync({
         payload: {
-          coachId: selectedCoach.id,
+          coachId: String(selectedCoach.id),
           scheduledAt: `${selectedDate}T${selectedSlot.startTime}:00`,
-          duration: selectedSlot.durationMin
-        }
+          duration: selectedSlot.durationMin,
+        },
       });
       onSuccess?.();
       resetAndClose();
     } catch (error: unknown) {
-      setErrorText(error instanceof Error ? error.message : "Unable to book appointment.");
+      setErrorText(
+        error instanceof Error ? error.message : "Unable to book appointment.",
+      );
     }
   };
 
@@ -202,60 +263,236 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
               <View style={{ flex: 1 }}>
                 <FitText style={s.headerTitle}>Book a Trainer</FitText>
                 <FitText style={s.headerSubtitle}>
-                  {step === "coach" ? "Step 1 of 2 - Select coach" : "Step 2 of 2 - Pick time"}
+                  {step === "coach"
+                    ? "Step 1 of 2 - Review coach profile"
+                    : "Step 2 of 2 - Pick a live slot"}
                 </FitText>
               </View>
             </Animated.View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={s.body}
+            >
               {step === "coach" ? (
-                <View>
-                  <FitText style={s.sectionLabel}>AVAILABLE COACHES</FitText>
-                  <View style={s.coachList}>
-                    {trainers.map((trainer) => {
-                      const isActive = selectedCoach?.id === trainer.id;
-                      return (
-                        <Pressable
-                          key={trainer.id}
-                          style={[s.coachRow, isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "10" }]}
-                          onPress={() => setSelectedCoach(isActive ? null : trainer)}
-                        >
-                          <View style={[s.coachAvatar, isActive && { backgroundColor: colors.brand }]}>
-                            <FitText style={[s.coachAvatarText, isActive && { color: colors.surface }]}>
-                              {trainer.avatarInitials}
-                            </FitText>
-                          </View>
-                          <View style={s.coachInfo}>
-                            <FitText style={s.coachName}>{trainer.name}</FitText>
-                            <FitText style={s.coachSpecialty}>
-                              {trainer.specialty} - {trainer.pricePerSession}/session
-                            </FitText>
-                          </View>
-                          {isActive ? <CheckCircle size={16} color={colors.brand} strokeWidth={2} /> : null}
-                        </Pressable>
-                      );
-                    })}
+                <View style={{ gap: 12 }}>
+                  <View>
+                    <FitText style={s.sectionLabel}>AVAILABLE COACHES</FitText>
+                    {coachesLoading ? (
+                      <FitText style={s.helperText}>
+                        Loading coach profiles...
+                      </FitText>
+                    ) : coaches.length === 0 ? (
+                      <FitText style={s.helperText}>
+                        No bookable coaches are available yet.
+                      </FitText>
+                    ) : (
+                      <View style={s.coachList}>
+                        {coaches.map((coach) => {
+                          const isActive = selectedCoach?.id === coach.id;
+                          return (
+                            <Pressable
+                              key={coach.id}
+                              style={[
+                                s.coachRow,
+                                isActive && {
+                                  borderColor: colors.brand,
+                                  backgroundColor: colors.brand + "10",
+                                },
+                              ]}
+                              onPress={() => {
+                                setSelectedCoachId(
+                                  isActive ? null : String(coach.id),
+                                );
+                                setErrorText("");
+                                setSelectedSlotLabel("");
+                              }}
+                            >
+                              <View
+                                style={[
+                                  s.coachAvatar,
+                                  isActive && { backgroundColor: colors.brand },
+                                ]}
+                              >
+                                <FitText
+                                  style={[
+                                    s.coachAvatarText,
+                                    isActive && { color: colors.surface },
+                                  ]}
+                                >
+                                  {getCoachInitials(coach)}
+                                </FitText>
+                              </View>
+                              <View style={s.coachInfo}>
+                                <FitText style={s.coachName}>
+                                  {getCoachName(coach)}
+                                </FitText>
+                                <FitText style={s.coachSpecialty}>
+                                  {getCoachPrimarySpecialty(coach)}{" "}
+                                  {" - "}
+                                  {getCoachPriceLabel(coach)}
+                                </FitText>
+                                <FitText style={s.coachBio}>
+                                  {coach.bio?.trim() ||
+                                    "Staff has not added a coach bio yet."}
+                                </FitText>
+                                <View style={s.coachMetaRow}>
+                                  {(coach.specialties ?? [])
+                                    .slice(0, 2)
+                                    .map((specialty) => (
+                                      <View
+                                        key={`${coach.id}-${specialty}`}
+                                        style={s.coachMetaChip}
+                                      >
+                                        <FitText style={s.coachMetaChipText}>
+                                          {specialty}
+                                        </FitText>
+                                      </View>
+                                    ))}
+                                  {(coach.certifications ?? [])
+                                    .slice(0, 1)
+                                    .map((certification) => (
+                                      <View
+                                        key={`${coach.id}-${certification}`}
+                                        style={s.coachMetaChip}
+                                      >
+                                        <FitText style={s.coachMetaChipText}>
+                                          {certification}
+                                        </FitText>
+                                      </View>
+                                    ))}
+                                </View>
+                              </View>
+                              {isActive ? (
+                                <CheckCircle
+                                  size={16}
+                                  color={colors.brand}
+                                  strokeWidth={2}
+                                />
+                              ) : null}
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {coachesError ? (
+                      <FitText style={s.errorText}>{coachLoadMessage}</FitText>
+                    ) : null}
+                  </View>
+                  <View style={s.previewCard}>
+                    <FitText style={s.previewTitle}>
+                      {selectedCoach
+                        ? `Coach review: ${getCoachName(selectedCoach)}`
+                        : "Coach review required"}
+                    </FitText>
+                    <FitText style={s.previewSubtitle}>
+                      {selectedCoach
+                        ? selectedCoach.bio?.trim() ||
+                          "This coach profile still needs a fuller bio from staff."
+                        : "Review the coach profile and the live slot summary before continuing to time selection."}
+                    </FitText>
+                    <View style={s.previewSection}>
+                      <FitText style={s.previewSectionTitle}>
+                        SPECIALTIES
+                      </FitText>
+                      <FitText style={s.previewPlainText}>
+                        {selectedCoach?.specialties?.length
+                          ? selectedCoach.specialties.join(", ")
+                          : "No specialties listed yet."}
+                      </FitText>
+                    </View>
+                    <View style={s.previewSection}>
+                      <FitText style={s.previewSectionTitle}>
+                        CERTIFICATIONS
+                      </FitText>
+                      <FitText style={s.previewPlainText}>
+                        {selectedCoach?.certifications?.length
+                          ? selectedCoach.certifications.join(", ")
+                          : "No certifications listed yet."}
+                      </FitText>
+                    </View>
+                    <View style={s.previewSection}>
+                      <FitText style={s.previewSectionTitle}>
+                        LIVE SLOT CHECK
+                      </FitText>
+                      <FitText style={s.previewPlainText}>
+                        {availabilityStatusMessage}
+                      </FitText>
+                    </View>
                   </View>
                 </View>
               ) : (
-                <View>
-                  <FitText style={s.sectionLabel}>SELECT DATE</FitText>
-                  <Pressable style={[s.fieldBtn, { borderColor: colors.fieldBorder }]} onPress={() => setIsCalOpen(true)}>
-                    <CalendarDays size={16} color={colors.textMuted} strokeWidth={2} />
-                    <FitText style={s.fieldBtnText}>{formatBookingDate(selectedDate)}</FitText>
-                  </Pressable>
-                  <FitText style={s.sectionLabel}>SELECT TIME SLOT</FitText>
-                  <Pressable
-                    style={[s.fieldBtn, { borderColor: selectedSlotLabel ? colors.brand : colors.fieldBorder }]}
-                    onPress={() => setIsTimeOpen(true)}
-                  >
-                    <Clock size={16} color={selectedSlotLabel ? colors.brand : colors.textMuted} strokeWidth={2} />
-                    <FitText style={[s.fieldBtnText, selectedSlotLabel && { color: colors.textPrimary }]}>
-                      {selectedSlotLabel || "Choose available slot"}
+                <View style={{ gap: 12 }}>
+                  {selectedCoach ? (
+                    <View style={s.previewCard}>
+                      <FitText style={s.previewTitle}>
+                        {getCoachName(selectedCoach)}
+                      </FitText>
+                      <FitText style={s.previewSubtitle}>
+                        {getCoachPrimarySpecialty(selectedCoach)} {" - "}{" "}
+                        {getCoachPriceLabel(selectedCoach)}
+                      </FitText>
+                      <View style={s.previewSection}>
+                        <FitText style={s.previewSectionTitle}>
+                          DAY CHECK
+                        </FitText>
+                        <FitText style={s.previewPlainText}>
+                          {availabilityStatusMessage}
+                        </FitText>
+                      </View>
+                    </View>
+                  ) : null}
+                  <View>
+                    <FitText style={s.sectionLabel}>SELECT DATE</FitText>
+                    <Pressable
+                      style={[
+                        s.fieldBtn,
+                        { borderColor: colors.fieldBorder },
+                      ]}
+                      onPress={() => setIsCalOpen(true)}
+                    >
+                      <CalendarDays
+                        size={16}
+                        color={colors.textMuted}
+                        strokeWidth={2}
+                      />
+                      <FitText style={s.fieldBtnText}>
+                        {formatBookingDate(selectedDate)}
+                      </FitText>
+                    </Pressable>
+                  </View>
+                  <View>
+                    <FitText style={s.sectionLabel}>SELECT TIME SLOT</FitText>
+                    <Pressable
+                      style={[
+                        s.fieldBtn,
+                        {
+                          borderColor: selectedSlotLabel
+                            ? colors.brand
+                            : colors.fieldBorder,
+                        },
+                      ]}
+                      onPress={() => setIsTimeOpen(true)}
+                    >
+                      <Clock
+                        size={16}
+                        color={
+                          selectedSlotLabel ? colors.brand : colors.textMuted
+                        }
+                        strokeWidth={2}
+                      />
+                      <FitText
+                        style={[
+                          s.fieldBtnText,
+                          selectedSlotLabel && { color: colors.textPrimary },
+                        ]}
+                      >
+                        {selectedSlotLabel || "Choose available slot"}
+                      </FitText>
+                    </Pressable>
+                    <FitText style={s.helperText}>
+                      {availabilityStatusMessage}
                     </FitText>
-                  </Pressable>
-                  <FitText style={s.helperText}>
-                    {timeSlots.length > 0 ? `${timeSlots.length} available slots found.` : "No available slots for this date."}
-                  </FitText>
+                  </View>
                 </View>
               )}
               {errorText ? <FitText style={s.errorText}>{errorText}</FitText> : null}
@@ -264,7 +501,9 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
               <FitButton
                 label={step === "coach" ? "Cancel" : "Back"}
                 variant="ghost"
-                onPress={step === "coach" ? resetAndClose : () => setStep("coach")}
+                onPress={
+                  step === "coach" ? resetAndClose : () => setStep("coach")
+                }
                 disabled={createAppointmentMutation.isPending}
                 flex={1}
               />
@@ -272,7 +511,11 @@ export default function AppointmentModal({ isVisible, onClose, onSuccess }: Prop
                 label={step === "coach" ? "Continue" : bookingLabel}
                 variant="primary"
                 onPress={step === "coach" ? goToTimeStep : handleBookAppointment}
-                disabled={step === "time" ? !selectedSlot || createAppointmentMutation.isPending : !selectedCoach}
+                disabled={
+                  step === "time"
+                    ? !selectedSlot || createAppointmentMutation.isPending
+                    : !selectedCoach || coachesLoading
+                }
                 loading={createAppointmentMutation.isPending}
                 flex={2}
               />

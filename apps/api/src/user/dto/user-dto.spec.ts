@@ -3,6 +3,7 @@ import { validate } from 'class-validator';
 import {
   DateRangeDTO,
   PaginationDTO,
+  ScanQrDTO,
   UpdatePhoneDTO,
   UpdateProfileDTO,
 } from './user-dto';
@@ -37,6 +38,16 @@ describe('User DTO validation', () => {
     );
   });
 
+  it('rejects invalid avatar URLs', async () => {
+    const dto = plainToInstance(UpdateProfileDTO, {
+      avatar_url: 'not a url',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'avatar_url must be a valid URL',
+    );
+  });
+
   it('rejects date ranges where end_date is earlier than start_date', async () => {
     const dto = plainToInstance(DateRangeDTO, {
       start_date: '2026-03-20',
@@ -57,5 +68,20 @@ describe('User DTO validation', () => {
     const messages = extractMessages(await validate(dto));
     expect(messages).toContain('page must be at least 1');
     expect(messages).toContain('limit must not exceed 100');
+  });
+
+  it('accepts the camelCase qrValue scanner payload', async () => {
+    const dto = plainToInstance(ScanQrDTO, {
+      qrValue: 'live-qr-value-123',
+    });
+
+    expect(extractMessages(await validate(dto))).toEqual([]);
+  });
+
+  it('requires at least one attendance QR field', async () => {
+    const dto = plainToInstance(ScanQrDTO, {});
+
+    const messages = extractMessages(await validate(dto));
+    expect(messages).toContain('qrValue is required');
   });
 });

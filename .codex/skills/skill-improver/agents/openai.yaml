@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Skill Maintenance"
+  short_description: "Targeted FitTrack skill repairs for routing, MCP, and output failures"
+  default_prompt: "Use $skill-improver to surgically fix a FitTrack skill that is failing through weak routing, stale MCP guidance, overlapping triggers, repeated low-quality outputs, premium motion-system drift, design-language drift, Figma workspace drift, annotation leakage, or conservative-but-approved scaffold failures."
+
+policy:
+  allow_implicit_invocation: true

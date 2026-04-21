@@ -1,32 +1,39 @@
 import {
   Controller,
+  Get,
+  Header,
+  Query,
+  Res,
   Post,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 
+import { Public } from '../auth/public.decorator/public.decorator';
 import { JwtAuthGuard } from '../common/guards';
 import { FilesService } from './files.service';
 import { UploadedImageFile } from './files.types';
 
 @ApiTags('Files')
-@ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
 @Controller('files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -40,7 +47,37 @@ export class FilesController {
   })
   @ApiOperation({ summary: 'Upload an image file to shared storage.' })
   @ApiResponse({ status: 201, description: 'File uploaded successfully.' })
+  @ApiResponse({
+    status: 413,
+    description: 'File exceeds the configured upload limit.',
+  })
   uploadFile(@UploadedFile() file: UploadedImageFile | undefined) {
     return this.filesService.uploadImage(file);
+  }
+
+  @Get('render')
+  @Public()
+  @ApiOperation({ summary: 'Render a stored image through the API.' })
+  @ApiQuery({
+    name: 'key',
+    required: true,
+    description: 'Storage object key, such as uploads/2026/04/avatar.png.',
+  })
+  @ApiResponse({ status: 200, description: 'Image streamed successfully.' })
+  @ApiResponse({ status: 404, description: 'Image not found.' })
+  @Header('access-control-allow-origin', '*')
+  @Header('cache-control', 'public, max-age=300')
+  @Header('cross-origin-resource-policy', 'cross-origin')
+  async renderImage(
+    @Query('key') key: string,
+    @Res() response: Response,
+  ) {
+    const image = await this.filesService.renderImage(key);
+    response.setHeader('content-type', image.contentType);
+    if (image.contentLength) {
+      response.setHeader('content-length', String(image.contentLength));
+    }
+    response.setHeader('x-fittrack-asset-key', image.key);
+    response.send(image.body);
   }
 }

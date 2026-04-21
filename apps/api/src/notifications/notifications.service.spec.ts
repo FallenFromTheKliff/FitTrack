@@ -6,7 +6,7 @@ import {
   NotificationType,
 } from '@prisma/client';
 
-import { QUEUE_MAIL, QUEUE_SMS } from '../queue/queue.constants';
+import { QUEUE_MAIL } from '../queue/queue.constants';
 import { UserService } from '../user/user.service';
 import type {
   NotificationDeliveryFailedEvent,
@@ -90,10 +90,6 @@ describe('NotificationsService', () => {
     add: jest.fn(),
   };
 
-  const smsQueue = {
-    add: jest.fn(),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -101,7 +97,6 @@ describe('NotificationsService', () => {
         { provide: NotificationsRepository, useValue: repo },
         { provide: UserService, useValue: userService },
         { provide: getQueueToken(QUEUE_MAIL), useValue: mailQueue },
-        { provide: getQueueToken(QUEUE_SMS), useValue: smsQueue },
       ],
     }).compile();
 
@@ -235,7 +230,7 @@ describe('NotificationsService', () => {
     );
   });
 
-  it('dispatches in-app, email, and sms notifications using contact context plus persisted preferences', async () => {
+  it('dispatches in-app and email notifications while ignoring sms payloads', async () => {
     userService.getNotificationDispatchContext.mockResolvedValue({
       user_id: 'user-1',
       preferred_email: 'fit@example.com',
@@ -254,10 +249,6 @@ describe('NotificationsService', () => {
       createNotificationRecord({
         id: 'notif-email',
         channel: NotificationChannel.email,
-      }),
-      createNotificationRecord({
-        id: 'notif-sms',
-        channel: NotificationChannel.sms,
       }),
     ]);
 
@@ -295,11 +286,6 @@ describe('NotificationsService', () => {
           title: 'Subscription expires in 3 days',
           status: NotificationStatus.pending,
         }),
-        expect.objectContaining({
-          channel: NotificationChannel.sms,
-          body: 'FitTrack: your membership expires in 3 days.',
-          status: NotificationStatus.pending,
-        }),
       ],
     );
     expect(mailQueue.add).toHaveBeenCalledWith(
@@ -308,15 +294,6 @@ describe('NotificationsService', () => {
         to: 'fit@example.com',
         subject: 'Subscription expires in 3 days',
         notification: { notification_id: 'notif-email' },
-      }),
-      expect.anything(),
-    );
-    expect(smsQueue.add).toHaveBeenCalledWith(
-      'send-generic',
-      expect.objectContaining({
-        to: '+639171234567',
-        body: 'FitTrack: your membership expires in 3 days.',
-        notification: { notification_id: 'notif-sms' },
       }),
       expect.anything(),
     );
@@ -413,7 +390,6 @@ describe('NotificationsService', () => {
       }),
       expect.anything(),
     );
-    expect(smsQueue.add).not.toHaveBeenCalled();
   });
 
   it('marks persisted deliveries as sent when processors acknowledge success', async () => {

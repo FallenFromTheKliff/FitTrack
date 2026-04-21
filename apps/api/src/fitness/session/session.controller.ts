@@ -20,6 +20,7 @@ import {
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import {
@@ -81,7 +82,7 @@ export class WorkoutSessionController {
   constructor(private readonly workoutSessionService: WorkoutSessionService) {}
 
   @Get('sessions')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List the authenticated users workout sessions.' })
   @ApiResponse({
@@ -96,7 +97,7 @@ export class WorkoutSessionController {
   }
 
   @Get('sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a single owned workout session with all logged sets.',
@@ -116,7 +117,7 @@ export class WorkoutSessionController {
   }
 
   @Post('sessions/start')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: StartSessionDTO })
   @ApiOperation({ summary: 'Start an in-progress workout session.' })
@@ -132,7 +133,7 @@ export class WorkoutSessionController {
   }
 
   @Post('sessions/:id/sets')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: LogExerciseSetDTO })
   @ApiOperation({ summary: 'Log one exercise set for an owned session.' })
@@ -154,7 +155,7 @@ export class WorkoutSessionController {
   }
 
   @Post('sessions/:id/complete')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Complete an owned in-progress workout session.' })
   @ApiResponse({
@@ -173,7 +174,7 @@ export class WorkoutSessionController {
   }
 
   @Post('sessions/:id/cancel')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Cancel an owned in-progress workout session.' })
   @ApiResponse({

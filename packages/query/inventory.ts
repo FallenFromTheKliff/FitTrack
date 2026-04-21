@@ -1,0 +1,188 @@
+import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
+import type {
+  ApiClient,
+  InventoryEquipmentCreateInput,
+  InventoryEquipmentListParams,
+  InventoryEquipmentUpdateInput,
+  InventoryEquipmentWriteOffInput,
+  InventoryProductMutationInput,
+  InventoryProductListParams,
+  InventoryRestockInput,
+  InventorySaleListParams
+} from "@fittrack/api-client";
+import { invalidateInventoryQueries } from "./cache";
+import { queryKeys } from "./query-keys";
+
+export function inventoryProductsQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  params?: InventoryProductListParams
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventoryProducts(params),
+    queryFn: () => client.inventory.listProducts(params)
+  });
+}
+
+export function inventoryProductDetailQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  productId?: string
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventoryProductDetail(productId),
+    queryFn: async () => {
+      if (!productId) return null;
+      return client.inventory.getProductById(productId);
+    }
+  });
+}
+
+export function inventorySalesQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  params?: InventorySaleListParams
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventorySales(params),
+    queryFn: () => client.inventory.listSales(params)
+  });
+}
+
+export function inventoryEquipmentQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  params?: InventoryEquipmentListParams
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventoryEquipment(params),
+    queryFn: () => client.inventory.listEquipment(params)
+  });
+}
+
+export function inventoryEquipmentDetailQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  equipmentId?: string
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventoryEquipmentDetail(equipmentId),
+    queryFn: async () => {
+      if (!equipmentId) return null;
+      return client.inventory.getEquipmentById(equipmentId);
+    }
+  });
+}
+
+export function createInventoryProductMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({ payload }: { payload: InventoryProductMutationInput }) =>
+      client.inventory.createProduct(payload),
+    onSuccess: async () => {
+      await invalidateInventoryQueries(queryClient);
+    }
+  });
+}
+
+export function createInventoryEquipmentMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({ payload }: { payload: InventoryEquipmentCreateInput }) =>
+      client.inventory.createEquipment(payload),
+    onSuccess: async () => {
+      await invalidateInventoryQueries(queryClient);
+    }
+  });
+}
+
+export function updateInventoryProductMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      payload,
+      productId
+    }: {
+      payload: InventoryProductMutationInput;
+      productId: string;
+    }) => client.inventory.updateProduct(productId, payload),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateInventoryQueries(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.inventoryProductDetail(variables.productId)
+        })
+      ]);
+    }
+  });
+}
+
+export function updateInventoryEquipmentMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      equipmentId,
+      payload
+    }: {
+      equipmentId: string;
+      payload: InventoryEquipmentUpdateInput;
+    }) => client.inventory.updateEquipment(equipmentId, payload),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateInventoryQueries(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.inventoryEquipmentDetail(variables.equipmentId)
+        })
+      ]);
+    }
+  });
+}
+
+export function restockInventoryProductMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      payload,
+      productId
+    }: {
+      payload: InventoryRestockInput;
+      productId: string;
+    }) => client.inventory.restockProduct(productId, payload),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateInventoryQueries(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.inventoryProductDetail(variables.productId)
+        })
+      ]);
+    }
+  });
+}
+
+export function writeOffInventoryEquipmentMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      equipmentId,
+      payload
+    }: {
+      equipmentId: string;
+      payload: InventoryEquipmentWriteOffInput;
+    }) => client.inventory.writeOffEquipment(equipmentId, payload),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateInventoryQueries(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.inventoryEquipmentDetail(variables.equipmentId)
+        })
+      ]);
+    }
+  });
+}

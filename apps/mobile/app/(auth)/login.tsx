@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useForm } from "react-hook-form";
@@ -9,7 +9,7 @@ import { Dumbbell, Lock, Mail } from "lucide-react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuthEntrance } from "@/hooks/animations/feature/useAuthEntrance";
-import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { useLoadingText } from "@fittrack/hooks";
 import { loginSchema, type LoginData } from "@fittrack/validators";
 import { makeAuthStyles } from "@/styles/shared/AuthStyles";
 
@@ -19,8 +19,10 @@ import FitInputField from "@/components/fit/FitInputField";
 import BufferScreen from "@/components/loading/BufferScreen";
 import ForgotPasswordModal from "@/components/modals/auth/ForgotPasswordModal";
 
+const WEB_AUTH_STATUS_KEY = "fittrack_mobile_auth_status";
+
 export default function LoginScreen() {
-  const { login, commitLogin } = useAuth();
+  const { login, commitLogin, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
@@ -29,11 +31,17 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showBuffer, setShowBuffer] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [statusTone, setStatusTone] = useState<"danger" | "brand">("brand");
+  const [statusText, setStatusText] = useState("");
   const contentOpacity = useSharedValue(1);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistedStatusText = Platform.OS === "web"
+    ? globalThis.sessionStorage?.getItem(WEB_AUTH_STATUS_KEY)?.trim() ?? ""
+    : "";
+  const visibleStatusText = statusText || persistedStatusText;
 
   const loadingText = useLoadingText("Signing in", isLoading);
-  const { message: statusText, showMessage: showStatus } = useTimedMessage(2000);
-  const buttonLabel = isLoading ? loadingText : statusText || "Sign In";
+  const buttonLabel = isLoading ? loadingText : "Sign In";
 
   const {
     control,
@@ -46,11 +54,33 @@ export default function LoginScreen() {
     reValidateMode: "onChange"
   });
 
+  const showStatus = useCallback((message: string) => {
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+    }
+    setStatusText(message);
+    statusTimerRef.current = setTimeout(() => {
+      setStatusText("");
+      statusTimerRef.current = null;
+    }, 2000);
+  }, []);
+
+  useEffect(() => () => {
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+    }
+  }, []);
+
   const fadeOutAndShowBuffer = async () => {
     contentOpacity.value = withTiming(0, { duration: 200 });
     await new Promise((resolve) => setTimeout(resolve, 200));
     setShowBuffer(true);
   };
+
+  useEffect(() => {
+    if (showBuffer || isAuthLoading || !isAuthenticated) return;
+    router.replace("/(tabs)/home");
+  }, [isAuthenticated, isAuthLoading, router, showBuffer]);
 
   const onSubmit = async (data: LoginData) => {
     if (isLoading) {
@@ -59,14 +89,23 @@ export default function LoginScreen() {
     setIsLoading(true);
     const result = await login(data.email, data.password);
     setIsLoading(false);
-    if (!result) {
-      showStatus("Invalid credentials.");
+    if ("error" in result) {
+      setStatusTone("danger");
+      if (Platform.OS === "web") {
+        globalThis.sessionStorage?.setItem(WEB_AUTH_STATUS_KEY, result.error);
+      }
+      showStatus(result.error);
       return;
     }
+    if (Platform.OS === "web") {
+      globalThis.sessionStorage?.removeItem(WEB_AUTH_STATUS_KEY);
+    }
     if (result.needsOTP) {
+      setStatusTone("brand");
       showStatus("Verification code sent. Check your email to continue.");
       return;
     }
+    setStatusTone("brand");
     showStatus("Welcome back!");
     await fadeOutAndShowBuffer();
   };
@@ -83,6 +122,7 @@ export default function LoginScreen() {
   const screenFadeStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value
   }));
+  const submitCredentials = handleSubmit(onSubmit);
 
   if (showBuffer) {
     return (
@@ -115,38 +155,50 @@ export default function LoginScreen() {
             </View>
           </Animated.View>
           <Animated.View style={fadeStyle}>
-            <View style={s.fields}>
-              <FitInputField
-                control={control}
-                name="email"
-                label="Email"
-                placeholder="your.email@example.com"
-                errors={errors}
-                icon={Mail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                editable={!isLoading}
+            <View>
+              <View style={s.fields}>
+                <FitInputField
+                  control={control}
+                  name="email"
+                  label="Email"
+                  placeholder="your.email@example.com"
+                  errors={errors}
+                  icon={Mail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                <FitInputField
+                  control={control}
+                  name="password"
+                  label="Password"
+                  placeholder="********"
+                  errors={errors}
+                  icon={Lock}
+                  secureTextEntry
+                  editable={!isLoading}
+                />
+                <FitText style={s.forgotPassword} onPress={() => setForgotOpen(true)}>
+                  Forgot Password?
+                </FitText>
+              </View>
+              <FitButton
+                label={buttonLabel}
+                onPress={submitCredentials}
+                disabled={isLoading}
+                style={s.primaryBtn}
               />
-              <FitInputField
-                control={control}
-                name="password"
-                label="Password"
-                placeholder="********"
-                errors={errors}
-                icon={Lock}
-                secureTextEntry
-                editable={!isLoading}
-              />
-              <FitText style={s.forgotPassword} onPress={() => setForgotOpen(true)}>
-                Forgot Password?
-              </FitText>
             </View>
-            <FitButton
-              label={buttonLabel}
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-              style={s.primaryBtn}
-            />
+            {visibleStatusText ? (
+              <FitText
+                style={[
+                  s.statusMessage,
+                  { color: statusTone === "danger" || persistedStatusText ? colors.danger : colors.brand }
+                ]}
+              >
+                {visibleStatusText}
+              </FitText>
+            ) : null}
             <View style={s.dividerRow}>
               <View style={s.dividerLine} />
               <FitText style={s.dividerText}>New to SertFit?</FitText>

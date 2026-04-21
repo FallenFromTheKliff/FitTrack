@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -33,6 +34,20 @@ function transformBooleanInput(value: unknown): unknown {
   return value;
 }
 
+const RETAIL_PRODUCT_CATEGORY_VALUES = [
+  'supplements',
+  'beverages',
+  'snacks',
+  'accessories',
+  'recovery',
+  'merchandise',
+  'other',
+] as const;
+
+function retailProductCategoryEnum() {
+  return [...RETAIL_PRODUCT_CATEGORY_VALUES];
+}
+
 export class CreateRetailProductDTO {
   @ApiProperty({ example: 'Whey Protein Isolate' })
   @TrimString()
@@ -49,6 +64,19 @@ export class CreateRetailProductDTO {
   @TrimString()
   @IsString({ message: 'description must be a string' })
   description?: string;
+
+  @ApiPropertyOptional({
+    example: 'supplements',
+    enum: retailProductCategoryEnum(),
+    default: 'other',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'category must be a string' })
+  @IsIn(retailProductCategoryEnum(), {
+    message: 'category must be a supported inventory category',
+  })
+  category?: (typeof RETAIL_PRODUCT_CATEGORY_VALUES)[number];
 
   @ApiProperty({ example: 1499 })
   @Type(() => Number)
@@ -95,6 +123,18 @@ export class UpdateRetailProductDTO {
   @IsString({ message: 'description must be a string' })
   description?: string;
 
+  @ApiPropertyOptional({
+    example: 'supplements',
+    enum: retailProductCategoryEnum(),
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'category must be a string' })
+  @IsIn(retailProductCategoryEnum(), {
+    message: 'category must be a supported inventory category',
+  })
+  category?: (typeof RETAIL_PRODUCT_CATEGORY_VALUES)[number];
+
   @ApiPropertyOptional({ example: 1499 })
   @IsOptional()
   @Type(() => Number)
@@ -107,6 +147,13 @@ export class UpdateRetailProductDTO {
   @IsInt({ message: 'reorder_threshold must be an integer' })
   @Min(0, { message: 'reorder_threshold must be at least 0' })
   reorder_threshold?: number;
+
+  @ApiPropertyOptional({ example: 8 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'stock_quantity must be an integer' })
+  @Min(0, { message: 'stock_quantity must be at least 0' })
+  stock_quantity?: number;
 
   @ApiPropertyOptional({
     example: 'https://cdn.fittrack.test/images/whey-isolate.png',
@@ -161,6 +208,12 @@ export class RetailProductResponseDTO {
 
   @ApiProperty({ example: 'Whey Protein Isolate' })
   name: string;
+
+  @ApiProperty({
+    example: 'supplements',
+    enum: retailProductCategoryEnum(),
+  })
+  category: string;
 
   @ApiPropertyOptional({
     example: 'Vanilla whey isolate tub with 30 servings.',

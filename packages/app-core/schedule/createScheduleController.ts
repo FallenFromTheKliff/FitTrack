@@ -17,6 +17,15 @@ export function createScheduleController() {
   return {
     toMessage: toActionErrorMessage,
     toScheduleBooking<TRecord extends {
+      coach?: {
+        user?: {
+          email?: string | null;
+          profile?: {
+            firstName?: string | null;
+            lastName?: string | null;
+          } | null;
+        } | null;
+      } | null;
       endTime: string;
       id: string;
       purpose?: string | null;
@@ -41,7 +50,11 @@ export function createScheduleController() {
       const userLabel = record.user?.profile?.firstName
         ? `${record.user.profile.firstName} ${record.user.profile.lastName ?? ""}`.trim()
         : record.user?.email ?? "Member";
-      const title = record.purpose ? `${userLabel} - ${record.purpose}` : record.title?.trim() || userLabel;
+      const coachLabel = record.coach?.user?.profile?.firstName
+        ? `${record.coach.user.profile.firstName} ${record.coach.user.profile.lastName ?? ""}`.trim()
+        : record.coach?.user?.email ?? null;
+      const titleBase = record.purpose ? `${userLabel} - ${record.purpose}` : record.title?.trim() || userLabel;
+      const title = coachLabel ? `${titleBase} with ${coachLabel}` : titleBase;
       return {
         id: record.id,
         resourceId,

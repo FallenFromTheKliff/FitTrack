@@ -27,6 +27,34 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
       backgroundColor: colors.surfaceRaised,
       borderColor: colors.border
     },
+    prefixToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: R.sm,
+      overflow: "hidden",
+      marginRight: 10
+    },
+    prefixOption: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      backgroundColor: colors.surfaceRaised
+    },
+    prefixOptionActive: {
+      backgroundColor: colors.brand
+    },
+    prefixOptionText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: colors.textSecondary
+    },
+    prefixOptionTextActive: {
+      color: colors.onBrand ?? "#FFFFFF"
+    },
+    prefixOptionTextDisabled: {
+      color: colors.textDisabled
+    },
     multilineInput: {
       minHeight: 96,
       textAlignVertical: "top",

@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack UI Runtime Review"
+  short_description: "Contained live browser click-through for premium FitTrack UI before QA"
+  default_prompt: "Use $ui-runtime-review after premium FitTrack UI implementation to click through the live surface in Chrome DevTools, judge hover, pagination, modal, validation, toast, and confirm flows, and report any runtime feel gaps, conservative feel, or prototype-like residue before QA."
+
+policy:
+  allow_implicit_invocation: false

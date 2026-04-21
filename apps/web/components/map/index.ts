@@ -4,6 +4,8 @@ export { LayoutStatusPanel } from "./LayoutStatusPanel";
 export { FloorPlanPanel } from "./FloorPlanPanel";
 export { FloorToggle } from "./FloorToggle";
 export { LayoutEditorPanel } from "./LayoutEditorPanel";
+export { QuickRegionPanel } from "./QuickRegionPanel";
+export { QuickRegionSummaryCard } from "./QuickRegionPanel";
 export { EditVenueModal } from "./EditVenueModal";
 export { VenueManagementTable } from "./VenueManagementTable";
 export { CompactFloorLayout } from "./CompactFloorLayout";

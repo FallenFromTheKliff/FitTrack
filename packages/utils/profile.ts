@@ -28,5 +28,100 @@ export function fullName(member: MemberRecord): string {
 }
 
 export function membershipType(member: MemberRecord): string {
-  return member.profile?.membershipType ?? "Basic";
+  if (member.role?.name && member.role.name !== "USER") return "Not Applicable";
+
+  switch (member.profile?.membershipType?.trim().toLowerCase()) {
+    case "premium":
+      return "Premium";
+    case "vip":
+      return "VIP";
+    case "member":
+    default:
+      return "Member";
+  }
+}
+
+function safeDecodeUriComponent(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeApiAssetBaseUrl(apiBaseUrl?: string | null) {
+  const trimmedValue = apiBaseUrl?.trim();
+  if (!trimmedValue) return null;
+  return trimmedValue.replace(/\/+$/, "");
+}
+
+function normalizeAssetPathValue(value: string) {
+  return value
+    .split(/[?#]/)[0]
+    .replace(/^\/+/, "");
+}
+
+export function extractStorageObjectKey(
+  assetUrl?: string | null,
+  publicBaseUrl?: string | null
+) {
+  const trimmedUrl = assetUrl?.trim();
+  if (!trimmedUrl || trimmedUrl.startsWith("blob:") || trimmedUrl.startsWith("data:")) {
+    return null;
+  }
+
+  const trimmedPublicBaseUrl = publicBaseUrl?.trim()?.replace(/\/+$/, "");
+  if (trimmedPublicBaseUrl && trimmedUrl.startsWith(`${trimmedPublicBaseUrl}/`)) {
+    return safeDecodeUriComponent(
+      normalizeAssetPathValue(trimmedUrl.slice(trimmedPublicBaseUrl.length + 1))
+    );
+  }
+
+  try {
+    const parsed = new URL(trimmedUrl);
+    const normalizedPath = normalizeAssetPathValue(parsed.pathname);
+    if (!normalizedPath) return null;
+
+    if (parsed.hostname.endsWith(".r2.dev")) {
+      return safeDecodeUriComponent(normalizedPath);
+    }
+
+    if (parsed.hostname.endsWith(".r2.cloudflarestorage.com")) {
+      const [, ...keyParts] = normalizedPath.split("/");
+      const key = keyParts.join("/");
+      return key ? safeDecodeUriComponent(key) : null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function buildRenderableAssetUrl({
+  apiBaseUrl,
+  assetKey,
+  assetUrl,
+  publicBaseUrl
+}: {
+  apiBaseUrl?: string | null;
+  assetKey?: string | null;
+  assetUrl?: string | null;
+  publicBaseUrl?: string | null;
+}) {
+  const trimmedAssetUrl = assetUrl?.trim() ?? null;
+  if (trimmedAssetUrl?.startsWith("blob:") || trimmedAssetUrl?.startsWith("data:")) {
+    return trimmedAssetUrl;
+  }
+
+  const normalizedApiBaseUrl = normalizeApiAssetBaseUrl(apiBaseUrl);
+  const normalizedAssetKey =
+    assetKey?.trim().replace(/^\/+/, "") ||
+    extractStorageObjectKey(trimmedAssetUrl, publicBaseUrl);
+
+  if (!normalizedAssetKey || !normalizedApiBaseUrl) {
+    return trimmedAssetUrl;
+  }
+
+  return `${normalizedApiBaseUrl}/files/render?key=${encodeURIComponent(normalizedAssetKey)}`;
 }

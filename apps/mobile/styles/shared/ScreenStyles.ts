@@ -247,6 +247,73 @@ export function makeGymMapStyles(colors: ThemeColors) {
       fontSize: 12,
       fontWeight: "700"
     },
+    floorSnapshotCard: {
+      gap: 12,
+      padding: 14,
+      borderRadius: R.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      marginBottom: 16
+    },
+    floorSnapshotHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12
+    },
+    floorSnapshotTitleWrap: {
+      flex: 1,
+      gap: 4
+    },
+    floorSnapshotEyebrow: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.brand
+    },
+    floorSnapshotTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    floorSnapshotFloorLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.textMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.brand + "14",
+      overflow: "hidden"
+    },
+    floorSnapshotBody: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 19
+    },
+    floorSnapshotMetrics: {
+      flexDirection: "row",
+      gap: 10
+    },
+    floorSnapshotMetricCard: {
+      flex: 1,
+      gap: 4,
+      padding: 12,
+      borderRadius: R.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised
+    },
+    floorSnapshotMetricValue: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    floorSnapshotMetricLabel: {
+      fontSize: 12,
+      color: colors.textMuted
+    },
     mapCanvas: {
       height: 480,
       position: "relative" as const,
@@ -257,6 +324,84 @@ export function makeGymMapStyles(colors: ThemeColors) {
       overflow: "hidden",
       marginBottom: 16
     },
+    mapBlueprintLayer: {
+      ...StyleSheet.absoluteFillObject,
+      pointerEvents: "none" as const
+    },
+    mapBlueprintTint: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.brand + "0A"
+    },
+    mapBlueprintRouteHorizontal: {
+      position: "absolute" as const,
+      left: "8%" as const,
+      right: "8%" as const,
+      height: 2,
+      borderRadius: 999,
+      backgroundColor: colors.brand + "26"
+    },
+    mapBlueprintRouteVertical: {
+      position: "absolute" as const,
+      top: "12%" as const,
+      bottom: "12%" as const,
+      width: 2,
+      borderRadius: 999,
+      backgroundColor: colors.brand + "22"
+    },
+    mapBlueprintCompass: {
+      position: "absolute" as const,
+      top: 14,
+      right: 14,
+      width: 148,
+      gap: 4,
+      padding: 12,
+      borderRadius: R.lg,
+      borderWidth: 1,
+      borderColor: colors.brand + "22",
+      backgroundColor: colors.surface + "F2"
+    },
+    mapBlueprintCompassEyebrow: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.7,
+      color: colors.brand
+    },
+    mapBlueprintCompassLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    mapBlueprintCompassBody: {
+      fontSize: 11,
+      color: colors.textMuted,
+      lineHeight: 16
+    },
+    mapBlueprintMarker: {
+      position: "absolute" as const,
+      gap: 4,
+      padding: 10,
+      borderRadius: R.lg,
+      borderWidth: 1,
+      justifyContent: "flex-end"
+    },
+    mapBlueprintMarkerPrimary: {
+      borderColor: colors.brand + "3D",
+      backgroundColor: colors.brand + "12"
+    },
+    mapBlueprintMarkerMuted: {
+      borderColor: colors.border,
+      backgroundColor: colors.surface + "CC"
+    },
+    mapBlueprintMarkerLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    mapBlueprintMarkerHint: {
+      fontSize: 10,
+      color: colors.textMuted,
+      lineHeight: 14
+    },
     mapGridLine: {
       position: "absolute" as const,
       backgroundColor: colors.border,
@@ -266,13 +411,41 @@ export function makeGymMapStyles(colors: ThemeColors) {
       position: "absolute" as const,
       padding: 6,
       borderWidth: 1,
-      borderRadius: R.lg
+      borderRadius: R.lg,
+      zIndex: 2
     },
     mapZoneBackdrop: {
       ...StyleSheet.absoluteFill,
       borderRadius: R.lg,
       backgroundColor: colors.surfaceRaised,
       opacity: 0.5
+    },
+    mapEmptyState: {
+      position: "absolute" as const,
+      left: 22,
+      right: 22,
+      top: 124,
+      borderRadius: R.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface + "F4",
+      padding: 18,
+      alignItems: "flex-start",
+      gap: 10,
+      zIndex: 2
+    },
+    mapEmptyStateTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    mapEmptyStateBody: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.textSecondary
+    },
+    mapEmptyStateAction: {
+      marginTop: 4
     },
     mapZoneBadge: {
       flex: 1,
@@ -301,6 +474,11 @@ export function makeGymMapStyles(colors: ThemeColors) {
       marginTop: -4
     },
     mapLegendInner: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 4 },
+    mapLegendEmpty: {
+      fontSize: 13,
+      color: colors.textMuted,
+      lineHeight: 19
+    },
     mapLegendItem: {
       flexDirection: "row",
       alignItems: "center",
@@ -313,7 +491,14 @@ export function makeGymMapStyles(colors: ThemeColors) {
 
 export function makeWorkoutStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    previewInner: { height: 580, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 0 },
+    previewInner: {
+      height: 450,
+      minHeight: 360,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      borderRadius: 0
+    },
     cameraView: { ...StyleSheet.absoluteFill, backgroundColor: "#000000" },
     gridOverlay: { ...StyleSheet.absoluteFill, pointerEvents: "none" as const },
     gridLine: { position: "absolute" as const, backgroundColor: colors.border },
@@ -350,7 +535,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       position: "absolute" as const,
       left: 16,
       right: 16,
-      top: 64,
+      top: 56,
       alignItems: "center"
     },
     timerPill: {
@@ -370,11 +555,11 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       gap: 6,
       backgroundColor: "rgba(0,0,0,0.45)",
       borderRadius: R.lg,
-      paddingHorizontal: 18,
-      paddingVertical: 8
+      paddingHorizontal: 16,
+      paddingVertical: 7
     },
-    repsText: { fontSize: 48, fontWeight: "700", color: "#FFFFFF" },
-    repsPillLabel: { fontSize: 18, fontWeight: "600", color: "rgba(255,255,255,0.75)" },
+    repsText: { fontSize: 40, fontWeight: "700", color: "#FFFFFF" },
+    repsPillLabel: { fontSize: 16, fontWeight: "600", color: "rgba(255,255,255,0.75)" },
     kcalPill: {
       flexDirection: "row",
       alignItems: "center",
@@ -418,7 +603,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       position: "absolute" as const,
       left: 0,
       right: 0,
-      bottom: 20,
+      bottom: 16,
       flexDirection: "row",
       justifyContent: "center",
       alignItems: "center",
@@ -595,6 +780,51 @@ export function makeNutritionStyles(colors: ThemeColors) {
       marginTop: 2,
       marginBottom: 4
     },
+    sectionBlock: {
+      padding: 16,
+      gap: 8
+    },
+    signalStack: {
+      gap: 10
+    },
+    signalCard: {
+      borderRadius: R.lg,
+      borderWidth: 1,
+      padding: 12,
+      gap: 4
+    },
+    signalCardBrand: {
+      borderColor: colors.brand + "2E",
+      backgroundColor: colors.brand + "10"
+    },
+    signalCardWarning: {
+      borderColor: colors.warning + "32",
+      backgroundColor: colors.warning + "12"
+    },
+    signalCardSuccess: {
+      borderColor: colors.success + "30",
+      backgroundColor: colors.success + "12"
+    },
+    signalEyebrow: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 1
+    },
+    signalTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    signalMessage: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted
+    },
+    sectionNote: {
+      fontSize: 11,
+      color: colors.textMuted,
+      lineHeight: 16
+    },
     contentCard: {
       backgroundColor: colors.surfaceRaised,
       borderRadius: R.xl,
@@ -646,7 +876,8 @@ export function makeBrodigyStyles(colors: ThemeColors) {
     messagesArea: {
       flex: 1,
       paddingHorizontal: 16,
-      paddingTop: 16
+      paddingTop: 16,
+      paddingBottom: 12
     },
     aiBubbleRow: {
       flexDirection: "row" as const,
@@ -675,7 +906,7 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
       padding: 10,
-      maxWidth: "80%" as any,
+      maxWidth: "84%" as any,
       flexShrink: 1
     },
     aiBubbleText: {
@@ -688,7 +919,7 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       borderRadius: 12,
       borderTopRightRadius: 4,
       padding: 10,
-      maxWidth: "80%" as any,
+      maxWidth: "84%" as any,
       alignSelf: "flex-end" as const
     },
     userBubbleText: {
@@ -714,7 +945,8 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       alignItems: "center" as const,
       gap: 8,
       paddingHorizontal: 16,
-      paddingVertical: 10,
+      paddingTop: 12,
+      paddingBottom: 14,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.base
@@ -730,8 +962,8 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       justifyContent: "center" as const
     },
     sendBtn: {
-      width: 44,
-      height: 44,
+      width: 46,
+      height: 46,
       borderRadius: 12,
       backgroundColor: colors.brand,
       alignItems: "center" as const,

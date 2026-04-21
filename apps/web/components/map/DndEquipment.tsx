@@ -1,39 +1,62 @@
 "use client";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
-import { Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
 
-import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
 import type { EquipmentDef } from "@/data/facilities/mapTypes";
 
 type DraggableEquipmentProps = {
     item: EquipmentDef;
     disabled?: boolean;
+    selected?: boolean;
+    onSelect?: (equipmentId: string) => void;
+    remainingQuantity?: number | null;
+    isOutOfStock?: boolean;
 };
 
-export function DraggableEquipment({ item, disabled = false }: DraggableEquipmentProps) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-        id: `equip-${item.id}`,
-        data: { equipmentId: item.id },
-        disabled
-    });
+export function DraggableEquipment({
+    item,
+    disabled = false,
+    selected = false,
+    onSelect,
+    remainingQuantity,
+    isOutOfStock = false,
+}: DraggableEquipmentProps) {
+    const inventoryText =
+        item.quantityAvailable !== undefined
+            ? remainingQuantity !== null && remainingQuantity !== undefined
+                ? `${remainingQuantity} remaining of ${item.quantityAvailable}`
+                : `${item.quantityAvailable} available`
+            : item.category;
 
     return (
-        <FitButton
-            buttonRef={setNodeRef}
-            style={{
-                transform: CSS.Translate.toString(transform),
-                opacity: isDragging ? 0.55 : 1,
-                width: "100%",
-                border: "none",
-                background: "none",
-                textAlign: "left",
-                cursor: disabled ? "not-allowed" : "grab"
+        <div
+            draggable={!disabled}
+            onClick={() => {
+                if (disabled) return;
+                onSelect?.(item.id);
             }}
-            {...listeners}
-            {...attributes}
+            onDragStart={(event) => {
+                if (disabled) return;
+                event.dataTransfer.setData("text/plain", item.id);
+                event.dataTransfer.effectAllowed = "copy";
+                onSelect?.(item.id);
+            }}
+            style={{
+                width: "100%",
+                border: selected ? `1px solid ${item.color}` : "1px solid transparent",
+                background: selected ? `${item.color}12` : "transparent",
+                borderRadius: 10,
+                padding: "2px 4px",
+                textAlign: "left",
+                cursor: disabled ? "not-allowed" : "grab",
+                touchAction: "none",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                outline: "none",
+            }}
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            aria-disabled={disabled}
+            aria-pressed={selected}
         >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div
@@ -56,10 +79,32 @@ export function DraggableEquipment({ item, disabled = false }: DraggableEquipmen
                         {item.name}
                     </FitText>
                     <FitText style={{ fontSize: 11, color: "var(--fit-text-muted)", display: "block", marginTop: 1 }}>
-                        {item.category}
+                        {item.quantityAvailable !== undefined
+                            ? `${item.category} • ${inventoryText}`
+                            : inventoryText}
                     </FitText>
+                    {isOutOfStock ? (
+                        <FitText style={{ fontSize: 10, color: "var(--fit-danger)", display: "block", marginTop: 2 }}>
+                            All mapped units are already placed.
+                        </FitText>
+                    ) : null}
+                    {item.detail ? (
+                        <FitText
+                            style={{
+                                fontSize: 10,
+                                color: "var(--fit-text-muted)",
+                                display: "block",
+                                marginTop: 2,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                        >
+                            {item.detail}
+                        </FitText>
+                    ) : null}
                 </div>
             </div>
-        </FitButton>
+        </div>
     );
 }

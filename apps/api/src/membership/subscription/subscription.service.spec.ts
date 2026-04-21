@@ -16,6 +16,7 @@ describe('SubscriptionService', () => {
     findActivePlanByIdOrThrow: jest.fn(),
     createPlan: jest.fn(),
     updatePlan: jest.fn(),
+    findCurrentSubscriptionByUserId: jest.fn(),
     findCurrentSubscriptionByUserIdOrThrow: jest.fn(),
     findCancellableSubscriptionByUserIdOrThrow: jest.fn(),
     findSubscriptionByIdOrThrow: jest.fn(),
@@ -104,7 +105,7 @@ describe('SubscriptionService', () => {
   });
 
   it('returns the current subscription for the authenticated member', async () => {
-    repo.findCurrentSubscriptionByUserIdOrThrow.mockResolvedValue({
+    repo.findCurrentSubscriptionByUserId.mockResolvedValue({
       id: 'sub-1',
       status: 'active',
       plan: { id: 'plan-1', name: 'Monthly Membership' },
@@ -112,9 +113,7 @@ describe('SubscriptionService', () => {
 
     const result = await service.getMySubscription('member-1');
 
-    expect(repo.findCurrentSubscriptionByUserIdOrThrow).toHaveBeenCalledWith(
-      'member-1',
-    );
+    expect(repo.findCurrentSubscriptionByUserId).toHaveBeenCalledWith('member-1');
     expect(result.id).toBe('sub-1');
   });
 

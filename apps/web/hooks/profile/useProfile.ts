@@ -1,14 +1,19 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { calcBMI, formatDate, formatMonthYear, splitFullName } from "@fittrack/utils";
+import { buildRenderableAssetUrl, calcBMI, formatDate, formatMonthYear, splitFullName } from "@fittrack/utils";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
-import { updateAccountMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
+import { updatePhoneMutationOptions, updateProfileMutationOptions, uploadImageMutationOptions } from "@fittrack/query";
+import {
+  formatPhilippineMobileForInput,
+  isSupportedPhilippineMobileNumber,
+  normalizePhilippineMobileNumber
+} from "@fittrack/validators";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { sleep } from "@/utils/sleep";
-import { webApiClient } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import type { PersonalFieldKey } from "@/data/profile/profile";
 
 export type PersonalData = Record<PersonalFieldKey, string>;
@@ -20,11 +25,9 @@ export function validateProfileFields(
 ): string | null {
   const first = personalData.firstName.trim();
   const last = personalData.lastName.trim();
-  const email = personalData.email.trim();
   const phone = personalData.phone.trim();
   if (!first || !last) return "First and last name are required.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Please enter a valid email address.";
-  if (!/^09\d{9}$/.test(phone)) return "Please enter a valid 11-digit PH phone number.";
+  if (phone && !isSupportedPhilippineMobileNumber(phone)) return "Please enter a valid PH mobile number.";
   if (
     (weightKg.trim() !== "" && (Number.isNaN(Number(weightKg)) || Number(weightKg) < 0)) ||
     (heightCm.trim() !== "" && (Number.isNaN(Number(heightCm)) || Number(heightCm) < 0))
@@ -32,11 +35,18 @@ export function validateProfileFields(
   return null;
 }
 
+function toSaveErrorMessage(error: unknown) {
+  return error instanceof Error && error.message.trim() !== ""
+    ? error.message
+    : "Unable to update profile.";
+}
+
 export function useProfilePage() {
   const { user, updateUser, logout, deleteUser } = useAuth();
   const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.sensitive);
   const updateProfileMutation = useMutation(updateProfileMutationOptions(webApiClient));
-  const updateAccountMutation = useMutation(updateAccountMutationOptions(webApiClient));
+  const updatePhoneMutation = useMutation(updatePhoneMutationOptions(webApiClient));
+  const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
 
   const initialName = splitFullName(user?.name ?? "");
 
@@ -47,18 +57,57 @@ export function useProfilePage() {
   const [showDobCalendar, setShowDobCalendar] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showSensitiveConfirm, setShowSensitiveConfirm] = useState(false);
-  const [sensitiveAction, setSensitiveAction] = useState<"email" | "password" | null>(null);
+  const [sensitiveAction, setSensitiveAction] = useState<"password" | null>(null);
   const [sensitiveLoading, setSensitiveLoading] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
 
   const [personalData, setPersonalData] = useState<PersonalData>({
     firstName: initialName.firstName,
     lastName: initialName.lastName,
     email: user?.email ?? "",
-    phone: user?.phone_no ?? "",
+    phone: formatPhilippineMobileForInput(user?.phone_no),
     dateOfBirth: user?.dateOfBirth ?? ""
   });
   const [weightKg, setWeightKg] = useState(String(user?.weightKg ?? ""));
   const [heightCm, setHeightCm] = useState(String(user?.heightCm ?? ""));
+
+  useEffect(() => {
+    if (editing) return;
+
+    const nextName = splitFullName(user?.name ?? "");
+    setPersonalData({
+      firstName: nextName.firstName,
+      lastName: nextName.lastName,
+      email: user?.email ?? "",
+      phone: formatPhilippineMobileForInput(user?.phone_no),
+      dateOfBirth: user?.dateOfBirth ?? ""
+    });
+    setWeightKg(String(user?.weightKg ?? ""));
+    setHeightCm(String(user?.heightCm ?? ""));
+  }, [
+    editing,
+    user?.dateOfBirth,
+    user?.email,
+    user?.heightCm,
+    user?.name,
+    user?.phone_no,
+    user?.weightKg
+  ]);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreviewUrl(null);
+      return;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreviewUrl(nextPreviewUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextPreviewUrl);
+    };
+  }, [avatarFile]);
 
   const saveLabel = useLoadingText("SAVING CHANGES", saving);
   const terminateLabel = useLoadingText("TERMINATING ACCOUNT", terminating);
@@ -75,13 +124,13 @@ export function useProfilePage() {
     return (
       personalData.firstName !== baselineName.firstName ||
       personalData.lastName !== baselineName.lastName ||
-      personalData.email !== (user?.email ?? "") ||
-      personalData.phone !== (user?.phone_no ?? "") ||
+      personalData.phone !== formatPhilippineMobileForInput(user?.phone_no) ||
       personalData.dateOfBirth !== (user?.dateOfBirth ?? "") ||
       weightKg !== String(user?.weightKg ?? "") ||
-      heightCm !== String(user?.heightCm ?? "")
+      heightCm !== String(user?.heightCm ?? "") ||
+      !!avatarFile
     );
-  }, [heightCm, personalData, user, weightKg]);
+  }, [avatarFile, heightCm, personalData, user, weightKg]);
 
   const roleValue = user?.role
     ? `${user.role.charAt(0).toUpperCase()}${user.role.slice(1)}`
@@ -92,6 +141,10 @@ export function useProfilePage() {
     ? formatDate(personalData.dateOfBirth, "MMM d, yyyy")
     : "Not set";
   const initials = user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
+  const displayedAvatarUri = buildRenderableAssetUrl({
+    apiBaseUrl: WEB_API_BASE_URL,
+    assetUrl: avatarPreviewUrl ?? user?.avatarUri ?? null
+  });
   const isAdmin = user?.role === "ADMIN";
 
   const persistProfileChanges = async () => {
@@ -100,33 +153,47 @@ export function useProfilePage() {
       .join(" ");
     const w = parseFloat(weightKg);
     const h = parseFloat(heightCm);
+    const normalizedPhone = normalizePhilippineMobileNumber(personalData.phone);
+    const currentPhone = normalizePhilippineMobileNumber(user?.phone_no ?? "");
+    let nextAvatarUri = user?.avatarUri;
+
+    if (avatarFile) {
+      const formData = new FormData();
+      formData.append("file", avatarFile);
+      const uploadResult = await uploadImageMutation.mutateAsync(formData);
+      nextAvatarUri = uploadResult.url;
+    }
 
     await updateProfileMutation.mutateAsync({
       firstName: personalData.firstName.trim() || undefined,
       lastName: personalData.lastName.trim() || undefined,
+      avatarUrl: nextAvatarUri,
       dateOfBirth: personalData.dateOfBirth || undefined,
       currentWeightKg: Number.isNaN(w) ? undefined : w,
       heightCm: Number.isNaN(h) ? undefined : h
     });
 
-    const emailChanged = personalData.email.trim() !== (user?.email ?? "");
-    const phoneChanged = personalData.phone.trim() !== (user?.phone_no ?? "");
-    if (emailChanged || phoneChanged) {
-      await updateAccountMutation.mutateAsync({
-        ...(emailChanged ? { email: personalData.email.trim() } : {}),
-        ...(phoneChanged ? { phone_no: personalData.phone.trim() } : {})
+    if (normalizedPhone !== currentPhone) {
+      if (!normalizedPhone) {
+        throw new Error("Phone number removal is not available in profile settings.");
+      }
+
+      await updatePhoneMutation.mutateAsync({
+        phone_number: normalizedPhone
       });
     }
 
     await updateUser({
       name: fullName || user?.name,
-      email: personalData.email.trim(),
-      phone_no: personalData.phone.trim(),
+      email: user?.email ?? "",
+      phone_no: (normalizedPhone || user?.phone_no) ?? null,
+      avatarUri: nextAvatarUri,
       dateOfBirth: personalData.dateOfBirth || undefined,
       weightKg: Number.isNaN(w) ? undefined : w,
       heightCm: Number.isNaN(h) ? undefined : h,
       profile: {
         ...user?.profile,
+        avatarUrl: nextAvatarUri ?? null,
         firstName: personalData.firstName.trim() || null,
         lastName: personalData.lastName.trim() || null,
         dateOfBirth: personalData.dateOfBirth || null,
@@ -134,43 +201,40 @@ export function useProfilePage() {
         heightCm: Number.isNaN(h) ? null : h
       }
     });
+
+    setAvatarFile(null);
   };
 
   const handleSave = async () => {
     if (saving) return;
     const error = validateProfileFields(personalData, weightKg, heightCm);
-    if (error) { showMessage(error); return; }
-
-    const emailChanged = personalData.email.trim() !== (user?.email ?? "");
-    if (emailChanged) {
-      setSensitiveAction("email");
-      setShowSensitiveConfirm(true);
+    if (error) {
+      showMessage(error);
       return;
     }
 
     setSaving(true);
-    await persistProfileChanges();
-    await sleep(FEEDBACK_DURATION_MS.standard);
-    setSaving(false);
-    setEditing(false);
-    showMessage("Profile updated.");
+    try {
+      await persistProfileChanges();
+      await sleep(FEEDBACK_DURATION_MS.standard);
+      setEditing(false);
+      showMessage("Profile updated.");
+    } catch (saveError: unknown) {
+      showMessage(toSaveErrorMessage(saveError));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSensitiveConfirm = async () => {
-    if (!sensitiveAction || sensitiveLoading) return;
+    if (sensitiveAction !== "password" || sensitiveLoading) return;
     setSensitiveLoading(true);
-    if (sensitiveAction === "email") {
-      await persistProfileChanges();
-      setEditing(false);
-      showMessage("Email changed. You will be logged out for security.");
-    } else {
-      showMessage("Password changed. You will be logged out for security.");
-    }
+    showMessage("Password changed. You will be logged out for security.");
     await sleep(FEEDBACK_DURATION_MS.sensitive);
     setSensitiveLoading(false);
     setShowSensitiveConfirm(false);
     setSensitiveAction(null);
-    logout();
+    await logout();
   };
 
   const handleTerminate = async () => {
@@ -180,7 +244,7 @@ export function useProfilePage() {
     setTerminating(false);
     setShowTerminateConfirm(false);
     if (deleteUser) await deleteUser();
-    else logout();
+    else await logout();
   };
 
   const resetPersonalData = () => {
@@ -189,11 +253,12 @@ export function useProfilePage() {
       firstName: resetName.firstName,
       lastName: resetName.lastName,
       email: user?.email ?? "",
-      phone: user?.phone_no ?? "",
+      phone: formatPhilippineMobileForInput(user?.phone_no),
       dateOfBirth: user?.dateOfBirth ?? ""
     });
     setWeightKg(String(user?.weightKg ?? ""));
     setHeightCm(String(user?.heightCm ?? ""));
+    setAvatarFile(null);
     setEditing(false);
   };
 
@@ -228,9 +293,11 @@ export function useProfilePage() {
     memberSinceValue,
     dobDisplay,
     initials,
+    displayedAvatarUri,
     isAdmin,
     message,
     showMessage,
+    setAvatarFile,
     handleSave,
     handleSensitiveConfirm,
     handleTerminate,

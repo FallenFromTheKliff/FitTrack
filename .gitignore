@@ -15,11 +15,31 @@ apps/mobile/.env
 agents/
 
 # Build outputs
+.artifacts/
+.npm-cache/
 .next/
 .expo/
 .turbo/
 dist/
 *.tsbuildinfo
+tmp/
+test-results/
+playwright-report/
+apps/web/test-results/
+apps/web/.next-runtime/
+apps/mobile/dist-web-auth-check/
+apps/web/debug_logs.txt
+apps/web/dom.html
+temp_skill_build/
+.railway-deploy/
+members-admin-*.png
+apps/web/dashboard.png
+apps/web/members.png
+check_page.js
+do_replace.js
+do_replace_safe.js
+fix_ui_for_real.js
+refactor.js
 
 # OS
 .DS_Store
@@ -34,3 +54,17 @@ Thumbs.db
 
 # Task runner scratch data
 tasks/backend-builder/tmp/
+
+# Keep shared agent setup and MCP config versioned for the team
+!.codex/
+!.codex/**
+!.serena/
+!.serena/**
+!.playwright-mcp.json
+!.playwright-fittrack-flow.json
+!.vscode/mcp.json
+
+# But still ignore Serena runtime chatter
+.serena/logs/
+.serena/memories/integration/
+.serena/memories/skills/

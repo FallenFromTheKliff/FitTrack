@@ -46,7 +46,7 @@ function AppProvidersInner({ children }: { children: ReactNode }) {
   }, []);
 
   if (!apiReady) {
-    return null;
+    return <SplashScreen onDone={() => {}} fontsReady={false} />;
   }
 
   return (

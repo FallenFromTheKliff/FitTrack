@@ -36,16 +36,10 @@ export class NotificationPreferencesResponseDTO {
   subscription_expiring_email: boolean;
 
   @ApiProperty()
-  subscription_expiring_sms: boolean;
-
-  @ApiProperty()
   subscription_expired_email: boolean;
 
   @ApiProperty()
   booking_confirmed_email: boolean;
-
-  @ApiProperty()
-  booking_confirmed_sms: boolean;
 
   @ApiProperty()
   booking_cancelled_email: boolean;
@@ -55,9 +49,6 @@ export class NotificationPreferencesResponseDTO {
 
   @ApiProperty()
   appointment_confirmed_email: boolean;
-
-  @ApiProperty()
-  appointment_confirmed_sms: boolean;
 
   @ApiProperty()
   appointment_completed_email: boolean;
@@ -91,12 +82,6 @@ export class UpdateNotificationPreferencesDTO {
   @ApiPropertyOptional()
   @IsOptional()
   @Transform((params) => transformBooleanInput(params))
-  @IsBoolean({ message: 'subscription_expiring_sms must be a boolean value' })
-  subscription_expiring_sms?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform((params) => transformBooleanInput(params))
   @IsBoolean({ message: 'subscription_expired_email must be a boolean value' })
   subscription_expired_email?: boolean;
 
@@ -105,12 +90,6 @@ export class UpdateNotificationPreferencesDTO {
   @Transform((params) => transformBooleanInput(params))
   @IsBoolean({ message: 'booking_confirmed_email must be a boolean value' })
   booking_confirmed_email?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform((params) => transformBooleanInput(params))
-  @IsBoolean({ message: 'booking_confirmed_sms must be a boolean value' })
-  booking_confirmed_sms?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -129,12 +108,6 @@ export class UpdateNotificationPreferencesDTO {
   @Transform((params) => transformBooleanInput(params))
   @IsBoolean({ message: 'appointment_confirmed_email must be a boolean value' })
   appointment_confirmed_email?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform((params) => transformBooleanInput(params))
-  @IsBoolean({ message: 'appointment_confirmed_sms must be a boolean value' })
-  appointment_confirmed_sms?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

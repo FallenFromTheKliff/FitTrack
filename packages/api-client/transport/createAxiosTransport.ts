@@ -3,6 +3,16 @@ import type { AuthEvents } from "../auth/auth-events";
 import type { TokenSet, TokenStore } from "../auth/token-store";
 import { resolveApiBaseUrl } from "../base-url";
 
+declare module "axios" {
+  interface AxiosRequestConfig {
+    _preserveSessionOn401?: boolean;
+  }
+
+  interface InternalAxiosRequestConfig {
+    _preserveSessionOn401?: boolean;
+  }
+}
+
 export type ApiTransportConfig = {
   authEvents?: AuthEvents;
   baseURL: string;
@@ -16,6 +26,10 @@ type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
 };
 
+function isApiEnvelope<T>(value: T | { data: T }): value is { data: T } {
+  return typeof value === "object" && value !== null && "data" in value;
+}
+
 function isTokenShape(value: unknown): value is { access_token: string; refresh_token?: string | null } {
   if (!value || typeof value !== "object") return false;
   if (!("access_token" in value)) return false;
@@ -23,10 +37,11 @@ function isTokenShape(value: unknown): value is { access_token: string; refresh_
 }
 
 function extractTokenSet(data: unknown): TokenSet | null {
-  if (!isTokenShape(data)) return null;
+  const tokenSource = isApiEnvelope(data) ? data.data : data;
+  if (!isTokenShape(tokenSource)) return null;
   return {
-    accessToken: data.access_token,
-    refreshToken: typeof data.refresh_token === "string" ? data.refresh_token : undefined
+    accessToken: tokenSource.access_token,
+    refreshToken: typeof tokenSource.refresh_token === "string" ? tokenSource.refresh_token : undefined
   };
 }
 
@@ -40,6 +55,10 @@ function normalizeRequestHeaders(headers?: Record<string, string>) {
     "Content-Type": "application/json",
     ...headers
   };
+}
+
+function isFormDataPayload(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
 }
 
 export function createAxiosTransport({
@@ -90,10 +109,19 @@ export function createAxiosTransport({
 
   transport.interceptors.request.use(async (config) => {
     await ensureHydrated();
+    config.headers = config.headers ?? {};
+    if (isFormDataPayload(config.data)) {
+      const requestHeaders = config.headers as Record<string, unknown> & {
+        delete?: (name: string) => void;
+      };
+      requestHeaders.delete?.("Content-Type");
+      requestHeaders.delete?.("content-type");
+      delete requestHeaders["Content-Type"];
+      delete requestHeaders["content-type"];
+    }
     if (!tokenStore) return config;
     const accessToken = await tokenStore.getAccessToken();
     if (!accessToken) return config;
-    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${accessToken}`;
     return config;
   });
@@ -117,8 +145,11 @@ export function createAxiosTransport({
       }
       const original = error.config as RetriableRequestConfig | undefined;
       if (
-        error.response?.status !== 401 ||
         !original ||
+        // Some authenticated endpoints intentionally use 401 for invalid user input.
+        // Those responses should surface to the caller without clearing the session.
+        original._preserveSessionOn401 ||
+        error.response?.status !== 401 ||
         original._retry ||
         isPathMatch(original.url, refreshPath)
       ) {

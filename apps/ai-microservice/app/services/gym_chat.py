@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models.gym_chat import (
+from ..models.gym_chat import (
     GymChatGroundingPayload,
     GymChatRequest,
     GymChatResponse,

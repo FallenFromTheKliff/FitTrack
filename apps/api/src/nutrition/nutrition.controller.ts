@@ -23,6 +23,7 @@ import {
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ActiveMemberPlanGuard } from '../common/guards/active-member-plan.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DateRangeDTO, PaginationDTO } from '../user/dto/user-dto';
 import {
@@ -93,8 +94,19 @@ export class NutritionController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Active TDEE profile returned.',
-    schema: objectEnvelopeSchema(getSchemaPath(ActiveTdeeResponseDTO)),
+    description: 'Active TDEE profile returned, or null when none exists.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          anyOf: [
+            { $ref: getSchemaPath(ActiveTdeeResponseDTO) },
+            { type: 'null' },
+          ],
+        },
+      },
+      required: ['data'],
+    },
   })
   getActiveTdee(@CurrentUser() user: JwtPayload) {
     return this.nutritionService.getActiveTdee(user.sub);
@@ -139,7 +151,7 @@ export class NutritionController {
   }
 
   @Post('logs')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberPlanGuard)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: LogNutritionDTO })
   @ApiOperation({
@@ -158,7 +170,7 @@ export class NutritionController {
   }
 
   @Get('logs')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberPlanGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: "List the authenticated user's nutrition logs.",
@@ -176,7 +188,7 @@ export class NutritionController {
   }
 
   @Patch('logs/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberPlanGuard)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateNutritionLogDTO })
   @ApiOperation({
@@ -196,7 +208,7 @@ export class NutritionController {
   }
 
   @Delete('logs/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberPlanGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Delete an owned nutrition log for the authenticated user.',

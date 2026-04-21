@@ -8,4 +8,5 @@ export interface PaymentCompletedEvent {
   payableType: PayableType;
   payableId: string;
   amount: string;
+  verifiedBy?: string | null;
 }

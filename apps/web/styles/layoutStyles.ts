@@ -57,7 +57,7 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flex: 1,
             minHeight: 0,
             overflowY: "auto",
-            padding: "12px 24px 24px",
+            padding: "10px 18px 18px",
             backgroundColor: layoutBg
         } as CSSProperties,
         mobileSidebarBackdrop: {
@@ -133,7 +133,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
 
     return {
         header: {
-            minHeight: 96,
+            minHeight: 84,
             display: "flex",
             alignItems: "center",
             flexShrink: 0,
@@ -148,7 +148,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-start",
-            padding: "10px 20px",
+            padding: "8px 18px",
             gap: 10,
             backgroundColor: headerBg
         } as CSSProperties,
@@ -157,7 +157,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-end",
-            padding: "0 16px",
+            padding: "0 14px",
             position: "relative",
             backgroundColor: "transparent",
             borderLeft: "none",
@@ -171,7 +171,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flex: 1
         } as CSSProperties,
         messageTitle: {
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 700,
             lineHeight: 1.2,
             margin: 0,
@@ -181,9 +181,9 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             textOverflow: "ellipsis"
         } as CSSProperties,
         messageSubtitle: {
-            fontSize: 13,
-            color: colors.textMuted,
-            marginTop: 6,
+            fontSize: 12,
+            color: colors.textSecondary,
+            marginTop: 5,
             marginBottom: 0,
             lineHeight: 1.35,
             paddingBottom: 2,
@@ -193,8 +193,8 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             textOverflow: "ellipsis"
         } as CSSProperties,
         iconBtn: {
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             borderRadius: 8,
             background: "none",
             border: "none",
@@ -240,14 +240,14 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
 }
 
 export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
-    const onBrand = colors.onBrand ?? getReadableTextColor(colors.brand, colors.textPrimary, themes.sunlight.surface);
+    const onBrand = getReadableTextColor(colors.brand, themes.sunlight.textPrimary, colors.textPrimary);
 
     const sidebarBg = getSidebarBackground(colors, activeThemeKey);
     const sidebarBorder = colors.border;
     const separatorColor = colors.border;
 
     const textPrimary = colors.textPrimary;
-    const textMuted = colors.textMuted;
+    const textMuted = colors.textSecondary;
     const manageText = colors.brand;
 
     const cardBg = colors.surfaceRaised;
@@ -269,7 +269,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             alignItems: "center",
             gap: 10,
             minWidth: 0,
-            minHeight: 96,
+            minHeight: 88,
             padding: "0 6px",
             marginTop: 0,
             marginBottom: 0,
@@ -286,11 +286,11 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             color: textPrimary
         } as CSSProperties,
         logoSubtitle: {
-            color: textMuted
+            color: colors.textSecondary
         } as CSSProperties,
         logoMark: {
-            width: 46,
-            height: 46,
+            width: 44,
+            height: 44,
             borderRadius: 10,
             backgroundColor: colors.brand,
             display: "flex",
@@ -387,12 +387,12 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            padding: "14px 14px",
+            padding: "12px 14px",
             borderRadius: 12,
             cursor: "pointer",
             backgroundColor: active ? colors.brand : "transparent",
             color: active ? onBrand : textMuted,
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: active ? 600 : 400,
             border: "none",
             width: "100%",

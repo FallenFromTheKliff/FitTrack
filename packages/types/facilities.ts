@@ -1,5 +1,7 @@
+export type VenueEntityId = string | number;
+
 export type VenueRecord = {
-  id: number;
+  id: VenueEntityId;
   slug: string;
   name: string;
   description?: string | null;
@@ -8,6 +10,7 @@ export type VenueRecord = {
   minimumHours?: number | null;
   amenities?: string[];
   iconKey?: string | null;
+  floorId?: FacilityFloorId | null;
   gridColumn?: number | null;
   gridRow?: number | null;
   gridWidth?: number | null;
@@ -44,7 +47,7 @@ export type FacilityFloorDefinition = {
 export type FloorVenueRecord = VenueRecord & {
   mapId: string;
   floorId: FacilityFloorId;
-  sourceVenueId?: number;
+  sourceVenueId?: VenueEntityId;
 };
 
 const FLOOR_ONE: FacilityFloorDefinition = {
@@ -83,6 +86,94 @@ export const FACILITY_FLOOR_MAP: Record<FacilityFloorId, FacilityFloorDefinition
   "floor-1": FLOOR_ONE,
   "floor-2": FLOOR_TWO,
   "floor-3": FLOOR_THREE
+};
+
+export type FacilityLayoutDefaults = {
+  displayOrder: number;
+  floorId: FacilityFloorId;
+  gridColumn: number;
+  gridHeight: number;
+  gridRow: number;
+  gridWidth: number;
+  iconKey: VenueIconKey;
+  isReservable: boolean;
+  minimumHours: number;
+  slug: string;
+};
+
+export const FACILITY_LAYOUT_DEFAULTS: Record<VenueIconKey, FacilityLayoutDefaults> = {
+  basketball: {
+    displayOrder: 3,
+    floorId: "floor-1",
+    gridColumn: 9,
+    gridHeight: 4,
+    gridRow: 1,
+    gridWidth: 6,
+    iconKey: "basketball",
+    isReservable: true,
+    minimumHours: 1,
+    slug: "basketball-court"
+  },
+  volleyball: {
+    displayOrder: 4,
+    floorId: "floor-1",
+    gridColumn: 1,
+    gridHeight: 5,
+    gridRow: 5,
+    gridWidth: 7,
+    iconKey: "volleyball",
+    isReservable: true,
+    minimumHours: 1,
+    slug: "volleyball-court"
+  },
+  boxing: {
+    displayOrder: 1,
+    floorId: "floor-2",
+    gridColumn: 3,
+    gridHeight: 4,
+    gridRow: 3,
+    gridWidth: 5,
+    iconKey: "boxing",
+    isReservable: true,
+    minimumHours: 1,
+    slug: "boxing-ring"
+  },
+  reception: {
+    displayOrder: 1,
+    floorId: "floor-1",
+    gridColumn: 1,
+    gridHeight: 2,
+    gridRow: 1,
+    gridWidth: 3,
+    iconKey: "reception",
+    isReservable: false,
+    minimumHours: 1,
+    slug: "reception"
+  },
+  "gym-area": {
+    displayOrder: 2,
+    floorId: "floor-1",
+    gridColumn: 4,
+    gridHeight: 4,
+    gridRow: 1,
+    gridWidth: 5,
+    iconKey: "gym-area",
+    isReservable: false,
+    minimumHours: 1,
+    slug: "gym-area"
+  },
+  yoga: {
+    displayOrder: 1,
+    floorId: "floor-3",
+    gridColumn: 4,
+    gridHeight: 6,
+    gridRow: 2,
+    gridWidth: 8,
+    iconKey: "yoga",
+    isReservable: true,
+    minimumHours: 1,
+    slug: "yoga-studio"
+  }
 };
 
 function sortVenues(a: VenueRecord, b: VenueRecord) {
@@ -141,192 +232,118 @@ export function resolveVenueIconKey(input: Pick<VenueRecord, "iconKey" | "slug" 
   return "gym-area";
 }
 
-function createFloorVenue(
-  baseVenue: VenueRecord | undefined,
-  overrides: Omit<FloorVenueRecord, "sourceVenueId">
+export function inferFacilityFloorId(input: Pick<VenueRecord, "floorId" | "iconKey" | "slug" | "name">): FacilityFloorId {
+  if (
+    input.floorId === "floor-1" ||
+    input.floorId === "floor-2" ||
+    input.floorId === "floor-3"
+  ) {
+    return input.floorId;
+  }
+
+  const iconKey = resolveVenueIconKey(input);
+  return FACILITY_LAYOUT_DEFAULTS[iconKey].floorId;
+}
+
+function slugify(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || "venue";
+}
+
+function createTemplateFloorVenue(
+  floorId: FacilityFloorId,
+  iconKey: VenueIconKey,
+  name: string,
+  capacity: number,
+  hourlyRate: number | null
 ): FloorVenueRecord {
+  const defaults = FACILITY_LAYOUT_DEFAULTS[iconKey];
   return {
-    ...(baseVenue ?? {}),
-    ...overrides,
-    sourceVenueId: baseVenue?.id
+    id: `${floorId}-${defaults.slug}`,
+    slug: defaults.slug,
+    name,
+    capacity,
+    hourlyRate,
+    minimumHours: defaults.minimumHours,
+    iconKey,
+    floorId,
+    gridColumn: defaults.gridColumn,
+    gridRow: defaults.gridRow,
+    gridWidth: defaults.gridWidth,
+    gridHeight: defaults.gridHeight,
+    isReservable: defaults.isReservable,
+    isSystem: false,
+    displayOrder: defaults.displayOrder,
+    isActive: true,
+    mapId: `${floorId}-${defaults.slug}`,
+    sourceVenueId: undefined
   };
 }
 
-function findVenue(venues: VenueRecord[], matcher: (venue: VenueRecord) => boolean) {
-  return venues.find(matcher);
+function buildTemplateFloorVenues(): Record<FacilityFloorId, FloorVenueRecord[]> {
+  return {
+    "floor-1": [
+      createTemplateFloorVenue("floor-1", "reception", "Reception", 2, null),
+      createTemplateFloorVenue("floor-1", "gym-area", "Gym Area", 30, null),
+      createTemplateFloorVenue("floor-1", "basketball", "Basketball Court", 10, 153)
+    ],
+    "floor-2": [
+      createTemplateFloorVenue("floor-2", "boxing", "Boxing Ring", 4, 29)
+    ],
+    "floor-3": [
+      createTemplateFloorVenue("floor-3", "yoga", "Multi-Purpose Studio", 16, 75)
+    ]
+  };
+}
+
+function toFloorVenueRecord(venue: VenueRecord): FloorVenueRecord {
+  const iconKey = resolveVenueIconKey(venue);
+  const defaults = FACILITY_LAYOUT_DEFAULTS[iconKey];
+  const floorId = inferFacilityFloorId(venue);
+
+  return {
+    ...venue,
+    slug: venue.slug?.trim() || defaults.slug || slugify(venue.name),
+    minimumHours: venue.minimumHours ?? defaults.minimumHours,
+    iconKey,
+    floorId,
+    gridColumn: venue.gridColumn ?? defaults.gridColumn,
+    gridRow: venue.gridRow ?? defaults.gridRow,
+    gridWidth: venue.gridWidth ?? defaults.gridWidth,
+    gridHeight: venue.gridHeight ?? defaults.gridHeight,
+    isReservable: venue.isReservable ?? defaults.isReservable,
+    displayOrder: venue.displayOrder ?? defaults.displayOrder,
+    mapId: `venue-${String(venue.id)}`,
+    sourceVenueId: venue.id
+  };
 }
 
 export function buildFacilityFloorVenues(venues: VenueRecord[]): Record<FacilityFloorId, FloorVenueRecord[]> {
-  const sortedVenues = [...venues].sort(sortVenues);
-  const receptionVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug === "reception" || venue.iconKey === "reception" || normalizeName(venue.name).includes("reception")
-  );
-  const basketballVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug === "basketball" || venue.iconKey === "basketball" || normalizeName(venue.name).includes("basketball")
-  );
-  const volleyballVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug === "volleyball" || venue.iconKey === "volleyball" || normalizeName(venue.name).includes("volleyball")
-  );
-  const boxingVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug === "boxing" || venue.iconKey === "boxing" || normalizeName(venue.name).includes("boxing")
-  );
-  const gymVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug?.startsWith("gym") ||
-    venue.iconKey === "gym-area" ||
-    normalizeName(venue.name).includes("gym area")
-  );
-  const yogaVenue = findVenue(sortedVenues, (venue) =>
-    venue.slug === "yoga-studio" ||
-    venue.iconKey === "yoga" ||
-    normalizeName(venue.name).includes("yoga")
-  );
+  if (venues.length === 0) {
+    return buildTemplateFloorVenues();
+  }
+
+  const grouped: Record<FacilityFloorId, FloorVenueRecord[]> = {
+    "floor-1": [],
+    "floor-2": [],
+    "floor-3": []
+  };
+
+  [...venues]
+    .sort(sortVenues)
+    .map((venue) => toFloorVenueRecord(venue))
+    .forEach((venue) => {
+      grouped[venue.floorId].push(venue);
+    });
 
   return {
-    "floor-1": [
-      createFloorVenue(receptionVenue, {
-        id: receptionVenue?.id ?? -101,
-        slug: receptionVenue?.slug ?? "reception",
-        name: "Reception",
-        description: receptionVenue?.description ?? "Member welcome area, assistance desk, and entry check-in point.",
-        iconKey: "reception",
-        capacity: receptionVenue?.capacity ?? 2,
-        hourlyRate: receptionVenue?.hourlyRate ?? null,
-        minimumHours: receptionVenue?.minimumHours ?? 1,
-        isReservable: false,
-        isSystem: true,
-        isActive: true,
-        displayOrder: 1,
-        gridColumn: 1,
-        gridRow: 1,
-        gridWidth: 3,
-        gridHeight: 2,
-        mapId: "floor-1-reception",
-        floorId: "floor-1"
-      }),
-      createFloorVenue(gymVenue, {
-        id: gymVenue?.id ?? -102,
-        slug: gymVenue?.slug ?? "gym-area",
-        name: "Gym Area",
-        description: gymVenue?.description ?? "Primary free-weight and machine zone for daily member training.",
-        iconKey: "gym-area",
-        capacity: gymVenue?.capacity ?? 30,
-        hourlyRate: gymVenue?.hourlyRate ?? null,
-        minimumHours: gymVenue?.minimumHours ?? 1,
-        isReservable: false,
-        isSystem: true,
-        isActive: true,
-        displayOrder: 2,
-        gridColumn: 4,
-        gridRow: 1,
-        gridWidth: 5,
-        gridHeight: 4,
-        mapId: "floor-1-gym-area",
-        floorId: "floor-1"
-      }),
-      createFloorVenue(basketballVenue, {
-        id: basketballVenue?.id ?? -103,
-        slug: basketballVenue?.slug ?? "basketball-court",
-        name: "Basketball Court",
-        description: basketballVenue?.description ?? "Full court booking area for drills, team training, and scrimmages.",
-        iconKey: "basketball",
-        capacity: basketballVenue?.capacity ?? 10,
-        hourlyRate: basketballVenue?.hourlyRate ?? 153,
-        minimumHours: basketballVenue?.minimumHours ?? 1,
-        isReservable: basketballVenue?.isReservable ?? true,
-        isSystem: basketballVenue?.isSystem ?? false,
-        isActive: true,
-        displayOrder: 3,
-        gridColumn: 9,
-        gridRow: 1,
-        gridWidth: 6,
-        gridHeight: 4,
-        mapId: "floor-1-basketball-court",
-        floorId: "floor-1"
-      }),
-      createFloorVenue(volleyballVenue, {
-        id: volleyballVenue?.id ?? -104,
-        slug: volleyballVenue?.slug ?? "volleyball-court",
-        name: "Volleyball Court",
-        description: volleyballVenue?.description ?? "Open court space for league practice, clinics, and private sessions.",
-        iconKey: "volleyball",
-        capacity: volleyballVenue?.capacity ?? 12,
-        hourlyRate: volleyballVenue?.hourlyRate ?? 120,
-        minimumHours: volleyballVenue?.minimumHours ?? 1,
-        isReservable: volleyballVenue?.isReservable ?? true,
-        isSystem: volleyballVenue?.isSystem ?? false,
-        isActive: true,
-        displayOrder: 4,
-        gridColumn: 1,
-        gridRow: 5,
-        gridWidth: 7,
-        gridHeight: 5,
-        mapId: "floor-1-volleyball-court",
-        floorId: "floor-1"
-      })
-    ],
-    "floor-2": [
-      createFloorVenue(boxingVenue, {
-        id: boxingVenue?.id ?? -201,
-        slug: boxingVenue?.slug ?? "boxing-floor-2",
-        name: "Boxing Ring",
-        description: boxingVenue?.description ?? "Professional boxing ring for sparring, pad work, and coached sessions.",
-        iconKey: "boxing",
-        capacity: boxingVenue?.capacity ?? 4,
-        hourlyRate: boxingVenue?.hourlyRate ?? 29,
-        minimumHours: boxingVenue?.minimumHours ?? 1,
-        isReservable: boxingVenue?.isReservable ?? true,
-        isSystem: boxingVenue?.isSystem ?? false,
-        isActive: true,
-        displayOrder: 1,
-        gridColumn: 3,
-        gridRow: 3,
-        gridWidth: 5,
-        gridHeight: 4,
-        mapId: "floor-2-boxing-ring",
-        floorId: "floor-2"
-      }),
-      createFloorVenue(gymVenue, {
-        id: gymVenue?.id ?? -202,
-        slug: gymVenue?.slug ?? "gym-area-floor-2",
-        name: "Gym Area",
-        description: "Upper deck training zone with free weights, bags, and mobility stations.",
-        iconKey: "gym-area",
-        capacity: gymVenue?.capacity ?? 20,
-        hourlyRate: gymVenue?.hourlyRate ?? null,
-        minimumHours: gymVenue?.minimumHours ?? 1,
-        isReservable: false,
-        isSystem: true,
-        isActive: true,
-        displayOrder: 2,
-        gridColumn: 9,
-        gridRow: 2,
-        gridWidth: 5,
-        gridHeight: 6,
-        mapId: "floor-2-gym-area",
-        floorId: "floor-2"
-      })
-    ],
-    "floor-3": [
-      createFloorVenue(yogaVenue, {
-        id: yogaVenue?.id ?? -301,
-        slug: yogaVenue?.slug ?? "yoga-studio",
-        name: "Yoga Studio",
-        description: yogaVenue?.description ?? "Quiet studio for yoga flows, stretching classes, and low-impact recovery work.",
-        iconKey: "yoga",
-        capacity: yogaVenue?.capacity ?? 16,
-        hourlyRate: yogaVenue?.hourlyRate ?? 18,
-        minimumHours: yogaVenue?.minimumHours ?? 1,
-        isReservable: yogaVenue?.isReservable ?? true,
-        isSystem: yogaVenue?.isSystem ?? false,
-        isActive: true,
-        displayOrder: 1,
-        gridColumn: 4,
-        gridRow: 2,
-        gridWidth: 8,
-        gridHeight: 6,
-        mapId: "floor-3-yoga-studio",
-        floorId: "floor-3"
-      })
-    ]
+    "floor-1": grouped["floor-1"].sort(sortVenues),
+    "floor-2": grouped["floor-2"].sort(sortVenues),
+    "floor-3": grouped["floor-3"].sort(sortVenues)
   };
 }

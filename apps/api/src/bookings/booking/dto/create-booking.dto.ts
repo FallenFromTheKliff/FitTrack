@@ -14,12 +14,26 @@ import {
 
 import { IsOnOrAfter, TrimString } from '../../../common/validators';
 
+export enum CreateBookingPaymentStage {
+  downpayment = 'downpayment',
+  full = 'full',
+}
+
 export class CreateBookingDTO {
   @ApiProperty({
     example: '11111111-1111-4111-8111-111111111111',
   })
   @IsUUID('4', { message: 'amenity_id must be a valid UUID' })
   amenity_id: string;
+
+  @ApiPropertyOptional({
+    example: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+    description:
+      'Optional coach add-on for venue-first reservations. Coach IDs may be deterministic UUID v5 values.',
+  })
+  @IsOptional()
+  @IsUUID('all', { message: 'coach_id must be a valid UUID' })
+  coach_id?: string;
 
   @ApiProperty({
     example: '2026-03-24T10:00:00.000Z',
@@ -44,6 +58,18 @@ export class CreateBookingDTO {
     message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
   })
   provider: PaymentProvider;
+
+  @ApiPropertyOptional({
+    enum: CreateBookingPaymentStage,
+    example: CreateBookingPaymentStage.downpayment,
+    description:
+      'Choose whether the initial reservation collects only the downpayment or the full booking amount.',
+  })
+  @IsOptional()
+  @IsEnum(CreateBookingPaymentStage, {
+    message: `payment_stage must be one of: ${Object.values(CreateBookingPaymentStage).join(', ')}`,
+  })
+  payment_stage?: CreateBookingPaymentStage;
 
   @ApiPropertyOptional({
     example: 'Birthday game booking.',

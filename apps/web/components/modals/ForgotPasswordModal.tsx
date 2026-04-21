@@ -4,9 +4,14 @@ import { useMutation } from "@tanstack/react-query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
-import { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "@fittrack/query";
+import {
+  forgotPasswordMutationOptions,
+  resetPasswordMutationOptions,
+  verifyResetOtpMutationOptions
+} from "@fittrack/query";
 import { modalStyles } from "@/styles/modalStyles";
 import { webApiClient } from "@/lib/api-client";
+import { ApiClientError } from "@fittrack/api-client";
 import type { ForgotPasswordStep } from "@/data/auth/auth";
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
@@ -24,23 +29,46 @@ function extractErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
+const SAME_PASSWORD_MESSAGE = "Cannot change password to current password.";
+
+function shouldBounceBackToOtp(error: unknown) {
+  const message = extractErrorMessage(error, "");
+  if (!message || message === SAME_PASSWORD_MESSAGE) {
+    return false;
+  }
+
+  if (
+    /(?:otp|verification code|code).*(?:invalid|expired|used)|(?:invalid|expired|used).*(?:otp|verification code|code)/i.test(
+      message
+    )
+  ) {
+    return true;
+  }
+
+  return error instanceof ApiClientError && typeof error.status === "number" && error.status < 500;
+}
+
 export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
   const { colors } = useTheme();
   const s = modalStyles(colors);
   const { message, showMessage } = useTimedMessage(2400);
   const [step, setStep] = useState<ForgotPasswordStep>("email");
   const [email, setEmail] = useState("");
-  const [token, setToken] = useState("");
+  const [code, setCode] = useState("");
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordValid, setPasswordValid] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
   const forgotPasswordMutation = useMutation(forgotPasswordMutationOptions(webApiClient));
+  const verifyResetOtpMutation = useMutation(verifyResetOtpMutationOptions(webApiClient));
   const resetPasswordMutation = useMutation(resetPasswordMutationOptions(webApiClient));
-  const isSubmitting = forgotPasswordMutation.isPending || resetPasswordMutation.isPending;
+  const isSubmitting =
+    forgotPasswordMutation.isPending ||
+    verifyResetOtpMutation.isPending ||
+    resetPasswordMutation.isPending;
 
-  const sendingLabel = useLoadingText("SENDING CODE", isSubmitting && step === "email");
-  const resettingLabel = useLoadingText("RESETTING PASSWORD", isSubmitting && step === "password");
+  const sendingLabel = useLoadingText("SENDING CODE", forgotPasswordMutation.isPending);
+  const resettingLabel = useLoadingText("RESETTING PASSWORD", resetPasswordMutation.isPending);
 
   const emailFields = useMemo<FieldConfig[]>(() => [
     {
@@ -65,7 +93,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
   const resetState = useCallback(() => {
     setStep("email");
     setEmail("");
-    setToken("");
+    setCode("");
     setPasswordDraft("");
     setPasswordValid(false);
     setErrorText("");
@@ -104,17 +132,36 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     }
   };
 
-  const captureOtp = async (code: string) => {
-    setToken(code);
+  const captureOtp = async (nextCode: string) => {
     setErrorText("");
-    return { success: true };
+    const trimmedCode = nextCode.trim();
+
+    try {
+      const verification = await verifyResetOtpMutation.mutateAsync({
+        email,
+        code: trimmedCode
+      });
+      if (verification.verified === false) {
+        return {
+          success: false,
+          error: "Invalid code. Try again."
+        };
+      }
+      setCode(trimmedCode);
+      return { success: true };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: extractErrorMessage(error, "Invalid code. Try again.")
+      };
+    }
   };
 
   const resetPassword = async (data: Record<string, string>) => {
     if (isSubmitting) {
       return;
     }
-    if (!token) {
+    if (!code) {
       setErrorText("Verification code is missing.");
       setStep("otp");
       return;
@@ -127,15 +174,23 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     setSuccessText("");
     try {
       const response = await resetPasswordMutation.mutateAsync({
-        token,
-        newPassword: data.newPassword ?? ""
+        email,
+        code,
+        new_password: data.newPassword ?? ""
       });
       setSuccessText(response.message ?? "Password reset successful.");
       setTimeout(() => {
         closeModal();
       }, 800);
     } catch (error: unknown) {
-      setErrorText(extractErrorMessage(error, "Unable to reset password."));
+      const errorMessage = extractErrorMessage(error, "Unable to reset password.");
+      if (shouldBounceBackToOtp(error)) {
+        setCode("");
+        setStep("otp");
+        setErrorText(errorMessage);
+        return;
+      }
+      setErrorText(errorMessage);
     }
   };
 
@@ -149,7 +204,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
         initialValues={{ email }}
         onSubmit={sendCode}
         onCancel={closeModal}
-        submitLabel={sendingLabel}
+        submitLabel={forgotPasswordMutation.isPending ? sendingLabel : "SEND CODE"}
         isLoading={isSubmitting}
       >
         {errorText ? (
@@ -161,6 +216,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
       <OTPModal
         isOpen={isOpen && step === "otp"}
         email={email}
+        initialError={step === "otp" ? errorText : ""}
         onVerify={captureOtp}
         onSuccess={() => {
           setStep("password");
@@ -178,7 +234,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
         onChange={(values) => setPasswordDraft(values.newPassword ?? "")}
         onSubmit={resetPassword}
         onCancel={closeModal}
-        submitLabel={resettingLabel}
+        submitLabel={resetPasswordMutation.isPending ? resettingLabel : "RESET PASSWORD"}
         isLoading={isSubmitting}
       >
         <PasswordRequirements

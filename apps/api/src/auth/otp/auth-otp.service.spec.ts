@@ -5,7 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { OtpChannel, OtpPurpose } from '@prisma/client';
 
 import { AuthRepository } from '../auth.repository';
-import { QUEUE_MAIL, QUEUE_SMS } from '../../queue/queue.constants';
+import { QUEUE_MAIL } from '../../queue/queue.constants';
 import { AuthOtpService } from './auth-otp.service';
 import { OTP_HASH_ROUNDS } from './otp.constants';
 
@@ -22,17 +22,12 @@ describe('AuthOtpService', () => {
     add: jest.fn(),
   };
 
-  const smsQueue = {
-    add: jest.fn(),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthOtpService,
         { provide: AuthRepository, useValue: repo },
         { provide: getQueueToken(QUEUE_MAIL), useValue: mailQueue },
-        { provide: getQueueToken(QUEUE_SMS), useValue: smsQueue },
       ],
     }).compile();
 
@@ -65,34 +60,20 @@ describe('AuthOtpService', () => {
       }),
       expect.any(Object),
     );
-    expect(smsQueue.add).not.toHaveBeenCalled();
   });
 
-  it('issues an SMS OTP and enqueues the sms job', async () => {
-    repo.findLatestOtp.mockResolvedValue(null);
-    repo.createOtp.mockResolvedValue({ id: 'otp-1' });
+  it('rejects SMS OTP issuance because the feature has been removed', async () => {
+    await expect(
+      service.issueOtp(
+        'user-1',
+        OtpPurpose.phone_verify,
+        OtpChannel.sms,
+        '+639171234567',
+      ),
+    ).rejects.toThrow(HttpException);
 
-    await service.issueOtp(
-      'user-1',
-      OtpPurpose.phone_verify,
-      OtpChannel.sms,
-      '+639171234567',
-    );
-
-    expect(repo.createOtp).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: OtpChannel.sms,
-        purpose: OtpPurpose.phone_verify,
-      }),
-    );
-    expect(smsQueue.add).toHaveBeenCalledWith(
-      'send-otp',
-      expect.objectContaining({
-        to: '+639171234567',
-        purpose: OtpPurpose.phone_verify,
-      }),
-      expect.any(Object),
-    );
+    expect(repo.findLatestOtp).not.toHaveBeenCalled();
+    expect(repo.createOtp).not.toHaveBeenCalled();
     expect(mailQueue.add).not.toHaveBeenCalled();
   });
 
@@ -112,7 +93,6 @@ describe('AuthOtpService', () => {
 
     expect(repo.createOtp).not.toHaveBeenCalled();
     expect(mailQueue.add).not.toHaveBeenCalled();
-    expect(smsQueue.add).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when consuming a missing OTP', async () => {
@@ -203,6 +183,24 @@ describe('AuthOtpService', () => {
     expect(repo.updateOtp).toHaveBeenCalledWith('otp-1', updateOtpData);
     expect(updateOtpData).toMatchObject({ attempts: 3 });
     expect(updateOtpData?.locked_until).toBeInstanceOf(Date);
+  });
+
+  it('validates a correct OTP without consuming it when using assertOtpValid', async () => {
+    const codeHash = await bcrypt.hash('123456', OTP_HASH_ROUNDS);
+    repo.findLatestOtp.mockResolvedValue({
+      id: 'otp-1',
+      attempts: 0,
+      code_hash: codeHash,
+      expires_at: new Date(Date.now() + 60_000),
+      locked_until: null,
+      consumed_at: null,
+    });
+
+    await expect(
+      service.assertOtpValid('user-1', '123456', OtpPurpose.password_reset),
+    ).resolves.toMatchObject({ id: 'otp-1' });
+
+    expect(repo.updateOtp).not.toHaveBeenCalled();
   });
 
   it('marks OTP as consumed when the code is valid', async () => {

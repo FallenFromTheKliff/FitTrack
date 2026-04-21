@@ -95,8 +95,12 @@ export class NutritionService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async getActiveTdee(userId: string): Promise<ActiveTdeeResponseDTO> {
-    const record = await this.repo.findActiveTdeeAggregateOrThrow(userId);
+  async getActiveTdee(userId: string): Promise<ActiveTdeeResponseDTO | null> {
+    const record = await this.repo.findActiveTdeeAggregate(userId);
+
+    if (!record) {
+      return null;
+    }
 
     return {
       tdee: this.toTdeeProfileResponse(record),

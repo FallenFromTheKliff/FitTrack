@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, CheckCircle, Clock, Plus, XCircle } from "lucide-react-native";
+import { CalendarDays, CheckCircle, Clock, Plus, Users, XCircle } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { VenueAvailabilityRecord } from "@fittrack/api-client";
+import { PAYMONGO_AVAILABILITY, WEEKDAY_NAMES, isPaymongoCheckoutEnabled } from "@fittrack/app-config";
+import type { CoachAvailabilityResponse, VenueAvailabilityRecord } from "@fittrack/api-client";
+import type { CoachProfileRecord } from "@fittrack/types";
 
 import {
+  activeCoachesQueryOptions,
+  coachAvailabilityQueryOptions,
   createBookingMutationOptions,
   venueAvailabilityQueryOptions,
   venuesQueryOptions
@@ -21,13 +25,17 @@ import { makeReservationModalStyles } from "@/styles/modals/ReservationStyles";
 import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
 
 import { FitButton, FitText, FitTextInput } from "@/components/fit";
-import { CalendarModal, TimeSlotModal, type TimeSlot } from "@/components/modals";
+import CalendarModal from "@/components/modals/shared/CalendarModal";
+import NoticeModal from "@/components/modals/shared/NoticeModal";
+import TimeSlotModal, { type TimeSlot } from "@/components/modals/shared/TimeSlotModal";
 
 type Props = {
   isVisible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 };
+
+type BookingPaymentOption = "cash_downpayment" | "cash_full" | "paymongo_downpayment";
 
 function timeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -40,6 +48,54 @@ function timeToMinutes(value: string) {
   return hour * 60 + minute;
 }
 
+function timeValueToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  return hours * 60 + minutes;
+}
+
+function matchesDay(selectedDate: string, dayValue: number | string) {
+  const currentDate = new Date(`${selectedDate}T00:00:00`);
+  const dayIndex = currentDate.getDay();
+  if (typeof dayValue === "number") {
+    return dayValue === dayIndex;
+  }
+  return WEEKDAY_NAMES[dayIndex] === dayValue.toLowerCase();
+}
+
+function getCoachName(coach: CoachProfileRecord) {
+  const firstName = coach.user?.profile?.firstName?.trim() ?? "";
+  const lastName = coach.user?.profile?.lastName?.trim() ?? "";
+  return `${firstName} ${lastName}`.trim() || coach.user?.email || "Coach";
+}
+
+function getCoachInitials(coach: CoachProfileRecord) {
+  return getCoachName(coach)
+    .split(" ")
+    .filter((part) => part.length > 0)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "C";
+}
+
+function getCoachPriceLabel(coach: CoachProfileRecord) {
+  if (coach.hourlyRate == null || !Number.isFinite(coach.hourlyRate)) {
+    return "Rate pending";
+  }
+
+  return `PHP ${coach.hourlyRate.toLocaleString("en-PH")} / hr`;
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function formatCurrency(value: number) {
+  return `₱${value.toLocaleString("en-PH", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2
+  })}`;
+}
+
 export default function ReservationModal({ isVisible, onClose, onSuccess }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
@@ -47,14 +103,22 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const s = useMemo(() => makeReservationModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
   const createBookingMutation = useMutation(createBookingMutationOptions(mobileApiClient, queryClient));
+  const canUsePaymongo = isPaymongoCheckoutEnabled();
+  const defaultPaymentOption: BookingPaymentOption = canUsePaymongo
+    ? "paymongo_downpayment"
+    : "cash_downpayment";
 
   const [date, setDate] = useState(getTodayString());
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
+  const [paymentOption, setPaymentOption] = useState<BookingPaymentOption>(defaultPaymentOption);
+  const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedVenue, setSelectedVenue] = useState<VenueRecord | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
+  const [isPaymongoNoticeOpen, setIsPaymongoNoticeOpen] = useState(false);
+  const [successNotice, setSuccessNotice] = useState<{ message: string; title: string } | null>(null);
   const [timeTarget, setTimeTarget] = useState<"start" | "end">("start");
   const isSubmitting = createBookingMutation.isPending;
   const [apiError, setApiError] = useState("");
@@ -62,6 +126,14 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
 
   const { data: venues = [] } = useQuery({
     ...venuesQueryOptions(mobileApiClient),
+    enabled: isVisible
+  });
+  const {
+    data: coaches = [],
+    isLoading: coachesLoading,
+    error: coachesError
+  } = useQuery({
+    ...activeCoachesQueryOptions<CoachProfileRecord>(mobileApiClient),
     enabled: isVisible
   });
 
@@ -75,10 +147,25 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     () => (selectedVenue ? getVenuePresentation(selectedVenue) : null),
     [selectedVenue]
   );
+  const selectedCoach = useMemo(
+    () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
+    [coaches, selectedCoachId]
+  );
 
   const { data: availability = [] } = useQuery({
     ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(mobileApiClient, selectedVenue?.id, date),
     enabled: isVisible && !!selectedVenue && !!date
+  });
+  const {
+    data: coachAvailability,
+    isLoading: coachAvailabilityLoading,
+    error: coachAvailabilityError
+  } = useQuery({
+    ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(
+      mobileApiClient,
+      selectedCoach ? String(selectedCoach.id) : undefined
+    ),
+    enabled: isVisible && !!selectedCoach
   });
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
@@ -92,6 +179,59 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
   const basePrice = useMemo(() => selectedVenuePresentation?.price ?? 0, [selectedVenuePresentation]);
+  const reservationHours = useMemo(() => {
+    if (!startTime || !endTime) return 0;
+    const totalHours = (timeToMinutes(endTime) - timeToMinutes(startTime)) / 60;
+    return totalHours > 0 ? totalHours : 0;
+  }, [endTime, startTime]);
+  const totalAmount = useMemo(
+    () => roundCurrency(basePrice * reservationHours),
+    [basePrice, reservationHours]
+  );
+  const isFreeReservation = totalAmount <= 0;
+  const splitAmountDueNow = useMemo(
+    () => roundCurrency(totalAmount * 0.3),
+    [totalAmount]
+  );
+  const splitRemainingBalance = useMemo(
+    () => roundCurrency(Math.max(0, totalAmount - splitAmountDueNow)),
+    [splitAmountDueNow, totalAmount]
+  );
+  const amountDueNow = paymentOption === "cash_full" ? totalAmount : splitAmountDueNow;
+  const remainingBalance = paymentOption === "cash_full" ? 0 : splitRemainingBalance;
+  const paymentProvider = paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
+  const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const paymentOptionSummary = useMemo(() => {
+    if (isFreeReservation) {
+      return {
+        body: "This reservation currently prices at PHP 0, so no upfront payment is required.",
+        eyebrow: "Free access",
+        title: "No checkout required"
+      };
+    }
+
+    if (paymentOption === "cash_full") {
+      return {
+        body: `Staff will verify your full cash payment of ${formatCurrency(totalAmount)} before the reservation is treated as fully paid.`,
+        eyebrow: "Cash",
+        title: "Full payment"
+      };
+    }
+
+    if (paymentOption === "cash_downpayment") {
+      return {
+        body: `Submit a cash downpayment now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
+        eyebrow: "Cash",
+        title: "Split payment"
+      };
+    }
+
+    return {
+      body: `Start PayMongo checkout for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
+      eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
+      title: "Online downpayment"
+    };
+  }, [canUsePaymongo, isFreeReservation, paymentOption, splitAmountDueNow, splitRemainingBalance, totalAmount]);
 
   const endSlots = useMemo((): TimeSlot[] => {
     if (!startTime) return [];
@@ -119,18 +259,62 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     });
   }, [availability, date, endTime, selectedVenue, startTime]);
 
-  const canConfirm = !!date && !!selectedVenue && !!startTime && !!endTime && !hasConflict;
+  const coachMatchesWindow = useMemo(() => {
+    if (!selectedCoach) return true;
+    if (!date || !startTime || !endTime) return true;
+    if (!coachAvailability?.availability) return false;
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = timeToMinutes(endTime);
+    return coachAvailability.availability.some((slot) =>
+      slot.isAvailable &&
+      matchesDay(date, slot.dayOfWeek) &&
+      timeValueToMinutes(slot.startTime) <= startMinutes &&
+      timeValueToMinutes(slot.endTime) >= endMinutes
+    );
+  }, [coachAvailability?.availability, date, endTime, selectedCoach, startTime]);
+
+  const coachStatusMessage = useMemo(() => {
+    if (!selectedCoach) {
+      return "Keep this venue booking on its own, or attach a coach after reviewing their profile.";
+    }
+    if (!startTime || !endTime) {
+      return "Pick the reservation time first to validate this coach against the selected window.";
+    }
+    if (coachAvailabilityLoading) {
+      return "Checking this coach against the selected reservation window.";
+    }
+    if (coachAvailabilityError) {
+      return coachAvailabilityError instanceof Error
+        ? coachAvailabilityError.message
+        : "Unable to load coach availability right now.";
+    }
+    if (!coachMatchesWindow) {
+      return "This coach does not currently cover the selected reservation window.";
+    }
+    return `${getCoachName(selectedCoach)} is available for the selected reservation window.`;
+  }, [coachAvailabilityError, coachAvailabilityLoading, coachMatchesWindow, endTime, selectedCoach, startTime]);
+
+  const canConfirm =
+    !!date &&
+    !!selectedVenue &&
+    !!startTime &&
+    !!endTime &&
+    !hasConflict &&
+    coachMatchesWindow;
 
   const handleReset = () => {
     setDate(getTodayString());
     setStartTime("");
     setEndTime("");
     setNotes([]);
+    setPaymentOption(defaultPaymentOption);
+    setSelectedCoachId(null);
     setSelectedVenue(null);
     setTimeTarget("start");
     setIsCalOpen(false);
     setIsTimeOpen(false);
     setApiError("");
+    setSuccessNotice(null);
   };
 
   const handleClose = () => {
@@ -153,30 +337,62 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const handleConfirm = async () => {
     if (!canConfirm || !selectedVenue) return;
     setApiError("");
+    if (!isFreeReservation && paymentProvider === "paymongo" && !canUsePaymongo) {
+      setIsPaymongoNoticeOpen(true);
+      return;
+    }
     const startMinutes = timeToMinutes(startTime);
     const endMinutes = timeToMinutes(endTime);
-    const durationHours = (endMinutes - startMinutes) / 60;
     const startHour24 = Math.floor(startMinutes / 60);
     const startMinute = startMinutes % 60;
     const isoStart = `${date}T${String(startHour24).padStart(2, "0")}:${String(startMinute).padStart(2, "0")}:00`;
     const purpose = notes.filter((note) => note.trim() !== "").join("\n") || undefined;
+    if (selectedCoach && !coachMatchesWindow) {
+      setApiError("Selected coach does not currently cover this reservation window.");
+      return;
+    }
     try {
-      await Promise.all([
+      const result = await Promise.all([
         createBookingMutation.mutateAsync({
           payload: {
+            coachId: selectedCoach ? String(selectedCoach.id) : undefined,
+            paymentStage,
+            provider: isFreeReservation ? undefined : paymentProvider,
             venueId: selectedVenue.id,
             startTime: isoStart,
-            durationHours,
+            durationHours: reservationHours,
             purpose
           },
           venueId: selectedVenue.id,
           date
         }),
         new Promise((resolve) => setTimeout(resolve, 2000))
-      ]);
+      ]).then(([response]) => response);
+      if (result?.checkout_url) {
+        handleReset();
+        onSuccess?.();
+        onClose();
+        void Linking.openURL(result.checkout_url);
+        return;
+      }
+
+      const successTitle = isFreeReservation
+        ? "Reservation confirmed"
+        : paymentOption === "cash_full"
+          ? "Cash payment submitted"
+          : "Downpayment submitted";
+      const successMessage = isFreeReservation
+        ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
+        : paymentOption === "cash_full"
+          ? `Your reservation is pending staff verification for the full cash payment of ${formatCurrency(totalAmount)}.`
+          : `Your reservation is pending staff verification for the upfront ${formatCurrency(amountDueNow)}. The remaining ${formatCurrency(remainingBalance)} can be collected on or after ${formatBookingDate(date)}.`;
+
       handleReset();
       onSuccess?.();
-      onClose();
+      setSuccessNotice({
+        title: successTitle,
+        message: successMessage
+      });
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : "Reservation failed. Please try again.");
     }
@@ -272,11 +488,167 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                 );
               })}
             </View>
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>PRICE</FitText>
+            <View style={s.notesSectionHeader}>
+              <FitText style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}>COACH ADD-ON</FitText>
+              <FitText style={s.optionalLabel}>Optional</FitText>
+            </View>
+            <FitText style={s.validationHint}>
+              Review a coach profile here if you want to attach one to this venue reservation.
+            </FitText>
+            {coachesLoading ? (
+              <FitText style={s.validationHint}>Loading coach profiles...</FitText>
+            ) : coachesError ? (
+              <FitText style={s.unavailableText}>
+                {coachesError instanceof Error ? coachesError.message : "Unable to load coach profiles."}
+              </FitText>
+            ) : coaches.length === 0 ? (
+              <FitText style={s.validationHint}>No bookable coaches are available right now.</FitText>
+            ) : (
+              <View style={s.trainerList}>
+                {coaches.map((coach) => {
+                  const isActive = selectedCoach?.id === coach.id;
+                  return (
+                    <Pressable
+                      key={coach.id}
+                      style={[
+                        s.trainerRow,
+                        isActive && {
+                          borderColor: colors.brand,
+                          backgroundColor: colors.brand + "12"
+                        }
+                      ]}
+                      onPress={() => {
+                        setApiError("");
+                        setSelectedCoachId(isActive ? null : String(coach.id));
+                      }}
+                    >
+                      <View style={[s.trainerAvatar, isActive && { backgroundColor: colors.brand }]}>
+                        <FitText style={[s.trainerAvatarText, isActive && { color: colors.surface }]}>
+                          {getCoachInitials(coach)}
+                        </FitText>
+                      </View>
+                      <View style={s.trainerInfo}>
+                        <FitText style={s.trainerName}>{getCoachName(coach)}</FitText>
+                        <FitText style={s.trainerSpecialty}>
+                          {(coach.specialties?.[0] ?? "General Coaching")} {" - "} {getCoachPriceLabel(coach)}
+                        </FitText>
+                        <FitText style={s.validationHint}>
+                          {coach.bio?.trim() || "Staff has not added a coach bio yet."}
+                        </FitText>
+                      </View>
+                      {isActive ? (
+                        <Users size={18} color={colors.brand} strokeWidth={2} />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            <FitText style={coachMatchesWindow ? s.validationHint : s.unavailableText}>
+              {coachStatusMessage}
+            </FitText>
+            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>VENUE RATE</FitText>
             <View style={[s.inputFieldWrap, { opacity: 0.6 }]}>
               <FitText style={s.inputPrefix}>₱</FitText>
               <FitText style={s.inputField}>{basePrice > 0 ? String(basePrice) : "—"}</FitText>
             </View>
+            {startTime && endTime ? (
+              <>
+                <FitText style={[s.sectionLabel, { marginTop: 16 }]}>PAYMENT OPTIONS</FitText>
+                {isFreeReservation ? (
+                  <View style={s.paymentSummaryCard}>
+                    <FitText style={s.paymentSummaryEyebrow}>Free access</FitText>
+                    <FitText style={s.paymentSummaryTitle}>No upfront payment required</FitText>
+                    <FitText style={s.paymentSummaryBody}>
+                      This reservation currently prices at {formatCurrency(totalAmount)} for {reservationHours} hour{reservationHours === 1 ? "" : "s"}.
+                    </FitText>
+                  </View>
+                ) : (
+                  <>
+                    <View style={s.paymentOptionList}>
+                      {[
+                        {
+                          key: "paymongo_downpayment" as const,
+                          label: "PayMongo Downpayment",
+                          meta: `Pay now ${formatCurrency(splitAmountDueNow)}`,
+                          body: canUsePaymongo
+                            ? `Leave ${formatCurrency(splitRemainingBalance)} for later.`
+                            : "Temporarily unavailable on this local stack.",
+                          disabled: !canUsePaymongo
+                        },
+                        {
+                          key: "cash_downpayment" as const,
+                          label: "Cash Downpayment",
+                          meta: `Pay now ${formatCurrency(splitAmountDueNow)}`,
+                          body: `Settle ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
+                          disabled: false
+                        },
+                        {
+                          key: "cash_full" as const,
+                          label: "Cash Full Payment",
+                          meta: `Pay now ${formatCurrency(totalAmount)}`,
+                          body: "No remaining balance after staff verifies the payment.",
+                          disabled: false
+                        }
+                      ].map((option) => {
+                        const isActive = paymentOption === option.key;
+                        return (
+                          <Pressable
+                            key={option.key}
+                            style={[
+                              s.paymentOptionCard,
+                              isActive && {
+                                borderColor: colors.brand,
+                                backgroundColor: colors.brand + "12"
+                              },
+                              option.disabled && s.paymentOptionCardDisabled
+                            ]}
+                            onPress={() => {
+                              if (option.disabled) {
+                                setIsPaymongoNoticeOpen(true);
+                                return;
+                              }
+                              setPaymentOption(option.key);
+                            }}
+                          >
+                            <View style={s.paymentOptionText}>
+                              <FitText style={[s.paymentOptionLabel, isActive && { color: colors.brand }]}>
+                                {option.label}
+                              </FitText>
+                              <FitText style={s.paymentOptionMeta}>{option.meta}</FitText>
+                              <FitText style={s.paymentOptionBody}>{option.body}</FitText>
+                            </View>
+                            {isActive ? <CheckCircle size={18} color={colors.brand} strokeWidth={2} /> : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <View style={s.paymentSummaryCard}>
+                      <FitText style={s.paymentSummaryEyebrow}>{paymentOptionSummary.eyebrow}</FitText>
+                      <FitText style={s.paymentSummaryTitle}>{paymentOptionSummary.title}</FitText>
+                      <FitText style={s.paymentSummaryBody}>{paymentOptionSummary.body}</FitText>
+                      <View style={s.paymentSummaryRow}>
+                        <FitText style={s.paymentSummaryLabel}>Reservation total</FitText>
+                        <FitText style={s.paymentSummaryValue}>{formatCurrency(totalAmount)}</FitText>
+                      </View>
+                      <View style={s.paymentSummaryRow}>
+                        <FitText style={s.paymentSummaryLabel}>Pay now</FitText>
+                        <FitText style={s.paymentSummaryValue}>{formatCurrency(amountDueNow)}</FitText>
+                      </View>
+                      <View style={s.paymentSummaryRow}>
+                        <FitText style={s.paymentSummaryLabel}>Remaining later</FitText>
+                        <FitText style={s.paymentSummaryValue}>{formatCurrency(remainingBalance)}</FitText>
+                      </View>
+                      <FitText style={s.paymentSummaryDeadline}>
+                        {remainingBalance > 0
+                          ? `Next payment window: on or after ${formatBookingDate(date)}.`
+                          : "No later payment is scheduled for this reservation."}
+                      </FitText>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : null}
             <View style={s.notesSectionHeader}>
               <FitText style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}>NOTES</FitText>
               <FitButton
@@ -338,6 +710,21 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
           </Animated.View>
         </Animated.View>
       </Animated.View>
+      <NoticeModal
+        isVisible={isPaymongoNoticeOpen}
+        title={PAYMONGO_AVAILABILITY.modalTitle}
+        message={PAYMONGO_AVAILABILITY.modalBody}
+        onClose={() => setIsPaymongoNoticeOpen(false)}
+      />
+      <NoticeModal
+        isVisible={successNotice != null}
+        title={successNotice?.title ?? "Reservation updated"}
+        message={successNotice?.message ?? ""}
+        onClose={() => {
+          setSuccessNotice(null);
+          onClose();
+        }}
+      />
       <CalendarModal
         isVisible={isCalOpen}
         selectedDate={date}

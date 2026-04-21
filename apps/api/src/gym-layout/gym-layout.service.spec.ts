@@ -13,6 +13,7 @@ describe('GymLayoutService', () => {
   const repo = {
     listActiveEquipment: jest.fn(),
     createEquipment: jest.fn(),
+    findEquipmentByIdOrThrow: jest.fn(),
     updateEquipment: jest.fn(),
     softDeleteEquipment: jest.fn(),
   };
@@ -85,10 +86,13 @@ describe('GymLayoutService', () => {
     repo.listActiveEquipment.mockResolvedValue([
       {
         id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 10,
+        grid_row: 4,
         name: 'Leg Press Station',
         type: 'strength',
-        position_x: { toString: () => '12.5' },
-        position_y: { toString: () => '7.25' },
+        position_x: { toString: () => '67.86' },
+        position_y: { toString: () => '35' },
         status: EquipmentStatus.available,
         icon_key: null,
         is_active: true,
@@ -100,10 +104,13 @@ describe('GymLayoutService', () => {
     await expect(service.listEquipment()).resolves.toEqual([
       {
         id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 10,
+        grid_row: 4,
         name: 'Leg Press Station',
         type: 'strength',
-        position_x: 12.5,
-        position_y: 7.25,
+        position_x: 67.86,
+        position_y: 35,
         status: EquipmentStatus.available,
         icon_key: null,
         is_active: true,
@@ -117,10 +124,13 @@ describe('GymLayoutService', () => {
     repo.listActiveEquipment.mockResolvedValue([
       {
         id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 10,
+        grid_row: 4,
         name: 'Leg Press Station',
         type: 'strength',
-        position_x: { toString: () => '12.5' },
-        position_y: { toString: () => '7.25' },
+        position_x: { toString: () => '67.86' },
+        position_y: { toString: () => '35' },
         status: EquipmentStatus.occupied,
         icon_key: null,
         is_active: true,
@@ -137,10 +147,13 @@ describe('GymLayoutService', () => {
     await expect(service.getRealtimeSnapshot()).resolves.toEqual([
       {
         id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 10,
+        grid_row: 4,
         name: 'Leg Press Station',
         type: 'strength',
-        position_x: 12.5,
-        position_y: 7.25,
+        position_x: 67.86,
+        position_y: 35,
         status: EquipmentStatus.occupied,
         icon_key: null,
         is_active: true,
@@ -160,10 +173,13 @@ describe('GymLayoutService', () => {
   it('creates equipment with the default available status', async () => {
     repo.createEquipment.mockResolvedValue({
       id: 'equipment-1',
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
+      position_x: 67.86,
+      position_y: 35,
       status: EquipmentStatus.available,
       icon_key: null,
       is_active: true,
@@ -174,17 +190,21 @@ describe('GymLayoutService', () => {
     redis.publish.mockResolvedValue(1);
 
     await service.createEquipment({
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
     });
 
     expect(repo.createEquipment).toHaveBeenCalledWith({
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
+      position_x: 67.86,
+      position_y: 35,
       status: EquipmentStatus.available,
       icon_key: null,
     });
@@ -195,12 +215,30 @@ describe('GymLayoutService', () => {
   });
 
   it('updates only fields provided in the DTO', async () => {
-    repo.updateEquipment.mockResolvedValue({
+    repo.findEquipmentByIdOrThrow.mockResolvedValue({
       id: 'equipment-1',
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 13,
-      position_y: 8.5,
+      position_x: { toString: () => '67.86' },
+      position_y: { toString: () => '35' },
+      status: EquipmentStatus.available,
+      icon_key: 'leg-press',
+      is_active: true,
+      created_at: new Date('2026-03-27T02:00:00.000Z'),
+      updated_at: new Date('2026-03-27T03:00:00.000Z'),
+    });
+    repo.updateEquipment.mockResolvedValue({
+      id: 'equipment-1',
+      floor_id: 'floor-2',
+      grid_column: 11,
+      grid_row: 4,
+      name: 'Leg Press Station',
+      type: 'strength',
+      position_x: 75,
+      position_y: 35,
       status: EquipmentStatus.maintenance,
       icon_key: 'leg-press',
       is_active: true,
@@ -211,12 +249,15 @@ describe('GymLayoutService', () => {
     redis.publish.mockResolvedValue(1);
 
     await service.updateEquipment('equipment-1', {
-      position_x: 13,
+      grid_column: 11,
       status: EquipmentStatus.maintenance,
     });
 
     expect(repo.updateEquipment).toHaveBeenCalledWith('equipment-1', {
-      position_x: 13,
+      grid_column: 11,
+      grid_row: 4,
+      position_x: 75,
+      position_y: 35,
       status: EquipmentStatus.maintenance,
     });
     expect(redis.hset).toHaveBeenCalledWith(
@@ -229,10 +270,13 @@ describe('GymLayoutService', () => {
   it('soft-deletes equipment through the repository', async () => {
     repo.softDeleteEquipment.mockResolvedValue({
       id: 'equipment-1',
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
+      position_x: 67.86,
+      position_y: 35,
       status: EquipmentStatus.available,
       icon_key: null,
       is_active: false,

@@ -3,15 +3,14 @@
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@fittrack/app-core";
 import { createApiClient, createTokenStore, resolveApiBaseUrl } from "@fittrack/api-client";
 
-const BASE = resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_URL);
+export const WEB_API_BASE_URL = resolveApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL,
+  "http://127.0.0.1:3001/v1"
+);
 
 function getSafeStorage() {
   if (typeof window === "undefined") {
-    return {
-      getItem: () => null,
-      removeItem: () => undefined,
-      setItem: () => undefined
-    };
+    return null;
   }
   return localStorage;
 }
@@ -21,24 +20,24 @@ export const webSessionStore = createTokenStore({
   refreshTokenKey: REFRESH_TOKEN_KEY,
   storage: {
     getItem(key) {
-      return getSafeStorage().getItem(key);
+      return getSafeStorage()?.getItem(key) ?? null;
     },
     removeItem(key) {
-      getSafeStorage().removeItem(key);
+      getSafeStorage()?.removeItem(key);
     },
     setItem(key, value) {
-      getSafeStorage().setItem(key, value);
+      getSafeStorage()?.setItem(key, value);
     }
   }
 });
 
 export const webApiClient = createApiClient({
-  baseURL: BASE,
+  baseURL: WEB_API_BASE_URL,
   tokenStore: webSessionStore,
   authEvents: {
     onAuthFailure() {
-      getSafeStorage().removeItem(ACCESS_TOKEN_KEY);
-      getSafeStorage().removeItem(REFRESH_TOKEN_KEY);
+      getSafeStorage()?.removeItem(ACCESS_TOKEN_KEY);
+      getSafeStorage()?.removeItem(REFRESH_TOKEN_KEY);
       if (typeof window === "undefined") return;
       window.location.href = "/login";
     }

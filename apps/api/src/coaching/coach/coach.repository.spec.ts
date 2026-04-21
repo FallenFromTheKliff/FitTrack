@@ -11,8 +11,16 @@ describe('CoachRepository', () => {
     findUnique: jest.fn(),
     update: jest.fn(),
   };
+  const coachAppointment = {
+    findMany: jest.fn(),
+  };
+  const amenityBooking = {
+    count: jest.fn(),
+  };
 
   const prisma = {
+    amenityBooking,
+    coachAppointment,
     coachProfile,
     $transaction: jest.fn(),
   };
@@ -128,6 +136,55 @@ describe('CoachRepository', () => {
           where: { is_active: true },
           orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
         },
+      },
+    });
+  });
+
+  it('detects overlapping active coach appointments for reservation add-ons', async () => {
+    const startsAt = new Date('2099-03-23T08:30:00.000Z');
+    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    coachAppointment.findMany.mockResolvedValue([
+      {
+        scheduled_at: new Date('2099-03-23T08:00:00.000Z'),
+        duration_minutes: 90,
+      },
+    ]);
+
+    await expect(
+      repo.hasActiveAppointmentConflict('coach-1', startsAt, endsAt),
+    ).resolves.toBe(true);
+
+    expect(coachAppointment.findMany).toHaveBeenCalledWith({
+      where: {
+        coach_id: 'coach-1',
+        status: { in: ['pending_coach', 'pending_payment', 'confirmed'] },
+        scheduled_at: {
+          gte: new Date('2099-03-23T05:30:00.000Z'),
+          lt: endsAt,
+        },
+      },
+      select: {
+        scheduled_at: true,
+        duration_minutes: true,
+      },
+    });
+  });
+
+  it('detects overlapping coach-linked venue bookings for reservation add-ons', async () => {
+    const startsAt = new Date('2099-03-23T08:30:00.000Z');
+    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    amenityBooking.count.mockResolvedValue(1);
+
+    await expect(
+      repo.hasActiveLinkedBookingConflict('coach-1', startsAt, endsAt),
+    ).resolves.toBe(true);
+
+    expect(amenityBooking.count).toHaveBeenCalledWith({
+      where: {
+        coach_id: 'coach-1',
+        status: { in: ['pending', 'confirmed', 'balance_pending'] },
+        starts_at: { lt: endsAt },
+        ends_at: { gt: startsAt },
       },
     });
   });

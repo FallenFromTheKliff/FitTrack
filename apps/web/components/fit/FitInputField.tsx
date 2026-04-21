@@ -178,6 +178,7 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                   iconOnly
                   icon={visible ? EyeOff : Eye}
                   iconSize={15}
+                  aria-label={visible ? "Hide password" : "Show password"}
                   onClick={() => setVisible((v) => !v)}
                   style={s.eyeBtn}
                 />

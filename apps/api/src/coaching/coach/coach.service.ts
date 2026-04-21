@@ -1,5 +1,11 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
@@ -10,6 +16,7 @@ import {
   CoachDetailResponseDTO,
   CoachFilterDTO,
   CoachListItemResponseDTO,
+  CoachSelfDetailResponseDTO,
   CoachUserProfileResponseDTO,
   UpdateCoachProfileDTO,
 } from './dto/coach.dto';
@@ -70,6 +77,10 @@ export class CoachService {
     return this.toCoachDetail(await this.repo.findCoachByIdOrThrow(id));
   }
 
+  async getMyProfile(userId: string): Promise<CoachSelfDetailResponseDTO> {
+    return this.toCoachSelfDetail(await this.repo.findCoachByUserIdOrThrow(userId));
+  }
+
   async updateMyProfile(
     userId: string,
     dto: UpdateCoachProfileDTO,
@@ -114,6 +125,71 @@ export class CoachService {
     }
 
     return this.toAdminCoachDetail(updated);
+  }
+
+  async updateManagedProfile(
+    coachId: string,
+    dto: UpdateCoachProfileDTO,
+  ): Promise<CoachDetailResponseDTO> {
+    this.assertCoachOwnedFields(dto);
+
+    return this.toCoachDetail(
+      await this.repo.updateCoachById(coachId, this.toSelfUpdateInput(dto)),
+    );
+  }
+
+  async assertCoachReservableForBookingWindow(
+    coachId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ): Promise<void> {
+    const coach = await this.repo.findCoachByIdOrThrow(coachId);
+
+    if (!coach.is_available_for_booking) {
+      throw this.buildCoachUnavailableError();
+    }
+
+    if (this.toUtcCalendarDay(startsAt) !== this.toUtcCalendarDay(endsAt)) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Coach Reservation Window',
+          status: 422,
+          detail:
+            'Coach-linked venue reservations must begin and end on the same UTC calendar day.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const dayOfWeek = startsAt.getUTCDay();
+    const slotStart = this.toTimeValue(startsAt);
+    const slotEnd = this.toTimeValue(endsAt);
+    const hasAvailability = coach.availability_slots.some(
+      (slot) =>
+        slot.day_of_week === dayOfWeek &&
+        slot.start_time.getTime() <= slotStart.getTime() &&
+        slot.end_time.getTime() >= slotEnd.getTime(),
+    );
+
+    if (!hasAvailability) {
+      throw this.buildCoachUnavailableError();
+    }
+
+    const hasAppointmentConflict = await this.repo.hasActiveAppointmentConflict(
+      coachId,
+      startsAt,
+      endsAt,
+    );
+    if (hasAppointmentConflict) {
+      throw this.buildCoachConflictError();
+    }
+
+    const hasLinkedBookingConflict =
+      await this.repo.hasActiveLinkedBookingConflict(coachId, startsAt, endsAt);
+    if (hasLinkedBookingConflict) {
+      throw this.buildCoachConflictError();
+    }
   }
 
   private assertCoachOwnedFields(dto: UpdateCoachProfileDTO): void {
@@ -175,6 +251,18 @@ export class CoachService {
     };
   }
 
+  private toCoachSelfDetail(
+    coach: CoachDetailRecord,
+  ): CoachSelfDetailResponseDTO {
+    return {
+      ...this.toCoachDetail(coach),
+      user: {
+        id: coach.user.id,
+        profile: this.toCoachUserProfile(coach),
+      },
+    };
+  }
+
   private toCoachUserProfile(
     coach: CoachListRecord,
   ): CoachUserProfileResponseDTO {
@@ -200,6 +288,47 @@ export class CoachService {
     const hours = value.getUTCHours().toString().padStart(2, '0');
     const minutes = value.getUTCMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
+  }
+
+  private toTimeValue(value: Date): Date {
+    return new Date(
+      Date.UTC(
+        1970,
+        0,
+        1,
+        value.getUTCHours(),
+        value.getUTCMinutes(),
+        0,
+        0,
+      ),
+    );
+  }
+
+  private toUtcCalendarDay(value: Date): string {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private buildCoachUnavailableError(): HttpException {
+    return new HttpException(
+      {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Coach Unavailable',
+        status: 422,
+        detail:
+          'The selected coach is not currently available for this reservation window.',
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+
+  private buildCoachConflictError(): ConflictException {
+    return new ConflictException({
+      type: 'SCHEDULE_CONFLICT',
+      title: 'Coach Schedule Conflict',
+      status: 409,
+      detail:
+        'The selected coach already has another appointment or reservation during that time.',
+    });
   }
 
   private didCommissionChange(

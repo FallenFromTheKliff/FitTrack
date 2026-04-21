@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -8,16 +9,17 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
-import { QUEUE_MAIL, QUEUE_SMS } from './queue/queue.constants';
+import { QUEUE_MAIL } from './queue/queue.constants';
+import { localEnvFilePath } from '../env-path';
 
 import {
   aiConfig,
   appConfig,
+  filesConfig,
   jwtConfig,
   redisConfig,
   mailConfig,
   googleConfig,
-  twilioConfig,
   r2Config,
   paymongoConfig,
 } from './config/configuration';
@@ -30,6 +32,7 @@ import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './common/health/health.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { CoachingModule } from './coaching/coaching.module';
 import { FilesModule } from './files/files.module';
@@ -40,7 +43,26 @@ import { NutritionModule } from './nutrition/nutrition.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { GymLayoutModule } from './gym-layout/gym-layout.module';
+import { StaffModule } from './staff/staff.module';
 import { UserModule } from './user/user.module';
+
+function buildRedisConnection(config: ConfigService) {
+  const connection = {
+    host: config.get<string>('redis.host'),
+    port: config.get<number>('redis.port'),
+    password: config.get<string>('redis.password') || undefined,
+    family: config.get<number>('redis.family', 0),
+  };
+
+  if (config.get<boolean>('redis.tlsEnabled', false)) {
+    return {
+      ...connection,
+      tls: {},
+    };
+  }
+
+  return connection;
+}
 
 @Module({
   controllers: [AppController],
@@ -52,42 +74,50 @@ import { UserModule } from './user/user.module';
       load: [
         aiConfig,
         appConfig,
+        filesConfig,
         jwtConfig,
         redisConfig,
         mailConfig,
         googleConfig,
-        twilioConfig,
         r2Config,
         paymongoConfig,
       ],
-      envFilePath: '.env',
+      envFilePath: localEnvFilePath ?? '.env',
+    }),
+    MulterModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        limits: {
+          fileSize: config.get<number>(
+            'files.uploadMaxFileSizeBytes',
+            25 * 1024 * 1024,
+          ),
+        },
+      }),
     }),
 
     // ── Bull ──────────────────────────────────────────────────────────────────
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get<string>('redis.host'),
-          port: config.get<number>('redis.port'),
-          password: config.get<string>('redis.password') || undefined,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redis = buildRedisConnection(config);
+        return { redis };
+      },
     }),
 
     // ── Redis ─────────────────────────────────────────────────────────────────
     RedisModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'single',
-        url: `redis://${
-          config.get('redis.password')
-            ? `:${config.get('redis.password')}@`
-            : ''
-        }${config.get('redis.host')}:${config.get('redis.port')}`,
-      }),
+      useFactory: (config: ConfigService) => {
+        const options = buildRedisConnection(config);
+        return {
+          type: 'single',
+          options,
+        };
+      },
     }),
 
     // ── Rate Limiting ─────────────────────────────────────────────────────────
@@ -121,11 +151,6 @@ import { UserModule } from './user/user.module';
       name: QUEUE_MAIL,
       adapter: BullAdapter,
     }),
-    BullBoardModule.forFeature({
-      name: QUEUE_SMS,
-      adapter: BullAdapter,
-    }),
-
     // ── Event Bus ─────────────────────────────────────────────────────────────
     EventEmitterModule.forRoot({ wildcard: false, delimiter: '.' }),
 
@@ -135,6 +160,7 @@ import { UserModule } from './user/user.module';
     QueueModule,
     HealthModule,
     AuditModule,
+    AdminModule,
     FilesModule,
     FitnessModule,
     AiModule,
@@ -149,6 +175,7 @@ import { UserModule } from './user/user.module';
     AnalyticsModule,
     GymLayoutModule,
     NotificationsModule,
+    StaffModule,
     UserModule,
   ],
 })

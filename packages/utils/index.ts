@@ -6,4 +6,5 @@ export * from "./date";
 export * from "./display";
 export * from "./number";
 export * from "./password";
+export * from "./pose";
 export * from "./profile";

@@ -52,11 +52,14 @@ describe('EquipmentRepository', () => {
     await repo.listEquipmentItems({ page: 2, limit: 10 });
 
     expect(gymEquipmentItem.findMany).toHaveBeenCalledWith({
+      where: { is_active: true },
       orderBy: [{ name: 'asc' }, { created_at: 'desc' }],
       skip: 10,
       take: 10,
     });
-    expect(gymEquipmentItem.count).toHaveBeenCalledWith({ where: undefined });
+    expect(gymEquipmentItem.count).toHaveBeenCalledWith({
+      where: { is_active: true },
+    });
   });
 
   it('loads a single equipment item with descending write-off history', async () => {

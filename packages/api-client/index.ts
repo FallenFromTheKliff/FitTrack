@@ -1,4 +1,6 @@
 import type { AxiosInstance } from "axios";
+import { createAiApi } from "./domains/ai";
+import { createAnalyticsApi } from "./domains/analytics";
 import { createAuthApi } from "./domains/auth";
 import { createUsersApi } from "./domains/users";
 import { createVenuesApi } from "./domains/venues";
@@ -6,9 +8,19 @@ import { createBookingsApi } from "./domains/bookings";
 import { createAppointmentsApi } from "./domains/appointments";
 import { createCoachesApi } from "./domains/coaches";
 import { createAdminApi } from "./domains/admin";
+import { createFitnessApi } from "./domains/fitness";
+import { createFilesApi } from "./domains/files";
+import { createInventoryApi } from "./domains/inventory";
+import { createMembershipApi } from "./domains/membership";
+import { createNutritionApi } from "./domains/nutrition";
+import { createNotificationsApi } from "./domains/notifications";
 import { createStaffApi } from "./domains/staff";
+import { createGymLayoutApi } from "./domains/gym-layout";
 import { resolveApiBaseUrl } from "./base-url";
-import { createAxiosTransport, type ApiTransportConfig } from "./transport/createAxiosTransport";
+import {
+  createAxiosTransport,
+  type ApiTransportConfig,
+} from "./transport/createAxiosTransport";
 
 export type { AuthEvents } from "./auth/auth-events";
 export { createTokenStore } from "./auth/createTokenStore";
@@ -18,7 +30,36 @@ export { ApiClientError, toApiClientError } from "./errors/api-client-error";
 export type { ApiClientErrorKind } from "./errors/api-client-error";
 export { resolveApiBaseUrl } from "./base-url";
 export { createAxiosTransport } from "./transport/createAxiosTransport";
-export type { ApiTransport, ApiTransportConfig } from "./transport/createAxiosTransport";
+export type {
+  ApiTransport,
+  ApiTransportConfig,
+} from "./transport/createAxiosTransport";
+export type {
+  AiChatMessageRecord,
+  AiChatRequest,
+  AiChatResponse,
+  AiChatSessionRecord,
+  AiGeneratePlanInput,
+  AiTrainingPlanDetailRecord,
+  AiPaginationParams,
+} from "./domains/ai";
+export type {
+  AnalyticsAttendanceRecord,
+  AnalyticsCoachesRecord,
+  AnalyticsMembersRecord,
+  AnalyticsOverviewRecord,
+  AnalyticsPaginatedResult,
+  AnalyticsPeriod,
+  AnalyticsQueryParams,
+  AnalyticsRevenueRecord,
+  AnalyticsRevenueTotalsRecord,
+  BusinessInsightFocus,
+  BusinessInsightHistoryParams,
+  BusinessInsightPeriod,
+  BusinessInsightRunDetailRecord,
+  BusinessInsightRunSummaryRecord,
+  GenerateBusinessInsightInput,
+} from "./domains/analytics";
 export type {
   ChangePasswordPayload,
   ForgotPasswordPayload,
@@ -30,32 +71,161 @@ export type {
   RegisterPayload,
   RegisterResponse,
   ResetPasswordPayload,
-  VerifyEmailPayload
+  VerifyCurrentPasswordPayload,
+  VerifyResetOtpPayload,
+  VerifyEmailPayload,
 } from "./domains/auth";
-export type { AppointmentRecord, CoachScheduleRecord, CreateAppointmentPayload } from "./domains/appointments";
-export type { CreateBookingPayload, VenueBookingRecord } from "./domains/bookings";
-export type { CoachAvailabilityResponse, CoachAvailabilitySlot, UpdateCoachProfilePayload, UpsertCoachAvailabilityPayload } from "./domains/coaches";
-export type { UpdateUserAccountPayload, UpdateUserProfilePayload, UserProfileResponse } from "./domains/users";
-export type { VenueAvailabilityRecord, VenueMutationPayload } from "./domains/venues";
-export type { ReviewDeletionPayload, UpgradeToCoachPayload } from "./domains/admin";
+export type {
+  AppointmentRecord,
+  CoachScheduleRecord,
+  CreateAppointmentPayload,
+} from "./domains/appointments";
+export type {
+  CreateBookingPayload,
+  VenueBookingRecord,
+} from "./domains/bookings";
+export type {
+  CoachAvailabilityResponse,
+  CoachAvailabilitySlot,
+  UpdateCoachProfilePayload,
+  UpsertCoachAvailabilityPayload,
+} from "./domains/coaches";
+export type {
+  AnalyzePoseSequenceInput,
+  CreateFitnessExerciseInput,
+  ExerciseReviewSubmissionRecord,
+  ExerciseLogRecord,
+  ExerciseReviewSubmissionStatus,
+  FinalizePoseSessionInput,
+  FitnessExerciseCategory,
+  FitnessExerciseListParams,
+  FitnessExerciseReviewSubmissionListParams,
+  FitnessExerciseRecord,
+  FitnessLeaderboardEntryRecord,
+  FitnessLeaderboardListParams,
+  FitnessMasteryListParams,
+  FitnessMasteryRank,
+  FitnessPaginatedResult,
+  LogWorkoutSetInput,
+  MuscleMasteryRecord,
+  PoseFrameAnalysisRecord,
+  PoseSessionRecord,
+  StartPoseSessionInput,
+  StartedPoseSessionRecord,
+  StartWorkoutSessionInput,
+  TrainingPlanListParams,
+  UpdateExerciseReviewSubmissionInput,
+  UpdateFitnessExerciseInput,
+  WorkoutSessionDetailRecord,
+  WorkoutSessionListParams,
+  WorkoutSessionSummaryRecord,
+} from "./domains/fitness";
+export type { UploadedFileRecord } from "./domains/files";
+export type {
+  InventoryCreateSaleInput,
+  InventoryEquipmentCreateInput,
+  InventoryEquipmentDetailRecord,
+  InventoryEquipmentListParams,
+  InventoryEquipmentRecord,
+  InventoryEquipmentUpdateInput,
+  InventoryEquipmentWriteOffInput,
+  InventoryEquipmentWriteOffRecord,
+  InventoryPaginatedResult,
+  InventoryProductCategory,
+  InventoryProductListParams,
+  InventoryProductMutationInput,
+  InventoryProductRecord,
+  InventoryRestockInput,
+  InventorySaleCheckoutRecord,
+  InventorySaleListParams,
+  InventorySaleTransactionDetailRecord,
+  InventorySaleTransactionSummaryRecord,
+} from "./domains/inventory";
+export type {
+  CancelMembershipInput,
+  MembershipCardPurchaseRecord,
+  ManualMembershipPaymentInput,
+  MembershipCheckoutRecord,
+  MembershipPaymentDetailsRecord,
+  MembershipPaymentHistoryParams,
+  MembershipPaymentRecord,
+  MembershipPaymentReviewFilters,
+  MembershipPlanListParams,
+  MembershipPlanRecord,
+  MembershipSubscriptionRecord,
+  PaginatedResult,
+  PurchaseMembershipCardInput,
+  SubscribeToMembershipInput,
+  VerifyMembershipPaymentInput,
+} from "./domains/membership";
+export type {
+  MarkAllNotificationsReadResult,
+  NotificationInboxResult,
+  NotificationListParams,
+  NotificationPreferencesRecord,
+  NotificationPreferencesUpdateInput,
+  NotificationRecord,
+  NotificationUnreadCountRecord,
+} from "./domains/notifications";
+export type {
+  CreateNutritionLogPayload,
+  NutritionHistoryParams,
+  NutritionLogListParams,
+  RecalculateNutritionPayload,
+  UpdateNutritionLogPayload,
+} from "./domains/nutrition";
+export type {
+  GymLayoutEquipmentMutationInput,
+  GymLayoutEquipmentRecord,
+} from "./domains/gym-layout";
+export type {
+  StaffAppointmentListParams,
+  StaffAppointmentRecord,
+  StaffCoachAvailabilityPayload,
+} from "./domains/staff";
+export type {
+  AttendanceQrCodeResponse,
+  UpdateUserPhonePayload,
+  UpdateUserProfilePayload,
+  UploadUserAvatarResponse,
+  UserProfileResponse,
+} from "./domains/users";
+export type {
+  VenueAvailabilityRecord,
+  VenueMutationPayload,
+} from "./domains/venues";
+export type {
+  ManualAttendanceCheckInInput,
+  RestoreUserResult,
+  ReviewDeletionPayload,
+  ScanAttendanceQrInput,
+  UpdateMemberPayload,
+  UpdateMembershipCardPayload,
+  UpgradeToCoachPayload,
+} from "./domains/admin";
 
-type CreateApiClientConfig = (Omit<ApiTransportConfig, "baseURL"> & {
-  baseURL?: string | null;
-  fallbackBaseURL?: string;
-}) | {
-  transport: AxiosInstance;
-};
+type CreateApiClientConfig =
+  | (Omit<ApiTransportConfig, "baseURL"> & {
+      baseURL?: string | null;
+      fallbackBaseURL?: string;
+    })
+  | {
+      transport: AxiosInstance;
+    };
 
 export function createApiClient(config: CreateApiClientConfig) {
-  const transport = "transport" in config
-    ? config.transport
-    : createAxiosTransport({
-        ...config,
-        baseURL: resolveApiBaseUrl(config.baseURL, config.fallbackBaseURL)
-      });
+  const transport =
+    "transport" in config
+      ? config.transport
+      : createAxiosTransport({
+          ...config,
+          baseURL: resolveApiBaseUrl(config.baseURL, config.fallbackBaseURL),
+        });
 
   return {
     transport,
+    ai: createAiApi(transport),
+    analytics: createAnalyticsApi(transport),
     auth: createAuthApi(transport),
     users: createUsersApi(transport),
     venues: createVenuesApi(transport),
@@ -63,7 +233,14 @@ export function createApiClient(config: CreateApiClientConfig) {
     appointments: createAppointmentsApi(transport),
     coaches: createCoachesApi(transport),
     admin: createAdminApi(transport),
-    staff: createStaffApi(transport)
+    fitness: createFitnessApi(transport),
+    files: createFilesApi(transport),
+    inventory: createInventoryApi(transport),
+    gymLayout: createGymLayoutApi(transport),
+    membership: createMembershipApi(transport),
+    notifications: createNotificationsApi(transport),
+    nutrition: createNutritionApi(transport),
+    staff: createStaffApi(transport),
   };
 }
 

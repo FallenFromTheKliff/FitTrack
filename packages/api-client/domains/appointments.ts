@@ -43,44 +43,79 @@ export type CoachScheduleRecord = {
 export type CreateAppointmentPayload = {
   coachId: string;
   duration: number;
+  notes?: string;
   scheduledAt: string;
 };
+
+type AppointmentApiRecord = {
+  coach?: AppointmentCoachSummary | null;
+  coach_id?: string;
+  duration_minutes?: number;
+  id: string;
+  member_notes?: string | null;
+  notes?: string | null;
+  scheduled_at?: string;
+  scheduledAt?: string;
+  sessionType?: string | null;
+  status?: string;
+};
+
+function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
+  return {
+    coach: record.coach ?? null,
+    coachId: record.coach_id,
+    duration: record.duration_minutes ?? 0,
+    id: record.id,
+    notes: record.member_notes ?? record.notes ?? null,
+    scheduledAt: record.scheduled_at ?? record.scheduledAt ?? "",
+    sessionType: record.sessionType ?? null,
+    status: record.status
+  };
+}
 
 export function createAppointmentsApi(transport: ApiTransport) {
   return {
     listMine<T>() {
-      return unwrapResponse<T[]>(
-        transport.get("/appointments"),
+      return unwrapResponse<AppointmentApiRecord[]>(
+        transport.get("/coaching/appointments/my"),
         "Unable to load appointments."
-      );
+      ).then((records) => records.map((record) => mapAppointmentRecord(record)) as T[]);
     },
     create(payload: CreateAppointmentPayload) {
       return unwrapVoidResponse(
-        transport.post("/appointments", payload),
+        transport.post("/coaching/appointments", {
+          coach_id: payload.coachId,
+          duration_minutes: payload.duration,
+          ...(payload.notes ? { member_notes: payload.notes } : {}),
+          scheduled_at: payload.scheduledAt
+        }),
         "Unable to create appointment."
       );
     },
     cancel(appointmentId: string, cancelReason: string) {
       return unwrapVoidResponse(
-        transport.patch(`/appointments/${appointmentId}/cancel`, { cancelReason }),
+        transport.patch(`/coaching/appointments/${appointmentId}/cancel`, { reason: cancelReason }),
         "Unable to cancel appointment."
       );
     },
     confirmAsCoach(appointmentId: string) {
       return unwrapVoidResponse(
-        transport.patch(`/coaches/appointments/${appointmentId}/confirm`, {}),
+        transport.patch(`/coaching/appointments/${appointmentId}/respond`, { accepted: true }),
         "Unable to confirm appointment."
       );
     },
     declineAsCoach(appointmentId: string, reason: string) {
       return unwrapVoidResponse(
-        transport.patch(`/coaches/appointments/${appointmentId}/decline`, { reason }),
+        transport.patch(`/coaching/appointments/${appointmentId}/respond`, {
+          accepted: false,
+          rejection_reason: reason
+        }),
         "Unable to decline appointment."
       );
     },
     completeAsCoach(appointmentId: string) {
       return unwrapVoidResponse(
-        transport.patch(`/coaches/appointments/${appointmentId}/complete`, {}),
+        transport.patch(`/coaching/appointments/${appointmentId}/complete`, {}),
         "Unable to complete appointment."
       );
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Lock, CheckCircle, XCircle } from "lucide-react-native";
 import { useForm } from "react-hook-form";
@@ -61,6 +61,10 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
   }, [allMet]);
 
   const onSubmit = async (data: ChangePasswordData) => {
+    if (data.currentPassword === data.newPassword) {
+      Alert.alert("Cannot change password to current password.");
+      return;
+    }
     setPendingChange(data);
     setIsLogoutConfirmVisible(true);
   };

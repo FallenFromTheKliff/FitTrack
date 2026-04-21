@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.models.business_insights import (
+from ..models.assistant import (
+    AssistantChatRequest,
+    AssistantChatResponse,
+    AssistantPlanRequest,
+    AssistantPlanResponse,
+)
+from ..models.business_insights import (
     BusinessAnalyticsInsightRequest,
     BusinessAnalyticsInsightResponse,
 )
-from app.models.gym_chat import GymChatRequest, GymChatResponse
-from app.models.pose import (
+from ..models.gym_chat import GymChatRequest, GymChatResponse
+from ..models.nutrition import CalculateTdeeRequest, CalculateTdeeResponse
+from ..models.pose import (
     HealthResponse,
     PoseAnalyzeRequest,
     PoseAnalyzeResponse,
@@ -16,13 +23,17 @@ from app.models.pose import (
     PoseFinalizeRequest,
     PoseFinalizeResponse,
 )
-from app.services.business_insights import BusinessInsightService
-from app.services.gym_chat import GymChatService
-from app.services.pose_sessions import PoseSessionService
+from ..services.assistant import AssistantService
+from ..services.business_insights import BusinessInsightService
+from ..services.gym_chat import GymChatService
+from ..services.nutrition import NutritionService
+from ..services.pose_sessions import PoseSessionService
 
 router = APIRouter()
+assistant_service = AssistantService()
 business_insight_service = BusinessInsightService()
 gym_chat_service = GymChatService()
+nutrition_service = NutritionService()
 pose_session_service = PoseSessionService()
 
 
@@ -31,9 +42,21 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+# Assistant endpoints intentionally stay explicit here so the mounted
+# FitTrack API and the raw microservice expose the same contract surface.
+@router.post("/chat", response_model=AssistantChatResponse)
+def chat(payload: AssistantChatRequest) -> AssistantChatResponse:
+    return assistant_service.reply_to_message(payload)
+
+
 @router.post("/chat/gym", response_model=GymChatResponse)
 def chat_gym(payload: GymChatRequest) -> GymChatResponse:
     return gym_chat_service.reply_to_message(payload)
+
+
+@router.post("/generate-plan", response_model=AssistantPlanResponse)
+def generate_plan(payload: AssistantPlanRequest) -> AssistantPlanResponse:
+    return assistant_service.generate_plan(payload)
 
 
 @router.post(
@@ -44,6 +67,11 @@ def generate_business_insight(
     payload: BusinessAnalyticsInsightRequest,
 ) -> BusinessAnalyticsInsightResponse:
     return business_insight_service.generate_insight(payload)
+
+
+@router.post("/calculate-tdee", response_model=CalculateTdeeResponse)
+def calculate_tdee(payload: CalculateTdeeRequest) -> CalculateTdeeResponse:
+    return nutrition_service.calculate_tdee(payload)
 
 
 @router.post("/pose/session/bootstrap", response_model=PoseBootstrapResponse)

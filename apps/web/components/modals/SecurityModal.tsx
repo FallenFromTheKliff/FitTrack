@@ -21,6 +21,8 @@ type Props = {
   onSuccess?: () => void;
 };
 
+const SAME_PASSWORD_MESSAGE = "Cannot change password to current password.";
+
 export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
   const { verifyCurrentPassword, changePassword, logout } = useAuth();
   const { colors, onBrandTextColor } = useTheme();
@@ -121,7 +123,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
       nextErrors.confirmNewPassword = "Passwords do not match.";
     }
     if (currentPasswordValue && newPasswordValue && currentPasswordValue === newPasswordValue) {
-      nextErrors.newPassword = "New password must be different from old password.";
+      nextErrors.newPassword = SAME_PASSWORD_MESSAGE;
     }
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -139,6 +141,10 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
       const result = await changePassword(currentPasswordValue, newPasswordValue);
       if (!result.success) {
         setIsSubmitting(false);
+        if ((result.error ?? "").includes("current password")) {
+          setErrors({ newPassword: SAME_PASSWORD_MESSAGE });
+          return;
+        }
         setErrors({ currentPassword: result.error ?? "Unable to update password." });
         return;
       }

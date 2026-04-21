@@ -30,6 +30,11 @@ import {
   ExerciseResponseDTO,
   UpdateExerciseDTO,
 } from './dto/exercise.dto';
+import {
+  ExerciseReviewSubmissionFilterDTO,
+  ExerciseReviewSubmissionResponseDTO,
+  UpdateExerciseReviewSubmissionDTO,
+} from './dto/exercise-review.dto';
 
 function apiEnvelopeSchema(schemaRef: string) {
   return {
@@ -62,7 +67,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 }
 
 @ApiTags('Fitness')
-@ApiExtraModels(ExerciseResponseDTO)
+@ApiExtraModels(ExerciseResponseDTO, ExerciseReviewSubmissionResponseDTO)
 @Controller('fitness')
 export class ExerciseController {
   constructor(private readonly exerciseService: ExerciseService) {}
@@ -96,7 +101,7 @@ export class ExerciseController {
 
   @Post('exercises')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateExerciseDTO })
   @ApiOperation({ summary: 'Create an exercise. Admin only.' })
@@ -112,7 +117,7 @@ export class ExerciseController {
 
   @Patch('exercises/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateExerciseDTO })
   @ApiOperation({ summary: 'Update or deactivate an exercise. Admin only.' })
@@ -128,5 +133,46 @@ export class ExerciseController {
     @Body() dto: UpdateExerciseDTO,
   ) {
     return this.exerciseService.updateExercise(id, dto);
+  }
+
+  @Get('exercise-review-submissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List custom exercise review submissions. Admin and staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Review submissions returned.',
+    schema: paginatedEnvelopeSchema(
+      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
+    ),
+  })
+  listReviewSubmissions(@Query() dto: ExerciseReviewSubmissionFilterDTO) {
+    return this.exerciseService.listReviewSubmissions(dto);
+  }
+
+  @Patch('exercise-review-submissions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: UpdateExerciseReviewSubmissionDTO })
+  @ApiOperation({
+    summary:
+      'Update the status of a custom exercise review submission. Admin and staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Review submission updated.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
+    ),
+  })
+  updateReviewSubmission(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateExerciseReviewSubmissionDTO,
+  ) {
+    return this.exerciseService.updateReviewSubmission(id, dto);
   }
 }

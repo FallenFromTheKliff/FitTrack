@@ -33,6 +33,7 @@ import {
   AppointmentCheckoutResponseDTO,
   AppointmentResponseDTO,
   CancelAppointmentDTO,
+  CoachScheduleAppointmentResponseDTO,
   CompleteAppointmentDTO,
   CreateAppointmentDTO,
   InitiateAppointmentPaymentDTO,
@@ -103,7 +104,11 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 }
 
 @ApiTags('Coaching')
-@ApiExtraModels(AppointmentResponseDTO, AppointmentCheckoutResponseDTO)
+@ApiExtraModels(
+  AppointmentResponseDTO,
+  AppointmentCheckoutResponseDTO,
+  CoachScheduleAppointmentResponseDTO,
+)
 @Controller('coaching')
 export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
@@ -160,6 +165,27 @@ export class AppointmentController {
     @Query() dto: DateRangeDTO,
   ) {
     return this.appointmentService.getMyAppointments(user.sub, dto);
+  }
+
+  @Get('appointments/coach')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get the authenticated coach appointment schedule.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Coach schedule returned.',
+    schema: paginatedEnvelopeSchema(
+      getSchemaPath(CoachScheduleAppointmentResponseDTO),
+    ),
+  })
+  getCoachAppointments(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: DateRangeDTO,
+  ) {
+    return this.appointmentService.getCoachAppointments(user.sub, dto);
   }
 
   @Patch('appointments/:id/respond')

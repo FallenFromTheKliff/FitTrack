@@ -1,94 +1,58 @@
-import { useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { useMemo } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { ArrowUp } from "lucide-react-native";
-import { MOBILE_GREETING_MESSAGE } from "@fittrack/app-config";
+import { useIsFocused } from "@react-navigation/native";
 
-import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeBrodigyStyles } from "@/styles/shared/ScreenStyles";
-
-import { FitText, FitTextInput } from "@/components/fit/FitText";
-
-type Msg = { id: string; text: string; from: "ai" | "user" };
-const UNAVAILABLE_MESSAGE = "BrodigyAI is not connected yet. This screen stays available as a preview while backend support is being prepared.";
+import ChatbotScreenContent from "@/components/chatbot/ChatbotScreenContent";
+import { useChatbotScreen } from "@/hooks/chatbot/useChatbotScreen";
 
 export default function ChatbotScreen() {
-  const { user } = useAuth();
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeBrodigyStyles(colors), [colors]);
-
-  const [messages, setMessages] = useState<Msg[]>([{ id: "m1", text: MOBILE_GREETING_MESSAGE, from: "ai" }]);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<ScrollView | null>(null);
-  const isFrozen = user?.status === "frozen";
+  const {
+    canSend,
+    input,
+    isFrozen,
+    isMemberLocked,
+    isPending,
+    lastError,
+    memberLockMessage,
+    memberLockStatusLabel,
+    messages,
+    send,
+    sessionTitle,
+    setInput,
+    statusMessage
+  } = useChatbotScreen({ isFocused });
 
   const screenStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const contentStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
 
-  const send = () => {
-    if (isFrozen) return;
-    if (!input.trim()) return;
-    const userMsg: Msg = { id: `u${Date.now()}`, text: input.trim(), from: "user" };
-    const systemMsg: Msg = { id: `a${Date.now()}`, text: UNAVAILABLE_MESSAGE, from: "ai" };
-    setMessages((m) => [...m, userMsg, systemMsg]);
-    setInput("");
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-  };
-
-  const canSend = !isFrozen && !!input.trim();
-
   return (
-    <Animated.View style={base.screen}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={80}
-      >
-        <Animated.View style={[base.content, screenStyle, contentStyle]}>
-          <ScrollView
-            ref={scrollRef}
-            style={s.messagesArea}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            scrollEventThrottle={16}
-          >
-            {messages.map((m) =>
-              m.from === "ai" ? (
-                <View key={m.id} style={[s.aiBubbleRow, { marginBottom: 12 }]}>
-                  <View style={[s.aiAvatar, { backgroundColor: colors.brand + "22", borderColor: colors.brand + "44" }]}>
-                    <FitText style={[s.aiAvatarText, { color: colors.brand }]}>B</FitText>
-                  </View>
-                  <View style={s.aiBubble}>
-                    <FitText style={s.aiBubbleText}>{m.text}</FitText>
-                  </View>
-                </View>
-              ) : (
-                <View key={m.id} style={{ marginBottom: 12 }}>
-                  <View style={s.userBubble}>
-                    <FitText style={s.userBubbleText}>{m.text}</FitText>
-                  </View>
-                </View>
-              )
-            )}
-          </ScrollView>
-        </Animated.View>
-        <View style={s.inputBar}>
-          <View style={s.inputWrap}>
-            <FitTextInput
-              placeholder={isFrozen ? "Account frozen" : "Type a message"}
-              value={input}
-              onChangeText={setInput}
-              editable={!isFrozen}
-            />
-          </View>
-          <Pressable onPress={send} disabled={!canSend} style={[s.sendBtn, !canSend && { opacity: 0.6 }]}>
-            <ArrowUp size={20} color={colors.surface} strokeWidth={2.5} />
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+    <Animated.View style={[base.screen, !isFocused && { display: "none" }]}>
+      <Animated.View style={[base.content, screenStyle, contentStyle]}>
+        <ChatbotScreenContent
+          canSend={canSend}
+          input={input}
+          isFrozen={isFrozen}
+          isMemberLocked={isMemberLocked}
+          isPending={isPending}
+          lastError={lastError}
+          memberLockMessage={memberLockMessage}
+          memberLockStatusLabel={memberLockStatusLabel}
+          messages={messages}
+          onInputChange={setInput}
+          onSend={send}
+          sessionTitle={sessionTitle}
+          statusMessage={statusMessage}
+          styles={s}
+        />
+      </Animated.View>
     </Animated.View>
   );
 }

@@ -1,4 +1,9 @@
-import { UserRole, UserStatus } from '@prisma/client';
+import {
+  MembershipCardSource,
+  MembershipCardStatus,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 
 /**
  * JwtPayload - contents of the signed access token (HS256).
@@ -18,16 +23,31 @@ export interface JwtPayload {
  */
 export interface TokenPairResponse {
   access_token: string;
+  refresh_token?: string;
   user: {
     id: string;
     role: UserRole;
     status: UserStatus;
     email_verified_at: string | null;
+    membership_card?: {
+      activated_at?: Date | null;
+      purchased_at?: Date | null;
+      revoke_reason?: string | null;
+      revoked_at?: Date | null;
+      source?: MembershipCardSource | null;
+      status: MembershipCardStatus;
+      updated_at: Date;
+      verified_at?: Date | null;
+    } | null;
+    phone_no?: string | null;
     profile: {
       first_name: string;
       last_name: string;
       avatar_url: string | null;
     };
+    qr_code_token?: string | null;
+    qrCodeReady?: boolean;
+    attendanceQrReady?: boolean;
   };
 }
 

@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack UI Notion Gate"
+  short_description: "Contained premium UI review-page and motion-bible authoring for Notion"
+  default_prompt: "Use $ui-notion-gate inside premium FitTrack UI work to create or update the structured Notion review page, preserve the approval gate, maintain the FitTrack Admin UI Canon, persist visual-DNA and concept-divergence fields, and maintain the FitTrack UI Motion Bible in a machine-readable format."
+
+policy:
+  allow_implicit_invocation: false

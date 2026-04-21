@@ -101,7 +101,8 @@ export class NotificationDomainEventsListener {
   @OnEvent(PAYMENT_FAILED_EVENT, { async: true })
   async handlePaymentFailed(event: PaymentFailedEvent): Promise<void> {
     const reason = event.reason ? ` Reason: ${event.reason}` : '';
-    const body = `A payment for your ${event.payableType} could not be completed.${reason}`;
+    const payableLabel = event.payableType.replace(/_/g, ' ');
+    const body = `A payment for your ${payableLabel} could not be completed.${reason}`;
 
     await this.notificationsService.dispatch(
       event.userId,

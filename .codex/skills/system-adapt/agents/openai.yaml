@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack System Adapt"
+  short_description: "FitTrack-native feature coupling and product coherence guidance"
+  default_prompt: "Use $system-adapt to turn a generic feature idea into a FitTrack-native feature set by choosing the strongest immediate couplings, deferring the rest, and keeping the product coherent."
+
+policy:
+  allow_implicit_invocation: true

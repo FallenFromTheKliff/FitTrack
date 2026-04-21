@@ -45,7 +45,20 @@ describe('CreateBookingDTO validation', () => {
       starts_at: '2026-03-24T10:00:00.000Z',
       ends_at: '2026-03-24T11:00:00.000Z',
       provider: 'paymongo',
+      payment_stage: 'downpayment',
       notes: 'Birthday game booking.',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts a full-payment stage for cash booking initiation', async () => {
+    const dto = plainToInstance(CreateBookingDTO, {
+      amenity_id: '11111111-1111-4111-8111-111111111111',
+      starts_at: '2026-03-24T10:00:00.000Z',
+      ends_at: '2026-03-24T11:00:00.000Z',
+      provider: 'cash',
+      payment_stage: 'full',
     });
 
     expect(await validate(dto)).toHaveLength(0);

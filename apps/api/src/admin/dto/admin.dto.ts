@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsString,
+  IsIn,
   MinLength,
   MaxLength,
   Matches,
@@ -56,6 +57,29 @@ export class UpgradeToCoachDto {
   @IsNumber()
   @IsNotEmpty()
   hourlyRate: number;
+}
+
+export class UpdateMembershipCardDto {
+  @IsString()
+  @IsIn(['grant', 'revoke'], {
+    message: 'action must be one of: grant, revoke',
+  })
+  action: 'grant' | 'revoke';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['admin_grant', 'admin_repair'], {
+    message: 'source must be one of: admin_grant, admin_repair',
+  })
+  source?: 'admin_grant' | 'admin_repair';
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
 
 export class CreateVenueDto {

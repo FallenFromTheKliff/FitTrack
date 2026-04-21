@@ -6,6 +6,7 @@ export { default as FitFilter } from "./FitFilter";
 export { default as FitInputField } from "./FitInputField";
 export { default as FitPill } from "./FitPill";
 export type { FitPillOption } from "./FitPill";
+export { default as FitPagination } from "./FitPagination";
 export { default as FitSearch } from "./FitSearch";
 export { default as FitSection } from "./FitSection";
 export { default as FitTable } from "./FitTable";

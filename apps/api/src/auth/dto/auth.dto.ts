@@ -77,26 +77,31 @@ export class LoginDTO {
   password: string;
 }
 
-export class PhoneLoginRequestDTO {
-  @ApiProperty({ example: '+639171234567' })
-  @IsPhilippineMobileNumber('phone')
-  phone: string;
-}
-
-export class PhoneLoginVerifyDTO {
-  @ApiProperty({ example: '+639171234567' })
-  @IsPhilippineMobileNumber('phone')
-  phone: string;
-
-  @ApiProperty({ example: '748201' })
-  @IsOtpCode('code')
-  code: string;
-}
-
 export class ForgotPasswordDTO {
   @ApiProperty({ example: 'juan@gmail.com' })
   @IsAllowedEmail('email')
   email: string;
+}
+
+export class VerifyCurrentPasswordDTO {
+  @ApiProperty({ example: 'Password1!' })
+  @TrimString()
+  @IsString({ message: 'current_password must be a string' })
+  @IsNotEmpty({ message: 'current_password is required' })
+  @MaxLength(255, {
+    message: 'current_password must not exceed 255 characters',
+  })
+  current_password: string;
+}
+
+export class VerifyResetOtpDTO {
+  @ApiProperty({ example: 'juan@gmail.com' })
+  @IsAllowedEmail('email')
+  email: string;
+
+  @ApiProperty({ example: '193847' })
+  @IsOtpCode('code')
+  code: string;
 }
 
 export class ResetPasswordDTO {
@@ -117,10 +122,23 @@ export class ResetPasswordDTO {
   new_password: string;
 }
 
-export class VerifyPhoneDTO {
-  @ApiProperty({ example: '748201' })
-  @IsOtpCode('code')
-  code: string;
+export class ChangePasswordDTO {
+  @ApiProperty({ example: 'Password1!' })
+  @TrimString()
+  @IsString({ message: 'current_password must be a string' })
+  @IsNotEmpty({ message: 'current_password is required' })
+  @MaxLength(255, {
+    message: 'current_password must not exceed 255 characters',
+  })
+  current_password: string;
+
+  @ApiProperty({
+    example: 'NewPassword1!',
+    description:
+      'Minimum 8 characters with at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol.',
+  })
+  @IsStrongPasswordField('new_password')
+  new_password: string;
 }
 
 export class AdminCreateUserDTO {
@@ -148,13 +166,13 @@ export class AdminCreateUserDTO {
   @IsPersonName('last_name')
   last_name: string;
 
-  @ApiProperty({ enum: ['admin', 'staff', 'coach'], example: 'coach' })
+  @ApiProperty({ enum: ['admin', 'staff', 'member'], example: 'member' })
   @IsString({ message: 'role must be a string' })
   @IsNotEmpty({ message: 'role is required' })
-  @IsIn(['admin', 'staff', 'coach'], {
-    message: 'role must be one of: admin, staff, coach',
+  @IsIn(['admin', 'staff', 'member'], {
+    message: 'role must be one of: admin, staff, member',
   })
-  role: 'admin' | 'staff' | 'coach';
+  role: 'admin' | 'staff' | 'member';
 
   @ApiPropertyOptional({ example: '+639171234567' })
   @IsOptional()

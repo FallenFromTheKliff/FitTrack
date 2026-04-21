@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Activity, Bell, CalendarCheck, CalendarDays, CalendarPlus, Dumbbell, Swords, Users, SlidersHorizontal, CheckCircle2, CircleOff } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFocused } from "@react-navigation/native";
 import type { AppointmentRecord, CoachScheduleRecord, VenueBookingRecord } from "@fittrack/api-client";
 
 import {
@@ -66,6 +67,7 @@ type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
 export default function BookingsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const isFocused = useIsFocused();
   const isCoach = user?.role === "COACH";
   const isUserRole = user?.role === "USER";
   const { isFabOpen, setFabOpen, registerFAB, unregisterFAB, setReservationOpen, bookingRefreshTick } = useFABState();
@@ -99,28 +101,28 @@ export default function BookingsScreen() {
 
   const { data: venues = [], isLoading: venuesLoading, error: venuesError } = useQuery({
     ...venuesQueryOptions(mobileApiClient, user?.id),
-    enabled: !!user?.id && isUserRole,
+    enabled: isFocused && !!user?.id && isUserRole,
     staleTime: 60_000,
     gcTime: 300_000
   });
 
   const { data: apiBookings = [], isLoading: bookingsLoading, error: bookingsError, refetch } = useQuery({
     ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
-    enabled: !!user?.id && isUserRole,
+    enabled: isFocused && !!user?.id && isUserRole,
     staleTime: 60_000,
     gcTime: 300_000
   });
 
   const { data: appointmentsRaw = [], isLoading: appointmentsLoading, error: appointmentsError } = useQuery({
     ...appointmentsQueryOptions<AppointmentRecord>(mobileApiClient, user?.id),
-    enabled: !!user?.id && isUserRole,
+    enabled: isFocused && !!user?.id && isUserRole,
     staleTime: 60_000,
     gcTime: 300_000
   });
 
   const { data: coachScheduleRaw = [], isLoading: coachScheduleLoading, error: coachScheduleError } = useQuery({
     ...coachScheduleQueryOptions<CoachScheduleRecord>(mobileApiClient, user?.id),
-    enabled: !!user?.id && isCoach,
+    enabled: isFocused && !!user?.id && isCoach,
     staleTime: 60_000,
     gcTime: 300_000
   });
@@ -128,8 +130,12 @@ export default function BookingsScreen() {
   const reservations = useMemo<DetailBooking[]>(
     () => toMobileBookings(apiBookings, venues).map((booking) => ({
       ...booking,
+      participantLabel: booking.trainerName ? "Coach" : undefined,
+      participantName: booking.trainerName,
       detailTitle: "Reservation Details",
-      detailSubtitle: booking.resourceName
+      detailSubtitle: booking.trainerName
+        ? `${booking.resourceName} · ${booking.trainerName}`
+        : booking.resourceName
     })),
     [apiBookings, venues]
   );
@@ -225,9 +231,9 @@ export default function BookingsScreen() {
   }, [colors.brand, colors.surfaceRaised, isFrozen, isUserRole, setReservationOpen]);
 
   useEffect(() => {
-    if (!user?.id || !isUserRole) return;
+    if (!isFocused || !user?.id || !isUserRole) return;
     void refetch();
-  }, [bookingRefreshTick, isUserRole, refetch, user?.id]);
+  }, [bookingRefreshTick, isFocused, isUserRole, refetch, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -442,7 +448,7 @@ export default function BookingsScreen() {
   const chipOptions = isCoach ? COACH_FILTER_OPTIONS : FILTER_OPTIONS;
 
   return (
-    <View style={base.screen}>
+    <View style={[base.screen, !isFocused && { display: "none" }]}>
       <Animated.View style={[s.searchAnimWrap, contentStyle]}>
         <View style={s.searchWrap}>
           <View style={s.searchRow}>

@@ -4,7 +4,12 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { KeyRound, Lock, Mail } from "lucide-react-native";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
-import { forgotPasswordMutationOptions, resetPasswordMutationOptions } from "@fittrack/query";
+import {
+  forgotPasswordMutationOptions,
+  resetPasswordMutationOptions,
+  verifyResetOtpMutationOptions
+} from "@fittrack/query";
+import { toApiClientError } from "@fittrack/api-client";
 
 import { useTheme, useFontFamily } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
@@ -34,9 +39,28 @@ type ResetForm = {
 type Step = "email" | "otp" | "password";
 
 const OTP_LENGTH = 6;
+const RESET_OTP_ERROR_TYPES = new Set([
+  "INVALID_OTP",
+  "OTP_EXPIRED",
+  "OTP_ALREADY_USED",
+  "OTP_LOCKED",
+  "NOT_FOUND"
+]);
 
 function extractErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
+}
+
+function isResetOtpFailure(error: unknown) {
+  const apiError = toApiClientError(error, "Could not reset password. Please try again.");
+  const details = apiError.details;
+  const type = details && typeof details === "object" && typeof (details as { type?: unknown }).type === "string"
+    ? (details as { type: string }).type
+    : undefined;
+  return {
+    apiError,
+    shouldReturnToOtp: type !== undefined && RESET_OTP_ERROR_TYPES.has(type)
+  };
 }
 
 export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
@@ -48,7 +72,7 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
   const { message, showMessage } = useTimedMessage(2200);
   const [step, setStep] = useState<Step>("email");
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
-  const [token, setToken] = useState("");
+  const [code, setCode] = useState("");
   const [canResetPassword, setCanResetPassword] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
@@ -64,18 +88,21 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     reValidateMode: "onChange"
   });
   const forgotPasswordMutation = useMutation(forgotPasswordMutationOptions(mobileApiClient));
+  const verifyResetOtpMutation = useMutation(verifyResetOtpMutationOptions(mobileApiClient));
   const resetPasswordMutation = useMutation(resetPasswordMutationOptions(mobileApiClient));
   const isSending = forgotPasswordMutation.isPending;
+  const isVerifyingOtp = verifyResetOtpMutation.isPending;
   const isResetting = resetPasswordMutation.isPending;
 
   const sendingLabel = useLoadingText("SENDING CODE", isSending);
+  const verifyingLabel = useLoadingText("VERIFYING OTP", isVerifyingOtp);
   const resettingLabel = useLoadingText("RESETTING PASSWORD", isResetting);
   const passwordValue = resetForm.watch("newPassword");
 
   const clearState = useCallback(() => {
     setStep("email");
     setDigits(Array(OTP_LENGTH).fill(""));
-    setToken("");
+    setCode("");
     setCanResetPassword(false);
     setErrorText("");
     setSuccessText("");
@@ -115,7 +142,7 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
       ? "Enter the 6-digit code from your email."
       : "Create your new password to finish resetting your account.";
 
-  const busy = isSending || isResetting;
+  const busy = isSending || isVerifyingOtp || isResetting;
   const otpCode = digits.join("");
   const otpComplete = otpCode.length === OTP_LENGTH;
 
@@ -142,6 +169,35 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     }
   });
 
+  const continueToPassword = async () => {
+    if (!otpComplete) {
+      setErrorText("Enter all 6 digits.");
+      return;
+    }
+    setErrorText("");
+    setSuccessText("");
+    try {
+      const verified = await verifyResetOtpMutation.mutateAsync({
+        email: emailForm.getValues("email").trim(),
+        code: otpCode
+      });
+      if (verified.verified === false) {
+        setErrorText("Invalid OTP.");
+        return;
+      }
+      setCode(otpCode);
+      setCanResetPassword(false);
+      setStep("password");
+    } catch (error: unknown) {
+      const apiError = toApiClientError(error, "Invalid OTP.");
+      setCode("");
+      setDigits(Array(OTP_LENGTH).fill(""));
+      setCanResetPassword(false);
+      setStep("otp");
+      setErrorText(apiError.message);
+    }
+  };
+
   const handleOtpChange = (text: string, index: number) => {
     const digit = text.replace(/[^0-9]/g, "").slice(-1);
     setDigits((prev) => {
@@ -166,18 +222,8 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     }
   };
 
-  const continueToPassword = () => {
-    if (!otpComplete) {
-      setErrorText("Enter all 6 digits.");
-      return;
-    }
-    setToken(otpCode);
-    setErrorText("");
-    setStep("password");
-  };
-
   const submitReset = resetForm.handleSubmit(async (values) => {
-    if (!token) {
+    if (!code) {
       setErrorText("Enter the verification code first.");
       setStep("otp");
       return;
@@ -190,8 +236,9 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     setSuccessText("");
     try {
       const data = await resetPasswordMutation.mutateAsync({
-        token,
-        newPassword: values.newPassword
+        email: emailForm.getValues("email").trim(),
+        code,
+        new_password: values.newPassword
       });
       setSuccessText(data.message || "Password reset successful.");
       setTimeout(() => {
@@ -199,7 +246,15 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
         onClose();
       }, 900);
     } catch (error: unknown) {
-      setErrorText(extractErrorMessage(error, "Could not reset password. Please try again."));
+      const { apiError, shouldReturnToOtp } = isResetOtpFailure(error);
+      if (shouldReturnToOtp) {
+        setStep("otp");
+        setDigits(Array(OTP_LENGTH).fill(""));
+        setCode("");
+        setCanResetPassword(false);
+        resetForm.reset({ newPassword: "" });
+      }
+      setErrorText(apiError.message || extractErrorMessage(error, "Could not reset password. Please try again."));
     }
   });
 
@@ -223,13 +278,13 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
   const rightLabel = step === "email"
     ? (isSending ? sendingLabel : "SEND CODE")
     : step === "otp"
-      ? "CONTINUE"
+      ? (isVerifyingOtp ? verifyingLabel : "CONTINUE")
       : (isResetting ? resettingLabel : "RESET PASSWORD");
 
   const rightDisabled = step === "email"
     ? isSending
     : step === "otp"
-      ? !otpComplete
+      ? !otpComplete || isVerifyingOtp
       : (isResetting || !canResetPassword);
 
   return (
@@ -337,7 +392,7 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
                 variant="primary"
                 onPress={rightAction}
                 disabled={rightDisabled}
-                loading={isSending || isResetting}
+                loading={isSending || isVerifyingOtp || isResetting}
                 style={s.buttonFlex}
               />
             </View>

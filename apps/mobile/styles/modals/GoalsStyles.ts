@@ -16,6 +16,7 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
       width: "100%",
       maxWidth: MAX_WIDTH,
       maxHeight: "88%",
+      flex: 1,
       borderRadius: R.xl,
       borderWidth: 1,
       overflow: "hidden"
@@ -42,6 +43,7 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
     headerTitle: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
     headerSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
     body: {
+      flex: 1,
       paddingHorizontal: 16,
       paddingTop: 16,
       paddingBottom: 8
@@ -111,7 +113,9 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
     footer: {
       flexDirection: "row",
       gap: 10,
-      padding: 16,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 18,
       borderTopWidth: 1
     }
   });

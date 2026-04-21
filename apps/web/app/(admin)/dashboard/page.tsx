@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Activity, CalendarClock, CircleOff, DollarSign } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 
@@ -12,7 +13,6 @@ import {
   DASHBOARD_ACTIVITY,
   type DashboardActivityItem,
   DASHBOARD_ACTIVITY_FILTER_OPTIONS,
-  DASHBOARD_ALERTS,
   DASHBOARD_GROWTH,
   DASHBOARD_PERIOD_OPTIONS,
   DASHBOARD_REVENUE
@@ -20,20 +20,54 @@ import {
 
 import { FitButton, FitChartContainer, FitPill, FitSection, FitSelect, FitTable, FitText } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
+import { downloadExcelCompatibleReport } from "@/utils/reporting";
 import {
+  DASHBOARD_REPORT_EXPORT_ID,
   DASHBOARD_DEFAULT_ACTIVITY_FILTER,
   DASHBOARD_DEFAULT_PERIOD,
+  filterDashboardActivityRows,
+  filterDashboardSeries,
+  getDashboardPeriodSubtitle,
   getDashboardActivityStatusColor
 } from "./helpers";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { colors } = useTheme();
   const s = dashboardStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const { isStaff, kpis, staffStats } = useDashboardStats();
+  const { dashboardAlerts, isStaff, kpis, staffStats } = useDashboardStats();
   const [period, setPeriod] = useState(DASHBOARD_DEFAULT_PERIOD);
   const [activityFilter, setActivityFilter] = useState(DASHBOARD_DEFAULT_ACTIVITY_FILTER);
+  const growthData = filterDashboardSeries(DASHBOARD_GROWTH, period);
+  const revenueData = filterDashboardSeries(DASHBOARD_REVENUE, period);
+  const activityRows = filterDashboardActivityRows(DASHBOARD_ACTIVITY, activityFilter);
+  const chartSubtitle = getDashboardPeriodSubtitle(period);
+
+  const handleExportDashboard = () => {
+    downloadExcelCompatibleReport({
+      fileName: `fittrack-dashboard-${period}.csv`,
+      title: `FitTrack Dashboard Report - ${period}`,
+      sections: [
+        {
+          title: "Key Metrics",
+          columns: ["Metric", "Value", "Delta"],
+          rows: kpis.map((kpi) => [kpi.label, kpi.value, kpi.delta])
+        },
+        {
+          title: "System Alerts",
+          columns: ["Alert", "Summary", "Action"],
+          rows: dashboardAlerts.map((alert) => [alert.title, alert.body, alert.action])
+        },
+        {
+          title: "Recent Activity",
+          columns: ["Member", "Action", "Time", "Status"],
+          rows: activityRows.map((row) => [row.member, row.action, row.time, row.status])
+        }
+      ]
+    });
+  };
 
   const activityColumns: FitTableColumn<DashboardActivityItem>[] = [
     {
@@ -135,6 +169,34 @@ export default function DashboardPage() {
 
   return (
       <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
+        <div id={DASHBOARD_REPORT_EXPORT_ID}>
+          <FitSection
+              heading="System Alerts"
+              action={<FitText style={{ fontSize: 12, color: colors.textMuted }}>{dashboardAlerts.length} live alert lanes</FitText>}
+          >
+            <div style={{ padding: "0 16px" }}>
+              {dashboardAlerts.map((a, i) => (
+                  <div
+                      key={i}
+                      style={{ ...s.alertItem, borderBottom: i < dashboardAlerts.length - 1 ? `1px solid ${colors.border}` : "none" }}
+                  >
+                    <div style={s.alertIconWrap(colors[a.colorKey])}>
+                      <a.icon size={15} color={colors[a.colorKey]} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <FitText style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</FitText>
+                      <FitText as="p" style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 1.5 }}>{a.body}</FitText>
+                    </div>
+                    <FitButton
+                      variant="ghost"
+                      label={a.action}
+                      onClick={() => router.push("/inventory")}
+                      style={{ whiteSpace: "nowrap" }}
+                    />
+                  </div>
+              ))}
+            </div>
+          </FitSection>
         <FitSection
             heading="Key Metrics"
             bare
@@ -146,7 +208,7 @@ export default function DashboardPage() {
                       onChange={(e) => setPeriod(e.target.value)}
                       options={DASHBOARD_PERIOD_OPTIONS}
                   />
-                  <FitButton variant="ghost" label="EXPORT" />
+                  <FitButton variant="ghost" label="EXPORT EXCEL" onClick={handleExportDashboard} />
                 </div>
             )}
         >
@@ -168,13 +230,13 @@ export default function DashboardPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
           <FitChartContainer
             heading="Membership Growth"
-            subtitle="Last 6 months"
+            subtitle={chartSubtitle}
             action={<Activity size={15} color={colors.brand} />}
             sectionClassName="mb-0"
             chartStyle={{ height: 200 }}
             contentPadding="0"
           >
-            <BarChart data={DASHBOARD_GROWTH}>
+            <BarChart data={growthData}>
               <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
               <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
               <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
@@ -183,13 +245,13 @@ export default function DashboardPage() {
           </FitChartContainer>
           <FitChartContainer
             heading="Revenue Trend"
-            subtitle="Last 6 months"
+            subtitle={chartSubtitle}
             action={<DollarSign size={15} color={colors.brand} />}
             sectionClassName="mb-0"
             chartStyle={{ height: 200 }}
             contentPadding="0"
           >
-            <LineChart data={DASHBOARD_REVENUE}>
+            <LineChart data={revenueData}>
               <XAxis dataKey="m" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
               <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
               <Tooltip contentStyle={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
@@ -212,32 +274,11 @@ export default function DashboardPage() {
           </div>
           <FitTable
               columns={activityColumns}
-              rows={DASHBOARD_ACTIVITY}
+              rows={activityRows}
               getRowKey={(row) => `${row.member}-${row.time}`}
           />
         </div>
-        <FitSection
-            heading="System Alerts"
-            action={<FitText style={{ fontSize: 12, color: colors.brand, cursor: "pointer" }}>View all</FitText>}
-        >
-          <div style={{ padding: "0 16px" }}>
-            {DASHBOARD_ALERTS.map((a, i) => (
-                <div
-                    key={i}
-                    style={{ ...s.alertItem, borderBottom: i < DASHBOARD_ALERTS.length - 1 ? `1px solid ${colors.border}` : "none" }}
-                >
-                  <div style={s.alertIconWrap(colors[a.colorKey])}>
-                    <a.icon size={15} color={colors[a.colorKey]} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <FitText style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</FitText>
-                    <FitText as="p" style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 1.5 }}>{a.body}</FitText>
-                  </div>
-                  <FitButton variant="ghost" label={a.action} style={{ fontSize: 12, padding: "6px 12px" }} />
-                </div>
-            ))}
-          </div>
-        </FitSection>
+        </div>
       </FitSection>
   );
 }

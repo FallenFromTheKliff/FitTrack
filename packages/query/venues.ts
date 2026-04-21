@@ -37,7 +37,7 @@ export function createVenueMutationOptions(client: Pick<ApiClient, "venues">, qu
 
 export function updateVenueMutationOptions(client: Pick<ApiClient, "venues">, queryClient: QueryClient, userId?: string) {
   return mutationOptions({
-    mutationFn: ({ id, payload }: { id: number; payload: VenueMutationPayload }) => client.venues.update(id, payload),
+    mutationFn: ({ id, payload }: { id: string | number; payload: VenueMutationPayload }) => client.venues.update(id, payload),
     onSuccess: async () => {
       await invalidateVenueQueries(queryClient, userId);
     }
@@ -46,7 +46,7 @@ export function updateVenueMutationOptions(client: Pick<ApiClient, "venues">, qu
 
 export function deleteVenueMutationOptions(client: Pick<ApiClient, "venues">, queryClient: QueryClient, userId?: string) {
   return mutationOptions({
-    mutationFn: (id: number) => client.venues.delete(id),
+    mutationFn: (id: string | number) => client.venues.delete(id),
     onSuccess: async () => {
       await invalidateVenueQueries(queryClient, userId);
     }

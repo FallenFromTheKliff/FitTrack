@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Professional UI Brainstorm"
+  short_description: "Premium UI consultation, anti-generic direction, and fix-versus-enhancement guidance"
+  default_prompt: "Use $professional-ui-brainstorm when a FitTrack page or modal needs premium UI consultation before rebuild or implementation, returning professional blockers, workflow fixes, visual identity opportunities, a design thesis, emotional keywords, a signature opportunity, a purpose-driven reference keyword stack, reference targets, banned generic patterns, an anti-reference verdict, a sibling inheritance rule, and one strong recommended direction."
+
+policy:
+  allow_implicit_invocation: false

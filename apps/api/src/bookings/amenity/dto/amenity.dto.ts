@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -14,6 +15,8 @@ import {
 } from 'class-validator';
 
 import { TrimString } from '../../../common/validators';
+
+const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
 
 export class CreateAmenityDTO {
   @ApiProperty({ example: 'Main Court' })
@@ -56,6 +59,69 @@ export class CreateAmenityDTO {
   @IsOptional()
   @IsBoolean({ message: 'requires_subscription must be a boolean value' })
   requires_subscription?: boolean;
+
+  @ApiPropertyOptional({ example: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'minimum_hours must be an integer' })
+  @Min(1, { message: 'minimum_hours must be at least 1' })
+  minimum_hours?: number;
+
+  @ApiPropertyOptional({ example: 'basketball' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'icon_key must be a string' })
+  @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
+  icon_key?: string;
+
+  @ApiPropertyOptional({ example: 9, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_column must be an integer' })
+  @Min(1, { message: 'grid_column must be at least 1' })
+  grid_column?: number;
+
+  @ApiPropertyOptional({ example: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_row must be an integer' })
+  @Min(1, { message: 'grid_row must be at least 1' })
+  grid_row?: number;
+
+  @ApiPropertyOptional({ example: 6, default: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_width must be an integer' })
+  @Min(1, { message: 'grid_width must be at least 1' })
+  grid_width?: number;
+
+  @ApiPropertyOptional({ example: 4, default: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_height must be an integer' })
+  @Min(1, { message: 'grid_height must be at least 1' })
+  grid_height?: number;
+
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean({ message: 'is_reservable must be a boolean value' })
+  is_reservable?: boolean;
+
+  @ApiPropertyOptional({ example: 3, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'display_order must be an integer' })
+  @Min(0, { message: 'display_order must be at least 0' })
+  display_order?: number;
+
+  @ApiPropertyOptional({ example: 'floor-1', enum: FACILITY_FLOOR_IDS })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'floor_id must be a string' })
+  @IsIn(FACILITY_FLOOR_IDS, {
+    message: `floor_id must be one of: ${FACILITY_FLOOR_IDS.join(', ')}`,
+  })
+  floor_id?: (typeof FACILITY_FLOOR_IDS)[number];
 }
 
 export class UpdateAmenityDTO {
@@ -108,4 +174,67 @@ export class UpdateAmenityDTO {
   @IsOptional()
   @IsBoolean({ message: 'is_active must be a boolean value' })
   is_active?: boolean;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'minimum_hours must be an integer' })
+  @Min(1, { message: 'minimum_hours must be at least 1' })
+  minimum_hours?: number;
+
+  @ApiPropertyOptional({ example: 'basketball' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'icon_key must be a string' })
+  @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
+  icon_key?: string;
+
+  @ApiPropertyOptional({ example: 9 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_column must be an integer' })
+  @Min(1, { message: 'grid_column must be at least 1' })
+  grid_column?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_row must be an integer' })
+  @Min(1, { message: 'grid_row must be at least 1' })
+  grid_row?: number;
+
+  @ApiPropertyOptional({ example: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_width must be an integer' })
+  @Min(1, { message: 'grid_width must be at least 1' })
+  grid_width?: number;
+
+  @ApiPropertyOptional({ example: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_height must be an integer' })
+  @Min(1, { message: 'grid_height must be at least 1' })
+  grid_height?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({ message: 'is_reservable must be a boolean value' })
+  is_reservable?: boolean;
+
+  @ApiPropertyOptional({ example: 3 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'display_order must be an integer' })
+  @Min(0, { message: 'display_order must be at least 0' })
+  display_order?: number;
+
+  @ApiPropertyOptional({ example: 'floor-1', enum: FACILITY_FLOOR_IDS })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'floor_id must be a string' })
+  @IsIn(FACILITY_FLOOR_IDS, {
+    message: `floor_id must be one of: ${FACILITY_FLOOR_IDS.join(', ')}`,
+  })
+  floor_id?: (typeof FACILITY_FLOOR_IDS)[number];
 }

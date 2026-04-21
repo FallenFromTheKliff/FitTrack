@@ -11,10 +11,10 @@ export function useCameraCountdown() {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const initCamera = useCallback(async (isFrozen: boolean) => {
-    if (isFrozen) return;
+    if (isFrozen) return false;
     if (!permission?.granted) {
       const result = await requestPermission();
-      if (!result.granted) return;
+      if (!result.granted) return false;
     }
     setCameraActive(true);
     setGlobalCameraActive(true);
@@ -36,6 +36,7 @@ export function useCameraCountdown() {
         setCountdownValue(count);
       }
     }, 1000);
+    return true;
   }, [permission?.granted, requestPermission, setGlobalCameraActive]);
 
   const cleanupCamera = useCallback(() => {

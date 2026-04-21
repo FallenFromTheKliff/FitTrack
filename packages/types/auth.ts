@@ -1,5 +1,5 @@
 import type { MemberTier, Role } from "./base";
-import type { MemberProfile } from "./member";
+import type { MemberProfile, MembershipCardRecord } from "./member";
 
 export interface AuthUser {
   id: string;
@@ -18,13 +18,23 @@ export interface AuthUser {
   heightCm?: number;
   currentCalories?: number;
   dateOfBirth?: string;
+  gender?: string;
+  activityLevel?: string;
+  fitnessGoal?: string;
+  membershipAccess?: "member" | "non-member";
+  membershipCard?: MembershipCardRecord | null;
   profile?: MemberProfile;
+  qrCodeReady?: boolean;
+  attendanceQrReady?: boolean;
+  qrCodeToken?: string | null;
 }
 
 export interface User extends AuthUser {
   status: "active" | "frozen" | "expired";
   lastCheckIn?: string;
 }
+
+export type LoginFailureReason = "PORTAL_ROLE_MISMATCH";
 
 export interface IAuthContext {
   user: AuthUser | null;
@@ -33,10 +43,12 @@ export interface IAuthContext {
   login: (
     email: string,
     password: string
-  ) => Promise<{ success: boolean; otpRequired?: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; otpRequired?: boolean; error?: string; reason?: LoginFailureReason }>;
   register: (data: {
+    firstName: string;
+    lastName: string;
     email: string;
-    phone_no?: string;
+    phone?: string;
     password: string;
   }) => Promise<{ success: boolean; userId?: string; error?: string }>;
   logout: () => void | Promise<void>;

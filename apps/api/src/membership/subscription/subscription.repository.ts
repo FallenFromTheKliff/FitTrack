@@ -120,6 +120,16 @@ export class SubscriptionRepository extends BaseRepository {
     );
   }
 
+  findCurrentSubscriptionByUserId(
+    userId: string,
+  ): Promise<SubscriptionWithPlan | null> {
+    return this.prisma.subscription.findFirst({
+      where: this.buildCurrentSubscriptionWhere(userId),
+      include: { plan: true },
+      orderBy: [{ created_at: 'desc' }],
+    });
+  }
+
   findCancellableSubscriptionByUserIdOrThrow(
     userId: string,
   ): Promise<SubscriptionWithPlan> {
@@ -310,6 +320,13 @@ export class SubscriptionRepository extends BaseRepository {
       this.prisma.subscription,
       this.buildAccessibleSubscriptionWhere(userId),
     );
+  }
+
+  hasActivePlanAccess(userId: string): Promise<boolean> {
+    return this.exists(this.prisma.subscription, {
+      user_id: userId,
+      status: 'active',
+    });
   }
 
   hasCoachingAccess(userId: string): Promise<boolean> {

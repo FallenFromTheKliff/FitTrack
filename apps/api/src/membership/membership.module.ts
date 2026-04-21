@@ -2,8 +2,13 @@ import { BullModule } from '@nestjs/bull';
 import { forwardRef, Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
+import { ActiveMemberCardGuard } from '../common/guards/active-member-card.guard';
+import { ActiveMemberPlanGuard } from '../common/guards/active-member-plan.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { QueueModule } from '../queue/queue.module';
+import { MembershipCardController } from './card/card.controller';
+import { MembershipCardRepository } from './card/card.repository';
+import { MembershipCardService } from './card/card.service';
 import { PaymentController } from './payment/payment.controller';
 import { PaymongoCheckoutService } from './payment/paymongo-checkout.service';
 import { PaymongoWebhookService } from './payment/paymongo-webhook.service';
@@ -26,20 +31,28 @@ import { SubscriptionService } from './subscription/subscription.service';
   ],
   controllers: [
     SubscriptionController,
+    MembershipCardController,
     PaymentController,
     PaymentWebhookController,
   ],
   providers: [
     SubscriptionService,
+    MembershipCardService,
     SubscriptionLifecycleService,
     SubscriptionLifecycleProcessor,
     SubscriptionRepository,
+    MembershipCardRepository,
+    ActiveMemberCardGuard,
+    ActiveMemberPlanGuard,
     PaymentService,
     PaymentRepository,
     PaymongoCheckoutService,
     PaymongoWebhookService,
   ],
   exports: [
+    ActiveMemberCardGuard,
+    ActiveMemberPlanGuard,
+    MembershipCardService,
     SubscriptionService,
     PaymentService,
     PaymentRepository,

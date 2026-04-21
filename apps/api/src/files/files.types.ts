@@ -11,6 +11,13 @@ export interface StorageUploadInput {
   contentType: string;
 }
 
+export interface StorageObjectResult {
+  body: Buffer;
+  contentLength: number | null;
+  contentType: string | null;
+}
+
 export interface FilesStorageAdapter {
+  getObject(key: string): Promise<StorageObjectResult>;
   uploadObject(input: StorageUploadInput): Promise<string>;
 }

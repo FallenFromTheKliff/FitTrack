@@ -6,7 +6,10 @@ import { useFontClass } from "@/contexts/ThemeContext";
 export default function RootLayoutClient() {
   const fontClass = useFontClass();
   const pathname = usePathname() ?? "/";
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/locked");
+  const isAuthRoute =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/locked") ||
+    pathname.startsWith("/payments/");
 
   useEffect(() => {
     const root = document.documentElement;

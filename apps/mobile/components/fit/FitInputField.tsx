@@ -32,6 +32,11 @@ type FitInputFieldProps<TFieldValues extends FieldValues> = {
   onPress?: () => void;
   displayValue?: string;
   trailingIcon?: LucideIcon;
+  sanitizeValue?: (value: string) => string;
+  phonePrefixOptions?: ReadonlyArray<{ label: string; value: string }>;
+  phonePrefixValue?: string;
+  onPhonePrefixChange?: (value: string) => void;
+  formatInputValue?: (value: string) => string;
 };
 
 const filterInput = (text: string, keyboardType: string) => {
@@ -62,7 +67,12 @@ export default function FitInputField<TFieldValues extends FieldValues>({
   pressable = false,
   onPress,
   displayValue,
-  trailingIcon: TrailingIcon
+  trailingIcon: TrailingIcon,
+  sanitizeValue,
+  phonePrefixOptions,
+  phonePrefixValue,
+  onPhonePrefixChange,
+  formatInputValue
 }: FitInputFieldProps<TFieldValues>) {
   const { colors } = useTheme();
   const s = useMemo(() => makeFitInputFieldStyles(colors, compact), [colors, compact]);
@@ -79,8 +89,12 @@ export default function FitInputField<TFieldValues extends FieldValues>({
       control={control}
       name={name}
       rules={rules}
-      render={({ field: { onChange, onBlur, value } }) => (
-        <View style={s.wrapper}>
+      render={({ field: { onChange, onBlur, value } }) => {
+        const rawValue = value == null ? "" : String(value);
+        const renderedValue = formatInputValue ? formatInputValue(rawValue) : rawValue;
+
+        return (
+          <View style={s.wrapper}>
           <View style={s.labelRow}>
             <FitText style={[s.label, !editable && s.labelDisabled]}>
               {label}
@@ -137,6 +151,31 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 multiline && { alignItems: "flex-start" }
               ]}
             >
+              {phonePrefixOptions?.length && phonePrefixValue && onPhonePrefixChange ? (
+                <View style={s.prefixToggle}>
+                  {phonePrefixOptions.map((option) => {
+                    const isActive = option.value === phonePrefixValue;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        style={[s.prefixOption, isActive && s.prefixOptionActive]}
+                        onPress={() => onPhonePrefixChange(option.value)}
+                        disabled={!editable}
+                      >
+                        <FitText
+                          style={[
+                            s.prefixOptionText,
+                            isActive && s.prefixOptionTextActive,
+                            !editable && s.prefixOptionTextDisabled,
+                          ]}
+                        >
+                          {option.label}
+                        </FitText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
               {Icon && (
                 <Icon
                   size={20}
@@ -146,13 +185,13 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 />
               )}
               <FitTextInput
-                value={value == null ? "" : String(value)}
+                value={renderedValue}
                 placeholder={placeholder}
                 placeholderTextColor={
                   editable ? colors.textMuted : colors.textDisabled
                 }
                 onChangeText={(text) => {
-                  const filtered = filterInput(text, keyboardType);
+                  const filtered = sanitizeValue ? sanitizeValue(text) : filterInput(text, keyboardType);
                   onChange(filtered);
                   onChangeValue?.(filtered);
                 }}
@@ -199,8 +238,9 @@ export default function FitInputField<TFieldValues extends FieldValues>({
               )}
             </View>
           )}
-        </View>
-      )}
+          </View>
+        );
+      }}
     />
   );
 }

@@ -135,6 +135,7 @@ export class PaymentService {
         payableType: payment.payable_type,
         payableId: payment.payable_id,
         amount: payment.amount.toString(),
+        verifiedBy: adminId,
       });
       return;
     }
@@ -196,6 +197,7 @@ export class PaymentService {
         payableType: payment.payable_type,
         payableId: payment.payable_id,
         amount: payment.amount.toString(),
+        verifiedBy: null,
       });
     }
 

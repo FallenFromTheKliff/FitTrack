@@ -29,9 +29,48 @@ describe('AuthController', () => {
     } as RequestWithCookies;
     const res = {} as Response;
 
-    await expect(controller.refresh(req, res)).rejects.toThrow(
+    await expect(controller.refresh(req, undefined, res)).rejects.toThrow(
       UnauthorizedException,
     );
     expect(authService.refresh).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the refresh token provided in the request body', async () => {
+    const req: RequestWithCookies = {
+      cookies: {},
+    } as RequestWithCookies;
+    const res = {
+      cookie: jest.fn(),
+    } as unknown as Response;
+
+    authService.refresh.mockResolvedValue({
+      access_token: 'next-access',
+      _refresh_token: 'next-refresh',
+      user: {
+        id: 'user-1',
+        role: 'member',
+        status: 'active',
+        email_verified_at: null,
+        profile: {
+          first_name: 'Ava',
+          last_name: 'Rivera',
+          avatar_url: null,
+        },
+      },
+    });
+
+    const result = await controller.refresh(
+      req,
+      { refresh_token: 'body-refresh-token' },
+      res,
+    );
+
+    expect(authService.refresh).toHaveBeenCalledWith('body-refresh-token');
+    expect(result).toEqual(
+      expect.objectContaining({
+        access_token: 'next-access',
+        refresh_token: 'next-refresh',
+      }),
+    );
   });
 });

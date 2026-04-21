@@ -23,13 +23,18 @@ import {
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
+  AnalyzePoseSequenceDTO,
+  PoseFrameAnalysisResponseDTO,
   FinalizePoseSessionDTO,
   PoseProfileFilterDTO,
+  PoseSessionBootstrapResponseDTO,
   PoseProfileResponseDTO,
   PoseSessionResponseDTO,
+  StartPoseSessionDTO,
 } from './dto/pose.dto';
 import { PoseService } from './pose.service';
 
@@ -69,13 +74,35 @@ function paginatedEnvelopeSchema(dataRef: string) {
 }
 
 @ApiTags('Pose')
-@ApiExtraModels(PoseSessionResponseDTO, PoseProfileResponseDTO)
+@ApiExtraModels(
+  PoseSessionBootstrapResponseDTO,
+  PoseFrameAnalysisResponseDTO,
+  PoseSessionResponseDTO,
+  PoseProfileResponseDTO,
+)
 @Controller('pose')
 export class PoseController {
   constructor(private readonly poseService: PoseService) {}
 
+  @Post('sessions/start')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: StartPoseSessionDTO })
+  @ApiOperation({ summary: 'Start an owned pose session.' })
+  @ApiResponse({
+    status: 201,
+    description: 'Pose session started.',
+    schema: apiEnvelopeSchema(getSchemaPath(PoseSessionBootstrapResponseDTO)),
+  })
+  startSession(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: StartPoseSessionDTO,
+  ) {
+    return this.poseService.startPoseSessionForUser(user.sub, dto);
+  }
+
   @Get('sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a single owned pose session summary.' })
   @ApiResponse({
@@ -92,8 +119,29 @@ export class PoseController {
     return this.poseService.getPoseSessionById(user.sub, id);
   }
 
+  @Post('sessions/:id/analyze')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @HttpCode(200)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: AnalyzePoseSequenceDTO })
+  @ApiOperation({ summary: 'Analyze a pose keypoint sequence for an owned session.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Pose sequence analyzed.',
+    schema: apiEnvelopeSchema(getSchemaPath(PoseFrameAnalysisResponseDTO)),
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Pose session not found.' })
+  analyzeSession(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AnalyzePoseSequenceDTO,
+  ) {
+    return this.poseService.analyzePoseSessionById(user.sub, id, dto);
+  }
+
   @Post('sessions/:id/finalize')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @HttpCode(200)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: FinalizePoseSessionDTO })

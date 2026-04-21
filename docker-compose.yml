@@ -19,7 +19,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -27,11 +27,11 @@ services:
   redis:
     container_name: fittrack-redis
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -47,7 +47,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["node", "node_modules/prisma/build/index.js", "db", "push", "--accept-data-loss", "--schema=prisma/schema.prisma"]
+    command: [ "node", "node_modules/prisma/build/index.js", "db", "push", "--accept-data-loss", "--schema=prisma/schema.prisma" ]
     restart: "no"
 
   init:
@@ -61,7 +61,7 @@ services:
     depends_on:
       schema:
         condition: service_completed_successfully
-    command: ["node", "dist/prisma/bootstrap-defaults.js"]
+    command: [ "node", "dist/prisma/bootstrap-defaults.js" ]
     restart: "no"
 
   ai-microservice:
@@ -74,13 +74,7 @@ services:
     ports:
       - "8001:8000"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; import sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)",
-        ]
+      test: [ "CMD", "python", "-c", "import urllib.request; import sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -104,11 +98,7 @@ services:
       ai-microservice:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:3001/v1/health | grep -q '\"status\":\"ok\"'",
-        ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3001/v1/health | grep -q '\"status\":\"ok\"'" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -119,16 +109,20 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_API_URL: http://localhost:3001/v1
+        NEXT_PUBLIC_R2_PUBLIC_BASE_URL: ${NEXT_PUBLIC_R2_PUBLIC_BASE_URL:-}
+        NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR: ${NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR:-defaults/avatars}
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:3001/v1
+      NEXT_PUBLIC_R2_PUBLIC_BASE_URL: ${NEXT_PUBLIC_R2_PUBLIC_BASE_URL:-}
+      NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR: ${NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR:-defaults/avatars}
     ports:
       - "8080:8080"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/login"]
+      test: [ "CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/login" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -148,7 +142,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready | grep -q 'Prometheus Server is Ready'"]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready | grep -q 'Prometheus Server is Ready'" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -169,7 +163,7 @@ services:
       prometheus:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q 'ok'"]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q 'ok'" ]
       interval: 10s
       timeout: 5s
       retries: 10

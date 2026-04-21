@@ -11,10 +11,11 @@ type Props = {
   onToggleDrawer: () => void;
   floorPlanNode: ReactNode;
   drawerNode: ReactNode;
+  quickRegionNode?: ReactNode;
   editorNode: ReactNode;
 };
 
-export function CompactFloorLayout({ colors, isDrawerOpen, drawerButtonWidth, onToggleDrawer, floorPlanNode, drawerNode, editorNode }: Props) {
+export function CompactFloorLayout({ colors, isDrawerOpen, drawerButtonWidth, onToggleDrawer, floorPlanNode, drawerNode, quickRegionNode, editorNode }: Props) {
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div
@@ -71,6 +72,7 @@ export function CompactFloorLayout({ colors, isDrawerOpen, drawerButtonWidth, on
           </div>
         </div>
       </div>
+      {quickRegionNode}
       {editorNode}
     </div>
   );

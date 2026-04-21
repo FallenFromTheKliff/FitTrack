@@ -15,7 +15,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { BaseRepository } from '../common/base-repository/base-repository';
 
-type UserWithProfile = Prisma.UserGetPayload<{ include: { profile: true } }>;
+type UserWithProfile = Prisma.UserGetPayload<{
+  include: { profile: true; membership_card: true };
+}>;
 type UserWithRequiredProfile = UserWithProfile & { profile: UserProfile };
 
 @Injectable()
@@ -37,6 +39,7 @@ export class AuthRepository extends BaseRepository {
   findUserWithProfile(id: string): Promise<UserWithProfile | null> {
     return this.findById<UserWithProfile>(this.prisma.user, id, {
       profile: true,
+      membership_card: true,
     });
   }
 
@@ -49,6 +52,7 @@ export class AuthRepository extends BaseRepository {
       'User',
       {
         profile: true,
+        membership_card: true,
       },
     );
 

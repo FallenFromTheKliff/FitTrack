@@ -30,15 +30,36 @@ export class ApiClientError extends Error {
   }
 }
 
+function extractString(value: unknown) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
 function extractMessage(details: unknown, fallback: string) {
+  if (typeof details === "string" && details.trim() !== "") {
+    return details.trim();
+  }
   if (!details || typeof details !== "object") return fallback;
-  if (!("message" in details)) return fallback;
+
+  const detail = extractString((details as { detail?: unknown }).detail);
+  if (detail) {
+    return detail;
+  }
+
   const message = (details as { message?: unknown }).message;
   if (Array.isArray(message)) {
     const joined = message.filter((item): item is string => typeof item === "string" && item.trim() !== "").join(" ");
-    return joined || fallback;
+    if (joined) {
+      return joined;
+    }
   }
-  return typeof message === "string" && message.trim() !== "" ? message : fallback;
+
+  const singleMessage = extractString(message);
+  if (singleMessage) {
+    return singleMessage;
+  }
+
+  const title = extractString((details as { title?: unknown }).title);
+  return title ?? fallback;
 }
 
 export function toApiClientError(error: unknown, fallback: string) {

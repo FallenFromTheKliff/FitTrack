@@ -37,15 +37,20 @@ import {
   AppointmentCheckoutResponseDTO,
   AppointmentResponseDTO,
   CancelAppointmentDTO,
+  CoachScheduleAppointmentResponseDTO,
   CompleteAppointmentDTO,
   CreateAppointmentDTO,
   InitiateAppointmentPaymentDTO,
   RespondAppointmentDTO,
   SetAvailabilityDTO,
+  StaffAppointmentFilterDTO,
+  StaffAppointmentResponseDTO,
 } from './dto/appointment.dto';
 import {
   AppointmentLifecycleRecord,
   AppointmentRepository,
+  CoachScheduleRecord,
+  StaffAppointmentRecord,
 } from './appointment.repository';
 import {
   APPOINTMENT_CANCELLED_EVENT,
@@ -79,6 +84,21 @@ type NormalizedAvailabilitySlot = {
   endMinutes: number;
 };
 
+function findPrimaryIdentifier(
+  identities:
+    | Array<{
+        identifier: string;
+        is_primary: boolean;
+      }>
+    | undefined,
+): string | null {
+  return (
+    identities?.find((identity) => identity.is_primary)?.identifier ??
+    identities?.[0]?.identifier ??
+    null
+  );
+}
+
 @Injectable()
 export class AppointmentService {
   constructor(
@@ -98,6 +118,23 @@ export class AppointmentService {
 
     await this.repo.replaceAvailabilitySlots({
       coachId: coach.id,
+      slots: normalizedSlots.map((slot) => ({
+        dayOfWeek: slot.dayOfWeek,
+        startTime: this.toTimeValue(slot.startTime),
+        endTime: this.toTimeValue(slot.endTime),
+      })),
+    });
+  }
+
+  async setAvailabilityForCoach(
+    coachId: string,
+    dto: SetAvailabilityDTO,
+  ): Promise<void> {
+    await this.repo.findCoachScheduleContextOrThrow(coachId);
+    const normalizedSlots = this.normalizeAvailabilitySlots(dto);
+
+    await this.repo.replaceAvailabilitySlots({
+      coachId,
       slots: normalizedSlots.map((slot) => ({
         dayOfWeek: slot.dayOfWeek,
         startTime: this.toTimeValue(slot.startTime),
@@ -175,6 +212,33 @@ export class AppointmentService {
     };
   }
 
+  async getCoachAppointments(
+    coachUserId: string,
+    dto: DateRangeDTO,
+  ): Promise<PaginatedResult<CoachScheduleAppointmentResponseDTO>> {
+    const result = await this.repo.getCoachAppointments(coachUserId, dto);
+
+    return {
+      data: result.data.map((appointment) =>
+        this.toCoachScheduleResponse(appointment),
+      ),
+      meta: result.meta,
+    };
+  }
+
+  async getStaffAppointments(
+    dto: StaffAppointmentFilterDTO,
+  ): Promise<PaginatedResult<StaffAppointmentResponseDTO>> {
+    const result = await this.repo.getStaffAppointments(dto);
+
+    return {
+      data: result.data.map((appointment) =>
+        this.toStaffAppointmentResponse(appointment),
+      ),
+      meta: result.meta,
+    };
+  }
+
   async respondToAppointment(
     coachUserId: string,
     appointmentId: string,
@@ -188,54 +252,21 @@ export class AppointmentService {
     this.assertPendingCoachStatus(appointment.status);
     this.assertRejectionReason(dto);
 
-    if (dto.accepted) {
-      const nextStatus = appointment.is_free_session
-        ? AppointmentStatus.confirmed
-        : AppointmentStatus.pending_payment;
-      const updated = await this.repo.updateAppointment(appointment.id, {
-        status: nextStatus,
-      });
+    return this.applyAppointmentResponse(coachUserId, appointment, dto);
+  }
 
-      if (nextStatus === AppointmentStatus.confirmed) {
-        this.emitAppointmentConfirmed({
-          appointmentId: updated.id,
-          userId: updated.user_id,
-          coachId: updated.coach_id,
-          scheduledAt: updated.scheduled_at.toISOString(),
-          durationMinutes: updated.duration_minutes,
-        });
-      }
+  async respondToAppointmentAsStaff(
+    actorId: string,
+    appointmentId: string,
+    dto: RespondAppointmentDTO,
+  ): Promise<AppointmentResponseDTO> {
+    const appointment =
+      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
 
-      return this.toAppointmentResponse(updated);
-    }
+    this.assertPendingCoachStatus(appointment.status);
+    this.assertRejectionReason(dto);
 
-    const cancelledAt = new Date();
-    const updated = await this.repo.updateAppointment(appointment.id, {
-      status: AppointmentStatus.cancelled,
-      cancellation_reason: dto.rejection_reason ?? null,
-      cancelled_at: cancelledAt,
-    });
-
-    this.emitAudit({
-      userId: coachUserId,
-      action: AuditAction.APPOINTMENT_CANCELLED,
-      entity: 'CoachAppointment',
-      entityId: appointment.id,
-      before: this.toAppointmentAuditBefore(appointment),
-      after: this.toAppointmentAuditAfter(
-        AppointmentStatus.cancelled,
-        cancelledAt,
-        dto.rejection_reason ?? null,
-      ),
-    });
-    this.emitAppointmentCancelled({
-      appointmentId: updated.id,
-      userId: updated.user_id,
-      coachId: updated.coach_id,
-      cancelledAt: cancelledAt.toISOString(),
-    });
-
-    return this.toAppointmentResponse(updated);
+    return this.applyAppointmentResponse(actorId, appointment, dto);
   }
 
   async cancelAppointment(
@@ -413,6 +444,81 @@ export class AppointmentService {
     this.assertCoachOwnership(appointment, coach.id);
     this.assertCompletionAllowed(appointment);
 
+    return this.applyAppointmentCompletion(appointment, dto);
+  }
+
+  async completeAppointmentAsStaff(
+    _actorId: string,
+    appointmentId: string,
+    dto: CompleteAppointmentDTO,
+  ): Promise<AppointmentResponseDTO> {
+    const appointment =
+      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
+
+    this.assertCompletionAllowed(appointment);
+
+    return this.applyAppointmentCompletion(appointment, dto);
+  }
+
+  private async applyAppointmentResponse(
+    actorId: string,
+    appointment: AppointmentLifecycleRecord,
+    dto: RespondAppointmentDTO,
+  ): Promise<AppointmentResponseDTO> {
+    if (dto.accepted) {
+      const nextStatus = appointment.is_free_session
+        ? AppointmentStatus.confirmed
+        : AppointmentStatus.pending_payment;
+      const updated = await this.repo.updateAppointment(appointment.id, {
+        status: nextStatus,
+      });
+
+      if (nextStatus === AppointmentStatus.confirmed) {
+        this.emitAppointmentConfirmed({
+          appointmentId: updated.id,
+          userId: updated.user_id,
+          coachId: updated.coach_id,
+          scheduledAt: updated.scheduled_at.toISOString(),
+          durationMinutes: updated.duration_minutes,
+        });
+      }
+
+      return this.toAppointmentResponse(updated);
+    }
+
+    const cancelledAt = new Date();
+    const updated = await this.repo.updateAppointment(appointment.id, {
+      status: AppointmentStatus.cancelled,
+      cancellation_reason: dto.rejection_reason ?? null,
+      cancelled_at: cancelledAt,
+    });
+
+    this.emitAudit({
+      userId: actorId,
+      action: AuditAction.APPOINTMENT_CANCELLED,
+      entity: 'CoachAppointment',
+      entityId: appointment.id,
+      before: this.toAppointmentAuditBefore(appointment),
+      after: this.toAppointmentAuditAfter(
+        AppointmentStatus.cancelled,
+        cancelledAt,
+        dto.rejection_reason ?? null,
+      ),
+    });
+    this.emitAppointmentCancelled({
+      appointmentId: updated.id,
+      userId: updated.user_id,
+      coachId: updated.coach_id,
+      cancelledAt: cancelledAt.toISOString(),
+    });
+
+    return this.toAppointmentResponse(updated);
+  }
+
+  private async applyAppointmentCompletion(
+    appointment: AppointmentLifecycleRecord,
+    dto: CompleteAppointmentDTO,
+  ): Promise<AppointmentResponseDTO> {
     const completedAt = new Date();
     const updated = await this.repo.updateAppointment(appointment.id, {
       status: AppointmentStatus.completed,
@@ -610,6 +716,64 @@ export class AppointmentService {
       no_show_at: appointment.no_show_at?.toISOString() ?? null,
       cancellation_reason: appointment.cancellation_reason ?? null,
       cancelled_at: appointment.cancelled_at?.toISOString() ?? null,
+      created_at: appointment.created_at.toISOString(),
+      updated_at: appointment.updated_at.toISOString(),
+    };
+  }
+
+  private toCoachScheduleResponse(
+    appointment: CoachScheduleRecord,
+  ): CoachScheduleAppointmentResponseDTO {
+    return {
+      id: appointment.id,
+      user_id: appointment.user_id,
+      coach_id: appointment.coach_id,
+      status: appointment.status,
+      scheduled_at: appointment.scheduled_at.toISOString(),
+      duration_minutes: appointment.duration_minutes,
+      member_notes: appointment.member_notes ?? null,
+      user: {
+        id: appointment.user.id,
+        profile: {
+          first_name: appointment.user.profile?.first_name ?? null,
+          last_name: appointment.user.profile?.last_name ?? null,
+          avatar_url: appointment.user.profile?.avatar_url ?? null,
+        },
+      },
+      created_at: appointment.created_at.toISOString(),
+      updated_at: appointment.updated_at.toISOString(),
+    };
+  }
+
+  private toStaffAppointmentResponse(
+    appointment: StaffAppointmentRecord,
+  ): StaffAppointmentResponseDTO {
+    return {
+      id: appointment.id,
+      user_id: appointment.user_id,
+      coach_id: appointment.coach_id,
+      status: appointment.status,
+      scheduled_at: appointment.scheduled_at.toISOString(),
+      duration_minutes: appointment.duration_minutes,
+      member_notes: appointment.member_notes ?? null,
+      user: {
+        id: appointment.user.id,
+        email: findPrimaryIdentifier(appointment.user.auth_identities),
+        profile: {
+          first_name: appointment.user.profile?.first_name ?? null,
+          last_name: appointment.user.profile?.last_name ?? null,
+          avatar_url: appointment.user.profile?.avatar_url ?? null,
+        },
+      },
+      coach: {
+        id: appointment.coach.id,
+        hourly_rate: appointment.coach.hourly_rate?.toString() ?? null,
+        profile: {
+          first_name: appointment.coach.user.profile?.first_name ?? null,
+          last_name: appointment.coach.user.profile?.last_name ?? null,
+          avatar_url: appointment.coach.user.profile?.avatar_url ?? null,
+        },
+      },
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };

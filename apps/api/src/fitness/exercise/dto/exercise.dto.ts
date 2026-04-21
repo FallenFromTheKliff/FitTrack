@@ -1,3 +1,4 @@
+import { Transform, type TransformFnParams } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExerciseCategory } from '@prisma/client';
 import {
@@ -12,6 +13,35 @@ import {
 
 import { TrimString } from '../../../common/validators';
 import { PaginationDTO } from '../../../user/dto/user-dto';
+
+function getRawTransformValue({ value, obj, key }: TransformFnParams): unknown {
+  if (!obj || typeof key !== 'string') {
+    return value;
+  }
+
+  const record = obj as Record<string, unknown>;
+  return key in record ? record[key] : value;
+}
+
+function transformBooleanInput(params: TransformFnParams): unknown {
+  const rawValue = getRawTransformValue(params);
+
+  if (typeof rawValue !== 'string') {
+    return rawValue;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+
+  if (normalized === 'true') {
+    return true;
+  }
+
+  if (normalized === 'false') {
+    return false;
+  }
+
+  return rawValue;
+}
 
 export class CreateExerciseDTO {
   @ApiProperty({ example: 'Barbell Back Squat' })
@@ -167,6 +197,15 @@ export class ExerciseFilterDTO extends PaginationDTO {
   @IsString({ message: 'search must be a string' })
   @MaxLength(100, { message: 'search must not exceed 100 characters' })
   search?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Include archived exercises in library queries.',
+  })
+  @IsOptional()
+  @Transform((params) => transformBooleanInput(params))
+  @IsBoolean({ message: 'include_inactive must be a boolean value' })
+  include_inactive?: boolean;
 }
 
 export class ExerciseResponseDTO {

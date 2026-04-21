@@ -1,5 +1,6 @@
 export { default as FitButton } from "./FitButton";
 export type { FitButtonVariant } from "./FitButton";
+export { default as FitAvatarImage } from "./FitAvatarImage";
 export { default as FitCard } from "./FitCard";
 export { default as FitFAB } from "./FitFAB";
 export { default as FitFABMenu } from "./FitFABMenu";

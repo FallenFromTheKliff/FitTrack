@@ -4,16 +4,15 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { MailModule } from '../mail/mail.module';
 import { MailProcessor } from './processors/mail.processor';
-import { SmsProcessor } from './processors/sms.processor';
-import { QUEUE_MAIL, QUEUE_SMS } from './queue.constants';
+import { QUEUE_MAIL } from './queue.constants';
 
 @Module({
   imports: [
-    BullModule.registerQueue({ name: QUEUE_MAIL }, { name: QUEUE_SMS }),
+    BullModule.registerQueue({ name: QUEUE_MAIL }),
     MailModule,
     EventEmitterModule,
   ],
-  providers: [MailProcessor, SmsProcessor],
+  providers: [MailProcessor],
   exports: [BullModule],
 })
 export class QueueModule {}

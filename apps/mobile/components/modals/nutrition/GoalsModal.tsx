@@ -1,16 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { Target, CalendarDays } from "lucide-react-native";
+import { CalendarDays, Dumbbell, Target } from "lucide-react-native";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import type { MemberProfile } from "@fittrack/types";
+import { nutritionGoalSetupSchema, type NutritionGoalSetupData } from "@fittrack/validators";
+import { recalculateNutritionMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useLoadingText } from "@fittrack/hooks";
 import { getTodayString } from "@/data/bookings";
-import { formatLongDate, nextDate } from "@fittrack/utils";
-import { GOAL_TYPES, type GoalType } from "@/data/nutrition";
+import { formatLongDate } from "@fittrack/utils";
+import { mobileApiClient } from "@/lib/api-client";
 import { makeGoalsModalStyles } from "@/styles/modals/GoalsStyles";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
@@ -30,28 +34,86 @@ export type NutritionGoal = {
 type Props = {
   isVisible: boolean;
   onClose: () => void;
-  onSuccess: (goal: NutritionGoal) => void;
+  onSuccess: () => void;
 };
+
+const GENDER_OPTIONS = [
+  { label: "Male", value: "male" as const },
+  { label: "Female", value: "female" as const },
+  { label: "Other", value: "other" as const }
+];
+
+const ACTIVITY_OPTIONS = [
+  { label: "Sedentary", value: "sedentary" as const },
+  { label: "Light", value: "light" as const },
+  { label: "Moderate", value: "moderate" as const },
+  { label: "Active", value: "active" as const },
+  { label: "Very Active", value: "very_active" as const }
+];
+
+const GOAL_OPTIONS = [
+  { label: "Bulk", value: "bulking" as const },
+  { label: "Cut", value: "cutting" as const },
+  { label: "Maintain", value: "maintenance" as const },
+  { label: "Sport", value: "sport_specific" as const }
+];
+
+function normalizeProfilePatch(
+  previous: MemberProfile | undefined,
+  payload: NutritionGoalSetupData
+): MemberProfile {
+  return {
+    ...(previous ?? {}),
+    dateOfBirth: payload.dateOfBirth,
+    gender: payload.gender,
+    activityLevel: payload.activityLevel,
+    fitnessGoal: payload.fitnessGoal,
+    currentWeightKg: payload.weightKg,
+    heightCm: payload.heightCm
+  };
+}
 
 export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const { colors } = useTheme();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const queryClient = useQueryClient();
   const { ic } = useThemeTransitionAnim();
   const s = useMemo(() => makeGoalsModalStyles(colors), [colors]);
 
-  const [name, setName] = useState("");
-  const [goalType, setGoalType] = useState<GoalType>("bulking");
-  const [currentCalories, setCurrentCalories] = useState("");
-  const [targetCalories, setTargetCalories] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [gender, setGender] = useState<"male" | "female" | "other">("male");
+  const [activityLevel, setActivityLevel] = useState<"sedentary" | "light" | "moderate" | "active" | "very_active">("moderate");
+  const [fitnessGoal, setFitnessGoal] = useState<"bulking" | "cutting" | "maintenance" | "sport_specific">("maintenance");
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [nameError, setNameError] = useState(false);
-  const [currentCalsError, setCurrentCalsError] = useState(false);
-  const [calsError, setCalsError] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof NutritionGoalSetupData, string>>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const savingText = useLoadingText("Saving", isSubmitting);
 
+  const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
+  const recalculateMutation = useMutation(recalculateNutritionMutationOptions(mobileApiClient, queryClient));
+
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
+
+  useEffect(() => {
+    if (!isVisible) return;
+    setDateOfBirth(user?.dateOfBirth ?? "");
+    setWeightKg(user?.weightKg != null ? String(user.weightKg) : "");
+    setHeightCm(user?.heightCm != null ? String(user.heightCm) : "");
+    setGender((user?.gender as "male" | "female" | "other" | undefined) ?? "male");
+    setActivityLevel(
+      (user?.activityLevel as "sedentary" | "light" | "moderate" | "active" | "very_active" | undefined) ?? "moderate"
+    );
+    setFitnessGoal(
+      (user?.fitnessGoal as "bulking" | "cutting" | "maintenance" | "sport_specific" | undefined) ?? "maintenance"
+    );
+    setFieldErrors({});
+    setSubmitError(null);
+    setIsSubmitting(false);
+    setIsCalOpen(false);
+  }, [isVisible, user?.activityLevel, user?.dateOfBirth, user?.fitnessGoal, user?.gender, user?.heightCm, user?.weightKg]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -63,45 +125,68 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
   const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
-  const reset = () => {
-    setName("");
-    setGoalType("bulking");
-    setCurrentCalories(String(user?.currentCalories ?? ""));
-    setTargetCalories("");
-    setDueDate("");
-    setNameError(false);
-    setCurrentCalsError(false);
-    setCalsError(false);
+  const resetAndClose = () => {
+    setFieldErrors({});
+    setSubmitError(null);
     setIsSubmitting(false);
-  };
-
-  const handleClose = () => {
-    reset();
+    setIsCalOpen(false);
     onClose();
   };
 
   const handleSubmit = async () => {
-    const trimmedName = name.trim();
-    const currCals = parseInt(currentCalories, 10);
-    const cals = parseInt(targetCalories, 10);
-    let hasError = false;
-    if (!trimmedName) { setNameError(true); hasError = true; }
-    if (!currentCalories || isNaN(currCals) || currCals < 0) { setCurrentCalsError(true); hasError = true; }
-    if (!targetCalories || isNaN(cals) || cals <= 0) { setCalsError(true); hasError = true; }
-    if (hasError) return;
-    setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    onSuccess({
-      id: Date.now().toString(),
-      name: trimmedName,
-      type: goalType,
-      weightKg: user?.weightKg ?? 0,
-      currentCalories: currCals,
-      targetCalories: cals,
-      dueDate: dueDate || nextDate(getTodayString())
+    const parsed = nutritionGoalSetupSchema.safeParse({
+      dateOfBirth,
+      weightKg,
+      heightCm,
+      gender,
+      activityLevel,
+      fitnessGoal
     });
-    reset();
-    onClose();
+
+    if (!parsed.success) {
+      setFieldErrors(parsed.error.flatten().fieldErrors as Partial<Record<keyof NutritionGoalSetupData, string>>);
+      return;
+    }
+
+    setFieldErrors({});
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      await updateProfileMutation.mutateAsync({
+        dateOfBirth: parsed.data.dateOfBirth,
+        currentWeightKg: parsed.data.weightKg,
+        heightCm: parsed.data.heightCm,
+        gender: parsed.data.gender,
+        activityLevel: parsed.data.activityLevel,
+        fitnessGoal: parsed.data.fitnessGoal
+      });
+      await recalculateMutation.mutateAsync({
+        payload: {
+          gender: parsed.data.gender,
+          activityLevel: parsed.data.activityLevel,
+          fitnessGoal: parsed.data.fitnessGoal,
+          weightKg: parsed.data.weightKg,
+          heightCm: parsed.data.heightCm
+        },
+        userId: user?.id
+      });
+      await updateUser({
+        dateOfBirth: parsed.data.dateOfBirth,
+        weightKg: parsed.data.weightKg,
+        heightCm: parsed.data.heightCm,
+        gender: parsed.data.gender,
+        activityLevel: parsed.data.activityLevel,
+        fitnessGoal: parsed.data.fitnessGoal,
+        profile: normalizeProfilePatch(user?.profile, parsed.data)
+      });
+      onSuccess();
+      resetAndClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to save nutrition target.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -113,34 +198,81 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               <Target size={18} color={colors.brand} strokeWidth={2} />
             </View>
             <View style={s.headerText}>
-              <FitText style={s.headerTitle}>Create Nutrition Goal</FitText>
-              <FitText style={s.headerSubtitle}>Set your calorie target</FitText>
+              <FitText style={s.headerTitle}>Set Nutrition Target</FitText>
+              <FitText style={s.headerSubtitle}>Save your profile metrics and recalculate live macros</FitText>
             </View>
           </Animated.View>
-          <ScrollView style={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={s.body}
+          >
             <View style={s.sectionGap}>
-              <FitText style={s.sectionLabel}>GOAL NAME</FitText>
-              <View style={[s.inputFieldWrap, nameError && { borderColor: colors.danger }]}>
+              <FitText style={s.sectionLabel}>DATE OF BIRTH</FitText>
+              <Pressable
+                style={[s.fieldBtn, dateOfBirth ? { borderColor: colors.brand } : { borderColor: colors.fieldBorder }]}
+                onPress={() => setIsCalOpen(true)}
+              >
+                <CalendarDays size={16} color={dateOfBirth ? colors.brand : colors.textMuted} strokeWidth={2} />
+                <FitText style={[s.fieldBtnText, dateOfBirth ? { color: colors.brand } : {}]}>
+                  {dateOfBirth ? formatLongDate(dateOfBirth) : "Select your birth date"}
+                </FitText>
+              </Pressable>
+              {fieldErrors.dateOfBirth?.[0] ? (
+                <FitText style={[s.fieldNote, { color: colors.danger }]}>{fieldErrors.dateOfBirth[0]}</FitText>
+              ) : (
+                <FitText style={s.fieldNote}>Required for the TDEE calculation.</FitText>
+              )}
+            </View>
+
+            <View style={s.sectionGap}>
+              <FitText style={s.sectionLabel}>BODY METRICS</FitText>
+              <View style={[s.inputFieldWrap, fieldErrors.weightKg?.[0] ? { borderColor: colors.danger } : null]}>
+                <Dumbbell size={16} color={colors.textMuted} strokeWidth={2} />
                 <FitTextInput
                   style={s.inputField}
-                  placeholder="e.g. Summer Cut"
-                  value={name}
-                  onChangeText={(v) => { setName(v); if (v.trim()) setNameError(false); }}
+                  placeholder="Weight in kg"
+                  value={weightKg}
+                  onChangeText={(value) => {
+                    setWeightKg(value.replace(/[^0-9.]/g, ""));
+                    setFieldErrors((previous) => ({ ...previous, weightKg: undefined }));
+                  }}
+                  keyboardType="decimal-pad"
                   returnKeyType="done"
                 />
               </View>
-              {nameError && (
-                <FitText style={[s.fieldNote, { color: colors.danger }]}>Name is required</FitText>
-              )}
+              {fieldErrors.weightKg?.[0] ? (
+                <FitText style={[s.fieldNote, { color: colors.danger }]}>{fieldErrors.weightKg[0]}</FitText>
+              ) : null}
+              <View style={{ height: 8 }} />
+              <View style={[s.inputFieldWrap, fieldErrors.heightCm?.[0] ? { borderColor: colors.danger } : null]}>
+                <Dumbbell size={16} color={colors.textMuted} strokeWidth={2} />
+                <FitTextInput
+                  style={s.inputField}
+                  placeholder="Height in cm"
+                  value={heightCm}
+                  onChangeText={(value) => {
+                    setHeightCm(value.replace(/[^0-9.]/g, ""));
+                    setFieldErrors((previous) => ({ ...previous, heightCm: undefined }));
+                  }}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </View>
+              {fieldErrors.heightCm?.[0] ? (
+                <FitText style={[s.fieldNote, { color: colors.danger }]}>{fieldErrors.heightCm[0]}</FitText>
+              ) : null}
             </View>
+
             <View style={s.sectionGap}>
-              <FitText style={s.sectionLabel}>GOAL TYPE</FitText>
+              <FitText style={s.sectionLabel}>GENDER</FitText>
               <View style={s.goalTypeRow}>
-                {GOAL_TYPES.map(({ value, label, Icon }) => {
-                  const isActive = goalType === value;
+                {GENDER_OPTIONS.map((option) => {
+                  const isActive = gender === option.value;
                   return (
                     <Pressable
-                      key={value}
+                      key={option.value}
                       style={[
                         s.goalTypePill,
                         {
@@ -148,70 +280,81 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
                           backgroundColor: isActive ? colors.brand + "18" : colors.fieldBg
                         }
                       ]}
-                      onPress={() => setGoalType(value)}
+                      onPress={() => setGender(option.value)}
                     >
-                      <Icon size={14} color={isActive ? colors.brand : colors.textMuted} strokeWidth={2} />
                       <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
-                        {label}
+                        {option.label}
                       </FitText>
                     </Pressable>
                   );
                 })}
               </View>
             </View>
+
             <View style={s.sectionGap}>
-              <FitText style={s.sectionLabel}>CALORIES</FitText>
-              <FitText style={s.fieldNote}>Current - how many kcal you've had today</FitText>
-              <View style={[s.inputFieldWrap, currentCalsError && { borderColor: colors.danger }]}>
-                <FitTextInput
-                  style={s.inputField}
-                  placeholder="e.g. 1850"
-                  value={currentCalories}
-                  onChangeText={(v) => {
-                    setCurrentCalories(v.replace(/[^0-9]/g, ""));
-                    if (v) setCurrentCalsError(false);
-                  }}
-                  keyboardType="numeric"
-                  returnKeyType="done"
-                />
+              <FitText style={s.sectionLabel}>ACTIVITY LEVEL</FitText>
+              <View style={{ gap: 8 }}>
+                {ACTIVITY_OPTIONS.map((option) => {
+                  const isActive = activityLevel === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[
+                        s.goalTypePill,
+                        {
+                          justifyContent: "flex-start",
+                          borderColor: isActive ? colors.brand : colors.fieldBorder,
+                          backgroundColor: isActive ? colors.brand + "18" : colors.fieldBg
+                        }
+                      ]}
+                      onPress={() => setActivityLevel(option.value)}
+                    >
+                      <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
+                        {option.label}
+                      </FitText>
+                    </Pressable>
+                  );
+                })}
               </View>
-              {currentCalsError && (
-                <FitText style={[s.fieldNote, { color: colors.danger }]}>Enter your current calorie intake</FitText>
-              )}
-              <View style={{ height: 8 }} />
-              <FitText style={s.fieldNote}>Target - your daily calorie goal</FitText>
-              <View style={[s.inputFieldWrap, calsError && { borderColor: colors.danger }]}>
-                <FitTextInput
-                  style={s.inputField}
-                  placeholder="e.g. 2200"
-                  value={targetCalories}
-                  onChangeText={(v) => { setTargetCalories(v.replace(/[^0-9]/g, "")); if (v) setCalsError(false); }}
-                  keyboardType="numeric"
-                  returnKeyType="done"
-                />
-              </View>
-              {calsError && (
-                <FitText style={[s.fieldNote, { color: colors.danger }]}>Enter a valid calorie target</FitText>
-              )}
             </View>
+
             <View style={[s.sectionGap, { marginBottom: 20 }]}>
-              <FitText style={s.sectionLabel}>DUE DATE</FitText>
-              <Pressable
-                style={[s.fieldBtn, dueDate ? { borderColor: colors.brand } : { borderColor: colors.fieldBorder }]}
-                onPress={() => setIsCalOpen(true)}
-              >
-                <CalendarDays size={16} color={dueDate ? colors.brand : colors.textMuted} strokeWidth={2} />
-                <FitText style={[s.fieldBtnText, dueDate ? { color: colors.brand } : {}]}>
-                  {dueDate ? formatLongDate(dueDate) : "Select due date"}
-                </FitText>
-              </Pressable>
-              <FitText style={s.fieldNote}>Optional - defaults to tomorrow if left blank.</FitText>
+              <FitText style={s.sectionLabel}>FITNESS GOAL</FitText>
+              <View style={{ gap: 8 }}>
+                {GOAL_OPTIONS.map((option) => {
+                  const isActive = fitnessGoal === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[
+                        s.goalTypePill,
+                        {
+                          justifyContent: "flex-start",
+                          borderColor: isActive ? colors.brand : colors.fieldBorder,
+                          backgroundColor: isActive ? colors.brand + "18" : colors.fieldBg
+                        }
+                      ]}
+                      onPress={() => setFitnessGoal(option.value)}
+                    >
+                      <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
+                        {option.label}
+                      </FitText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <FitText style={s.fieldNote}>
+                {`Today: ${formatLongDate(getTodayString())}. The backend will recompute your live macro target immediately.`}
+              </FitText>
+              {submitError ? (
+                <FitText style={[s.fieldNote, { color: colors.danger }]}>{submitError}</FitText>
+              ) : null}
             </View>
           </ScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
-            <FitButton label="Cancel" variant="ghost" onPress={handleClose} flex={1} />
+            <FitButton label="Cancel" variant="ghost" onPress={resetAndClose} flex={1} />
             <FitButton
-              label={isSubmitting ? savingText : "Create Goal"}
+              label={isSubmitting ? savingText : "Save Target"}
               variant="primary"
               icon={Target}
               iconSize={16}
@@ -225,11 +368,15 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
       </Animated.View>
       <CalendarModal
         isVisible={isCalOpen}
-        selectedDate={dueDate}
-        minDate={nextDate(getTodayString())}
+        selectedDate={dateOfBirth}
+        blockPast={false}
         defaultYear={new Date().getFullYear()}
         defaultMonth={new Date().getMonth() + 1}
-        onSelect={(date) => { setDueDate(date); setIsCalOpen(false); }}
+        onSelect={(date) => {
+          setDateOfBirth(date);
+          setFieldErrors((previous) => ({ ...previous, dateOfBirth: undefined }));
+          setIsCalOpen(false);
+        }}
         onClose={() => setIsCalOpen(false)}
       />
     </Modal>

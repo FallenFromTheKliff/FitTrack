@@ -1,11 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, createContext, useContext, type ReactNode } from "react";
 
 import type { AuthUser } from "@fittrack/types";
-import { createAuthController, toActionErrorMessage } from "@fittrack/app-core";
-import { mobileApiClient, mobileSessionStore } from "@/lib/api-client";
+import { createAuthController, resolveAccountStatus, toActionErrorMessage } from "@fittrack/app-core";
+import { mobileApiClient, mobileSessionStore, subscribeMobileAuthFailure } from "@/lib/api-client";
 
-type RegisterInput = { email: string; phone: string; password: string };
-type LoginResult = { user: AuthUser; needsOTP: boolean } | undefined;
+type RegisterInput = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  password: string;
+};
+type LoginResult =
+  | { user: AuthUser; needsOTP: boolean }
+  | { error: string };
 type AuthContextType = {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -29,6 +37,10 @@ type Props = {
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const MOBILE_ROLE_GATE = {
+  allowedRoles: ["USER", "COACH"] as const,
+  deniedMessage: "This account can't access the mobile app."
+};
 
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -37,15 +49,41 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     client: mobileApiClient,
     onUserLoaded,
     onUserCleared,
+    roleGate: MOBILE_ROLE_GATE,
     sessionStore: mobileSessionStore
   }), [onUserCleared, onUserLoaded]);
   const isAuthenticated = !!user;
 
+  const hydrateMemberDeletionStatus = useCallback(async (nextUser: AuthUser | null): Promise<AuthUser | null> => {
+    if (!nextUser) return nextUser;
+    if (nextUser.role !== "USER") {
+      return nextUser.status ? nextUser : { ...nextUser, status: "active" as AuthUser["status"] };
+    }
+    try {
+      const request = await mobileApiClient.users.getDeletionRequestStatus();
+      return {
+        ...nextUser,
+        status: resolveAccountStatus(null, request.status ?? null)
+      };
+    } catch {
+      return {
+        ...nextUser,
+        status: nextUser.status ?? ("active" as AuthUser["status"])
+      };
+    }
+  }, []);
+
+  useEffect(() => subscribeMobileAuthFailure(() => {
+    onUserCleared();
+    setUser(null);
+    setIsLoading(false);
+  }), [onUserCleared]);
+
   useEffect(() => {
     (async () => {
       try {
-        const nextUser = await controller.loadCurrentUser({ includeDeletionStatus: true });
-        setUser(nextUser);
+        const nextUser = await controller.loadCurrentUser();
+        setUser(await hydrateMemberDeletionStatus(nextUser));
       } catch {
         await mobileSessionStore.clearTokens();
         setUser(null);
@@ -53,35 +91,37 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
         setIsLoading(false);
       }
     })();
-  }, [controller]);
+  }, [controller, hydrateMemberDeletionStatus]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
       try {
         const data = await controller.login(email, password, { placeholderRole: "USER" });
         if (!data.success || !data.user) {
-          return undefined;
+          return { error: data.error ?? "Invalid credentials." };
         }
         return { user: data.user, needsOTP: data.otpRequired };
-      } catch {
-        return undefined;
+      } catch (error: unknown) {
+        return { error: toActionErrorMessage(error, "Invalid credentials.") };
       }
     }, [controller]
   );
 
   const commitLogin = useCallback(async () => {
-    const nextUser = await controller.commitLogin({ includeDeletionStatus: true });
+    const nextUser = await controller.commitLogin();
     if (nextUser === undefined) return;
-    setUser(nextUser);
-  }, [controller]);
+    setUser(await hydrateMemberDeletionStatus(nextUser));
+  }, [controller, hydrateMemberDeletionStatus]);
 
   const register = useCallback(
     async (data: RegisterInput): Promise<AuthUser | undefined> => {
       try {
         const res = await controller.register({
           email: data.email,
-          phone_no: data.phone,
-          password: data.password
+          first_name: data.firstName,
+          last_name: data.lastName,
+          password: data.password,
+          phone: data.phone || undefined
         }, { placeholderRole: "USER" });
         if (!res.success || !res.user) {
           return undefined;
@@ -115,8 +155,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   }, []);
 
   const sendOTP = useCallback(async (_destination: string) => {
-    return { success: true as const };
-  }, []);
+    try {
+      const success = await controller.sendOTP();
+      return { success };
+    } catch {
+      return { success: false as const };
+    }
+  }, [controller]);
 
   const verifyCurrentPassword = useCallback(async (password: string) => {
     try {
@@ -128,13 +173,13 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const changePassword = useCallback(async (_currentPassword: string, nextPassword: string): Promise<{ success: true } | { success: false; error: string }> => {
     try {
-      if (!user?.email) return { success: false, error: "No user session." };
-      await controller.changePassword(user.email, nextPassword);
+      if (!user?.id) return { success: false, error: "No user session." };
+      await controller.changePassword(_currentPassword, nextPassword);
       return { success: true };
     } catch (error: unknown) {
       return { success: false, error: toActionErrorMessage(error, "Password change failed.") };
     }
-  }, [controller, user?.email]);
+  }, [controller, user?.id]);
 
   const verifyOTP = useCallback(async (code: string) => {
     try {

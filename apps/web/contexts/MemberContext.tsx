@@ -3,17 +3,22 @@ import { createContext, useContext, useMemo, useCallback, type ReactNode } from 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   adminMembersQueryOptions,
-  createStaffMutationOptions,
+  createUserMutationOptions,
   deleteUserMutationOptions,
-  invalidateAdminMembersQuery
+  invalidateAdminMembersQuery,
+  restoreUserMutationOptions,
+  updateAdminMemberMutationOptions
 } from "@fittrack/query";
 import { createMemberController } from "@fittrack/app-core";
-import type { IMemberContext, CreateStaffInput } from "@fittrack/types";
+import type { IMemberContext, CreateUserInput, UpdateMemberInput } from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const MemberContext = createContext<IMemberContext | null>(null);
 
 export function MemberProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const queryClient = useQueryClient();
   const controller = useMemo(() => createMemberController(), []);
 
@@ -21,21 +26,46 @@ export function MemberProvider({ children }: { children: ReactNode }) {
     data: members = [],
     isLoading,
     error: queryError
-  } = useQuery(adminMembersQueryOptions(webApiClient));
+  } = useQuery({
+    ...adminMembersQueryOptions(webApiClient),
+    enabled: isAdmin
+  });
 
-  const error = queryError ? controller.toMessage(queryError, "Failed to fetch members.") : null;
+  const error = isAdmin && queryError
+    ? controller.toMessage(queryError, "Failed to fetch members.")
+    : null;
 
   const fetchMembers = useCallback(async () => {
     await invalidateAdminMembersQuery(queryClient);
   }, [queryClient]);
 
-  const createStaffMutation = useMutation(createStaffMutationOptions(webApiClient, queryClient));
+  const createUserMutation = useMutation(createUserMutationOptions(webApiClient, queryClient));
 
-  const createStaff = useCallback(async (input: CreateStaffInput) => {
+  const createUser = useCallback(async (input: CreateUserInput) => {
     return controller.runAction(async () => {
-      await createStaffMutation.mutateAsync(input);
-    }, "Failed to create staff.");
-  }, [controller, createStaffMutation]);
+      await createUserMutation.mutateAsync(input);
+    }, "Failed to create user.");
+  }, [controller, createUserMutation]);
+
+  const updateMemberMutation = useMutation(updateAdminMemberMutationOptions(webApiClient, queryClient));
+
+  const updateMember = useCallback(async (input: UpdateMemberInput) => {
+    return controller.runAction(async () => {
+      await updateMemberMutation.mutateAsync({
+        id: input.id,
+        payload: {
+          ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+          ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+          ...(input.dateOfBirth !== undefined ? { dateOfBirth: input.dateOfBirth } : {}),
+          ...(input.gender !== undefined ? { gender: input.gender } : {}),
+          ...(input.activityLevel !== undefined ? { activityLevel: input.activityLevel } : {}),
+          ...(input.fitnessGoal !== undefined ? { fitnessGoal: input.fitnessGoal } : {}),
+          ...(input.currentWeightKg !== undefined ? { currentWeightKg: input.currentWeightKg } : {}),
+          ...(input.heightCm !== undefined ? { heightCm: input.heightCm } : {})
+        }
+      });
+    }, "Failed to update member.");
+  }, [controller, updateMemberMutation]);
 
   const deleteUserMutation = useMutation(deleteUserMutationOptions(webApiClient, queryClient));
 
@@ -45,8 +75,16 @@ export function MemberProvider({ children }: { children: ReactNode }) {
     }, "Failed to delete user.");
   }, [controller, deleteUserMutation]);
 
+  const restoreUserMutation = useMutation(restoreUserMutationOptions(webApiClient, queryClient));
+
+  const restoreUser = useCallback(async (id: string) => {
+    return controller.runAction(async () => {
+      await restoreUserMutation.mutateAsync(id);
+    }, "Failed to restore user.");
+  }, [controller, restoreUserMutation]);
+
   return (
-    <MemberContext.Provider value={{ members, isLoading, error, fetchMembers, createStaff, deleteUser }}>
+    <MemberContext.Provider value={{ members, isLoading, error, fetchMembers, createUser, updateMember, deleteUser, restoreUser }}>
       {children}
     </MemberContext.Provider>
   );

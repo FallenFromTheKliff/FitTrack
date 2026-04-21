@@ -1,7 +1,11 @@
 "use client";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { gymLayoutEquipmentQueryOptions } from "@fittrack/query";
+import { listVenueEquipment } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import { webApiClient } from "@/lib/api-client";
 import { FACILITY_FLOOR_MAP, type FloorVenueRecord } from "@/data/facilities/floorPlans";
 import { getVenueIcon } from "@/data/facilities/mapTypes";
 import { FitText } from "@/components/fit/FitText";
@@ -34,11 +38,16 @@ function buildHeroImage(name: string, accent: string, background: string) {
 export default function VenueDetailsModal({ venue, isOpen, onClose }: Props) {
   const { colors } = useTheme();
   const Icon = useMemo(() => getVenueIcon(venue?.iconKey), [venue?.iconKey]);
+  const { data: liveEquipment = [] } = useQuery({
+    ...gymLayoutEquipmentQueryOptions(webApiClient),
+    enabled: isOpen,
+  });
 
   if (!venue) return null;
 
   const subtitle = `${FACILITY_FLOOR_MAP[venue.floorId].label} • ${venue.isReservable === false ? "Facility zone" : "Reservable venue"}`;
   const heroImage = buildHeroImage(venue.name, colors.brand, colors.surfaceRaised);
+  const assignedEquipment = listVenueEquipment(liveEquipment, venue);
   const infoItems = [
     { label: "Capacity", value: String(venue.capacity ?? "N/A") },
     { label: "Minimum Hours", value: `${venue.minimumHours ?? 1}` },
@@ -113,6 +122,39 @@ export default function VenueDetailsModal({ venue, isOpen, onClose }: Props) {
               <FitText style={{ fontSize: 15, fontWeight: 700 }}>{item.value}</FitText>
             </div>
           ))}
+        </div>
+        <div
+          style={{
+            borderRadius: 12,
+            border: `1px solid ${colors.border}`,
+            backgroundColor: colors.surfaceRaised,
+            padding: "14px 16px",
+            display: "grid",
+            gap: 8
+          }}
+        >
+          <FitText style={{ fontSize: 12, color: colors.textMuted, fontWeight: 700 }}>Live Equipment</FitText>
+          {assignedEquipment.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {assignedEquipment.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surface
+                  }}
+                >
+                  <FitText style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</FitText>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <FitText style={{ fontSize: 14, lineHeight: 1.55 }}>
+              No live equipment is assigned to this zone yet.
+            </FitText>
+          )}
         </div>
         <div
           style={{

@@ -15,12 +15,25 @@ type Props = {
   action?: ReactNode;
   className?: string;
   headingStyle?: CSSProperties;
+  headingAs?: "h2" | "h3" | "h4";
   hideHeading?: boolean;
   as?: "div" | "section";
   style?: CSSProperties;
 };
 
-export default function FitSection({ heading, children, bare = false, noPadding = false, action, className, headingStyle, hideHeading = false, as: Tag = "div", style }: Props) {
+export default function FitSection({
+  heading,
+  children,
+  bare = false,
+  noPadding = false,
+  action,
+  className,
+  headingStyle,
+  headingAs = "h4",
+  hideHeading = false,
+  as: Tag = "div",
+  style
+}: Props) {
   const { colors } = useTheme();
   const s = makeFitSectionStyles(colors);
 
@@ -34,7 +47,7 @@ export default function FitSection({ heading, children, bare = false, noPadding 
     <Tag className={cn(className)} style={{ ...s.section, ...style }}>
       {!hideHeading && (
         <div style={s.headingRow}>
-          <FitText as="h4" style={{ ...s.heading, ...headingStyle }}>{heading}</FitText>
+          <FitText as={headingAs} style={{ ...s.heading, ...headingStyle }}>{heading}</FitText>
           {action ?? null}
         </div>
       )}

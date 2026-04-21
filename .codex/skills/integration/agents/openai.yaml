@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Integration"
+  short_description: "FitTrack ideation-aware integration, bounded routing, and completion enforcement"
+  default_prompt: "Use $integration to orchestrate a FitTrack surface bundle end to end, route bounded work to the right companion skills, and close it with MCP-aware, evidence-backed verification. For premium admin UI work, require a purpose-driven reference keyword stack, route consultation through $professional-ui-brainstorm when needed, structure through $premium-route-rebuild or $premium-modal-rebuild, evidence through $ui-reference-lane, visual DNA through $ui-visual-dna-director, family grammar through $admin-design-language, approval through $ui-notion-gate, workspace governance through $figma-workspace-governor, divergent concepting through $figma-concept-explorer, scaffold authoring through $figma-scaffold-builder, pre-code critique through $ui-art-direction-review, implementation through $frontend, static polish through $frontend-uiux-polish, motion through $ui-animator, runtime click-through through $ui-runtime-review, and final closure through $quality-assurance."
+
+policy:
+  allow_implicit_invocation: true

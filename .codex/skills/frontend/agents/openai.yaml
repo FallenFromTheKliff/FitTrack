@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Frontend"
+  short_description: "FitTrack thin-surface frontend implementation, anti-bloat cleanup, and UI elevation"
+  default_prompt: "Use $frontend to implement or refactor a FitTrack frontend surface with UI-first handoff discipline, page architecture enforcement, anti-bloat cleanup, and the narrowest safe write scope."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,11 +1,18 @@
-import { ForbiddenException, HttpException } from '@nestjs/common';
+import {
+  AccountDeletionRequestStatus,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
-import { UserRole, UserStatus } from '@prisma/client';
 
-import { AuthService } from '../auth/auth.service';
 import { FilesService } from '../files/files.service';
-import { SubscriptionService } from '../membership/subscription/subscription.service';
 import { AttendanceService, UserService } from './user.service';
 import { UserRepository } from './user.repository';
 
@@ -24,15 +31,15 @@ describe('UserService', () => {
     listGamificationParticipants: jest.fn(),
     findGamificationNotificationTargetOrThrow: jest.fn(),
     findNotificationDispatchTargetOrThrow: jest.fn(),
+    findLatestDeletionRequest: jest.fn(),
+    findPendingDeletionRequestByUserId: jest.fn(),
+    createDeletionRequest: jest.fn(),
+    updateDeletionRequest: jest.fn(),
     updateUser: jest.fn(),
   };
 
   const eventEmitter = {
     emit: jest.fn(),
-  };
-
-  const authService = {
-    sendPhoneOtp: jest.fn(),
   };
 
   const filesService = {
@@ -45,7 +52,6 @@ describe('UserService', () => {
         UserService,
         { provide: UserRepository, useValue: repo },
         { provide: EventEmitter2, useValue: eventEmitter },
-        { provide: AuthService, useValue: authService },
         { provide: FilesService, useValue: filesService },
       ],
     }).compile();
@@ -60,20 +66,181 @@ describe('UserService', () => {
 
     await service.updateMyProfile('user-1', {
       first_name: 'Fit',
+      avatar_url: 'https://cdn.fittrack.test/avatars/fit.png',
       height_cm: 180,
       date_of_birth: '2026-03-22T00:00:00.000Z',
     });
 
     expect(repo.updateProfile).toHaveBeenCalledWith('user-1', {
       first_name: 'Fit',
+      avatar_url: 'https://cdn.fittrack.test/avatars/fit.png',
       height_cm: 180,
       date_of_birth: new Date('2026-03-22T00:00:00.000Z'),
     });
   });
 
-  it('updates phone state transactionally and sends a new OTP', async () => {
+  it('enriches /users/me aggregates with preferred email and phone fields', async () => {
+    repo.findUserAggregateOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: null,
+      phone_verified_at: null,
+      qr_code_token: 'qr-token',
+      auth_identities: [
+        {
+          provider: 'email',
+          identifier: 'member@example.com',
+          verified_at: new Date('2026-03-31T00:00:00.000Z'),
+          is_primary: true,
+        },
+        {
+          provider: 'phone',
+          identifier: '+639171234567',
+          verified_at: null,
+          is_primary: false,
+        },
+      ],
+      profile: {
+        phone: '09171234567',
+      },
+      membership_card: {
+        status: 'active',
+      },
+      notification_prefs: {},
+    });
+
+    await expect(service.getMyProfile('user-1')).resolves.toEqual(
+      expect.objectContaining({
+        id: 'user-1',
+        email: 'member@example.com',
+        phone: '09171234567',
+        phone_no: '09171234567',
+        emailVerified: true,
+        phoneVerified: false,
+        qrCodeReady: true,
+        attendanceQrReady: true,
+      }),
+    );
+  });
+
+  it.each(['pending_verification', 'revoked'] as const)(
+    'keeps the account QR token available but blocks attendance QR when the membership card is %s',
+    async (membershipCardStatus) => {
+      repo.findUserAggregateOrThrow.mockResolvedValue({
+        id: 'user-1',
+        role: UserRole.member,
+        status: UserStatus.active,
+        email_verified_at: null,
+        phone_verified_at: null,
+        qr_code_token: 'qr-token',
+        auth_identities: [
+          {
+            provider: 'email',
+            identifier: 'member@example.com',
+            verified_at: new Date('2026-03-31T00:00:00.000Z'),
+            is_primary: true,
+          },
+        ],
+        profile: {
+          phone: '09171234567',
+        },
+        membership_card: {
+          status: membershipCardStatus,
+        },
+        notification_prefs: {},
+      });
+
+      await expect(service.getMyProfile('user-1')).resolves.toEqual(
+        expect.objectContaining({
+          qrCodeReady: true,
+          attendanceQrReady: false,
+        }),
+      );
+    },
+  );
+
+  it('returns the latest deletion request status for a member', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
+    repo.findLatestDeletionRequest.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+    });
+
+    await expect(service.getDeletionRequestStatus('user-1')).resolves.toEqual({
+      status: AccountDeletionRequestStatus.pending,
+    });
+  });
+
+  it('creates a pending deletion request when none exists', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({
+      id: 'user-1',
+      deletedAt: null,
+    });
+    repo.findPendingDeletionRequestByUserId.mockResolvedValue(null);
+    repo.createDeletionRequest.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+      reason: 'Need to leave',
+      createdAt: new Date('2026-03-31T00:00:00.000Z'),
+    });
+
+    const result = await service.requestDeletion('user-1', {
+      reason: 'Need to leave',
+    });
+
+    expect(repo.createDeletionRequest).toHaveBeenCalledWith({
+      user: { connect: { id: 'user-1' } },
+      reason: 'Need to leave',
+      status: AccountDeletionRequestStatus.pending,
+    });
+    expect(result).toEqual({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+      reason: 'Need to leave',
+      createdAt: new Date('2026-03-31T00:00:00.000Z'),
+    });
+  });
+
+  it('rejects duplicate pending deletion requests', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({
+      id: 'user-1',
+      deletedAt: null,
+    });
+    repo.findPendingDeletionRequestByUserId.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+    });
+
+    await expect(
+      service.requestDeletion('user-1', { reason: 'Need to leave' }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('cancels a pending deletion request for the current member', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
+    repo.findPendingDeletionRequestByUserId.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+    });
+    repo.updateDeletionRequest.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.cancelled,
+    });
+
+    await expect(service.cancelDeletionRequest('user-1')).resolves.toEqual({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.cancelled,
+    });
+
+    expect(repo.updateDeletionRequest).toHaveBeenCalledWith('request-1', {
+      status: AccountDeletionRequestStatus.cancelled,
+      reviewNotes: 'Cancelled by member',
+    });
+  });
+
+  it('updates phone state transactionally without triggering OTP delivery', async () => {
     repo.updatePhoneAndResetVerification.mockResolvedValue(undefined);
-    authService.sendPhoneOtp.mockResolvedValue(undefined);
 
     await service.updatePhone('user-1', { phone_number: '+639171234567' });
 
@@ -81,7 +248,6 @@ describe('UserService', () => {
       'user-1',
       '+639171234567',
     );
-    expect(authService.sendPhoneOtp).toHaveBeenCalledWith('user-1');
   });
 
   it('uploads avatars through the shared files service', async () => {
@@ -168,7 +334,7 @@ describe('UserService', () => {
   it('maps notification dispatch context with preferred email and verified phone', async () => {
     repo.findNotificationDispatchTargetOrThrow.mockResolvedValue({
       user_id: 'user-1',
-      phone_verified_at: new Date('2026-03-28T06:00:00.000Z'),
+      profile_phone: '+639171234567',
       auth_identities: [
         { provider: 'google', identifier: 'fit@example.com' },
         { provider: 'phone', identifier: '+639171234567' },
@@ -181,7 +347,7 @@ describe('UserService', () => {
       user_id: 'user-1',
       preferred_email: 'fit@example.com',
       preferred_phone: '+639171234567',
-      phone_verified_at: new Date('2026-03-28T06:00:00.000Z'),
+      phone_verified_at: null,
     });
   });
 
@@ -212,6 +378,124 @@ describe('UserService', () => {
       }),
     );
   });
+
+  it('hides historical approved deletion state after restore clears deletedAt', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({
+      id: 'user-1',
+      deletedAt: null,
+    });
+    repo.findLatestDeletionRequest.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.approved,
+    });
+
+    await expect(service.getDeletionRequestStatus('user-1')).resolves.toEqual({
+      status: null,
+    });
+  });
+
+  it('returns a rotating attendance QR payload for active members', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-13T12:00:00.000Z'));
+    repo.findUserAggregateOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      qr_code_token: 'seed-qr-token',
+      qr_code_rotated_at: new Date('2026-04-13T11:59:00.000Z'),
+      qr_code_expires_at: new Date('2026-04-13T12:15:00.000Z'),
+      deletedAt: null,
+      email_verified_at: null,
+      phone_verified_at: null,
+      auth_identities: [],
+      membership_card: {
+        status: 'active',
+      },
+      notification_prefs: {},
+      profile: {
+        phone: null,
+      },
+    });
+    repo.findLatestDeletionRequest.mockResolvedValue(null);
+
+    await expect(service.getAttendanceQr('user-1')).resolves.toEqual({
+      ready: true,
+      qrValue: 'seed-qr-token',
+      expiresAt: '2026-04-13T12:15:00.000Z',
+      refreshAvailableAt: '2026-04-13T12:00:30.000Z',
+      reason: null,
+    });
+
+    jest.useRealTimers();
+  });
+
+  it('refreshes the attendance QR with a fresh expiry and enforces cooldown', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-13T12:00:00.000Z'));
+    repo.findUserAggregateOrThrow
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        role: UserRole.member,
+        status: UserStatus.active,
+        qr_code_token: 'old-token',
+        qr_code_rotated_at: null,
+        qr_code_expires_at: null,
+        deletedAt: null,
+        email_verified_at: null,
+        phone_verified_at: null,
+        auth_identities: [],
+        membership_card: {
+          status: 'active',
+        },
+        notification_prefs: {},
+        profile: {
+          phone: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        role: UserRole.member,
+        status: UserStatus.active,
+        qr_code_token: 'fresh-token',
+        qr_code_rotated_at: new Date('2026-04-13T12:00:00.000Z'),
+        qr_code_expires_at: new Date('2026-04-13T12:15:00.000Z'),
+        deletedAt: null,
+        email_verified_at: null,
+        phone_verified_at: null,
+        auth_identities: [],
+        membership_card: {
+          status: 'active',
+        },
+        notification_prefs: {},
+        profile: {
+          phone: null,
+        },
+      });
+    repo.findLatestDeletionRequest.mockResolvedValue(null);
+    repo.updateUser.mockResolvedValue({
+      qr_code_token: 'fresh-token',
+      qr_code_rotated_at: new Date('2026-04-13T12:00:00.000Z'),
+      qr_code_expires_at: new Date('2026-04-13T12:15:00.000Z'),
+    });
+
+    await expect(service.refreshQrToken('user-1')).resolves.toEqual({
+      ready: true,
+      qrValue: 'fresh-token',
+      expiresAt: '2026-04-13T12:15:00.000Z',
+      refreshAvailableAt: '2026-04-13T12:01:30.000Z',
+      reason: null,
+    });
+
+    await expect(service.refreshQrToken('user-1')).rejects.toMatchObject({
+      status: HttpStatus.TOO_MANY_REQUESTS,
+    });
+
+    expect(repo.updateUser).toHaveBeenCalledWith('user-1', {
+      qr_code_token: expect.any(String),
+      qr_code_rotated_at: new Date('2026-04-13T12:00:00.000Z'),
+      qr_code_expires_at: new Date('2026-04-13T12:15:00.000Z'),
+    });
+
+    jest.useRealTimers();
+  });
 });
 
 describe('AttendanceService', () => {
@@ -219,6 +503,7 @@ describe('AttendanceService', () => {
 
   const repo = {
     findActiveUserByQrTokenOrThrow: jest.fn(),
+    findLatestDeletionRequest: jest.fn(),
     findOpenAttendanceToday: jest.fn(),
     createAttendanceLog: jest.fn(),
     findUserProfileByUserIdOrThrow: jest.fn(),
@@ -227,16 +512,11 @@ describe('AttendanceService', () => {
     getAllAttendance: jest.fn(),
   };
 
-  const membershipService = {
-    hasSubscriptionAccess: jest.fn(),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
         { provide: UserRepository, useValue: repo },
-        { provide: SubscriptionService, useValue: membershipService },
       ],
     }).compile();
 
@@ -244,17 +524,18 @@ describe('AttendanceService', () => {
     jest.clearAllMocks();
   });
 
-  it('blocks member check-in without an active subscription', async () => {
-    repo.findActiveUserByQrTokenOrThrow.mockResolvedValue({
-      id: 'user-1',
-      role: UserRole.member,
-      status: 'active',
-    });
-    membershipService.hasSubscriptionAccess.mockResolvedValue(false);
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('rejects scans when the QR token is invalid or membership access is inactive', async () => {
+    repo.findActiveUserByQrTokenOrThrow.mockRejectedValue(
+      new NotFoundException('Invalid QR'),
+    );
 
     await expect(
       service.scanQr('staff-1', { qr_code_token: 'qr-token' }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('creates an attendance log when the member can check in', async () => {
@@ -262,8 +543,9 @@ describe('AttendanceService', () => {
       id: 'user-1',
       role: UserRole.member,
       status: 'active',
+      qr_code_token: 'seed-qr-token',
     });
-    membershipService.hasSubscriptionAccess.mockResolvedValue(true);
+    repo.findLatestDeletionRequest.mockResolvedValue(null);
     repo.findOpenAttendanceToday.mockResolvedValue(null);
     repo.createAttendanceLog.mockResolvedValue({
       id: 'attendance-1',
@@ -275,7 +557,7 @@ describe('AttendanceService', () => {
     });
 
     const result = await service.scanQr('staff-1', {
-      qr_code_token: 'qr-token',
+      qr_value: 'seed-qr-token',
     });
 
     expect(result).toEqual({
@@ -283,5 +565,24 @@ describe('AttendanceService', () => {
       member_name: 'Fit Track',
       check_in_at: new Date('2026-03-22T10:00:00Z'),
     });
+  });
+
+  it('rejects archived accounts even when the QR token matches', async () => {
+    repo.findActiveUserByQrTokenOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: 'active',
+      qr_code_token: 'seed-qr-token',
+    });
+    repo.findLatestDeletionRequest.mockResolvedValue({
+      id: 'request-1',
+      status: AccountDeletionRequestStatus.pending,
+    });
+
+    await expect(
+      service.scanQr('staff-1', {
+        qr_value: 'seed-qr-token',
+      }),
+    ).rejects.toThrow(HttpException);
   });
 });

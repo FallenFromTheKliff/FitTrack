@@ -1,5 +1,7 @@
 export { default as BlockDetailModal } from "./BlockDetailModal";
 export { default as CalendarModal } from "./CalendarModal";
+export { default as CoachAppointmentActionModal } from "./CoachAppointmentActionModal";
+export { default as CoachAvailabilityModal } from "./CoachAvailabilityModal";
 export { default as ConfirmModal } from "./ConfirmModal";
 export { default as DetailsModal } from "./DetailsModal";
 export { default as FitModal } from "./FitModal";

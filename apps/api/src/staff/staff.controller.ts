@@ -1,138 +1,180 @@
-import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/roles.guard/roles.guard';
-import { Roles } from 'src/auth/roles.decorator/roles.decorator';
-import { BookingService } from 'src/booking-venue/booking/booking.service';
-import { UserService } from 'src/user/user.service';
-import { CoachService } from 'src/coach-appointment/coach/coach.service';
-import { AdminService } from 'src/admin/admin.service';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
-/**
- * STAFF Controller
- *
- * Purpose: Handle operations for STAFF role (sub-admin)
- *
- * Permissions:
- * - View users (read-only)
- * - Manage bookings (approve/reject)
- * - View coaches (read-only)
- *
- * Restrictions:
- * - Cannot create admins/staff
- * - Cannot delete users
- * - Cannot manage venues
- * - Cannot upgrade users to coaches
- */
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { BookingService } from '../bookings/booking/booking.service';
+import { AppointmentService } from '../coaching/appointment/appointment.service';
+import {
+  CancelAppointmentDTO,
+  CompleteAppointmentDTO,
+  RespondAppointmentDTO,
+  SetAvailabilityDTO,
+  StaffAppointmentFilterDTO,
+} from '../coaching/appointment/dto/appointment.dto';
+import { UpdateCoachProfileDTO } from '../coaching/coach/dto/coach.dto';
+import { CoachService } from '../coaching/coach/coach.service';
+import { DateRangeDTO } from '../user/dto/user-dto';
+import { StaffService } from './staff.service';
+
+@ApiTags('Staff')
+@ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN') // Both STAFF and ADMIN can access these endpoints
+@Roles(UserRole.staff, UserRole.admin)
 @Controller('staff')
 export class StaffController {
   constructor(
-    private bookingService: BookingService,
-    private userService: UserService,
-    private coachService: CoachService,
-    private adminService: AdminService,
+    private readonly staffService: StaffService,
+    private readonly bookingService: BookingService,
+    private readonly appointmentService: AppointmentService,
+    private readonly coachService: CoachService,
   ) {}
 
-  // ===== USER MANAGEMENT (Read-Only) =====
+  @Get('dashboard/stats')
+  @ApiOperation({
+    summary: 'Get live amenity-booking metrics for the staff dashboard.',
+  })
+  getDashboardStats() {
+    return this.staffService.getDashboardStats();
+  }
 
-  /**
-   * Get all users
-   * Staff can view users but cannot modify them
-   */
   @Get('users')
-  async getAllUsers() {
-    return this.adminService.getAllUsers();
+  @ApiOperation({
+    summary: 'List user directory records for staff-facing member pages.',
+  })
+  getAllUsers() {
+    return this.staffService.getAllUsers();
   }
 
-  /**
-   * Get specific user details
-   */
-  @Get('users/:id')
-  async getUserDetails(@Param('id') userId: string) {
-    return this.userService.getProfile(userId);
+  @Get('coaches')
+  @ApiOperation({
+    summary: 'List coach directory records for staff-facing member pages.',
+  })
+  getAllCoaches() {
+    return this.staffService.getAllCoaches();
   }
 
-  // ===== BOOKING MANAGEMENT (Full Access) =====
-  // This is the PRIMARY responsibility of STAFF role
-
-  // Get all pending bookings (requires action)
-
-  @Get('bookings/pending')
-  async getPendingBookings() {
-    return this.bookingService.getPendingBookings();
+  @Get('appointments')
+  @ApiOperation({
+    summary: 'List coach appointments for staff-owned coaching management.',
+  })
+  getAllAppointments(@Query() dto: StaffAppointmentFilterDTO) {
+    return this.appointmentService.getStaffAppointments(dto);
   }
 
-  /**
-   * Get all bookings (for monitoring)
-   */
+  @Patch('coaches/:id/availability')
+  @ApiOperation({
+    summary: 'Replace a coach weekly availability as staff or admin.',
+  })
+  async replaceCoachAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetAvailabilityDTO,
+  ) {
+    await this.appointmentService.setAvailabilityForCoach(id, dto);
+    return null;
+  }
+
+  @Patch('coaches/:id')
+  @ApiOperation({
+    summary:
+      'Update coach profile details from the staff coaching management surface.',
+  })
+  updateCoachProfile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCoachProfileDTO,
+  ) {
+    return this.coachService.updateManagedProfile(id, dto);
+  }
+
   @Get('bookings')
-  async getAllBookings() {
-    return this.bookingService.getAllBookings();
+  @ApiOperation({
+    summary: 'List live amenity bookings for the staff schedule surface.',
+  })
+  getAllBookings(@Query() dto: DateRangeDTO) {
+    return this.bookingService.getAllBookings(dto);
   }
 
-  /**
-   * Get specific booking details
-   */
-  @Get('bookings/:id')
-  async getBookingDetails(@Param('id') id: string) {
-    return this.bookingService.getBookingById(id);
-  }
-
-  /**
-   * Confirm/Approve a booking
-   */
   @Patch('bookings/:id/confirm')
-  async confirmBooking(@Param('id') id: string) {
-    return this.bookingService.confirmBooking(id);
+  @ApiOperation({
+    summary: 'Confirm a pending booking from the staff schedule surface.',
+  })
+  confirmBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.bookingService.confirmPendingBooking(id, user.sub);
   }
 
-  /**
-   * Reject a booking
-   */
   @Patch('bookings/:id/reject')
-  async rejectBooking(
-    @Param('id') id: string,
+  @ApiOperation({
+    summary: 'Reject a pending booking from the staff schedule surface.',
+  })
+  rejectBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
     @Body('reason') reason?: string,
   ) {
-    return this.bookingService.rejectBooking(id, reason);
+    return this.bookingService.rejectPendingBooking(id, user.sub, reason);
   }
 
-  // ===== COACH MANAGEMENT (Read-Only) =====
-
-  /**
-   * Get all coaches (for reference/monitoring)
-   */
-  @Get('coaches')
-  async getAllCoaches() {
-    return this.coachService.getAllCoaches();
+  @Patch('appointments/:id/respond')
+  @ApiOperation({
+    summary:
+      'Accept or reject a pending coaching appointment as staff or admin.',
+  })
+  respondToAppointment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: RespondAppointmentDTO,
+  ) {
+    return this.appointmentService.respondToAppointmentAsStaff(
+      user.sub,
+      id,
+      dto,
+    );
   }
 
-  /**
-   * Get specific coach details
-   */
-  @Get('coaches/:id')
-  async getCoachDetails(@Param('id') id: string) {
-    return this.coachService.getCoachProfile(id);
+  @Patch('appointments/:id/complete')
+  @ApiOperation({
+    summary: 'Mark a coaching appointment complete as staff or admin.',
+  })
+  completeAppointment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CompleteAppointmentDTO,
+  ) {
+    return this.appointmentService.completeAppointmentAsStaff(user.sub, id, dto);
   }
 
-  /**
-   * Get coach's appointments (for monitoring booking conflicts)
-   */
-  @Get('coaches/:id/appointments')
-  async getCoachAppointments(@Param('id') coachId: string) {
-    // Note: This would need to be implemented in CoachService
-    // For now, staff can only view coach profiles
-    return this.coachService.getCoachProfile(coachId);
-  }
-
-  // ===== DASHBOARD/STATS =====
-
-  /**
-   * Get booking statistics (optional - for staff dashboard)
-   */
-  @Get('dashboard/stats')
-  async getBookingStats() {
-    return this.bookingService.getBookingStatistics();
+  @Patch('appointments/:id/cancel')
+  @ApiOperation({
+    summary: 'Cancel a coaching appointment as staff or admin.',
+  })
+  async cancelAppointment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CancelAppointmentDTO,
+  ) {
+    await this.appointmentService.cancelAppointment(
+      user.sub,
+      user.role,
+      id,
+      dto,
+    );
+    return {
+      message: 'Appointment cancelled. Paid downpayments are non-refundable.',
+    };
   }
 }

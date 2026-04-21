@@ -58,6 +58,36 @@ export class NutritionRepository extends BaseRepository {
     super(prisma);
   }
 
+  async findActiveTdeeAggregate(
+    userId: string,
+  ): Promise<ActiveTdeeAggregateRecord | null> {
+    const tdee = await this.findOne<ActiveTdeeAggregateRecord>(
+      this.prisma.tdeeProfile,
+      {
+        user_id: userId,
+        is_active: true,
+      },
+      {
+        macro_targets: {
+          where: {
+            user_id: userId,
+            is_active: true,
+          },
+          orderBy: {
+            created_at: 'desc',
+          },
+          take: 1,
+        },
+      },
+    );
+
+    if (!tdee || tdee.macro_targets.length === 0) {
+      return null;
+    }
+
+    return tdee;
+  }
+
   async findActiveTdeeAggregateOrThrow(
     userId: string,
   ): Promise<ActiveTdeeAggregateRecord> {

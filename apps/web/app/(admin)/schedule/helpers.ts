@@ -1,9 +1,21 @@
-import type { MemberRecord } from "@fittrack/types";
+import type { CoachProfileRecord } from "@fittrack/types";
 import { formatWeekRange, toYmd } from "@fittrack/utils";
 import type { Booking, Resource } from "@/data/schedule-constants";
 
-export const DEFAULT_STAFF_ICON = "👤";
+export type CoachRosterResource = Resource & {
+  availabilityCount: number;
+  availabilityPreview: string[];
+  bio: string | null;
+  certifications: string[];
+  email: string;
+  hourlyRate: number | null;
+  isActive: boolean;
+  specialties: string[];
+};
+
+export const DEFAULT_COACH_ICON = "CO";
 export const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 06:00-21:00
+const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function getWeekStart(date: Date): Date {
   const nextDate = new Date(date);
@@ -20,37 +32,55 @@ export function addDays(date: Date, days: number): Date {
 
 export { formatWeekRange, toYmd };
 
-export function getMemberInitials(member: MemberRecord): string {
-  const first = member.profile?.firstName?.trim().charAt(0) ?? "";
-  const last = member.profile?.lastName?.trim().charAt(0) ?? "";
-  if (first || last) return `${first}${last}`.toUpperCase();
-  return member.email.slice(0, 2).toUpperCase();
+function getCoachDisplayName(coach: CoachProfileRecord): string {
+  const first = coach.user?.profile?.firstName?.trim() ?? "";
+  const last = coach.user?.profile?.lastName?.trim() ?? "";
+  return `${first} ${last}`.trim() || coach.user?.email || "Coach";
 }
 
-export function mapMembersToStaff(allMembers: MemberRecord[]): Resource[] {
-  return allMembers
-    .filter((member) => member.role?.name === "STAFF" && !member.deletedAt)
-    .map((member) => ({
-      id: `staff-${member.id}`,
-      name:
-        member.profile?.firstName && member.profile?.lastName
-          ? `${member.profile.firstName} ${member.profile.lastName}`.trim()
-          : member.email,
-      type: "trainer" as const,
-      icon: DEFAULT_STAFF_ICON,
-      initials: getMemberInitials(member)
-    }));
+function formatAvailabilityPreview(coach: CoachProfileRecord): string[] {
+  return (coach.availability ?? []).slice(0, 3).map((slot) => {
+    const weekday = WEEKDAY_NAMES[slot.dayOfWeek] ?? `Day ${slot.dayOfWeek}`;
+    return `${weekday} ${slot.startTime}-${slot.endTime}`;
+  });
+}
+
+export function getCoachInitials(coach: CoachProfileRecord): string {
+  const first = coach.user?.profile?.firstName?.trim().charAt(0) ?? "";
+  const last = coach.user?.profile?.lastName?.trim().charAt(0) ?? "";
+  if (first || last) return `${first}${last}`.toUpperCase();
+  return (coach.user?.email ?? "CO").slice(0, 2).toUpperCase();
+}
+
+export function mapCoachesToRoster(
+  coaches: CoachProfileRecord[],
+): CoachRosterResource[] {
+  return coaches.map((coach) => ({
+    id: coach.id,
+    name: getCoachDisplayName(coach),
+    type: "trainer" as const,
+    icon: DEFAULT_COACH_ICON,
+    initials: getCoachInitials(coach),
+    bio: coach.bio ?? null,
+    certifications: coach.certifications ?? [],
+    specialties: coach.specialties ?? [],
+    hourlyRate: coach.hourlyRate ?? null,
+    isActive: coach.isActive ?? false,
+    email: coach.user?.email ?? "",
+    availabilityCount: coach.availability?.length ?? 0,
+    availabilityPreview: formatAvailabilityPreview(coach),
+  }));
 }
 
 export function buildManualBooking(
   staff: Resource,
   dayDate: Date,
   hour: number,
-  brandColor: string
+  brandColor: string,
 ): Booking {
   return {
     id: `manual-${Date.now()}`,
-    title: `${staff.name} - Shift`,
+    title: `${staff.name} - Coaching Block`,
     resourceId: staff.id,
     resourceName: staff.name,
     startHour: hour,
@@ -60,6 +90,6 @@ export function buildManualBooking(
     status: "confirmed",
     source: "manual",
     date: toYmd(dayDate),
-    venueLabel: "Unassigned"
+    venueLabel: "Coach Session",
   };
 }

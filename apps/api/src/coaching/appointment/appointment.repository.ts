@@ -15,6 +15,7 @@ import {
 import { BaseRepository } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DateRangeDTO } from '../../user/dto/user-dto';
+import { StaffAppointmentFilterDTO } from './dto/appointment.dto';
 
 const ACTIVE_APPOINTMENT_STATUSES = [
   AppointmentStatus.pending_coach,
@@ -81,6 +82,59 @@ export type AppointmentLifecycleRecord = Prisma.CoachAppointmentGetPayload<{
       };
     };
   };
+}>;
+
+const coachScheduleInclude = {
+  user: {
+    include: {
+      profile: true,
+    },
+  },
+} satisfies Prisma.CoachAppointmentInclude;
+
+export type CoachScheduleRecord = Prisma.CoachAppointmentGetPayload<{
+  include: typeof coachScheduleInclude;
+}>;
+
+const staffAppointmentInclude = {
+  user: {
+    include: {
+      auth_identities: {
+        where: { provider: { in: ['email', 'google'] } },
+        orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+        select: {
+          identifier: true,
+          provider: true,
+          is_primary: true,
+          verified_at: true,
+        },
+      },
+      profile: true,
+    },
+  },
+  coach: {
+    include: {
+      user: {
+        include: {
+          auth_identities: {
+            where: { provider: { in: ['email', 'google'] } },
+            orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+            select: {
+              identifier: true,
+              provider: true,
+              is_primary: true,
+              verified_at: true,
+            },
+          },
+          profile: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.CoachAppointmentInclude;
+
+export type StaffAppointmentRecord = Prisma.CoachAppointmentGetPayload<{
+  include: typeof staffAppointmentInclude;
 }>;
 
 @Injectable()
@@ -290,6 +344,47 @@ export class AppointmentRepository extends BaseRepository {
         dateField: 'scheduled_at',
       },
       {
+        orderBy: { scheduled_at: 'desc' },
+      },
+      { page: dto.page, limit: dto.limit },
+    );
+  }
+
+  getCoachAppointments(coachUserId: string, dto: DateRangeDTO) {
+    return this.paginateWithDateRange<CoachScheduleRecord>(
+      this.prisma.coachAppointment,
+      {
+        coach: {
+          user_id: coachUserId,
+        },
+      },
+      {
+        start_date: dto.start_date,
+        end_date: dto.end_date,
+        dateField: 'scheduled_at',
+      },
+      {
+        include: coachScheduleInclude,
+        orderBy: { scheduled_at: 'desc' },
+      },
+      { page: dto.page, limit: dto.limit },
+    );
+  }
+
+  getStaffAppointments(dto: StaffAppointmentFilterDTO) {
+    return this.paginateWithDateRange<StaffAppointmentRecord>(
+      this.prisma.coachAppointment,
+      {
+        ...(dto.coach_id ? { coach_id: dto.coach_id } : {}),
+        ...(dto.status ? { status: dto.status } : {}),
+      },
+      {
+        start_date: dto.start_date,
+        end_date: dto.end_date,
+        dateField: 'scheduled_at',
+      },
+      {
+        include: staffAppointmentInclude,
         orderBy: { scheduled_at: 'desc' },
       },
       { page: dto.page, limit: dto.limit },

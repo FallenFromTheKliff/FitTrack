@@ -28,6 +28,7 @@ describe('AppointmentService', () => {
     findCoachScheduleContextOrThrow: jest.fn(),
     createPendingAppointment: jest.fn(),
     getMyAppointments: jest.fn(),
+    getStaffAppointments: jest.fn(),
     findAppointmentLifecycleContextByIdOrThrow: jest.fn(),
     updateAppointment: jest.fn(),
   };
@@ -99,6 +100,29 @@ describe('AppointmentService', () => {
           dayOfWeek: 1,
           startTime: new Date(Date.UTC(1970, 0, 1, 8, 0, 0, 0)),
           endTime: new Date(Date.UTC(1970, 0, 1, 10, 0, 0, 0)),
+        },
+      ],
+    });
+  });
+
+  it('replaces availability slots for a selected coach when staff manages the schedule', async () => {
+    repo.findCoachScheduleContextOrThrow.mockResolvedValue({
+      id: 'coach-1',
+      user_id: 'coach-user-1',
+    });
+
+    await service.setAvailabilityForCoach('coach-1', {
+      slots: [{ day_of_week: 2, start_time: '10:00', end_time: '12:00' }],
+    });
+
+    expect(repo.findCoachScheduleContextOrThrow).toHaveBeenCalledWith('coach-1');
+    expect(repo.replaceAvailabilitySlots).toHaveBeenCalledWith({
+      coachId: 'coach-1',
+      slots: [
+        {
+          dayOfWeek: 2,
+          startTime: new Date(Date.UTC(1970, 0, 1, 10, 0, 0, 0)),
+          endTime: new Date(Date.UTC(1970, 0, 1, 12, 0, 0, 0)),
         },
       ],
     });
@@ -255,6 +279,77 @@ describe('AppointmentService', () => {
     );
   });
 
+  it('returns the staff-owned appointment roster with member and coach summaries', async () => {
+    repo.getStaffAppointments.mockResolvedValue({
+      data: [
+        {
+          id: 'appt-1',
+          user_id: 'member-1',
+          coach_id: 'coach-1',
+          status: 'pending_coach',
+          scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
+          duration_minutes: 60,
+          member_notes: 'Focus on shoulder stability.',
+          created_at: new Date('2099-03-25T10:00:00.000Z'),
+          updated_at: new Date('2099-03-25T10:00:00.000Z'),
+          user: {
+            id: 'member-1',
+            auth_identities: [
+              { identifier: 'member-1@fittrack.com', is_primary: true },
+            ],
+            profile: {
+              first_name: 'Jamie',
+              last_name: 'Rivera',
+              avatar_url: null,
+            },
+          },
+          coach: {
+            id: 'coach-1',
+            hourly_rate: new Prisma.Decimal('900'),
+            user: {
+              auth_identities: [
+                { identifier: 'coach-1@fittrack.com', is_primary: true },
+              ],
+              profile: {
+                first_name: 'Noah',
+                last_name: 'Reyes',
+                avatar_url: null,
+              },
+            },
+          },
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
+    });
+
+    const result = await service.getStaffAppointments({
+      page: 1,
+      limit: 20,
+      coach_id: 'coach-1',
+    });
+
+    expect(repo.getStaffAppointments).toHaveBeenCalledWith({
+      page: 1,
+      limit: 20,
+      coach_id: 'coach-1',
+    });
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        id: 'appt-1',
+        status: 'pending_coach',
+        user: expect.objectContaining({
+          email: 'member-1@fittrack.com',
+        }),
+        coach: expect.objectContaining({
+          hourly_rate: '900',
+          profile: expect.objectContaining({
+            first_name: 'Noah',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('confirms free appointments immediately when a coach accepts them', async () => {
     repo.findCoachByUserIdOrThrow.mockResolvedValue({ id: 'coach-1' });
     repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
@@ -365,6 +460,53 @@ describe('AppointmentService', () => {
       APPOINTMENT_CONFIRMED_EVENT,
       expect.anything(),
     );
+  });
+
+  it('allows staff to accept a pending appointment without coach ownership checks', async () => {
+    repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'pending_coach',
+      is_free_session: false,
+      cancelled_at: null,
+      cancellation_reason: null,
+      coach: { id: 'coach-1', user_id: 'coach-user-1' },
+    });
+    repo.updateAppointment.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'pending_payment',
+      is_free_session: false,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
+      duration_minutes: 60,
+      total_amount: new Prisma.Decimal('1200'),
+      downpayment_amount: new Prisma.Decimal('360'),
+      balance_amount: new Prisma.Decimal('840'),
+      gym_revenue: new Prisma.Decimal('240'),
+      coach_earnings: new Prisma.Decimal('960'),
+      downpayment_paid_at: null,
+      balance_paid_at: null,
+      session_notes: null,
+      member_notes: null,
+      completed_at: null,
+      no_show_at: null,
+      cancellation_reason: null,
+      cancelled_at: null,
+      created_at: new Date('2099-03-25T10:00:00.000Z'),
+      updated_at: new Date('2099-03-25T10:00:00.000Z'),
+    });
+
+    const result = await service.respondToAppointmentAsStaff('staff-1', 'appt-1', {
+      accepted: true,
+    });
+
+    expect(repo.findCoachByUserIdOrThrow).not.toHaveBeenCalled();
+    expect(repo.updateAppointment).toHaveBeenCalledWith('appt-1', {
+      status: 'pending_payment',
+    });
+    expect(result.status).toBe('pending_payment');
   });
 
   it('requires a rejection reason when a coach rejects an appointment', async () => {

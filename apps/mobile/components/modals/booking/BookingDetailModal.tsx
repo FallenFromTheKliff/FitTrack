@@ -17,7 +17,11 @@ import { getVenueIcon } from "@/utils/venueMap";
 import { FitButton, FitText } from "@/components/fit";
 
 export type DetailBooking = {
+  amountDueNow?: number;
   id: string;
+  nextPaymentDate?: string;
+  paymentPlan?: "downpayment" | "free" | "full";
+  remainingBalance?: number;
   resourceId?: string;
   resourceName: string;
   date: string;
@@ -32,6 +36,7 @@ export type DetailBooking = {
   participantName?: string;
   detailTitle?: string;
   detailSubtitle?: string;
+  totalAmount?: number;
 };
 
 type DetailAction = {
@@ -130,6 +135,16 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
       finalPrice: booking.price || venueTotal
     };
   })();
+  const totalPrice = booking.totalAmount ?? pricing.finalPrice;
+  const showPaymentPlan = booking.paymentPlan === "downpayment" || booking.paymentPlan === "full";
+  const amountDueNow = booking.amountDueNow ?? totalPrice;
+  const remainingBalance = booking.remainingBalance ?? 0;
+  const paymentPlanLabel =
+    booking.paymentPlan === "full"
+      ? "Full payment"
+      : booking.paymentPlan === "downpayment"
+        ? "Split payment"
+        : "Free access";
 
   return (
     <Modal
@@ -199,9 +214,23 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
                 <FitText style={s.detailValue}>{booking.description}</FitText>
               </View>
             ) : null}
+            {showPaymentPlan ? (
+              <View style={s.priceCard}>
+                <FitText style={s.detailLabel}>PAYMENT PLAN</FitText>
+                <FitText style={s.detailValue}>{paymentPlanLabel}</FitText>
+                <FitText style={s.priceSub}>
+                  Pay now: ₱{amountDueNow.toLocaleString()}
+                </FitText>
+                <FitText style={s.priceSub}>
+                  {remainingBalance > 0
+                    ? `Remaining balance: ₱${remainingBalance.toLocaleString()} on or after ${formatBookingDate(booking.nextPaymentDate ?? booking.date)}`
+                    : "No remaining balance after the first payment is confirmed."}
+                </FitText>
+              </View>
+            ) : null}
             <View style={s.priceCard}>
               <FitText style={s.detailLabel}>PRICE</FitText>
-              <FitText style={s.priceValue}>₱{pricing.finalPrice.toLocaleString()}</FitText>
+              <FitText style={s.priceValue}>₱{totalPrice.toLocaleString()}</FitText>
               <FitText style={s.priceSub}>
                 {pricing.parsed && venuePresentation ? `₱${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr` : ""}
               </FitText>

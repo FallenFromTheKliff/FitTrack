@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack UI Polish"
+  short_description: "FitTrack adaptive layout, hierarchy, copy restraint, and modal polish"
+  default_prompt: "Use $frontend-uiux-polish to improve a FitTrack user-facing surface with stronger hierarchy, adaptive layout, copy restraint, modal quality, and static premium finish while preserving existing ownership boundaries. For record-centric admin surfaces, prefer Attio as the primary benchmark and Linear as the secondary benchmark. If an approved scaffold exists, enforce scaffold fidelity, reject annotation leakage or clean-but-generic composition, and then hand premium motion-system work to $ui-animator."
+
+policy:
+  allow_implicit_invocation: true

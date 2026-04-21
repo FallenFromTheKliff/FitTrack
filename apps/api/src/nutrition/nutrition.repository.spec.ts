@@ -42,6 +42,33 @@ describe('NutritionRepository', () => {
     jest.clearAllMocks();
   });
 
+  it('returns the active tdee aggregate when both tdee and macro target exist', async () => {
+    tdeeProfile.findFirst.mockResolvedValue({
+      id: 'tdee-1',
+      macro_targets: [{ id: 'macro-1' }],
+    });
+
+    await expect(repo.findActiveTdeeAggregate('user-1')).resolves.toEqual({
+      id: 'tdee-1',
+      macro_targets: [{ id: 'macro-1' }],
+    });
+  });
+
+  it('returns null when the active tdee aggregate is missing', async () => {
+    tdeeProfile.findFirst.mockResolvedValue(null);
+
+    await expect(repo.findActiveTdeeAggregate('user-1')).resolves.toBeNull();
+  });
+
+  it('returns null when the active tdee profile has no active macro target', async () => {
+    tdeeProfile.findFirst.mockResolvedValue({
+      id: 'tdee-1',
+      macro_targets: [],
+    });
+
+    await expect(repo.findActiveTdeeAggregate('user-1')).resolves.toBeNull();
+  });
+
   it('loads the active tdee aggregate with the active macro target', async () => {
     tdeeProfile.findFirst.mockResolvedValue({
       id: 'tdee-1',

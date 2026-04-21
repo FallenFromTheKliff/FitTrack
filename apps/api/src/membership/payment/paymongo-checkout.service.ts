@@ -22,9 +22,11 @@ interface PaymongoCheckoutSessionResponse {
 
 export interface CreatePaymongoCheckoutInput {
   amount: number;
+  cancelQuery?: Record<string, string>;
   description: string;
   idempotencyKey: string;
   metadata: Record<string, string>;
+  successQuery?: Record<string, string>;
 }
 
 export interface PaymongoCheckoutResult {
@@ -41,6 +43,11 @@ export class PaymongoCheckoutService {
     input: CreatePaymongoCheckoutInput,
   ): Promise<PaymongoCheckoutResult> {
     const settings = this.getRequiredSettings();
+    const cancelUrl = this.buildReturnUrl(settings.cancelUrl, input.cancelQuery);
+    const successUrl = this.buildReturnUrl(
+      settings.successUrl,
+      input.successQuery,
+    );
     const endpoint = `${settings.apiBaseUrl.replace(/\/+$/, '')}/checkout_sessions`;
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -54,7 +61,7 @@ export class PaymongoCheckoutService {
         data: {
           attributes: {
             billing: {},
-            cancel_url: settings.cancelUrl,
+            cancel_url: cancelUrl,
             description: input.description,
             line_items: [
               {
@@ -70,7 +77,7 @@ export class PaymongoCheckoutService {
             send_email_receipt: false,
             show_description: true,
             show_line_items: true,
-            success_url: settings.successUrl,
+            success_url: successUrl,
           },
         },
       }),
@@ -162,6 +169,24 @@ export class PaymongoCheckoutService {
       .split(',')
       .map((methodType) => methodType.trim())
       .filter((methodType) => methodType.length > 0);
+  }
+
+  private buildReturnUrl(baseUrl: string, query?: Record<string, string>) {
+    if (!query || Object.keys(query).length === 0) {
+      return baseUrl;
+    }
+
+    const url = new URL(baseUrl);
+    for (const [key, value] of Object.entries(query)) {
+      const normalizedValue = value.trim();
+      if (!normalizedValue) {
+        continue;
+      }
+
+      url.searchParams.set(key, normalizedValue);
+    }
+
+    return url.toString();
   }
 
   private buildAuthorizationHeader(secretKey: string): string {

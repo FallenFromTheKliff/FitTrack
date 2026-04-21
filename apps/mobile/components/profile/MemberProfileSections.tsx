@@ -1,0 +1,209 @@
+import { View } from "react-native";
+import { Award, CreditCard, Dumbbell, HeartPulse, RefreshCw, ScanLine, Trophy, UserCog } from "lucide-react-native";
+
+import { makeProfileStyles } from "@/styles/shared/ScreenStyles";
+import { FitButton, FitCard, FitSection, FitText } from "@/components/fit";
+import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
+import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
+
+type MemberProfileSectionsProps = {
+  controller: ProfileScreenController;
+  styles: ReturnType<typeof makeProfileStyles>;
+};
+
+function formatMembershipStatus(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export default function MemberProfileSections({ controller, styles }: MemberProfileSectionsProps) {
+  const canShowGamification = controller.hasMemberCardAccess;
+  const membershipCardActionSubtitle = controller.memberAccessLabel === "Pending verification"
+    ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
+    : controller.memberAccessLabel === "Revoked"
+      ? "Your membership card access is revoked right now. Buy a new card or ask the front desk to repair the account if this looks incorrect."
+      : "Permanent PHP 400 membership card. Buy once, then load weekly, monthly, or multi-month plans whenever you need them.";
+  const gamificationMessage = controller.memberAccessLabel === "Pending verification"
+    ? "Your membership card is waiting for verification. Fitness progress, badges, and achievement history unlock as soon as the card becomes active."
+    : `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
+  const onlinePurchaseLabel = controller.isMembershipCardPurchasePending && controller.membershipCardPurchaseProvider === "paymongo"
+    ? "Starting..."
+    : "Pay Online";
+  const cashPurchaseLabel = controller.isMembershipCardPurchasePending && controller.membershipCardPurchaseProvider === "cash"
+    ? "Requesting..."
+    : "Pay in Cash";
+
+  return (
+    <>
+      {canShowGamification ? (
+        <FitSection heading="Fitness Summary">
+          {controller.profileFitnessLoading ? (
+            <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>
+              Loading your live mastery summary...
+            </FitText>
+          ) : controller.profileFitnessError ? (
+            <>
+              <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>
+                {controller.profileFitnessError}
+              </FitText>
+              <FitButton
+                label="Retry Fitness Summary"
+                icon={RefreshCw}
+                onPress={() => void controller.onRefreshFitnessSummary()}
+                variant="ghost"
+                style={{ marginTop: 12 }}
+              />
+            </>
+          ) : (
+            <>
+              <View style={styles.statsRow}>
+                {controller.fitnessSummaryCards.map((item, index) => (
+                  <View key={item.id} style={{ flex: 1, flexDirection: "row", alignItems: "stretch" }}>
+                    <FitCard label={item.label} statValue={item.value} noChevron />
+                    {index < controller.fitnessSummaryCards.length - 1 ? <View style={styles.statDivider} /> : null}
+                  </View>
+                ))}
+              </View>
+              <View style={{ marginTop: 14 }}>
+                <FitCard
+                  icon={Award}
+                  label="Current Badge"
+                  subtitle={controller.fitnessSummaryBadgeDetail}
+                  trailingLabel={controller.fitnessSummaryBadge}
+                  hasBorder
+                  onPress={controller.onOpenMastery}
+                />
+                <FitCard
+                  icon={Trophy}
+                  label="Gym Standing"
+                  subtitle={controller.fitnessSummaryRankDetail}
+                  trailingLabel={controller.fitnessSummaryRank}
+                  hasBorder
+                  onPress={controller.onOpenMastery}
+                />
+                <FitCard
+                  icon={HeartPulse}
+                  label="Health Snapshot"
+                  subtitle={controller.fitnessSummaryHealthDetail}
+                  trailingLabel={controller.fitnessSummaryHealth}
+                  noChevron
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                <FitButton
+                  label="Open Muscle Mastery"
+                  icon={Trophy}
+                  variant="primary"
+                  onPress={controller.onOpenMastery}
+                  flex={1}
+                />
+                <FitButton
+                  label="Open Workout"
+                  icon={Dumbbell}
+                  variant="ghost"
+                  onPress={controller.onOpenWorkout}
+                  flex={1}
+                />
+              </View>
+            </>
+          )}
+        </FitSection>
+      ) : (
+        <FitSection heading="Fitness Progress">
+          <PremiumFeatureGate
+            icon={Trophy}
+            eyebrow="MEMBERSHIP CARD REQUIRED"
+            statusLabel={controller.memberAccessLabel}
+            title={controller.memberAccessLabel === "Pending verification" ? "Membership card verification in progress" : "Stats, badges, and achievements stay locked"}
+            message={gamificationMessage}
+          />
+        </FitSection>
+      )}
+      <FitSection heading="ACCOUNT">
+        <FitCard
+          icon={UserCog}
+          label="Edit Profile"
+          subtitle="Update your name, phone, and avatar"
+          hasBorder
+          onPress={() => controller.setEditVisible(true)}
+        />
+        <FitCard
+          icon={CreditCard}
+          label="Member Access"
+          subtitle={controller.memberAccessSummary}
+          trailingLabel={controller.memberAccessLabel}
+          trailingLabelColor={controller.memberAccessColor}
+          noChevron
+        />
+        <FitCard
+          icon={ScanLine}
+          label="Attendance QR"
+          subtitle={controller.qrCodeSubtitle}
+          trailingLabel={controller.qrCodeStatusLabel}
+          trailingLabelColor={controller.qrCodeStatusColor}
+          onPress={controller.handleOpenAttendanceQr}
+        />
+        {!controller.hasMemberCardAccess ? (
+          <>
+            <FitCard
+              icon={CreditCard}
+              label="Membership Card Purchase"
+              subtitle={membershipCardActionSubtitle}
+              trailingLabel={controller.canPurchaseMembershipCard ? "PHP 400" : undefined}
+              trailingLabelColor={controller.canPurchaseMembershipCard ? controller.memberAccessColor : undefined}
+              noChevron
+            />
+            {controller.canPurchaseMembershipCard ? (
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                <FitButton
+                  label={onlinePurchaseLabel}
+                  variant="primary"
+                  onPress={() => controller.handlePurchaseMembershipCard("paymongo")}
+                  disabled={controller.isMembershipCardPurchasePending}
+                  flex={1}
+                />
+                <FitButton
+                  label={cashPurchaseLabel}
+                  variant="ghost"
+                  onPress={() => controller.handlePurchaseMembershipCard("cash")}
+                  disabled={controller.isMembershipCardPurchasePending}
+                  flex={1}
+                />
+              </View>
+            ) : (
+              <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 12 }}>
+                Member-card purchase actions stay paused while this account is already waiting for verification.
+              </FitText>
+            )}
+          </>
+        ) : null}
+        <FitCard
+          icon={CreditCard}
+          label="Loaded Plan"
+          subtitle={controller.membershipSubtitle}
+          trailingLabel={controller.membershipStatusLabel}
+          trailingLabelColor={
+            controller.membershipStatusLabel && controller.currentSubscription
+              ? controller.membershipStatusColors[controller.currentSubscription.status]
+              : undefined
+          }
+          noChevron
+        />
+        <FitCard
+          icon={CreditCard}
+          label="Payment History"
+          subtitle={controller.paymentHistorySubtitle}
+          trailingLabel={controller.latestMembershipPayment ? formatMembershipStatus(controller.latestMembershipPayment.status) : undefined}
+          trailingLabelColor={
+            controller.latestMembershipPayment
+              ? controller.membershipStatusColors[controller.latestMembershipPayment.status]
+              : undefined
+          }
+          noChevron
+        />
+      </FitSection>
+    </>
+  );
+}

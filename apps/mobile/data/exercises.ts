@@ -15,6 +15,13 @@ export const EXERCISE_REFERENCES: ExerciseReference[] = [
     recommendation: "Keep your chest up and drive through your heels on every rep."
   },
   {
+    id: "ex-013",
+    name: "Push-Up",
+    muscleGroup: "Chest",
+    level: "Beginner",
+    recommendation: "Keep a straight body line, lower until the elbows bend deeply, and press without letting the hips sag."
+  },
+  {
     id: "ex-002",
     name: "Incline Push-Up",
     muscleGroup: "Chest",

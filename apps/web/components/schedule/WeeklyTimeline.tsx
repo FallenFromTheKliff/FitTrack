@@ -1,16 +1,18 @@
 "use client";
 import type { MotionStyle } from "framer-motion";
 import { motion } from "framer-motion";
-import { useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { ThemeColors } from "@fittrack/types";
 import { toYmd } from "@fittrack/utils";
 import type { Booking } from "@/data/schedule-constants";
+import { useTheme } from "@/contexts/ThemeContext";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 
 const WEEK_DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CELL_HEIGHT = 52;
+const CELL_HEIGHT = 42;
 const HOUR_COL_WIDTH = 52;
 
 type Props = {
@@ -47,6 +49,123 @@ function DropCell({ id, children, isToday, colors }: { id: string; children?: Re
   );
 }
 
+function BookingNode({
+  booking,
+  colors,
+  bookingMutedTextColor,
+  bookingTextColor,
+  onBlockClick,
+}: {
+  booking: Booking;
+  colors: ThemeColors;
+  bookingMutedTextColor: string;
+  bookingTextColor: string;
+  onBlockClick: (booking: Booking) => void;
+}) {
+  const { settings } = useTheme();
+  const canAnimate = settings.animationLevel !== "none";
+  const fullMotion = settings.animationLevel === "full";
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `booking:${booking.id}`,
+    data: {
+      kind: "booking",
+      bookingId: booking.id,
+    },
+  });
+
+  return (
+    <FitButton
+      buttonRef={setNodeRef}
+      variant="primary"
+      onClick={() => onBlockClick(booking)}
+      {...listeners}
+      {...attributes}
+      style={{
+        position: "absolute",
+        top: 3,
+        left: 3,
+        right: 3,
+        borderRadius: 6,
+        backgroundColor: booking.color ?? colors.brand,
+        border: "none",
+        padding: "3px 6px",
+        textAlign: "left",
+        zIndex: 2,
+        minHeight: 30,
+        boxShadow: isDragging
+          ? "0 10px 24px rgba(0,0,0,0.22)"
+          : "0 2px 8px rgba(0,0,0,0.2)",
+        alignItems: "flex-start",
+        cursor: "grab",
+        touchAction: "none",
+        opacity: isDragging ? 0.56 : 1,
+        transform: CSS.Translate.toString(transform),
+        transformOrigin: "center",
+        transition: canAnimate
+          ? "transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease, filter 160ms ease"
+          : "box-shadow 160ms ease, opacity 160ms ease",
+      }}
+      onMouseEnter={(event) => {
+        if (!canAnimate || isDragging) return;
+        event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
+        event.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.22)";
+        event.currentTarget.style.filter = "brightness(1.03)";
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.transform = CSS.Translate.toString(transform) ?? "";
+        event.currentTarget.style.boxShadow = isDragging
+          ? "0 10px 24px rgba(0,0,0,0.22)"
+          : "0 2px 8px rgba(0,0,0,0.2)";
+        event.currentTarget.style.filter = "none";
+      }}
+      onMouseDown={(event) => {
+        if (!canAnimate || isDragging) return;
+        event.currentTarget.style.transform = fullMotion ? "scale(0.992)" : "scale(0.996)";
+      }}
+      onMouseUp={(event) => {
+        if (!canAnimate || isDragging) return;
+        event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
+      }}
+    >
+      <FitText
+        excludeGlobalScale
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: bookingTextColor,
+          display: "block",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {booking.resourceName}
+      </FitText>
+      {booking.venueLabel && (
+        <FitText
+          excludeGlobalScale
+          style={{
+            fontSize: 9,
+            color: bookingMutedTextColor,
+            display: "block",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {booking.venueLabel}
+        </FitText>
+      )}
+      <FitText
+        excludeGlobalScale
+        style={{ fontSize: 9, color: bookingMutedTextColor, display: "block" }}
+      >
+        {booking.durationMin}min
+      </FitText>
+    </FitButton>
+  );
+}
+
 export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, isLoading, colors, onBlockClick }: Props) {
   const today = toYmd(new Date());
   const bookingTextColor = colors.onBrand ?? colors.surface;
@@ -62,13 +181,13 @@ export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, 
         overflow: "hidden"
       }}>
         <div style={{ display: "grid", width: "100%", gridTemplateColumns: timelineColumns, borderBottom: `1px solid ${colors.border}` }}>
-          <div style={{ height: 44, borderRight: `1px solid ${colors.border}` }} />
+          <div style={{ height: 40, borderRight: `1px solid ${colors.border}` }} />
           {weekDays.map((day, i) => {
             const ymd = toYmd(day);
             const isToday = ymd === today;
             return (
               <div key={i} style={{
-                height: 44,
+                height: 40,
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
@@ -77,8 +196,8 @@ export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, 
                 borderRight: i < 6 ? `1px solid ${colors.border}` : "none",
                 backgroundColor: isToday ? `${colors.brand}14` : "transparent"
               }}>
-                <FitText style={{ fontSize: 11, color: colors.textMuted, fontWeight: 600 }}>{WEEK_DAYS_SHORT[day.getDay()]}</FitText>
-                <FitText style={{ fontSize: 16, fontWeight: isToday ? 700 : 500, color: isToday ? colors.brand : colors.textPrimary, lineHeight: 1.1 }}>
+                <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{WEEK_DAYS_SHORT[day.getDay()]}</FitText>
+                <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? colors.brand : colors.textPrimary, lineHeight: 1.05 }}>
                   {day.getDate()}
                 </FitText>
               </div>
@@ -99,11 +218,11 @@ export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, 
                 alignItems: "flex-start",
                 justifyContent: "flex-end",
                 paddingRight: 8,
-                paddingTop: 6,
+                paddingTop: 5,
                 borderRight: `1px solid ${colors.border}`,
                 borderBottom: `1px solid ${colors.border}`
               }}>
-                <FitText style={{ fontSize: 11, color: colors.textMuted, fontWeight: 600 }}>{hour}:00</FitText>
+                <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{hour}:00</FitText>
               </div>
               {weekDays.map((day, dayIdx) => {
                 const ymd = toYmd(day);
@@ -115,38 +234,14 @@ export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, 
                 return (
                   <DropCell key={dayIdx} id={`${dayIdx}:${hour}`} isToday={isToday} colors={colors}>
                     {cellBookings.map((b) => (
-                      <FitButton
+                      <BookingNode
                         key={b.id}
-                        variant="primary"
-                        onClick={() => onBlockClick(b)}
-                        style={{
-                          position: "absolute",
-                          top: 3,
-                          left: 3,
-                          right: 3,
-                          borderRadius: 6,
-                          backgroundColor: b.color ?? colors.brand,
-                          border: "none",
-                          padding: "4px 7px",
-                          textAlign: "left",
-                          zIndex: 2,
-                          minHeight: 36,
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                          alignItems: "flex-start"
-                        }}
-                      >
-                        <FitText style={{ fontSize: 11, fontWeight: 700, color: bookingTextColor, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {b.resourceName}
-                        </FitText>
-                        {b.venueLabel && (
-                          <FitText style={{ fontSize: 10, color: bookingMutedTextColor, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {b.venueLabel}
-                          </FitText>
-                        )}
-                        <FitText style={{ fontSize: 10, color: bookingMutedTextColor, display: "block" }}>
-                          {b.durationMin}min
-                        </FitText>
-                      </FitButton>
+                        booking={b}
+                        colors={colors}
+                        bookingMutedTextColor={bookingMutedTextColor}
+                        bookingTextColor={bookingTextColor}
+                        onBlockClick={onBlockClick}
+                      />
                     ))}
                   </DropCell>
                 );

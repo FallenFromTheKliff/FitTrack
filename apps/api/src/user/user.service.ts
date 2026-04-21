@@ -1,18 +1,21 @@
 import {
   Injectable,
-  ForbiddenException,
+  BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as crypto from 'crypto';
-import { Prisma, UserRole } from '@prisma/client';
+import {
+  AccountDeletionRequestStatus,
+  AuthProvider,
+  Prisma,
+} from '@prisma/client';
 
-import { AuthService } from '../auth/auth.service';
 import { FilesService } from '../files/files.service';
 import type { UploadedImageFile } from '../files/files.types';
-import { SubscriptionService } from '../membership/subscription/subscription.service';
 import { UserRepository } from './user.repository';
 import { AuditAction, AuditEvent } from '../audit/audit.service';
 import {
@@ -22,13 +25,16 @@ import {
   UserFilterDTO,
   UpdateUserStatusDTO,
   ScanQrDTO,
+  ManualAttendanceCheckInDTO,
   AttendanceFilterDTO,
   UpdatePhoneDTO,
 } from './dto/user-dto';
+import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
 
 const PROFILE_DIRECT_FIELDS = [
   'first_name',
   'last_name',
+  'avatar_url',
   'gender',
   'weight_kg',
   'height_cm',
@@ -44,6 +50,26 @@ const MEASUREMENT_FIELDS = [
   'waist_cm',
   'chest_cm',
 ] as const;
+
+const ATTENDANCE_QR_TTL_MS = 15 * 60 * 1000;
+const ATTENDANCE_QR_REFRESH_COOLDOWN_MS = 90 * 1000;
+
+function createAttendanceQrToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+function getAttendanceQrExpiresAt(date = new Date()) {
+  return new Date(date.getTime() + ATTENDANCE_QR_TTL_MS);
+}
+
+function getAttendanceQrRefreshAvailableAt(rotatedAt: Date | null | undefined) {
+  if (!rotatedAt) return null;
+  return new Date(rotatedAt.getTime() + ATTENDANCE_QR_REFRESH_COOLDOWN_MS);
+}
+
+function toIsoStringOrNull(value: Date | null | undefined) {
+  return value ? value.toISOString() : null;
+}
 
 export interface GamificationParticipantProfile {
   user_id: string;
@@ -81,6 +107,21 @@ function pickDefined<T extends object, K extends keyof T>(
   return result;
 }
 
+function getIdentityIdentifier(
+  identities: Array<{
+    provider: AuthProvider;
+    identifier: string;
+    verified_at: Date | null;
+    is_primary: boolean;
+  }>,
+  providers: readonly AuthProvider[],
+) {
+  return (
+    identities.find((identity) => providers.includes(identity.provider))
+      ?.identifier ?? null
+  );
+}
+
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -88,12 +129,41 @@ export class UserService {
   constructor(
     private readonly repo: UserRepository,
     private readonly eventEmitter: EventEmitter2,
-    private readonly authService: AuthService,
     private readonly filesService: FilesService,
   ) {}
 
   async getMyProfile(userId: string) {
-    return this.repo.findUserAggregateOrThrow(userId);
+    const user = await this.repo.findUserAggregateOrThrow(userId);
+    const email =
+      getIdentityIdentifier(user.auth_identities, [
+        AuthProvider.email,
+        AuthProvider.google,
+      ]) ?? '';
+    const phone = user.profile.phone ?? null;
+    const hasQrCodeToken =
+      typeof user.qr_code_token === 'string' &&
+      user.qr_code_token.trim() !== '';
+    const hasActiveMembershipCard = user.membership_card?.status === 'active';
+    const qrCodeReady = hasQrCodeToken;
+    const attendanceQrReady = hasActiveMembershipCard && hasQrCodeToken;
+
+    return {
+      ...user,
+      email,
+      phone,
+      phone_no: phone,
+      qrCodeReady,
+      attendanceQrReady,
+      emailVerified:
+        user.email_verified_at !== null ||
+        user.auth_identities.some(
+          (identity) =>
+            (identity.provider === AuthProvider.email ||
+              identity.provider === AuthProvider.google) &&
+            identity.verified_at !== null,
+        ),
+      phoneVerified: false,
+    };
   }
 
   async updateMyProfile(userId: string, dto: UpdateProfileDTO) {
@@ -101,9 +171,74 @@ export class UserService {
     return this.updateExistingUserProfile(userId, dto);
   }
 
+  async getDeletionRequestStatus(userId: string) {
+    const user = await this.repo.findUserByIdOrThrow(userId);
+    const request = await this.repo.findLatestDeletionRequest(userId);
+    const latestStatus = request?.status ?? null;
+
+    if (
+      user.deletedAt === null &&
+      latestStatus === AccountDeletionRequestStatus.approved
+    ) {
+      return {
+        status: null,
+      };
+    }
+
+    return {
+      status: latestStatus,
+    };
+  }
+
+  async requestDeletion(userId: string, dto: CreateDeletionRequestDto) {
+    const user = await this.repo.findUserByIdOrThrow(userId);
+
+    if (user.deletedAt) {
+      throw new BadRequestException('User account is already deleted');
+    }
+
+    const pending = await this.repo.findPendingDeletionRequestByUserId(userId);
+
+    if (pending) {
+      throw new ConflictException('Deletion request is already pending');
+    }
+
+    const request = await this.repo.createDeletionRequest({
+      user: { connect: { id: userId } },
+      ...(dto.reason?.trim() ? { reason: dto.reason.trim() } : {}),
+      status: AccountDeletionRequestStatus.pending,
+    });
+
+    return {
+      id: request.id,
+      status: request.status,
+      reason: request.reason,
+      createdAt: request.createdAt,
+    };
+  }
+
+  async cancelDeletionRequest(userId: string) {
+    await this.repo.findUserByIdOrThrow(userId);
+
+    const pending = await this.repo.findPendingDeletionRequestByUserId(userId);
+
+    if (!pending) {
+      throw new BadRequestException('No pending deletion request found');
+    }
+
+    const request = await this.repo.updateDeletionRequest(pending.id, {
+      status: AccountDeletionRequestStatus.cancelled,
+      reviewNotes: 'Cancelled by member',
+    });
+
+    return {
+      id: request.id,
+      status: request.status,
+    };
+  }
+
   async updatePhone(userId: string, dto: UpdatePhoneDTO): Promise<void> {
     await this.repo.updatePhoneAndResetVerification(userId, dto.phone_number);
-    await this.authService.sendPhoneOtp(userId);
   }
 
   async uploadAvatarFile(
@@ -138,10 +273,72 @@ export class UserService {
     return this.repo.getProgressHistory(userId, dto);
   }
 
-  async refreshQrToken(userId: string): Promise<{ qr_code_token: string }> {
-    const token = crypto.randomBytes(32).toString('hex');
-    await this.repo.updateUser(userId, { qr_code_token: token });
-    return { qr_code_token: token };
+  async refreshQrToken(userId: string) {
+    const user = await this.repo.findUserAggregateOrThrow(userId);
+    const latestDeletionRequest =
+      await this.repo.findLatestDeletionRequest(userId);
+    const latestDeletionStatus = latestDeletionRequest?.status ?? null;
+    const blockedResponse = this.resolveBlockedAttendanceQrResponse(
+      user,
+      latestDeletionStatus,
+    );
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
+    const now = new Date();
+    const refreshAvailableAt = getAttendanceQrRefreshAvailableAt(
+      user.qr_code_rotated_at,
+    );
+
+    if (
+      refreshAvailableAt &&
+      refreshAvailableAt.getTime() > now.getTime()
+    ) {
+      throw new HttpException(
+        {
+          type: 'QR_REFRESH_COOLDOWN',
+          title: 'QR Refresh Cooling Down',
+          status: 429,
+          detail:
+            'A fresh attendance QR was already issued recently. Try again after the cooldown ends.',
+          refreshAvailableAt: refreshAvailableAt.toISOString(),
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    return this.rotateAttendanceQr(userId, now);
+  }
+
+  async getAttendanceQr(userId: string) {
+    const user = await this.repo.findUserAggregateOrThrow(userId);
+    const latestDeletionRequest =
+      await this.repo.findLatestDeletionRequest(userId);
+    const latestDeletionStatus = latestDeletionRequest?.status ?? null;
+    const blockedResponse = this.resolveBlockedAttendanceQrResponse(
+      user,
+      latestDeletionStatus,
+    );
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
+    const now = new Date();
+    const currentToken = user.qr_code_token?.trim() ?? '';
+    const expiresAt = user.qr_code_expires_at ?? null;
+
+    if (currentToken && expiresAt && expiresAt.getTime() > now.getTime()) {
+      return this.buildReadyAttendanceQrResponse(
+        currentToken,
+        expiresAt,
+        user.qr_code_rotated_at ?? null,
+      );
+    }
+
+    return this.rotateAttendanceQr(userId, now);
   }
 
   getAllUsers(dto: UserFilterDTO) {
@@ -186,10 +383,8 @@ export class UserService {
         target.auth_identities.find(
           ({ provider }) => provider === 'email' || provider === 'google',
         )?.identifier ?? null,
-      preferred_phone:
-        target.auth_identities.find(({ provider }) => provider === 'phone')
-          ?.identifier ?? null,
-      phone_verified_at: target.phone_verified_at,
+      preferred_phone: target.profile_phone,
+      phone_verified_at: null,
     };
   }
 
@@ -268,35 +463,127 @@ export class UserService {
   private emitAudit(event: AuditEvent): void {
     this.eventEmitter.emit('audit.log', event);
   }
+
+  private buildBlockedAttendanceQrResponse(reason: string) {
+    return {
+      ready: false,
+      qrValue: null,
+      expiresAt: null,
+      refreshAvailableAt: null,
+      reason,
+    };
+  }
+
+  private buildReadyAttendanceQrResponse(
+    qrValue: string,
+    expiresAt: Date,
+    rotatedAt: Date | null,
+  ) {
+    return {
+      ready: true,
+      qrValue,
+      expiresAt: expiresAt.toISOString(),
+      refreshAvailableAt: toIsoStringOrNull(
+        getAttendanceQrRefreshAvailableAt(rotatedAt),
+      ),
+      reason: null,
+    };
+  }
+
+  private resolveBlockedAttendanceQrResponse(
+    user: Awaited<ReturnType<UserRepository['findUserAggregateOrThrow']>>,
+    latestDeletionStatus: AccountDeletionRequestStatus | null,
+  ) {
+    if (
+      user.deletedAt ||
+      latestDeletionStatus === AccountDeletionRequestStatus.pending
+    ) {
+      return this.buildBlockedAttendanceQrResponse(
+        'Archived accounts cannot use attendance QR check-in.',
+      );
+    }
+
+    if (user.membership_card?.status !== 'active') {
+      return this.buildBlockedAttendanceQrResponse(
+        user.membership_card?.status === 'pending_verification'
+          ? 'Your membership card is still pending verification.'
+          : user.membership_card?.status === 'revoked'
+            ? 'Your membership card access is revoked right now.'
+            : 'Attendance QR unlocks once this account has an active membership card.',
+      );
+    }
+
+    return null;
+  }
+
+  private async rotateAttendanceQr(userId: string, now = new Date()) {
+    const qrToken = createAttendanceQrToken();
+    const expiresAt = getAttendanceQrExpiresAt(now);
+    const updatedUser = await this.repo.updateUser(userId, {
+      qr_code_token: qrToken,
+      qr_code_rotated_at: now,
+      qr_code_expires_at: expiresAt,
+    });
+
+    return this.buildReadyAttendanceQrResponse(
+      updatedUser.qr_code_token?.trim() ?? qrToken,
+      updatedUser.qr_code_expires_at ?? expiresAt,
+      updatedUser.qr_code_rotated_at ?? now,
+    );
+  }
 }
 
 @Injectable()
 export class AttendanceService {
-  constructor(
-    private readonly repo: UserRepository,
-    private readonly subscriptionService: SubscriptionService,
-  ) {}
+  constructor(private readonly repo: UserRepository) {}
 
   async scanQr(scannerUserId: string | null, dto: ScanQrDTO) {
-    const user = await this.repo.findActiveUserByQrTokenOrThrow(
-      dto.qr_code_token,
-    );
+    const qrValue =
+      dto.qrValue?.trim() || dto.qr_value?.trim() || dto.qr_code_token?.trim() || '';
 
-    if (user.role === UserRole.member) {
-      const hasSub = await this.subscriptionService.hasSubscriptionAccess(
-        user.id,
+    if (!qrValue) {
+      throw new HttpException(
+        {
+          type: 'NOT_FOUND',
+          title: 'Invalid QR',
+          status: 404,
+          detail: 'QR code not found or membership access is inactive.',
+        },
+        HttpStatus.NOT_FOUND,
       );
-      if (!hasSub) {
-        throw new ForbiddenException({
-          type: 'SUBSCRIPTION_REQUIRED',
-          title: 'Subscription Required',
-          status: 403,
-          detail: 'This member does not have an active subscription.',
-        });
-      }
     }
 
-    const existing = await this.repo.findOpenAttendanceToday(user.id);
+    const user = await this.repo.findActiveUserByQrTokenOrThrow(qrValue);
+    const latestDeletionRequest = await this.repo.findLatestDeletionRequest(
+      user.id,
+    );
+    if (
+      latestDeletionRequest?.status === AccountDeletionRequestStatus.pending
+    ) {
+      throw new HttpException(
+        {
+          type: 'NOT_FOUND',
+          title: 'Invalid QR',
+          status: 404,
+          detail: 'Archived accounts cannot use attendance QR check-in.',
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return this.createCheckIn(user.id, scannerUserId);
+  }
+
+  async manualCheckIn(
+    scannerUserId: string | null,
+    dto: ManualAttendanceCheckInDTO,
+  ) {
+    const user = await this.repo.findActiveUserByIdOrThrow(dto.user_id);
+    return this.createCheckIn(user.id, scannerUserId);
+  }
+
+  private async createCheckIn(userId: string, scannerUserId: string | null) {
+    const existing = await this.repo.findOpenAttendanceToday(userId);
     if (existing) {
       throw new HttpException(
         {
@@ -310,12 +597,12 @@ export class AttendanceService {
     }
 
     const log = await this.repo.createAttendanceLog({
-      user: { connect: { id: user.id } },
+      user: { connect: { id: userId } },
       scanner: scannerUserId ? { connect: { id: scannerUserId } } : undefined,
       check_in_at: new Date(),
     });
 
-    const profile = await this.repo.findUserProfileByUserIdOrThrow(user.id);
+    const profile = await this.repo.findUserProfileByUserIdOrThrow(userId);
     return {
       attendance_id: log.id,
       member_name: `${profile.first_name} ${profile.last_name}`.trim(),

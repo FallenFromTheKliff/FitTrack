@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack AI Contracts"
+  short_description: "Strict prompt and schema contracts for FitTrack AI systems"
+  default_prompt: "Use $ai-contract-core to define a strict FitTrack AI contract with schema-first outputs, refusal rules, confidence semantics, and low-model-safe prompt structure."
+
+policy:
+  allow_implicit_invocation: true

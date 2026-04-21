@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
@@ -19,6 +19,12 @@ class CandidateProfileInput(StrictModel):
     profile_kind: Literal["seed", "learned"]
     landmark_signature: dict[str, object]
     angle_signature: dict[str, object]
+    orientation_signature: dict[str, object] = Field(default_factory=dict)
+    movement_pattern: dict[str, object] = Field(default_factory=dict)
+    visibility_pattern: dict[str, object] = Field(default_factory=dict)
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"] | None = None
+    tolerance: float | None = None
+    rep_thresholds: dict[str, object] | None = None
     rep_rules: dict[str, object] | None = None
 
 
@@ -35,21 +41,116 @@ class PoseBootstrapResponse(StrictModel):
     subject_lock_mode: Literal["single_subject"]
 
 
+class PoseKeypoint(StrictModel):
+    x: float
+    y: float
+    z: float
+    visibility: float = Field(ge=0.0, le=1.0)
+
+
+class PoseSequenceFrame(StrictModel):
+    captured_at_ms: int
+    keypoints: list[PoseKeypoint] = Field(min_length=33, max_length=33)
+
+
+class PoseAngleSignalEntry(StrictModel):
+    captured_at_ms: int
+    elbow: float | None = None
+    shoulder: float | None = None
+    hip: float | None = None
+    knee: float | None = None
+
+
+class PoseOrientationVector(StrictModel):
+    x: float
+    y: float
+
+
+class PoseOrientationSignal(StrictModel):
+    body_orientation: str
+    torso_slope_deg: float
+    vector: PoseOrientationVector
+
+
+class PoseVisibilitySignal(StrictModel):
+    average_visibility: float
+    feet_visibility: float
+    low_confidence_landmarks: list[str] = Field(default_factory=list)
+    reliable_frame_count: int
+    wrist_visibility: float
+
+
+class PoseHipSignal(StrictModel):
+    average_y: float
+    range_y: float
+    stable: bool
+
+
+class PoseTemporalSignal(StrictModel):
+    amplitudes: dict[str, float] = Field(default_factory=dict)
+    oscillating_joints: list[str] = Field(default_factory=list)
+
+
+class PoseDerivedSignals(StrictModel):
+    angles: list[PoseAngleSignalEntry] = Field(default_factory=list)
+    orientation: PoseOrientationSignal
+    visibility: PoseVisibilitySignal
+    hip: PoseHipSignal
+    temporal: PoseTemporalSignal
+
+
+class PoseRepThreshold(StrictModel):
+    angle: float
+    tolerance: float
+
+
+class PoseRepThresholdPair(StrictModel):
+    down: PoseRepThreshold
+    up: PoseRepThreshold
+
+
+class PoseMovementContract(StrictModel):
+    exercise: str = Field(min_length=1)
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"]
+    rep_thresholds: PoseRepThresholdPair
+    secondary_check: str = Field(min_length=1)
+    oscillating_joints: list[str] = Field(default_factory=list)
+
+
 class PoseAnalyzeRequest(StrictModel):
     pose_session_id: str = Field(min_length=1)
-    frame_b64: str = Field(min_length=1)
+    frame_b64: str | None = None
+    landmark_schema: Literal["mediapipe_pose_v1"] | None = None
+    exercise_hint: str | None = None
+    camera_facing_mode: Literal["user", "environment"] | None = None
+    frames: list[PoseSequenceFrame] | None = Field(default=None, min_length=12, max_length=20)
+    signals: PoseDerivedSignals | None = None
+
+    @model_validator(mode="after")
+    def validate_transport(self) -> "PoseAnalyzeRequest":
+        has_frame = isinstance(self.frame_b64, str) and len(self.frame_b64.strip()) > 0
+        has_sequence = self.frames is not None
+        if not has_frame and not has_sequence:
+            raise ValueError("either frame_b64 or frames must be provided")
+        if has_sequence and self.landmark_schema != "mediapipe_pose_v1":
+            raise ValueError("landmark_schema must be mediapipe_pose_v1 when frames are provided")
+        if has_sequence and self.signals is None:
+            raise ValueError("signals must be provided when frames are provided")
+        return self
 
 
 class PoseAnalyzeResponse(StrictModel):
-    rep_event: bool
-    rep_count_delta: int = Field(ge=0)
     confidence: float = Field(ge=0.0, le=1.0)
-    exercise_class: str = Field(min_length=1)
+    exercise_class: str | None = None
     matched_profile_id: str | None = None
+    movement_contract: PoseMovementContract | None = None
     subject_locked: bool
     subject_lock_confidence: float = Field(ge=0.0, le=1.0)
-    phase: str | None = None
-    form_feedback: list[str]
+    classification_source: Literal["preset", "classifier", "user_confirmed"] = "classifier"
+    needs_confirmation: bool = False
+    candidate_exercises: list[str] = Field(default_factory=list)
+    form_feedback: list[str] = Field(default_factory=list)
+    learned_profile: LearnedProfile | None = None
 
 
 class PoseFinalizeRequest(StrictModel):
@@ -67,6 +168,12 @@ class LearnedProfile(StrictModel):
     canonical_name: str = Field(min_length=1, max_length=100)
     landmark_signature: dict[str, object]
     angle_signature: dict[str, object]
+    orientation_signature: dict[str, object]
+    movement_pattern: dict[str, object]
+    visibility_pattern: dict[str, object]
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"] | None = None
+    tolerance: float | None = None
+    rep_thresholds: dict[str, object] | None = None
     rep_rules: dict[str, object] | None = None
 
 

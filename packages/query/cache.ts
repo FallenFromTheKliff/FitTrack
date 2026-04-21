@@ -29,8 +29,53 @@ export function invalidateBookingQueries(queryClient: QueryClient, userId?: stri
   return queryClient.invalidateQueries({ queryKey: queryKeys.bookings(userId) });
 }
 
+export async function invalidateNotificationQueries(
+  queryClient: QueryClient,
+  userId?: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.notificationInbox(userId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.notificationUnreadCount(userId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.notificationPreferences(userId),
+    }),
+  ]);
+}
+
+export function invalidateGymLayoutQueries(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.gymLayoutEquipment(),
+  });
+}
+
+export function invalidateAiChatSessionsQuery(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.aiChatSessions() });
+}
+
+export function invalidateAiChatSessionQuery(queryClient: QueryClient, sessionId?: string) {
+  if (!sessionId) return Promise.resolve();
+  return queryClient.invalidateQueries({ queryKey: queryKeys.aiChatSession(sessionId) });
+}
+
+export function invalidateAiChatMessagesQuery(queryClient: QueryClient, sessionId?: string) {
+  if (!sessionId) return Promise.resolve();
+  return queryClient.invalidateQueries({ queryKey: queryKeys.aiChatMessages(sessionId) });
+}
+
 export function invalidateAppointmentQueries(queryClient: QueryClient, userId?: string) {
   return queryClient.invalidateQueries({ queryKey: queryKeys.appointments(userId) });
+}
+
+export async function invalidateMembershipQueries(queryClient: QueryClient, userId?: string) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.membershipPlans() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.membershipCurrentSubscription(userId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.membershipPayments(userId) })
+  ]);
 }
 
 export function invalidateCoachScheduleQueries(queryClient: QueryClient, userId?: string) {
@@ -39,6 +84,10 @@ export function invalidateCoachScheduleQueries(queryClient: QueryClient, userId?
 
 export function invalidateProfileDeletionStatusQuery(queryClient: QueryClient, userId?: string) {
   return queryClient.invalidateQueries({ queryKey: queryKeys.profileDeletionStatus(userId) });
+}
+
+export function invalidateAttendanceQrQuery(queryClient: QueryClient, userId?: string) {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.attendanceQr(userId) });
 }
 
 export function invalidateAdminMembersQuery(queryClient: QueryClient) {
@@ -53,11 +102,38 @@ export function invalidateAdminBookingsQuery(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() });
 }
 
+export function invalidateAdminMembershipPaymentQueries(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.membershipReviewPayments() });
+}
+
 export async function invalidateStaffBookingQueries(queryClient: QueryClient) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("all") }),
     queryClient.invalidateQueries({ queryKey: queryKeys.staffBookings("pending") })
   ]);
+}
+
+export async function invalidateStaffCoachManagementQueries(
+  queryClient: QueryClient,
+  coachId?: string
+) {
+  const tasks = [
+    queryClient.invalidateQueries({ queryKey: queryKeys.staffAppointments() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.appointments() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule() })
+  ];
+
+  if (coachId) {
+    tasks.push(
+      queryClient.invalidateQueries({ queryKey: queryKeys.staffCoachDetail(coachId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.coachDetail(coachId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.coachAvailability(coachId) })
+    );
+  }
+
+  await Promise.all(tasks);
 }
 
 export async function invalidateCoachQueries(queryClient: QueryClient, userId?: string, coachId?: string) {
@@ -73,6 +149,74 @@ export async function invalidateCoachQueries(queryClient: QueryClient, userId?: 
     tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.coachAvailability(coachId) }));
   }
   await Promise.all(tasks);
+}
+
+export function invalidateNutritionQueries(queryClient: QueryClient, userId?: string) {
+  return queryClient.invalidateQueries({
+    predicate: (query) => {
+      const [scope, , queryUserId] = query.queryKey as [string, string?, string?];
+      if (scope !== "nutrition") return false;
+      return !userId || queryUserId === undefined || queryUserId === userId;
+    }
+  });
+}
+
+export async function invalidateInventoryQueries(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.inventoryProducts() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.inventoryEquipment() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.inventorySales() })
+  ]);
+}
+
+export async function invalidateAnalyticsQueries(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsOverview() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsRevenue() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsAttendance() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsMembers() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsCoaches() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsInsights() })
+  ]);
+}
+
+export async function invalidateFitnessQueries(
+  queryClient: QueryClient,
+  userId?: string,
+  sessionId?: string
+) {
+  const tasks = [
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.fitnessExercises(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
+    }),
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const [scope, area, queryUserId] = query.queryKey as [string, string?, string?];
+        if (scope !== "fitness") return false;
+        if (
+          area !== "plans" &&
+          area !== "sessions" &&
+          area !== "mastery" &&
+          area !== "leaderboard"
+        ) {
+          return false;
+        }
+        return !userId || queryUserId === undefined || queryUserId === userId;
+      }
+    })
+  ];
+  if (sessionId) {
+    tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.fitnessSessionDetail(sessionId) }));
+  }
+  await Promise.all(tasks);
+}
+
+export function invalidateFitnessPoseQuery(queryClient: QueryClient, poseSessionId?: string) {
+  if (!poseSessionId) return Promise.resolve();
+  return queryClient.invalidateQueries({ queryKey: queryKeys.fitnessPoseSession(poseSessionId) });
 }
 
 export async function invalidateScheduleBookingsQuery(queryClient: QueryClient, mode: "admin" | "staff") {

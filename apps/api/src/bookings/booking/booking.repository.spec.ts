@@ -4,9 +4,13 @@ describe('BookingRepository', () => {
   const payment = {
     create: jest.fn(),
   };
+  const amenity = {
+    findUnique: jest.fn(),
+  };
 
   const amenityBooking = {
     count: jest.fn(),
+    create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -14,6 +18,7 @@ describe('BookingRepository', () => {
   };
 
   const prisma = {
+    amenity,
     amenityBooking,
     payment,
     $transaction: jest.fn(),
@@ -27,15 +32,21 @@ describe('BookingRepository', () => {
     prisma.$transaction.mockImplementation(
       (
         callback: (client: {
+          amenity: typeof amenity;
           amenityBooking: typeof amenityBooking;
           payment: typeof payment;
         }) => unknown,
       ) =>
         callback({
+          amenity,
           amenityBooking,
           payment,
         }),
     );
+    amenity.findUnique.mockResolvedValue({
+      capacity: 1,
+      is_active: true,
+    });
   });
 
   it('lists overlapping bookings using active capacity statuses only', async () => {
@@ -142,6 +153,15 @@ describe('BookingRepository', () => {
 
     expect(include).toEqual({
       amenity: true,
+      coach: {
+        include: {
+          user: {
+            include: {
+              profile: true,
+            },
+          },
+        },
+      },
       user: {
         select: {
           id: true,
@@ -156,6 +176,119 @@ describe('BookingRepository', () => {
       },
     });
     expect(include.user.select).not.toHaveProperty('qr_code_token');
+  });
+
+  it('persists optional coach linkage on confirmed free bookings', async () => {
+    const startsAt = new Date('2099-03-24T10:00:00.000Z');
+    const endsAt = new Date('2099-03-24T11:00:00.000Z');
+    amenityBooking.count.mockResolvedValue(0);
+    amenityBooking.create.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    await repository.createConfirmedFreeBooking({
+      userId: 'user-1',
+      amenityId: 'amenity-1',
+      coachId: 'coach-1',
+      startsAt,
+      endsAt,
+      notes: 'Coach-linked scrimmage.',
+      totalAmount: 0 as never,
+      downpaymentAmount: 0 as never,
+      balanceAmount: 0 as never,
+    });
+
+    expect(amenityBooking.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        user: { connect: { id: 'user-1' } },
+        amenity: { connect: { id: 'amenity-1' } },
+        coach: { connect: { id: 'coach-1' } },
+        starts_at: startsAt,
+        ends_at: endsAt,
+      }),
+    });
+  });
+
+  it('persists optional coach linkage on pending paid bookings', async () => {
+    const startsAt = new Date('2099-03-24T10:00:00.000Z');
+    const endsAt = new Date('2099-03-24T11:00:00.000Z');
+    amenityBooking.count.mockResolvedValue(0);
+    amenityBooking.create.mockResolvedValue({
+      id: 'booking-1',
+      status: 'pending',
+    });
+    payment.create.mockResolvedValue({
+      id: 'payment-1',
+      payable_type: 'booking',
+    });
+
+    await repository.createPendingBookingWithPayment({
+      userId: 'user-1',
+      amenityId: 'amenity-1',
+      coachId: 'coach-1',
+      startsAt,
+      endsAt,
+      notes: 'Coach-linked training block.',
+      totalAmount: 1000 as never,
+      downpaymentAmount: 300 as never,
+      balanceAmount: 700 as never,
+      paymentAmount: 300 as never,
+      paymentStage: 'downpayment' as never,
+      paymentStatus: 'pending' as never,
+      idempotencyKey: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      provider: 'paymongo',
+    });
+
+    expect(amenityBooking.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        user: { connect: { id: 'user-1' } },
+        amenity: { connect: { id: 'amenity-1' } },
+        coach: { connect: { id: 'coach-1' } },
+        starts_at: startsAt,
+        ends_at: endsAt,
+      }),
+    });
+  });
+
+  it('stores full cash booking initiations as awaiting verification payments', async () => {
+    const startsAt = new Date('2099-03-24T10:00:00.000Z');
+    const endsAt = new Date('2099-03-24T11:00:00.000Z');
+    amenityBooking.count.mockResolvedValue(0);
+    amenityBooking.create.mockResolvedValue({
+      id: 'booking-1',
+      status: 'pending',
+    });
+    payment.create.mockResolvedValue({
+      id: 'payment-1',
+      payment_stage: 'full',
+      provider: 'cash',
+      status: 'awaiting_verification',
+    });
+
+    await repository.createPendingBookingWithPayment({
+      userId: 'user-1',
+      amenityId: 'amenity-1',
+      startsAt,
+      endsAt,
+      totalAmount: 800 as never,
+      downpaymentAmount: 800 as never,
+      balanceAmount: 0 as never,
+      paymentAmount: 800 as never,
+      paymentStage: 'full' as never,
+      paymentStatus: 'awaiting_verification' as never,
+      idempotencyKey: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      provider: 'cash' as never,
+    });
+
+    expect(payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payment_stage: 'full',
+        amount: 800,
+        provider: 'cash',
+        status: 'awaiting_verification',
+      }),
+    });
   });
 
   it('cancels a booking by setting status and cancelled timestamp', async () => {
@@ -233,6 +366,26 @@ describe('BookingRepository', () => {
         status: 'completed',
         balance_paid_at: paidAt,
         completed_at: paidAt,
+      },
+      include: undefined,
+    });
+  });
+
+  it('stamps both payment timestamps when a booking is fully paid up front', async () => {
+    const paidAt = new Date('2026-03-24T12:00:00.000Z');
+    amenityBooking.update.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    await repository.confirmBookingFullPayment('booking-1', paidAt);
+
+    expect(amenityBooking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: {
+        status: 'confirmed',
+        downpayment_paid_at: paidAt,
+        balance_paid_at: paidAt,
       },
       include: undefined,
     });

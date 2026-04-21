@@ -38,6 +38,12 @@ const poseProfileSelect = {
   profile_kind: true,
   landmark_signature: true,
   angle_signature: true,
+  orientation_signature: true,
+  movement_pattern: true,
+  visibility_pattern: true,
+  dominant_joint: true,
+  tolerance: true,
+  rep_thresholds: true,
   rep_rules: true,
   sample_count: true,
   confidence_threshold: true,
@@ -58,6 +64,12 @@ const poseBootstrapProfileSelect = {
   profile_kind: true,
   landmark_signature: true,
   angle_signature: true,
+  orientation_signature: true,
+  movement_pattern: true,
+  visibility_pattern: true,
+  dominant_joint: true,
+  tolerance: true,
+  rep_thresholds: true,
   rep_rules: true,
 } satisfies Prisma.PoseExerciseProfileSelect;
 
@@ -112,6 +124,16 @@ export class PoseRepository extends BaseRepository {
     });
   }
 
+  deletePoseSessionById(poseSessionId: string): Promise<void> {
+    return this.prisma.poseSession
+      .deleteMany({
+        where: {
+          id: poseSessionId,
+        },
+      })
+      .then(() => undefined);
+  }
+
   listBootstrapPoseProfiles(input: {
     exerciseHint: string | null;
     canonicalHint: string | null;
@@ -159,13 +181,19 @@ export class PoseRepository extends BaseRepository {
     classificationConfidence: number | null;
     subjectLockConfidence: number | null;
     analysisSummary: Prisma.InputJsonObject | null;
-    learnedProfile?: {
-      canonicalName: string;
-      exerciseId: string | null;
-      landmarkSignature: Prisma.InputJsonObject;
-      angleSignature: Prisma.InputJsonObject;
-      repRules?: Prisma.InputJsonObject | null;
-    } | null;
+      learnedProfile?: {
+        canonicalName: string;
+        exerciseId: string | null;
+        landmarkSignature: Prisma.InputJsonObject;
+        angleSignature: Prisma.InputJsonObject;
+        orientationSignature: Prisma.InputJsonObject;
+        movementPattern: Prisma.InputJsonObject;
+        visibilityPattern: Prisma.InputJsonObject;
+        dominantJoint?: string | null;
+        tolerance?: number | null;
+        repThresholds?: Prisma.InputJsonObject | null;
+        repRules?: Prisma.InputJsonObject | null;
+      } | null;
   }): Promise<PoseSessionDetailRecord> {
     return this.prisma.$transaction(async (tx) => {
       let detectedProfileId = input.detectedProfileId;
@@ -178,6 +206,13 @@ export class PoseRepository extends BaseRepository {
             profile_kind: PoseProfileKind.learned,
             landmark_signature: input.learnedProfile.landmarkSignature,
             angle_signature: input.learnedProfile.angleSignature,
+            orientation_signature: input.learnedProfile.orientationSignature,
+            movement_pattern: input.learnedProfile.movementPattern,
+            visibility_pattern: input.learnedProfile.visibilityPattern,
+            dominant_joint: input.learnedProfile.dominantJoint,
+            tolerance: this.toDecimal(input.learnedProfile.tolerance),
+            rep_thresholds:
+              input.learnedProfile.repThresholds ?? Prisma.JsonNull,
             rep_rules: input.learnedProfile.repRules ?? Prisma.JsonNull,
           },
           select: {
@@ -203,6 +238,117 @@ export class PoseRepository extends BaseRepository {
           analysis_summary: input.analysisSummary ?? Prisma.JsonNull,
         },
         select: poseSessionDetailSelect,
+      });
+    });
+  }
+
+  updatePoseSessionAnalysis(input: {
+    poseSessionId: string;
+    repCountAi?: number;
+    detectedExerciseName: string | null;
+    detectedProfileId: string | null;
+    classificationConfidence: number | null;
+    subjectLockConfidence: number | null;
+    analysisSummary: Prisma.InputJsonObject | null;
+  }): Promise<PoseSessionDetailRecord> {
+    return this.prisma.poseSession.update({
+      where: { id: input.poseSessionId },
+      data: {
+        ...(input.repCountAi !== undefined
+          ? { rep_count_ai: input.repCountAi }
+          : {}),
+        detected_exercise_name: input.detectedExerciseName,
+        detected_profile_id: input.detectedProfileId,
+        classification_confidence: this.toDecimal(input.classificationConfidence),
+        subject_lock_confidence: this.toDecimal(input.subjectLockConfidence),
+        analysis_summary: input.analysisSummary ?? Prisma.JsonNull,
+      },
+      select: poseSessionDetailSelect,
+    });
+  }
+
+  findActivePoseProfileByCanonicalName(
+    canonicalName: string,
+  ): Promise<PoseProfileRecord | null> {
+    return this.prisma.poseExerciseProfile.findFirst({
+      where: {
+        canonical_name: canonicalName,
+        is_active: true,
+      },
+      orderBy: poseProfileOrderBy,
+      select: poseProfileSelect,
+    });
+  }
+
+  upsertLearnedPoseProfile(input: {
+    canonicalName: string;
+    exerciseId: string | null;
+    landmarkSignature: Prisma.InputJsonObject;
+    angleSignature: Prisma.InputJsonObject;
+    orientationSignature: Prisma.InputJsonObject;
+    movementPattern: Prisma.InputJsonObject;
+    visibilityPattern: Prisma.InputJsonObject;
+    dominantJoint?: string | null;
+    tolerance?: number | null;
+    repThresholds?: Prisma.InputJsonObject | null;
+    repRules?: Prisma.InputJsonObject | null;
+    confidenceThreshold?: number | null;
+  }): Promise<PoseProfileRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.poseExerciseProfile.findFirst({
+        where: {
+          canonical_name: input.canonicalName,
+          profile_kind: PoseProfileKind.learned,
+        },
+        orderBy: poseProfileOrderBy,
+        select: {
+          id: true,
+        },
+      });
+
+      if (!existing) {
+        return tx.poseExerciseProfile.create({
+          data: {
+            canonical_name: input.canonicalName,
+            exercise_id: input.exerciseId,
+            profile_kind: PoseProfileKind.learned,
+            landmark_signature: input.landmarkSignature,
+            angle_signature: input.angleSignature,
+            orientation_signature: input.orientationSignature,
+            movement_pattern: input.movementPattern,
+            visibility_pattern: input.visibilityPattern,
+            dominant_joint: input.dominantJoint,
+            tolerance: this.toDecimal(input.tolerance),
+            rep_thresholds: input.repThresholds ?? Prisma.JsonNull,
+            rep_rules: input.repRules ?? Prisma.JsonNull,
+            confidence_threshold: this.toDecimal(input.confidenceThreshold),
+          },
+          select: poseProfileSelect,
+        });
+      }
+
+      return tx.poseExerciseProfile.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          exercise_id: input.exerciseId,
+          landmark_signature: input.landmarkSignature,
+          angle_signature: input.angleSignature,
+          orientation_signature: input.orientationSignature,
+          movement_pattern: input.movementPattern,
+          visibility_pattern: input.visibilityPattern,
+          dominant_joint: input.dominantJoint,
+          tolerance: this.toDecimal(input.tolerance),
+          rep_thresholds: input.repThresholds ?? Prisma.JsonNull,
+          rep_rules: input.repRules ?? Prisma.JsonNull,
+          confidence_threshold: this.toDecimal(input.confidenceThreshold),
+          is_active: true,
+          sample_count: {
+            increment: 1,
+          },
+        },
+        select: poseProfileSelect,
       });
     });
   }
@@ -246,7 +392,9 @@ export class PoseRepository extends BaseRepository {
     );
   }
 
-  private toDecimal(value: number | null): Prisma.Decimal | null {
-    return value === null ? null : new Prisma.Decimal(value.toFixed(3));
+  private toDecimal(
+    value: number | null | undefined,
+  ): Prisma.Decimal | null {
+    return value == null ? null : new Prisma.Decimal(value.toFixed(3));
   }
 }

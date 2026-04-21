@@ -11,6 +11,7 @@ function getGuardMetadata(
     | 'setAvailability'
     | 'createAppointment'
     | 'getMyAppointments'
+    | 'getCoachAppointments'
     | 'respondToAppointment'
     | 'cancelAppointment'
     | 'initiateDownpayment'
@@ -26,6 +27,7 @@ function getGuardMetadata(
 function getRolesMetadata(
   methodName:
     | 'setAvailability'
+    | 'getCoachAppointments'
     | 'respondToAppointment'
     | 'processBalance'
     | 'completeAppointment',
@@ -41,6 +43,7 @@ describe('AppointmentController', () => {
     setAvailability: jest.fn(),
     createAppointment: jest.fn(),
     getMyAppointments: jest.fn(),
+    getCoachAppointments: jest.fn(),
     respondToAppointment: jest.fn(),
     cancelAppointment: jest.fn(),
     initiateDownpayment: jest.fn(),
@@ -109,6 +112,28 @@ describe('AppointmentController', () => {
       { page: 1, limit: 20 },
     );
     expect(getGuardMetadata('getMyAppointments')).toEqual([JwtAuthGuard]);
+  });
+
+  it('locks coach schedule loading to authenticated coaches', async () => {
+    appointmentService.getCoachAppointments.mockResolvedValue({
+      data: [],
+      meta: {},
+    });
+
+    await controller.getCoachAppointments({ sub: 'coach-user-1' } as never, {
+      page: 1,
+      limit: 20,
+    });
+
+    expect(appointmentService.getCoachAppointments).toHaveBeenCalledWith(
+      'coach-user-1',
+      { page: 1, limit: 20 },
+    );
+    expect(getGuardMetadata('getCoachAppointments')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('getCoachAppointments')).toEqual([UserRole.coach]);
   });
 
   it('locks appointment responses to authenticated coaches', async () => {

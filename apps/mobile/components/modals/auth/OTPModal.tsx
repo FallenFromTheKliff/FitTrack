@@ -77,7 +77,7 @@ export default function OTPModal({
   const code = digits.join("");
   const isComplete = code.length === OTP_LENGTH;
 
-  const buttonLabel = isVerified ? "Verified!" : isVerifying ? verifyingText : errorText || "Verify & Continue";
+  const buttonLabel = isVerified ? "Verified!" : isVerifying ? verifyingText : "Verify & Continue";
   const buttonDisabled = !isComplete || isVerifying || isVerified;
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
@@ -89,10 +89,23 @@ export default function OTPModal({
   const titleStyle = useAnimatedStyle(() => ({ color: ic.value.textPrimary }));
   const subtitleStyle = useAnimatedStyle(() => ({ color: ic.value.textSecondary }));
 
+  const blurOtpInputs = useCallback(() => {
+    inputRefs.current.forEach((inputRef) => inputRef?.blur?.());
+    if (Platform.OS === "web") {
+      const activeElement = (globalThis as {
+        document?: { activeElement?: { blur?: () => void } };
+      }).document?.activeElement;
+      activeElement?.blur?.();
+    }
+  }, []);
+
   const resetInactivity = useCallback(() => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(() => onDismissRef.current(), INACTIVITY_MS);
-  }, []);
+    inactivityTimer.current = setTimeout(() => {
+      blurOtpInputs();
+      onDismissRef.current();
+    }, INACTIVITY_MS);
+  }, [blurOtpInputs]);
 
   const startResendCountdown = useCallback(() => {
     setResendSeconds(RESEND_SECONDS);
@@ -107,6 +120,12 @@ export default function OTPModal({
       });
     }, 1000);
   }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      blurOtpInputs();
+    }
+  }, [blurOtpInputs, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -152,6 +171,7 @@ export default function OTPModal({
     if (result.success) {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
       if (resendTimer.current) clearInterval(resendTimer.current);
+      blurOtpInputs();
       setIsVerifying(false);
       setIsVerified(true);
       verifiedTimer.current = setTimeout(() => {
@@ -235,11 +255,6 @@ export default function OTPModal({
                   caretHidden
                 />
               ))}
-            </View>
-            <View style={s.demoRow}>
-              <FitText style={s.demoLabel}>Demo Mode: </FitText>
-              <FitText style={s.demoValue}>Use OTP </FitText>
-              <FitText style={s.demoCode}>123456</FitText>
             </View>
             <FitButton
               label={buttonLabel}

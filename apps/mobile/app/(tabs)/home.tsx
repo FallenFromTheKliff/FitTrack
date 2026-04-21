@@ -1,13 +1,43 @@
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
-import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue
+} from "react-native-reanimated";
 import { useFocusEffect } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, User, Zap } from "lucide-react-native";
+import { useIsFocused } from "@react-navigation/native";
+import {
+  CalendarDays,
+  Dumbbell,
+  ShieldCheck,
+  Sparkles,
+  Trophy,
+  User,
+  Zap,
+  type LucideIcon
+} from "lucide-react-native";
 import type { VenueBookingRecord } from "@fittrack/api-client";
-import type { Booking } from "@fittrack/types";
-import { bookingsQueryOptions, venuesQueryOptions } from "@fittrack/query";
+import {
+  bookingsQueryOptions,
+  fitnessLeaderboardQueryOptions,
+  fitnessMasteryQueryOptions,
+  fitnessSessionsQueryOptions,
+  nutritionActiveTdeeQueryOptions,
+  nutritionDailySummaryQueryOptions,
+  venuesQueryOptions
+} from "@fittrack/query";
+import type {
+  ActiveNutritionProfileRecord,
+  Booking,
+  DailyNutritionSummaryRecord,
+  FitnessLeaderboardEntryRecord,
+  FitnessMasteryRank,
+  MuscleMasteryRecord,
+  WorkoutSessionSummaryRecord
+} from "@fittrack/types";
+import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -15,63 +45,176 @@ import { useFABState } from "@/contexts/FABStateContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useHomeFABItems } from "@/hooks/home/useHomeFABItems";
-
-import { makeScreenStyles, makeHomeStyles } from "@/styles/shared/ScreenStyles";
-import { getTodayString } from "@/data/bookings";
-import { GOAL_ROWS, HOME_STAT_CARDS, HOME_BADGE_BANNER } from "@/data/home";
-import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
 import { mobileApiClient } from "@/lib/api-client";
+import { makeHomeStyles, makeScreenStyles } from "@/styles/shared/ScreenStyles";
+import { getTodayString } from "@/data/bookings";
 import { toMobileBookings } from "@/utils/venueBookings";
-import type { NutritionGoal } from "@/components/modals/nutrition/GoalsModal";
 
-import { FitText, AnimatedFitText } from "@/components/fit/FitText";
-import FitSection from "@/components/fit/FitSection";
+import { AnimatedFitText, FitText } from "@/components/fit/FitText";
 import FitCard from "@/components/fit/FitCard";
+import FitSection from "@/components/fit/FitSection";
 import BookingDetailModal from "@/components/modals/booking/BookingDetailModal";
+
+type HomeStatCard = {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+};
+
+type HomeSnapshotRow = {
+  label: string;
+  progress?: number;
+  subtitle: string;
+  trailingLabel: string;
+  trailingLabelColor: string;
+};
+
+const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
+  bronze: 1,
+  silver: 2,
+  gold: 3,
+  platinum: 4,
+  adamantite: 5
+};
+
+function clampProgress(value: number) {
+  return Math.max(0, Math.min(value, 1));
+}
+
+function formatCompactNumber(value: number) {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}`.replace(".0", "") + "K";
+  }
+  return value.toLocaleString("en-US");
+}
+
+function getLocalDayKey(dateLike: string) {
+  const date = new Date(dateLike);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function resolveHighestRank(mastery: MuscleMasteryRecord[]) {
+  return mastery.reduce<MuscleMasteryRecord | null>((highest, entry) => {
+    if (!highest) return entry;
+    if (RANK_PRIORITY[entry.rank] > RANK_PRIORITY[highest.rank]) return entry;
+    if (
+      RANK_PRIORITY[entry.rank] === RANK_PRIORITY[highest.rank] &&
+      entry.xpPoints > highest.xpPoints
+    ) {
+      return entry;
+    }
+    return highest;
+  }, null);
+}
+
+function countRecentActiveDays(sessions: WorkoutSessionSummaryRecord[]) {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6).getTime();
+  const activeDays = new Set(
+    sessions
+      .filter((session) => session.status === "completed")
+      .filter((session) => {
+        const sourceDate = session.completedAt ?? session.startedAt;
+        return new Date(sourceDate).getTime() >= start;
+      })
+      .map((session) => getLocalDayKey(session.completedAt ?? session.startedAt))
+  );
+  return activeDays.size;
+}
+
+function countRecentCompletedSessions(sessions: WorkoutSessionSummaryRecord[]) {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6).getTime();
+  return sessions.filter((session) => {
+    if (session.status !== "completed") return false;
+    const sourceDate = session.completedAt ?? session.startedAt;
+    return new Date(sourceDate).getTime() >= start;
+  }).length;
+}
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const isFocused = useIsFocused();
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeHomeStyles(colors), [colors]);
 
-  const [activeGoal, setActiveGoal] = useState<NutritionGoal | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const { registerFAB, unregisterFAB } = useFABState();
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => { scrollY.value = e.contentOffset.y; }
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    }
   });
 
   const menuItems = useHomeFABItems();
 
-  useFocusEffect(useCallback(() => {
-    registerFAB({ screenIcon: Zap, menuItems, scrollY, visible: true });
-    (async () => {
-      try {
-        const key = `fittrack_active_nutrition_goal_${user?.id ?? "guest"}`;
-        const raw = await AsyncStorage.getItem(key);
-        if (raw) setActiveGoal(JSON.parse(raw));
-      } catch {
-        return;
-      }
-    })();
-    return () => unregisterFAB();
-  }, [menuItems, registerFAB, scrollY, unregisterFAB, user?.id]));
+  useFocusEffect(
+    useCallback(() => {
+      registerFAB({ screenIcon: Zap, menuItems, scrollY, visible: true });
+      return () => unregisterFAB();
+    }, [menuItems, registerFAB, scrollY, unregisterFAB])
+  );
 
   const firstName = user?.name?.split(" ")[0] ?? "Member";
-  const todayCalories = user?.currentCalories ?? 0;
-  const goalTarget = activeGoal?.targetCalories ?? 2000;
   const todayString = getTodayString();
+  const membershipCardStatus = user?.membershipCard?.status ?? "none";
+  const hasMemberCardAccess = user?.membershipAccess === "member";
+  const isCoach = user?.role === "COACH";
+  const memberAccessLabel = membershipCardStatus === "pending_verification"
+    ? "Pending"
+    : membershipCardStatus === "revoked"
+      ? "Revoked"
+      : hasMemberCardAccess
+        ? "Member"
+        : "Locked";
+  const memberAccessColor = membershipCardStatus === "pending_verification"
+    ? colors.warning
+    : membershipCardStatus === "revoked"
+      ? colors.danger
+      : hasMemberCardAccess
+        ? colors.success
+        : colors.textMuted;
 
-  const { data: venues = [] } = useQuery(venuesQueryOptions(mobileApiClient, user?.id));
-  const { data: bookingRecords = [] } = useQuery(bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id));
+  const venuesQuery = useQuery({
+    ...venuesQueryOptions(mobileApiClient, user?.id),
+    enabled: isFocused && !!user?.id
+  });
+  const bookingsQuery = useQuery({
+    ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
+    enabled: isFocused && !!user?.id
+  });
+  const nutritionTargetQuery = useQuery({
+    ...nutritionActiveTdeeQueryOptions<ActiveNutritionProfileRecord | null>(mobileApiClient, user?.id),
+    enabled: isFocused && !!user?.id && hasMemberCardAccess
+  });
+  const nutritionSummaryQuery = useQuery({
+    ...nutritionDailySummaryQueryOptions<DailyNutritionSummaryRecord>(mobileApiClient, user?.id, todayString),
+    enabled: isFocused && !!user?.id && hasMemberCardAccess
+  });
+  const masteryQuery = useQuery({
+    ...fitnessMasteryQueryOptions(mobileApiClient, user?.id),
+    enabled: isFocused && !!user?.id && hasMemberCardAccess
+  });
+  const leaderboardQuery = useQuery({
+    ...fitnessLeaderboardQueryOptions(mobileApiClient, user?.id, { limit: 5, page: 1 }),
+    enabled: isFocused && !!user?.id && hasMemberCardAccess
+  });
+  const sessionsQuery = useQuery({
+    ...fitnessSessionsQueryOptions(mobileApiClient, user?.id, { limit: 50, page: 1 }),
+    enabled: isFocused && !!user?.id && hasMemberCardAccess
+  });
 
+  const venues = venuesQuery.data ?? [];
+  const bookingRecords = bookingsQuery.data ?? [];
   const bookings = useMemo(() => toMobileBookings(bookingRecords, venues), [bookingRecords, venues]);
   const todayBookings = useMemo(
-    () => bookings.filter((b) => b.date === todayString && b.status !== "cancelled"),
+    () => bookings.filter((booking) => booking.date === todayString && booking.status !== "cancelled"),
     [bookings, todayString]
   );
   const selectedVenue = useMemo(
@@ -79,14 +222,228 @@ export default function HomeScreen() {
     [selectedBooking?.resourceId, venues]
   );
 
-  const screenStyle = useAnimatedStyle(() => ({ opacity: opacity.value, backgroundColor: ic.value.base }));
-  const contentStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
-  const surfaceStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.surface, borderColor: ic.value.border }));
+  const mastery = masteryQuery.data ?? [];
+  const leaderboard = leaderboardQuery.data?.data ?? [];
+  const sessions = sessionsQuery.data?.data ?? [];
+  const activeNutrition = nutritionTargetQuery.data ?? null;
+  const nutritionSummary = nutritionSummaryQuery.data ?? null;
+
+  const loggedCalories = nutritionSummary?.logged.calories ?? user?.currentCalories ?? 0;
+  const targetCalories = activeNutrition?.macros.targetCalories ?? nutritionSummary?.target?.calories ?? null;
+  const remainingCalories = nutritionSummary?.remaining?.calories ?? (
+    targetCalories !== null ? Math.max(targetCalories - loggedCalories, 0) : null
+  );
+  const totalXp = mastery.reduce((sum, entry) => sum + entry.xpPoints, 0);
+  const highestRankEntry = resolveHighestRank(mastery);
+  const leaderboardEntry = leaderboard.find((entry) => entry.userId === user?.id) ?? null;
+  const completedSessionsLast7Days = countRecentCompletedSessions(sessions);
+  const activeDaysLast7Days = countRecentActiveDays(sessions);
+  const bookingsLoading = venuesQuery.isPending || bookingsQuery.isPending;
+  const bookingsErrorMessage =
+    (venuesQuery.error as Error | null)?.message ??
+    (bookingsQuery.error as Error | null)?.message ??
+    null;
+  const memberSnapshotLoading =
+    hasMemberCardAccess &&
+    (nutritionTargetQuery.isPending ||
+      nutritionSummaryQuery.isPending ||
+      masteryQuery.isPending ||
+      leaderboardQuery.isPending ||
+      sessionsQuery.isPending);
+  const memberSnapshotError =
+    (nutritionTargetQuery.error as Error | null)?.message ??
+    (nutritionSummaryQuery.error as Error | null)?.message ??
+    (masteryQuery.error as Error | null)?.message ??
+    (leaderboardQuery.error as Error | null)?.message ??
+    (sessionsQuery.error as Error | null)?.message ??
+    null;
+
+  const statCards = useMemo<HomeStatCard[]>(() => {
+    if (hasMemberCardAccess) {
+      return [
+        { icon: CalendarDays, label: "Today Bookings", value: String(todayBookings.length) },
+        { icon: Dumbbell, label: "7 Day Activity", value: String(activeDaysLast7Days) },
+        { icon: Trophy, label: "Gym Rank", value: leaderboardEntry ? `#${leaderboardEntry.rankPosition}` : "--" },
+        { icon: Sparkles, label: "Total EXP", value: formatCompactNumber(totalXp) }
+      ];
+    }
+
+    return [
+      { icon: CalendarDays, label: "Today Bookings", value: String(todayBookings.length) },
+      { icon: User, label: "Portal Role", value: isCoach ? "Coach" : "User" },
+      { icon: ShieldCheck, label: "Member Access", value: memberAccessLabel },
+      { icon: Sparkles, label: "AI Access", value: hasMemberCardAccess ? "Open" : "Locked" }
+    ];
+  }, [
+    activeDaysLast7Days,
+    hasMemberCardAccess,
+    isCoach,
+    leaderboardEntry,
+    memberAccessLabel,
+    todayBookings.length,
+    totalXp
+  ]);
+
+  const snapshotRows = useMemo<HomeSnapshotRow[]>(() => {
+    if (hasMemberCardAccess) {
+      return [
+        {
+          label: "Nutrition Target",
+          subtitle: targetCalories !== null
+            ? `Logged ${loggedCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal today.`
+            : "No active nutrition target is loaded yet. Open Nutrition to save one.",
+          trailingLabel: targetCalories !== null && remainingCalories !== null
+            ? `${Math.max(Math.round(remainingCalories), 0)} kcal left`
+            : "Set target",
+          trailingLabelColor: targetCalories !== null ? colors.brand : colors.textMuted,
+          progress: targetCalories !== null ? clampProgress(loggedCalories / targetCalories) : undefined
+        },
+        {
+          label: "Workout Momentum",
+          subtitle: `${completedSessionsLast7Days} completed session${completedSessionsLast7Days === 1 ? "" : "s"} across ${activeDaysLast7Days} active day${activeDaysLast7Days === 1 ? "" : "s"} in the last 7 days.`,
+          trailingLabel: highestRankEntry?.rankDisplay ?? "Unranked",
+          trailingLabelColor: highestRankEntry ? colors.success : colors.textMuted,
+          progress: clampProgress(completedSessionsLast7Days / 4)
+        },
+        {
+          label: "Muscle Mastery",
+          subtitle: mastery.length > 0
+            ? `${mastery.length} tracked muscle group${mastery.length === 1 ? "" : "s"}. ${highestRankEntry?.muscleGroup ?? "Your top group"} leads the board right now.`
+            : "No mastery entries yet. Log a workout to light up the board.",
+          trailingLabel: leaderboardEntry ? `#${leaderboardEntry.rankPosition}` : "--",
+          trailingLabelColor: leaderboardEntry ? colors.warning : colors.textMuted,
+          progress: mastery.length > 0 ? clampProgress(mastery.length / 5) : undefined
+        }
+      ];
+    }
+
+    const accessSubtitle = membershipCardStatus === "pending_verification"
+      ? "Your membership card request is already pending verification. Member-only app features unlock after staff approval."
+      : membershipCardStatus === "revoked"
+        ? "Your membership card access is revoked right now. Ask the front desk to repair it if this looks incorrect."
+        : "Buy a membership card to unlock BrodigyAI, Muscle Mastery, workouts, and richer member snapshots.";
+
+    return [
+      {
+        label: "Member Access",
+        subtitle: accessSubtitle,
+        trailingLabel: memberAccessLabel,
+        trailingLabelColor: memberAccessColor
+      },
+      {
+        label: "Assistant Access",
+        subtitle: "BrodigyAI chat and history stay aligned with the same member-card gate used across the mobile member stack.",
+        trailingLabel: hasMemberCardAccess ? "Open" : "Locked",
+        trailingLabelColor: hasMemberCardAccess ? colors.success : colors.textMuted
+      },
+      {
+        label: "Next Step",
+        subtitle: membershipCardStatus === "pending_verification"
+          ? "Stay on standby while staff reviews the payment and activates the card."
+          : "Open Profile to buy, verify, or repair a membership card and unlock the full member experience.",
+        trailingLabel: membershipCardStatus === "pending_verification" ? "Waiting" : "Open /profile",
+        trailingLabelColor: membershipCardStatus === "pending_verification" ? colors.warning : colors.brand
+      }
+    ];
+  }, [
+    activeDaysLast7Days,
+    colors.brand,
+    colors.success,
+    colors.textMuted,
+    colors.warning,
+    completedSessionsLast7Days,
+    hasMemberCardAccess,
+    highestRankEntry,
+    leaderboardEntry,
+    loggedCalories,
+    mastery.length,
+    memberAccessColor,
+    memberAccessLabel,
+    membershipCardStatus,
+    remainingCalories,
+    targetCalories
+  ]);
+
+  const insightCard = useMemo(() => {
+    if (!hasMemberCardAccess) {
+      return {
+        body: membershipCardStatus === "pending_verification"
+          ? "Bookings and profile stay usable while AI, workouts, mastery, and deeper home insights unlock after staff verifies the card."
+          : membershipCardStatus === "revoked"
+            ? "Your member-facing surfaces are partially locked until the membership card is repaired."
+            : "This account can still book and manage profile basics, but the richer member stack opens only after a membership card becomes active.",
+        icon: ShieldCheck as LucideIcon,
+        title: membershipCardStatus === "pending_verification"
+          ? "Membership card verification in progress"
+          : membershipCardStatus === "revoked"
+            ? "Member access needs repair"
+            : "Unlock the full member stack"
+      };
+    }
+
+    if (memberSnapshotLoading) {
+      return {
+        body: "Refreshing nutrition, workouts, bookings, and mastery from the live stack.",
+        icon: Sparkles as LucideIcon,
+        title: "Loading your live member snapshot"
+      };
+    }
+
+    if (targetCalories === null) {
+      return {
+        body: "Daily calories are live, but saving a nutrition target gives this screen a much sharper coaching snapshot.",
+        icon: Sparkles as LucideIcon,
+        title: "Nutrition target still open"
+      };
+    }
+
+    if (todayBookings.length > 0) {
+      return {
+        body: `You have ${todayBookings.length} booking${todayBookings.length === 1 ? "" : "s"} today and ${completedSessionsLast7Days} completed workout session${completedSessionsLast7Days === 1 ? "" : "s"} in the last 7 days.`,
+        icon: CalendarDays as LucideIcon,
+        title: "Today's schedule is already moving"
+      };
+    }
+
+    if (highestRankEntry) {
+      return {
+        body: `${highestRankEntry.muscleGroup} is currently your strongest tracked group, and the rest of the member stack is ready when you are.`,
+        icon: Trophy as LucideIcon,
+        title: `${highestRankEntry.rankDisplay} momentum is active`
+      };
+    }
+
+    return {
+      body: "BrodigyAI, bookings, nutrition, and future workouts are already aligned around the current member contract.",
+      icon: Sparkles as LucideIcon,
+      title: "Member stack is live"
+    };
+  }, [
+    completedSessionsLast7Days,
+    hasMemberCardAccess,
+    highestRankEntry,
+    memberSnapshotLoading,
+    membershipCardStatus,
+    targetCalories,
+    todayBookings.length
+  ]);
+
+  const screenStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    backgroundColor: ic.value.base
+  }));
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }]
+  }));
+  const surfaceStyle = useAnimatedStyle(() => ({
+    backgroundColor: ic.value.surface,
+    borderColor: ic.value.border
+  }));
   const greetingNameStyle = useAnimatedStyle(() => ({ color: ic.value.textPrimary }));
   const greetingDateStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
 
   return (
-    <View style={base.screen}>
+    <View style={[base.screen, !isFocused && { display: "none" }]}>
       <Animated.ScrollView
         style={[base.content, screenStyle]}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -103,40 +460,35 @@ export default function HomeScreen() {
               {formatTodayLong()}
             </AnimatedFitText>
           </View>
+          {bookingsErrorMessage || memberSnapshotError ? (
+            <FitText style={{ fontSize: 12, color: colors.warning, marginBottom: 12 }}>
+              {bookingsErrorMessage ?? memberSnapshotError}
+            </FitText>
+          ) : null}
           <View style={s.statsOuter}>
             <View style={s.statsGrid}>
-              <View style={s.statsCol}>
-                <View style={s.caloriesCard}>
-                  <FitText style={s.caloriesLabel}>Calories</FitText>
-                  <FitText style={s.caloriesValue}>{todayCalories.toLocaleString()}</FitText>
-                  <FitText style={s.caloriesGoal}>
-                    of {goalTarget.toLocaleString()} goal{activeGoal ? ` · ${activeGoal.name}` : ""}
-                  </FitText>
-                </View>
-                {HOME_STAT_CARDS.slice(0, 1).map((stat) => (
-                  <Animated.View key={stat.label} style={[s.statCard, surfaceStyle]}>
-                    <stat.icon size={18} color={colors.brand} strokeWidth={2} />
-                    <FitText style={s.statCardLabel}>{stat.label}</FitText>
-                    <FitText style={s.statCardValue}>{stat.value}</FitText>
-                    <FitText style={s.statCardSub}>{stat.sub}</FitText>
-                  </Animated.View>
-                ))}
-              </View>
-              <View style={s.statsCol}>
-                {HOME_STAT_CARDS.slice(1).map((stat) => (
-                  <Animated.View key={stat.label} style={[s.statCard, surfaceStyle]}>
-                    <stat.icon size={17} color={colors.brand} strokeWidth={2} />
-                    <FitText style={s.statCardLabel}>{stat.label}</FitText>
-                    <FitText style={s.statCardValue}>{stat.value}</FitText>
-                    <FitText style={s.statCardSub}>{stat.sub}</FitText>
-                  </Animated.View>
-                ))}
-              </View>
+              {statCards.map((card) => (
+                <Animated.View key={card.label} style={[s.statCard, surfaceStyle]}>
+                  <FitCard icon={card.icon} label={card.label} statValue={card.value} iconSize={18} />
+                </Animated.View>
+              ))}
             </View>
           </View>
           <View style={s.sectionWrap}>
             <FitSection heading="SCHEDULE FOR TODAY">
-              {todayBookings.length === 0 ? (
+              {bookingsLoading ? (
+                <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
+                  <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
+                  <FitText style={{ fontSize: 14, color: colors.textMuted }}>Loading today's schedule...</FitText>
+                </View>
+              ) : bookingsErrorMessage ? (
+                <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
+                  <CalendarDays size={28} color={colors.warning} strokeWidth={1.5} />
+                  <FitText style={{ fontSize: 14, color: colors.textMuted, textAlign: "center" }}>
+                    Schedule data is temporarily unavailable. Reopen the screen to try again.
+                  </FitText>
+                </View>
+              ) : todayBookings.length === 0 ? (
                 <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
                   <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
                   <FitText style={{ fontSize: 14, color: colors.textMuted }}>No bookings scheduled for today</FitText>
@@ -148,14 +500,14 @@ export default function HomeScreen() {
                   style={{ maxHeight: 232 }}
                   nestedScrollEnabled
                 >
-                  {todayBookings.map((booking, i) => (
+                  {todayBookings.map((booking, index) => (
                     <FitCard
                       key={booking.id}
                       icon={booking.resourceType === "trainer" ? User : CalendarDays}
                       iconSize={18}
                       label={booking.resourceName}
-                      subtitle={`${formatBookingDate(booking.date)} · ${booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time}`}
-                      hasBorder={i < todayBookings.length - 1}
+                      subtitle={`${formatBookingDate(booking.date)} - ${booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time}`}
+                      hasBorder={index < todayBookings.length - 1}
                       onPress={() => setSelectedBooking(booking)}
                     />
                   ))}
@@ -164,16 +516,17 @@ export default function HomeScreen() {
             </FitSection>
           </View>
           <View style={s.sectionWrap}>
-            <FitSection heading="WEEKLY ACTIVITIES">
-              {GOAL_ROWS.map((row, i) => (
+            <FitSection heading="LIVE SNAPSHOT">
+              {snapshotRows.map((row, index) => (
                 <FitCard
                   key={row.label}
                   label={row.label}
-                  trailingLabel={row.value}
-                  trailingLabelColor={row.color}
+                  subtitle={row.subtitle}
+                  trailingLabel={row.trailingLabel}
+                  trailingLabelColor={row.trailingLabelColor}
                   progress={row.progress}
                   noChevron
-                  hasBorder={i < GOAL_ROWS.length - 1}
+                  hasBorder={index < snapshotRows.length - 1}
                 />
               ))}
             </FitSection>
@@ -181,11 +534,11 @@ export default function HomeScreen() {
           <View style={s.sectionWrap}>
             <Animated.View style={[s.badgeBanner, surfaceStyle]}>
               <View style={s.badgeIconBox}>
-                <FitText style={{ fontSize: 24 }}>🏆</FitText>
+                <insightCard.icon size={22} color={colors.brand} strokeWidth={2} />
               </View>
               <View style={{ flex: 1 }}>
-                <FitText style={s.badgeBannerTitle}>{HOME_BADGE_BANNER.title}</FitText>
-                <FitText style={s.badgeBannerBody}>{HOME_BADGE_BANNER.body}</FitText>
+                <FitText style={s.badgeBannerTitle}>{insightCard.title}</FitText>
+                <FitText style={s.badgeBannerBody}>{insightCard.body}</FitText>
               </View>
             </Animated.View>
           </View>

@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Security"
+  short_description: "FitTrack auth, permission, and sensitive-surface hardening"
+  default_prompt: "Use $security-hardening to review a sensitive FitTrack change, find auth and data-exposure risks, and recommend or apply the narrowest safe hardening steps."
+
+policy:
+  allow_implicit_invocation: true

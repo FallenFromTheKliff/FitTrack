@@ -1,5 +1,5 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { AuditAction } from '../../audit/audit.service';
@@ -14,7 +14,10 @@ describe('CoachService', () => {
 
   const repo = {
     listAvailableCoaches: jest.fn(),
+    hasActiveAppointmentConflict: jest.fn(),
+    hasActiveLinkedBookingConflict: jest.fn(),
     findCoachByIdOrThrow: jest.fn(),
+    findCoachByUserIdOrThrow: jest.fn(),
     updateCoachByUserId: jest.fn(),
     updateCoachById: jest.fn(),
   };
@@ -33,6 +36,7 @@ describe('CoachService', () => {
     gym_commission_pct: 20,
     is_available_for_booking: true,
     user: {
+      id: 'user-1',
       profile: {
         first_name: 'Maria',
         last_name: 'Santos',
@@ -103,6 +107,24 @@ describe('CoachService', () => {
     );
   });
 
+  it('returns the authenticated coach profile with nested user details', async () => {
+    repo.findCoachByUserIdOrThrow.mockResolvedValue(makeCoach());
+
+    await expect(service.getMyProfile('user-1')).resolves.toEqual(
+      expect.objectContaining({
+        id: 'coach-1',
+        user: {
+          id: 'user-1',
+          profile: {
+            first_name: 'Maria',
+            last_name: 'Santos',
+            avatar_url: 'https://cdn.fittrack.test/avatars/maria.png',
+          },
+        },
+      }),
+    );
+  });
+
   it('rejects gym commission updates from coach self-service', async () => {
     await expect(
       service.updateMyProfile('user-1', { gym_commission_pct: 25 }),
@@ -151,5 +173,133 @@ describe('CoachService', () => {
 
     expect(repo.findCoachByIdOrThrow).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('lets staff-facing management update non-financial coach fields', async () => {
+    repo.updateCoachById.mockResolvedValue(
+      makeCoach({
+        bio: 'Updated from schedule management.',
+        certification: 'NASM-CPT, CPR',
+        hourly_rate: 1500,
+        is_available_for_booking: false,
+        specialization: 'Strength, Mobility',
+      }),
+    );
+
+    await expect(
+      service.updateManagedProfile('coach-1', {
+        bio: 'Updated from schedule management.',
+        certification: 'NASM-CPT, CPR',
+        hourly_rate: 1500,
+        is_available_for_booking: false,
+        specialization: 'Strength, Mobility',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        bio: 'Updated from schedule management.',
+        certification: 'NASM-CPT, CPR',
+        hourly_rate: '1500',
+        is_available_for_booking: false,
+        specialization: 'Strength, Mobility',
+      }),
+    );
+
+    expect(repo.updateCoachById).toHaveBeenCalledWith('coach-1', {
+      bio: 'Updated from schedule management.',
+      certification: 'NASM-CPT, CPR',
+      hourly_rate: 1500,
+      is_available_for_booking: false,
+      specialization: 'Strength, Mobility',
+    });
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects gym commission updates from the staff-facing management flow', async () => {
+    await expect(
+      service.updateManagedProfile('coach-1', { gym_commission_pct: 35 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(repo.updateCoachById).not.toHaveBeenCalled();
+  });
+
+  it('accepts coach-linked reservation windows that fit active availability with no conflicts', async () => {
+    const startsAt = new Date('2099-03-23T08:30:00.000Z');
+    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    repo.findCoachByIdOrThrow.mockResolvedValue(
+      makeCoach({
+        availability_slots: [
+          {
+            id: 'slot-1',
+            day_of_week: startsAt.getUTCDay(),
+            start_time: START_TIME,
+            end_time: END_TIME,
+          },
+        ],
+      }),
+    );
+    repo.hasActiveAppointmentConflict.mockResolvedValue(false);
+    repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
+
+    await expect(
+      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+    ).resolves.toBeUndefined();
+
+    expect(repo.hasActiveAppointmentConflict).toHaveBeenCalledWith(
+      'coach-1',
+      startsAt,
+      endsAt,
+    );
+    expect(repo.hasActiveLinkedBookingConflict).toHaveBeenCalledWith(
+      'coach-1',
+      startsAt,
+      endsAt,
+    );
+  });
+
+  it('rejects coach-linked reservation windows outside active availability', async () => {
+    const startsAt = new Date('2099-03-23T11:00:00.000Z');
+    const endsAt = new Date('2099-03-23T12:00:00.000Z');
+    repo.findCoachByIdOrThrow.mockResolvedValue(
+      makeCoach({
+        availability_slots: [
+          {
+            id: 'slot-1',
+            day_of_week: startsAt.getUTCDay(),
+            start_time: START_TIME,
+            end_time: END_TIME,
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+    ).rejects.toBeInstanceOf(HttpException);
+
+    expect(repo.hasActiveAppointmentConflict).not.toHaveBeenCalled();
+    expect(repo.hasActiveLinkedBookingConflict).not.toHaveBeenCalled();
+  });
+
+  it('rejects coach-linked reservation windows when another coach appointment overlaps', async () => {
+    const startsAt = new Date('2099-03-23T08:30:00.000Z');
+    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    repo.findCoachByIdOrThrow.mockResolvedValue(
+      makeCoach({
+        availability_slots: [
+          {
+            id: 'slot-1',
+            day_of_week: startsAt.getUTCDay(),
+            start_time: START_TIME,
+            end_time: END_TIME,
+          },
+        ],
+      }),
+    );
+    repo.hasActiveAppointmentConflict.mockResolvedValue(true);
+    repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
+
+    await expect(
+      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

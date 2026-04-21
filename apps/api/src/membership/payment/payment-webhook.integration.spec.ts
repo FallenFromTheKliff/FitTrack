@@ -1,7 +1,14 @@
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
-import { PayableType, PaymentProvider, Prisma } from '@prisma/client';
+import {
+  MembershipCardSource,
+  PayableType,
+  PaymentProvider,
+  Prisma,
+} from '@prisma/client';
 
+import { MembershipCardRepository } from '../card/card.repository';
+import { MembershipCardService } from '../card/card.service';
 import { PaymongoCheckoutService } from './paymongo-checkout.service';
 import {
   PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
@@ -18,6 +25,9 @@ type PaymentRecord = Awaited<
 >;
 type SubscriptionRecord = Awaited<
   ReturnType<SubscriptionRepository['findSubscriptionByIdOrThrow']>
+>;
+type MembershipCardRecord = Awaited<
+  ReturnType<MembershipCardRepository['findMembershipCardByIdOrThrow']>
 >;
 
 function flushAsyncEvents(): Promise<void> {
@@ -41,6 +51,11 @@ describe('Payment webhook integration', () => {
     findSubscriptionByIdOrThrow: jest.fn(),
     activateSubscription: jest.fn(),
   };
+  const membershipCardRepo = {
+    findMembershipCardByIdOrThrow: jest.fn(),
+    activateMembershipCard: jest.fn(),
+    revokeMembershipCard: jest.fn(),
+  };
 
   const paymongoWebhookService = {
     parseAndVerify: jest.fn(),
@@ -58,8 +73,10 @@ describe('Payment webhook integration', () => {
       providers: [
         PaymentService,
         SubscriptionService,
+        MembershipCardService,
         { provide: PaymentRepository, useValue: paymentRepo },
         { provide: SubscriptionRepository, useValue: subscriptionRepo },
+        { provide: MembershipCardRepository, useValue: membershipCardRepo },
         { provide: PaymongoWebhookService, useValue: paymongoWebhookService },
         { provide: PaymongoCheckoutService, useValue: paymongoCheckoutService },
       ],
@@ -141,22 +158,84 @@ describe('Payment webhook integration', () => {
     expect(paymentRepo.updatePayment).not.toHaveBeenCalled();
     expect(subscriptionRepo.activateSubscription).not.toHaveBeenCalled();
   });
+
+  it('acknowledges a PayMongo webhook and activates the linked membership card once', async () => {
+    const event = createCheckoutPaidEvent({
+      checkoutSessionId: 'cs_test_card_checkout',
+      eventId: 'evt_test_card_checkout_paid',
+      checkoutUrl: 'https://checkout.paymongo.com/cs_test_card_checkout',
+      metadata: {
+        membership_card_id: 'card-1',
+        payment_id: 'payment-card-1',
+      },
+      referenceNumber: 'GCASH-CARD-1234',
+    });
+    const payment = createProcessingMembershipCardPayment();
+
+    paymongoWebhookService.parseAndVerify.mockReturnValue(event);
+    paymentRepo.findPaymentByGatewayEventId.mockResolvedValue(null);
+    paymentRepo.findPaymentByProviderRefOrThrow.mockResolvedValue(payment);
+    paymentRepo.updatePayment.mockResolvedValue({
+      ...payment,
+      status: 'completed',
+      gateway_event_id: event.data.id,
+    });
+    membershipCardRepo.findMembershipCardByIdOrThrow.mockResolvedValue(
+      createPendingMembershipCard(),
+    );
+    membershipCardRepo.activateMembershipCard.mockResolvedValue({
+      ...createPendingMembershipCard(),
+      status: 'active',
+    });
+
+    const result = await paymentService.handleWebhook(
+      Buffer.from(JSON.stringify(event), 'utf8'),
+      't=123,te=fake',
+    );
+    await flushAsyncEvents();
+
+    expect(result).toEqual({ message: 'SUCCESS' });
+    expect(paymentRepo.findPaymentByProviderRefOrThrow).toHaveBeenCalledWith(
+      'cs_test_card_checkout',
+    );
+    expect(membershipCardRepo.activateMembershipCard).toHaveBeenCalledWith(
+      'card-1',
+      expect.objectContaining({
+        activatedAt: expect.any(Date),
+        verifiedAt: expect.any(Date),
+        verifiedBy: null,
+      }),
+    );
+    expect(subscriptionRepo.activateSubscription).not.toHaveBeenCalled();
+  });
 });
 
-function createCheckoutPaidEvent(): PaymongoWebhookEvent {
+function createCheckoutPaidEvent(input?: {
+  checkoutSessionId?: string;
+  checkoutUrl?: string;
+  eventId?: string;
+  metadata?: Record<string, string>;
+  referenceNumber?: string;
+}): PaymongoWebhookEvent {
+  const checkoutSessionId = input?.checkoutSessionId ?? 'cs_test_checkout';
+  const checkoutUrl =
+    input?.checkoutUrl ??
+    `https://checkout.paymongo.com/${checkoutSessionId}`;
+  const referenceNumber = input?.referenceNumber ?? 'GCASH-1234';
+
   return {
     data: {
-      id: 'evt_test_checkout_paid',
+      id: input?.eventId ?? 'evt_test_checkout_paid',
       type: 'event',
       attributes: {
         type: PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
         livemode: false,
         data: {
-          id: 'cs_test_checkout',
+          id: checkoutSessionId,
           type: 'checkout_session',
           attributes: {
-            checkout_url: 'https://checkout.paymongo.com/cs_test_checkout',
-            metadata: {
+            checkout_url: checkoutUrl,
+            metadata: input?.metadata ?? {
               payment_id: 'payment-1',
               subscription_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             },
@@ -169,13 +248,13 @@ function createCheckoutPaidEvent(): PaymongoWebhookEvent {
                 attributes: {
                   amount: 149900,
                   currency: 'PHP',
-                  external_reference_number: 'GCASH-1234',
+                  external_reference_number: referenceNumber,
                   paid_at: 1770000000,
                   status: 'paid',
                 },
               },
             ],
-            reference_number: 'GCASH-1234',
+            reference_number: referenceNumber,
             status: 'paid',
           },
         },
@@ -201,6 +280,32 @@ function createProcessingPayment(): PaymentRecord {
     status: 'processing',
     gateway_metadata: {
       checkout_url: 'https://checkout.paymongo.com/cs_test_checkout',
+    },
+    screenshot_url: null,
+    rejection_reason: null,
+    verified_by: null,
+    verified_at: null,
+    created_at: new Date('2026-03-24T00:00:00.000Z'),
+    updated_at: new Date('2026-03-24T00:00:00.000Z'),
+  };
+}
+
+function createProcessingMembershipCardPayment(): PaymentRecord {
+  return {
+    id: 'payment-card-1',
+    user_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    payable_type: PayableType.membership_card,
+    payable_id: 'card-1',
+    payment_stage: 'full',
+    amount: new Prisma.Decimal('400'),
+    currency: 'PHP',
+    provider: PaymentProvider.paymongo,
+    provider_ref: 'cs_test_card_checkout',
+    gateway_event_id: null,
+    idempotency_key: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    status: 'pending',
+    gateway_metadata: {
+      checkout_url: 'https://checkout.paymongo.com/cs_test_card_checkout',
     },
     screenshot_url: null,
     rejection_reason: null,
@@ -241,5 +346,23 @@ function createPendingSubscription(): SubscriptionRecord {
       created_at: new Date('2026-03-24T00:00:00.000Z'),
       updated_at: new Date('2026-03-24T00:00:00.000Z'),
     },
+  };
+}
+
+function createPendingMembershipCard(): MembershipCardRecord {
+  return {
+    id: 'card-1',
+    user_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    source: MembershipCardSource.paymongo,
+    status: 'pending_verification',
+    purchased_at: new Date('2026-03-24T00:00:00.000Z'),
+    verified_at: null,
+    verified_by: null,
+    activated_at: null,
+    revoked_at: null,
+    revoked_by: null,
+    revoke_reason: null,
+    created_at: new Date('2026-03-24T00:00:00.000Z'),
+    updated_at: new Date('2026-03-24T00:00:00.000Z'),
   };
 }

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/swagger';
 import { ChatContext } from '@prisma/client';
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -46,6 +47,15 @@ export class AIChatDTO {
     message: `context_type must be one of: ${Object.values(ChatContext).join(', ')}`,
   })
   context_type?: ChatContext;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'When true and no session_id is provided, archive the current active context session and start a fresh conversation.',
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'start_new_session must be a boolean' })
+  start_new_session?: boolean;
 }
 
 export class AIChatResponseDTO {

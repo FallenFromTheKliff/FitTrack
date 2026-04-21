@@ -39,6 +39,13 @@ export function makeAuthStyles(colors: ThemeColors) {
       marginTop: 4,
       color: colors.brand
     },
+    statusMessage: {
+      fontSize: 13,
+      textAlign: "center",
+      marginTop: 16,
+      lineHeight: 18,
+      color: colors.textSecondary
+    },
     primaryBtn: { marginTop: 40 },
     dividerRow: {
       flexDirection: "row",

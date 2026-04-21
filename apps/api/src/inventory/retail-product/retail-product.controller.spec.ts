@@ -84,11 +84,13 @@ describe('RetailProductController', () => {
     retailProductService.createProduct.mockResolvedValue({ id: 'product-1' });
 
     await controller.createProduct({
+      category: 'supplements',
       name: 'Whey Protein Isolate',
       price: 1499,
     });
 
     expect(retailProductService.createProduct).toHaveBeenCalledWith({
+      category: 'supplements',
       name: 'Whey Protein Isolate',
       price: 1499,
     });

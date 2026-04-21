@@ -1,5 +1,9 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { ExerciseCatalog, Prisma } from '@prisma/client';
+import {
+  ExerciseCatalog,
+  ExerciseReviewSubmission,
+  Prisma,
+} from '@prisma/client';
 
 import {
   BaseRepository,
@@ -7,6 +11,7 @@ import {
 } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ExerciseFilterDTO } from './dto/exercise.dto';
+import { ExerciseReviewSubmissionFilterDTO } from './dto/exercise-review.dto';
 
 const exerciseOrderBy = [
   { muscle_group: 'asc' },
@@ -18,6 +23,8 @@ export type ActiveExerciseGenerationRecord = Pick<
   'id' | 'name' | 'muscle_group' | 'category'
 >;
 
+export type ExerciseReviewSubmissionRecord = ExerciseReviewSubmission;
+
 @Injectable()
 export class ExerciseRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -27,9 +34,9 @@ export class ExerciseRepository extends BaseRepository {
   listExercises(
     dto: ExerciseFilterDTO,
   ): Promise<PaginatedResult<ExerciseCatalog>> {
-    const where: Prisma.ExerciseCatalogWhereInput = {
-      is_active: true,
-    };
+    const where: Prisma.ExerciseCatalogWhereInput = dto.include_inactive
+      ? {}
+      : { is_active: true };
 
     if (dto.muscle_group) {
       where.muscle_group = {
@@ -85,9 +92,31 @@ export class ExerciseRepository extends BaseRepository {
     });
   }
 
+  listReviewSubmissions(
+    dto: ExerciseReviewSubmissionFilterDTO,
+  ): Promise<PaginatedResult<ExerciseReviewSubmissionRecord>> {
+    const where: Prisma.ExerciseReviewSubmissionWhereInput = {
+      ...(dto.status ? { status: dto.status } : {}),
+    };
+
+    return this.paginate<ExerciseReviewSubmissionRecord>(
+      this.prisma.exerciseReviewSubmission,
+      {
+        where,
+        orderBy: [{ created_at: 'desc' }],
+      },
+      { page: dto.page, limit: dto.limit },
+    );
+  }
+
   async createExercise(
     data: Prisma.ExerciseCatalogCreateInput,
   ): Promise<ExerciseCatalog> {
+    const nextName = typeof data.name === 'string' ? data.name.trim() : '';
+    if (nextName) {
+      await this.ensureExerciseNameAvailable(nextName);
+    }
+
     try {
       return await this.create<ExerciseCatalog>(
         this.prisma.exerciseCatalog,
@@ -106,6 +135,11 @@ export class ExerciseRepository extends BaseRepository {
     id: string,
     data: Prisma.ExerciseCatalogUpdateInput,
   ): Promise<ExerciseCatalog> {
+    const nextName = typeof data.name === 'string' ? data.name.trim() : '';
+    if (nextName) {
+      await this.ensureExerciseNameAvailable(nextName, id);
+    }
+
     try {
       return await this.updateById<ExerciseCatalog>(
         this.prisma.exerciseCatalog,
@@ -119,6 +153,17 @@ export class ExerciseRepository extends BaseRepository {
 
       throw error;
     }
+  }
+
+  updateReviewSubmission(
+    id: string,
+    data: Prisma.ExerciseReviewSubmissionUpdateInput,
+  ): Promise<ExerciseReviewSubmissionRecord> {
+    return this.updateById<ExerciseReviewSubmissionRecord>(
+      this.prisma.exerciseReviewSubmission,
+      id,
+      data,
+    );
   }
 
   private buildDuplicateExerciseConflict(): ConflictException {
@@ -147,5 +192,25 @@ export class ExerciseRepository extends BaseRepository {
         : '';
 
     return target.includes('name') || String(error.message).includes('name');
+  }
+
+  private async ensureExerciseNameAvailable(
+    name: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await this.prisma.exerciseCatalog.findFirst({
+      where: {
+        name: {
+          equals: name,
+          mode: 'insensitive',
+        },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw this.buildDuplicateExerciseConflict();
+    }
   }
 }

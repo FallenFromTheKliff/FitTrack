@@ -9,6 +9,7 @@ import { CoachController } from './coach.controller';
 function getGuardMetadata(
   methodName:
     | 'listCoaches'
+    | 'getMyProfile'
     | 'getCoachById'
     | 'updateMyProfile'
     | 'updateCoachById',
@@ -20,7 +21,7 @@ function getGuardMetadata(
 }
 
 function getRolesMetadata(
-  methodName: 'updateMyProfile' | 'updateCoachById',
+  methodName: 'getMyProfile' | 'updateMyProfile' | 'updateCoachById',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -31,6 +32,7 @@ function getRolesMetadata(
 describe('CoachController', () => {
   const coachService = {
     listCoaches: jest.fn(),
+    getMyProfile: jest.fn(),
     getCoachById: jest.fn(),
     updateMyProfile: jest.fn(),
     adminUpdateCoach: jest.fn(),
@@ -60,6 +62,19 @@ describe('CoachController', () => {
       expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
     },
   );
+
+  it('loads the authenticated coach profile through the service', async () => {
+    coachService.getMyProfile.mockResolvedValue({ id: 'coach-1' });
+
+    await controller.getMyProfile({ sub: 'coach-user-1' } as never);
+
+    expect(coachService.getMyProfile).toHaveBeenCalledWith('coach-user-1');
+    expect(getGuardMetadata('getMyProfile')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('getMyProfile')).toEqual([UserRole.coach]);
+  });
 
   it('loads a single coach profile through the service', async () => {
     coachService.getCoachById.mockResolvedValue({ id: 'coach-1' });

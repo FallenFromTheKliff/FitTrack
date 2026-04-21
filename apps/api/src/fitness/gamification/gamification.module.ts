@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { MembershipModule } from '../../membership/membership.module';
 import { NotificationsModule } from '../../notifications/notifications.module';
 import { UserModule } from '../../user/user.module';
 import { GamificationController } from './gamification.controller';
@@ -8,7 +9,7 @@ import { GamificationRepository } from './gamification.repository';
 import { GamificationService } from './gamification.service';
 
 @Module({
-  imports: [UserModule, NotificationsModule],
+  imports: [UserModule, NotificationsModule, MembershipModule],
   controllers: [GamificationController],
   providers: [
     GamificationService,

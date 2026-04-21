@@ -198,15 +198,83 @@ export type AiGeneratePlanResponse = {
 };
 
 export type PoseAnalyzeResponse = {
-  rep_event: boolean;
   confidence: number;
-  exercise_class: string;
-  rep_count_delta?: number;
+  exercise_class: string | null;
   matched_profile_id?: string | null;
+  movement_contract?: {
+    exercise: string;
+    dominant_joint: 'elbow' | 'shoulder' | 'hip' | 'knee';
+    rep_thresholds: {
+      down: { angle: number; tolerance: number };
+      up: { angle: number; tolerance: number };
+    };
+    secondary_check: string;
+    oscillating_joints: string[];
+  } | null;
   subject_locked?: boolean;
   subject_lock_confidence?: number;
-  phase?: string;
+  classification_source?: 'preset' | 'classifier' | 'user_confirmed';
+  needs_confirmation?: boolean;
+  candidate_exercises?: string[];
   form_feedback?: string[];
+  learned_profile?: {
+    canonical_name: string;
+    landmark_signature: Record<string, unknown>;
+    angle_signature: Record<string, unknown>;
+    orientation_signature: Record<string, unknown>;
+    movement_pattern: Record<string, unknown>;
+    visibility_pattern: Record<string, unknown>;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    tolerance?: number | null;
+    rep_thresholds?: Record<string, unknown> | null;
+    rep_rules?: Record<string, unknown> | null;
+  } | null;
+};
+
+export type PoseAnalyzeSequenceInput = {
+  poseSessionId: string;
+  landmarkSchema: 'mediapipe_pose_v1';
+  exerciseHint?: string | null;
+  cameraFacingMode?: 'user' | 'environment';
+  frames: Array<{
+    captured_at_ms: number;
+    keypoints: Array<{
+      x: number;
+      y: number;
+      z: number;
+      visibility: number;
+    }>;
+  }>;
+  signals: {
+    angles: Array<{
+      captured_at_ms: number;
+      elbow?: number | null;
+      shoulder?: number | null;
+      hip?: number | null;
+      knee?: number | null;
+    }>;
+    orientation: {
+      body_orientation: string;
+      torso_slope_deg: number;
+      vector: { x: number; y: number };
+    };
+    visibility: {
+      average_visibility: number;
+      feet_visibility: number;
+      low_confidence_landmarks: string[];
+      reliable_frame_count: number;
+      wrist_visibility: number;
+    };
+    hip: {
+      average_y: number;
+      range_y: number;
+      stable: boolean;
+    };
+    temporal: {
+      amplitudes: Record<string, number>;
+      oscillating_joints: string[];
+    };
+  };
 };
 
 export type PoseBootstrapInput = {
@@ -219,6 +287,12 @@ export type PoseBootstrapInput = {
     profile_kind: 'seed' | 'learned';
     landmark_signature: Record<string, unknown>;
     angle_signature: Record<string, unknown>;
+    orientation_signature: Record<string, unknown>;
+    movement_pattern: Record<string, unknown>;
+    visibility_pattern: Record<string, unknown>;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    tolerance?: number | null;
+    rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
   }>;
 };
@@ -248,6 +322,12 @@ export type PoseFinalizeResponse = {
     canonical_name: string;
     landmark_signature: Record<string, unknown>;
     angle_signature: Record<string, unknown>;
+    orientation_signature: Record<string, unknown>;
+    movement_pattern: Record<string, unknown>;
+    visibility_pattern: Record<string, unknown>;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    tolerance?: number | null;
+    rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
   };
 };
@@ -300,29 +380,34 @@ export class AiPythonClientService {
   async generatePlan(
     input: GeneratePlanInput,
   ): Promise<AiGeneratePlanResponse> {
-    const response = await this.performRequest('/generate-plan', {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
+    const response = await this.performRequest(
+      '/generate-plan',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_context: input.userContext,
+          plan_input: input.planInput,
+          allowed_exercises: input.allowedExercises,
+        }),
       },
-      body: JSON.stringify({
-        user_context: input.userContext,
-        plan_input: input.planInput,
-        allowed_exercises: input.allowedExercises,
-      }),
-    });
+      {
+        unavailableDetail:
+          'BrodigyAI plan generation is unavailable right now.',
+        missingConfigDetail: 'AI plan generation is not configured.',
+        timeoutDetail:
+          'BrodigyAI timed out while generating a training plan. Please try again.',
+      },
+    );
 
     if (!response.ok) {
-      throw new HttpException(
-        {
-          type: 'BAD_GATEWAY',
-          title: 'AI Plan Generation Failed',
-          status: 502,
-          detail: 'The AI plan service rejected the training-plan request.',
-        },
-        HttpStatus.BAD_GATEWAY,
-      );
+      await this.throwHttpExceptionFromResponse(response, {
+        title: 'AI Plan Generation Failed',
+        detail: 'The AI plan service rejected the generation request.',
+      });
     }
 
     const payload = (await response.json()) as AiGeneratePlanResponse;
@@ -333,8 +418,7 @@ export class AiPythonClientService {
           type: 'BAD_GATEWAY',
           title: 'Invalid AI Plan Response',
           status: 502,
-          detail:
-            'The AI plan service returned an invalid training-plan payload.',
+          detail: 'The AI plan service returned an invalid payload.',
         },
         HttpStatus.BAD_GATEWAY,
       );
@@ -346,25 +430,27 @@ export class AiPythonClientService {
   async calculateTdee(
     input: CalculateTdeeInput,
   ): Promise<AiCalculateTdeeResponse> {
-    const response = await this.performRequest('/calculate-tdee', {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(input),
-    });
+    let response: Response;
+
+    try {
+      response = await this.performRequest('/calculate-tdee', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      });
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        return this.calculateTdeeLocally(input);
+      }
+
+      throw error;
+    }
 
     if (!response.ok) {
-      throw new HttpException(
-        {
-          type: 'BAD_GATEWAY',
-          title: 'TDEE Calculation Failed',
-          status: 502,
-          detail: 'The AI nutrition service rejected the TDEE request.',
-        },
-        HttpStatus.BAD_GATEWAY,
-      );
+      return this.calculateTdeeLocally(input);
     }
 
     const payload = (await response.json()) as AiCalculateTdeeResponse;
@@ -384,30 +470,100 @@ export class AiPythonClientService {
     return payload;
   }
 
+  private calculateTdeeLocally(
+    input: CalculateTdeeInput,
+  ): AiCalculateTdeeResponse {
+    const activityMultipliers: Record<string, number> = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9,
+    };
+    const goalCalorieAdjustments: Record<string, number> = {
+      bulking: 300,
+      cutting: -500,
+      maintenance: 0,
+      sport_specific: 150,
+    };
+    const proteinPerKg: Record<string, number> = {
+      bulking: 2.0,
+      cutting: 2.2,
+      maintenance: 1.8,
+      sport_specific: 2.0,
+    };
+    const fatRatio: Record<string, number> = {
+      bulking: 0.25,
+      cutting: 0.25,
+      maintenance: 0.25,
+      sport_specific: 0.27,
+    };
+
+    const bmrBase =
+      10 * input.weight_kg + 6.25 * input.height_cm - 5 * input.age;
+    const bmr =
+      input.gender === 'male'
+        ? bmrBase + 5
+        : input.gender === 'female'
+          ? bmrBase - 161
+          : bmrBase - 78;
+    const tdee = bmr * (activityMultipliers[input.activity_level] ?? 1.2);
+    const targetCalories = Math.max(
+      1200,
+      Math.round(tdee + (goalCalorieAdjustments[input.fitness_goal] ?? 0)),
+    );
+    const proteinG = Math.max(
+      0,
+      Math.round(input.weight_kg * (proteinPerKg[input.fitness_goal] ?? 1.8)),
+    );
+    const fatG = Math.max(
+      0,
+      Math.round((targetCalories * (fatRatio[input.fitness_goal] ?? 0.25)) / 9),
+    );
+    const carbsG = Math.max(
+      0,
+      Math.round((targetCalories - proteinG * 4 - fatG * 9) / 4),
+    );
+
+    return {
+      bmr: Number(bmr.toFixed(2)),
+      tdee: Number(tdee.toFixed(2)),
+      target_calories: targetCalories,
+      protein_g: proteinG,
+      carbs_g: carbsG,
+      fat_g: fatG,
+    };
+  }
+
   async chat(input: AIChatInput): Promise<AIChatResponse> {
-    const response = await this.performRequest('/chat', {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
+    const response = await this.performRequest(
+      '/chat',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: input.messages,
+          user_context: input.userContext,
+          session_context: input.sessionContext,
+        }),
       },
-      body: JSON.stringify({
-        messages: input.messages,
-        user_context: input.userContext,
-        session_context: input.sessionContext,
-      }),
-    });
+      {
+        unavailableDetail:
+          'BrodigyAI is unavailable right now. Please try again shortly.',
+        missingConfigDetail: 'BrodigyAI chat is not configured.',
+        timeoutDetail:
+          'BrodigyAI timed out while waiting for the AI service. Please try again.',
+      },
+    );
 
     if (!response.ok) {
-      throw new HttpException(
-        {
-          type: 'BAD_GATEWAY',
-          title: 'AI Chat Failed',
-          status: 502,
-          detail: 'The AI chat service rejected the chat request.',
-        },
-        HttpStatus.BAD_GATEWAY,
-      );
+      await this.throwHttpExceptionFromResponse(response, {
+        title: 'AI Chat Failed',
+        detail: 'The AI chat service rejected the chat request.',
+      });
     }
 
     const payload = (await response.json()) as AIChatResponse;
@@ -418,7 +574,7 @@ export class AiPythonClientService {
           type: 'BAD_GATEWAY',
           title: 'Invalid AI Chat Response',
           status: 502,
-          detail: 'The AI chat service returned an invalid chat payload.',
+          detail: 'The AI chat service returned an invalid payload.',
         },
         HttpStatus.BAD_GATEWAY,
       );
@@ -572,6 +728,83 @@ export class AiPythonClientService {
     return payload;
   }
 
+  async analyzePoseSequence(
+    input: PoseAnalyzeSequenceInput,
+  ): Promise<PoseAnalyzeResponse> {
+    const fullSequenceBody = {
+      pose_session_id: input.poseSessionId,
+      landmark_schema: input.landmarkSchema,
+      exercise_hint: input.exerciseHint ?? null,
+      camera_facing_mode: input.cameraFacingMode ?? null,
+      frames: input.frames,
+      signals: input.signals,
+    };
+    const legacySequenceBody = {
+      pose_session_id: input.poseSessionId,
+      landmark_schema: input.landmarkSchema,
+      exercise_hint: input.exerciseHint ?? null,
+      camera_facing_mode: input.cameraFacingMode ?? null,
+      frames: input.frames,
+    };
+
+    let response = await this.performRequest('/pose/analyze', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(fullSequenceBody),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await this.readErrorPayload(response);
+      const supportsLegacyFramesOnly =
+        response.status === 422 &&
+        errorPayload?.detail?.includes('body.signals') &&
+        errorPayload.detail.includes('Extra inputs are not permitted');
+
+      if (supportsLegacyFramesOnly) {
+        response = await this.performRequest('/pose/analyze', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(legacySequenceBody),
+        });
+      }
+
+      if (!response.ok) {
+        throw new HttpException(
+          {
+            type: 'BAD_GATEWAY',
+            title: 'Pose Sequence Analysis Failed',
+            status: 502,
+            detail:
+              'The AI pose-analysis service rejected the keypoint sequence request.',
+          },
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+    }
+
+    const payload = (await response.json()) as PoseAnalyzeResponse;
+
+    if (!this.isValidPoseAnalyzePayload(payload)) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Invalid Pose Sequence Analysis Response',
+          status: 502,
+          detail: 'The AI pose-analysis service returned an invalid payload.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return payload;
+  }
+
   async bootstrapPoseSession(
     input: PoseBootstrapInput,
   ): Promise<PoseBootstrapResponse> {
@@ -671,6 +904,7 @@ export class AiPythonClientService {
     options?: {
       unavailableDetail?: string;
       missingConfigDetail?: string;
+      timeoutDetail?: string;
     },
   ): Promise<Response> {
     const settings = this.getRequiredSettings(options?.missingConfigDetail);
@@ -681,11 +915,77 @@ export class AiPythonClientService {
         ...init,
         signal: AbortSignal.timeout(settings.requestTimeoutMs),
       });
-    } catch {
+    } catch (error) {
+      const detail =
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+          ? options?.timeoutDetail ??
+            options?.unavailableDetail ??
+            'The AI service timed out right now.'
+          : options?.unavailableDetail ??
+            'The AI plan service is unavailable right now.';
       throw this.buildUnavailableException(
-        options?.unavailableDetail ??
-          'The AI plan service is unavailable right now.',
+        detail,
       );
+    }
+  }
+
+  private async throwHttpExceptionFromResponse(
+    response: Response,
+    fallback: {
+      detail: string;
+      title: string;
+    },
+  ): Promise<never> {
+    const payload = await this.readErrorPayload(response);
+    const status = response.status >= 400 ? response.status : 502;
+
+    throw new HttpException(
+      {
+        type:
+          payload?.type ??
+          (status >= 500 ? 'SERVICE_UNAVAILABLE' : 'BAD_GATEWAY'),
+        title: payload?.title ?? fallback.title,
+        status,
+        detail: payload?.detail ?? fallback.detail,
+      },
+      status,
+    );
+  }
+
+  private async readErrorPayload(response: Response): Promise<{
+    detail?: string;
+    title?: string;
+    type?: string;
+  } | null> {
+    const raw = (await response.text()).trim();
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        detail?: unknown;
+        title?: unknown;
+        type?: unknown;
+      };
+
+      return {
+        detail:
+          typeof parsed.detail === 'string' && parsed.detail.trim()
+            ? parsed.detail.trim()
+            : undefined,
+        title:
+          typeof parsed.title === 'string' && parsed.title.trim()
+            ? parsed.title.trim()
+            : undefined,
+        type:
+          typeof parsed.type === 'string' && parsed.type.trim()
+            ? parsed.type.trim()
+            : undefined,
+      };
+    } catch {
+      return { detail: raw };
     }
   }
 
@@ -794,25 +1094,51 @@ export class AiPythonClientService {
     payload: PoseAnalyzeResponse,
   ): payload is PoseAnalyzeResponse {
     return (
-      typeof payload.rep_event === 'boolean' &&
       typeof payload.confidence === 'number' &&
       Number.isFinite(payload.confidence) &&
-      typeof payload.exercise_class === 'string' &&
-      payload.exercise_class.trim().length > 0 &&
-      (payload.rep_count_delta === undefined ||
-        (Number.isInteger(payload.rep_count_delta) &&
-          payload.rep_count_delta >= 0)) &&
+      (payload.exercise_class === null ||
+        (typeof payload.exercise_class === 'string' &&
+          payload.exercise_class.trim().length > 0)) &&
       (payload.matched_profile_id === undefined ||
         payload.matched_profile_id === null ||
         typeof payload.matched_profile_id === 'string') &&
+      (payload.movement_contract === undefined ||
+        payload.movement_contract === null ||
+        this.isValidMovementContract(payload.movement_contract)) &&
       (payload.subject_locked === undefined ||
         typeof payload.subject_locked === 'boolean') &&
       (payload.subject_lock_confidence === undefined ||
         (typeof payload.subject_lock_confidence === 'number' &&
           Number.isFinite(payload.subject_lock_confidence))) &&
-      (payload.phase === undefined || typeof payload.phase === 'string') &&
+      (payload.classification_source === undefined ||
+        payload.classification_source === 'preset' ||
+        payload.classification_source === 'classifier' ||
+        payload.classification_source === 'user_confirmed') &&
+      (payload.needs_confirmation === undefined ||
+        typeof payload.needs_confirmation === 'boolean') &&
+      (payload.candidate_exercises === undefined ||
+        this.isStringArray(payload.candidate_exercises)) &&
       (payload.form_feedback === undefined ||
-        this.isStringArray(payload.form_feedback))
+        this.isStringArray(payload.form_feedback)) &&
+      (payload.learned_profile === undefined ||
+        payload.learned_profile === null ||
+        this.isValidLearnedProfile(payload.learned_profile))
+    );
+  }
+
+  private isValidMovementContract(
+    value: NonNullable<PoseAnalyzeResponse['movement_contract']>,
+  ): boolean {
+    return (
+      this.isObject(value) &&
+      typeof value.exercise === 'string' &&
+      value.exercise.trim().length > 0 &&
+      ['elbow', 'shoulder', 'hip', 'knee'].includes(value.dominant_joint) &&
+      this.isObject(value.rep_thresholds) &&
+      this.isObject(value.rep_thresholds.down) &&
+      this.isObject(value.rep_thresholds.up) &&
+      typeof value.secondary_check === 'string' &&
+      this.isStringArray(value.oscillating_joints)
     );
   }
 
@@ -871,6 +1197,9 @@ export class AiPythonClientService {
       value.canonical_name.trim().length > 0 &&
       this.isObject(value.landmark_signature) &&
       this.isObject(value.angle_signature) &&
+      this.isObject(value.orientation_signature) &&
+      this.isObject(value.movement_pattern) &&
+      this.isObject(value.visibility_pattern) &&
       (value.rep_rules === undefined ||
         value.rep_rules === null ||
         this.isObject(value.rep_rules))

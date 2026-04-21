@@ -85,6 +85,88 @@ export function makeReservationModalStyles(colors: ThemeColors) {
     },
     inputPrefix: { fontSize: 16, color: colors.textMuted, marginTop: 1 },
     inputField: { fontSize: 15, color: colors.textPrimary, flex: 1, paddingVertical: 12, paddingHorizontal: 2 },
+    paymentOptionList: {
+      gap: 8,
+      marginTop: 8
+    },
+    paymentOptionCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      padding: 12
+    },
+    paymentOptionCardDisabled: {
+      opacity: 0.6
+    },
+    paymentOptionText: {
+      flex: 1,
+      gap: 2
+    },
+    paymentOptionLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.textPrimary
+    },
+    paymentOptionMeta: {
+      fontSize: 12,
+      color: colors.textMuted
+    },
+    paymentOptionBody: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted
+    },
+    paymentSummaryCard: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      padding: 12,
+      marginTop: 10,
+      gap: 6
+    },
+    paymentSummaryEyebrow: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      color: colors.textMuted,
+      textTransform: "uppercase"
+    },
+    paymentSummaryTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    paymentSummaryBody: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted
+    },
+    paymentSummaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12
+    },
+    paymentSummaryLabel: {
+      fontSize: 12,
+      color: colors.textMuted
+    },
+    paymentSummaryValue: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textPrimary
+    },
+    paymentSummaryDeadline: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted,
+      marginTop: 2
+    },
     notesSectionHeader: {
       flexDirection: "row",
       alignItems: "center",

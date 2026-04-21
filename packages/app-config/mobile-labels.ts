@@ -3,6 +3,7 @@ export type TabKey =
   | "facilities"
   | "bookings"
   | "nutrition"
+  | "mastery"
   | "workout"
   | "chathistory"
   | "chatbot"
@@ -14,6 +15,7 @@ export const SCREEN_NAMES: Record<TabKey, string> = {
   facilities: "Gym Facilities",
   bookings: "Bookings",
   nutrition: "Nutrition",
+  mastery: "Muscle Mastery",
   workout: "Workout",
   chathistory: "BrodigyAI",
   chatbot: "BrodigyAI",
@@ -26,6 +28,7 @@ export const TAB_SUBTITLES: Record<TabKey, string> = {
   facilities: "Explore the gym floor!",
   bookings: "Stay on top of your schedule!",
   nutrition: "Fuel your body right!",
+  mastery: "Track muscle EXP and rank climbs!",
   workout: "Time to crush it!",
   chathistory: "Your AI fitness assistant!",
   chatbot: "Your AI fitness assistant!",

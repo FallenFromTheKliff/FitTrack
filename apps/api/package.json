@@ -7,7 +7,13 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "db:push:deploy": "npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
+    "db:seed:exercise-review": "node -r ts-node/register prisma/bootstrap-exercise-review-submissions.ts",
+    "db:seed:test": "node -r ts-node/register prisma/seed-test-data.ts --mode=reset",
+    "db:seed:test:additive": "node -r ts-node/register prisma/seed-test-data.ts --mode=additive",
+    "db:seed:test:report": "node -r ts-node/register prisma/report-test-data.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "railway:predeploy": "pnpm run db:push:deploy && node -r ts-node/register prisma/bootstrap-defaults.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -53,6 +59,7 @@
     "ioredis": "^5.10.0",
     "nanoid": "^5.1.7",
     "nest-winston": "^1.10.2",
+    "multer": "^2.1.1",
     "nodemailer": "^8.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
@@ -63,7 +70,6 @@
     "rxjs": "^7.8.2",
     "socket.io": "^4.8.1",
     "swagger-ui-express": "^5.0.1",
-    "twilio": "^5.12.2",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0"
@@ -79,6 +85,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.0.0",
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^7.0.11",
     "@types/passport": "^1.0.17",
@@ -112,6 +119,9 @@
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^prisma/(.*)$": "<rootDir>/prisma/$1"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

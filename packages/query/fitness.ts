@@ -1,0 +1,355 @@
+import {
+  mutationOptions,
+  queryOptions,
+  type QueryClient,
+} from "@tanstack/react-query";
+import type {
+  AnalyzePoseSequenceInput,
+  ApiClient,
+  CreateFitnessExerciseInput,
+  FinalizePoseSessionInput,
+  FitnessExerciseListParams,
+  FitnessExerciseReviewSubmissionListParams,
+  FitnessLeaderboardListParams,
+  FitnessMasteryListParams,
+  LogWorkoutSetInput,
+  StartPoseSessionInput,
+  StartWorkoutSessionInput,
+  TrainingPlanListParams,
+  UpdateExerciseReviewSubmissionInput,
+  UpdateFitnessExerciseInput,
+  WorkoutSessionListParams,
+} from "@fittrack/api-client";
+import { invalidateFitnessQueries, invalidateFitnessPoseQuery } from "./cache";
+import { queryKeys } from "./query-keys";
+
+export function fitnessExercisesQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  params?: FitnessExerciseListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessExercises(params),
+    queryFn: () => client.fitness.listExercises(params),
+  });
+}
+
+export function fitnessExerciseReviewSubmissionsQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  params?: FitnessExerciseReviewSubmissionListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessExerciseReviewSubmissions(params),
+    queryFn: () => client.fitness.listExerciseReviewSubmissions(params),
+  });
+}
+
+export function createFitnessExerciseMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ payload }: { payload: CreateFitnessExerciseInput }) =>
+      client.fitness.createExercise(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessExercises(),
+      });
+    },
+  });
+}
+
+export function updateFitnessExerciseMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      exerciseId,
+      payload,
+    }: {
+      exerciseId: string;
+      payload: UpdateFitnessExerciseInput;
+    }) => client.fitness.updateExercise(exerciseId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessExercises(),
+      });
+    },
+  });
+}
+
+export function updateExerciseReviewSubmissionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      submissionId,
+      payload,
+    }: {
+      payload: UpdateExerciseReviewSubmissionInput;
+      submissionId: string;
+    }) => client.fitness.updateExerciseReviewSubmission(submissionId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
+      });
+    },
+  });
+}
+
+export function fitnessPlansQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId?: string,
+  params?: TrainingPlanListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessPlans(userId, params),
+    queryFn: async () => {
+      if (!userId) {
+        return {
+          data: [],
+          meta: {
+            page: 1,
+            limit: params?.limit ?? 0,
+            total: 0,
+            total_pages: 0,
+          },
+        };
+      }
+      return client.fitness.listPlans(params);
+    },
+  });
+}
+
+export function fitnessMasteryQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId?: string,
+  params?: FitnessMasteryListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessMastery(userId, params),
+    queryFn: async () => {
+      if (!userId) return [];
+      return client.fitness.listMastery(params);
+    },
+  });
+}
+
+export function fitnessLeaderboardQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId?: string,
+  params?: FitnessLeaderboardListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessLeaderboard(userId, params),
+    queryFn: async () => {
+      if (!userId) {
+        return {
+          data: [],
+          meta: {
+            page: 1,
+            limit: params?.limit ?? 0,
+            total: 0,
+            total_pages: 0,
+          },
+        };
+      }
+      return client.fitness.listLeaderboard(params);
+    },
+  });
+}
+
+export function fitnessPlanDetailQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  planId?: string,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessPlanDetail(planId),
+    queryFn: async () => {
+      if (!planId) return null;
+      return client.fitness.getPlanById(planId);
+    },
+  });
+}
+
+export function fitnessSessionsQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId?: string,
+  params?: WorkoutSessionListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessSessions(userId, params),
+    queryFn: async () => {
+      if (!userId) {
+        return {
+          data: [],
+          meta: {
+            page: 1,
+            limit: params?.limit ?? 0,
+            total: 0,
+            total_pages: 0,
+          },
+        };
+      }
+      return client.fitness.listSessions(params);
+    },
+  });
+}
+
+export function fitnessSessionDetailQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  sessionId?: string,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessSessionDetail(sessionId),
+    queryFn: async () => {
+      if (!sessionId) return null;
+      return client.fitness.getSessionById(sessionId);
+    },
+  });
+}
+
+export function fitnessPoseSessionQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  poseSessionId?: string,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessPoseSession(poseSessionId),
+    queryFn: async () => {
+      if (!poseSessionId) return null;
+      return client.fitness.getPoseSessionById(poseSessionId);
+    },
+  });
+}
+
+export function startWorkoutSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      input,
+      userId,
+    }: {
+      input: StartWorkoutSessionInput;
+      userId?: string;
+    }) => client.fitness.startSession(input),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function logWorkoutSetMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      sessionId,
+      input,
+      userId,
+    }: {
+      input: LogWorkoutSetInput;
+      sessionId: string;
+      userId?: string;
+    }) => client.fitness.logSet(sessionId, input),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(
+        queryClient,
+        variables.userId,
+        variables.sessionId,
+      );
+    },
+  });
+}
+
+export function completeWorkoutSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      sessionId,
+      userId,
+    }: {
+      sessionId: string;
+      userId?: string;
+    }) => client.fitness.completeSession(sessionId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(
+        queryClient,
+        variables.userId,
+        variables.sessionId,
+      );
+    },
+  });
+}
+
+export function cancelWorkoutSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      sessionId,
+      userId,
+    }: {
+      sessionId: string;
+      userId?: string;
+    }) => client.fitness.cancelSession(sessionId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(
+        queryClient,
+        variables.userId,
+        variables.sessionId,
+      );
+    },
+  });
+}
+
+export function startPoseSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ input }: { input: StartPoseSessionInput }) =>
+      client.fitness.startPoseSession(input),
+    onSuccess: async (data) => {
+      await invalidateFitnessPoseQuery(queryClient, data.poseSessionId);
+    },
+  });
+}
+
+export function analyzePoseSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      poseSessionId,
+      input,
+    }: {
+      input: AnalyzePoseSequenceInput;
+      poseSessionId: string;
+    }) => client.fitness.analyzePoseSession(poseSessionId, input),
+  });
+}
+
+export function finalizePoseSessionMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      poseSessionId,
+      input,
+    }: {
+      input?: FinalizePoseSessionInput;
+      poseSessionId: string;
+    }) => client.fitness.finalizePoseSession(poseSessionId, input),
+    onSuccess: async (data) => {
+      await invalidateFitnessPoseQuery(queryClient, data.id);
+    },
+  });
+}

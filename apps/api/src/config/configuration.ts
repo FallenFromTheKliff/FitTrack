@@ -1,10 +1,100 @@
 import { registerAs } from '@nestjs/config';
+import {
+  DEFAULT_R2_MIN_FREE_BYTES,
+  DEFAULT_R2_STORAGE_LIMIT_BYTES,
+  DEFAULT_UPLOAD_MAX_FILE_SIZE_BYTES,
+  parseEnvBoolean,
+  parseEnvInteger,
+} from './runtime-settings';
+
+type RedisRuntimeConfig = {
+  url: string;
+  host: string;
+  port: number;
+  password?: string;
+  family: number;
+  tlsEnabled: boolean;
+};
+
+function buildRedisUrl(config: Omit<RedisRuntimeConfig, 'url'>) {
+  const url = new URL(
+    `${config.tlsEnabled ? 'rediss' : 'redis'}://${config.host}:${config.port}`,
+  );
+
+  if (config.password) {
+    url.password = config.password;
+  }
+
+  url.searchParams.set('family', String(config.family));
+  return url.toString();
+}
+
+function resolveRedisConfig(): RedisRuntimeConfig {
+  const family = 0;
+  const rawRedisUrl = process.env.REDIS_URL?.trim();
+
+  if (rawRedisUrl) {
+    let parsed: URL;
+
+    try {
+      parsed = new URL(rawRedisUrl);
+    } catch {
+      throw new Error('REDIS_URL must be a valid redis:// or rediss:// URL.');
+    }
+
+    const host = parsed.hostname || 'localhost';
+    const tlsEnabled = parsed.protocol === 'rediss:';
+    const port = parsed.port
+      ? parseEnvInteger(parsed.port, tlsEnabled ? 6380 : 6379)
+      : tlsEnabled
+        ? 6380
+        : 6379;
+    const password = parsed.password || undefined;
+
+    return {
+      host,
+      port,
+      password,
+      family,
+      tlsEnabled,
+      url: buildRedisUrl({
+        host,
+        port,
+        password,
+        family,
+        tlsEnabled,
+      }),
+    };
+  }
+
+  const host = process.env.REDIS_HOST || 'localhost';
+  const port = parseEnvInteger(process.env.REDIS_PORT, 6379);
+  const password = process.env.REDIS_PASSWORD || undefined;
+  const tlsEnabled = process.env.REDIS_TLS === 'true';
+
+  return {
+    host,
+    port,
+    password,
+    family,
+    tlsEnabled,
+    url: buildRedisUrl({
+      host,
+      port,
+      password,
+      family,
+      tlsEnabled,
+    }),
+  };
+}
 
 export const appConfig = registerAs('app', () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
+  host: process.env.HOST || '::',
   apiPrefix: process.env.API_PREFIX || 'v1',
   databaseUrl: process.env.DATABASE_URL || '',
+  webAllowedOrigins: process.env.WEB_ALLOWED_ORIGINS || '',
 }));
 
 // CORRECT — HS256 config
@@ -13,15 +103,11 @@ export const jwtConfig = registerAs('jwt', () => ({
   accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
 }));
 
-export const redisConfig = registerAs('redis', () => ({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379', 10),
-  password: process.env.REDIS_PASSWORD || undefined,
-}));
+export const redisConfig = registerAs('redis', () => resolveRedisConfig());
 
 export const mailConfig = registerAs('mail', () => ({
   host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.MAIL_PORT || '587', 10),
+  port: parseEnvInteger(process.env.MAIL_PORT, 587),
   user: process.env.MAIL_USER || '',
   appPassword: process.env.MAIL_APP_PASSWORD || '',
   fromName: process.env.MAIL_FROM_NAME || 'FitTrack',
@@ -34,18 +120,29 @@ export const googleConfig = registerAs('google', () => ({
   callbackUrl: process.env.GOOGLE_CALLBACK_URL || '',
 }));
 
-export const twilioConfig = registerAs('twilio', () => ({
-  accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-  authToken: process.env.TWILIO_AUTH_TOKEN || '',
-  phoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
-}));
-
 export const r2Config = registerAs('r2', () => ({
   accountId: process.env.R2_ACCOUNT_ID || '',
   bucket: process.env.R2_BUCKET || '',
   accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   publicBaseUrl: process.env.R2_PUBLIC_BASE_URL || '',
+  analyticsApiToken: process.env.R2_ANALYTICS_API_TOKEN || '',
+  enforceGuard: parseEnvBoolean(process.env.R2_ENFORCE_UPLOAD_GUARD, false),
+  storageLimitBytes: parseEnvInteger(
+    process.env.R2_STORAGE_LIMIT_BYTES,
+    DEFAULT_R2_STORAGE_LIMIT_BYTES,
+  ),
+  minFreeBytes: parseEnvInteger(
+    process.env.R2_MIN_FREE_BYTES,
+    DEFAULT_R2_MIN_FREE_BYTES,
+  ),
+}));
+
+export const filesConfig = registerAs('files', () => ({
+  uploadMaxFileSizeBytes: parseEnvInteger(
+    process.env.UPLOAD_MAX_FILE_SIZE_BYTES,
+    DEFAULT_UPLOAD_MAX_FILE_SIZE_BYTES,
+  ),
 }));
 
 export const paymongoConfig = registerAs('paymongo', () => ({
@@ -64,5 +161,5 @@ export const paymongoConfig = registerAs('paymongo', () => ({
 
 export const aiConfig = registerAs('ai', () => ({
   apiBaseUrl: process.env.AI_API_BASE_URL || '',
-  requestTimeoutMs: parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '10000', 10),
+  requestTimeoutMs: parseEnvInteger(process.env.AI_REQUEST_TIMEOUT_MS, 60000),
 }));

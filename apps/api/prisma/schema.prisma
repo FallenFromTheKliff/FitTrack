@@ -29,8 +29,11 @@ model User {
   email_verified_at DateTime?  @db.Timestamptz(6)
   phone_verified_at DateTime?  @db.Timestamptz(6)
   qr_code_token     String?    @unique @db.VarChar(64)
+  qr_code_rotated_at DateTime? @db.Timestamptz(6)
+  qr_code_expires_at DateTime? @db.Timestamptz(6)
   created_at        DateTime   @default(now()) @db.Timestamptz(6)
   updated_at        DateTime   @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?  @db.Timestamptz(6)
 
   // S2
   auth_identities             AuthIdentity[]
@@ -39,11 +42,13 @@ model User {
   // S3
   profile                     UserProfile?
   notification_prefs          NotificationPreference?
+  deletion_requests           AccountDeletionRequest[]
   progress_metrics            ProgressMetric[]
   attendance_logs             AttendanceLog[]           @relation("attendee")
   scanned_attendance          AttendanceLog[]           @relation("scanner")
   // S4
   subscriptions               Subscription[]
+  membership_card             MembershipCard?
   payments                    Payment[]
   payments_verified           Payment[]                 @relation("payment_verifier")
   // S5
@@ -58,6 +63,7 @@ model User {
   coach_assigned_plans        TrainingPlan[]            @relation("coach_trainer")
   workout_sessions            WorkoutSession[]
   exercise_logs               ExerciseLog[]
+  exercise_review_submissions ExerciseReviewSubmission[]
   pose_sessions               PoseSession[]
   // S8
   muscle_mastery              MuscleMasteryProgress[]
@@ -101,6 +107,31 @@ enum UserStatus {
   active
   suspended
   banned
+}
+
+model AccountDeletionRequest {
+  id          String                       @id @default(uuid())
+  userId      String                       @map("user_id") @db.Uuid
+  reason      String?
+  status      AccountDeletionRequestStatus @default(pending)
+  reviewedBy  String?                      @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime?                    @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes String?                      @map("review_notes")
+  createdAt   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
+}
+
+enum AccountDeletionRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
 }
 
 model AuthIdentity {
@@ -353,6 +384,43 @@ enum SubscriptionStatus {
   suspended
 }
 
+model MembershipCard {
+  id            String               @id @default(uuid()) @db.Uuid
+  user_id       String               @unique @db.Uuid
+  status        MembershipCardStatus @default(active)
+  source        MembershipCardSource @default(admin_grant)
+  price         Decimal              @default(400) @db.Decimal(10, 2)
+  purchased_at  DateTime             @default(now()) @db.Timestamptz(6)
+  verified_at   DateTime?            @db.Timestamptz(6)
+  verified_by   String?              @db.Uuid
+  activated_at  DateTime?            @db.Timestamptz(6)
+  revoked_at    DateTime?            @db.Timestamptz(6)
+  revoked_by    String?              @db.Uuid
+  revoke_reason String?
+  created_at    DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime             @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([verified_by])
+  @@index([revoked_by])
+  @@map("membership_cards")
+}
+
+enum MembershipCardStatus {
+  pending_verification
+  active
+  revoked
+}
+
+enum MembershipCardSource {
+  cash
+  paymongo
+  admin_grant
+  admin_repair
+}
+
 model Payment {
   id               String          @id @default(uuid()) @db.Uuid
   user_id          String          @db.Uuid
@@ -388,6 +456,7 @@ enum PayableType {
   booking
   coaching
   product
+  membership_card
 }
 
 enum PaymentStage {
@@ -420,6 +489,15 @@ model Amenity {
   description           String?
   capacity              Int         @default(1)
   hourly_rate           Decimal     @default(0) @db.Decimal(8, 2)
+  minimum_hours         Int?
+  icon_key              String?     @db.VarChar(100)
+  grid_column           Int?
+  grid_row              Int?
+  grid_width            Int?
+  grid_height           Int?
+  is_reservable         Boolean?
+  display_order         Int?
+  floor_id              String?     @db.VarChar(20)
   requires_subscription Boolean     @default(false)
   is_active             Boolean     @default(true)
   created_at            DateTime    @default(now()) @db.Timestamptz(6)
@@ -441,6 +519,7 @@ model AmenityBooking {
   id                  String        @id @default(uuid()) @db.Uuid
   user_id             String        @db.Uuid
   amenity_id          String        @db.Uuid
+  coach_id            String?       @db.Uuid
   status              BookingStatus @default(pending)
   starts_at           DateTime      @db.Timestamptz(6)
   ends_at             DateTime      @db.Timestamptz(6)
@@ -457,9 +536,11 @@ model AmenityBooking {
 
   user    User    @relation(fields: [user_id], references: [id])
   amenity Amenity @relation(fields: [amenity_id], references: [id])
+  coach   CoachProfile? @relation(fields: [coach_id], references: [id])
 
   @@index([user_id])
   @@index([amenity_id, starts_at, ends_at])
+  @@index([coach_id, starts_at, ends_at])
   @@index([status])
   @@map("amenity_bookings")
 }
@@ -493,6 +574,7 @@ model CoachProfile {
 
   user                 User                      @relation(fields: [user_id], references: [id])
   appointments         CoachAppointment[]
+  amenity_bookings     AmenityBooking[]
   reviews              CoachReview[]
   availability_slots   CoachAvailabilitySlot[]
   client_relationships CoachClientRelationship[] @relation("coach_rel")
@@ -631,6 +713,7 @@ model ExerciseCatalog {
 
   plan_exercises PlanExercise[]
   exercise_logs  ExerciseLog[]
+  published_review_submissions ExerciseReviewSubmission[] @relation("published_exercise_review_submissions")
   pose_profiles  PoseExerciseProfile[]
 
   @@index([muscle_group, is_active])
@@ -643,6 +726,46 @@ enum ExerciseCategory {
   cardio
   flexibility
   balance
+}
+
+enum ExerciseReviewSubmissionStatus {
+  pending
+  left_private
+  rejected
+  published
+}
+
+model ExerciseReviewSubmission {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  user_id               String                         @db.Uuid
+  pose_session_id       String?                        @unique @db.Uuid
+  published_exercise_id String?                        @db.Uuid
+  status                ExerciseReviewSubmissionStatus @default(pending)
+  source_label          String                         @default("detected unknown movement") @db.VarChar(100)
+  origin_label          String                         @default("client custom") @db.VarChar(100)
+  queue_tag             String                         @default("needs match") @db.VarChar(50)
+  trigger_label         String                         @default("unknown after 3 reps") @db.VarChar(100)
+  title                 String                         @db.VarChar(255)
+  proposed_name         String                         @db.VarChar(255)
+  summary               String                         @db.VarChar(255)
+  match_hint            String?                        @db.VarChar(255)
+  category              ExerciseCategory
+  muscle_group          String                         @db.VarChar(100)
+  description           String?
+  instructions          String?
+  evidence_bars         Json?
+  review_notes          String?
+  created_at            DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                       @updatedAt @db.Timestamptz(6)
+  reviewed_at           DateTime?                      @db.Timestamptz(6)
+
+  user               User             @relation(fields: [user_id], references: [id])
+  pose_session       PoseSession?     @relation(fields: [pose_session_id], references: [id], onDelete: SetNull)
+  published_exercise ExerciseCatalog? @relation("published_exercise_review_submissions", fields: [published_exercise_id], references: [id], onDelete: SetNull)
+
+  @@index([status, created_at(sort: Desc)])
+  @@index([user_id, status])
+  @@map("exercise_review_submissions")
 }
 
 enum PoseProfileKind {
@@ -785,6 +908,12 @@ model PoseExerciseProfile {
   profile_kind         PoseProfileKind @default(seed)
   landmark_signature   Json
   angle_signature      Json
+  orientation_signature Json
+  movement_pattern     Json
+  visibility_pattern   Json
+  dominant_joint       String?         @db.VarChar(32)
+  tolerance            Decimal?        @db.Decimal(5, 2)
+  rep_thresholds       Json?
   rep_rules            Json?
   sample_count         Int             @default(1)
   confidence_threshold Decimal?        @db.Decimal(4, 3)
@@ -819,6 +948,7 @@ model PoseSession {
 
   user         User                 @relation(fields: [user_id], references: [id])
   exercise_log ExerciseLog?         @relation(fields: [exercise_log_id], references: [id])
+  review_submission ExerciseReviewSubmission?
   pose_profile PoseExerciseProfile? @relation(fields: [detected_profile_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
@@ -956,6 +1086,7 @@ enum NutritionUnit {
 model RetailProduct {
   id                      String    @id @default(uuid()) @db.Uuid
   name                    String    @db.VarChar(255)
+  category                String    @default("other") @db.VarChar(80)
   description             String?
   price                   Decimal   @db.Decimal(10, 2)
   stock_quantity          Int       @default(0)
@@ -968,6 +1099,7 @@ model RetailProduct {
 
   sale_items SaleTransactionItem[]
 
+  @@index([category, is_active])
   @@index([is_active])
   @@index([stock_quantity])
   @@map("retail_products")
@@ -1211,6 +1343,9 @@ model GymEquipment {
   id         String          @id @default(uuid()) @db.Uuid
   name       String          @db.VarChar(255)
   type       String          @db.VarChar(100)
+  floor_id   String          @default("floor-1") @db.VarChar(20)
+  grid_column Int?
+  grid_row   Int?
   position_x Decimal         @db.Decimal(8, 2)
   position_y Decimal         @db.Decimal(8, 2)
   status     EquipmentStatus @default(available)
@@ -1221,6 +1356,7 @@ model GymEquipment {
 
   @@index([status])
   @@index([is_active])
+  @@index([floor_id, grid_column, grid_row])
   @@map("gym_equipment")
 }
 

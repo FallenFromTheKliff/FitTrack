@@ -1,10 +1,19 @@
-export type { VenueRecord } from "@fittrack/types";
-import { normalizeVenueIconKey, type VenueIconKey, type VenueRecord } from "@fittrack/types";
+export type { FacilityFloorId, VenueRecord } from "@fittrack/types";
+import {
+  FACILITY_FLOOR_MAP,
+  GYM_LAYOUT_GRID_COLUMNS,
+  GYM_LAYOUT_GRID_ROWS,
+  normalizeVenueIconKey,
+  type VenueIconKey,
+  type VenueRecord
+} from "@fittrack/types";
 import type { LucideIcon } from "lucide-react";
 import { Activity, Bike, CircleDot, ConciergeBell, Dribbble, Dumbbell, Flame, Square, Swords, Timer, Volleyball, Waves } from "lucide-react";
 
-export const COLS = 14;
-export const ROWS = 10;
+export { FACILITY_FLOOR_MAP };
+
+export const COLS = GYM_LAYOUT_GRID_COLUMNS;
+export const ROWS = GYM_LAYOUT_GRID_ROWS;
 export const LAYOUT_KEY = "fittrack_facilities_layout";
 
 export type EquipmentDef = {
@@ -13,6 +22,10 @@ export type EquipmentDef = {
   category: string;
   icon: LucideIcon;
   color: string;
+  detail?: string;
+  iconKey?: string;
+  quantityAvailable?: number;
+  sourceLabel?: string;
 };
 
 export type VenueEquipmentAssignments = Record<string, string[]>;

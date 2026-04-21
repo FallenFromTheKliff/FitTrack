@@ -10,6 +10,7 @@ import {
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
@@ -59,7 +60,7 @@ export class GamificationController {
   constructor(private readonly gamificationService: GamificationService) {}
 
   @Get('mastery')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List the authenticated users muscle mastery progress.',
@@ -74,7 +75,7 @@ export class GamificationController {
   }
 
   @Get('leaderboard')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List the gym-wide XP leaderboard.' })
   @ApiResponse({

@@ -39,11 +39,25 @@ describe('RetailProduct DTO validation', () => {
 
   it('accepts partial product updates', async () => {
     const dto = plainToInstance(UpdateRetailProductDTO, {
+      category: 'recovery',
       is_active: false,
       image_url: 'https://cdn.fittrack.test/images/whey.png',
+      stock_quantity: 4,
     });
 
     expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects unsupported retail product categories', async () => {
+    const dto = plainToInstance(CreateRetailProductDTO, {
+      name: 'Whey Protein Isolate',
+      price: 1499,
+      category: 'fuel',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'category must be a supported inventory category',
+    );
   });
 
   it('validates product browse filters and boolean coercion', async () => {

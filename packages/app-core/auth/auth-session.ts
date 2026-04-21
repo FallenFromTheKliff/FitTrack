@@ -18,28 +18,182 @@ export type PendingCredentials = {
   password: string;
 };
 
+export type RoleGateConfig = {
+  allowedRoles: readonly Role[];
+  deniedMessage: string;
+};
+
+type ApiProfileShape = NonNullable<UserProfileResponse["profile"] | LoginSuccessResponse["user"]["profile"]>;
+type ApiMembershipShape = {
+  membershipCard?: AuthUser["membershipCard"];
+  membership_card?: AuthUser["membershipCard"];
+  qrCodeReady?: boolean;
+  attendanceQrReady?: boolean;
+  qrCodeToken?: string | null;
+  qr_code_token?: string | null;
+};
+
+function hasVerifiedTimestamp(value?: string | null) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function normalizeRole(role: string | null | undefined): Role | undefined {
+  switch (role?.toLowerCase()) {
+    case "admin":
+      return "ADMIN";
+    case "staff":
+      return "STAFF";
+    case "coach":
+      return "COACH";
+    case "member":
+    case "user":
+      return "USER";
+    default:
+      return undefined;
+  }
+}
+
+function normalizeMemberProfile(profile: ApiProfileShape | null | undefined) {
+  if (!profile) return undefined;
+
+  return {
+    activityLevel: profile.activityLevel ?? profile.activity_level ?? null,
+    avatarUrl: profile.avatarUrl ?? profile.avatar_url ?? null,
+    dateOfBirth: profile.dateOfBirth ?? profile.date_of_birth ?? null,
+    fitnessGoal: profile.fitnessGoal ?? profile.fitness_goal ?? null,
+    firstName: profile.firstName ?? profile.first_name ?? null,
+    gender: profile.gender ?? null,
+    currentWeightKg: profile.currentWeightKg ?? profile.weight_kg ?? null,
+    heightCm: profile.heightCm ?? profile.height_cm ?? null,
+    lastName: profile.lastName ?? profile.last_name ?? null,
+    membershipType: profile.membershipType ?? profile.membership_type ?? undefined
+  };
+}
+
+function buildDisplayName(profile: ReturnType<typeof normalizeMemberProfile>, email?: string) {
+  const firstName = profile?.firstName?.trim() ?? "";
+  const lastName = profile?.lastName?.trim() ?? "";
+  return `${firstName} ${lastName}`.trim() || email;
+}
+
+function buildAvatarInitials(name?: string, email?: string) {
+  const source = name?.trim() || email?.trim() || "";
+  if (!source) return undefined;
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
+function resolveMembershipCard(payload: ApiMembershipShape): AuthUser["membershipCard"] {
+  return payload.membershipCard ?? payload.membership_card ?? null;
+}
+
+function resolveQrCodeToken(payload: ApiMembershipShape) {
+  return payload.qrCodeToken ?? payload.qr_code_token ?? null;
+}
+
+function hasQrCodeToken(qrCodeToken: string | null) {
+  return typeof qrCodeToken === "string" && qrCodeToken.trim() !== "";
+}
+
+function resolveQrCodeReady(payload: ApiMembershipShape, qrCodeToken: string | null) {
+  return payload.qrCodeReady ?? hasQrCodeToken(qrCodeToken);
+}
+
+function resolveAttendanceQrReady(payload: ApiMembershipShape, qrCodeToken: string | null) {
+  const membershipCard = resolveMembershipCard(payload);
+
+  return payload.attendanceQrReady ?? (
+    membershipCard?.status === "active" &&
+    hasQrCodeToken(qrCodeToken)
+  );
+}
+
+function resolveMembershipAccess(membershipCard: AuthUser["membershipCard"]): AuthUser["membershipAccess"] {
+  return membershipCard?.status === "active" ? "member" : "non-member";
+}
+
+export function getRoleGateDeniedMessage(roleGate?: RoleGateConfig) {
+  return roleGate?.deniedMessage ?? "This account can't access this portal.";
+}
+
+export function isRoleAllowedForGate(role: Role | undefined, roleGate?: RoleGateConfig) {
+  if (!roleGate) return true;
+  return !!role && roleGate.allowedRoles.includes(role);
+}
+
 export function mapProfileToAuthUser(profile: UserProfileResponse, status?: AuthUser["status"]): AuthUser {
+  const resolvedRole =
+    typeof profile.role === "string"
+      ? normalizeRole(profile.role)
+      : normalizeRole(profile.role?.name);
+  const normalizedProfile = normalizeMemberProfile(profile.profile);
+  const name = buildDisplayName(normalizedProfile, profile.email);
+  const membershipCard = resolveMembershipCard(profile);
+  const qrCodeToken = resolveQrCodeToken(profile);
+
   return {
     id: profile.id,
     email: profile.email,
-    role: profile.role?.name as Role,
-    phone_no: profile.phone_no,
-    emailVerified: profile.emailVerified,
-    phoneVerified: profile.phoneVerified,
-    profile: profile.profile ?? undefined,
+    name,
+    role: resolvedRole,
+    phone_no: profile.phone_no ?? profile.phone ?? null,
+    emailVerified: profile.emailVerified ?? hasVerifiedTimestamp(profile.email_verified_at),
+    phoneVerified: profile.phoneVerified ?? hasVerifiedTimestamp(profile.phone_verified_at),
+    avatarInitials: buildAvatarInitials(name, profile.email),
+    avatarUri: normalizedProfile?.avatarUrl ?? undefined,
+    activityLevel: normalizedProfile?.activityLevel ?? undefined,
+    dateOfBirth: normalizedProfile?.dateOfBirth ?? undefined,
+    fitnessGoal: normalizedProfile?.fitnessGoal ?? undefined,
+    gender: normalizedProfile?.gender ?? undefined,
+    heightCm: normalizedProfile?.heightCm ?? undefined,
+    membershipAccess: resolveMembershipAccess(membershipCard),
+    membershipCard,
+    profile: normalizedProfile,
+    qrCodeReady: resolveQrCodeReady(profile, qrCodeToken),
+    attendanceQrReady: resolveAttendanceQrReady(profile, qrCodeToken),
+    qrCodeToken,
+    weightKg: normalizedProfile?.currentWeightKg ?? undefined,
     ...(status ? { status } : {})
   };
 }
 
-export function mapLoginSuccessUser(payload: LoginSuccessResponse): AuthUser {
+export function mapLoginSuccessUser(
+  payload: LoginSuccessResponse,
+  fallbackEmail?: string
+): AuthUser {
+  const email = payload.user.email ?? fallbackEmail ?? "";
+  const normalizedProfile = normalizeMemberProfile(payload.user.profile);
+  const name = buildDisplayName(normalizedProfile, email);
+  const membershipCard = resolveMembershipCard(payload.user);
+  const qrCodeToken = resolveQrCodeToken(payload.user);
+
   return {
     id: payload.user.id,
-    email: payload.user.email,
-    role: payload.user.role as Role,
-    phone_no: payload.user.phone_no,
-    emailVerified: payload.user.emailVerified,
-    phoneVerified: payload.user.phoneVerified,
-    profile: payload.user.profile ?? undefined
+    email,
+    name,
+    role: normalizeRole(payload.user.role),
+    phone_no: payload.user.phone_no ?? payload.user.phone ?? null,
+    emailVerified:
+      payload.user.emailVerified ?? hasVerifiedTimestamp(payload.user.email_verified_at),
+    phoneVerified:
+      payload.user.phoneVerified ?? hasVerifiedTimestamp(payload.user.phone_verified_at),
+    avatarInitials: buildAvatarInitials(name, email),
+    avatarUri: normalizedProfile?.avatarUrl ?? undefined,
+    activityLevel: normalizedProfile?.activityLevel ?? undefined,
+    dateOfBirth: normalizedProfile?.dateOfBirth ?? undefined,
+    fitnessGoal: normalizedProfile?.fitnessGoal ?? undefined,
+    gender: normalizedProfile?.gender ?? undefined,
+    heightCm: normalizedProfile?.heightCm ?? undefined,
+    membershipAccess: resolveMembershipAccess(membershipCard),
+    membershipCard,
+    profile: normalizedProfile,
+    qrCodeReady: resolveQrCodeReady(payload.user, qrCodeToken),
+    attendanceQrReady: resolveAttendanceQrReady(payload.user, qrCodeToken),
+    qrCodeToken,
+    weightKg: normalizedProfile?.currentWeightKg ?? undefined
   };
 }
 
@@ -47,7 +201,6 @@ export function resolveAccountStatus(deletedAt?: string | null, requestStatus?: 
   if (deletedAt) return "expired";
   const normalized = requestStatus?.toLowerCase() ?? "";
   if (normalized === "pending") return "frozen";
-  if (normalized === "approved") return "expired";
   return "active";
 }
 

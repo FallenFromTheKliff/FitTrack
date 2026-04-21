@@ -14,7 +14,8 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
-      height: 680,
+      flex: 1,
+      maxHeight: "88%",
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.border,
@@ -36,14 +37,15 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
       borderRadius: R.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: 3
+      padding: 3,
+      flexShrink: 1
     },
     tabBtn: {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
       paddingVertical: 9,
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
       borderRadius: R.md
     },
     tabBtnActive: {
@@ -60,7 +62,7 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
       paddingVertical: 3
     },
     statusText: { fontSize: 11, fontWeight: "600" },
-    body: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+    body: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
     avatarRow: {
       alignItems: "center",
       justifyContent: "center",
@@ -144,7 +146,9 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
     footer: {
       flexDirection: "row",
       gap: 8,
-      padding: 16,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 18,
       borderTopWidth: 1,
       borderTopColor: colors.border
     },

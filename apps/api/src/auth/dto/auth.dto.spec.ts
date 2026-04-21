@@ -5,6 +5,7 @@ import {
   LoginDTO,
   RegisterDTO,
   ResetPasswordDTO,
+  VerifyResetOtpDTO,
 } from './auth.dto';
 
 function extractMessages(
@@ -32,11 +33,11 @@ describe('Auth DTO validation', () => {
 
   it('rejects weak admin passwords that do not contain a symbol', async () => {
     const dto = plainToInstance(AdminCreateUserDTO, {
-      email: 'coach@fittrack.com',
+      email: 'member@fittrack.com',
       password: 'Password1',
       first_name: 'Maria',
       last_name: 'Santos',
-      role: 'coach',
+      role: 'member',
     });
 
     expect(extractMessages(await validate(dto))).toContain(
@@ -58,6 +59,17 @@ describe('Auth DTO validation', () => {
       email: 'member@gmail.com',
       code: '12ab56',
       new_password: 'Password1!',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'code must be a 6-digit number',
+    );
+  });
+
+  it('rejects verify-reset-otp codes that are not six digits', async () => {
+    const dto = plainToInstance(VerifyResetOtpDTO, {
+      email: 'member@gmail.com',
+      code: 'abc123',
     });
 
     expect(extractMessages(await validate(dto))).toContain(

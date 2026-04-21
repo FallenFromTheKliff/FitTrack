@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Analytics AI"
+  short_description: "Grounded narrative business insights for FitTrack analytics"
+  default_prompt: "Use $business-analytics-ai with $ai-contract-core when needed to shape grounded FitTrack business insights, anomaly flags, risks, and recommended actions from deterministic KPI payloads."
+
+policy:
+  allow_implicit_invocation: true

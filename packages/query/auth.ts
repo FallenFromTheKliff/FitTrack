@@ -6,6 +6,7 @@ import type {
   LoginCredentials,
   RegisterPayload,
   ResetPasswordPayload,
+  VerifyResetOtpPayload,
   VerifyEmailPayload
 } from "@fittrack/api-client";
 import type { AuthUser } from "@fittrack/types";
@@ -72,6 +73,12 @@ export function forgotPasswordMutationOptions(client: Pick<ApiClient, "auth">) {
   });
 }
 
+export function verifyResetOtpMutationOptions(client: Pick<ApiClient, "auth">) {
+  return mutationOptions({
+    mutationFn: (payload: VerifyResetOtpPayload) => client.auth.verifyResetOtp(payload)
+  });
+}
+
 export function resetPasswordMutationOptions(client: Pick<ApiClient, "auth">) {
   return mutationOptions({
     mutationFn: (payload: ResetPasswordPayload) => client.auth.resetPassword(payload)
@@ -101,10 +108,11 @@ export function verifyCurrentPasswordActionMutationOptions<TResult>(
 }
 
 export function changePasswordActionMutationOptions<TResult>(
-  changePassword: (email: string, password: string) => Promise<TResult>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<TResult>
 ) {
   return mutationOptions({
-    mutationFn: ({ email, password }: { email: string; password: string }) => changePassword(email, password)
+    mutationFn: ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) =>
+      changePassword(currentPassword, newPassword)
   });
 }
 

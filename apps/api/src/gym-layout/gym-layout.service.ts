@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -32,12 +33,14 @@ import {
 const GYM_LAYOUT_UPDATE_FIELDS = [
   'name',
   'type',
-  'position_x',
-  'position_y',
+  'floor_id',
   'status',
   'icon_key',
   'is_active',
 ] as const;
+
+const GYM_LAYOUT_GRID_COLUMNS = 14;
+const GYM_LAYOUT_GRID_ROWS = 10;
 
 function pickDefined<T extends object, K extends readonly (keyof T)[]>(
   source: T,
@@ -54,6 +57,43 @@ function pickDefined<T extends object, K extends readonly (keyof T)[]>(
     {} as Pick<T, K[number]>,
   );
 }
+
+function clampGridColumn(value: number) {
+  return Math.max(1, Math.min(GYM_LAYOUT_GRID_COLUMNS, Math.round(value)));
+}
+
+function clampGridRow(value: number) {
+  return Math.max(1, Math.min(GYM_LAYOUT_GRID_ROWS, Math.round(value)));
+}
+
+function gridColumnToPositionX(gridColumn: number) {
+  return Number(
+    (((clampGridColumn(gridColumn) - 0.5) / GYM_LAYOUT_GRID_COLUMNS) * 100).toFixed(
+      2,
+    ),
+  );
+}
+
+function gridRowToPositionY(gridRow: number) {
+  return Number(
+    (((clampGridRow(gridRow) - 0.5) / GYM_LAYOUT_GRID_ROWS) * 100).toFixed(2),
+  );
+}
+
+function positionXToGridColumn(positionX: number) {
+  return clampGridColumn(((positionX / 100) * GYM_LAYOUT_GRID_COLUMNS) + 0.5);
+}
+
+function positionYToGridRow(positionY: number) {
+  return clampGridRow(((positionY / 100) * GYM_LAYOUT_GRID_ROWS) + 0.5);
+}
+
+type PlacementInput = {
+  grid_column?: number | null;
+  grid_row?: number | null;
+  position_x?: number;
+  position_y?: number;
+};
 
 @Injectable()
 export class GymLayoutService {
@@ -82,9 +122,10 @@ export class GymLayoutService {
     id: string,
     dto: UpdateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
+    const updateData = await this.toResolvedUpdateInput(id, dto);
     const equipment = await this.repo.updateEquipment(
       id,
-      this.toUpdateInput(dto),
+      updateData,
     );
     await this.publishRealtimeDelta(
       equipment,
@@ -165,11 +206,16 @@ export class GymLayoutService {
   private toCreateInput(
     dto: CreateEquipmentDTO,
   ): Prisma.GymEquipmentCreateInput {
+    const placement = this.resolvePlacement(dto);
+
     return {
       name: dto.name,
       type: dto.type,
-      position_x: dto.position_x,
-      position_y: dto.position_y,
+      floor_id: dto.floor_id,
+      grid_column: placement.grid_column,
+      grid_row: placement.grid_row,
+      position_x: placement.position_x,
+      position_y: placement.position_y,
       status: EquipmentStatus.available,
       icon_key: dto.icon_key ?? null,
     };
@@ -183,16 +229,89 @@ export class GymLayoutService {
     };
   }
 
+  private async toResolvedUpdateInput(
+    id: string,
+    dto: UpdateEquipmentDTO,
+  ): Promise<Prisma.GymEquipmentUpdateInput> {
+    const basePatch = this.toUpdateInput(dto);
+    const placementRequested =
+      dto.grid_column !== undefined ||
+      dto.grid_row !== undefined ||
+      dto.position_x !== undefined ||
+      dto.position_y !== undefined;
+
+    if (!placementRequested) {
+      return basePatch;
+    }
+
+    const current = await this.repo.findEquipmentByIdOrThrow(id);
+    const placement = this.resolvePlacement({
+      grid_column: dto.grid_column ?? current.grid_column,
+      grid_row: dto.grid_row ?? current.grid_row,
+      position_x: dto.position_x ?? Number(current.position_x),
+      position_y: dto.position_y ?? Number(current.position_y),
+    });
+
+    return {
+      ...basePatch,
+      ...placement,
+    };
+  }
+
+  private resolvePlacement(input: PlacementInput) {
+    const gridColumn =
+      input.grid_column ??
+      (input.position_x !== undefined
+        ? positionXToGridColumn(input.position_x)
+        : undefined);
+    const gridRow =
+      input.grid_row ??
+      (input.position_y !== undefined
+        ? positionYToGridRow(input.position_y)
+        : undefined);
+
+    if (gridColumn === undefined || gridRow === undefined) {
+      throw new BadRequestException({
+        type: 'BAD_REQUEST',
+        title: 'Invalid Gym Layout Placement',
+        status: 400,
+        detail:
+          'Provide both placement axes through grid_column/grid_row or position_x/position_y.',
+      });
+    }
+
+    const normalizedGridColumn = clampGridColumn(gridColumn);
+    const normalizedGridRow = clampGridRow(gridRow);
+
+    return {
+      grid_column: normalizedGridColumn,
+      grid_row: normalizedGridRow,
+      position_x: gridColumnToPositionX(normalizedGridColumn),
+      position_y: gridRowToPositionY(normalizedGridRow),
+    } satisfies Pick<
+      Prisma.GymEquipmentUpdateInput,
+      'grid_column' | 'grid_row' | 'position_x' | 'position_y'
+    >;
+  }
+
   private toEquipmentResponse(
     item: GymEquipment,
     cachedStatus?: string,
   ): GymLayoutEquipmentResponseDTO {
+    const positionX = Number(item.position_x);
+    const positionY = Number(item.position_y);
+    const gridColumn = item.grid_column ?? positionXToGridColumn(positionX);
+    const gridRow = item.grid_row ?? positionYToGridRow(positionY);
+
     return {
       id: item.id,
       name: item.name,
       type: item.type,
-      position_x: Number(item.position_x),
-      position_y: Number(item.position_y),
+      floor_id: item.floor_id as 'floor-1' | 'floor-2' | 'floor-3',
+      grid_column: gridColumn,
+      grid_row: gridRow,
+      position_x: positionX,
+      position_y: positionY,
       status: this.toCachedStatus(cachedStatus) ?? item.status,
       icon_key: item.icon_key ?? null,
       is_active: item.is_active,

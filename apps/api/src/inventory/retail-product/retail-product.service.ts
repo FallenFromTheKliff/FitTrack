@@ -14,9 +14,11 @@ import {
 import { RetailProductRepository } from './retail-product.repository';
 
 const RETAIL_PRODUCT_UPDATE_FIELDS = [
+  'category',
   'name',
   'description',
   'price',
+  'stock_quantity',
   'reorder_threshold',
   'image_url',
   'is_active',
@@ -107,6 +109,7 @@ export class RetailProductService {
     dto: CreateRetailProductDTO,
   ): Prisma.RetailProductCreateInput {
     return {
+      category: dto.category ?? 'other',
       name: dto.name,
       description: dto.description ?? null,
       price: dto.price,
@@ -126,6 +129,7 @@ export class RetailProductService {
 
   private toResponse(product: RetailProduct): RetailProductResponseDTO {
     return {
+      category: product.category,
       id: product.id,
       name: product.name,
       description: product.description ?? null,

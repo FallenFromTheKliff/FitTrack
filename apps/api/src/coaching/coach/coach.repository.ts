@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, UserStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  BookingStatus,
+  Prisma,
+  UserStatus,
+} from '@prisma/client';
 
 import {
   BaseRepository,
@@ -35,6 +40,20 @@ export type CoachListRecord = Prisma.CoachProfileGetPayload<{
 export type CoachDetailRecord = Prisma.CoachProfileGetPayload<{
   include: typeof coachDetailInclude;
 }>;
+
+const ACTIVE_APPOINTMENT_STATUSES = [
+  AppointmentStatus.pending_coach,
+  AppointmentStatus.pending_payment,
+  AppointmentStatus.confirmed,
+] as const;
+
+const ACTIVE_COACH_LINKED_BOOKING_STATUSES = [
+  BookingStatus.pending,
+  BookingStatus.confirmed,
+  BookingStatus.balance_pending,
+] as const;
+
+const MAX_APPOINTMENT_LOOKBACK_MINUTES = 180;
 
 @Injectable()
 export class CoachRepository extends BaseRepository {
@@ -125,5 +144,57 @@ export class CoachRepository extends BaseRepository {
       'CoachProfile',
       coachDetailInclude,
     );
+  }
+
+  async hasActiveAppointmentConflict(
+    coachId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ): Promise<boolean> {
+    const candidates = await this.prisma.coachAppointment.findMany({
+      where: {
+        coach_id: coachId,
+        status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
+        scheduled_at: {
+          gte: new Date(
+            startsAt.getTime() - MAX_APPOINTMENT_LOOKBACK_MINUTES * 60 * 1000,
+          ),
+          lt: endsAt,
+        },
+      },
+      select: {
+        scheduled_at: true,
+        duration_minutes: true,
+      },
+    });
+
+    return candidates.some((appointment) => {
+      const existingStartsAt = appointment.scheduled_at;
+      const existingEndsAt = new Date(
+        existingStartsAt.getTime() + appointment.duration_minutes * 60 * 1000,
+      );
+
+      return (
+        existingStartsAt.getTime() < endsAt.getTime() &&
+        existingEndsAt.getTime() > startsAt.getTime()
+      );
+    });
+  }
+
+  async hasActiveLinkedBookingConflict(
+    coachId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ): Promise<boolean> {
+    const count = await this.prisma.amenityBooking.count({
+      where: {
+        coach_id: coachId,
+        status: { in: [...ACTIVE_COACH_LINKED_BOOKING_STATUSES] },
+        starts_at: { lt: endsAt },
+        ends_at: { gt: startsAt },
+      },
+    });
+
+    return count > 0;
   }
 }

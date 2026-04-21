@@ -23,6 +23,7 @@ describe('RetailProductService', () => {
 
   const makeProduct = (overrides: Record<string, unknown> = {}) => ({
     id: 'product-1',
+    category: 'supplements',
     name: 'Whey Protein Isolate',
     description: 'Vanilla whey isolate tub with 30 servings.',
     price: new Prisma.Decimal('1499.00'),
@@ -58,6 +59,7 @@ describe('RetailProductService', () => {
       data: [
         expect.objectContaining({
           id: 'product-1',
+          category: 'supplements',
           name: 'Whey Protein Isolate',
           price: '1499.00',
           created_at: '2026-03-27T02:00:00.000Z',
@@ -77,6 +79,7 @@ describe('RetailProductService', () => {
     });
 
     expect(repo.createProduct).toHaveBeenCalledWith({
+      category: 'other',
       name: 'Whey Protein Isolate',
       description: null,
       price: 1499,
@@ -92,14 +95,18 @@ describe('RetailProductService', () => {
     );
 
     await service.updateProduct('product-1', {
+      category: 'recovery',
       is_active: false,
+      stock_quantity: 12,
       image_url: 'https://cdn.fittrack.test/images/whey-v2.png',
       description: undefined,
     });
 
     expect(repo.updateProduct).toHaveBeenCalledWith('product-1', {
+      category: 'recovery',
       is_active: false,
       image_url: 'https://cdn.fittrack.test/images/whey-v2.png',
+      stock_quantity: 12,
     });
   });
 
@@ -127,6 +134,7 @@ describe('RetailProductService', () => {
 
     await expect(service.getProductById('product-1')).resolves.toEqual(
       expect.objectContaining({
+        category: 'supplements',
         id: 'product-1',
         price: '1499.00',
       }),

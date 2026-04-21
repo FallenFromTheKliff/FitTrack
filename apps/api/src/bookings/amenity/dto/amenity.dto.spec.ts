@@ -49,8 +49,21 @@ describe('Amenity DTO validation', () => {
     const dto = plainToInstance(UpdateAmenityDTO, {
       is_active: false,
       hourly_rate: 750,
+      floor_id: 'floor-2',
     });
 
     expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects invalid floor ids', async () => {
+    const dto = plainToInstance(CreateAmenityDTO, {
+      name: 'Studio Beta',
+      type: 'other',
+      floor_id: 'annex',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'floor_id must be one of: floor-1, floor-2, floor-3',
+    );
   });
 });

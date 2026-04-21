@@ -97,6 +97,62 @@ type ActionExecutionResult = {
     | null;
 };
 
+type ChatPromptUserContext = AIChatInput['userContext'];
+
+type RequiredPromptUserContext = {
+  age: number;
+  gender: string;
+  weight_kg: number;
+  height_cm: number;
+  activity_level: string;
+  fitness_goal: string;
+  fitnessGoal: FitnessGoal;
+};
+
+type ChatPromptBlueprint = {
+  version: 'v1';
+  domain: 'chat';
+  persona: string;
+  objective: string;
+  responseStyle: string[];
+  guardrails: string[];
+  actionPolicy: {
+    allowedActions: AIChatAction[];
+    triggerNotes: string[];
+    safetyNotes: string[];
+  };
+  context: {
+    sessionId: string;
+    contextType: ChatContext;
+    recentMessageCount: number;
+    latestUserMessage: string;
+    userContext: ChatPromptUserContext;
+    messagePurpose: string;
+  };
+};
+
+type PlanPromptBlueprint = {
+  version: 'v1';
+  domain: 'generate-plan';
+  persona: string;
+  objective: string;
+  responseStyle: string[];
+  guardrails: string[];
+  planConstraints: {
+    durationWeeks: number;
+    daysPerWeek: number;
+    exerciseCatalogSize: number;
+    allowedExerciseCatalog: Array<{
+      name: string;
+      muscleGroup: string;
+      category: ActiveExerciseGenerationRecord['category'];
+    }>;
+    selectionNotes: string[];
+    userContext: RequiredPromptUserContext;
+    preferences: string | null;
+  };
+};
+
 const SESSION_INACTIVITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_CHAT_HISTORY_MESSAGES = 20;
 const MAX_SESSION_TITLE_LENGTH = 80;
@@ -187,6 +243,16 @@ export class AiService {
       userContext,
       dto.message,
     );
+    const promptBlueprint = this.buildChatPromptBlueprint(
+      resolved.session,
+      history,
+      userContext,
+      dto.message,
+    );
+    const persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
+      requestPayload,
+      promptBlueprint,
+    );
     const startedAt = Date.now();
 
     try {
@@ -225,7 +291,7 @@ export class AiService {
         userId,
         sessionId: resolved.session.id,
         interactionType: 'chat',
-        requestPayload: requestPayload as Prisma.InputJsonValue,
+        requestPayload: persistedRequestPayload as Prisma.InputJsonValue,
         responsePayload: response as Prisma.InputJsonValue,
         actionTriggered,
         actionResult: actionResult as unknown as Prisma.InputJsonValue,
@@ -272,13 +338,22 @@ export class AiService {
       dto,
       allowedExercises,
     );
+    const promptBlueprint = this.buildPlanPromptBlueprint(
+      userContext,
+      dto,
+      allowedExercises,
+    );
+    const persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
+      requestPayload,
+      promptBlueprint,
+    );
     const startedAt = Date.now();
     const response = await this.aiClient.generatePlan(requestPayload);
     const latencyMs = Date.now() - startedAt;
 
     await this.aiInteractionLogRepository.createPlanGenerationLog({
       userId,
-      requestPayload: requestPayload as Prisma.InputJsonValue,
+      requestPayload: persistedRequestPayload as Prisma.InputJsonValue,
       responsePayload: response as Prisma.InputJsonValue,
       latencyMs,
       modelUsed: response.model_used ?? null,
@@ -289,6 +364,7 @@ export class AiService {
       response,
       allowedExercises,
       dto.duration_weeks,
+      dto.days_per_week,
     );
 
     return this.trainingPlanService.createAiGeneratedPlan(userId, {
@@ -296,7 +372,7 @@ export class AiService {
       title: `AI ${this.formatGoalForTitle(userContext.fitnessGoal)} Plan`,
       durationWeeks: dto.duration_weeks,
       daysPerWeek: dto.days_per_week,
-      aiGenerationPrompt: requestPayload as Prisma.InputJsonValue,
+      aiGenerationPrompt: persistedRequestPayload as Prisma.InputJsonValue,
       schedule,
     });
   }
@@ -385,6 +461,7 @@ export class AiService {
     response: AiGeneratePlanResponse,
     allowedExercises: ActiveExerciseGenerationRecord[],
     durationWeeks: number,
+    daysPerWeek: number,
   ): TrainingPlanScheduleDayWriteInput[] {
     const exerciseLookup = new Map<string, ActiveExerciseGenerationRecord>(
       allowedExercises.map((exercise) => [exercise.name, exercise]),
@@ -395,9 +472,7 @@ export class AiService {
     for (const week of response.weeks) {
       this.assertValidWeek(week, durationWeeks);
 
-      for (const day of week.days) {
-        this.assertValidDay(day);
-
+      for (const day of this.normalizeWeekDays(week.days, daysPerWeek)) {
         schedule.push({
           weekNumber: week.week_number,
           dayOfWeek: day.day_of_week,
@@ -431,6 +506,31 @@ export class AiService {
     }
 
     return schedule;
+  }
+
+  private normalizeWeekDays(
+    days: AiGeneratedDay[],
+    daysPerWeek: number,
+  ): AiGeneratedDay[] {
+    days.forEach((day) => this.assertValidDay(day));
+
+    const selectedDays: AiGeneratedDay[] = [];
+    const seenDays = new Set<number>();
+
+    for (const day of days) {
+      if (seenDays.has(day.day_of_week)) {
+        continue;
+      }
+
+      seenDays.add(day.day_of_week);
+      selectedDays.push(day);
+
+      if (selectedDays.length === daysPerWeek) {
+        break;
+      }
+    }
+
+    return selectedDays.sort((left, right) => left.day_of_week - right.day_of_week);
   }
 
   private assertValidWeek(week: AiGeneratedWeek, durationWeeks: number): void {
@@ -787,6 +887,10 @@ export class AiService {
           dto.session_id,
         );
 
+      if (!session.is_active) {
+        throw this.buildSessionArchivedException();
+      }
+
       if (this.isSessionInactive(session.last_activity_at)) {
         await this.archiveInactiveSession(session);
         throw this.buildSessionArchivedException();
@@ -804,6 +908,20 @@ export class AiService {
         userId,
         contextType,
       );
+
+    if (dto.start_new_session) {
+      if (activeSession) {
+        await this.archiveInactiveSession(activeSession);
+      }
+
+      return {
+        session: await this.aiChatSessionRepository.createSession({
+          userId,
+          contextType,
+        }),
+        seedTitle: true,
+      };
+    }
 
     if (!activeSession) {
       return {
@@ -876,6 +994,160 @@ export class AiService {
         context_type: session.context_type,
       },
     };
+  }
+
+  private buildChatPromptBlueprint(
+    session: AiChatSessionRecord,
+    history: AiChatMessageRecord[],
+    userContext: AIChatInput['userContext'],
+    message: string,
+  ): ChatPromptBlueprint {
+    const messagePurpose = this.inferChatMessagePurpose(
+      message,
+      session.context_type,
+    );
+
+    return {
+      version: 'v1',
+      domain: 'chat',
+      persona:
+        'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
+      objective:
+        'Help the user make the safest useful next step inside FitTrack without inventing profile facts or overpromising.',
+      responseStyle: [
+        'Keep replies brief and practical.',
+        'Use a supportive coach tone, not a lecture.',
+        'Ask at most one clarifying question when the next step is unclear.',
+        'Prefer specific next actions over generic motivation.',
+      ],
+      guardrails: [
+        'Do not invent weights, measurements, meal logs, plan adherence, or other profile facts that are not in the provided context or chat history.',
+        'Do not claim a logged action or plan update unless the requested action is supported by the visible context and response policy.',
+        'Do not provide medical diagnosis or emergency guidance; safely redirect when the user asks for medical advice.',
+        'Stay inside the current FitTrack workflow and keep the reply grounded in the user context and recent conversation.',
+      ],
+      actionPolicy: {
+        allowedActions: ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE'],
+        triggerNotes: [
+          'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',
+          'Return ADJUST_TDEE when the user asks to recalculate calories or macros.',
+          'Return LOG_NUTRITION when the user is clearly asking to log a meal or nutrition entry.',
+          'Return NONE for general coaching, clarification, or unsupported requests.',
+        ],
+        safetyNotes: [
+          'Prefer NONE when the intent is ambiguous rather than guessing.',
+          'If the request is outside scope, acknowledge the limitation and steer back to training, nutrition, or TDEE guidance.',
+        ],
+      },
+      context: {
+        sessionId: session.id,
+        contextType: session.context_type,
+        recentMessageCount: history.length,
+        latestUserMessage: message,
+        userContext,
+        messagePurpose,
+      },
+    };
+  }
+
+  private buildPlanPromptBlueprint(
+    userContext: RequiredUserContext,
+    dto: GeneratePlanDTO,
+    allowedExercises: ActiveExerciseGenerationRecord[],
+  ): PlanPromptBlueprint {
+    return {
+      version: 'v1',
+      domain: 'generate-plan',
+      persona:
+        'FitTrack training planner: structured, progressive, and practical with a coach-like tone.',
+      objective:
+        'Generate a plan that matches the user goal, uses only the provided exercise catalog, and fits the requested schedule exactly.',
+      responseStyle: [
+        'Keep the plan clear and directly usable.',
+        'Prefer sensible progression and balance over novelty.',
+        'Be specific with exercise selection, sets, reps, and rest.',
+      ],
+      guardrails: [
+        'Only use exercises from the provided catalog and never invent new movements.',
+        'Honor the requested duration and days per week exactly.',
+        'Prefer strength work first when the catalog supports it, then fill remaining slots with cardio, flexibility, or balance work.',
+        'Do not exceed the provided exercise catalog capacity when distributing exercises across days.',
+      ],
+      planConstraints: {
+        durationWeeks: dto.duration_weeks,
+        daysPerWeek: dto.days_per_week,
+        exerciseCatalogSize: allowedExercises.length,
+        allowedExerciseCatalog: allowedExercises.map((exercise) => ({
+          name: exercise.name,
+          muscleGroup: exercise.muscle_group,
+          category: exercise.category,
+        })),
+        selectionNotes: [
+          'Keep the weekly structure aligned to the user goal and fitness context.',
+          'Use the allowed exercise catalog as the only source of movements.',
+          'Prefer readable, sustainable programming over extreme volume.',
+        ],
+        userContext: {
+          age: userContext.age,
+          gender: userContext.gender,
+          weight_kg: userContext.weight_kg,
+          height_cm: userContext.height_cm,
+          activity_level: userContext.activity_level,
+          fitness_goal: userContext.fitness_goal,
+          fitnessGoal: userContext.fitnessGoal,
+        },
+        preferences: dto.preferences ?? null,
+      },
+    };
+  }
+
+  private enrichRequestPayloadWithBlueprint<
+    TPayload extends object,
+    TBlueprint extends object,
+  >(payload: TPayload, promptBlueprint: TBlueprint): TPayload & {
+    promptBlueprint: TBlueprint;
+  } {
+    return {
+      ...payload,
+      promptBlueprint,
+    };
+  }
+
+  private inferChatMessagePurpose(
+    message: string,
+    contextType: ChatContext,
+  ): string {
+    const normalized = message.toLowerCase();
+
+    if (contextType === ChatContext.training_plan) {
+      return 'training_plan_guidance';
+    }
+
+    if (contextType === ChatContext.tdee_adjustment) {
+      return 'tdee_adjustment';
+    }
+
+    if (normalized.includes('macro') || normalized.includes('calorie')) {
+      return 'nutrition_guidance';
+    }
+
+    if (
+      normalized.includes('meal') ||
+      normalized.includes('nutrition') ||
+      normalized.includes('food')
+    ) {
+      return 'nutrition_guidance';
+    }
+
+    if (
+      normalized.includes('workout') ||
+      normalized.includes('training') ||
+      normalized.includes('plan')
+    ) {
+      return 'training_guidance';
+    }
+
+    return 'general_support';
   }
 
   private isSessionInactive(lastActivityAt: Date): boolean {

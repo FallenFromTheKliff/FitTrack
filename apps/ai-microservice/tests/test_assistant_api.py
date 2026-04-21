@@ -1,0 +1,597 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def _openrouter_response(content: dict[str, object], *, model: str, tokens: int) -> object:
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": model,
+                "usage": {"total_tokens": tokens},
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(content),
+                        }
+                    }
+                ],
+            }
+
+    return FakeResponse()
+
+
+def test_chat_route_uses_openrouter_assistant_model_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "openrouter/legacy-assistant-model",
+    )
+    monkeypatch.setenv(
+        "OPENROUTER_INSIGHT_MODEL",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+    )
+
+    calls: list[dict[str, object]] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return _openrouter_response(
+            {
+                "content": "I can help you stay on track this week.",
+                "action": "NONE",
+                "params": None,
+            },
+            model="meta-llama/llama-3.3-70b-instruct:free",
+            tokens=87,
+        )
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Can you help me stay on track this week?"}
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-1",
+                "context_type": "general",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["content"] == "I can help you stay on track this week."
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert payload["model_used"] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert payload["token_count"] == 87
+    assert calls[0]["model"] == "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def test_chat_route_returns_provider_status_message_when_openrouter_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")
+
+    class RejectedResponse:
+        status_code = 503
+
+        def json(self) -> dict[str, object]:
+            return {"error": {"message": "service unavailable"}}
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: RejectedResponse(),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Can you build me a 4 week training plan with 3 days per week?",
+                }
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-2",
+                "context_type": "training_plan",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert payload["model_used"] == "provider-status"
+    assert "temporarily unavailable" in payload["content"]
+
+
+def test_chat_route_retries_with_openrouter_free_model_after_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")
+    calls: list[dict[str, object]] = []
+
+    class RateLimitedResponse:
+        status_code = 429
+
+        def json(self) -> dict[str, object]:
+            return {"error": {"message": "rate limited"}}
+
+    class FreeAcceptedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/free",
+                "usage": {"total_tokens": 55},
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "content": "Here is a real provider reply from the free fallback route.",
+                                    "action": "NONE",
+                                    "params": None,
+                                }
+                            )
+                        }
+                    }
+                ],
+            }
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) < 3:
+            return RateLimitedResponse()
+        return FreeAcceptedResponse()
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Help me stay consistent with my workouts this week."}
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-fallback",
+                "context_type": "general",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["model_used"] == "openrouter/free"
+    assert payload["token_count"] == 55
+    assert calls[0]["model"] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert calls[1]["model"] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert calls[2]["model"] == "openrouter/free"
+
+
+def test_chat_route_parses_code_fenced_json_from_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+
+    class FencedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "usage": {"total_tokens": 41},
+                "choices": [
+                    {
+                        "message": {
+                            "content": "```json\n{\"content\":\"Lock in two realistic sessions and treat them like appointments.\",\"action\":\"NONE\",\"params\":null}\n```"
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: FencedResponse(),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Help me stay consistent with workouts this week."}
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-code-fence",
+                "context_type": "general",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["content"] == "Lock in two realistic sessions and treat them like appointments."
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+
+
+def test_chat_route_wraps_plain_text_provider_reply_as_none_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+
+    class PlainTextResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "usage": {"total_tokens": 29},
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "Pair your workout with an existing habit, like heading to the gym "
+                                "right after work."
+                            )
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: PlainTextResponse(),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Give me one practical tip to stay consistent with my gym workouts this week.",
+                }
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-plain-text",
+                "context_type": "general",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert (
+        payload["content"]
+        == "Pair your workout with an existing habit, like heading to the gym right after work."
+    )
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert payload["model_used"] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert payload["token_count"] == 29
+
+
+def test_chat_route_refuses_out_of_scope_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Explain the French Revolution in detail."}
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "assistant-session-scope",
+                "context_type": "general",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["action"] == "NONE"
+    assert payload["model_used"] == "scope-guard"
+    assert "FitTrack and SertFit topics" in payload["content"]
+
+
+def test_generate_plan_route_uses_openrouter_plan_model_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_PLAN_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "openrouter/legacy-assistant-model",
+    )
+    monkeypatch.setenv(
+        "OPENROUTER_INSIGHT_MODEL",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+    )
+
+    calls: list[dict[str, object]] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return _openrouter_response(
+            {
+                "weeks": [
+                    {
+                        "week_number": 1,
+                        "days": [
+                            {
+                                "day_of_week": 1,
+                                "focus_label": "Legs focus",
+                                "notes": "Week 1: Keep it efficient and joint-friendly.",
+                                "exercises": [
+                                    {
+                                        "name": "Barbell Back Squat",
+                                        "sets": 4,
+                                        "reps": 10,
+                                        "duration_seconds": None,
+                                        "rest_seconds": 90,
+                                        "weight_kg_target": None,
+                                        "order_index": 0,
+                                        "notes": "Prioritize controlled form.",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            },
+            model="meta-llama/llama-3.3-70b-instruct:free",
+            tokens=192,
+        )
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    client = TestClient(app)
+    response = client.post(
+        "/generate-plan",
+        json={
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "plan_input": {
+                "duration_weeks": 1,
+                "days_per_week": 1,
+                "preferences": "Keep it efficient and joint-friendly.",
+            },
+            "allowed_exercises": [
+                {
+                    "name": "Barbell Back Squat",
+                    "muscle_group": "legs",
+                    "category": "strength",
+                },
+                {
+                    "name": "Lat Pulldown",
+                    "muscle_group": "back",
+                    "category": "strength",
+                },
+                {
+                    "name": "Stationary Bike",
+                    "muscle_group": "conditioning",
+                    "category": "cardio",
+                },
+            ],
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert len(payload["weeks"]) == 1
+    assert len(payload["weeks"][0]["days"]) == 1
+    assert payload["weeks"][0]["days"][0]["exercises"][0]["name"] == "Barbell Back Squat"
+    assert payload["model_used"] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert payload["token_count"] == 192
+    assert calls[0]["model"] == "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def test_generate_plan_route_falls_back_when_openrouter_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+
+    class RejectedResponse:
+        status_code = 503
+
+        def json(self) -> dict[str, object]:
+            return {"error": {"message": "service unavailable"}}
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: RejectedResponse(),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/generate-plan",
+        json={
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "plan_input": {
+                "duration_weeks": 2,
+                "days_per_week": 3,
+                "preferences": "Keep it efficient and joint-friendly.",
+            },
+            "allowed_exercises": [
+                {
+                    "name": "Barbell Back Squat",
+                    "muscle_group": "legs",
+                    "category": "strength",
+                },
+                {
+                    "name": "Lat Pulldown",
+                    "muscle_group": "back",
+                    "category": "strength",
+                },
+                {
+                    "name": "Stationary Bike",
+                    "muscle_group": "conditioning",
+                    "category": "cardio",
+                },
+            ],
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert len(payload["weeks"]) == 2
+    assert len(payload["weeks"][0]["days"]) == 3
+    assert payload["weeks"][0]["days"][0]["exercises"][0]["name"] == "Barbell Back Squat"
+    assert payload["model_used"] == "grounded-fallback"
+
+
+def test_generate_plan_route_rejects_empty_allowed_exercise_catalog() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/generate-plan",
+        json={
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "plan_input": {
+                "duration_weeks": 2,
+                "days_per_week": 3,
+            },
+            "allowed_exercises": [],
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 422
+    assert payload["type"] == "INVALID_REQUEST"
+    assert payload["title"] == "Invalid Request"
+    assert payload["status"] == 422
+    assert "body.allowed_exercises" in payload["detail"]

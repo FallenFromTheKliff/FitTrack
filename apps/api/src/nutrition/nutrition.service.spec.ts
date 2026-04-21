@@ -18,7 +18,7 @@ describe('NutritionService', () => {
   let service: NutritionService;
 
   const repo = {
-    findActiveTdeeAggregateOrThrow: jest.fn(),
+    findActiveTdeeAggregate: jest.fn(),
     findActiveMacroTarget: jest.fn(),
     listTdeeHistory: jest.fn(),
     createNutritionLog: jest.fn(),
@@ -58,7 +58,7 @@ describe('NutritionService', () => {
   });
 
   it('maps the active tdee aggregate into the response contract', async () => {
-    repo.findActiveTdeeAggregateOrThrow.mockResolvedValue({
+    repo.findActiveTdeeAggregate.mockResolvedValue({
       id: 'tdee-1',
       user_id: 'user-1',
       weight_kg: new Prisma.Decimal('75.5'),
@@ -105,6 +105,12 @@ describe('NutritionService', () => {
       carbs_g: '210.00',
       fat_g: '65.00',
     });
+  });
+
+  it('returns null when no active nutrition target exists yet', async () => {
+    repo.findActiveTdeeAggregate.mockResolvedValue(null);
+
+    await expect(service.getActiveTdee('user-1')).resolves.toBeNull();
   });
 
   it('maps paginated tdee history into response rows', async () => {

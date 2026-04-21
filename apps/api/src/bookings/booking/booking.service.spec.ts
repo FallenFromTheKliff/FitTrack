@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditAction } from '../../audit/audit.service';
+import { CoachService } from '../../coaching/coach/coach.service';
 
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
@@ -42,6 +43,7 @@ describe('BookingService', () => {
     getAllBookings: jest.fn(),
     cancelBooking: jest.fn(),
     confirmBookingDownpayment: jest.fn(),
+    confirmBookingFullPayment: jest.fn(),
     createBalancePendingPayment: jest.fn(),
     completeBookingBalance: jest.fn(),
   };
@@ -63,6 +65,10 @@ describe('BookingService', () => {
 
   const subscriptionService = {
     hasSubscriptionAccess: jest.fn(),
+  };
+
+  const coachService = {
+    assertCoachReservableForBookingWindow: jest.fn(),
   };
 
   const redis = {
@@ -88,6 +94,7 @@ describe('BookingService', () => {
           useValue: paymongoCheckoutService,
         },
         { provide: SubscriptionService, useValue: subscriptionService },
+        { provide: CoachService, useValue: coachService },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
@@ -97,6 +104,53 @@ describe('BookingService', () => {
     jest.clearAllMocks();
     redis.set.mockResolvedValue('OK');
     redis.del.mockResolvedValue(1);
+  });
+
+  it('validates optional coach add-ons and stores the linked coach on free bookings', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Main Court',
+      hourly_rate: new Prisma.Decimal('0'),
+      requires_subscription: false,
+    });
+    coachService.assertCoachReservableForBookingWindow.mockResolvedValue(
+      undefined,
+    );
+    bookingRepository.createConfirmedFreeBooking.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    const result = await service.createBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        coach_id: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        provider: PaymentProvider.paymongo,
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+    );
+
+    expect(
+      coachService.assertCoachReservableForBookingWindow,
+    ).toHaveBeenCalledWith(
+      '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+      new Date('2099-03-24T10:00:00.000Z'),
+      new Date('2099-03-24T11:00:00.000Z'),
+    );
+    expect(bookingRepository.createConfirmedFreeBooking).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coachId: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+      }),
+    );
+    expect(result).toEqual({
+      booking_id: 'booking-1',
+      status: 'confirmed',
+      checkout_url: null,
+    });
   });
 
   it('marks slots unavailable when active bookings reach amenity capacity', async () => {
@@ -225,6 +279,94 @@ describe('BookingService', () => {
     expect(result.meta.total).toBe(1);
   });
 
+  it('confirms pending bookings for admin and staff schedule flows', async () => {
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      user_id: 'member-1',
+      amenity_id: 'amenity-1',
+      status: 'pending',
+      downpayment_paid_at: null,
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
+      ends_at: new Date('2099-03-24T11:00:00.000Z'),
+    });
+    bookingRepository.confirmBookingDownpayment.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    const result = await service.confirmPendingBooking('booking-1', 'staff-1');
+
+    expect(bookingRepository.confirmBookingDownpayment).toHaveBeenCalledWith(
+      'booking-1',
+      expect.any(Date),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      BOOKING_CONFIRMED_EVENT,
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        userId: 'member-1',
+        amenityId: 'amenity-1',
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'audit.log',
+      expect.objectContaining({
+        userId: 'staff-1',
+        action: AuditAction.BOOKING_CONFIRMED,
+        entityId: 'booking-1',
+      }),
+    );
+    expect(result).toEqual({
+      booking: { id: 'booking-1', status: 'confirmed' },
+      message: 'Booking confirmed successfully',
+    });
+  });
+
+  it('rejects pending bookings for admin and staff schedule flows', async () => {
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      user_id: 'member-1',
+      amenity_id: 'amenity-1',
+      status: 'pending',
+      cancelled_at: null,
+    });
+    bookingRepository.cancelBooking.mockResolvedValue({
+      id: 'booking-1',
+      status: 'cancelled',
+    });
+
+    const result = await service.rejectPendingBooking(
+      'booking-1',
+      'admin-1',
+      'Duplicate request',
+    );
+
+    expect(bookingRepository.cancelBooking).toHaveBeenCalledWith(
+      'booking-1',
+      expect.any(Date),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'audit.log',
+      expect.objectContaining({
+        userId: 'admin-1',
+        action: AuditAction.BOOKING_CANCELLED,
+        entityId: 'booking-1',
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      BOOKING_CANCELLED_EVENT,
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        userId: 'member-1',
+        amenityId: 'amenity-1',
+      }),
+    );
+    expect(result).toEqual({
+      booking: { id: 'booking-1', status: 'cancelled' },
+      message: 'Booking rejected successfully',
+    });
+  });
+
   it('releases acquired slot locks when another reservation is already in progress', async () => {
     paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
@@ -343,6 +485,7 @@ describe('BookingService', () => {
       booking: { id: 'booking-1', status: 'pending' },
       payment: {
         id: 'payment-1',
+        payment_stage: PaymentStage.downpayment,
         idempotency_key: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
         amount: new Prisma.Decimal('240'),
       },
@@ -372,6 +515,9 @@ describe('BookingService', () => {
       expect.objectContaining({
         downpaymentAmount: new Prisma.Decimal('240.00'),
         balanceAmount: new Prisma.Decimal('560.00'),
+        paymentAmount: new Prisma.Decimal('240.00'),
+        paymentStage: PaymentStage.downpayment,
+        paymentStatus: PaymentStatus.pending,
         totalAmount: new Prisma.Decimal('800.00'),
       }),
     );
@@ -398,9 +544,56 @@ describe('BookingService', () => {
     });
   });
 
+  it('creates an awaiting-verification cash payment for split booking initiation', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Main Court',
+      hourly_rate: new Prisma.Decimal('800'),
+      requires_subscription: false,
+    });
+    bookingRepository.createPendingBookingWithPayment.mockResolvedValue({
+      booking: { id: 'booking-1', status: 'pending' },
+      payment: {
+        id: 'payment-1',
+        payment_stage: PaymentStage.downpayment,
+        amount: new Prisma.Decimal('240'),
+      },
+    });
+
+    const result = await service.createBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        provider: PaymentProvider.cash,
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+    );
+
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentAmount: new Prisma.Decimal('240.00'),
+        paymentStage: PaymentStage.downpayment,
+        paymentStatus: PaymentStatus.awaiting_verification,
+        provider: PaymentProvider.cash,
+      }),
+    );
+    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      booking_id: 'booking-1',
+      status: 'pending',
+      checkout_url: null,
+    });
+  });
+
   it('returns the existing booking checkout when the same idempotency key is retried', async () => {
     paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue({
       id: 'payment-1',
+      payment_stage: PaymentStage.downpayment,
       user_id: 'member-1',
       payable_type: 'booking',
       payable_id: 'booking-1',
@@ -437,6 +630,44 @@ describe('BookingService', () => {
     expect(
       bookingRepository.createPendingBookingWithPayment,
     ).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing cash booking request when the same idempotency key is retried', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue({
+      id: 'payment-1',
+      payment_stage: PaymentStage.full,
+      user_id: 'member-1',
+      payable_type: 'booking',
+      payable_id: 'booking-1',
+      provider: PaymentProvider.cash,
+      status: PaymentStatus.awaiting_verification,
+      idempotency_key: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      gateway_metadata: null,
+    });
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      user_id: 'member-1',
+      status: 'pending',
+      amenity: { name: 'Main Court' },
+    });
+
+    const result = await service.createBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        provider: PaymentProvider.cash,
+        payment_stage: 'full',
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+    );
+
+    expect(result).toEqual({
+      booking_id: 'booking-1',
+      status: 'pending',
+      checkout_url: null,
+    });
   });
 
   it('requires a valid idempotency key when creating a booking', async () => {
@@ -492,6 +723,40 @@ describe('BookingService', () => {
         userId: 'member-1',
         amenityId: 'amenity-1',
       }),
+    );
+  });
+
+  it('confirms full-payment bookings by stamping both payment timestamps', async () => {
+    paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
+      id: 'payment-1',
+      payment_stage: PaymentStage.full,
+    });
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      user_id: 'member-1',
+      amenity_id: 'amenity-1',
+      status: 'pending',
+      downpayment_paid_at: null,
+      balance_paid_at: null,
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
+      ends_at: new Date('2099-03-24T11:00:00.000Z'),
+    });
+    bookingRepository.confirmBookingFullPayment.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    await service.handlePaymentCompleted({
+      paymentId: 'payment-1',
+      userId: 'member-1',
+      payableType: 'booking',
+      payableId: 'booking-1',
+      amount: '800',
+    });
+
+    expect(bookingRepository.confirmBookingFullPayment).toHaveBeenCalledWith(
+      'booking-1',
+      expect.any(Date),
     );
   });
 

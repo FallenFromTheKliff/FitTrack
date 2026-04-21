@@ -9,7 +9,8 @@ import type { Socket } from 'socket.io';
 
 import type { PoseSessionResponseDTO } from './dto/pose.dto';
 import type { PoseSessionEndReason } from './dto/pose.dto';
-import { PoseConnectionState, PoseService } from './pose.service';
+import { PoseService } from './pose.service';
+import type { PoseConnectionState } from './pose.types';
 
 type PoseFramePayload = {
   frame_b64?: string;
@@ -186,21 +187,14 @@ export class PoseGateway {
     state: PoseConnectionState,
     analysis: Awaited<ReturnType<PoseService['analyzeFrame']>>['analysis'],
   ): void {
-    if (analysis.rep_event) {
-      client.emit('pose.rep-count', {
-        pose_session_id: state.poseSessionId,
-        rep_count_ai: state.repCountAi,
-        confidence: analysis.confidence,
-        exercise_class: analysis.exercise_class,
-        phase: analysis.phase,
-      });
-    }
-
     if (analysis.subject_locked !== undefined || analysis.form_feedback) {
       client.emit('pose.feedback', {
         pose_session_id: state.poseSessionId,
         subject_locked: analysis.subject_locked ?? false,
         form_feedback: analysis.form_feedback ?? [],
+        movement_contract: analysis.movement_contract ?? null,
+        exercise_class: analysis.exercise_class ?? null,
+        confidence: analysis.confidence,
       });
     }
   }

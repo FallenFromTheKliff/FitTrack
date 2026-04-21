@@ -29,7 +29,7 @@ export function coachScheduleQueryOptions<T>(client: Pick<ApiClient, "coaches">,
   });
 }
 
-export function coachSelfProfileQueryOptions<T extends { user?: { id?: string } | null }>(
+export function coachSelfProfileQueryOptions<T>(
   client: Pick<ApiClient, "coaches">,
   userId?: string
 ) {
@@ -37,8 +37,7 @@ export function coachSelfProfileQueryOptions<T extends { user?: { id?: string } 
     queryKey: queryKeys.coachSelfProfile(userId),
     queryFn: async () => {
       if (!userId) return null;
-      const coaches = await client.coaches.listAll<T>();
-      return coaches.find((coach) => coach.user?.id === userId) ?? null;
+      return client.coaches.getMine<T>();
     }
   });
 }

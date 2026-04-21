@@ -1,28 +1,34 @@
 {
-  "browser": "chromium",
-  "headless": false,
-  "viewports": {
-    "mobile": { "width": 390, "height": 844 },
-    "web": { "width": 1440, "height": 900 }
-  },
-  "defaultViewport": "mobile",
-  "startUrls": [
-    "http://localhost:8081",
-    "http://localhost:8080"
-  ],
-  "apps": {
-    "mobile": {
-      "url": "http://localhost:8081",
-      "viewport": "mobile",
-      "loginRoute": null,
-      "notes": "Expo dev server — navigate to the app via the Expo Go URL or Metro bundler"
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "headless": true
     },
-    "web": {
-      "url": "http://localhost:8080",
-      "viewport": "web",
-      "loginRoute": "/login",
-      "dashboardRoute": "/dashboard",
-      "notes": "Next.js dev server — unauthenticated requests redirect to /login"
+    "contextOptions": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
     }
+  },
+  "capabilities": ["core", "testing", "network"],
+  "saveSession": true,
+  "saveTrace": true,
+  "sharedBrowserContext": false,
+  "outputDir": ".artifacts/playwright-mcp",
+  "outputMode": "file",
+  "console": {
+    "level": "info"
+  },
+  "network": {
+    "allowedOrigins": ["http://127.0.0.1:*", "http://localhost:*"]
+  },
+  "testIdAttribute": "data-testid",
+  "timeouts": {
+    "action": 8000,
+    "navigation": 60000
+  },
+  "snapshot": {
+    "mode": "incremental"
   }
 }

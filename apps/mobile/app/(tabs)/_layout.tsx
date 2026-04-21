@@ -17,13 +17,14 @@ import Header from "@/components/layout/Header";
 import { ConfirmModal, ReservationModal } from "@/components/modals";
 
 const TAB_ROUTES: TabKey[] = [
-  "home", "facilities", "bookings", "nutrition", "workout",
+  "home", "facilities", "bookings", "nutrition", "mastery", "workout",
   "chathistory", "chatbot", "profile", "settings"
 ];
 
 const TAB_SCREEN_OPTIONS = {
   headerShown: false,
-  tabBarStyle: { display: "none" as const }
+  tabBarStyle: { display: "none" as const },
+  detachInactiveScreens: true
 };
 
 const s = StyleSheet.create({
@@ -78,7 +79,7 @@ function TabsLayoutInner() {
       router.replace("/(auth)/login");
       return;
     }
-    if (user?.role === "ADMIN" || user?.role === "STAFF") {
+    if (user?.role !== "USER" && user?.role !== "COACH") {
       router.replace("/(auth)/login");
     }
   }, [isAuthenticated, isLoading, router, user?.role]);
@@ -120,6 +121,7 @@ function TabsLayoutInner() {
           <Tabs.Screen name="facilities" />
           <Tabs.Screen name="bookings" />
           <Tabs.Screen name="nutrition" />
+          <Tabs.Screen name="mastery" />
           <Tabs.Screen name="workout" />
           <Tabs.Screen name="chathistory" />
           <Tabs.Screen name="chatbot" />
@@ -178,7 +180,6 @@ function TabsLayoutInner() {
           onClose={() => setReservationOpen(false)}
           onSuccess={() => {
             fireBookingRefresh();
-            setReservationOpen(false);
           }}
         />
       ) : null}

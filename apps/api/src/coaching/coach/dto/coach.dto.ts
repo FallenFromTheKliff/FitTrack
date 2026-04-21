@@ -123,6 +123,14 @@ export class CoachUserProfileResponseDTO {
   avatar_url: string | null;
 }
 
+export class CoachSelfUserResponseDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  id: string;
+
+  @ApiProperty({ type: CoachUserProfileResponseDTO })
+  profile: CoachUserProfileResponseDTO;
+}
+
 export class CoachAvailabilitySlotResponseDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
   id: string;
@@ -175,6 +183,11 @@ export class CoachDetailResponseDTO extends CoachListItemResponseDTO {
     isArray: true,
   })
   availability_slots: CoachAvailabilitySlotResponseDTO[];
+}
+
+export class CoachSelfDetailResponseDTO extends CoachDetailResponseDTO {
+  @ApiProperty({ type: CoachSelfUserResponseDTO })
+  user: CoachSelfUserResponseDTO;
 }
 
 export class AdminCoachDetailResponseDTO extends CoachDetailResponseDTO {

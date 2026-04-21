@@ -113,10 +113,20 @@ export class SubscriptionController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Current subscription returned.',
-    schema: apiEnvelopeSchema(getSchemaPath(CurrentSubscriptionResponseDTO)),
+    description: 'Current subscription returned, or null when none exists.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          anyOf: [
+            { $ref: getSchemaPath(CurrentSubscriptionResponseDTO) },
+            { type: 'null' },
+          ],
+        },
+      },
+      required: ['data'],
+    },
   })
-  @ApiResponse({ status: 404, description: 'Subscription not found.' })
   getMySubscription(@CurrentUser() user: JwtPayload) {
     return this.subscriptionService.getMySubscription(user.sub);
   }
