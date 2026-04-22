@@ -208,6 +208,8 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, canDrag, canSele
         alignItems: "center",
         gap: 12,
         padding: "10px 12px",
+        minHeight: 88,
+        width: "100%",
         borderRadius: 14,
         border: `1.5px solid ${isSelected ? colors.brand : borderColor}`,
         backgroundColor: isSelected ? `${colors.brand}14` : colors.surface,

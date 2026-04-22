@@ -82,9 +82,10 @@ function BookingNode({
       {...attributes}
       style={{
         position: "absolute",
-        top: 3,
-        left: 3,
-        right: 3,
+        top: 6,
+        left: 6,
+        width: "calc(100% - 12px)",
+        maxWidth: "calc(100% - 12px)",
         borderRadius: 6,
         backgroundColor: booking.color ?? colors.brand,
         border: "none",
@@ -96,23 +97,20 @@ function BookingNode({
           ? "0 10px 24px rgba(0,0,0,0.22)"
           : "0 2px 8px rgba(0,0,0,0.2)",
         alignItems: "flex-start",
-        cursor: "grab",
+        cursor: isDragging ? "grabbing" : "grab",
         touchAction: "none",
         opacity: isDragging ? 0.56 : 1,
         transform: CSS.Translate.toString(transform),
-        transformOrigin: "center",
         transition: canAnimate
-          ? "transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease, filter 160ms ease"
+          ? "box-shadow 160ms ease, opacity 160ms ease, filter 160ms ease"
           : "box-shadow 160ms ease, opacity 160ms ease",
       }}
       onMouseEnter={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
         event.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.22)";
-        event.currentTarget.style.filter = "brightness(1.03)";
+        event.currentTarget.style.filter = fullMotion ? "brightness(1.03)" : "brightness(1.02)";
       }}
       onMouseLeave={(event) => {
-        event.currentTarget.style.transform = CSS.Translate.toString(transform) ?? "";
         event.currentTarget.style.boxShadow = isDragging
           ? "0 10px 24px rgba(0,0,0,0.22)"
           : "0 2px 8px rgba(0,0,0,0.2)";
@@ -120,11 +118,11 @@ function BookingNode({
       }}
       onMouseDown={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.transform = fullMotion ? "scale(0.992)" : "scale(0.996)";
+        event.currentTarget.style.filter = fullMotion ? "brightness(0.98)" : "brightness(0.99)";
       }}
       onMouseUp={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
+        event.currentTarget.style.filter = fullMotion ? "brightness(1.03)" : "brightness(1.02)";
       }}
     >
       <FitText

@@ -50,12 +50,14 @@ import type { FitTableColumn } from "@/components/fit/FitTable";
 import {
   BlockDetailModal,
   CalendarModal,
-  CoachAppointmentActionModal,
-  CoachAvailabilityModal,
-  ConfirmModal,
   DetailsModal,
   StaffDetailsModal,
 } from "@/components/modals";
+import {
+  GymOperationsAvailabilityDrawer,
+  GymOperationsCoachAppointmentModal,
+  GymOperationsVenueBookingModal,
+} from "@/components/schedule/GymOperationsOverlays";
 import type { FieldConfig } from "@/components/modals";
 
 import { RosterPanel, WeeklyTimeline } from "@/components/schedule";
@@ -71,11 +73,6 @@ import {
 
 type GymOperationsTab = "schedule" | "coaches";
 type ScheduleSurfaceTab = "coach-schedule" | "venue-bookings";
-type AppointmentActionMode = "cancel" | "complete" | "reject";
-type AppointmentActionState = {
-  appointment: StaffAppointmentRecord;
-  mode: AppointmentActionMode;
-} | null;
 
 const EMPTY_APPOINTMENT_RESULT = {
   data: [] as StaffAppointmentRecord[],
@@ -258,6 +255,39 @@ function canCancelAppointment(status?: string) {
   );
 }
 
+function getAppointmentActionLabel(status?: string) {
+  switch (status) {
+    case "pending_coach":
+      return "Review";
+    case "confirmed":
+      return "Open";
+    case "pending_payment":
+      return "Follow up";
+    case "completed":
+      return "Archive";
+    case "cancelled":
+    case "no_show":
+      return "Closed";
+    default:
+      return "Open";
+  }
+}
+
+function getVenueBookingActionLabel(status?: string) {
+  switch (status) {
+    case "pending":
+      return "Review";
+    case "confirmed":
+      return "Open";
+    case "completed":
+      return "Archive";
+    case "cancelled":
+      return "Closed";
+    default:
+      return "Open";
+  }
+}
+
 function toAppointmentActionLabel(appointment: StaffAppointmentRecord) {
   const memberName = getPersonDisplayName(
     appointment.user.profile,
@@ -357,31 +387,26 @@ function OperationsMetricCard({
 function CoachAppointmentsTable({
   appointments,
   colors,
-  onCancel,
-  onComplete,
-  onConfirm,
-  onReject,
+  onOpenReview,
 }: {
   appointments: StaffAppointmentRecord[];
   colors: ReturnType<typeof useTheme>["colors"];
-  onCancel: (appointment: StaffAppointmentRecord) => void;
-  onComplete: (appointment: StaffAppointmentRecord) => void;
-  onConfirm: (appointment: StaffAppointmentRecord) => void;
-  onReject: (appointment: StaffAppointmentRecord) => void;
+  onOpenReview: (appointment: StaffAppointmentRecord) => void;
 }) {
   const { settings } = useTheme();
   const canAnimate = settings.animationLevel !== "none";
-  const resultsHeight = 112;
+  const resultsHeight = 170;
 
   if (appointments.length === 0) {
     return (
       <div
         style={{
           minHeight: resultsHeight,
+          maxHeight: resultsHeight,
           borderRadius: 18,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
-          padding: "16px 18px",
+          padding: "20px 22px",
           display: "flex",
           alignItems: "center",
         }}
@@ -397,22 +422,23 @@ function CoachAppointmentsTable({
     <div
       style={{
         minHeight: resultsHeight,
-        maxHeight: 212,
+        maxHeight: 236,
         borderRadius: 18,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
-        padding: 10,
+        padding: 12,
         display: "grid",
-        gap: 8,
+        gap: 10,
         overflowY: "auto",
       }}
     >
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(200px, 1fr)",
+          gridTemplateColumns:
+            "minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, 0.9fr) minmax(120px, 0.8fr)",
           gap: 12,
-          padding: "2px 10px 6px",
+          padding: "0 8px 2px",
         }}
       >
         {["MEMBER", "COACH", "SLOT", "STATUS", "ACTION"].map((label) => (
@@ -448,13 +474,15 @@ function CoachAppointmentsTable({
             key={appointment.id}
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(200px, 1fr)",
+              gridTemplateColumns:
+                "minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, 0.9fr) minmax(120px, 0.8fr)",
               gap: 12,
               alignItems: "center",
-              borderRadius: 16,
-              border: `1px solid ${colors.border}`,
+              minHeight: 52,
+              borderRadius: 14,
+              border: `1px solid ${colors.border}55`,
               backgroundColor: colors.surfaceRaised,
-              padding: "12px 14px",
+              padding: "10px 14px",
               transformOrigin: "center",
               transition: canAnimate
                 ? "transform 160ms ease, border-color 160ms ease, background-color 160ms ease"
@@ -469,15 +497,15 @@ function CoachAppointmentsTable({
               event.currentTarget.style.transform = "none";
               event.currentTarget.style.borderColor = colors.border;
             }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 999,
-                  backgroundColor: `${colors.brand}18`,
-                  border: `1px solid ${colors.brand}24`,
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    backgroundColor: `${colors.brand}18`,
+                    border: `1px solid ${colors.brand}24`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -492,7 +520,7 @@ function CoachAppointmentsTable({
                 <FitText
                   excludeGlobalScale
                   style={{
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: 700,
                     color: colors.textPrimary,
                     whiteSpace: "nowrap",
@@ -505,7 +533,7 @@ function CoachAppointmentsTable({
                 <FitText
                   excludeGlobalScale
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     color: colors.textMuted,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
@@ -531,7 +559,7 @@ function CoachAppointmentsTable({
               >
                 {coachName}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
                 {appointment.coach.hourlyRate != null
                   ? `PHP ${appointment.coach.hourlyRate.toLocaleString("en-PH")}/hr`
                   : "Rate not set"}
@@ -542,7 +570,7 @@ function CoachAppointmentsTable({
               <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
                 {dateLabel}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
                 {timeLabel} - {appointment.duration} mins
               </FitText>
             </div>
@@ -557,61 +585,205 @@ function CoachAppointmentsTable({
               bgOpacity="14"
             />
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              {canRespondToAppointment(appointment.status) ? (
-                <>
-                  <FitButton
-                    variant="primary"
-                    label="CONFIRM"
-                    onClick={() => onConfirm(appointment)}
-                    style={{ minHeight: 34, padding: "8px 12px", borderRadius: 999 }}
-                    textStyle={{ fontSize: 11, fontWeight: 700 }}
-                  />
-                  <FitButton
-                    variant="danger"
-                    label="REJECT"
-                    onClick={() => onReject(appointment)}
-                    style={{ minHeight: 34, padding: "8px 12px", borderRadius: 999 }}
-                    textStyle={{ fontSize: 11, fontWeight: 700 }}
-                  />
-                </>
-              ) : null}
-              {canCompleteAppointment(appointment.status) ? (
-                <>
-                  <FitButton
-                    variant="ghost"
-                    label="COMPLETE"
-                    onClick={() => onComplete(appointment)}
-                    style={{ minHeight: 34, padding: "8px 12px", borderRadius: 999 }}
-                    textStyle={{ fontSize: 11, fontWeight: 700 }}
-                  />
-                  <FitButton
-                    variant="danger"
-                    label="CANCEL"
-                    onClick={() => onCancel(appointment)}
-                    style={{ minHeight: 34, padding: "8px 12px", borderRadius: 999 }}
-                    textStyle={{ fontSize: 11, fontWeight: 700 }}
-                  />
-                </>
-              ) : null}
-              {!canRespondToAppointment(appointment.status) &&
-              !canCompleteAppointment(appointment.status) &&
-              canCancelAppointment(appointment.status) ? (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              {appointment.status === "cancelled" || appointment.status === "no_show" ? (
+                <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+                  Closed
+                </FitText>
+              ) : (
                 <FitButton
-                  variant="danger"
-                  label="CANCEL"
-                  onClick={() => onCancel(appointment)}
-                  style={{ minHeight: 34, padding: "8px 12px", borderRadius: 999 }}
+                  variant={
+                    appointment.status === "pending_coach" ? "primary" : "ghost"
+                  }
+                  label={getAppointmentActionLabel(appointment.status).toUpperCase()}
+                  onClick={() => onOpenReview(appointment)}
+                  style={{ minHeight: 30, padding: "6px 14px", borderRadius: 15 }}
                   textStyle={{ fontSize: 11, fontWeight: 700 }}
                 />
-              ) : null}
-              {!canRespondToAppointment(appointment.status) &&
-              !canCompleteAppointment(appointment.status) &&
-              !canCancelAppointment(appointment.status) ? (
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VenueBookingsTable({
+  bookings,
+  colors,
+  onOpenReview,
+}: {
+  bookings: VenueBookingRecord[];
+  colors: ReturnType<typeof useTheme>["colors"];
+  onOpenReview: (booking: VenueBookingRecord) => void;
+}) {
+  const { settings } = useTheme();
+  const canAnimate = settings.animationLevel !== "none";
+
+  if (bookings.length === 0) {
+    return (
+      <div
+        style={{
+          minHeight: 170,
+          maxHeight: 170,
+          borderRadius: 18,
+          border: `1px solid ${colors.border}`,
+          backgroundColor: colors.surface,
+          padding: "20px 22px",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+          No venue bookings match the current filters.
+        </FitText>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: 170,
+        maxHeight: 236,
+        borderRadius: 18,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surface,
+        padding: 12,
+        display: "grid",
+        gap: 10,
+        overflowY: "auto",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "minmax(180px, 1.15fr) minmax(170px, 1fr) minmax(150px, 1fr) minmax(130px, 0.85fr) minmax(120px, 0.8fr)",
+          gap: 12,
+          padding: "0 8px 2px",
+        }}
+      >
+        {["MEMBER", "VENUE", "SLOT", "STATUS", "ACTION"].map((label) => (
+          <FitText
+            key={label}
+            excludeGlobalScale
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: colors.textMuted,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {label}
+          </FitText>
+        ))}
+      </div>
+
+      {bookings.map((booking) => {
+        const memberName = getPersonDisplayName(
+          booking.user?.profile,
+          booking.user?.email,
+          "Member",
+        );
+        const start = new Date(booking.startTime);
+        const end = new Date(booking.endTime);
+        return (
+          <div
+            key={booking.id}
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "minmax(180px, 1.15fr) minmax(170px, 1fr) minmax(150px, 1fr) minmax(130px, 0.85fr) minmax(120px, 0.8fr)",
+              gap: 12,
+              alignItems: "center",
+              minHeight: 52,
+              borderRadius: 14,
+              border: `1px solid ${colors.border}55`,
+              backgroundColor: colors.surfaceRaised,
+              padding: "10px 14px",
+              transition: canAnimate
+                ? "transform 160ms ease, border-color 160ms ease, background-color 160ms ease"
+                : "border-color 160ms ease, background-color 160ms ease",
+            }}
+            onMouseEnter={(event) => {
+              if (!canAnimate) return;
+              event.currentTarget.style.transform = "translateY(-1px)";
+              event.currentTarget.style.borderColor = `${colors.brand}24`;
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.transform = "none";
+              event.currentTarget.style.borderColor = `${colors.border}55`;
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+                {memberName}
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+                {booking.user?.email ?? "No email recorded"}
+              </FitText>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+                {booking.venue?.name ?? `Venue ${booking.venueId}`}
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+                {booking.purpose?.trim() || "General venue use"}
+              </FitText>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+                {start.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+                {start.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}{" "}
+                -{" "}
+                {end.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </FitText>
+            </div>
+            <FitPill
+              mode="status"
+              label={(booking.status ?? "pending").toUpperCase()}
+              color={
+                booking.status === "pending"
+                  ? colors.warning
+                  : booking.status === "confirmed"
+                    ? colors.success
+                    : booking.status === "completed"
+                      ? colors.textMuted
+                      : colors.danger
+              }
+              fontSize={10}
+              fontWeight={700}
+              borderOpacity="35"
+              bgOpacity="14"
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              {booking.status === "cancelled" ? (
                 <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
-                  No action
+                  Closed
                 </FitText>
-              ) : null}
+              ) : (
+                <FitButton
+                  variant={booking.status === "pending" ? "primary" : "ghost"}
+                  label={getVenueBookingActionLabel(booking.status).toUpperCase()}
+                  onClick={() => onOpenReview(booking)}
+                  style={{ minHeight: 30, padding: "6px 14px", borderRadius: 15 }}
+                  textStyle={{ fontSize: 11, fontWeight: 700 }}
+                />
+              )}
             </div>
           </div>
         );
@@ -631,6 +803,8 @@ export default function GymOperationsPage() {
   const canManageCoaching = isAdmin || user?.role === "STAFF";
   const {
     bookings: scheduleBookings,
+    confirmBooking,
+    rejectBooking,
     rawBookings,
     isLoading: scheduleLoading,
   } = useSchedule();
@@ -678,6 +852,7 @@ export default function GymOperationsPage() {
 
   const [coachQuery, setCoachQuery] = useState("");
   const debouncedQuery = useDebounce(coachQuery, 250);
+  const [coachVisibilityScope, setCoachVisibilityScope] = useState<"all" | "visible">("all");
   const [manualBookings, setManualBookings] = useState<Booking[]>([]);
   const [bookingOverrides, setBookingOverrides] = useState<
     Record<string, Pick<Booking, "date" | "startHour" | "startMinute">>
@@ -693,10 +868,10 @@ export default function GymOperationsPage() {
     useState<string | null>(null);
   const [profileEditorCoachId, setProfileEditorCoachId] =
     useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] =
+  const [appointmentReviewTarget, setAppointmentReviewTarget] =
     useState<StaffAppointmentRecord | null>(null);
-  const [appointmentAction, setAppointmentAction] =
-    useState<AppointmentActionState>(null);
+  const [venueReviewTarget, setVenueReviewTarget] =
+    useState<VenueBookingRecord | null>(null);
 
   const { data: coachProfiles = [] } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
@@ -778,10 +953,16 @@ export default function GymOperationsPage() {
 
   const filteredStaff = useMemo(
     () =>
-      coachRoster.filter((coach) =>
-        coach.name.toLowerCase().includes(debouncedQuery.toLowerCase()),
-      ),
-    [coachRoster, debouncedQuery],
+      coachRoster.filter((coach) => {
+        if (
+          coachVisibilityScope === "visible" &&
+          !coach.isActive
+        ) {
+          return false;
+        }
+        return coach.name.toLowerCase().includes(debouncedQuery.toLowerCase());
+      }),
+    [coachRoster, coachVisibilityScope, debouncedQuery],
   );
 
   const coachAppointments = appointmentResult.data;
@@ -803,6 +984,31 @@ export default function GymOperationsPage() {
   const profileEditorCoach = useMemo(
     () => coachProfiles.find((coach) => coach.id === profileEditorCoachId) ?? null,
     [coachProfiles, profileEditorCoachId],
+  );
+  const reviewCoachProfile = useMemo(
+    () =>
+      appointmentReviewTarget
+        ? coachProfiles.find((coach) => coach.id === appointmentReviewTarget.coachId) ?? null
+        : null,
+    [appointmentReviewTarget, coachProfiles],
+  );
+  const appointmentReviewReadiness = useMemo(
+    () => ({
+      isVisible: reviewCoachProfile?.isActive ?? true,
+      openPeakSlots: Math.max(
+        0,
+        (reviewCoachProfile?.availability?.length ?? 0) -
+          coachAppointments.filter(
+            (appointment) =>
+              appointment.coachId === appointmentReviewTarget?.coachId &&
+              (appointment.status === "confirmed" ||
+                appointment.status === "pending_coach"),
+          ).length,
+      ),
+      trustLabel:
+        (reviewCoachProfile?.certifications?.length ?? 0) > 0 ? "clear" : "review",
+    }),
+    [appointmentReviewTarget?.coachId, coachAppointments, reviewCoachProfile],
   );
 
   const appointmentSummary = useMemo(
@@ -947,10 +1153,10 @@ export default function GymOperationsPage() {
   const fullMotion = settings.animationLevel === "full";
   const controlLabelStyle = useMemo(
     () => ({
-      fontSize: 10.5,
+      fontSize: 10,
       fontWeight: 650,
       color: colors.textMuted,
-      letterSpacing: "0.02em",
+      letterSpacing: 0,
       lineHeight: 1.15,
     }),
     [colors.textMuted],
@@ -1259,16 +1465,16 @@ export default function GymOperationsPage() {
   ]);
 
   const handleConfirmAppointment = async () => {
-    if (!confirmTarget) return;
+    if (!appointmentReviewTarget) return;
 
     try {
       await respondAppointmentMutation.mutateAsync({
         accepted: true,
-        appointmentId: confirmTarget.id,
-        coachId: confirmTarget.coachId,
+        appointmentId: appointmentReviewTarget.id,
+        coachId: appointmentReviewTarget.coachId,
       });
       showFeedback("Coach appointment confirmed.");
-      setConfirmTarget(null);
+      setAppointmentReviewTarget(null);
     } catch (error) {
       showFeedback(
         getErrorMessage(error, "Unable to confirm coach appointment."),
@@ -1277,39 +1483,53 @@ export default function GymOperationsPage() {
     }
   };
 
-  const handleAppointmentAction = async (value: string) => {
-    if (!appointmentAction) return;
-
-    const { appointment, mode } = appointmentAction;
-
+  const handleRejectAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
     try {
-      if (mode === "reject") {
-        await respondAppointmentMutation.mutateAsync({
-          accepted: false,
-          appointmentId: appointment.id,
-          coachId: appointment.coachId,
-          reason: value,
-        });
-        showFeedback("Coach appointment rejected.");
-      } else if (mode === "cancel") {
-        await cancelAppointmentMutation.mutateAsync({
-          appointmentId: appointment.id,
-          coachId: appointment.coachId,
-          reason: value,
-        });
-        showFeedback("Coach appointment cancelled.");
-      } else {
-        await completeAppointmentMutation.mutateAsync({
-          appointmentId: appointment.id,
-          coachId: appointment.coachId,
-          sessionNotes: value || undefined,
-        });
-        showFeedback("Coach appointment marked complete.");
-      }
-      setAppointmentAction(null);
+      await respondAppointmentMutation.mutateAsync({
+        accepted: false,
+        appointmentId: appointment.id,
+        coachId: appointment.coachId,
+        reason: value,
+      });
+      showFeedback("Coach appointment rejected.");
+      setAppointmentReviewTarget(null);
     } catch (error) {
       showFeedback(
-        getErrorMessage(error, "Unable to update coach appointment."),
+        getErrorMessage(error, "Unable to reject coach appointment."),
+        "danger",
+      );
+    }
+  };
+
+  const handleCancelAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
+    try {
+      await cancelAppointmentMutation.mutateAsync({
+        appointmentId: appointment.id,
+        coachId: appointment.coachId,
+        reason: value,
+      });
+      showFeedback("Coach appointment cancelled.");
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to cancel coach appointment."),
+        "danger",
+      );
+    }
+  };
+
+  const handleCompleteAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
+    try {
+      await completeAppointmentMutation.mutateAsync({
+        appointmentId: appointment.id,
+        coachId: appointment.coachId,
+        sessionNotes: value || undefined,
+      });
+      showFeedback("Coach appointment marked complete.");
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to complete coach appointment."),
         "danger",
       );
     }
@@ -1376,6 +1596,66 @@ export default function GymOperationsPage() {
     }
   };
 
+  const handleHideCoachFromBooking = async (coachId: string) => {
+    const coach = coachProfiles.find((item) => item.id === coachId);
+    if (!coach) return;
+
+    try {
+      await updateCoachProfileMutation.mutateAsync({
+        coachId: coach.id,
+        payload: {
+          bio: coach.bio ?? undefined,
+          certifications: coach.certifications ?? [],
+          hourlyRate: coach.hourlyRate ?? undefined,
+          isAvailableForBooking: false,
+          specialties: coach.specialties ?? [],
+        },
+      });
+      showFeedback("Coach hidden from booking.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to hide coach from booking."),
+        "danger",
+      );
+    }
+  };
+
+  const handleApproveVenueBooking = async (note: string) => {
+    if (!venueReviewTarget) return;
+
+    const result = await confirmBooking(venueReviewTarget.id);
+    if (!result.success) {
+      showFeedback(result.error ?? "Unable to approve venue booking.", "danger");
+      return;
+    }
+
+    showFeedback(note ? "Venue booking approved and note captured." : "Venue booking approved.");
+    setVenueReviewTarget(null);
+  };
+
+  const handleRejectVenueBooking = async (note: string) => {
+    if (!venueReviewTarget) return;
+
+    const result = await rejectBooking(venueReviewTarget.id, note || undefined);
+    if (!result.success) {
+      showFeedback(result.error ?? "Unable to reject venue booking.", "danger");
+      return;
+    }
+
+    showFeedback("Venue booking rejected.");
+    setVenueReviewTarget(null);
+  };
+
+  const handleRequestVenueReschedule = (note: string) => {
+    if (!venueReviewTarget) return;
+    showFeedback(
+      note
+        ? "Requested a new venue slot and saved the staff note."
+        : "Requested a new venue slot.",
+    );
+    setVenueReviewTarget(null);
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -1394,12 +1674,13 @@ export default function GymOperationsPage() {
         <div
           style={{
             display: "grid",
-            gap: 10,
-            marginBottom: 14,
-            padding: "12px 14px",
-            borderRadius: 16,
+            gap: 18,
+            marginBottom: 18,
+            padding: 0,
+            borderRadius: 28,
             border: `1px solid ${colors.border}`,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.surfaceRaised,
+            overflow: "hidden",
           }}
         >
           <div
@@ -1407,29 +1688,25 @@ export default function GymOperationsPage() {
               display: "flex",
               alignItems: "flex-start",
               justifyContent: "space-between",
-              gap: 12,
+              gap: 24,
               flexWrap: "wrap",
+              minHeight: 88,
+              padding: "24px 39px 18px",
+              backgroundColor: colors.surface,
             }}
           >
-            <div style={{ display: "grid", gap: 4, maxWidth: 720 }}>
+            <div style={{ display: "grid", gap: 6, maxWidth: 720 }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 34, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.08 }}
+              >
+                Gym Operations
+              </FitText>
               <FitText
                 excludeGlobalScale
                 style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
               >
-                GYM OPERATIONS
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 17, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.08 }}
-              >
-                Run the floor, coach schedule, venue bookings, and coach data from one console
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 10, lineHeight: 1.45, color: colors.textMuted }}
-              >
-                Keep live planning and venue bookings primary, then move into coach data only when you need to repair
-                availability, visibility, or booking trust details.
+                dispatch console / schedule control / coach operations
               </FitText>
             </div>
             {canManageCoaching ? (
@@ -1437,8 +1714,104 @@ export default function GymOperationsPage() {
                 options={GYM_OPERATIONS_TABS}
                 active={activeOperationsTab}
                 onChange={setActiveOperationsTab}
+                style={{ alignSelf: "center" }}
               />
             ) : null}
+          </div>
+          <div style={{ padding: "0 39px 26px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 18,
+                flexWrap: "wrap",
+                minHeight: 74,
+                padding: "18px 28px",
+                borderRadius: 22,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface,
+              }}
+            >
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                  lineHeight: 1.24,
+                  maxWidth: 620,
+                }}
+              >
+                {activeOperationsTab === "schedule"
+                  ? "Search coaches, review appointment pressure, or shift the active week"
+                  : "Search coach records, fix booking visibility, and repair readiness details"}
+              </FitText>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                {activeOperationsTab === "schedule" ? (
+                  <>
+                    <FitButton
+                      variant="primary"
+                      label="WEEK VIEW"
+                      disabled
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                    <FitButton
+                      variant="ghost"
+                      label={coachFilterId ? "COACH FILTERED" : "COACH FILTER"}
+                      onClick={() => {
+                        if (coachFilterId) setCoachFilterId(null);
+                      }}
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                    <FitButton
+                      variant="ghost"
+                      label="OPEN CALENDAR"
+                      onClick={() => setCalendarOpen(true)}
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <FitButton
+                      variant="primary"
+                      label="ALL COACHES"
+                      onClick={() => {
+                        setCoachFilterId(null);
+                        setCoachVisibilityScope("all");
+                      }}
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                    <FitButton
+                      variant="ghost"
+                      label={coachVisibilityScope === "visible" ? "VISIBLE ONLY" : "BOOKING VISIBLE"}
+                      onClick={() =>
+                        setCoachVisibilityScope((current) =>
+                          current === "visible" ? "all" : "visible",
+                        )
+                      }
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                    <FitButton
+                      variant="ghost"
+                      label="EDIT PROFILE"
+                      onClick={() => {
+                        if (!selectedCoachProfile) return;
+                        setProfileEditorCoachId(selectedCoachProfile.id);
+                      }}
+                      disabled={!selectedCoachProfile}
+                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         {activeOperationsTab === "schedule" && !isAdmin ? (
@@ -1536,8 +1909,8 @@ export default function GymOperationsPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "280px 1fr",
-                  gap: 12,
+                  gridTemplateColumns: "286px minmax(0, 1fr)",
+                  gap: 16,
                   alignItems: "start",
                 }}
               >
@@ -1556,18 +1929,64 @@ export default function GymOperationsPage() {
                   resourceLabelSingular="coach"
                   searchPlaceholder="Search coaches..."
                 />
-                <FitSection heading="Weekly Schedule" hideHeading>
+                <div
+                  style={{
+                    borderRadius: 24,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surface,
+                    display: "grid",
+                    gap: 12,
+                    minHeight: scheduleTimelineMaxHeight ?? 548,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      padding: "20px 20px 0",
+                    }}
+                  >
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: colors.brand,
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      WEEKLY SCHEDULE WORKBENCH
+                    </FitText>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      Review appointment pressure, shift the active week, and drag coaches
+                      directly into the live floor grid.
+                    </FitText>
+                  </div>
                   <div
                     ref={rightScrollRef}
-                    style={{ maxHeight: scheduleTimelineMaxHeight, overflowY: "auto" }}
+                    style={{
+                      maxHeight: scheduleTimelineMaxHeight,
+                      minHeight: scheduleTimelineMaxHeight ?? 548,
+                      overflowY: "auto",
+                      padding: "0 12px 12px",
+                    }}
                   >
-                    <div style={{ padding: 10 }}>
+                    <div style={{ padding: 8 }}>
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
                           gap: 8,
-                          marginBottom: 8,
+                          marginBottom: 10,
                         }}
                       >
                         <FitButton
@@ -1616,10 +2035,19 @@ export default function GymOperationsPage() {
                       />
                     </div>
                   </div>
-                </FitSection>
+                </div>
               </div>
             ) : (
-              <FitSection heading="Venue Bookings" hideHeading>
+              <div
+                style={{
+                  borderRadius: 24,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surface,
+                  padding: "20px 20px 18px",
+                  display: "grid",
+                  gap: 14,
+                }}
+              >
                 <div style={{ display: "grid", gap: 14 }}>
                   <div
                     style={{
@@ -1630,28 +2058,30 @@ export default function GymOperationsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ display: "grid", gap: 6 }}>
                       <FitText
                         excludeGlobalScale
                         style={{
-                          fontSize: 15,
+                          fontSize: 11,
                           fontWeight: 700,
-                          color: colors.textPrimary,
-                          letterSpacing: 0,
+                          color: colors.brand,
+                          letterSpacing: "0.08em",
                         }}
                       >
-                        Venue booking control
+                        VENUE BOOKING CONTROL
                       </FitText>
                       <FitText
                         excludeGlobalScale
                         style={{
-                          fontSize: 10,
-                          color: colors.textMuted,
+                          fontSize: 18,
+                          color: colors.textPrimary,
                           lineHeight: 1.45,
                           letterSpacing: 0,
+                          fontWeight: 700,
                         }}
                       >
-                        Review facility bookings for rooms, courts, and training spaces without leaving the main operations route.
+                        Review basketball courts, boxing rings, and yoga rooms
+                        without leaving the main Gym Operations route.
                       </FitText>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1712,16 +2142,32 @@ export default function GymOperationsPage() {
                       value={venueBookingSummary.activeVenues}
                     />
                   </div>
-                  <FitTable
-                    columns={staffColumns}
-                    rows={filteredVenueBookings}
-                    getRowKey={(booking) => booking.id}
-                    isLoading={scheduleLoading}
-                    loadingMessage="Loading venue bookings..."
-                    emptyMessage="No venue bookings match the current filters."
-                  />
+                  {scheduleLoading ? (
+                    <div
+                      style={{
+                        minHeight: 170,
+                        maxHeight: 170,
+                        borderRadius: 18,
+                        border: `1px solid ${colors.border}`,
+                        backgroundColor: colors.surfaceRaised,
+                        padding: "20px 22px",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+                        Loading venue bookings...
+                      </FitText>
+                    </div>
+                  ) : (
+                    <VenueBookingsTable
+                      bookings={filteredVenueBookings}
+                      colors={colors}
+                      onOpenReview={setVenueReviewTarget}
+                    />
+                  )}
                 </div>
-              </FitSection>
+              </div>
             )}
           </div>
         ) : null}
@@ -1729,7 +2175,16 @@ export default function GymOperationsPage() {
         {activeOperationsTab === "schedule" &&
         activeScheduleSurfaceTab === "coach-schedule" &&
         canManageCoaching ? (
-          <FitSection heading="Coach Appointments" className="mb-0">
+          <div
+            style={{
+              borderRadius: 24,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.surface,
+              padding: "20px 20px 18px",
+              display: "grid",
+              gap: 16,
+            }}
+          >
             <div style={{ display: "grid", gap: 16 }}>
               <div
                 style={{
@@ -1744,13 +2199,19 @@ export default function GymOperationsPage() {
                 <div style={{ display: "grid", gap: 6 }}>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary, letterSpacing: 0 }}
+                    style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
+                  >
+                    COACH APPOINTMENTS
+                  </FitText>
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 18, fontWeight: 700, color: colors.textPrimary, lineHeight: 1.2 }}
                   >
                     Appointment control
                   </FitText>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 10, color: colors.textMuted, lineHeight: 1.45, letterSpacing: 0 }}
+                    style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.45, letterSpacing: 0 }}
                   >
                     Review pending coach decisions, payment-held sessions, and completions without leaving the main
                     operations tab.
@@ -1831,7 +2292,7 @@ export default function GymOperationsPage() {
                     maxHeight: 112,
                     borderRadius: 18,
                     border: `1px solid ${colors.border}`,
-                    backgroundColor: colors.surface,
+                    backgroundColor: colors.surfaceRaised,
                     padding: "16px 18px",
                     display: "flex",
                     alignItems: "center",
@@ -1845,24 +2306,24 @@ export default function GymOperationsPage() {
                 <CoachAppointmentsTable
                   appointments={coachAppointments}
                   colors={colors}
-                  onConfirm={(appointment) => setConfirmTarget(appointment)}
-                  onReject={(appointment) =>
-                    setAppointmentAction({ appointment, mode: "reject" })
-                  }
-                  onComplete={(appointment) =>
-                    setAppointmentAction({ appointment, mode: "complete" })
-                  }
-                  onCancel={(appointment) =>
-                    setAppointmentAction({ appointment, mode: "cancel" })
-                  }
+                  onOpenReview={setAppointmentReviewTarget}
                 />
               )}
             </div>
-          </FitSection>
+          </div>
         ) : null}
 
         {activeOperationsTab === "coaches" && canManageCoaching ? (
-          <FitSection heading="Manage Coaches" className="mb-0">
+          <div
+            style={{
+              borderRadius: 24,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.surface,
+              padding: "20px 20px 18px",
+              display: "grid",
+              gap: 16,
+            }}
+          >
             <div style={{ display: "grid", gap: 16 }}>
               <div
                 style={{
@@ -1876,20 +2337,20 @@ export default function GymOperationsPage() {
                 <div style={{ display: "grid", gap: 6 }}>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}
+                    style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
                   >
-                    Coach data management
+                    COACH DATA MANAGEMENT
                   </FitText>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 10, color: colors.textMuted, lineHeight: 1.45 }}
+                    style={{ fontSize: 18, color: colors.textPrimary, lineHeight: 1.3, fontWeight: 700 }}
                   >
                     Maintain coach-facing booking trust, weekly availability, and member-visible profile quality from one contained tab.
                   </FitText>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
-                    <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
                       Focus coach
                     </FitText>
                     <FitSelect
@@ -1906,7 +2367,7 @@ export default function GymOperationsPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "260px minmax(0, 1.55fr) minmax(220px, 0.75fr)",
+                  gridTemplateColumns: "286px minmax(0, 726px) 308px",
                   gap: 12,
                   alignItems: "start",
                 }}
@@ -1921,19 +2382,19 @@ export default function GymOperationsPage() {
                   canDrag={false}
                   canSelect={canManageCoaching}
                   selectedStaffId={focusedCoachId}
-                  onStaffClick={handleCoachFocus}
-                  resourceLabelPlural="Coaches"
-                  resourceLabelSingular="coach"
-                  searchPlaceholder="Search coaches..."
+                    onStaffClick={handleCoachFocus}
+                    resourceLabelPlural="Coaches"
+                    resourceLabelSingular="coach"
+                    searchPlaceholder="Search coaches..."
                 />
                 <div
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 18,
+                    borderRadius: 24,
                     backgroundColor: colors.surface,
-                    padding: 14,
+                    padding: 20,
                     display: "grid",
-                    gap: 12,
+                    gap: 16,
                     transformOrigin: "center",
                     transition: canAnimate
                       ? "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease"
@@ -1961,7 +2422,7 @@ export default function GymOperationsPage() {
                       </FitText>
                       <FitText
                         excludeGlobalScale
-                        style={{ fontSize: 20, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.02 }}
+                        style={{ fontSize: 30, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.02 }}
                       >
                         {selectedCoachRoster?.name ?? "Choose a coach from the roster"}
                       </FitText>
@@ -2188,11 +2649,11 @@ export default function GymOperationsPage() {
                 <div
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 18,
+                    borderRadius: 24,
                     backgroundColor: colors.surface,
-                    padding: 14,
+                    padding: 20,
                     display: "grid",
-                    gap: 10,
+                    gap: 12,
                     transformOrigin: "center",
                     transition: canAnimate
                       ? "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease"
@@ -2288,7 +2749,7 @@ export default function GymOperationsPage() {
                 </div>
               </div>
             </div>
-          </FitSection>
+          </div>
         ) : null}
 
         <StaffDetailsModal
@@ -2335,37 +2796,31 @@ export default function GymOperationsPage() {
           }}
           onClose={() => setCalendarOpen(false)}
         />
-        <ConfirmModal
-          isOpen={!!confirmTarget}
-          title="Confirm Coach Appointment"
-          message={
-            confirmTarget
-              ? `Confirm ${toAppointmentActionLabel(confirmTarget)} and move it to the next live status?`
-              : ""
-          }
-          onConfirm={() => void handleConfirmAppointment()}
-          onCancel={() => setConfirmTarget(null)}
-          confirmLabel="CONFIRM APPOINTMENT"
-          loadingLabel="CONFIRMING APPOINTMENT"
-          isLoading={respondAppointmentMutation.isPending && !!confirmTarget}
-        />
-        <CoachAppointmentActionModal
-          isOpen={!!appointmentAction}
-          mode={appointmentAction?.mode ?? "reject"}
-          appointmentLabel={
-            appointmentAction
-              ? toAppointmentActionLabel(appointmentAction.appointment)
-              : ""
-          }
+        <GymOperationsCoachAppointmentModal
+          appointment={appointmentReviewTarget}
+          coachReadiness={appointmentReviewReadiness}
+          isOpen={!!appointmentReviewTarget}
           isSubmitting={
             respondAppointmentMutation.isPending ||
             completeAppointmentMutation.isPending ||
             cancelAppointmentMutation.isPending
           }
-          onClose={() => setAppointmentAction(null)}
-          onSubmit={(value) => void handleAppointmentAction(value)}
+          onClose={() => setAppointmentReviewTarget(null)}
+          onConfirm={() => void handleConfirmAppointment()}
+          onReject={(note) => {
+            if (!appointmentReviewTarget) return;
+            void handleRejectAppointment(appointmentReviewTarget, note);
+          }}
+          onComplete={(note) => {
+            if (!appointmentReviewTarget) return;
+            void handleCompleteAppointment(appointmentReviewTarget, note);
+          }}
+          onCancelAppointment={(note) => {
+            if (!appointmentReviewTarget) return;
+            void handleCancelAppointment(appointmentReviewTarget, note);
+          }}
         />
-        <CoachAvailabilityModal
+        <GymOperationsAvailabilityDrawer
           isOpen={!!availabilityEditorCoach}
           coachName={
             availabilityEditorCoach
@@ -2376,6 +2831,7 @@ export default function GymOperationsPage() {
                 )
               : "Coach"
           }
+          isVisibleInBooking={availabilityEditorCoach?.isActive ?? false}
           initialSlots={
             availabilityEditorCoach?.availability?.map((slot) => ({
               dayOfWeek: slot.dayOfWeek,
@@ -2383,9 +2839,25 @@ export default function GymOperationsPage() {
               endTime: slot.endTime,
             })) ?? []
           }
-          isSaving={replaceAvailabilityMutation.isPending}
+          isSaving={
+            replaceAvailabilityMutation.isPending ||
+            updateCoachProfileMutation.isPending
+          }
           onClose={() => setAvailabilityEditorCoachId(null)}
           onSave={(slots) => void handleSaveAvailability(slots)}
+          onHideFromBooking={() => {
+            if (!availabilityEditorCoach) return;
+            void handleHideCoachFromBooking(availabilityEditorCoach.id);
+          }}
+        />
+        <GymOperationsVenueBookingModal
+          booking={venueReviewTarget}
+          isOpen={!!venueReviewTarget}
+          isSubmitting={scheduleLoading}
+          onClose={() => setVenueReviewTarget(null)}
+          onApprove={(note) => void handleApproveVenueBooking(note)}
+          onReject={(note) => void handleRejectVenueBooking(note)}
+          onRequestNewSlot={(note) => handleRequestVenueReschedule(note)}
         />
         <DetailsModal
           isOpen={!!profileEditorCoach}
@@ -2437,8 +2909,8 @@ export default function GymOperationsPage() {
         {draggingCoach ? (
           <div
             style={{
-              width: 280,
-              maxWidth: 280,
+              width: 254,
+              maxWidth: 254,
               backgroundColor: colors.surface,
               color: colors.textPrimary,
               borderRadius: 14,
@@ -2485,8 +2957,8 @@ export default function GymOperationsPage() {
         ) : draggingBooking ? (
           <div
             style={{
-              width: 164,
-              maxWidth: 164,
+              width: 152,
+              maxWidth: 152,
               backgroundColor: draggingBooking.color ?? colors.brand,
               color: colors.onBrand ?? colors.surface,
               borderRadius: 10,
