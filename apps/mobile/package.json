@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "node ./node_modules/expo/bin/cli start --lan",
-    "android": "node ./node_modules/expo/bin/cli start --android",
-    "ios": "node ./node_modules/expo/bin/cli start --ios",
-    "web": "node ./node_modules/expo/bin/cli start --web",
+    "dev": "set EXPO_UNSTABLE_HEADLESS=1&& node ./node_modules/expo/bin/cli start --lan",
+    "android": "set EXPO_UNSTABLE_HEADLESS=1&& node ./node_modules/expo/bin/cli start --android",
+    "ios": "set EXPO_UNSTABLE_HEADLESS=1&& node ./node_modules/expo/bin/cli start --ios",
+    "web": "set EXPO_UNSTABLE_HEADLESS=1&& node ./node_modules/expo/bin/cli start --web",
     "lint": "..\\web\\node_modules\\.bin\\eslint.cmd . --ext .ts,.tsx --config ..\\web\\eslint.config.mjs --rule no-empty:warn --rule @typescript-eslint/no-unused-expressions:warn --rule @typescript-eslint/no-require-imports:off",
     "typecheck": "tsc --noEmit"
   },

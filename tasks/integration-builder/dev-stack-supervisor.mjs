@@ -296,7 +296,29 @@ function createRuntimeState(options) {
     options,
     shuttingDown: false,
     targets: new Map(),
+    keepAliveTimer: null,
   };
+}
+
+function startKeepAlive(runtimeState) {
+  if (runtimeState.keepAliveTimer) {
+    return;
+  }
+
+  runtimeState.keepAliveTimer = setInterval(() => {
+    if (!runtimeState.shuttingDown) {
+      flushManifest(runtimeState);
+    }
+  }, 30000);
+}
+
+function stopKeepAlive(runtimeState) {
+  if (!runtimeState.keepAliveTimer) {
+    return;
+  }
+
+  clearInterval(runtimeState.keepAliveTimer);
+  runtimeState.keepAliveTimer = null;
 }
 
 function currentManifestPayload(runtimeState) {
@@ -556,6 +578,7 @@ function startTarget(target, runtimeState, existingEntry = null) {
 
 function stopAllTargets(runtimeState) {
   runtimeState.shuttingDown = true;
+  stopKeepAlive(runtimeState);
 
   for (const entry of runtimeState.targets.values()) {
     if (entry.restartTimer) {
@@ -666,6 +689,7 @@ async function runCommand(options) {
   }
 
   flushManifest(runtimeState);
+  startKeepAlive(runtimeState);
 
   await new Promise(() => {});
 }
