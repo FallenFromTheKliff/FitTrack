@@ -155,7 +155,8 @@ export function approveDeletionRequestMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
-        invalidateAdminDeletionRequestsQuery(queryClient)
+        invalidateAdminDeletionRequestsQuery(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() })
       ]);
     }
   });
@@ -171,7 +172,8 @@ export function rejectDeletionRequestMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
-        invalidateAdminDeletionRequestsQuery(queryClient)
+        invalidateAdminDeletionRequestsQuery(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() })
       ]);
     }
   });

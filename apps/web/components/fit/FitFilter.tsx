@@ -127,6 +127,7 @@ export default function FitFilter({
 type InlineFilterOption = {
   label: string;
   value: string;
+  disabled?: boolean;
 };
 
 type FitInlineFilterChipsProps = {
@@ -159,6 +160,7 @@ export function FitInlineFilterChips({
             key={opt.value}
             variant="chip"
             active={isActive}
+            disabled={opt.disabled}
             onClick={() => onChange(opt.value)}
             label={opt.label}
             style={s.inlineChip}

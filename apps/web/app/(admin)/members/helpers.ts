@@ -21,15 +21,16 @@ export function getPendingRequestsByUserId(deletionRequests: DeletionRequest[]) 
 
 export function isArchivedMember(
   member: MemberRecord,
-  pendingRequestsByUserId: Map<string, DeletionRequest>
+  _pendingRequestsByUserId: Map<string, DeletionRequest>
 ) {
-  return Boolean(member.deletedAt) || pendingRequestsByUserId.has(member.id);
+  return Boolean(member.deletedAt);
 }
 
 export function getDirectoryMemberStatus(
   member: MemberRecord,
   pendingRequestsByUserId: Map<string, DeletionRequest>
 ): MemberStatusTab {
+  if (pendingRequestsByUserId.has(member.id)) return "Termination Requests";
   return isArchivedMember(member, pendingRequestsByUserId) ? "Archived" : "Active";
 }
 
@@ -48,14 +49,16 @@ export function filterMembers(
     const role = member.role?.name ?? "USER";
     const matchesStatus = getDirectoryMemberStatus(member, pendingRequestsByUserId) === activeStatus;
     const matchesChip =
-      activeChip === "all" ||
-      (activeChip === "Admin"
-        ? role === "ADMIN"
-        : activeChip === "Staff"
-          ? role === "STAFF"
-          : activeChip === "Member"
-              ? role === "USER"
-              : true);
+      activeStatus === "Termination Requests"
+        ? role === "USER"
+        : activeChip === "all" ||
+          (activeChip === "Admin"
+            ? role === "ADMIN"
+            : activeChip === "Staff"
+              ? role === "STAFF"
+              : activeChip === "Member"
+                  ? role === "USER"
+                  : true);
 
     return matchesSearch && matchesChip && matchesStatus;
   });

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Archive, BadgeCheck, ScanLine, Skull, UserPlus } from "lucide-react";
+import { Archive, BadgeCheck, ScanLine, UserPlus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -24,7 +24,6 @@ import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { CONFIRM_COPY } from "@/utils/confirmCopy";
 import { buildRenderableAssetUrl, fullName, getReadableTextColor } from "@fittrack/utils";
 import {
   EDIT_MEMBER_FIELDS,
@@ -262,6 +261,7 @@ function getDirectoryStatusLabel(
   const status = getDirectoryMemberStatus(member, pendingRequestsByUserId);
   const accessLabel = getMembershipAccessLabel(member);
 
+  if (status === "Termination Requests") return "Termination request";
   if (status === "Archived") return "Archived";
   if (accessLabel === "Pending verification" || accessLabel === "Non-member" || accessLabel === "Revoked") return "Pending";
 
@@ -274,6 +274,7 @@ function getDirectoryStatusColor(
   warningColor: string
 ) {
   const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
+  if (statusLabel === "Termination request") return STATUS_COLORS["Termination request"] ?? warningColor;
   if (statusLabel === "Archived") return STATUS_COLORS.Archived ?? warningColor;
   if (statusLabel === "Pending") return PENDING_STATE_COLOR;
   return STATUS_COLORS.Active ?? warningColor;
@@ -347,10 +348,12 @@ export default function MembersDashboard() {
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "ADMIN";
   const isStaff = user?.role === "STAFF";
+  const canInspectAccounts = isAdmin || isStaff;
   const [q, setQ] = useState("");
   const debouncedQ = useDebounce(q, 250);
   const [activeChip, setActiveChip] = useState("all");
   const [activeStatus, setActiveStatus] = useState<MemberStatusTab>("Active");
+  const isTerminationRequestsView = activeStatus === "Termination Requests";
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
 
@@ -374,7 +377,7 @@ export default function MembersDashboard() {
   const [scanFeedback, setScanFeedback] = useState<AttendanceScanFeedback | null>(null);
   const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
-    enabled: isAdmin
+    enabled: canInspectAccounts
   });
   const {
     data: pendingMembershipPayments = { data: [], meta: { page: 1, limit: 0, total: 0, total_pages: 0 } },
@@ -408,13 +411,13 @@ export default function MembersDashboard() {
   }, [isStaff, staffUsersError]);
 
   useEffect(() => {
-    if (!deletionRequestsError || !isAdmin) return;
+    if (!deletionRequestsError || !canInspectAccounts) return;
     notifyActionError(
       "Termination requests could not be loaded",
       deletionRequestsError,
       "Failed to load pending termination requests."
     );
-  }, [deletionRequestsError, isAdmin]);
+  }, [canInspectAccounts, deletionRequestsError]);
 
   useEffect(() => {
     if (!pendingMembershipPaymentsError || !isAdmin) return;
@@ -431,8 +434,8 @@ export default function MembersDashboard() {
   }, [isStaff, members, staffUsers]);
 
   const pendingRequestsByUserId = useMemo(
-    () => isAdmin ? getPendingRequestsByUserId(deletionRequests) : new Map<string, DeletionRequest>(),
-    [deletionRequests, isAdmin]
+    () => canInspectAccounts ? getPendingRequestsByUserId(deletionRequests) : new Map<string, DeletionRequest>(),
+    [canInspectAccounts, deletionRequests]
   );
   const membershipReviewPayments = useMemo(
     () => pendingMembershipPayments.data.filter((payment) =>
@@ -468,6 +471,12 @@ export default function MembersDashboard() {
   );
 
   useEffect(() => setPage(1), [debouncedQ, activeChip, activeStatus]);
+
+  useEffect(() => {
+    if (isTerminationRequestsView && activeChip !== "Member") {
+      setActiveChip("Member");
+    }
+  }, [activeChip, isTerminationRequestsView]);
 
   useEffect(() => {
     if (contentMode !== "directory" || !editTarget) return;
@@ -535,7 +544,7 @@ export default function MembersDashboard() {
       !editPendingRequest &&
       !isEditTargetArchived
   );
-  const canTerminateEditTarget = Boolean(isAdmin && !isSelfEdit && editPendingRequest);
+  const canTerminateEditTarget = Boolean(canInspectAccounts && !isSelfEdit && editPendingRequest);
   const canRestoreEditTarget = Boolean(isAdmin && editTarget && !isSelfEdit && isEditTargetArchived);
   const canEditTargetDetails = Boolean(isAdmin && editTarget && !isSelfEdit);
   const canManageMemberCard = Boolean(isAdmin && editTarget && !isSelfEdit && editTarget.role?.name === "USER");
@@ -598,6 +607,7 @@ export default function MembersDashboard() {
   );
 
   const rejectLoadingLabel = useLoadingText("REJECTING REQUEST", rejectDeletionMutation.isPending);
+  const approveRequestLoadingLabel = useLoadingText("APPROVING REQUEST", approveDeletionMutation.isPending);
   const membershipCardLoadingLabel = useLoadingText("UPDATING CARD", membershipCardMutation.isPending);
   const manualCheckInLoadingLabel = useLoadingText("CHECKING IN", manualAttendanceMutation.isPending);
   const paymentReviewLoadingLabel = useLoadingText("UPDATING PAYMENT", membershipPaymentReviewMutation.isPending);
@@ -649,9 +659,9 @@ export default function MembersDashboard() {
       await approveDeletionMutation.mutateAsync(request.id);
       setDeleteTarget(null);
       closeInspector();
-      notify("success", "Account terminated", "The pending request was approved and the account was removed.");
+      notify("success", "Termination request approved", "The account was soft-deleted and moved to Archived.");
     } catch {
-      notify("error", "Could not terminate account", "Try again after the latest request state has loaded.");
+      notify("error", "Could not approve the request", "Try again after the latest request state has loaded.");
     }
   };
 
@@ -665,9 +675,9 @@ export default function MembersDashboard() {
     try {
       await rejectDeletionMutation.mutateAsync(request.id);
       closeInspector();
-      notify("success", "Termination request declined", "The account stays active in the directory.");
+      notify("success", "Termination request denied", "The account stays active in the directory.");
     } catch {
-      notify("error", "Could not decline the request", "Try again after the latest request state has loaded.");
+      notify("error", "Could not deny the request", "Try again after the latest request state has loaded.");
     }
   };
 
@@ -1215,6 +1225,14 @@ export default function MembersDashboard() {
   const routeHeroChips: MembersRouteShellChip[] = [];
   const routeSummaryItems: MembersRouteShellMetric[] = [];
   const directoryMotionKey = `${page}-${activeStatus}-${activeChip}-${paginatedRows.map((member) => member.id).join(":")}`;
+  const directoryFilterOptions = isTerminationRequestsView
+    ? MEMBER_FILTER_OPTIONS.map((option) => (
+      option.value === "Member" ? option : { ...option, disabled: true }
+    ))
+    : MEMBER_FILTER_OPTIONS;
+  const directoryEmptyMessage = isTerminationRequestsView
+    ? "No termination requests match your current filters."
+    : "No accounts match your current filters.";
   const directoryCommandSurface = (
     <div className="members-route-command-grid" style={{ display: "grid", gap: 10 }}>
       <div
@@ -1322,9 +1340,12 @@ export default function MembersDashboard() {
           />
           <FitInlineFilterChips
             isOpen
-            options={MEMBER_FILTER_OPTIONS}
+            options={directoryFilterOptions}
             activeValue={activeChip}
-            onChange={setActiveChip}
+            onChange={(value) => {
+              if (isTerminationRequestsView && value !== "Member") return;
+              setActiveChip(value);
+            }}
             maxWidth={620}
           />
         </div>
@@ -1427,7 +1448,7 @@ export default function MembersDashboard() {
               <div className="members-directory-stage" style={{ display: "grid", gap: 16 }}>
                 <MembersDirectoryPanel
                   activeRowId={editTarget?.id}
-                  emptyMessage="No accounts match your current filters."
+                  emptyMessage={directoryEmptyMessage}
                   filteredCount={filtered.length}
                   isAdmin={isAdmin}
                   onPageChange={setPage}
@@ -1525,7 +1546,7 @@ export default function MembersDashboard() {
           }
         }
       `}</style>
-      {isAdmin ? (
+      {canInspectAccounts ? (
         <FitModal
           isOpen={!!editTarget && !editModalOpen && !editConfirmOpen}
           onClose={closeInspector}
@@ -1745,14 +1766,14 @@ export default function MembersDashboard() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                     <FitButton
                       variant="ghost"
-                      label={rejectDeletionMutation.isPending ? rejectLoadingLabel : "Reject request"}
+                      label={rejectDeletionMutation.isPending ? rejectLoadingLabel : "Deny request"}
                       onClick={handleRejectDeleteRequest}
                       disabled={rejectDeletionMutation.isPending}
                       style={secondaryActionStyle}
                     />
                     <FitButton
                       variant="danger"
-                      label="Terminate account"
+                      label="Approve request"
                       onClick={() => setDeleteTarget(editTarget)}
                       style={{ borderRadius: 14, minHeight: 40 }}
                     />
@@ -1895,14 +1916,14 @@ export default function MembersDashboard() {
           onCancel={() => setRevokeCardTarget(null)}
         />
       ) : null}
-      {isAdmin ? (
+      {canInspectAccounts ? (
         <ConfirmModal
           isOpen={!!deleteTarget}
-          title="Terminate Account"
-          message={`Approve account termination for ${deleteTarget?.email ?? "this user"}? This permanently closes the account and cannot be undone.`}
-          confirmLabel={CONFIRM_COPY.terminateAccount.confirmLabel}
-          loadingLabel={CONFIRM_COPY.terminateAccount.loadingLabel}
-          confirmIcon={Skull}
+          title="Approve Termination Request"
+          message={`Approve the termination request for ${deleteTarget?.email ?? "this account"}? The account will be soft-deleted and moved to Archived until it is restored.`}
+          confirmLabel="APPROVE REQUEST"
+          loadingLabel={approveRequestLoadingLabel}
+          confirmIcon={BadgeCheck}
           isDanger
           isLoading={approveDeletionMutation.isPending}
           onConfirm={handleDelete}
