@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Dumbbell,
-  LayoutDashboard,
   Users,
   CalendarDays,
   Grid2X2,
@@ -50,12 +49,12 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    pageKey: "dashboard",
+    href: "/analytics",
+    label: "Analytics",
+    icon: BarChart2,
+    pageKey: "analytics",
   },
-  { href: "/members", label: "Members", icon: Users, pageKey: "members" },
+  { href: "/members", label: "Account Module", icon: Users, pageKey: "members" },
   {
     href: "/schedule",
     label: "Gym Operations",
@@ -80,12 +79,6 @@ const NAV: NavItem[] = [
     label: "Inventory",
     icon: Package,
     pageKey: "inventory",
-  },
-  {
-    href: "/analytics",
-    label: "Analytics",
-    icon: BarChart2,
-    pageKey: "analytics",
   },
   { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
 ];
@@ -313,8 +306,8 @@ export default function Sidebar({
       <nav style={s.navList}>
         {visibleNav.map((item) => {
           const isActive =
-            item.href === "/dashboard"
-              ? path === "/dashboard"
+            item.href === "/analytics"
+              ? path === "/dashboard" || path.startsWith("/analytics")
               : path.startsWith(item.href);
           return (
             <Link

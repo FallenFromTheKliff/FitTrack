@@ -142,6 +142,7 @@ const inventoryKeys = {
 };
 
 const analyticsKeys = {
+  snapshot: () => ["analytics", "snapshot"] as const,
   overview: (params?: { endDate?: string; period?: string; startDate?: string }) =>
     params ? ["analytics", "overview", params] as const : ["analytics", "overview"] as const,
   revenue: (params?: { endDate?: string; period?: string; startDate?: string }) =>
@@ -265,6 +266,7 @@ export const queryKeys = {
   inventoryEquipmentDetail: inventoryKeys.equipmentDetail,
   inventorySales: inventoryKeys.sales,
   inventorySaleDetail: inventoryKeys.saleDetail,
+  analyticsSnapshot: analyticsKeys.snapshot,
   analyticsOverview: analyticsKeys.overview,
   analyticsRevenue: analyticsKeys.revenue,
   analyticsAttendance: analyticsKeys.attendance,

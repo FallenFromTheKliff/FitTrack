@@ -17,12 +17,13 @@ type Props = {
   disabled?: boolean;
   input: string;
   isLoading?: boolean;
+  isReadOnly?: boolean;
   messages: ChatPanelMessage[];
   onBack?: () => void;
   onInputChange: (value: string) => void;
   onSend: () => void;
   placeholder?: string;
-  sessionTitle: string;
+  readOnlyMessage?: string;
   showBackButton?: boolean;
 };
 
@@ -30,12 +31,13 @@ export default function ChatPanel({
   disabled = false,
   input,
   isLoading = false,
+  isReadOnly = false,
   messages,
   onBack,
   onInputChange,
   onSend,
   placeholder = "Type a message...",
-  sessionTitle,
+  readOnlyMessage = "This chat is deleted. Restore it from Deleted Chats to continue the conversation.",
   showBackButton = false
 }: Props) {
   const { colors, onBrandTextColor } = useTheme();
@@ -51,13 +53,14 @@ export default function ChatPanel({
   }, [isLoading, messages, scrollToBottom]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (isReadOnly) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       onSend();
     }
-  }, [onSend]);
+  }, [isReadOnly, onSend]);
 
-  const canSend = !disabled && !isLoading && !!input.trim();
+  const canSend = !disabled && !isLoading && !isReadOnly && !!input.trim();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
@@ -74,7 +77,9 @@ export default function ChatPanel({
               style={{ padding: 6 }}
             />
           ) : null}
-          <FitText style={{ fontSize: 14, fontWeight: 700 }}>{sessionTitle}</FitText>
+          <FitText style={{ fontSize: 14, fontWeight: 700 }}>
+            {isReadOnly ? "Deleted conversation" : "Conversation"}
+          </FitText>
         </div>
         <div style={{ ...s.aiAvatar, backgroundColor: `${colors.brand}22` }}>
           <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.brand }}>B</FitText>
@@ -127,7 +132,7 @@ export default function ChatPanel({
             placeholder={placeholder}
             rows={2}
             style={s.inputField}
-            disabled={disabled}
+            disabled={disabled || isReadOnly}
           />
         </div>
         <FitButton
@@ -143,7 +148,7 @@ export default function ChatPanel({
       </div>
       <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${colors.border}`, backgroundColor: colors.surface }}>
         <FitText style={{ fontSize: 11, color: colors.textMuted }}>
-          Press Enter to send. Shift+Enter inserts a new line.
+          {isReadOnly ? readOnlyMessage : "Press Enter to send. Shift+Enter inserts a new line."}
         </FitText>
       </div>
     </div>

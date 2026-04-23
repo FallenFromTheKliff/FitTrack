@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AiChatSession, ChatContext, Prisma } from '@prisma/client';
 
 import {
@@ -107,6 +107,53 @@ export class AiChatSessionRepository extends BaseRepository {
       sessionId,
       { is_active: false },
     );
+  }
+
+  restoreOwnedSessionByIdOrThrow(
+    userId: string,
+    sessionId: string,
+  ): Promise<AiChatSessionRecord> {
+    return this.transaction(async (tx) => {
+      const session = await tx.aiChatSession.findFirst({
+        where: {
+          id: sessionId,
+          user_id: userId,
+        },
+      });
+
+      if (!session) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'AiChatSession Not Found',
+          status: 404,
+          detail: 'AiChatSession not found.',
+        });
+      }
+
+      await tx.aiChatSession.updateMany({
+        where: {
+          user_id: userId,
+          context_type: session.context_type,
+          is_active: true,
+          NOT: {
+            id: sessionId,
+          },
+        },
+        data: {
+          is_active: false,
+        },
+      });
+
+      return tx.aiChatSession.update({
+        where: {
+          id: sessionId,
+        },
+        data: {
+          is_active: true,
+          last_activity_at: new Date(),
+        },
+      });
+    });
   }
 
   updateSessionById(

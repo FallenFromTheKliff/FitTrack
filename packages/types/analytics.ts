@@ -1,6 +1,11 @@
 import type { PaginationMeta } from "./membership";
 
-export type AnalyticsPeriod = "daily" | "monthly" | "weekly" | "yearly";
+export type AnalyticsPeriod =
+  | "hourly"
+  | "daily"
+  | "monthly"
+  | "weekly"
+  | "yearly";
 export type BusinessInsightFocus =
   | "attendance"
   | "coaching"
@@ -8,9 +13,7 @@ export type BusinessInsightFocus =
   | "membership"
   | "overview"
   | "revenue";
-export type BusinessInsightPeriod =
-  | AnalyticsPeriod
-  | "custom";
+export type BusinessInsightPeriod = AnalyticsPeriod | "custom";
 
 export type AnalyticsQueryParams = {
   endDate?: string;
@@ -32,6 +35,21 @@ export type GenerateBusinessInsightInput = {
   startDate?: string;
 };
 
+export type ExportAnalyticsPdfInput = {
+  attendanceEndDate?: string;
+  attendancePeriod?: AnalyticsPeriod;
+  attendanceStartDate?: string;
+  revenueEndDate?: string;
+  revenuePeriod?: AnalyticsPeriod;
+  revenueStartDate?: string;
+};
+
+export type AnalyticsPdfExportResult = {
+  bytes: ArrayBuffer;
+  contentType: string;
+  fileName: string;
+};
+
 export type AnalyticsRevenueTotalsRecord = {
   bookingRevenue: number;
   coachingGymRevenue: number;
@@ -41,14 +59,25 @@ export type AnalyticsRevenueTotalsRecord = {
   totalRevenue: number;
 };
 
-export type AnalyticsRevenueSeriesPointRecord =
-  AnalyticsRevenueTotalsRecord & {
-    bucketStart: string;
-  };
+export type AnalyticsRevenueSeriesPointRecord = AnalyticsRevenueTotalsRecord & {
+  bucketStart: string;
+};
 
 export type AnalyticsAttendanceSeriesPointRecord = {
   bucketStart: string;
   checkIns: number;
+};
+
+export type AnalyticsAttendancePeakHourRecord = {
+  hourLabel: string;
+  checkIns: number;
+};
+
+export type AnalyticsTopRevenueSourceRecord = {
+  revenue: number;
+  sharePercentage: number;
+  sourceKey: string;
+  sourceLabel: string;
 };
 
 export type AnalyticsOverviewRecord = {
@@ -66,13 +95,61 @@ export type AnalyticsRevenueRecord = {
   series: AnalyticsRevenueSeriesPointRecord[];
   startDate: string;
   totals: AnalyticsRevenueTotalsRecord;
+  topRevenueSources: AnalyticsTopRevenueSourceRecord[];
 };
 
 export type AnalyticsAttendanceRecord = {
   endDate: string;
   period: AnalyticsPeriod;
+  peakHours: AnalyticsAttendancePeakHourRecord[];
   series: AnalyticsAttendanceSeriesPointRecord[];
   startDate: string;
+  totalCheckIns: number;
+};
+
+export type AnalyticsDailyInsightsRecord = {
+  activeMembers: number;
+  recentActivities: number;
+  sessionsToday: number;
+};
+
+export type AnalyticsPerformanceKpisRecord = {
+  checkIns: number;
+  coachingSessions: number;
+  newMembers: number;
+  totalCoachingAppointments: number;
+  totalRevenue: number;
+  totalVenueBookings: number;
+};
+
+export type AnalyticsSystemAlertRecord = {
+  actionLabel: string;
+  body: string;
+  href: string;
+  id: string;
+  kind: string;
+  severity: string;
+  title: string;
+};
+
+export type AnalyticsRecentActivityRecord = {
+  actorName: string;
+  description: string;
+  entityId: string;
+  entityLabel: string;
+  id: string;
+  kind: string;
+  occurredAt: string;
+  status: string;
+  title: string;
+};
+
+export type AnalyticsSnapshotRecord = {
+  dailyInsights: AnalyticsDailyInsightsRecord;
+  generatedAt: string;
+  performanceKpis: AnalyticsPerformanceKpisRecord;
+  recentActivities: AnalyticsRecentActivityRecord[];
+  systemAlerts: AnalyticsSystemAlertRecord[];
 };
 
 export type AnalyticsMembersRecord = {
@@ -125,14 +202,13 @@ export type BusinessInsightRunSummaryRecord = {
   tokenCount: number | null;
 };
 
-export type BusinessInsightRunDetailRecord =
-  BusinessInsightRunSummaryRecord & {
-    anomalyFlags: string[];
-    highlights: string[];
-    opportunities: string[];
-    recommendedActions: string[];
-    risks: string[];
-  };
+export type BusinessInsightRunDetailRecord = BusinessInsightRunSummaryRecord & {
+  anomalyFlags: string[];
+  highlights: string[];
+  opportunities: string[];
+  recommendedActions: string[];
+  risks: string[];
+};
 
 export type AnalyticsPaginatedResult<T> = {
   data: T[];

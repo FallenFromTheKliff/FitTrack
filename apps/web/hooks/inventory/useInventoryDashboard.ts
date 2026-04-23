@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useDebounce, useTimedMessage } from "@fittrack/hooks";
@@ -136,7 +137,10 @@ function toEquipmentDetailRow(
 }
 
 export function useInventoryDashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const consumedDeepLinkRef = useRef<string | null>(null);
   const [q, setQ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [tab, setTab] = useState<InventoryTab>("retail");
@@ -333,6 +337,50 @@ export function useInventoryDashboard() {
   const isRetailLoading = productsLoading;
   const isEquipmentLoading = equipmentLoading;
   const isAnalyticsLoading = productsLoading || salesLoading;
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const modalParam = searchParams.get("modal");
+    const productId = searchParams.get("productId");
+    const equipmentId = searchParams.get("equipmentId");
+    const normalizedTab: InventoryTab | null =
+      tabParam === "retail" || tabParam === "equipment" || tabParam === "analytics"
+        ? tabParam
+        : null;
+
+    if (normalizedTab) {
+      setTab(normalizedTab);
+    }
+
+    if (!modalParam) return;
+
+    const signature = [normalizedTab ?? "", modalParam, productId ?? "", equipmentId ?? ""].join("|");
+    if (consumedDeepLinkRef.current === signature) return;
+
+    if (normalizedTab === "retail" && modalParam === "restock" && productId) {
+      consumedDeepLinkRef.current = signature;
+      setSelectedRetailId(null);
+      setRestockRetailId(productId);
+    }
+
+    if (normalizedTab === "equipment" && modalParam === "details" && equipmentId) {
+      consumedDeepLinkRef.current = signature;
+      setArchiveEquipmentId(null);
+      setWriteOffEquipmentId(null);
+      setSelectedEquipmentId(equipmentId);
+    }
+
+    const nextParams = new URLSearchParams();
+    if (normalizedTab) {
+      nextParams.set("tab", normalizedTab);
+    }
+
+    const nextUrl = nextParams.toString()
+      ? `/inventory?${nextParams.toString()}`
+      : "/inventory";
+
+    router.replace(nextUrl, { scroll: false });
+  }, [router, searchParams]);
 
   const handleRefresh = async () => {
     await Promise.all([refetchProducts(), refetchEquipment(), refetchSales()]);

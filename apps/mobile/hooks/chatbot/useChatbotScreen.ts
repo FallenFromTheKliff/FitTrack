@@ -90,7 +90,7 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
     enabled: isFocused && !!activeSessionId
   });
 
-  const sendMutation = useMutation(aiChatMutationOptions(mobileApiClient, queryClient));
+  const sendMutation = useMutation(aiChatMutationOptions(mobileApiClient, queryClient, user?.id));
   const selectedSession = sessions.find((session) => session.id === activeSessionId) ?? sessionQuery.data ?? null;
 
   const messages = useMemo<ChatbotMessage[]>(() => {

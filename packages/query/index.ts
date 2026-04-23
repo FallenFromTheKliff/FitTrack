@@ -22,6 +22,7 @@ export {
   analyticsMembersQueryOptions,
   analyticsOverviewQueryOptions,
   analyticsRevenueQueryOptions,
+  analyticsSnapshotQueryOptions,
   generateAnalyticsInsightMutationOptions,
 } from "./analytics";
 export {
@@ -30,6 +31,7 @@ export {
   aiChatSessionQueryOptions,
   aiChatSessionsQueryOptions,
   archiveAiChatSessionMutationOptions,
+  restoreAiChatSessionMutationOptions,
   generateAiPlanMutationOptions,
 } from "./ai";
 export {

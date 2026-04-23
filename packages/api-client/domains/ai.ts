@@ -64,6 +64,12 @@ export function createAiApi(transport: ApiTransport) {
         "Unable to archive AI chat session."
       );
     },
+    restoreSession(sessionId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/ai/chat/sessions/${sessionId}/restore`),
+        "Unable to restore AI chat session."
+      );
+    },
     generatePlan(payload: AiGeneratePlanInput) {
       return unwrapResponse<AiTrainingPlanDetailRecord>(
         transport.post("/ai/generate-plan", payload),

@@ -171,6 +171,7 @@ export async function invalidateInventoryQueries(queryClient: QueryClient) {
 
 export async function invalidateAnalyticsQueries(queryClient: QueryClient) {
   await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.analyticsSnapshot() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.analyticsOverview() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.analyticsRevenue() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.analyticsAttendance() }),

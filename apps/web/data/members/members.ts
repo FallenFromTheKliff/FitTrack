@@ -1,13 +1,5 @@
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 import type { MemberRecord } from "@fittrack/types";
-export type {
-  AchievementReviewRecord,
-  AchievementReviewStatus,
-} from "@/data/progress/milestones";
-export {
-  ACHIEVEMENT_REVIEW_SEED,
-  ACHIEVEMENT_REVIEW_STATUS_COLORS,
-} from "@/data/progress/milestones";
 
 export const MEMBER_STATUS_TABS = [
   { key: "Active", label: "Active" },

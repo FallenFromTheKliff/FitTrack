@@ -392,13 +392,16 @@ async function testUrlReachability(url) {
   }
 }
 
-async function runBufferedCommand(commandPath, args, workingDirectory) {
+async function runBufferedCommand(commandPath, args, workingDirectory, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(commandPath, args, {
       cwd: workingDirectory,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      env: process.env,
+      env: {
+        ...process.env,
+        ...extraEnv,
+      },
     });
 
     let stdout = '';
@@ -422,11 +425,29 @@ async function runBufferedCommand(commandPath, args, workingDirectory) {
   });
 }
 
+function workspaceInstallLooksHealthy(repoRoot) {
+  const requiredPaths = [
+    path.join(repoRoot, 'node_modules', '.bin', 'turbo.cmd'),
+    path.join(repoRoot, 'apps', 'web', 'node_modules', 'next', 'package.json'),
+    path.join(repoRoot, 'apps', 'mobile', 'node_modules', 'expo', 'package.json'),
+    path.join(repoRoot, 'apps', 'api', 'node_modules', '@nestjs', 'core', 'package.json'),
+  ];
+
+  return requiredPaths.every((targetPath) => fs.existsSync(targetPath));
+}
+
 async function ensureWorkspaceInstall(options) {
+  if (workspaceInstallLooksHealthy(options.workspaceRoot)) {
+    return;
+  }
+
   const result = await runBufferedCommand(
     process.execPath,
-    [options.pnpmCjsPath, 'install'],
+    [options.pnpmCjsPath, 'install', '--frozen-lockfile'],
     options.workspaceRoot,
+    {
+      CI: 'true',
+    },
   );
 
   if (result.code !== 0) {
@@ -582,7 +603,12 @@ async function startCommand(options) {
   fs.writeFileSync(stderrPath, '', 'utf8');
   const pid = startBackgroundProcess(
     process.execPath,
-    [scriptPath, 'run', ...(options.includeAi ? ['--include-ai'] : [])],
+    [
+      scriptPath,
+      'run',
+      ...(options.includeAi ? ['--include-ai'] : []),
+      ...(options.skipMobileWeb ? ['--no-mobile-web'] : []),
+    ],
     options.workspaceRoot,
     stdoutPath,
     stderrPath,

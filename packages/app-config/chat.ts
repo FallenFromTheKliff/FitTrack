@@ -1,9 +1,16 @@
-import { ApiClientError } from "@fittrack/api-client";
-
 type AiSessionLike = {
   context_type?: string | null;
   title?: string | null;
 };
+
+type ApiClientErrorLike = {
+  kind?: unknown;
+  message?: unknown;
+};
+
+function isApiClientError(error: unknown): error is ApiClientErrorLike {
+  return typeof error === "object" && error !== null && ("kind" in error || "message" in error);
+}
 
 export const AI_CONTEXT_LABELS: Record<string, string> = {
   general: "General coaching",
@@ -19,7 +26,7 @@ export const MOBILE_GREETING_MESSAGE =
   "Hello! I'm BrodigyAI. Ask me about training plans, nutrition, or your next workout.";
 
 export function getAiChatErrorMessage(error: unknown, fallback = "Unable to send AI message.") {
-  if (error instanceof ApiClientError) {
+  if (isApiClientError(error)) {
     if (error.kind === "timeout") {
       return "BrodigyAI timed out before the server responded. Please try again.";
     }
@@ -28,7 +35,7 @@ export function getAiChatErrorMessage(error: unknown, fallback = "Unable to send
       return "BrodigyAI is unreachable right now. Check the connection and try again.";
     }
 
-    if (error.message.trim()) {
+    if (typeof error.message === "string" && error.message.trim()) {
       return error.message.trim();
     }
   }

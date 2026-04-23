@@ -945,7 +945,7 @@ describe('S7 Controllers (e2e)', () => {
     );
     expect(archiveResponse.body).toEqual({
       data: {
-        message: 'AI chat session archived.',
+        message: 'AI chat session deleted.',
       },
     });
   });

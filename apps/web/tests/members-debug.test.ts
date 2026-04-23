@@ -23,8 +23,8 @@ test('debug members page', async ({ page }) => {
     try {
         await page.goto('http://localhost:8080/login');
 
-        await page.fill('input[type="email"]', 'sertfitadmin@gmail.com');
-        await page.fill('input[type="password"]', 'aNYTIMEaNYWHERE2@');
+        await page.fill('input[type="email"]', 'seed.admin@fittrack.com');
+        await page.fill('input[type="password"]', 'SeedAdmin!2026');
         await page.waitForTimeout(1000);
 
         await page.getByRole('button', { name: /sign in/i }).click();
@@ -38,7 +38,7 @@ test('debug members page', async ({ page }) => {
 
         const tableCount = await page.locator('table').count();
         const rowCount = await page.locator('tr.fit-table-row').count();
-        const directoryCount = await page.locator('text=Members Directory').count();
+        const directoryCount = await page.locator('text=Account directory').count();
         const visibleRecordCount = await page.locator('text=/records visible/i').count();
         logs.push(`DOM: tableCount=${tableCount}`);
         logs.push(`DOM: rowCount=${rowCount}`);

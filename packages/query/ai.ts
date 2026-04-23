@@ -3,7 +3,8 @@ import type { AiChatRequest, AiGeneratePlanInput, AiPaginationParams, ApiClient 
 import {
   invalidateAiChatMessagesQuery,
   invalidateAiChatSessionQuery,
-  invalidateAiChatSessionsQuery
+  invalidateAiChatSessionsQuery,
+  invalidateNotificationQueries
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
@@ -32,22 +33,47 @@ export function aiChatMessagesQueryOptions(
   });
 }
 
-export function aiChatMutationOptions(client: Pick<ApiClient, "ai">, queryClient: QueryClient) {
+export function aiChatMutationOptions(
+  client: Pick<ApiClient, "ai">,
+  queryClient: QueryClient,
+  userId?: string
+) {
   return mutationOptions({
     mutationFn: (payload: AiChatRequest) => client.ai.chat(payload),
     onSuccess: async (data) => {
       await Promise.all([
         invalidateAiChatSessionsQuery(queryClient),
         invalidateAiChatSessionQuery(queryClient, data.session_id),
-        invalidateAiChatMessagesQuery(queryClient, data.session_id)
+        invalidateAiChatMessagesQuery(queryClient, data.session_id),
+        invalidateNotificationQueries(queryClient, userId)
       ]);
     }
   });
 }
 
-export function archiveAiChatSessionMutationOptions(client: Pick<ApiClient, "ai">, queryClient: QueryClient) {
+export function archiveAiChatSessionMutationOptions(
+  client: Pick<ApiClient, "ai">,
+  queryClient: QueryClient,
+  _userId?: string
+) {
   return mutationOptions({
     mutationFn: ({ sessionId }: { sessionId: string }) => client.ai.archiveSession(sessionId),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        invalidateAiChatSessionsQuery(queryClient),
+        invalidateAiChatSessionQuery(queryClient, variables.sessionId),
+        invalidateAiChatMessagesQuery(queryClient, variables.sessionId)
+      ]);
+    }
+  });
+}
+
+export function restoreAiChatSessionMutationOptions(
+  client: Pick<ApiClient, "ai">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({ sessionId }: { sessionId: string }) => client.ai.restoreSession(sessionId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateAiChatSessionsQuery(queryClient),

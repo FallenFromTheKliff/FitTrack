@@ -51,6 +51,17 @@ export class BusinessAnalyticsInsightService {
     return this.toDetailResponse(record);
   }
 
+  async generateTransientInsight(
+    dto: GenerateBusinessInsightDTO,
+  ): Promise<BusinessAnalyticsInsightResponse> {
+    const grounding =
+      await this.analyticsService.buildBusinessInsightGroundingPayload(dto);
+
+    return this.generateInsightPayload({
+      grounding,
+    });
+  }
+
   async getInsightHistory(
     dto: BusinessInsightFilterDTO,
   ): Promise<PaginatedResult<BusinessInsightRunSummaryResponseDTO>> {
@@ -163,7 +174,9 @@ export class BusinessAnalyticsInsightService {
 
     const risks = anomalyFlags.length
       ? [...anomalyFlags]
-      : ['External AI insight generation is degraded, so this summary is rule-based.'];
+      : [
+          'External AI insight generation is degraded, so this summary is rule-based.',
+        ];
 
     if (peakHour && peakHour.check_ins > 0) {
       risks.push(
@@ -178,22 +191,32 @@ export class BusinessAnalyticsInsightService {
           ]
         : []),
       ...(topProduct
-        ? [`Promote ${topProduct.name} during peak hours to lift secondary spend.`]
+        ? [
+            `Promote ${topProduct.name} during peak hours to lift secondary spend.`,
+          ]
         : []),
       ...(topPlan
-        ? [`Use ${topPlan.name} as the lead offer in upgrade and retention campaigns.`]
+        ? [
+            `Use ${topPlan.name} as the lead offer in upgrade and retention campaigns.`,
+          ]
         : []),
     ];
 
     const recommendedActions = [
       ...(totalRevenue <= 0
-        ? ['Audit payment capture before trusting revenue conclusions for this window.']
+        ? [
+            'Audit payment capture before trusting revenue conclusions for this window.',
+          ]
         : []),
       ...(grounding.overview.total_check_ins <= 0
-        ? ['Inspect access-control and check-in capture because attendance is currently zero.']
+        ? [
+            'Inspect access-control and check-in capture because attendance is currently zero.',
+          ]
         : []),
       ...(peakHour && peakHour.check_ins > 0
-        ? [`Align staffing and retail prompts around the ${peakHour.hour_label} peak.`]
+        ? [
+            `Align staffing and retail prompts around the ${peakHour.hour_label} peak.`,
+          ]
         : []),
       ...(topProduct
         ? [`Bundle ${topProduct.name} with memberships or coaching packages.`]
@@ -210,13 +233,17 @@ export class BusinessAnalyticsInsightService {
       opportunities: this.toUniqueStrings(
         opportunities.length > 0
           ? opportunities
-          : ['Review the live trends and regenerate once the AI provider stabilizes.'],
+          : [
+              'Review the live trends and regenerate once the AI provider stabilizes.',
+            ],
       ),
       anomaly_flags: anomalyFlags,
       recommended_actions: this.toUniqueStrings(
         recommendedActions.length > 0
           ? recommendedActions
-          : ['Review this grounded fallback insight and retry generation later.'],
+          : [
+              'Review this grounded fallback insight and retry generation later.',
+            ],
       ),
       model_used: 'grounded-fallback',
       token_count: null,
@@ -232,7 +259,10 @@ export class BusinessAnalyticsInsightService {
       anomalies.push('No attendance was recorded for the selected window.');
     }
 
-    if (this.toMoneyNumber(grounding.overview.total_revenue) === 0 && grounding.membership.active_members > 0) {
+    if (
+      this.toMoneyNumber(grounding.overview.total_revenue) === 0 &&
+      grounding.membership.active_members > 0
+    ) {
       anomalies.push(
         'Revenue is zero even though active members exist in the selected window.',
       );
@@ -262,11 +292,16 @@ export class BusinessAnalyticsInsightService {
   private toCoachName(
     coach: BusinessAnalyticsGroundingPayload['coaching']['coaches'][number],
   ): string {
-    return [coach.first_name, coach.last_name].filter(Boolean).join(' ') || 'the leading coach';
+    return (
+      [coach.first_name, coach.last_name].filter(Boolean).join(' ') ||
+      'the leading coach'
+    );
   }
 
   private toUniqueStrings(values: string[]): string[] {
-    return values.filter((value, index) => value && values.indexOf(value) === index);
+    return values.filter(
+      (value, index) => value && values.indexOf(value) === index,
+    );
   }
 
   private toMoneyNumber(value: string): number {

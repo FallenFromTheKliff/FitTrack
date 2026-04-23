@@ -42,7 +42,7 @@ export default function MembersDirectoryPanel({
   activeRowId,
   actionsHeading,
   badgeLabel,
-  emptyMessage = "No members match your current filters.",
+  emptyMessage = "No accounts match your current filters.",
   filteredCount,
   footerNote,
   isAdmin,
@@ -160,7 +160,7 @@ export default function MembersDirectoryPanel({
             }}
           >
             <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
-              {isAdmin ? "Loading members..." : "Loading staff directory..."}
+              {isAdmin ? "Loading accounts..." : "Loading staff directory..."}
             </FitText>
           </div>
         ) : rows.length > 0 ? (
@@ -252,7 +252,7 @@ export default function MembersDirectoryPanel({
             }}
           >
             <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
-              {isAdmin ? "Loading members..." : "Loading staff directory..."}
+              {isAdmin ? "Loading accounts..." : "Loading staff directory..."}
             </FitText>
           </div>
         ) : rows.length > 0 && renderMobileCard ? (
@@ -301,7 +301,7 @@ export default function MembersDirectoryPanel({
             currentPage={page}
             totalPages={totalPages}
             onPageChange={onPageChange}
-            ariaLabel="Members directory pagination"
+            ariaLabel="Account directory pagination"
           />
         </div>
       ) : null}

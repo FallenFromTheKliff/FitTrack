@@ -5,10 +5,39 @@ import type {
   RestoreUserResult as RestoreUserResultType,
   UpdateMembershipCardInput
 } from "@fittrack/types";
-import { normalizePhilippineMobileNumber } from "@fittrack/validators";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { getListFromEnvelope, unwrapResponse, unwrapVoidResponse } from "../request";
 import { mapAmenityBookingToVenueBookingRecord } from "./bookings";
+
+const canonicalPhilippineMobilePattern = /^\+639\d{9}$/;
+const localPhilippineMobilePattern = /^09\d{9}$/;
+
+function sanitizePhilippineMobileInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.startsWith("63")) {
+    return `0${digits.slice(2, 12)}`.slice(0, 11);
+  }
+
+  if (digits.startsWith("9")) {
+    return `0${digits.slice(0, 10)}`.slice(0, 11);
+  }
+
+  return digits.slice(0, 11);
+}
+
+function normalizePhilippineMobileNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (canonicalPhilippineMobilePattern.test(trimmed)) return trimmed;
+
+  const sanitized = sanitizePhilippineMobileInput(trimmed);
+  if (localPhilippineMobilePattern.test(sanitized)) {
+    return `+63${sanitized.slice(1)}`;
+  }
+
+  return trimmed;
+}
 
 export type ReviewDeletionPayload = {
   reviewNotes?: string;

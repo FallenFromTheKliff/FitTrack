@@ -80,7 +80,9 @@ export default function ChatHistoryScreen() {
     ...aiChatSessionsQueryOptions(mobileApiClient, { limit: 100 }),
     enabled: isFocused && hasMemberCardAccess
   });
-  const archiveMutation = useMutation(archiveAiChatSessionMutationOptions(mobileApiClient, queryClient));
+  const archiveMutation = useMutation(
+    archiveAiChatSessionMutationOptions(mobileApiClient, queryClient, user?.id)
+  );
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({

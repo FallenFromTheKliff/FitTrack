@@ -1,39 +1,58 @@
 import type {
+  AnalyticsAttendancePeakHourRecord,
   AnalyticsAttendanceRecord,
   AnalyticsCoachesRecord,
+  AnalyticsDailyInsightsRecord,
+  AnalyticsPdfExportResult,
   AnalyticsMembersRecord,
   AnalyticsOverviewRecord,
   AnalyticsPaginatedResult,
+  AnalyticsPerformanceKpisRecord,
   AnalyticsPeriod,
   AnalyticsQueryParams,
+  AnalyticsRecentActivityRecord,
   AnalyticsRevenueRecord,
   AnalyticsRevenueTotalsRecord,
+  AnalyticsSnapshotRecord,
+  AnalyticsSystemAlertRecord,
+  AnalyticsTopRevenueSourceRecord,
   BusinessInsightFocus,
   BusinessInsightHistoryParams,
   BusinessInsightPeriod,
   BusinessInsightRunDetailRecord,
   BusinessInsightRunSummaryRecord,
-  GenerateBusinessInsightInput
+  ExportAnalyticsPdfInput,
+  GenerateBusinessInsightInput,
 } from "@fittrack/types";
 import { unwrapPaginatedResponse, unwrapResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
+import { toApiClientError } from "../errors/api-client-error";
 
 export type {
+  AnalyticsAttendancePeakHourRecord,
   AnalyticsAttendanceRecord,
   AnalyticsCoachesRecord,
+  AnalyticsDailyInsightsRecord,
+  AnalyticsPdfExportResult,
   AnalyticsMembersRecord,
   AnalyticsOverviewRecord,
   AnalyticsPaginatedResult,
+  AnalyticsPerformanceKpisRecord,
   AnalyticsPeriod,
   AnalyticsQueryParams,
+  AnalyticsRecentActivityRecord,
   AnalyticsRevenueRecord,
   AnalyticsRevenueTotalsRecord,
+  AnalyticsSnapshotRecord,
+  AnalyticsSystemAlertRecord,
+  AnalyticsTopRevenueSourceRecord,
   BusinessInsightFocus,
   BusinessInsightHistoryParams,
   BusinessInsightPeriod,
   BusinessInsightRunDetailRecord,
   BusinessInsightRunSummaryRecord,
-  GenerateBusinessInsightInput
+  ExportAnalyticsPdfInput,
+  GenerateBusinessInsightInput,
 } from "@fittrack/types";
 
 type AnalyticsRevenueTotalsApiRecord = {
@@ -54,6 +73,18 @@ type AnalyticsAttendanceSeriesPointApiRecord = {
   check_ins: number;
 };
 
+type AnalyticsAttendancePeakHourApiRecord = {
+  hour_label: string;
+  check_ins: number;
+};
+
+type AnalyticsTopRevenueSourceApiRecord = {
+  revenue: string | number;
+  share_percentage: number;
+  source_key: string;
+  source_label: string;
+};
+
 type AnalyticsOverviewApiRecord = {
   completed_coaching_sessions: number;
   end_date: string;
@@ -69,13 +100,16 @@ type AnalyticsRevenueApiRecord = {
   series: AnalyticsRevenueSeriesPointApiRecord[];
   start_date: string;
   totals: AnalyticsRevenueTotalsApiRecord;
+  top_revenue_sources: AnalyticsTopRevenueSourceApiRecord[];
 };
 
 type AnalyticsAttendanceApiRecord = {
   end_date: string;
+  peak_hours: AnalyticsAttendancePeakHourApiRecord[];
   period: AnalyticsPeriod;
   series: AnalyticsAttendanceSeriesPointApiRecord[];
   start_date: string;
+  total_check_ins: number;
 };
 
 type AnalyticsMembersApiRecord = {
@@ -99,6 +133,51 @@ type AnalyticsCoachesApiRecord = {
   coaches: AnalyticsCoachBreakdownApiRecord[];
   end_date: string;
   start_date: string;
+};
+
+type AnalyticsDailyInsightsApiRecord = {
+  active_members: number;
+  recent_activities: number;
+  sessions_today: number;
+};
+
+type AnalyticsPerformanceKpisApiRecord = {
+  check_ins: number;
+  coaching_sessions: number;
+  new_members: number;
+  total_coaching_appointments: number;
+  total_revenue: string | number;
+  total_venue_bookings: number;
+};
+
+type AnalyticsSystemAlertApiRecord = {
+  action_label: string;
+  body: string;
+  href: string;
+  id: string;
+  kind: string;
+  severity: string;
+  title: string;
+};
+
+type AnalyticsRecentActivityApiRecord = {
+  actor_name: string;
+  description: string;
+  entity_id: string;
+  entity_label: string;
+  id: string;
+  kind: string;
+  occurred_at: string;
+  status: string;
+  title: string;
+};
+
+type AnalyticsSnapshotApiRecord = {
+  daily_insights: AnalyticsDailyInsightsApiRecord;
+  generated_at: string;
+  performance_kpis: AnalyticsPerformanceKpisApiRecord;
+  recent_activities: AnalyticsRecentActivityApiRecord[];
+  system_alerts: AnalyticsSystemAlertApiRecord[];
 };
 
 type BusinessInsightRequesterProfileApiRecord = {
@@ -142,7 +221,7 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 function mapRevenueTotals(
-  record: AnalyticsRevenueTotalsApiRecord
+  record: AnalyticsRevenueTotalsApiRecord,
 ): AnalyticsRevenueTotalsRecord {
   return {
     bookingRevenue: toNumber(record.booking_revenue),
@@ -150,18 +229,40 @@ function mapRevenueTotals(
     coachingPaymentsCollected: toNumber(record.coaching_payments_collected),
     membershipRevenue: toNumber(record.membership_revenue),
     productRevenue: toNumber(record.product_revenue),
-    totalRevenue: toNumber(record.total_revenue)
+    totalRevenue: toNumber(record.total_revenue),
   };
 }
 
-function mapOverview(record: AnalyticsOverviewApiRecord): AnalyticsOverviewRecord {
+function mapAttendancePeakHour(
+  record: AnalyticsAttendancePeakHourApiRecord,
+): AnalyticsAttendancePeakHourRecord {
+  return {
+    checkIns: record.check_ins,
+    hourLabel: record.hour_label,
+  };
+}
+
+function mapTopRevenueSource(
+  record: AnalyticsTopRevenueSourceApiRecord,
+): AnalyticsTopRevenueSourceRecord {
+  return {
+    revenue: toNumber(record.revenue),
+    sharePercentage: record.share_percentage,
+    sourceKey: record.source_key,
+    sourceLabel: record.source_label,
+  };
+}
+
+function mapOverview(
+  record: AnalyticsOverviewApiRecord,
+): AnalyticsOverviewRecord {
   return {
     completedCoachingSessions: record.completed_coaching_sessions,
     endDate: record.end_date,
     newMembers: record.new_members,
     revenue: mapRevenueTotals(record.revenue),
     startDate: record.start_date,
-    totalCheckIns: record.total_check_ins
+    totalCheckIns: record.total_check_ins,
   };
 }
 
@@ -171,24 +272,27 @@ function mapRevenue(record: AnalyticsRevenueApiRecord): AnalyticsRevenueRecord {
     period: record.period,
     series: record.series.map((point) => ({
       bucketStart: point.bucket_start,
-      ...mapRevenueTotals(point)
+      ...mapRevenueTotals(point),
     })),
     startDate: record.start_date,
-    totals: mapRevenueTotals(record.totals)
+    totals: mapRevenueTotals(record.totals),
+    topRevenueSources: record.top_revenue_sources.map(mapTopRevenueSource),
   };
 }
 
 function mapAttendance(
-  record: AnalyticsAttendanceApiRecord
+  record: AnalyticsAttendanceApiRecord,
 ): AnalyticsAttendanceRecord {
   return {
     endDate: record.end_date,
+    peakHours: record.peak_hours.map(mapAttendancePeakHour),
     period: record.period,
     series: record.series.map((point) => ({
       bucketStart: point.bucket_start,
-      checkIns: point.check_ins
+      checkIns: point.check_ins,
     })),
-    startDate: record.start_date
+    startDate: record.start_date,
+    totalCheckIns: record.total_check_ins,
   };
 }
 
@@ -197,7 +301,7 @@ function mapMembers(record: AnalyticsMembersApiRecord): AnalyticsMembersRecord {
     activeMembers: record.active_members,
     endDate: record.end_date,
     newMembers: record.new_members,
-    startDate: record.start_date
+    startDate: record.start_date,
   };
 }
 
@@ -210,15 +314,80 @@ function mapCoaches(record: AnalyticsCoachesApiRecord): AnalyticsCoachesRecord {
       firstName: coach.first_name,
       gymCut: toNumber(coach.gym_cut),
       lastName: coach.last_name,
-      totalBilled: toNumber(coach.total_billed)
+      totalBilled: toNumber(coach.total_billed),
     })),
     endDate: record.end_date,
-    startDate: record.start_date
+    startDate: record.start_date,
+  };
+}
+
+function mapDailyInsights(
+  record: AnalyticsDailyInsightsApiRecord,
+): AnalyticsDailyInsightsRecord {
+  return {
+    activeMembers: record.active_members,
+    recentActivities: record.recent_activities,
+    sessionsToday: record.sessions_today,
+  };
+}
+
+function mapPerformanceKpis(
+  record: AnalyticsPerformanceKpisApiRecord,
+): AnalyticsPerformanceKpisRecord {
+  return {
+    checkIns: record.check_ins,
+    coachingSessions: record.coaching_sessions,
+    newMembers: record.new_members,
+    totalCoachingAppointments: record.total_coaching_appointments,
+    totalRevenue: toNumber(record.total_revenue),
+    totalVenueBookings: record.total_venue_bookings,
+  };
+}
+
+function mapSystemAlert(
+  record: AnalyticsSystemAlertApiRecord,
+): AnalyticsSystemAlertRecord {
+  return {
+    actionLabel: record.action_label,
+    body: record.body,
+    href: record.href,
+    id: record.id,
+    kind: record.kind,
+    severity: record.severity,
+    title: record.title,
+  };
+}
+
+function mapRecentActivity(
+  record: AnalyticsRecentActivityApiRecord,
+): AnalyticsRecentActivityRecord {
+  return {
+    actorName: record.actor_name,
+    description: record.description,
+    entityId: record.entity_id,
+    entityLabel: record.entity_label,
+    id: record.id,
+    kind: record.kind,
+    occurredAt: record.occurred_at,
+    status: record.status,
+    title: record.title,
+  };
+}
+
+function mapSnapshot(
+  record: AnalyticsSnapshotApiRecord,
+): AnalyticsSnapshotRecord {
+  return {
+    dailyInsights: mapDailyInsights(record.daily_insights),
+    generatedAt: record.generated_at,
+    performanceKpis: mapPerformanceKpis(record.performance_kpis),
+    recentActivities: record.recent_activities.map(mapRecentActivity),
+    systemAlerts: record.system_alerts.map(mapSystemAlert),
   };
 }
 
 function mapInsightSummary(
-  record: BusinessInsightRunSummaryApiRecord
+  record: BusinessInsightRunSummaryApiRecord,
 ): BusinessInsightRunSummaryRecord {
   return {
     createdAt: record.created_at,
@@ -235,21 +404,21 @@ function mapInsightSummary(
           profile: record.requester.profile
             ? {
                 firstName: record.requester.profile.first_name,
-                lastName: record.requester.profile.last_name
+                lastName: record.requester.profile.last_name,
               }
             : null,
           role: record.requester.role,
-          status: record.requester.status
+          status: record.requester.status,
         }
       : null,
     startDate: record.start_date,
     summary: record.summary,
-    tokenCount: record.token_count
+    tokenCount: record.token_count,
   };
 }
 
 function mapInsightDetail(
-  record: BusinessInsightRunDetailApiRecord
+  record: BusinessInsightRunDetailApiRecord,
 ): BusinessInsightRunDetailRecord {
   return {
     ...mapInsightSummary(record),
@@ -257,7 +426,7 @@ function mapInsightDetail(
     highlights: record.highlights,
     opportunities: record.opportunities,
     recommendedActions: record.recommended_actions,
-    risks: record.risks
+    risks: record.risks,
   };
 }
 
@@ -265,7 +434,7 @@ function toAnalyticsQueryParams(params?: AnalyticsQueryParams) {
   return {
     ...(params?.startDate ? { start_date: params.startDate } : {}),
     ...(params?.endDate ? { end_date: params.endDate } : {}),
-    ...(params?.period ? { period: params.period } : {})
+    ...(params?.period ? { period: params.period } : {}),
   };
 }
 
@@ -274,7 +443,7 @@ function toInsightHistoryParams(params?: BusinessInsightHistoryParams) {
     ...(params?.page !== undefined ? { page: params.page } : {}),
     ...(params?.limit !== undefined ? { limit: params.limit } : {}),
     ...(params?.focus ? { focus: params.focus } : {}),
-    ...(params?.period ? { period: params.period } : {})
+    ...(params?.period ? { period: params.period } : {}),
   };
 }
 
@@ -283,81 +452,158 @@ function toGenerateInsightPayload(input: GenerateBusinessInsightInput) {
     ...(input.startDate ? { start_date: input.startDate } : {}),
     ...(input.endDate ? { end_date: input.endDate } : {}),
     ...(input.focus ? { focus: input.focus } : {}),
-    ...(input.period ? { period: input.period } : {})
+    ...(input.period ? { period: input.period } : {}),
   };
+}
+
+function toExportPdfPayload(input?: ExportAnalyticsPdfInput) {
+  return {
+    ...(input?.revenueStartDate
+      ? { revenue_start_date: input.revenueStartDate }
+      : {}),
+    ...(input?.revenueEndDate
+      ? { revenue_end_date: input.revenueEndDate }
+      : {}),
+    ...(input?.revenuePeriod ? { revenue_period: input.revenuePeriod } : {}),
+    ...(input?.attendanceStartDate
+      ? { attendance_start_date: input.attendanceStartDate }
+      : {}),
+    ...(input?.attendanceEndDate
+      ? { attendance_end_date: input.attendanceEndDate }
+      : {}),
+    ...(input?.attendancePeriod
+      ? { attendance_period: input.attendancePeriod }
+      : {}),
+  };
+}
+
+function extractAttachmentFileName(headerValue: string | undefined) {
+  if (!headerValue) return null;
+  const match = headerValue.match(/filename=\"?([^\";]+)\"?/i);
+  return match?.[1] ?? null;
 }
 
 export function createAnalyticsApi(transport: ApiTransport) {
   return {
+    async getSnapshot() {
+      return mapSnapshot(
+        await unwrapResponse<AnalyticsSnapshotApiRecord>(
+          transport.get("/analytics/snapshot"),
+          "Unable to load the analytics dashboard snapshot.",
+        ),
+      );
+    },
     async getOverview(params?: AnalyticsQueryParams) {
       return mapOverview(
         await unwrapResponse<AnalyticsOverviewApiRecord>(
-          transport.get("/analytics/overview", { params: toAnalyticsQueryParams(params) }),
-          "Unable to load analytics overview."
-        )
+          transport.get("/analytics/overview", {
+            params: toAnalyticsQueryParams(params),
+          }),
+          "Unable to load analytics overview.",
+        ),
       );
     },
     async getRevenue(params?: AnalyticsQueryParams) {
       return mapRevenue(
         await unwrapResponse<AnalyticsRevenueApiRecord>(
-          transport.get("/analytics/revenue", { params: toAnalyticsQueryParams(params) }),
-          "Unable to load analytics revenue."
-        )
+          transport.get("/analytics/revenue", {
+            params: toAnalyticsQueryParams(params),
+          }),
+          "Unable to load analytics revenue.",
+        ),
       );
     },
     async getAttendance(params?: AnalyticsQueryParams) {
       return mapAttendance(
         await unwrapResponse<AnalyticsAttendanceApiRecord>(
-          transport.get("/analytics/attendance", { params: toAnalyticsQueryParams(params) }),
-          "Unable to load analytics attendance."
-        )
+          transport.get("/analytics/attendance", {
+            params: toAnalyticsQueryParams(params),
+          }),
+          "Unable to load analytics attendance.",
+        ),
       );
     },
     async getMembers(params?: AnalyticsQueryParams) {
       return mapMembers(
         await unwrapResponse<AnalyticsMembersApiRecord>(
-          transport.get("/analytics/members", { params: toAnalyticsQueryParams(params) }),
-          "Unable to load analytics member counts."
-        )
+          transport.get("/analytics/members", {
+            params: toAnalyticsQueryParams(params),
+          }),
+          "Unable to load analytics member counts.",
+        ),
       );
     },
     async getCoaches(params?: AnalyticsQueryParams) {
       return mapCoaches(
         await unwrapResponse<AnalyticsCoachesApiRecord>(
-          transport.get("/analytics/coaches", { params: toAnalyticsQueryParams(params) }),
-          "Unable to load analytics coaches."
-        )
+          transport.get("/analytics/coaches", {
+            params: toAnalyticsQueryParams(params),
+          }),
+          "Unable to load analytics coaches.",
+        ),
       );
     },
     async listInsights(
-      params?: BusinessInsightHistoryParams
+      params?: BusinessInsightHistoryParams,
     ): Promise<AnalyticsPaginatedResult<BusinessInsightRunSummaryRecord>> {
-      const result = await unwrapPaginatedResponse<BusinessInsightRunSummaryApiRecord>(
-        transport.get("/business-analytics/insights", {
-          params: toInsightHistoryParams(params)
-        }),
-        "Unable to load analytics insights."
-      );
+      const result =
+        await unwrapPaginatedResponse<BusinessInsightRunSummaryApiRecord>(
+          transport.get("/business-analytics/insights", {
+            params: toInsightHistoryParams(params),
+          }),
+          "Unable to load analytics insights.",
+        );
       return {
         ...result,
-        data: result.data.map(mapInsightSummary)
+        data: result.data.map(mapInsightSummary),
       };
     },
     async getInsightById(insightId: string) {
       return mapInsightDetail(
         await unwrapResponse<BusinessInsightRunDetailApiRecord>(
           transport.get(`/business-analytics/insights/${insightId}`),
-          "Unable to load analytics insight."
-        )
+          "Unable to load analytics insight.",
+        ),
       );
     },
     async generateInsight(input: GenerateBusinessInsightInput) {
       return mapInsightDetail(
         await unwrapResponse<BusinessInsightRunDetailApiRecord>(
-          transport.post("/business-analytics/insights", toGenerateInsightPayload(input)),
-          "Unable to generate analytics insight."
-        )
+          transport.post(
+            "/business-analytics/insights",
+            toGenerateInsightPayload(input),
+          ),
+          "Unable to generate analytics insight.",
+        ),
       );
-    }
+    },
+    async exportPdf(
+      input?: ExportAnalyticsPdfInput,
+    ): Promise<AnalyticsPdfExportResult> {
+      try {
+        const response = await transport.post<ArrayBuffer>(
+          "/analytics/export/pdf",
+          toExportPdfPayload(input),
+          {
+            responseType: "arraybuffer",
+          },
+        );
+        return {
+          bytes: response.data,
+          contentType:
+            (typeof response.headers["content-type"] === "string"
+              ? response.headers["content-type"]
+              : "application/pdf") ?? "application/pdf",
+          fileName:
+            extractAttachmentFileName(
+              typeof response.headers["content-disposition"] === "string"
+                ? response.headers["content-disposition"]
+                : undefined,
+            ) ?? "fittrack-analytics-export.pdf",
+        };
+      } catch (error: unknown) {
+        throw toApiClientError(error, "Unable to export the analytics PDF.");
+      }
+    },
   };
 }

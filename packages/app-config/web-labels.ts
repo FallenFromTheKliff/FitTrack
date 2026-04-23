@@ -11,22 +11,22 @@ export type PageKey =
   | "profile";
 
 export const PAGE_NAMES: Record<PageKey, string> = {
-  dashboard: "Dashboard",
+  dashboard: "Analytics",
   ai: "BrodigyAI",
-  members: "Members",
+  members: "Account Module",
   schedule: "Gym Operations",
   "exercise-lab": "Exercise Lab",
   facilities: "Facilities",
   inventory: "Inventory Management",
-  analytics: "Analytics & Reports",
+  analytics: "Analytics",
   settings: "Settings",
   profile: "Profile Settings",
 };
 
 export const ADMIN_SUBTITLES: Record<PageKey, string> = {
-  dashboard: "Quick pulse check of today's gym activity!",
+  dashboard: "Read the numbers and spot your next gain!",
   ai: "Live AI conversations across web and mobile.",
-  members: "People and access",
+  members: "Accounts and access",
   schedule: "Run scheduling, appointments, and coach operations from one console.",
   "exercise-lab":
     "Review exercise submissions, milestone claims, and global definitions.",

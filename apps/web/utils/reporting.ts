@@ -5,6 +5,11 @@ type OpenReportPrintViewArgs = {
   title: string;
 };
 
+type OpenHtmlPrintViewArgs = {
+  bodyHtml: string;
+  title: string;
+};
+
 type SpreadsheetCell =
   | string
   | number
@@ -31,15 +36,7 @@ function serializeDocumentStyles() {
     .join("\n");
 }
 
-export function openReportPrintView({
-  elementId,
-  title
-}: OpenReportPrintViewArgs) {
-  if (typeof window === "undefined") return false;
-
-  const reportElement = document.getElementById(elementId);
-  if (!reportElement) return false;
-
+function openPrintWindow(title: string, bodyHtml: string) {
   const printWindow = window.open("", "_blank", "width=1280,height=900");
   if (!printWindow) return false;
 
@@ -78,7 +75,7 @@ export function openReportPrintView({
     </style>
   </head>
   <body>
-    ${reportElement.outerHTML}
+    ${bodyHtml}
   </body>
 </html>`);
   printWindow.document.close();
@@ -90,6 +87,28 @@ export function openReportPrintView({
   }, 300);
 
   return true;
+}
+
+export function openReportPrintView({
+  elementId,
+  title
+}: OpenReportPrintViewArgs) {
+  if (typeof window === "undefined") return false;
+
+  const reportElement = document.getElementById(elementId);
+  if (!reportElement) return false;
+
+  return openPrintWindow(title, reportElement.outerHTML);
+}
+
+export function openHtmlPrintView({
+  bodyHtml,
+  title
+}: OpenHtmlPrintViewArgs) {
+  if (typeof window === "undefined") return false;
+  if (!bodyHtml.trim()) return false;
+
+  return openPrintWindow(title, bodyHtml);
 }
 
 function toSpreadsheetValue(value: SpreadsheetCell) {

@@ -18,6 +18,15 @@ export function analyticsOverviewQueryOptions(
   });
 }
 
+export function analyticsSnapshotQueryOptions(
+  client: Pick<ApiClient, "analytics">
+) {
+  return queryOptions({
+    queryKey: queryKeys.analyticsSnapshot(),
+    queryFn: () => client.analytics.getSnapshot()
+  });
+}
+
 export function analyticsRevenueQueryOptions(
   client: Pick<ApiClient, "analytics">,
   params?: AnalyticsQueryParams

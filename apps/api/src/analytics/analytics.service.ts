@@ -6,6 +6,8 @@ import {
   AnalyticsAttendanceResponseDTO,
   AnalyticsCoachBreakdownDTO,
   AnalyticsCoachesResponseDTO,
+  AnalyticsDailyInsightSeriesPointDTO,
+  AnalyticsDailyInsightsTrendResponseDTO,
   AnalyticsMembersResponseDTO,
   AnalyticsOverviewResponseDTO,
   type AnalyticsPeriod,
@@ -13,8 +15,14 @@ import {
   AnalyticsRevenueResponseDTO,
   AnalyticsRevenueSeriesPointDTO,
   AnalyticsRevenueTotalsDTO,
+  AnalyticsRecentActivityDTO,
+  AnalyticsSnapshotResponseDTO,
+  AnalyticsSystemAlertDTO,
+  AnalyticsTopRevenueSourceDTO,
 } from './dto/analytics.dto';
 import {
+  type AnalyticsRecentActivityRow,
+  type AnalyticsSystemAlertRow,
   type AttendanceMetricsRows,
   AnalyticsRepository,
   type RevenueMetricsRows,
@@ -88,6 +96,14 @@ export class AnalyticsService {
         membership_revenue: result.payments.membership_revenue,
         product_revenue: result.payments.product_revenue,
       }),
+      top_revenue_sources: this.toTopRevenueSources({
+        booking_revenue: result.payments.booking_revenue,
+        coaching_payments_collected:
+          result.payments.coaching_payments_collected,
+        coaching_gym_revenue: result.coaching.coaching_gym_revenue,
+        membership_revenue: result.payments.membership_revenue,
+        product_revenue: result.payments.product_revenue,
+      }),
       series: this.toRevenueSeries(result),
     };
   }
@@ -106,6 +122,11 @@ export class AnalyticsService {
       start_date: window.start.toISOString(),
       end_date: window.end.toISOString(),
       period: window.period,
+      total_check_ins: this.toCount(result.summary.total_check_ins),
+      peak_hours: result.peakHours.map((row) => ({
+        hour_label: this.toHourLabel(row.hour_of_day),
+        check_ins: this.toCount(row.check_ins),
+      })),
       series: this.toAttendanceSeries(result.series),
     };
   }
@@ -121,6 +142,42 @@ export class AnalyticsService {
       end_date: window.end.toISOString(),
       new_members: this.toCount(result.new_members),
       active_members: this.toCount(result.active_members),
+    };
+  }
+
+  async getDailyInsightsTrend(
+    dto: AnalyticsQueryDTO,
+  ): Promise<AnalyticsDailyInsightsTrendResponseDTO> {
+    const window = this.resolveWindow(dto);
+    const [attendance, activeMemberTrend] = await Promise.all([
+      this.repo.getAttendanceMetrics(window.start, window.end, window.period),
+      this.repo.getActiveMemberTrend(window.start, window.end, window.period),
+    ]);
+
+    const attendanceByBucket = new Map(
+      this.toAttendanceSeries(attendance.series).map((point) => [
+        point.bucket_start,
+        point.check_ins,
+      ]),
+    );
+
+    const series: AnalyticsDailyInsightSeriesPointDTO[] = activeMemberTrend.map(
+      (point) => {
+        const bucketStart = this.toIsoString(point.bucket_start);
+
+        return {
+          bucket_start: bucketStart,
+          active_members: this.toCount(point.active_members),
+          sessions: attendanceByBucket.get(bucketStart) ?? 0,
+        };
+      },
+    );
+
+    return {
+      start_date: window.start.toISOString(),
+      end_date: window.end.toISOString(),
+      period: window.period,
+      series,
     };
   }
 
@@ -140,6 +197,75 @@ export class AnalyticsService {
     };
   }
 
+  async getSnapshot(): Promise<AnalyticsSnapshotResponseDTO> {
+    const now = new Date();
+    const { start: monthStart, end: monthEnd } = this.resolveWindow({});
+    const todayStart = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
+    );
+    const recentSince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const [
+      overview,
+      activeMembers,
+      sessionsToday,
+      venueBookings,
+      coachingAppointments,
+      recentActivityCount,
+      systemAlerts,
+      recentActivities,
+    ] = await Promise.all([
+      this.repo.getOverviewMetrics(monthStart, monthEnd),
+      this.repo.getCurrentActiveMembers(now),
+      this.repo.getCheckInCount(todayStart, now),
+      this.repo.getVenueBookingCount(monthStart, monthEnd),
+      this.repo.getCoachingAppointmentCount(monthStart, monthEnd),
+      this.repo.getRecentActivityCountSince(recentSince),
+      this.repo.listSystemAlerts(4),
+      this.repo.listRecentActivities(8),
+    ]);
+    const revenueTotals = this.toRevenueTotals({
+      booking_revenue: overview.payments.booking_revenue,
+      coaching_payments_collected:
+        overview.payments.coaching_payments_collected,
+      coaching_gym_revenue: overview.coaching.coaching_gym_revenue,
+      membership_revenue: overview.payments.membership_revenue,
+      product_revenue: overview.payments.product_revenue,
+    });
+
+    return {
+      generated_at: now.toISOString(),
+      daily_insights: {
+        active_members: activeMembers,
+        sessions_today: sessionsToday,
+        recent_activities: recentActivityCount,
+      },
+      performance_kpis: {
+        total_revenue: revenueTotals.total_revenue,
+        total_venue_bookings: venueBookings,
+        total_coaching_appointments: coachingAppointments,
+        new_members: this.toCount(overview.members.new_members),
+        check_ins: this.toCount(overview.attendance.total_check_ins),
+        coaching_sessions: this.toCount(
+          overview.coaching.completed_coaching_sessions,
+        ),
+      },
+      system_alerts: systemAlerts.map((alert) =>
+        this.toSystemAlert(alert),
+      ),
+      recent_activities: recentActivities.map((activity) =>
+        this.toRecentActivity(activity),
+      ),
+    };
+  }
+
   async buildBusinessInsightGroundingPayload(
     input: BuildBusinessInsightGroundingInput,
   ): Promise<BusinessAnalyticsGroundingPayload> {
@@ -150,7 +276,6 @@ export class AnalyticsService {
       attendance,
       membership,
       coaching,
-      peakHours,
       topPlans,
       topProducts,
     ] = await Promise.all([
@@ -158,11 +283,6 @@ export class AnalyticsService {
       this.repo.getAttendanceMetrics(window.start, window.end, window.period),
       this.repo.getMemberMetrics(window.start, window.end),
       this.repo.getCoachEarningsMetrics(window.start, window.end),
-      this.repo.getAttendancePeakHours(
-        window.start,
-        window.end,
-        GROUNDING_RANK_LIMIT,
-      ),
       this.repo.getTopMembershipPlans(
         window.start,
         window.end,
@@ -209,7 +329,9 @@ export class AnalyticsService {
       },
       attendance: {
         series: attendanceSeries,
-        peak_hours: peakHours.map((row) => ({
+        peak_hours: attendance.peakHours
+          .slice(0, GROUNDING_RANK_LIMIT)
+          .map((row) => ({
           hour_label: this.toHourLabel(row.hour_of_day),
           check_ins: this.toCount(row.check_ins),
         })),
@@ -377,6 +499,49 @@ export class AnalyticsService {
     };
   }
 
+  private toTopRevenueSources(
+    snapshot: RevenueSnapshot,
+  ): AnalyticsTopRevenueSourceDTO[] {
+    const totals = [
+      {
+        source_key: 'membership',
+        source_label: 'Memberships',
+        revenue: this.toMoneyNumber(snapshot.membership_revenue),
+      },
+      {
+        source_key: 'bookings',
+        source_label: 'Venue bookings',
+        revenue: this.toMoneyNumber(snapshot.booking_revenue),
+      },
+      {
+        source_key: 'products',
+        source_label: 'Retail products',
+        revenue: this.toMoneyNumber(snapshot.product_revenue),
+      },
+      {
+        source_key: 'coaching',
+        source_label: 'Coaching gym share',
+        revenue: this.toMoneyNumber(snapshot.coaching_gym_revenue),
+      },
+    ].filter((entry) => entry.revenue > 0);
+    const totalRevenue = totals.reduce(
+      (sum, entry) => sum + entry.revenue,
+      0,
+    );
+
+    return totals
+      .sort((left, right) => right.revenue - left.revenue)
+      .map((entry) => ({
+        source_key: entry.source_key,
+        source_label: entry.source_label,
+        revenue: entry.revenue.toFixed(2),
+        share_percentage:
+          totalRevenue > 0
+            ? Number(((entry.revenue / totalRevenue) * 100).toFixed(1))
+            : 0,
+      }));
+  }
+
   private toMoneyNumber(
     value: Prisma.Decimal | number | string | null,
   ): number {
@@ -401,8 +566,36 @@ export class AnalyticsService {
     return `${this.toCount(value).toString().padStart(2, '0')}:00`;
   }
 
+  private toSystemAlert(alert: AnalyticsSystemAlertRow): AnalyticsSystemAlertDTO {
+    return {
+      action_label: alert.action_label,
+      body: alert.body,
+      href: alert.href,
+      id: alert.id,
+      kind: alert.kind,
+      severity: alert.severity,
+      title: alert.title,
+    };
+  }
+
   private shouldIncludeInventory(focus: InsightFocus): boolean {
     return focus === InsightFocus.overview || focus === InsightFocus.inventory;
+  }
+
+  private toRecentActivity(
+    activity: AnalyticsRecentActivityRow,
+  ): AnalyticsRecentActivityDTO {
+    return {
+      actor_name: activity.actor_name,
+      description: activity.description,
+      entity_id: activity.entity_id,
+      entity_label: activity.entity_label,
+      id: activity.id,
+      kind: activity.kind,
+      occurred_at: activity.occurred_at.toISOString(),
+      status: activity.status,
+      title: activity.title,
+    };
   }
 
   private toCoachBreakdown(coach: {

@@ -6,19 +6,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ApiClientError } from "@fittrack/api-client";
 import {
   WEB_GREETING_MESSAGE,
-  getAiChatErrorMessage,
-  getAiSessionDisplayTitle
+  getAiChatErrorMessage
 } from "@fittrack/app-config";
 import {
   aiChatMessagesQueryOptions,
   aiChatMutationOptions,
   aiChatSessionQueryOptions,
   aiChatSessionsQueryOptions,
-  archiveAiChatSessionMutationOptions
+  archiveAiChatSessionMutationOptions,
+  restoreAiChatSessionMutationOptions
 } from "@fittrack/query";
 import { useTimedMessage } from "@fittrack/hooks";
 import { aiChatSchema } from "@fittrack/validators";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { webApiClient } from "@/lib/api-client";
 import type { ChatPanelMessage } from "@/components/chatbot/ChatPanel";
 
@@ -32,6 +33,7 @@ export function useAiPageController() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(2600);
+  const { user } = useAuth();
 
   const sessionParam = searchParams.get("sessionId");
   const promptParam = searchParams.get("prompt")?.trim() ?? "";
@@ -46,12 +48,12 @@ export function useAiPageController() {
 
   const sessionsQuery = useQuery(aiChatSessionsQueryOptions(webApiClient, { limit: 50 }));
   const sessions = sessionsQuery.data?.data ?? [];
-  const firstSessionId = sessions[0]?.id ?? null;
+  const firstActiveSessionId = sessions.find((session) => session.is_active)?.id ?? null;
 
   useEffect(() => {
-    if (sessionParam !== null || !firstSessionId) return;
-    router.replace(`/ai?sessionId=${firstSessionId}`);
-  }, [firstSessionId, router, sessionParam]);
+    if (sessionParam !== null) return;
+    router.replace(firstActiveSessionId ? `/ai?sessionId=${firstActiveSessionId}` : "/ai?sessionId=new");
+  }, [firstActiveSessionId, router, sessionParam]);
 
   useEffect(() => {
     if (!isExplicitNewSession || !promptParam || pendingMessage || input.trim()) return;
@@ -59,7 +61,7 @@ export function useAiPageController() {
     setLastError("");
   }, [input, isExplicitNewSession, pendingMessage, promptParam]);
 
-  const activeSessionId = requestedSessionId ?? (!isExplicitNewSession ? firstSessionId : null);
+  const activeSessionId = requestedSessionId ?? (!isExplicitNewSession ? firstActiveSessionId : null);
 
   const sessionQuery = useQuery({
     ...aiChatSessionQueryOptions(webApiClient, activeSessionId ?? ""),
@@ -71,8 +73,9 @@ export function useAiPageController() {
     enabled: !!activeSessionId
   });
 
-  const sendMutation = useMutation(aiChatMutationOptions(webApiClient, queryClient));
-  const archiveMutation = useMutation(archiveAiChatSessionMutationOptions(webApiClient, queryClient));
+  const sendMutation = useMutation(aiChatMutationOptions(webApiClient, queryClient, user?.id));
+  const archiveMutation = useMutation(archiveAiChatSessionMutationOptions(webApiClient, queryClient, user?.id));
+  const restoreMutation = useMutation(restoreAiChatSessionMutationOptions(webApiClient, queryClient));
   const selectedSession = sessions.find((session) => session.id === activeSessionId) ?? sessionQuery.data ?? null;
 
   const messages = useMemo<ChatPanelMessage[]>(() => {
@@ -162,33 +165,58 @@ export function useAiPageController() {
     shouldAutoStartPrompt
   ]);
 
-  const handleArchive = useCallback(async () => {
+  const handleDelete = useCallback(async () => {
     if (!activeSessionId) return;
     try {
       await archiveMutation.mutateAsync({ sessionId: activeSessionId });
       setLastError("");
-      showMessage("Conversation archived.");
+      showMessage("Chat deleted.");
       router.replace("/ai?sessionId=new");
+      return activeSessionId;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unable to archive conversation.";
+      const errorMessage = error instanceof Error ? error.message : "Unable to delete chat.";
       setLastError(errorMessage);
       showMessage(errorMessage);
+      return null;
     }
   }, [activeSessionId, archiveMutation, router, showMessage]);
 
+  const handleRestore = useCallback(async () => {
+    if (!selectedSession?.id) return null;
+    try {
+      await restoreMutation.mutateAsync({ sessionId: selectedSession.id });
+      setLastError("");
+      showMessage("Chat restored.");
+      router.replace(`/ai?sessionId=${selectedSession.id}`);
+      return selectedSession.id;
+    } catch (error) {
+      const errorMessage = error instanceof ApiClientError && error.status === 404
+        ? "Restore is unavailable until the API reloads. Restart the current stack, then try again."
+        : error instanceof Error
+          ? error.message
+          : "Unable to restore chat.";
+      setLastError(errorMessage);
+      showMessage(errorMessage);
+      return null;
+    }
+  }, [restoreMutation, router, selectedSession, showMessage]);
+
   return {
     activeSessionId,
-    archiveMutation,
-    handleArchive,
+    deleteMutation: archiveMutation,
+    handleDelete,
+    handleRestore,
     handleSelectSession,
     handleSend,
     handleStartFresh,
     input,
+    isSelectedSessionDeleted: selectedSession ? !selectedSession.is_active : false,
     lastError,
     message,
     messages,
+    restoreMutation,
     sendMutation,
-    sessionTitle: selectedSession ? getAiSessionDisplayTitle(selectedSession) : "New conversation",
+    selectedSession,
     sessions,
     setInput
   };

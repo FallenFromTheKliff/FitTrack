@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Query,
@@ -197,7 +198,7 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Archive an owned AI chat session.',
+    summary: 'Soft delete an owned AI chat session.',
   })
   @ApiParam({
     name: 'id',
@@ -206,14 +207,37 @@ export class AiController {
     example: '77777777-7777-4777-8777-777777777777',
     description: 'Owned AI chat session id.',
   })
-  @ApiResponse({ status: 200, description: 'AI chat session archived.' })
+  @ApiResponse({ status: 200, description: 'AI chat session deleted.' })
   @ApiResponse({ status: 404, description: 'AI chat session not found.' })
   async archiveSession(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
     await this.aiService.archiveSession(user.sub, id);
-    return { message: 'AI chat session archived.' };
+    return { message: 'AI chat session deleted.' };
+  }
+
+  @Patch('chat/sessions/:id/restore')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Restore a soft-deleted owned AI chat session.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    example: '77777777-7777-4777-8777-777777777777',
+    description: 'Owned AI chat session id.',
+  })
+  @ApiResponse({ status: 200, description: 'AI chat session restored.' })
+  @ApiResponse({ status: 404, description: 'AI chat session not found.' })
+  async restoreSession(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.aiService.restoreSession(user.sub, id);
+    return { message: 'AI chat session restored.' };
   }
 
   @Post('generate-plan')

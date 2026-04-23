@@ -8,11 +8,13 @@ import { AnalyticsController } from './analytics.controller';
 
 function getGuardMetadata(
   methodName:
+    | 'getSnapshot'
     | 'getOverview'
     | 'getRevenue'
     | 'getAttendance'
     | 'getMembers'
-    | 'getCoaches',
+    | 'getCoaches'
+    | 'exportPdf',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
     GUARDS_METADATA,
@@ -22,11 +24,13 @@ function getGuardMetadata(
 
 function getRolesMetadata(
   methodName:
+    | 'getSnapshot'
     | 'getOverview'
     | 'getRevenue'
     | 'getAttendance'
     | 'getMembers'
-    | 'getCoaches',
+    | 'getCoaches'
+    | 'exportPdf',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -41,12 +45,19 @@ describe('AnalyticsController', () => {
     getMembers: jest.fn(),
     getOverview: jest.fn(),
     getRevenue: jest.fn(),
+    getSnapshot: jest.fn(),
+  };
+  const analyticsPdfExportService = {
+    exportPdf: jest.fn(),
   };
 
   let controller: AnalyticsController;
 
   beforeEach(() => {
-    controller = new AnalyticsController(analyticsService as never);
+    controller = new AnalyticsController(
+      analyticsService as never,
+      analyticsPdfExportService as never,
+    );
     jest.clearAllMocks();
   });
 
@@ -58,6 +69,14 @@ describe('AnalyticsController', () => {
     expect(analyticsService.getOverview).toHaveBeenCalledWith({
       period: 'monthly',
     });
+  });
+
+  it('gets the snapshot through the service', async () => {
+    analyticsService.getSnapshot.mockResolvedValue({ generated_at: 'now' });
+
+    await controller.getSnapshot();
+
+    expect(analyticsService.getSnapshot).toHaveBeenCalled();
   });
 
   it('gets revenue through the service', async () => {
@@ -100,12 +119,45 @@ describe('AnalyticsController', () => {
     });
   });
 
+  it('exports the analytics PDF through the export service', async () => {
+    const response = {
+      send: jest.fn(),
+      setHeader: jest.fn(),
+    };
+    analyticsPdfExportService.exportPdf.mockResolvedValue({
+      buffer: Buffer.from('%PDF-1.4'),
+      fileName: 'fittrack-analytics-2026-04-23.pdf',
+    });
+
+    await controller.exportPdf(
+      {
+        attendance_period: 'daily',
+      },
+      response as never,
+    );
+
+    expect(analyticsPdfExportService.exportPdf).toHaveBeenCalledWith({
+      attendance_period: 'daily',
+    });
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'content-type',
+      'application/pdf',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'content-disposition',
+      'attachment; filename="fittrack-analytics-2026-04-23.pdf"',
+    );
+    expect(response.send).toHaveBeenCalledWith(Buffer.from('%PDF-1.4'));
+  });
+
   it.each([
+    'getSnapshot',
     'getOverview',
     'getRevenue',
     'getAttendance',
     'getMembers',
     'getCoaches',
+    'exportPdf',
   ] as const)('locks %s to admin users', (methodName) => {
     expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
     expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
