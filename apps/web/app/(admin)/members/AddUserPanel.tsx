@@ -31,6 +31,7 @@ import { getReadableTextColor } from "@fittrack/utils";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
 import { FitText } from "@/components/fit/FitText";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 type Props = {
@@ -222,8 +223,10 @@ export default function AddUserPanel({
   onBack,
   onSubmit,
 }: Props) {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const [reviewData, setReviewData] = useState<AdminCreateUserData | null>(null);
+  const isStaffCreator = user?.role === "STAFF";
   const primaryActionTextColor = getReadableTextColor(
     colors.brandLight,
     themes.sunlight.textPrimary,
@@ -252,6 +255,10 @@ export default function AddUserPanel({
 
   const watchedValues = (useWatch({ control }) ?? {}) as Partial<AdminCreateUserFormValues>;
   const activeRole = (useWatch({ control, name: "role" }) ?? "member") as CreateRole;
+  const availableRoleOptions = useMemo(
+    () => (isStaffCreator ? ROLE_OPTIONS.filter((option) => option.value !== "admin") : ROLE_OPTIONS),
+    [isStaffCreator],
+  );
   const activeRoleMeta = ROLE_META[activeRole];
   const roleError = errors.role?.message as string | undefined;
   const submitting = isLoading || isSubmitting;
@@ -577,7 +584,7 @@ export default function AddUserPanel({
                   Review before confirming
                 </FitText>
                 <FitText style={{ fontSize: 12, lineHeight: 1.5, color: colors.textSecondary }}>
-                  This is the last check before the account is created. The snapshot stays visible here so the admin can verify the temporary password, access level, and contact details in one pass.
+                  This is the last check before the account is created. The snapshot stays visible here so the creator can verify the temporary password, access level, and contact details in one pass.
                 </FitText>
               </div>
 
@@ -724,11 +731,11 @@ export default function AddUserPanel({
                 aria-label="Create account role selector"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gridTemplateColumns: `repeat(${availableRoleOptions.length}, minmax(0, 1fr))`,
                   gap: 10,
                 }}
               >
-                {ROLE_OPTIONS.map((option) => {
+                {availableRoleOptions.map((option) => {
                   const Icon = option.icon;
                   const isActive = activeRole === option.value;
                   return (
@@ -801,7 +808,9 @@ export default function AddUserPanel({
                 })}
               </div>
               <FitText style={{ fontSize: 12, color: roleError ? colors.danger : colors.textMuted }}>
-                {roleError ?? activeRoleMeta.note}
+                {roleError ?? (isStaffCreator
+                  ? `${activeRoleMeta.note} Staff can create staff and member accounts only.`
+                  : activeRoleMeta.note)}
               </FitText>
             </div>
 

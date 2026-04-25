@@ -4,6 +4,7 @@ describe('AnalyticsPdfExportService', () => {
   const analyticsService = {
     getAttendance: jest.fn(),
     getDailyInsightsTrend: jest.fn(),
+    getInventorySummary: jest.fn(),
     getRevenue: jest.fn(),
     getSnapshot: jest.fn(),
   };
@@ -110,6 +111,23 @@ describe('AnalyticsPdfExportService', () => {
         },
       ],
     });
+    analyticsService.getInventorySummary.mockResolvedValue({
+      retail_items: 14,
+      low_stock_items: 2,
+      out_of_stock_items: 1,
+      retail_inventory_value: '16450.00',
+      equipment_types: 9,
+      equipment_units_available: 28,
+      equipment_units_total: 32,
+      equipment_under_maintenance: 2,
+      top_products: [
+        {
+          name: 'Protein Bar',
+          quantity_sold: 12,
+          revenue: '840.00',
+        },
+      ],
+    });
     businessAnalyticsInsightService.generateTransientInsight.mockResolvedValue({
       summary: 'Revenue is holding steady and evening usage remains strongest.',
       highlights: ['Memberships remain stable.'],
@@ -136,6 +154,7 @@ describe('AnalyticsPdfExportService', () => {
     expect(result.buffer.subarray(0, 8).toString('utf8')).toContain('%PDF-1.4');
     expect(result.buffer.toString('latin1')).toContain('Analytics Export');
     expect(result.buffer.toString('latin1')).toContain('Daily Insights');
+    expect(result.buffer.toString('latin1')).toContain('Inventory Performance');
     expect(result.buffer.toString('latin1')).toContain(
       'Business Improvement Recommendations',
     );
@@ -153,6 +172,11 @@ describe('AnalyticsPdfExportService', () => {
       start_date: '2026-04-10',
       end_date: '2026-04-23',
       period: 'daily',
+    });
+    expect(analyticsService.getInventorySummary).toHaveBeenCalledWith({
+      start_date: '2025-11-01',
+      end_date: '2026-04-30',
+      period: 'monthly',
     });
     expect(
       businessAnalyticsInsightService.generateTransientInsight,

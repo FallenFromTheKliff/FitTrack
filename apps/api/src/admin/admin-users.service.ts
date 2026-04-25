@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AccountDeletionRequestStatus,
   AuthProvider,
@@ -12,6 +13,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from 'prisma/prisma.service';
+import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 import { UpdateMembershipCardDto, UpgradeToCoachDto } from './dto/admin.dto';
 
 function toFrontendRole(role: UserRole) {
@@ -61,6 +63,30 @@ function toFrontendMembershipCard(
   };
 }
 
+function getPreferredAccountEmail(
+  identities?: Array<{
+    identifier: string;
+    is_primary?: boolean;
+    provider: AuthProvider;
+  }> | null,
+) {
+  if (!identities?.length) {
+    return null;
+  }
+
+  return (
+    identities.find(
+      (identity) =>
+        identity.provider === AuthProvider.email && identity.is_primary,
+    )?.identifier ??
+    identities.find((identity) => identity.provider === AuthProvider.email)
+      ?.identifier ??
+    identities.find((identity) => identity.provider === AuthProvider.google)
+      ?.identifier ??
+    null
+  );
+}
+
 function isQrCodeReady(qrCodeToken: string | null) {
   return typeof qrCodeToken === 'string' && qrCodeToken.trim() !== '';
 }
@@ -81,7 +107,10 @@ function isAttendanceQrReady(
 
 @Injectable()
 export class AdminUsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter?: EventEmitter2,
+  ) {}
 
   async getAll() {
     const users = await this.prisma.user.findMany({
@@ -176,6 +205,13 @@ export class AdminUsersService {
         id: true,
         role: true,
         deletedAt: true,
+        auth_identities: {
+          select: {
+            provider: true,
+            identifier: true,
+            is_primary: true,
+          },
+        },
         membership_card: {
           select: {
             id: true,
@@ -232,6 +268,14 @@ export class AdminUsersService {
         },
       });
 
+      this.emitAccountActivity({
+        action: 'membership_card_granted',
+        actorId: actingUserId,
+        targetEmail: getPreferredAccountEmail(user.auth_identities),
+        targetRole: user.role,
+        targetUserId: user.id,
+      });
+
       return {
         membershipCard: toFrontendMembershipCard(user.role, membershipCard),
         message: 'Membership card access granted.',
@@ -252,6 +296,17 @@ export class AdminUsersService {
       },
     });
 
+    this.emitAccountActivity({
+      action: 'membership_card_revoked',
+      actorId: actingUserId,
+      details: {
+        reason: dto.reason?.trim() || null,
+      },
+      targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetRole: user.role,
+      targetUserId: user.id,
+    });
+
     return {
       membershipCard: toFrontendMembershipCard(user.role, membershipCard),
       message: 'Membership card access revoked.',
@@ -265,6 +320,13 @@ export class AdminUsersService {
         id: true,
         role: true,
         deletedAt: true,
+        auth_identities: {
+          select: {
+            provider: true,
+            identifier: true,
+            is_primary: true,
+          },
+        },
       },
     });
 
@@ -299,6 +361,14 @@ export class AdminUsersService {
       },
     });
 
+    this.emitAccountActivity({
+      action: 'account_archived',
+      actorId: actingUserId,
+      targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetRole: user.role,
+      targetUserId: user.id,
+    });
+
     return {
       message: 'User archived successfully',
       user: deleted,
@@ -310,7 +380,15 @@ export class AdminUsersService {
       where: { id: userId },
       select: {
         id: true,
+        role: true,
         deletedAt: true,
+        auth_identities: {
+          select: {
+            provider: true,
+            identifier: true,
+            is_primary: true,
+          },
+        },
       },
     });
 
@@ -364,6 +442,14 @@ export class AdminUsersService {
       });
     });
 
+    this.emitAccountActivity({
+      action: 'account_restored',
+      actorId: actingUserId,
+      targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetRole: user.role,
+      targetUserId: user.id,
+    });
+
     return {
       message: 'User restored successfully',
       user: {
@@ -373,13 +459,20 @@ export class AdminUsersService {
     };
   }
 
-  async upgradeToCoach(dto: UpgradeToCoachDto) {
+  async upgradeToCoach(dto: UpgradeToCoachDto, actingUserId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
       select: {
         id: true,
         role: true,
         deletedAt: true,
+        auth_identities: {
+          select: {
+            provider: true,
+            identifier: true,
+            is_primary: true,
+          },
+        },
       },
     });
 
@@ -426,6 +519,14 @@ export class AdminUsersService {
       });
     });
 
+    this.emitAccountActivity({
+      action: 'coach_upgraded',
+      actorId: actingUserId,
+      targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetRole: UserRole.coach,
+      targetUserId: dto.userId,
+    });
+
     return {
       message: 'User upgraded to coach successfully',
       coach: {
@@ -433,5 +534,24 @@ export class AdminUsersService {
         userId: dto.userId,
       },
     };
+  }
+
+  private emitAccountActivity(event: {
+    action:
+      | 'account_archived'
+      | 'account_restored'
+      | 'coach_upgraded'
+      | 'membership_card_granted'
+      | 'membership_card_revoked';
+    actorId: string;
+    details?: Record<string, boolean | number | string | null>;
+    targetEmail?: string | null;
+    targetRole?: UserRole | string | null;
+    targetUserId: string;
+  }) {
+    this.eventEmitter?.emit(ACCOUNT_ACTIVITY_EVENT, {
+      ...event,
+      occurredAt: new Date().toISOString(),
+    });
   }
 }

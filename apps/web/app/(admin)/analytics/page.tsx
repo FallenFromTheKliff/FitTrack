@@ -1,4 +1,4 @@
-import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard";
+import { AnalyticsDashboard } from "../../../components/analytics/AnalyticsDashboard";
 
 export const dynamic = "force-dynamic";
 

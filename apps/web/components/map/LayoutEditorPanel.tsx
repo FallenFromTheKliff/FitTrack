@@ -1,5 +1,5 @@
 "use client";
-import { Lock, LockOpen, RotateCcw, Save } from "lucide-react";
+import { ArchiveRestore, Lock, LockOpen, RotateCcw, Save } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ChangeEvent } from "react";
 
@@ -24,6 +24,7 @@ type Props = {
   onFloorChange: (e: ChangeEvent<HTMLSelectElement>) => void;
   onSave: () => void;
   onClearFloor: () => void;
+  onOpenArchive?: () => void;
   quickRegionNode?: ReactNode;
   quickRegionSummaryNode?: ReactNode;
   layoutStatusNode?: ReactNode;
@@ -44,6 +45,7 @@ export function LayoutEditorPanel({
   onFloorChange,
   onSave,
   onClearFloor,
+  onOpenArchive,
   quickRegionNode,
   quickRegionSummaryNode,
   layoutStatusNode,
@@ -166,6 +168,15 @@ export function LayoutEditorPanel({
         fullWidth
         disabled={!isEditMode}
       />
+      {onOpenArchive ? (
+        <FitButton
+          variant="ghost"
+          label="Manage Archive"
+          icon={ArchiveRestore}
+          onClick={onOpenArchive}
+          fullWidth
+        />
+      ) : null}
       {hasExtendedSections ? (
         <>
           <div style={{ height: 1, backgroundColor: colors.border, margin: "2px 0 4px" }} />

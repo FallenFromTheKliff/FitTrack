@@ -12,10 +12,13 @@ import {
   PaymentStatus,
   Prisma,
   SalePaymentMethod,
+  SaleSource,
   SaleStatus,
+  UserRole,
 } from '@prisma/client';
 import { isUUID } from 'class-validator';
 
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import type { PaginatedResult } from '../../common/base-repository/base-repository';
 import {
   PAYMENT_COMPLETED_EVENT,
@@ -43,6 +46,10 @@ import {
   PRODUCT_STOCK_CHANGED_EVENT,
   type ProductStockChangedEvent,
 } from '../events/product-stock-changed.event';
+import {
+  INVENTORY_ACTIVITY_EVENT,
+  type InventoryActivityEvent,
+} from '../events/inventory-activity.event';
 
 @Injectable()
 export class SalesService {
@@ -54,21 +61,26 @@ export class SalesService {
   ) {}
 
   async createSale(
-    staffId: string,
+    user: Pick<JwtPayload, 'role' | 'sub'>,
     dto: CreateSaleDTO,
     idempotencyKey: string | undefined,
   ): Promise<SaleTransactionDetailResponseDTO | SaleCheckoutResponseDTO> {
+    const saleContext = this.resolveSaleContext(user, dto);
+
     if (dto.payment_method === SalePaymentMethod.cash) {
       const sale = await this.repo.createCashSale({
-        processedBy: staffId,
+        notes: dto.notes,
+        processedBy: saleContext.processedBy,
         customerName: dto.customer_name,
-        customerUserId: dto.customer_user_id,
+        customerUserId: saleContext.customerUserId,
         items: dto.items,
+        source: saleContext.source,
       });
 
       this.emitProductStockChanged({
         productIds: sale.items.map((item) => item.product_id),
       });
+      await this.emitSaleRecordedActivity(sale);
 
       return this.toDetailResponse(sale);
     }
@@ -76,7 +88,7 @@ export class SalesService {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
     const customerUserId = this.requireCustomerUserForPaymongo(
-      dto.customer_user_id,
+      saleContext.customerUserId,
     );
     const existingPayment =
       await this.paymentRepository.findPaymentByIdempotencyKey(
@@ -86,18 +98,20 @@ export class SalesService {
     if (existingPayment) {
       return this.resumeExistingCheckout(
         existingPayment,
-        staffId,
+        saleContext.processedBy,
         customerUserId,
       );
     }
 
     try {
       const initiation = await this.repo.createPendingPaymongoSale({
-        processedBy: staffId,
+        notes: dto.notes,
+        processedBy: saleContext.processedBy,
         customerName: dto.customer_name,
         customerUserId,
         items: dto.items,
         idempotencyKey: normalizedIdempotencyKey,
+        source: saleContext.source,
       });
 
       this.emitProductStockChanged({
@@ -117,7 +131,7 @@ export class SalesService {
       if (resumedPayment) {
         return this.resumeExistingCheckout(
           resumedPayment,
-          staffId,
+          saleContext.processedBy,
           customerUserId,
         );
       }
@@ -155,6 +169,8 @@ export class SalesService {
     if (!sale) {
       return;
     }
+
+    await this.emitSaleRecordedActivity(sale);
   }
 
   private normalizeAndValidateIdempotencyKey(
@@ -195,6 +211,45 @@ export class SalesService {
     );
   }
 
+  private resolveSaleContext(
+    user: Pick<JwtPayload, 'role' | 'sub'>,
+    dto: CreateSaleDTO,
+  ): {
+    customerUserId: string | undefined;
+    processedBy: string;
+    source: SaleSource;
+  } {
+    if (user.role === UserRole.member) {
+      if (dto.payment_method !== SalePaymentMethod.paymongo) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Unsupported Member Sale Method',
+            status: 422,
+            detail:
+              'Members can only start retail purchases through PayMongo checkout.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      return {
+        customerUserId: user.sub,
+        processedBy: user.sub,
+        source: SaleSource.mobile,
+      };
+    }
+
+    return {
+      customerUserId:
+        dto.payment_method === SalePaymentMethod.paymongo
+          ? this.requireCustomerUserForPaymongo(dto.customer_user_id)
+          : dto.customer_user_id,
+      processedBy: user.sub,
+      source: SaleSource.manual,
+    };
+  }
+
   private async resumeExistingCheckout(
     payment: Payment,
     staffId: string,
@@ -228,7 +283,7 @@ export class SalesService {
         title: 'Sale Ownership Conflict',
         status: 409,
         detail:
-          'This Idempotency-Key is already associated with another staff-processed sale.',
+          'This Idempotency-Key is already associated with another retail sale actor.',
       });
     }
 
@@ -347,6 +402,47 @@ export class SalesService {
     this.eventEmitter.emit(PRODUCT_STOCK_CHANGED_EVENT, event);
   }
 
+  private async emitInventoryActivity(
+    event: InventoryActivityEvent,
+  ): Promise<void> {
+    await this.eventEmitter.emitAsync(INVENTORY_ACTIVITY_EVENT, event);
+  }
+
+  private async emitSaleRecordedActivity(
+    sale: SaleDetailRecord,
+  ): Promise<void> {
+    const itemCount = sale.items.length;
+    const quantitySold = sale.items.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    );
+    const productNames = sale.items
+      .map((item) => item.product?.name ?? item.product_id)
+      .filter(Boolean)
+      .join(', ');
+    const entityName =
+      itemCount === 1
+        ? (sale.items[0]?.product?.name ?? 'Retail sale')
+        : `Retail sale (${itemCount} items)`;
+
+    await this.emitInventoryActivity({
+      action: 'product_sale_recorded',
+      actorId: sale.processed_by,
+      entityId: sale.id,
+      entityName,
+      details: {
+        item_count: itemCount,
+        payment_method: sale.payment_method,
+        product_names: productNames || null,
+        quantity_sold: quantitySold,
+        sale_id: sale.id,
+        source: sale.source,
+        status: sale.status,
+        total_amount: sale.total_amount.toFixed(2),
+      },
+    });
+  }
+
   private toSummaryResponse(
     sale: SaleSummaryRecord,
   ): SaleTransactionSummaryResponseDTO {
@@ -354,6 +450,8 @@ export class SalesService {
       id: sale.id,
       customer_name: sale.customer_name ?? null,
       customer_user_id: sale.customer_user_id ?? null,
+      notes: sale.notes ?? null,
+      source: sale.source,
       total_amount: sale.total_amount.toFixed(2),
       payment_method: sale.payment_method,
       payment_id: sale.payment_id ?? null,
@@ -379,6 +477,8 @@ export class SalesService {
       id: sale.id,
       customer_name: sale.customer_name ?? null,
       customer_user_id: sale.customer_user_id ?? null,
+      notes: sale.notes ?? null,
+      source: sale.source,
       total_amount: sale.total_amount.toFixed(2),
       payment_method: sale.payment_method,
       payment_id: sale.payment_id ?? null,

@@ -14,6 +14,7 @@ type NotificationsPanelProps = {
   unreadCount: number;
   onClose: () => void;
   onDelete: (notificationId: string) => Promise<unknown>;
+  onDeleteAll: () => Promise<unknown>;
   onMarkAllRead: () => Promise<unknown>;
   onMarkRead: (notificationId: string) => Promise<unknown>;
 };
@@ -46,6 +47,7 @@ export default function NotificationsPanel({
   unreadCount,
   onClose,
   onDelete,
+  onDeleteAll,
   onMarkAllRead,
   onMarkRead
 }: NotificationsPanelProps) {
@@ -53,6 +55,16 @@ export default function NotificationsPanel({
   const s = layoutStyles(colors);
 
   if (!isOpen) return null;
+
+  const handleDeleteAll = () => {
+    if (notifications.length === 0 || isBusy) return;
+    const confirmed = window.confirm(
+      "Delete all notifications from this inbox?",
+    );
+
+    if (!confirmed) return;
+    void onDeleteAll();
+  };
 
   return (
     <>
@@ -84,6 +96,13 @@ export default function NotificationsPanel({
               onClick={() => void onMarkAllRead()}
               disabled={unreadCount === 0 || isBusy}
               style={{ fontSize: 12 }}
+            />
+            <FitButton
+              variant="ghost"
+              label="DELETE ALL"
+              onClick={handleDeleteAll}
+              disabled={notifications.length === 0 || isBusy}
+              style={{ fontSize: 12, color: colors.danger }}
             />
             <FitButton variant="ghost" iconOnly icon={X} iconSize={16} onClick={onClose} style={s.notificationsCloseBtn} aria-label="Close notifications panel" />
           </div>

@@ -109,6 +109,11 @@ export class GymLayoutService {
     return equipment.map((item) => this.toEquipmentResponse(item));
   }
 
+  async listArchivedEquipment(): Promise<GymLayoutEquipmentResponseDTO[]> {
+    const equipment = await this.repo.listArchivedEquipment();
+    return equipment.map((item) => this.toEquipmentResponse(item));
+  }
+
   async createEquipment(
     dto: CreateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
@@ -138,6 +143,13 @@ export class GymLayoutService {
   async deleteEquipment(id: string): Promise<void> {
     const equipment = await this.repo.softDeleteEquipment(id);
     await this.publishRealtimeDelta(equipment, 'remove');
+  }
+
+  async restoreEquipment(id: string): Promise<GymLayoutEquipmentResponseDTO> {
+    const equipment = await this.repo.restoreEquipment(id);
+    await this.publishRealtimeDelta(equipment, 'upsert');
+
+    return this.toEquipmentResponse(equipment);
   }
 
   async authenticateSocket(client: Socket): Promise<JwtPayload> {

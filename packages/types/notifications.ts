@@ -130,6 +130,10 @@ export type MarkAllNotificationsReadResult = {
   updatedCount: number;
 };
 
+export type DeleteAllNotificationsResult = {
+  deletedCount: number;
+};
+
 export type NotificationUnreadCountRecord = {
   count: number;
 };

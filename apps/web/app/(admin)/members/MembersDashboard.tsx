@@ -10,7 +10,6 @@ import {
   reviewMembershipPaymentsQueryOptions,
   rejectDeletionRequestMutationOptions,
   scanAttendanceQrMutationOptions,
-  staffUsersQueryOptions,
   updateAdminMembershipCardMutationOptions,
   verifyMembershipPaymentMutationOptions
 } from "@fittrack/query";
@@ -391,24 +390,14 @@ export default function MembersDashboard() {
     enabled: isAdmin
   });
 
-  const { data: staffUsers = [], isLoading: staffUsersLoading, error: staffUsersError } = useQuery({
-    ...staffUsersQueryOptions(webApiClient),
-    enabled: isStaff
-  });
+  useEffect(() => {
+    if (canInspectAccounts) void fetchMembers();
+  }, [canInspectAccounts, fetchMembers]);
 
   useEffect(() => {
-    if (!isStaff) void fetchMembers();
-  }, [fetchMembers, isStaff]);
-
-  useEffect(() => {
-    if (!membersError || isStaff) return;
+    if (!membersError || !canInspectAccounts) return;
     notify("error", "Could not load the account directory", membersError);
-  }, [membersError, isStaff]);
-
-  useEffect(() => {
-    if (!staffUsersError || !isStaff) return;
-    notifyActionError("Could not load the account directory", staffUsersError, "Failed to load the staff directory.");
-  }, [isStaff, staffUsersError]);
+  }, [canInspectAccounts, membersError]);
 
   useEffect(() => {
     if (!deletionRequestsError || !canInspectAccounts) return;
@@ -429,9 +418,14 @@ export default function MembersDashboard() {
   }, [isAdmin, pendingMembershipPaymentsError]);
 
   const roleScopedMembers = useMemo(() => {
-    const sourceMembers = isStaff ? staffUsers : members;
-    return sourceMembers.filter((member) => member.role?.name !== "COACH");
-  }, [isStaff, members, staffUsers]);
+    return members.filter((member) => {
+      if (isStaff) {
+        return member.role?.name === "USER";
+      }
+
+      return member.role?.name !== "COACH";
+    });
+  }, [isStaff, members]);
 
   const pendingRequestsByUserId = useMemo(
     () => canInspectAccounts ? getPendingRequestsByUserId(deletionRequests) : new Map<string, DeletionRequest>(),
@@ -544,9 +538,17 @@ export default function MembersDashboard() {
       !editPendingRequest &&
       !isEditTargetArchived
   );
-  const canTerminateEditTarget = Boolean(canInspectAccounts && !isSelfEdit && editPendingRequest);
+  const canTerminateEditTarget = Boolean(isAdmin && !isSelfEdit && editPendingRequest);
   const canRestoreEditTarget = Boolean(isAdmin && editTarget && !isSelfEdit && isEditTargetArchived);
-  const canEditTargetDetails = Boolean(isAdmin && editTarget && !isSelfEdit);
+  const canEditTargetDetails = Boolean(canInspectAccounts && editTarget && !isSelfEdit);
+  const canManualCheckInTarget = Boolean(
+    canInspectAccounts &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name === "USER" &&
+      !editPendingRequest &&
+      !isEditTargetArchived
+  );
   const canManageMemberCard = Boolean(isAdmin && editTarget && !isSelfEdit && editTarget.role?.name === "USER");
 
   const handleAdd = async (data: AdminCreateUserData) => {
@@ -613,7 +615,7 @@ export default function MembersDashboard() {
   const paymentReviewLoadingLabel = useLoadingText("UPDATING PAYMENT", membershipPaymentReviewMutation.isPending);
   const editLoadingLabel = useLoadingText("UPDATING MEMBER", editLoading);
   const restoreLoadingLabel = useLoadingText("RESTORING ACCOUNT", restoreLoading);
-  const pageLoading = isStaff ? staffUsersLoading : isLoading;
+  const pageLoading = isLoading;
 
   const openInspector = (member: MemberRecord) => {
     setEditTarget(member);
@@ -870,7 +872,7 @@ export default function MembersDashboard() {
   };
 
   const handleEdit = async (data: Record<string, string>) => {
-    if (!editTarget || !isAdmin || isSelfEdit) {
+    if (!editTarget || !canEditTargetDetails) {
       setEditModalOpen(false);
       setEditConfirmOpen(false);
       setPendingEditSubmission(null);
@@ -1277,7 +1279,7 @@ export default function MembersDashboard() {
               }}
             />
           ) : null}
-          {isAdmin ? (
+          {canInspectAccounts ? (
             <FitButton
               variant="primary"
               label="Create account"
@@ -1428,7 +1430,7 @@ export default function MembersDashboard() {
             }}
           >
             <AddUserPanel
-              existingAccounts={roleScopedMembers}
+              existingAccounts={members}
               isLoading={addLoading}
               loadingLabel={addLoadingLabel}
               onBack={() => setContentMode("directory")}
@@ -1705,7 +1707,7 @@ export default function MembersDashboard() {
                 </FitText>
 
                 {canEditTargetDetails ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: canManualCheckInTarget ? "repeat(2, minmax(0, 1fr))" : "1fr", gap: 10 }}>
                     <FitButton
                       variant="primary"
                       label="Edit details"
@@ -1713,24 +1715,28 @@ export default function MembersDashboard() {
                       style={primaryActionStyle}
                       textStyle={{ color: primaryCommandTextColor }}
                     />
-                    <FitButton
-                      variant="ghost"
-                      label={manualAttendanceMutation.isPending ? manualCheckInLoadingLabel : "Check in"}
-                      disabled={manualAttendanceMutation.isPending}
-                      onClick={() => {
-                        void handleManualCheckIn(editTarget);
-                      }}
-                      style={secondaryActionStyle}
-                    />
+                    {canManualCheckInTarget ? (
+                      <FitButton
+                        variant="ghost"
+                        label={manualAttendanceMutation.isPending ? manualCheckInLoadingLabel : "Check in"}
+                        disabled={manualAttendanceMutation.isPending}
+                        onClick={() => {
+                          void handleManualCheckIn(editTarget);
+                        }}
+                        style={secondaryActionStyle}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
 
-                <FitButton
-                  variant="ghost"
-                  label="Message"
-                  onClick={() => handleMessageMember(editTarget)}
-                  style={secondaryActionStyle}
-                />
+                {isAdmin ? (
+                  <FitButton
+                    variant="ghost"
+                    label="Message"
+                    onClick={() => handleMessageMember(editTarget)}
+                    style={secondaryActionStyle}
+                  />
+                ) : null}
 
                 {canManageMemberCard && getMembershipFieldValue(editTarget) !== "active" ? (
                   <FitButton
@@ -1804,7 +1810,7 @@ export default function MembersDashboard() {
           ) : null}
         </FitModal>
       ) : null}
-      {isAdmin ? (
+      {canEditTargetDetails ? (
         <DetailsModal
           isOpen={editModalOpen && !!editTarget}
           title="Edit account details"
@@ -1851,7 +1857,7 @@ export default function MembersDashboard() {
           ) : null}
         </DetailsModal>
       ) : null}
-      {isAdmin ? (
+      {canEditTargetDetails ? (
         <ConfirmModal
           isOpen={editConfirmOpen && !!editTarget && !!pendingEditSubmission}
           title="Confirm account update"

@@ -1,6 +1,7 @@
 import type {
   InventoryCreateSaleInput,
   InventoryEquipmentCreateInput,
+  InventoryEquipmentArchiveInput,
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentRecord,
@@ -15,6 +16,7 @@ import type {
   InventoryRestockInput,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
+  InventorySaleSource,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord
 } from "@fittrack/types";
@@ -24,6 +26,7 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 export type {
   InventoryCreateSaleInput,
   InventoryEquipmentCreateInput,
+  InventoryEquipmentArchiveInput,
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentRecord,
@@ -38,12 +41,14 @@ export type {
   InventoryRestockInput,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
+  InventorySaleSource,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord
 } from "@fittrack/types";
 
 type InventoryProductApiRecord = {
   category: InventoryProductCategory;
+  cost: string | number;
   created_at: string;
   description: string | null;
   id: string;
@@ -60,6 +65,7 @@ type InventoryEquipmentApiRecord = {
   created_at: string;
   description: string | null;
   id: string;
+  image_url: string | null;
   is_active: boolean;
   name: string;
   quantity_current: number;
@@ -118,9 +124,11 @@ type InventorySaleTransactionSummaryApiRecord = {
   customer_user_id: string | null;
   id: string;
   items_count: number;
+  notes: string | null;
   payment_id: string | null;
   payment_method: "cash" | "paymongo";
   processed_by: string;
+  source: "manual" | "mobile";
   staff: InventorySaleStaffApiRecord | null;
   status: "cancelled" | "completed" | "pending";
   total_amount: string | number;
@@ -153,6 +161,7 @@ function toNumber(value: string | number | null | undefined) {
 function mapProduct(record: InventoryProductApiRecord): InventoryProductRecord {
   return {
     category: record.category,
+    cost: toNumber(record.cost),
     createdAt: record.created_at,
     description: record.description,
     id: record.id,
@@ -173,6 +182,7 @@ function mapEquipment(
     createdAt: record.created_at,
     description: record.description,
     id: record.id,
+    imageUrl: record.image_url,
     isActive: record.is_active,
     name: record.name,
     quantityCurrent: record.quantity_current,
@@ -223,9 +233,11 @@ function mapSaleSummary(
     customerUserId: record.customer_user_id,
     id: record.id,
     itemsCount: record.items_count,
+    notes: record.notes,
     paymentId: record.payment_id,
     paymentMethod: record.payment_method,
     processedBy: record.processed_by,
+    source: record.source,
     staff: record.staff
       ? {
           firstName: record.staff.first_name,
@@ -301,6 +313,7 @@ function toEquipmentListParams(params?: InventoryEquipmentListParams) {
 function toProductMutationInput(payload: InventoryProductMutationInput) {
   return {
     ...(payload.category !== undefined ? { category: payload.category } : {}),
+    ...(payload.cost !== undefined ? { cost: payload.cost } : {}),
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.description !== undefined ? { description: payload.description } : {}),
     ...(payload.price !== undefined ? { price: payload.price } : {}),
@@ -316,6 +329,7 @@ function toProductMutationInput(payload: InventoryProductMutationInput) {
 function toEquipmentCreateInput(payload: InventoryEquipmentCreateInput) {
   return {
     ...(payload.description !== undefined ? { description: payload.description } : {}),
+    ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
     name: payload.name,
     quantity_current: payload.quantityCurrent,
     quantity_total: payload.quantityTotal,
@@ -326,8 +340,15 @@ function toEquipmentCreateInput(payload: InventoryEquipmentCreateInput) {
 function toEquipmentUpdateInput(payload: InventoryEquipmentUpdateInput) {
   return {
     ...(payload.description !== undefined ? { description: payload.description } : {}),
+    ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
     ...(payload.isActive !== undefined ? { is_active: payload.isActive } : {}),
     ...(payload.name !== undefined ? { name: payload.name } : {}),
+    ...(payload.quantityCurrent !== undefined
+      ? { quantity_current: payload.quantityCurrent }
+      : {}),
+    ...(payload.quantityTotal !== undefined
+      ? { quantity_total: payload.quantityTotal }
+      : {}),
     ...(payload.unit !== undefined ? { unit: payload.unit } : {})
   };
 }
@@ -339,16 +360,25 @@ function toEquipmentWriteOffInput(payload: InventoryEquipmentWriteOffInput) {
   };
 }
 
+function toEquipmentArchiveInput(payload: InventoryEquipmentArchiveInput) {
+  return {
+    quantity_to_archive: payload.quantityToArchive,
+    reason: payload.reason
+  };
+}
+
 function toCreateSaleInput(payload: InventoryCreateSaleInput) {
   return {
     ...(payload.customerName !== undefined ? { customer_name: payload.customerName } : {}),
     ...(payload.customerUserId !== undefined
       ? { customer_user_id: payload.customerUserId }
       : {}),
+    ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
     payment_method: payload.paymentMethod,
     items: payload.items.map((item) => ({
       product_id: item.productId,
-      quantity: item.quantity
+      quantity: item.quantity,
+      ...(item.unitPrice !== undefined ? { unit_price: item.unitPrice } : {})
     }))
   };
 }
@@ -458,6 +488,17 @@ export function createInventoryApi(transport: ApiTransport) {
             toEquipmentWriteOffInput(payload)
           ),
           "Unable to record inventory equipment write-off."
+        )
+      );
+    },
+    async archiveEquipment(equipmentId: string, payload: InventoryEquipmentArchiveInput) {
+      return mapEquipment(
+        await unwrapResponse<InventoryEquipmentApiRecord>(
+          transport.post(
+            `/inventory/equipment/${equipmentId}/archive`,
+            toEquipmentArchiveInput(payload)
+          ),
+          "Unable to archive inventory equipment item."
         )
       );
     },

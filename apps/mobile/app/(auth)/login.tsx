@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
@@ -22,7 +26,12 @@ import ForgotPasswordModal from "@/components/modals/auth/ForgotPasswordModal";
 const WEB_AUTH_STATUS_KEY = "fittrack_mobile_auth_status";
 
 export default function LoginScreen() {
-  const { login, commitLogin, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const {
+    login,
+    commitLogin,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+  } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
@@ -35,9 +44,10 @@ export default function LoginScreen() {
   const [statusText, setStatusText] = useState("");
   const contentOpacity = useSharedValue(1);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const persistedStatusText = Platform.OS === "web"
-    ? globalThis.sessionStorage?.getItem(WEB_AUTH_STATUS_KEY)?.trim() ?? ""
-    : "";
+  const persistedStatusText =
+    Platform.OS === "web"
+      ? (globalThis.sessionStorage?.getItem(WEB_AUTH_STATUS_KEY)?.trim() ?? "")
+      : "";
   const visibleStatusText = statusText || persistedStatusText;
 
   const loadingText = useLoadingText("Signing in", isLoading);
@@ -46,30 +56,41 @@ export default function LoginScreen() {
   const {
     control,
     handleSubmit,
-    formState: { errors }
+    formState: { errors },
   } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
     mode: "onSubmit",
-    reValidateMode: "onChange"
+    reValidateMode: "onChange",
   });
 
-  const showStatus = useCallback((message: string) => {
-    if (statusTimerRef.current) {
-      clearTimeout(statusTimerRef.current);
-    }
-    setStatusText(message);
-    statusTimerRef.current = setTimeout(() => {
-      setStatusText("");
-      statusTimerRef.current = null;
-    }, 2000);
-  }, []);
+  const showStatus = useCallback(
+    (message: string, options?: { autoClearMs?: number | null }) => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+      setStatusText(message);
+      if (options?.autoClearMs === null) {
+        statusTimerRef.current = null;
+        return;
+      }
+      const autoClearMs = options?.autoClearMs ?? 2000;
+      statusTimerRef.current = setTimeout(() => {
+        setStatusText("");
+        statusTimerRef.current = null;
+      }, autoClearMs);
+    },
+    [],
+  );
 
-  useEffect(() => () => {
-    if (statusTimerRef.current) {
-      clearTimeout(statusTimerRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const fadeOutAndShowBuffer = async () => {
     contentOpacity.value = withTiming(0, { duration: 200 });
@@ -94,7 +115,9 @@ export default function LoginScreen() {
       if (Platform.OS === "web") {
         globalThis.sessionStorage?.setItem(WEB_AUTH_STATUS_KEY, result.error);
       }
-      showStatus(result.error);
+      showStatus(result.error, {
+        autoClearMs: result.reason === "ACCOUNT_LOCKED" ? null : 2000,
+      });
       return;
     }
     if (Platform.OS === "web") {
@@ -112,15 +135,15 @@ export default function LoginScreen() {
 
   const heroStyle = useAnimatedStyle(() => ({
     opacity: fadeIn.value,
-    transform: [{ translateY: takeFlight.value }]
+    transform: [{ translateY: takeFlight.value }],
   }));
 
   const fadeStyle = useAnimatedStyle(() => ({
-    opacity: fadeIn.value
+    opacity: fadeIn.value,
   }));
 
   const screenFadeStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value
+    opacity: contentOpacity.value,
   }));
   const submitCredentials = handleSubmit(onSubmit);
 
@@ -147,7 +170,11 @@ export default function LoginScreen() {
         >
           <Animated.View style={heroStyle}>
             <View style={s.iconCircle}>
-              <Dumbbell size={36} color={colors.onBrand ?? "#FFFFFF"} strokeWidth={2} />
+              <Dumbbell
+                size={36}
+                color={colors.onBrand ?? "#FFFFFF"}
+                strokeWidth={2}
+              />
             </View>
             <View style={s.titleBlock}>
               <FitText style={s.title}>FitTrack</FitText>
@@ -178,7 +205,10 @@ export default function LoginScreen() {
                   secureTextEntry
                   editable={!isLoading}
                 />
-                <FitText style={s.forgotPassword} onPress={() => setForgotOpen(true)}>
+                <FitText
+                  style={s.forgotPassword}
+                  onPress={() => setForgotOpen(true)}
+                >
                   Forgot Password?
                 </FitText>
               </View>
@@ -193,7 +223,12 @@ export default function LoginScreen() {
               <FitText
                 style={[
                   s.statusMessage,
-                  { color: statusTone === "danger" || persistedStatusText ? colors.danger : colors.brand }
+                  {
+                    color:
+                      statusTone === "danger" || persistedStatusText
+                        ? colors.danger
+                        : colors.brand,
+                  },
                 ]}
               >
                 {visibleStatusText}
@@ -210,7 +245,9 @@ export default function LoginScreen() {
               onPress={() => router.push("/(auth)/register")}
               disabled={isLoading}
             />
-            <FitText style={s.copyright}>(c) 2026 SertFit Gym. All rights reserved.</FitText>
+            <FitText style={s.copyright}>
+              (c) 2026 SertFit Gym. All rights reserved.
+            </FitText>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -15,6 +15,7 @@ type ChatbotScreenContentProps = {
   isFrozen: boolean;
   isMemberLocked: boolean;
   isPending: boolean;
+  isSessionDeleted: boolean;
   lastError: string;
   memberLockMessage: string;
   memberLockStatusLabel: string;
@@ -32,6 +33,7 @@ export default function ChatbotScreenContent({
   isFrozen,
   isMemberLocked,
   isPending,
+  isSessionDeleted,
   lastError,
   memberLockMessage,
   memberLockStatusLabel,
@@ -86,6 +88,11 @@ export default function ChatbotScreenContent({
           />
         ) : (
           <>
+            {isSessionDeleted ? (
+              <FitText style={{ fontSize: 12, color: colors.danger, marginBottom: 12 }}>
+                This chat is deleted. Restore it from BrodigyAI history before sending another message.
+              </FitText>
+            ) : null}
             {messages.map((message) =>
               message.from === "ai" ? (
                 <View key={message.id} style={[styles.aiBubbleRow, { marginBottom: 12 }]}>
@@ -124,10 +131,10 @@ export default function ChatbotScreenContent({
       <View style={styles.inputBar}>
         <View style={styles.inputWrap}>
           <FitTextInput
-            placeholder={isFrozen ? "Account frozen" : isMemberLocked ? "Membership card required" : "Type a message"}
+            placeholder={isFrozen ? "Account frozen" : isMemberLocked ? "Membership card required" : isSessionDeleted ? "Restore this chat to continue" : "Type a message"}
             value={input}
             onChangeText={onInputChange}
-            editable={!isFrozen && !isMemberLocked && !isPending}
+            editable={!isFrozen && !isMemberLocked && !isSessionDeleted && !isPending}
           />
         </View>
         <Pressable onPress={onSend} disabled={!canSend} style={[styles.sendBtn, !canSend && { opacity: 0.6 }]}>

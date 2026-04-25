@@ -77,6 +77,15 @@ export type BusinessAnalyticsGroundingPayload = {
     }>;
   };
   inventory?: {
+    equipment_types: number;
+    equipment_under_maintenance: number;
+    equipment_units_available: number;
+    equipment_units_total: number;
+    low_stock_items: number;
+    out_of_stock_items: number;
+    retail_inventory_value: string;
+    retail_items: number;
+    retail_sales_revenue: string;
     top_products: Array<{
       name: string;
       quantity_sold: number;

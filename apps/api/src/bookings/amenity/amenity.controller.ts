@@ -34,6 +34,15 @@ export class AmenityController {
     return this.amenityService.listAmenities();
   }
 
+  @Get('amenities/archived')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List archived amenities. Admin only.' })
+  listArchivedAmenities() {
+    return this.amenityService.listArchivedAmenities();
+  }
+
   @Get('amenities/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -65,6 +74,17 @@ export class AmenityController {
     @Body() dto: UpdateAmenityDTO,
   ) {
     return this.amenityService.updateAmenity(id, dto);
+  }
+
+  @Patch('amenities/:id/restore')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Restore an archived amenity. Admin only.' })
+  @ApiResponse({ status: 200, description: 'Amenity restored.' })
+  @ApiResponse({ status: 404, description: 'Amenity not found.' })
+  restoreAmenity(@Param('id', ParseUUIDPipe) id: string) {
+    return this.amenityService.restoreAmenity(id);
   }
 
   @Delete('amenities/:id')

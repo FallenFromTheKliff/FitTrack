@@ -14,6 +14,9 @@ import { AppointmentService } from './appointment/appointment.service';
 import { CoachController } from './coach/coach.controller';
 import { CoachRepository } from './coach/coach.repository';
 import { CoachService } from './coach/coach.service';
+import { RecurringCoachingPlanController } from './recurring-plan/recurring-coaching-plan.controller';
+import { RecurringCoachingPlanRepository } from './recurring-plan/recurring-coaching-plan.repository';
+import { RecurringCoachingPlanService } from './recurring-plan/recurring-coaching-plan.service';
 import { RelationshipController } from './relationship/relationship.controller';
 import { RelationshipLifecycleService } from './relationship/relationship-lifecycle.service';
 import { RelationshipRepository } from './relationship/relationship.repository';
@@ -27,12 +30,19 @@ import { RelationshipService } from './relationship/relationship.service';
     QueueModule,
     BullModule.registerQueue({ name: COACHING_LIFECYCLE_QUEUE }),
   ],
-  controllers: [CoachController, AppointmentController, RelationshipController],
+  controllers: [
+    CoachController,
+    AppointmentController,
+    RelationshipController,
+    RecurringCoachingPlanController,
+  ],
   providers: [
     CoachService,
     CoachRepository,
     AppointmentService,
     AppointmentRepository,
+    RecurringCoachingPlanService,
+    RecurringCoachingPlanRepository,
     AppointmentLifecycleService,
     AppointmentLifecycleProcessor,
     RelationshipService,

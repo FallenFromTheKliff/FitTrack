@@ -27,9 +27,11 @@ import {
   CreateGymPromotionDTO,
   CreateGymSpecialScheduleDTO,
   GymFaqEntryResponseDTO,
+  GymProfileResponseDTO,
   GymOperatingHourResponseDTO,
   GymPromotionResponseDTO,
   GymSpecialScheduleResponseDTO,
+  UpdateGymProfileDTO,
   UpsertGymOperatingHoursDTO,
 } from './dto/gym-knowledge.dto';
 import { GymKnowledgeService } from './gym-knowledge.service';
@@ -88,6 +90,7 @@ function paginatedEnvelopeSchema(schemaRef: string) {
   GymSpecialScheduleResponseDTO,
   GymPromotionResponseDTO,
   GymFaqEntryResponseDTO,
+  GymProfileResponseDTO,
 )
 @Controller('gym-chat/knowledge')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -95,6 +98,34 @@ function paginatedEnvelopeSchema(schemaRef: string) {
 @ApiBearerAuth('access-token')
 export class GymKnowledgeController {
   constructor(private readonly gymKnowledgeService: GymKnowledgeService) {}
+
+  @Get('profile')
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({
+    summary: 'Get the shared gym profile snapshot for admin surfaces.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Gym profile returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(GymProfileResponseDTO)),
+  })
+  getGymProfile() {
+    return this.gymKnowledgeService.getGymProfile();
+  }
+
+  @Put('profile')
+  @ApiOperation({
+    summary: 'Replace the shared gym profile snapshot. Admin only.',
+  })
+  @ApiBody({ type: UpdateGymProfileDTO })
+  @ApiResponse({
+    status: 200,
+    description: 'Gym profile updated.',
+    schema: apiEnvelopeSchema(getSchemaPath(GymProfileResponseDTO)),
+  })
+  updateGymProfile(@Body() dto: UpdateGymProfileDTO) {
+    return this.gymKnowledgeService.updateGymProfile(dto);
+  }
 
   @Get('hours')
   @ApiOperation({ summary: 'List active gym operating hours. Admin only.' })

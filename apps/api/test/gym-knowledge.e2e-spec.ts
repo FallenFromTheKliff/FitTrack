@@ -19,6 +19,8 @@ import { JwtAuthGuard, RolesGuard } from '../src/common/guards';
 import { ResponseInterceptor } from '../src/common/interceptors/response.interceptor';
 
 type GymKnowledgeServiceMethods =
+  | 'getGymProfile'
+  | 'updateGymProfile'
   | 'getOperatingHours'
   | 'replaceOperatingHours'
   | 'getSpecialSchedules'
@@ -49,10 +51,20 @@ const USERS: Record<string, JwtPayload> = {
     iat: 1,
     exp: 9999999999,
   },
+  staff: {
+    sub: '33333333-3333-4333-8333-333333333333',
+    role: UserRole.staff,
+    status: UserStatus.active,
+    jti: 'staff-jti',
+    iat: 1,
+    exp: 9999999999,
+  },
 };
 
 function createGymKnowledgeServiceMock(): GymKnowledgeServiceMock {
   return {
+    getGymProfile: jest.fn(),
+    updateGymProfile: jest.fn(),
     getOperatingHours: jest.fn(),
     replaceOperatingHours: jest.fn(),
     getSpecialSchedules: jest.fn(),
@@ -149,6 +161,22 @@ describe('GymKnowledgeController (e2e)', () => {
   });
 
   it('supports the admin gym knowledge HTTP surface', async () => {
+    gymKnowledgeService.getGymProfile.mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
+    gymKnowledgeService.updateGymProfile.mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
     gymKnowledgeService.getOperatingHours.mockResolvedValue([
       {
         id: 'hour-1',
@@ -261,6 +289,38 @@ describe('GymKnowledgeController (e2e)', () => {
       is_active: true,
       created_at: '2026-03-29T09:00:00.000Z',
       updated_at: '2026-03-29T10:00:00.000Z',
+    });
+
+    const gymProfileResponse = await request(getHttpServer(app))
+      .get('/v1/gym-chat/knowledge/profile')
+      .set('Authorization', 'Bearer admin')
+      .expect(200);
+
+    expect(gymKnowledgeService.getGymProfile).toHaveBeenCalledTimes(1);
+    expect(gymProfileResponse.body).toMatchObject({
+      data: { name: 'SERTFIT Gym', opening_time: '06:00' },
+    });
+
+    await request(getHttpServer(app))
+      .put('/v1/gym-chat/knowledge/profile')
+      .set('Authorization', 'Bearer admin')
+      .send({
+        name: 'SERTFIT Gym',
+        phone: '+639281234567',
+        location: '123 Fitness Ave, New York, NY 10001',
+        email: 'contact@sertfit.com',
+        opening_time: '06:00',
+        closing_time: '22:00',
+      })
+      .expect(200);
+
+    expect(gymKnowledgeService.updateGymProfile).toHaveBeenCalledWith({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
     });
 
     const hoursResponse = await request(getHttpServer(app))
@@ -404,6 +464,27 @@ describe('GymKnowledgeController (e2e)', () => {
       keywords: ['walk-in', 'day pass'],
       sort_order: 10,
     });
+  });
+
+  it('allows staff to read the shared gym profile', async () => {
+    gymKnowledgeService.getGymProfile.mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
+
+    const response = await request(getHttpServer(app))
+      .get('/v1/gym-chat/knowledge/profile')
+      .set('Authorization', 'Bearer staff')
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      data: { name: 'SERTFIT Gym' },
+    });
+    expect(gymKnowledgeService.getGymProfile).toHaveBeenCalledTimes(1);
   });
 
   it('rejects non-admin callers from the knowledge routes', async () => {

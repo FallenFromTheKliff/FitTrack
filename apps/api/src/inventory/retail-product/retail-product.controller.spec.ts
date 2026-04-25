@@ -83,17 +83,33 @@ describe('RetailProductController', () => {
   it('creates products through the service', async () => {
     retailProductService.createProduct.mockResolvedValue({ id: 'product-1' });
 
-    await controller.createProduct({
+    await controller.createProduct({ sub: 'admin-1' } as never, {
       category: 'supplements',
       name: 'Whey Protein Isolate',
       price: 1499,
     });
 
-    expect(retailProductService.createProduct).toHaveBeenCalledWith({
+    expect(retailProductService.createProduct).toHaveBeenCalledWith('admin-1', {
       category: 'supplements',
       name: 'Whey Protein Isolate',
       price: 1499,
     });
+  });
+
+  it('forwards update requests with the authenticated actor id', async () => {
+    retailProductService.updateProduct.mockResolvedValue({ id: 'product-1' });
+
+    await controller.updateProduct({ sub: 'admin-1' } as never, 'product-1', {
+      name: 'Updated Whey',
+    });
+
+    expect(retailProductService.updateProduct).toHaveBeenCalledWith(
+      'admin-1',
+      'product-1',
+      {
+        name: 'Updated Whey',
+      },
+    );
   });
 
   it('forwards restock requests with the authenticated actor id', async () => {

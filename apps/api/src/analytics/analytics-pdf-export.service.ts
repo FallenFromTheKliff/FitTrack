@@ -35,36 +35,42 @@ export class AnalyticsPdfExportService {
       start_date: dto.attendance_start_date,
     });
 
-    const [snapshot, revenue, attendance, dailyInsightsTrend] = await Promise.all([
-      this.analyticsService.getSnapshot(),
-      this.analyticsService.getRevenue(revenueQuery),
-      this.analyticsService.getAttendance(attendanceQuery),
-      this.analyticsService.getDailyInsightsTrend(attendanceQuery),
-    ]);
-
-    const [overviewInsight, revenueInsight, attendanceInsight, inventoryInsight] =
+    const [snapshot, revenue, attendance, dailyInsightsTrend, inventory] =
       await Promise.all([
-        this.generateInsight({
-          ...revenueQuery,
-          focus: InsightFocus.overview,
-          period: this.toInsightPeriod(revenueQuery.period),
-        }),
-        this.generateInsight({
-          ...revenueQuery,
-          focus: InsightFocus.revenue,
-          period: this.toInsightPeriod(revenueQuery.period),
-        }),
-        this.generateInsight({
-          ...attendanceQuery,
-          focus: InsightFocus.attendance,
-          period: this.toInsightPeriod(attendanceQuery.period),
-        }),
-        this.generateInsight({
-          ...revenueQuery,
-          focus: InsightFocus.inventory,
-          period: this.toInsightPeriod(revenueQuery.period),
-        }),
+        this.analyticsService.getSnapshot(),
+        this.analyticsService.getRevenue(revenueQuery),
+        this.analyticsService.getAttendance(attendanceQuery),
+        this.analyticsService.getDailyInsightsTrend(attendanceQuery),
+        this.analyticsService.getInventorySummary(revenueQuery),
       ]);
+
+    const [
+      overviewInsight,
+      revenueInsight,
+      attendanceInsight,
+      inventoryInsight,
+    ] = await Promise.all([
+      this.generateInsight({
+        ...revenueQuery,
+        focus: InsightFocus.overview,
+        period: this.toInsightPeriod(revenueQuery.period),
+      }),
+      this.generateInsight({
+        ...revenueQuery,
+        focus: InsightFocus.revenue,
+        period: this.toInsightPeriod(revenueQuery.period),
+      }),
+      this.generateInsight({
+        ...attendanceQuery,
+        focus: InsightFocus.attendance,
+        period: this.toInsightPeriod(attendanceQuery.period),
+      }),
+      this.generateInsight({
+        ...revenueQuery,
+        focus: InsightFocus.inventory,
+        period: this.toInsightPeriod(revenueQuery.period),
+      }),
+    ]);
 
     const insights = {
       attendance: this.buildAttendanceInsight(attendance, attendanceInsight),
@@ -72,6 +78,11 @@ export class AnalyticsPdfExportService {
         snapshot,
         dailyInsightsTrend,
         overviewInsight,
+      ),
+      inventory: this.buildInventoryInsight(
+        inventory,
+        revenue,
+        inventoryInsight,
       ),
       performanceKpis: this.buildPerformanceInsight(
         snapshot,
@@ -101,6 +112,7 @@ export class AnalyticsPdfExportService {
       dailyInsightsTrend,
       generatedAt: generatedAt.toISOString(),
       insights,
+      inventory,
       revenue,
       snapshot,
     });
@@ -129,15 +141,19 @@ export class AnalyticsPdfExportService {
     insight: BusinessAnalyticsInsightResponse | null,
   ): AnalyticsPdfInsightBlock {
     const peakPoint =
-      [...trend.series].sort((left, right) => right.sessions - left.sessions)[0] ??
-      null;
+      [...trend.series].sort(
+        (left, right) => right.sessions - left.sessions,
+      )[0] ?? null;
     const quietPoint =
-      [...trend.series].sort((left, right) => left.sessions - right.sessions)[0] ??
-      null;
+      [...trend.series].sort(
+        (left, right) => left.sessions - right.sessions,
+      )[0] ?? null;
     const averageActiveMembers =
       trend.series.length > 0
-        ? trend.series.reduce((total, point) => total + point.active_members, 0) /
-          trend.series.length
+        ? trend.series.reduce(
+            (total, point) => total + point.active_members,
+            0,
+          ) / trend.series.length
         : snapshot.daily_insights.active_members;
 
     const local: AnalyticsPdfInsightBlock = {
@@ -157,7 +173,8 @@ export class AnalyticsPdfExportService {
         peakPoint
           ? `Schedule stronger floor coverage and retail prompts around ${this.toLabel(peakPoint.bucket_start, trend.period)}.`
           : 'Keep monitoring the session curve before shifting staffing coverage.',
-        quietPoint && quietPoint.sessions < (peakPoint?.sessions ?? quietPoint.sessions)
+        quietPoint &&
+        quietPoint.sessions < (peakPoint?.sessions ?? quietPoint.sessions)
           ? `Run reactivation or class-fill campaigns ahead of ${this.toLabel(quietPoint.bucket_start, trend.period)} to lift softer traffic.`
           : 'Keep the current member activation cadence while monitoring demand swings.',
       ],
@@ -192,15 +209,51 @@ export class AnalyticsPdfExportService {
     return this.mergeInsightBlock(insight, local);
   }
 
+  private buildInventoryInsight(
+    inventory: Awaited<ReturnType<AnalyticsService['getInventorySummary']>>,
+    revenue: Awaited<ReturnType<AnalyticsService['getRevenue']>>,
+    insight: BusinessAnalyticsInsightResponse | null,
+  ): AnalyticsPdfInsightBlock {
+    const topProduct = inventory.top_products[0] ?? null;
+
+    const local: AnalyticsPdfInsightBlock = {
+      summary: `Inventory currently tracks ${inventory.retail_items} retail items worth ${this.formatMoney(inventory.retail_inventory_value)}, with ${inventory.low_stock_items} low-stock item(s), ${inventory.out_of_stock_items} out-of-stock item(s), and ${inventory.equipment_under_maintenance} equipment type(s) under maintenance.`,
+      highlights: [
+        `Retail sales contributed ${this.formatMoney(revenue.totals.product_revenue)} in the selected revenue window.`,
+        topProduct
+          ? `${topProduct.name} leads retail sell-through at ${topProduct.quantity_sold} units and ${this.formatMoney(topProduct.revenue)} in revenue.`
+          : 'No retail sales were recorded for the selected export window.',
+        `${inventory.equipment_units_available} of ${inventory.equipment_units_total} equipment units are currently available on the floor.`,
+      ],
+      recommendedActions: [
+        inventory.low_stock_items > 0
+          ? `Restock the ${inventory.low_stock_items} low-stock retail item(s) before peak traffic loses add-on sales.`
+          : 'Keep the current retail reorder cadence because no low-stock retail items are active right now.',
+        inventory.equipment_under_maintenance > 0
+          ? `Resolve ${inventory.equipment_under_maintenance} maintenance queue item(s) so equipment availability stays ahead of attendance demand.`
+          : 'Equipment availability is stable, so the next inventory focus can stay on retail conversion.',
+        topProduct
+          ? `Feature ${topProduct.name} in front-desk prompts and bundles while it remains the strongest retail seller.`
+          : 'Review retail assortment and merchandising because the selected window produced no meaningful top seller.',
+      ],
+    };
+
+    return this.mergeInsightBlock(insight, local);
+  }
+
   private buildRevenueInsight(
     revenue: Awaited<ReturnType<AnalyticsService['getRevenue']>>,
     insight: BusinessAnalyticsInsightResponse | null,
   ): AnalyticsPdfInsightBlock {
     const strongestSource = revenue.top_revenue_sources[0] ?? null;
-    const series = revenue.series.filter((entry) => Number(entry.total_revenue) > 0);
+    const series = revenue.series.filter(
+      (entry) => Number(entry.total_revenue) > 0,
+    );
     const firstPoint = series[0] ?? revenue.series[0] ?? null;
     const lastPoint =
-      series[series.length - 1] ?? revenue.series[revenue.series.length - 1] ?? null;
+      series[series.length - 1] ??
+      revenue.series[revenue.series.length - 1] ??
+      null;
     const trendDirection =
       firstPoint && lastPoint
         ? Number(lastPoint.total_revenue) - Number(firstPoint.total_revenue)
@@ -237,11 +290,13 @@ export class AnalyticsPdfExportService {
     insight: BusinessAnalyticsInsightResponse | null,
   ): AnalyticsPdfInsightBlock {
     const peakPoint =
-      [...attendance.series].sort((left, right) => right.check_ins - left.check_ins)[0] ??
-      null;
+      [...attendance.series].sort(
+        (left, right) => right.check_ins - left.check_ins,
+      )[0] ?? null;
     const quietPoint =
-      [...attendance.series].sort((left, right) => left.check_ins - right.check_ins)[0] ??
-      null;
+      [...attendance.series].sort(
+        (left, right) => left.check_ins - right.check_ins,
+      )[0] ?? null;
 
     const local: AnalyticsPdfInsightBlock = {
       summary: peakPoint
@@ -294,7 +349,9 @@ export class AnalyticsPdfExportService {
                 (alert) =>
                   `${alert.action_label}: resolve the ${alert.title.toLowerCase()} item linked to ${alert.id}.`,
               )
-          : ['Keep the current restock and maintenance cadence so new alerts stay suppressed.'],
+          : [
+              'Keep the current restock and maintenance cadence so new alerts stay suppressed.',
+            ],
     };
 
     return this.mergeInsightBlock(insight, local);
@@ -316,8 +373,9 @@ export class AnalyticsPdfExportService {
     ).length;
     const latest = snapshot.recent_activities[0] ?? null;
     const dominantKind =
-      Object.entries(byKind).sort((left, right) => right[1] - left[1])[0]?.[0] ??
-      'mixed';
+      Object.entries(byKind).sort(
+        (left, right) => right[1] - left[1],
+      )[0]?.[0] ?? 'mixed';
 
     const local: AnalyticsPdfInsightBlock = {
       summary: latest
@@ -328,7 +386,9 @@ export class AnalyticsPdfExportService {
         cancelledCount > 0
           ? `${cancelledCount} recent activities ended in a cancelled state and may need operational follow-up.`
           : 'Recent activity is currently landing without visible cancellation pressure.',
-        latest ? latest.description : 'No latest activity description was available.',
+        latest
+          ? latest.description
+          : 'No latest activity description was available.',
       ],
       recommendedActions: [
         cancelledCount > 0
@@ -407,7 +467,7 @@ export class AnalyticsPdfExportService {
         : local.summary,
       highlights: this.mergeUniqueStrings([
         ...(this.isPrimaryInsight(args.overviewInsight)
-          ? args.overviewInsight?.highlights ?? []
+          ? (args.overviewInsight?.highlights ?? [])
           : []),
         ...local.highlights,
       ]).slice(0, 4),
@@ -452,8 +512,8 @@ export class AnalyticsPdfExportService {
   private isPrimaryInsight(insight: BusinessAnalyticsInsightResponse | null) {
     return Boolean(
       insight &&
-        insight.model_used !== 'grounded-fallback' &&
-        !insight.summary.startsWith('Fallback insight:'),
+      insight.model_used !== 'grounded-fallback' &&
+      !insight.summary.startsWith('Fallback insight:'),
     );
   }
 

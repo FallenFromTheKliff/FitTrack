@@ -79,6 +79,15 @@ def _build_grounding_payload() -> dict[str, object]:
             ]
         },
         "inventory": {
+            "retail_items": 14,
+            "low_stock_items": 2,
+            "out_of_stock_items": 1,
+            "retail_inventory_value": "16450.00",
+            "retail_sales_revenue": "850.00",
+            "equipment_types": 9,
+            "equipment_units_available": 28,
+            "equipment_units_total": 32,
+            "equipment_under_maintenance": 2,
             "top_products": [
                 {
                     "name": "Protein Bar",

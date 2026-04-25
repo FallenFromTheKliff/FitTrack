@@ -105,8 +105,11 @@ export class RetailProductController {
     description: 'Retail product created.',
     schema: apiEnvelopeSchema(getSchemaPath(RetailProductResponseDTO)),
   })
-  createProduct(@Body() dto: CreateRetailProductDTO) {
-    return this.retailProductService.createProduct(dto);
+  createProduct(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateRetailProductDTO,
+  ) {
+    return this.retailProductService.createProduct(user.sub, dto);
   }
 
   @Patch('products/:id')
@@ -124,10 +127,11 @@ export class RetailProductController {
   })
   @ApiResponse({ status: 404, description: 'Retail product not found.' })
   updateProduct(
+    @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateRetailProductDTO,
   ) {
-    return this.retailProductService.updateProduct(id, dto);
+    return this.retailProductService.updateProduct(user.sub, id, dto);
   }
 
   @Post('products/:id/restock')

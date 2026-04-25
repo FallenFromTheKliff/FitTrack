@@ -83,6 +83,12 @@ export class CreateRetailProductDTO {
   @IsPositive({ message: 'price must be a positive number' })
   price: number;
 
+  @ApiPropertyOptional({ example: 899, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0, { message: 'cost must be at least 0' })
+  cost?: number;
+
   @ApiPropertyOptional({ example: 25, default: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -140,6 +146,12 @@ export class UpdateRetailProductDTO {
   @Type(() => Number)
   @IsPositive({ message: 'price must be a positive number' })
   price?: number;
+
+  @ApiPropertyOptional({ example: 899 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0, { message: 'cost must be at least 0' })
+  cost?: number;
 
   @ApiPropertyOptional({ example: 8 })
   @IsOptional()
@@ -223,6 +235,9 @@ export class RetailProductResponseDTO {
 
   @ApiProperty({ example: '1499.00' })
   price: string;
+
+  @ApiProperty({ example: '899.00' })
+  cost: string;
 
   @ApiProperty({ example: 25 })
   stock_quantity: number;

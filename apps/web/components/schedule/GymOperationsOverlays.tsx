@@ -240,9 +240,12 @@ export function GymOperationsCoachAppointmentModal({
   coachReadiness,
   isOpen,
   isSubmitting = false,
+  onCancelRecurringPlan,
   onCancelAppointment,
   onClose,
   onComplete,
+  onEditRecurringFuture,
+  onEditRecurringSession,
   onConfirm,
   onReject,
 }: {
@@ -250,9 +253,12 @@ export function GymOperationsCoachAppointmentModal({
   coachReadiness: CoachReadinessSummary;
   isOpen: boolean;
   isSubmitting?: boolean;
+  onCancelRecurringPlan?: () => void;
   onCancelAppointment: (note: string) => void;
   onClose: () => void;
   onComplete: (note: string) => void;
+  onEditRecurringFuture?: () => void;
+  onEditRecurringSession?: () => void;
   onConfirm: () => void;
   onReject: (note: string) => void;
 }) {
@@ -263,6 +269,7 @@ export function GymOperationsCoachAppointmentModal({
   const tone = buildStatusTone(status, colors);
   const canConfirm = status === "pending_coach";
   const canComplete = status === "confirmed";
+  const isRecurring = Boolean(appointment?.recurringPlanId);
   const memberName = appointment
     ? getPersonDisplayName(
         appointment.user.profile,
@@ -395,6 +402,60 @@ export function GymOperationsCoachAppointmentModal({
             </div>
           </div>
         </div>
+
+        {isRecurring ? (
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: colors.textPrimary,
+                }}
+              >
+                Recurring plan controls
+              </FitText>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 12, color: colors.textMuted }}
+              >
+                Choose whether this change affects one generated session or the
+                future series.
+              </FitText>
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <FitButton
+                variant="ghost"
+                label="THIS SESSION ONLY"
+                onClick={onEditRecurringSession}
+                disabled={isSubmitting || !onEditRecurringSession}
+                style={actionPillStyle(colors)}
+                textStyle={{ fontSize: 13, fontWeight: 700 }}
+              />
+              <FitButton
+                variant="ghost"
+                label="THIS + FUTURE"
+                onClick={onEditRecurringFuture}
+                disabled={isSubmitting || !onEditRecurringFuture}
+                style={actionPillStyle(colors)}
+                textStyle={{ fontSize: 13, fontWeight: 700 }}
+              />
+              <FitButton
+                variant="ghost"
+                label="CANCEL PLAN"
+                onClick={onCancelRecurringPlan}
+                disabled={isSubmitting || !onCancelRecurringPlan}
+                style={actionPillStyle(colors)}
+                textStyle={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: colors.danger,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
           <FitText excludeGlobalScale style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>

@@ -103,14 +103,18 @@ export function useFacilitiesPageController() {
 
   const {
     venues,
+    archivedVenues,
     venuesLoading,
+    archivedVenuesLoading,
     isVenueSubmitting,
     venueSavingLabel,
     deleteVenueMutation,
+    restoreVenueMutation,
     message: venueMessage,
     showMessage: showVenueMessage,
     handleVenueSubmit,
     handleDeleteVenue,
+    handleRestoreVenue,
     handleCreateQuickFloorRegion,
     handleCreateQuickFloorRegionAt,
     handleUpdateVenueLayout,
@@ -123,6 +127,8 @@ export function useFacilitiesPageController() {
     hasUnsavedChanges,
     showUnsavedConfirm,
     setShowUnsavedConfirm,
+    clearFloorConfirmOpen,
+    setClearFloorConfirmOpen,
     layoutName,
     setLayoutName,
     layoutType,
@@ -130,16 +136,22 @@ export function useFacilitiesPageController() {
     deleteTarget,
     setDeleteTarget,
     assignedEquipment,
+    archivedEquipment,
+    archivedEquipmentLoading,
     availableEquipment,
     equipmentRemainingById,
     equipmentById,
     assignedCount,
+    deleteEquipmentMutation,
+    restoreEquipmentMutation,
     message: layoutMessage,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
+    handleRequestClearFloor,
     handleClearFloor,
+    handleRestoreEquipment,
     assignEquipmentToVenue,
   } = useFloorLayout();
 
@@ -148,6 +160,8 @@ export function useFacilitiesPageController() {
   const [venueDeleteTarget, setVenueDeleteTarget] = useState<VenueRecord | null>(null);
   const [selectedFloorVenue, setSelectedFloorVenue] = useState<FloorVenueRecord | null>(null);
   const [deleteHasReservations, setDeleteHasReservations] = useState(false);
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [archiveFilter, setArchiveFilter] = useState<"all" | "venues" | "equipment">("all");
 
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [resourceLoading, setResourceLoading] = useState(false);
@@ -256,6 +270,7 @@ export function useFacilitiesPageController() {
   const drawerButtonWidth = 44;
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
+  const activeFloorLabel = activeFloorConfig.label;
   const activeFloorVenues = floorVenues[activeFloor];
   const authoredRegionCount = activeFloorVenues.filter(
     (venue) => venue.isReservable === false && !venue.isSystem,
@@ -569,7 +584,8 @@ export function useFacilitiesPageController() {
         setSelectedFloorVenue(null);
       }}
       onSave={() => handleSaveLayout(() => showVenueMessage("Layout saved."))}
-      onClearFloor={handleClearFloor}
+      onClearFloor={handleRequestClearFloor}
+      onOpenArchive={() => setArchiveModalOpen(true)}
       quickRegionNode={!isCompact ? quickRegionSidebarNode : undefined}
       quickRegionSummaryNode={!isCompact ? quickRegionSummaryNode : undefined}
       layoutStatusNode={!isCompact ? layoutStatusNode : undefined}
@@ -609,9 +625,18 @@ export function useFacilitiesPageController() {
 
   return {
     activeTab,
+    activeFloorLabel,
+    archivedEquipment,
+    archivedEquipmentLoading,
+    archivedVenues,
+    archivedVenuesLoading,
+    archiveFilter,
+    archiveModalOpen,
     combinedMessage,
     colors,
+    clearFloorConfirmOpen,
     deleteHasReservations,
+    deleteEquipmentMutation,
     deleteTarget,
     deleteTargetEquipment,
     deleteVenueMutation,
@@ -624,12 +649,15 @@ export function useFacilitiesPageController() {
     handleAddResource,
     handleCloseVenueEditor,
     handleConfirmCellDelete,
+    handleClearFloor,
     handleDeleteVenue,
     handleDeleteVenueRequest,
     handleDragEnd,
     handleDragStart,
     handleOpenMap,
     handleOpenVenueEditor,
+    handleRestoreEquipment,
+    handleRestoreVenue,
     handleSaveAndExit,
     handleVenueSubmit,
     handleToggleEditMode,
@@ -651,6 +679,9 @@ export function useFacilitiesPageController() {
     selectedFloorVenue,
     sensors,
     setActiveTab,
+    setArchiveFilter,
+    setArchiveModalOpen,
+    setClearFloorConfirmOpen,
     setDeleteHasReservations,
     setDeleteTarget,
     setIsDrawerOpen,
@@ -662,6 +693,8 @@ export function useFacilitiesPageController() {
     showUnsavedConfirm,
     showVenueMessage,
     themeTransition,
+    restoreEquipmentMutation,
+    restoreVenueMutation,
     venueDeleteTarget,
     venueEditTarget,
     venueInitialValues,

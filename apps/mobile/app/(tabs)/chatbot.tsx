@@ -20,6 +20,7 @@ export default function ChatbotScreen() {
     isFrozen,
     isMemberLocked,
     isPending,
+    isSessionDeleted,
     lastError,
     memberLockMessage,
     memberLockStatusLabel,
@@ -42,6 +43,7 @@ export default function ChatbotScreen() {
           isFrozen={isFrozen}
           isMemberLocked={isMemberLocked}
           isPending={isPending}
+          isSessionDeleted={isSessionDeleted}
           lastError={lastError}
           memberLockMessage={memberLockMessage}
           memberLockStatusLabel={memberLockStatusLabel}

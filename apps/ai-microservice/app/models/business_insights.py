@@ -97,6 +97,15 @@ class BusinessAnalyticsTopProduct(StrictModel):
 
 
 class BusinessAnalyticsInventory(StrictModel):
+    retail_items: int = Field(ge=0)
+    low_stock_items: int = Field(ge=0)
+    out_of_stock_items: int = Field(ge=0)
+    retail_inventory_value: str = Field(min_length=1)
+    retail_sales_revenue: str = Field(min_length=1)
+    equipment_types: int = Field(ge=0)
+    equipment_units_available: int = Field(ge=0)
+    equipment_units_total: int = Field(ge=0)
+    equipment_under_maintenance: int = Field(ge=0)
     top_products: list[BusinessAnalyticsTopProduct]
 
 

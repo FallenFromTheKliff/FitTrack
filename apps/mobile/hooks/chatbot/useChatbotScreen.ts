@@ -92,6 +92,7 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
 
   const sendMutation = useMutation(aiChatMutationOptions(mobileApiClient, queryClient, user?.id));
   const selectedSession = sessions.find((session) => session.id === activeSessionId) ?? sessionQuery.data ?? null;
+  const isSessionDeleted = selectedSession ? !selectedSession.is_active : false;
 
   const messages = useMemo<ChatbotMessage[]>(() => {
     const liveMessages = (messagesQuery.data?.data ?? []).map<ChatbotMessage>((message) => ({
@@ -112,7 +113,7 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
   }, [messagesQuery.data, pendingMessage]);
 
   const send = async () => {
-    if (isFrozen || isMemberLocked) return;
+    if (isFrozen || isMemberLocked || isSessionDeleted) return;
     const trimmedInput = input.trim();
     if (!trimmedInput) return;
 
@@ -166,11 +167,12 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
   };
 
   return {
-    canSend: !isFrozen && !isMemberLocked && !sendMutation.isPending && !!input.trim(),
+    canSend: !isFrozen && !isMemberLocked && !isSessionDeleted && !sendMutation.isPending && !!input.trim(),
     input,
     isFrozen,
     isMemberLocked,
     isPending: sendMutation.isPending,
+    isSessionDeleted,
     lastError,
     memberLockMessage,
     memberLockStatusLabel,

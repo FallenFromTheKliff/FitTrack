@@ -8,6 +8,7 @@ import {
   Prisma,
   SalePaymentMethod,
   SaleStatus,
+  UserRole,
 } from '@prisma/client';
 
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
@@ -37,16 +38,19 @@ describe('SalesService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
 
   const makeSummarySale = (overrides: Record<string, unknown> = {}) => ({
     id: 'sale-1',
     customer_name: 'Walk-in Customer',
     customer_user_id: null,
+    notes: null,
     total_amount: new Prisma.Decimal('2998.00'),
     payment_method: SalePaymentMethod.cash,
     payment_id: null,
     processed_by: 'staff-1',
+    source: 'manual',
     status: SaleStatus.completed,
     staff: {
       id: 'staff-1',
@@ -105,7 +109,7 @@ describe('SalesService', () => {
 
     await expect(
       service.createSale(
-        'staff-1',
+        { sub: 'staff-1', role: UserRole.staff },
         {
           customer_name: 'Walk-in Customer',
           payment_method: SalePaymentMethod.cash,
@@ -132,12 +136,32 @@ describe('SalesService', () => {
         productIds: ['product-1'],
       },
     );
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'product_sale_recorded',
+        actorId: 'staff-1',
+        entityId: 'sale-1',
+        entityName: 'Whey Protein Isolate',
+      }),
+    );
+    const manualActivityCalls = eventEmitter.emitAsync.mock
+      .calls as unknown as Array<
+      [string, { details?: Record<string, unknown> }]
+    >;
+    const manualActivityPayload = manualActivityCalls[0]?.[1];
+    expect(manualActivityPayload?.details).toMatchObject({
+      payment_method: SalePaymentMethod.cash,
+      quantity_sold: 2,
+      source: 'manual',
+      total_amount: '2998.00',
+    });
   });
 
   it('requires a customer user id for paymongo sales', async () => {
     await expect(
       service.createSale(
-        'staff-1',
+        { sub: 'staff-1', role: UserRole.staff },
         {
           payment_method: SalePaymentMethod.paymongo,
           items: [{ product_id: 'product-1', quantity: 1 }],
@@ -182,7 +206,7 @@ describe('SalesService', () => {
 
     await expect(
       service.createSale(
-        'staff-1',
+        { sub: 'staff-1', role: UserRole.staff },
         {
           customer_user_id: 'customer-1',
           payment_method: SalePaymentMethod.paymongo,
@@ -203,6 +227,66 @@ describe('SalesService', () => {
       {
         productIds: ['product-1'],
       },
+    );
+    expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('lets members start their own paymongo product checkout through the shared sale pipeline', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    repo.createPendingPaymongoSale.mockResolvedValue({
+      sale: makeDetailSale({
+        customer_user_id: 'member-1',
+        payment_method: SalePaymentMethod.paymongo,
+        payment_id: 'payment-1',
+        processed_by: 'member-1',
+        source: 'mobile',
+        status: SaleStatus.pending,
+      }),
+      payment: {
+        id: 'payment-1',
+        payable_id: 'sale-1',
+        payable_type: PayableType.product,
+        provider: PaymentProvider.paymongo,
+        status: PaymentStatus.pending,
+        amount: new Prisma.Decimal('2998.00'),
+        idempotency_key: '11111111-1111-4111-8111-111111111111',
+      },
+    });
+    paymongoCheckoutService.createCheckoutSession.mockResolvedValue({
+      providerRef: 'checkout-1',
+      checkoutUrl: 'https://checkout.paymongo.test/sale-1',
+      gatewayMetadata: {
+        checkout_url: 'https://checkout.paymongo.test/sale-1',
+      },
+    });
+    paymentRepository.updatePayment.mockResolvedValue({
+      id: 'payment-1',
+      status: PaymentStatus.processing,
+    });
+
+    await expect(
+      service.createSale(
+        { sub: 'member-1', role: UserRole.member },
+        {
+          payment_method: SalePaymentMethod.paymongo,
+          items: [{ product_id: 'product-1', quantity: 2 }],
+        },
+        '11111111-1111-4111-8111-111111111111',
+      ),
+    ).resolves.toEqual({
+      sale_id: 'sale-1',
+      payment_id: 'payment-1',
+      status: SaleStatus.pending,
+      payment_status: PaymentStatus.processing,
+      checkout_url: 'https://checkout.paymongo.test/sale-1',
+    });
+
+    expect(repo.createPendingPaymongoSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerUserId: 'member-1',
+        processedBy: 'member-1',
+        source: 'mobile',
+      }),
     );
   });
 
@@ -228,7 +312,7 @@ describe('SalesService', () => {
 
     await expect(
       service.createSale(
-        'staff-1',
+        { sub: 'staff-1', role: UserRole.staff },
         {
           customer_user_id: 'customer-1',
           payment_method: SalePaymentMethod.paymongo,
@@ -290,7 +374,16 @@ describe('SalesService', () => {
   });
 
   it('finalizes product sales on payment.completed events', async () => {
-    repo.completePendingPaymongoSale.mockResolvedValue(makeDetailSale());
+    repo.completePendingPaymongoSale.mockResolvedValue(
+      makeDetailSale({
+        customer_user_id: 'customer-1',
+        payment_method: SalePaymentMethod.paymongo,
+        payment_id: 'payment-1',
+        processed_by: 'member-1',
+        source: 'mobile',
+        status: SaleStatus.completed,
+      }),
+    );
 
     await service.handlePaymentCompleted({
       paymentId: 'payment-1',
@@ -305,6 +398,26 @@ describe('SalesService', () => {
       'payment-1',
     );
     expect(eventEmitter.emit).not.toHaveBeenCalled();
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'product_sale_recorded',
+        actorId: 'member-1',
+        entityId: 'sale-1',
+        entityName: 'Whey Protein Isolate',
+      }),
+    );
+    const mobileActivityCalls = eventEmitter.emitAsync.mock
+      .calls as unknown as Array<
+      [string, { details?: Record<string, unknown> }]
+    >;
+    const mobileActivityPayload = mobileActivityCalls[0]?.[1];
+    expect(mobileActivityPayload?.details).toMatchObject({
+      payment_method: SalePaymentMethod.paymongo,
+      quantity_sold: 2,
+      source: 'mobile',
+      total_amount: '2998.00',
+    });
   });
 
   it('treats duplicate payment completion events as a no-op', async () => {
@@ -323,5 +436,6 @@ describe('SalesService', () => {
       'payment-1',
     );
     expect(eventEmitter.emit).not.toHaveBeenCalled();
+    expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
   });
 });

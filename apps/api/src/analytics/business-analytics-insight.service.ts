@@ -160,6 +160,7 @@ export class BusinessAnalyticsInsightService {
     const topPlan = grounding.membership.top_plans[0] ?? null;
     const topCoach = grounding.coaching.coaches[0] ?? null;
     const topProduct = grounding.inventory?.top_products[0] ?? null;
+    const inventory = grounding.inventory ?? null;
     const peakHour = grounding.attendance.peak_hours[0] ?? null;
 
     const highlights = [
@@ -168,6 +169,11 @@ export class BusinessAnalyticsInsightService {
       ...(topPlan
         ? [
             `Top membership plan is ${topPlan.name} with ${topPlan.subscriber_count} subscribers.`,
+          ]
+        : []),
+      ...(inventory
+        ? [
+            `${inventory.low_stock_items} low-stock retail items are live, with ${inventory.equipment_under_maintenance} equipment type(s) under maintenance.`,
           ]
         : []),
     ];
@@ -195,6 +201,11 @@ export class BusinessAnalyticsInsightService {
             `Promote ${topProduct.name} during peak hours to lift secondary spend.`,
           ]
         : []),
+      ...(inventory && inventory.low_stock_items > 0
+        ? [
+            `Use the live inventory lane to restock ${inventory.low_stock_items} retail item(s) before they suppress on-site sales.`,
+          ]
+        : []),
       ...(topPlan
         ? [
             `Use ${topPlan.name} as the lead offer in upgrade and retention campaigns.`,
@@ -220,6 +231,11 @@ export class BusinessAnalyticsInsightService {
         : []),
       ...(topProduct
         ? [`Bundle ${topProduct.name} with memberships or coaching packages.`]
+        : []),
+      ...(inventory && inventory.equipment_under_maintenance > 0
+        ? [
+            `Resolve ${inventory.equipment_under_maintenance} maintenance queue item(s) before equipment downtime affects attendance.`,
+          ]
         : []),
     ];
 
@@ -283,6 +299,16 @@ export class BusinessAnalyticsInsightService {
     ) {
       anomalies.push(
         'Inventory sales data is present, but the top product has zero quantity sold.',
+      );
+    }
+
+    if (
+      grounding.inventory &&
+      grounding.inventory.retail_items > 0 &&
+      this.toMoneyNumber(grounding.inventory.retail_inventory_value) === 0
+    ) {
+      anomalies.push(
+        'Inventory items exist, but the recorded retail inventory value is zero.',
       );
     }
 

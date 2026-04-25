@@ -30,6 +30,7 @@ import {
   UpdatePhoneDTO,
 } from './dto/user-dto';
 import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
+import { ACCOUNT_ACTIVITY_EVENT } from './events/account-activity.event';
 
 const PROFILE_DIRECT_FIELDS = [
   'first_name',
@@ -392,9 +393,23 @@ export class UserService {
     return this.repo.findUserAggregateOrThrow(id);
   }
 
-  async adminUpdateUser(id: string, dto: UpdateProfileDTO) {
-    await this.repo.findUserByIdOrThrow(id);
-    return this.updateExistingUserProfile(id, dto);
+  async adminUpdateUser(id: string, dto: UpdateProfileDTO, actorId: string) {
+    const target = await this.repo.findUserAggregateOrThrow(id);
+    const updatedProfile = await this.updateExistingUserProfile(id, dto);
+
+    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+      action: 'account_updated',
+      actorId,
+      occurredAt: new Date().toISOString(),
+      targetEmail: getIdentityIdentifier(target.auth_identities, [
+        AuthProvider.email,
+        AuthProvider.google,
+      ]),
+      targetRole: target.role,
+      targetUserId: id,
+    });
+
+    return updatedProfile;
   }
 
   async updateUserStatus(
@@ -535,7 +550,10 @@ export class UserService {
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly repo: UserRepository) {}
+  constructor(
+    private readonly repo: UserRepository,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async scanQr(scannerUserId: string | null, dto: ScanQrDTO) {
     const qrValue =
@@ -602,7 +620,25 @@ export class AttendanceService {
       check_in_at: new Date(),
     });
 
-    const profile = await this.repo.findUserProfileByUserIdOrThrow(userId);
+    const target = await this.repo.findUserAggregateOrThrow(userId);
+    const profile = target.profile;
+
+    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+      action: 'attendance_check_in',
+      actorId: scannerUserId ?? userId,
+      details: {
+        attendance_id: log.id,
+        check_in_at: log.check_in_at.toISOString(),
+      },
+      occurredAt: new Date().toISOString(),
+      targetEmail: getIdentityIdentifier(target.auth_identities, [
+        AuthProvider.email,
+        AuthProvider.google,
+      ]),
+      targetRole: target.role,
+      targetUserId: userId,
+    });
+
     return {
       attendance_id: log.id,
       member_name: `${profile.first_name} ${profile.last_name}`.trim(),

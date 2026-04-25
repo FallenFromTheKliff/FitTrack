@@ -16,7 +16,12 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { GymFaqCategory } from '@prisma/client';
 
-import { IsOnOrAfter, TrimString } from '../../common/validators';
+import {
+  IsAllowedEmail,
+  IsOnOrAfter,
+  IsPhilippineMobileNumber,
+  TrimString,
+} from '../../common/validators';
 
 export class UpsertGymOperatingHoursDTO {
   @ApiProperty({ example: 1, description: '0 = Sunday, 6 = Saturday.' })
@@ -173,6 +178,58 @@ export class CreateGymFaqEntryDTO {
   @IsInt({ message: 'sort_order must be an integer' })
   @Min(0, { message: 'sort_order must be at least 0' })
   sort_order?: number;
+}
+
+export class UpdateGymProfileDTO {
+  @ApiProperty({ example: 'SERTFIT Gym' })
+  @TrimString()
+  @IsString({ message: 'name must be a string' })
+  @IsNotEmpty({ message: 'name is required' })
+  @MaxLength(255, { message: 'name must not exceed 255 characters' })
+  name: string;
+
+  @ApiProperty({ example: '+639281234567' })
+  @IsPhilippineMobileNumber('phone')
+  phone: string;
+
+  @ApiProperty({ example: '123 Fitness Ave, New York, NY 10001' })
+  @TrimString()
+  @IsString({ message: 'location must be a string' })
+  @IsNotEmpty({ message: 'location is required' })
+  @MaxLength(255, { message: 'location must not exceed 255 characters' })
+  location: string;
+
+  @ApiProperty({ example: 'contact@sertfit.com' })
+  @IsAllowedEmail('email')
+  email: string;
+
+  @ApiProperty({ example: '06:00' })
+  @IsMilitaryTime({ message: 'opening_time must be a valid military time' })
+  opening_time: string;
+
+  @ApiProperty({ example: '22:00' })
+  @IsMilitaryTime({ message: 'closing_time must be a valid military time' })
+  closing_time: string;
+}
+
+export class GymProfileResponseDTO {
+  @ApiProperty({ example: 'SERTFIT Gym' })
+  name: string;
+
+  @ApiProperty({ example: '+639281234567' })
+  phone: string;
+
+  @ApiProperty({ example: '123 Fitness Ave, New York, NY 10001' })
+  location: string;
+
+  @ApiProperty({ example: 'contact@sertfit.com' })
+  email: string;
+
+  @ApiProperty({ example: '06:00' })
+  opening_time: string;
+
+  @ApiProperty({ example: '22:00' })
+  closing_time: string;
 }
 
 export class GymOperatingHourResponseDTO {

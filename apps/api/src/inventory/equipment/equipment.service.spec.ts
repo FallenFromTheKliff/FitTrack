@@ -20,6 +20,7 @@ describe('EquipmentService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
 
   const makeEquipment = (overrides: Record<string, unknown> = {}) => ({
@@ -118,7 +119,7 @@ describe('EquipmentService', () => {
 
   it('rejects creation when current quantity exceeds total quantity', async () => {
     await expect(
-      service.createEquipmentItem({
+      service.createEquipmentItem('admin-1', {
         name: 'Adjustable Bench',
         quantity_total: 4,
         quantity_current: 5,
@@ -129,7 +130,7 @@ describe('EquipmentService', () => {
   it('creates equipment with the default unit when omitted', async () => {
     repo.createEquipmentItem.mockResolvedValue(makeEquipment());
 
-    await service.createEquipmentItem({
+    await service.createEquipmentItem('admin-1', {
       name: 'Adjustable Bench',
       quantity_total: 8,
       quantity_current: 6,
@@ -138,10 +139,19 @@ describe('EquipmentService', () => {
     expect(repo.createEquipmentItem).toHaveBeenCalledWith({
       name: 'Adjustable Bench',
       description: null,
+      image_url: null,
       quantity_total: 8,
       quantity_current: 6,
       unit: 'units',
     });
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'equipment_created',
+        actorId: 'admin-1',
+        entityName: 'Adjustable Bench',
+      }),
+    );
   });
 
   it('updates only the provided equipment fields', async () => {
@@ -149,7 +159,7 @@ describe('EquipmentService', () => {
       makeEquipment({ unit: 'sets', is_active: false }),
     );
 
-    await service.updateEquipmentItem('equipment-1', {
+    await service.updateEquipmentItem('admin-1', 'equipment-1', {
       unit: 'sets',
       is_active: false,
       description: undefined,
@@ -159,6 +169,14 @@ describe('EquipmentService', () => {
       unit: 'sets',
       is_active: false,
     });
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'equipment_updated',
+        actorId: 'admin-1',
+        entityId: 'equipment-1',
+      }),
+    );
   });
 
   it('writes off equipment through the repository contract', async () => {

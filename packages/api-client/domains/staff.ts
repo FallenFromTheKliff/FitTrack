@@ -32,6 +32,9 @@ export type StaffAppointmentRecord = {
   duration: number;
   id: string;
   notes?: string | null;
+  originalScheduledAt?: string | null;
+  recurringPlanId?: string | null;
+  recurringState?: string | null;
   scheduledAt: string;
   status?: string;
   updatedAt: string;
@@ -80,6 +83,9 @@ type StaffAppointmentApiRecord = {
   duration_minutes: number;
   id: string;
   member_notes?: string | null;
+  original_scheduled_at?: string | null;
+  recurring_plan_id?: string | null;
+  recurring_state?: string | null;
   scheduled_at: string;
   status?: string;
   updated_at: string;
@@ -116,6 +122,9 @@ function mapStaffAppointment(
     scheduledAt: record.scheduled_at,
     duration: record.duration_minutes,
     notes: record.member_notes ?? null,
+    originalScheduledAt: record.original_scheduled_at ?? null,
+    recurringPlanId: record.recurring_plan_id ?? null,
+    recurringState: record.recurring_state ?? null,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
     user: {

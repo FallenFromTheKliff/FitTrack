@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   GymFaqEntry,
+  GymFaqCategory,
   GymOperatingHour,
   GymPromotion,
   GymSpecialSchedule,
@@ -38,6 +39,25 @@ export class GymKnowledgeRepository extends BaseRepository {
       undefined,
       { day_of_week: 'asc' },
     );
+  }
+
+  listFaqEntriesByQuestions(
+    category: GymFaqCategory,
+    questions: string[],
+  ): Promise<GymFaqEntryRecord[]> {
+    return this.prisma.gymFaqEntry.findMany({
+      where: {
+        category,
+        is_active: true,
+        question: {
+          in: questions,
+        },
+      },
+      orderBy: [
+        { sort_order: 'asc' },
+        { created_at: 'asc' },
+      ],
+    });
   }
 
   replaceOperatingHours(
@@ -162,6 +182,62 @@ export class GymKnowledgeRepository extends BaseRepository {
       answer: dto.answer,
       keywords: dto.keywords ?? Prisma.JsonNull,
       sort_order: dto.sort_order ?? 0,
+    });
+  }
+
+  upsertFaqEntries(
+    category: GymFaqCategory,
+    entries: Array<{
+      answer: string;
+      question: string;
+      sort_order: number;
+    }>,
+  ): Promise<GymFaqEntryRecord[]> {
+    return this.transaction(async (tx) => {
+      for (const entry of entries) {
+        const existing = await tx.gymFaqEntry.findFirst({
+          where: {
+            category,
+            question: entry.question,
+          },
+          orderBy: [{ is_active: 'desc' }, { created_at: 'asc' }],
+        });
+
+        if (existing) {
+          await tx.gymFaqEntry.update({
+            where: { id: existing.id },
+            data: {
+              answer: entry.answer,
+              is_active: true,
+              sort_order: entry.sort_order,
+            },
+          });
+          continue;
+        }
+
+        await tx.gymFaqEntry.create({
+          data: {
+            answer: entry.answer,
+            category,
+            question: entry.question,
+            sort_order: entry.sort_order,
+          },
+        });
+      }
+
+      return tx.gymFaqEntry.findMany({
+        where: {
+          category,
+          is_active: true,
+          question: {
+            in: entries.map((entry) => entry.question),
+          },
+        },
+        orderBy: [
+          { sort_order: 'asc' },
+          { created_at: 'asc' },
+        ],
+      });
     });
   }
 

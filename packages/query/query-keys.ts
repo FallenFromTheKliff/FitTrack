@@ -8,6 +8,10 @@ type StaffAppointmentFilters = {
   status?: string;
 };
 
+type RecurringPlanSessionsKey = {
+  planId?: string;
+};
+
 type AiPaginationParams = {
   limit?: number;
   page?: number;
@@ -32,8 +36,16 @@ const staffKeys = {
   coachDetail: (coachId?: string) => coachId ? ["staff", "coaches", coachId] as const : ["staff", "coaches", "detail"] as const
 };
 
+const recurringCoachingPlanKeys = {
+  sessions: (params?: RecurringPlanSessionsKey) =>
+    params?.planId
+      ? ["recurring-coaching-plans", params.planId, "sessions"] as const
+      : ["recurring-coaching-plans", "sessions"] as const
+};
+
 const memberKeys = {
   venues: (userId?: string) => userId ? ["venues", userId] as const : ["venues"] as const,
+  archivedVenues: () => ["venues", "archived"] as const,
   venueDetail: (venueId?: string | number) => venueId != null ? ["venues", "detail", String(venueId)] as const : ["venues", "detail"] as const,
   venueAvailability: (venueId?: string | number, date?: string) =>
     venueId != null
@@ -87,6 +99,7 @@ const notificationKeys = {
 
 const gymLayoutKeys = {
   equipment: () => ["gym-layout", "equipment"] as const,
+  archivedEquipment: () => ["gym-layout", "equipment", "archived"] as const,
 };
 
 const coachKeys = {
@@ -234,7 +247,9 @@ export const queryKeys = {
   staffUserDetail: staffKeys.userDetail,
   staffCoaches: staffKeys.coaches,
   staffCoachDetail: staffKeys.coachDetail,
+  recurringCoachingPlanSessions: recurringCoachingPlanKeys.sessions,
   venues: memberKeys.venues,
+  archivedVenues: memberKeys.archivedVenues,
   venueDetail: memberKeys.venueDetail,
   venueAvailability: memberKeys.venueAvailability,
   bookings: memberKeys.bookings,
@@ -283,5 +298,6 @@ export const queryKeys = {
   fitnessMastery: fitnessKeys.mastery,
   fitnessLeaderboard: fitnessKeys.leaderboard,
   fitnessPoseSession: fitnessKeys.poseSession,
-  gymLayoutEquipment: gymLayoutKeys.equipment
+  gymLayoutEquipment: gymLayoutKeys.equipment,
+  gymLayoutArchivedEquipment: gymLayoutKeys.archivedEquipment
 };

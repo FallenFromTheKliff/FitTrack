@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AccountDeletionRequestStatus,
   AuthProvider,
@@ -10,15 +11,20 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 
 function getIdentityIdentifier(
   identities: Array<{
     provider: AuthProvider;
     identifier: string;
     verified_at: Date | null;
-  }>,
+  }> | null | undefined,
   provider: AuthProvider,
 ) {
+  if (!identities?.length) {
+    return null;
+  }
+
   return (
     identities.find((identity) => identity.provider === provider)?.identifier ??
     null
@@ -41,7 +47,10 @@ function toFrontendRole(role: UserRole) {
 
 @Injectable()
 export class AdminDeletionRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter?: EventEmitter2,
+  ) {}
 
   async getAll(status?: string) {
     const where = status
@@ -149,6 +158,7 @@ export class AdminDeletionRequestsService {
         user: {
           select: {
             id: true,
+            role: true,
             auth_identities: {
               select: {
                 provider: true,
@@ -184,6 +194,17 @@ export class AdminDeletionRequestsService {
       data: { deletedAt: new Date() },
     });
 
+    this.emitAccountActivity({
+      action: 'termination_approved',
+      actorId: reviewedBy,
+      targetEmail: getIdentityIdentifier(
+        request.user.auth_identities,
+        AuthProvider.email,
+      ),
+      targetRole: request.user.role,
+      targetUserId: request.user.id,
+    });
+
     return {
       message: 'User account deleted successfully',
       email: getIdentityIdentifier(
@@ -200,6 +221,21 @@ export class AdminDeletionRequestsService {
   ) {
     const request = await this.prisma.accountDeletionRequest.findUnique({
       where: { id: requestId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            role: true,
+            auth_identities: {
+              select: {
+                provider: true,
+                identifier: true,
+                verified_at: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!request) {
@@ -220,8 +256,32 @@ export class AdminDeletionRequestsService {
       },
     });
 
+    this.emitAccountActivity({
+      action: 'termination_rejected',
+      actorId: reviewedBy,
+      targetEmail: getIdentityIdentifier(
+        request.user.auth_identities,
+        AuthProvider.email,
+      ),
+      targetRole: request.user.role,
+      targetUserId: request.user.id,
+    });
+
     return {
       message: 'Deletion request rejected',
     };
+  }
+
+  private emitAccountActivity(event: {
+    action: 'termination_approved' | 'termination_rejected';
+    actorId: string;
+    targetEmail?: string | null;
+    targetRole?: UserRole | string | null;
+    targetUserId: string;
+  }) {
+    this.eventEmitter?.emit(ACCOUNT_ACTIVITY_EVENT, {
+      ...event,
+      occurredAt: new Date().toISOString(),
+    });
   }
 }

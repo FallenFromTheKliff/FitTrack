@@ -1,4 +1,9 @@
-import type { ApiClient, LoginSuccessResponse, RegisterPayload } from "@fittrack/api-client";
+import {
+  toApiClientError,
+  type ApiClient,
+  type LoginSuccessResponse,
+  type RegisterPayload,
+} from "@fittrack/api-client";
 import type { AuthUser } from "@fittrack/types";
 import {
   createPendingAuthSession,
@@ -8,7 +13,7 @@ import {
   mapProfileToAuthUser,
   resolveAccountStatus,
   type RoleGateConfig,
-  type SessionStoreAdapter
+  type SessionStoreAdapter,
 } from "./auth-session";
 
 type AuthControllerConfig = {
@@ -19,7 +24,9 @@ type AuthControllerConfig = {
   sessionStore: SessionStoreAdapter;
 };
 
-function isLoginSuccess(value: LoginSuccessResponse | { otpRequired?: boolean }): value is LoginSuccessResponse {
+function isLoginSuccess(
+  value: LoginSuccessResponse | { otpRequired?: boolean },
+): value is LoginSuccessResponse {
   return "access_token" in value;
 }
 
@@ -28,7 +35,7 @@ export function createAuthController({
   onUserCleared,
   onUserLoaded,
   roleGate,
-  sessionStore
+  sessionStore,
 }: AuthControllerConfig) {
   const pending = createPendingAuthSession();
   const shouldFetchDeletionStatus = (user: AuthUser | null | undefined) =>
@@ -57,13 +64,16 @@ export function createAuthController({
       if (options?.includeDeletionStatus) {
         const status = shouldFetchDeletionStatus(authUser)
           ? await (async () => {
-            try {
-              const request = await client.users.getDeletionRequestStatus();
-              return resolveAccountStatus(profile.deletedAt, request.status ?? null);
-            } catch {
-              return resolveAccountStatus(profile.deletedAt, null);
-            }
-          })()
+              try {
+                const request = await client.users.getDeletionRequestStatus();
+                return resolveAccountStatus(
+                  profile.deletedAt,
+                  request.status ?? null,
+                );
+              } catch {
+                return resolveAccountStatus(profile.deletedAt, null);
+              }
+            })()
           : resolveAccountStatus(profile.deletedAt, null);
         authUser = { ...authUser, status };
       }
@@ -79,34 +89,73 @@ export function createAuthController({
       await onUserLoaded(authUser.id);
       return authUser;
     },
-    async login(email: string, password: string, options?: { placeholderRole?: AuthUser["role"] }) {
-      const data = await client.auth.login({ email, password });
-      if ("otpRequired" in data && data.otpRequired) {
-        const placeholder: AuthUser = { id: "", email, role: options?.placeholderRole ?? "USER" };
-        pending.setPendingUser(placeholder);
-        pending.setPendingEmail(email);
+    async login(
+      email: string,
+      password: string,
+      options?: { placeholderRole?: AuthUser["role"] },
+    ) {
+      try {
+        const data = await client.auth.login({ email, password });
+        if ("otpRequired" in data && data.otpRequired) {
+          const placeholder: AuthUser = {
+            id: "",
+            email,
+            role: options?.placeholderRole ?? "USER",
+          };
+          pending.setPendingUser(placeholder);
+          pending.setPendingEmail(email);
+          pending.setPendingCredentials({ email, password });
+          return {
+            success: true as const,
+            otpRequired: true as const,
+            user: placeholder,
+          };
+        }
+        if (!isLoginSuccess(data)) {
+          return {
+            success: false as const,
+            otpRequired: false as const,
+            error: "Invalid login response.",
+          };
+        }
+        const authUser = mapLoginSuccessUser(data, email);
+        if (await shouldRejectRole(authUser)) {
+          return {
+            success: false as const,
+            otpRequired: false as const,
+            error: getRoleGateDeniedMessage(roleGate),
+            reason: "PORTAL_ROLE_MISMATCH" as const,
+          };
+        }
+        await sessionStore.setTokens({
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+        });
+        pending.setPendingUser(authUser);
+        pending.setPendingEmail(authUser.email);
         pending.setPendingCredentials({ email, password });
-        return { success: true as const, otpRequired: true as const, user: placeholder };
-      }
-      if (!isLoginSuccess(data)) {
-        return { success: false as const, otpRequired: false as const, error: "Invalid login response." };
-      }
-      const authUser = mapLoginSuccessUser(data, email);
-      if (await shouldRejectRole(authUser)) {
         return {
-          success: false as const,
+          success: true as const,
           otpRequired: false as const,
-          error: getRoleGateDeniedMessage(roleGate),
-          reason: "PORTAL_ROLE_MISMATCH" as const
+          user: authUser,
         };
+      } catch (error) {
+        const apiError = toApiClientError(error, "Login failed.");
+        if (apiError.status === 423) {
+          return {
+            success: false as const,
+            otpRequired: false as const,
+            error: apiError.message,
+            reason: "ACCOUNT_LOCKED" as const,
+          };
+        }
+        throw error;
       }
-      await sessionStore.setTokens({ accessToken: data.access_token, refreshToken: data.refresh_token });
-      pending.setPendingUser(authUser);
-      pending.setPendingEmail(authUser.email);
-      pending.setPendingCredentials({ email, password });
-      return { success: true as const, otpRequired: false as const, user: authUser };
     },
-    async register(payload: RegisterPayload, options?: { placeholderRole?: AuthUser["role"] }) {
+    async register(
+      payload: RegisterPayload,
+      options?: { placeholderRole?: AuthUser["role"] },
+    ) {
       const data = await client.auth.register(payload);
       if (!data.user_id) {
         return { success: false as const, error: "Registration failed." };
@@ -114,27 +163,43 @@ export function createAuthController({
       const placeholder: AuthUser = {
         id: data.user_id,
         email: payload.email,
-        role: options?.placeholderRole ?? "USER"
+        role: options?.placeholderRole ?? "USER",
       };
       pending.setPendingUser(placeholder);
       pending.setPendingEmail(payload.email);
       pending.clearCredentials();
-      return { success: true as const, user: placeholder, userId: data.user_id };
+      return {
+        success: true as const,
+        user: placeholder,
+        userId: data.user_id,
+      };
     },
     async verifyOTP(code: string) {
       const pendingUser = pending.getPendingUser();
       if (!pendingUser?.id) {
         return { success: false as const, error: "No pending session." };
       }
-      const verify = await client.auth.verifyEmail({ user_id: pendingUser.id, code });
+      const verify = await client.auth.verifyEmail({
+        user_id: pendingUser.id,
+        code,
+      });
       if (!isLoginSuccess(verify)) {
         return { success: false as const, error: "Verification failed." };
       }
-      const verifiedUser = mapLoginSuccessUser(verify, pending.getPendingEmail() ?? undefined);
+      const verifiedUser = mapLoginSuccessUser(
+        verify,
+        pending.getPendingEmail() ?? undefined,
+      );
       if (await shouldRejectRole(verifiedUser)) {
-        return { success: false as const, error: getRoleGateDeniedMessage(roleGate) };
+        return {
+          success: false as const,
+          error: getRoleGateDeniedMessage(roleGate),
+        };
       }
-      await sessionStore.setTokens({ accessToken: verify.access_token, refreshToken: verify.refresh_token });
+      await sessionStore.setTokens({
+        accessToken: verify.access_token,
+        refreshToken: verify.refresh_token,
+      });
       pending.setPendingUser(verifiedUser);
       pending.clearCredentials();
       return { success: true as const };
@@ -186,7 +251,7 @@ export function createAuthController({
     async changePassword(currentPassword: string, newPassword: string) {
       await client.auth.changePassword({
         current_password: currentPassword,
-        new_password: newPassword
+        new_password: newPassword,
       });
     },
     async logout() {
@@ -201,6 +266,6 @@ export function createAuthController({
       await sessionStore.clearTokens();
       pending.clear();
       onUserCleared();
-    }
+    },
   };
 }

@@ -13,6 +13,7 @@ import { FitSelect } from "@/components/fit/FitCard";
 import { ConfirmModal, FitModal, VenueDetailsModal } from "@/components/modals";
 
 import { CompactFloorLayout, EditVenueModal, VenueManagementTable } from "@/components/map";
+import { FacilitiesArchiveModal } from "@/components/map/FacilitiesArchiveModal";
 import type { FacilitiesPageController } from "@/components/map/useFacilitiesPageController";
 
 type Props = {
@@ -31,6 +32,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 <FitButton variant="ghost" label="BACK TO VENUES" onClick={controller.handleCloseVenueEditor} />
               ) : null}
               <FitButton variant="ghost" label="MANAGE RESOURCES" onClick={() => controller.setResourceModalOpen(true)} />
+              <FitButton variant="ghost" label="MANAGE ARCHIVE" onClick={() => controller.setArchiveModalOpen(true)} />
               <FitButton variant="primary" label="ADD VENUE" onClick={() => controller.handleOpenVenueEditor("create")} />
             </div>
           </div>
@@ -110,6 +112,21 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         venue={controller.selectedFloorVenue}
         isOpen={!!controller.selectedFloorVenue && !controller.isEditMode}
         onClose={() => controller.setSelectedFloorVenue(null)}
+      />
+      <FacilitiesArchiveModal
+        archivedEquipment={controller.archivedEquipment}
+        archivedVenues={controller.archivedVenues}
+        colors={controller.colors}
+        filter={controller.archiveFilter}
+        isLoadingEquipment={controller.archivedEquipmentLoading}
+        isLoadingVenues={controller.archivedVenuesLoading}
+        isOpen={controller.archiveModalOpen}
+        isRestoringEquipment={controller.restoreEquipmentMutation.isPending}
+        isRestoringVenue={controller.restoreVenueMutation.isPending}
+        onClose={() => controller.setArchiveModalOpen(false)}
+        onFilterChange={controller.setArchiveFilter}
+        onRestoreEquipment={(equipment) => controller.handleRestoreEquipment(equipment)}
+        onRestoreVenue={(venue) => controller.handleRestoreVenue(venue)}
       />
       <FitModal
         isOpen={controller.resourceModalOpen}
@@ -274,6 +291,18 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         confirmLabel={CONFIRM_COPY.saveAndExit.confirmLabel}
         onConfirm={() => controller.handleSaveAndExit(() => controller.showVenueMessage("Layout saved."))}
         onCancel={() => controller.setShowUnsavedConfirm(false)}
+      />
+      <ConfirmModal
+        isOpen={controller.clearFloorConfirmOpen}
+        title="Clear Floor"
+        message={`Archive every equipment placement on ${controller.activeFloorLabel}? You can restore archived placements from Manage Archive.`}
+        confirmLabel="CLEAR FLOOR"
+        loadingLabel="CLEARING FLOOR"
+        loadingTitle="CLEARING FLOOR"
+        isDanger
+        isLoading={controller.deleteEquipmentMutation.isPending}
+        onConfirm={controller.handleClearFloor}
+        onCancel={() => controller.setClearFloorConfirmOpen(false)}
       />
       <ConfirmModal
         isOpen={!!controller.deleteTarget}

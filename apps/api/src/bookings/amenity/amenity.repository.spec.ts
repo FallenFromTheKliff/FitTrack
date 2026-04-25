@@ -35,6 +35,19 @@ describe('AmenityRepository', () => {
     });
   });
 
+  it('lists archived amenities ordered by type then name', async () => {
+    amenity.findMany.mockResolvedValue([{ id: 'amenity-1', is_active: false }]);
+
+    await repo.listArchivedAmenities();
+
+    expect(amenity.findMany).toHaveBeenCalledWith({
+      where: { is_active: false },
+      include: undefined,
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      select: undefined,
+    });
+  });
+
   it('loads a single active amenity by id', async () => {
     amenity.findFirst.mockResolvedValue({ id: 'amenity-1', is_active: true });
 
@@ -57,6 +70,18 @@ describe('AmenityRepository', () => {
       where: { id: 'missing-amenity', is_active: true },
       include: undefined,
       orderBy: undefined,
+    });
+  });
+
+  it('restores amenities by setting is_active to true', async () => {
+    amenity.update.mockResolvedValue({ id: 'amenity-1', is_active: true });
+
+    await repo.restoreAmenity('amenity-1');
+
+    expect(amenity.update).toHaveBeenCalledWith({
+      where: { id: 'amenity-1' },
+      data: { is_active: true },
+      include: undefined,
     });
   });
 });

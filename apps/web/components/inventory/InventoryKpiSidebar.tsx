@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Archive, BarChart2, DollarSign, Package } from "lucide-react";
+import { AlertTriangle, BarChart2, DollarSign, Package } from "lucide-react";
 
 import type { IThemeContext } from "@fittrack/types";
 import { FitKpiCard } from "@/components/fit/FitCard";
@@ -22,27 +22,21 @@ export function InventoryKpiSidebar({
     ? [
         {
           icon: Package,
-          label: "Equipment Items",
-          value: String(inventory.equipmentCount),
+          label: "Total Number of Equipments",
+          value: String(inventory.equipmentTotalUnits),
           color: colors.brand
         },
         {
-          icon: AlertTriangle,
-          label: "Needs Attention",
-          value: String(inventory.equipmentAttentionCount),
-          color: colors.warning
-        },
-        {
           icon: BarChart2,
-          label: "Active Units",
-          value: String(inventory.equipmentCurrentUnits),
+          label: "Total Types of Equipments",
+          value: String(inventory.equipmentCount),
           color: colors.success
         },
         {
-          icon: Archive,
-          label: "Missing Units",
-          value: String(inventory.equipmentMissingUnits),
-          color: colors.textMuted
+          icon: AlertTriangle,
+          label: "Equipments Under Maintenance",
+          value: String(inventory.equipmentAttentionCount),
+          color: colors.warning
         }
       ]
     : [

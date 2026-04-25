@@ -147,6 +147,7 @@ export class AuthController {
     description: 'TokenPairResponse + HttpOnly cookie.',
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
+  @ApiResponse({ status: 423, description: 'Account locked.' })
   @ApiResponse({ status: 403, description: 'Account suspended or banned.' })
   @ApiResponse({ status: 410, description: 'Account archived.' })
   async login(
@@ -347,13 +348,16 @@ export class AuthController {
 @ApiTags('Admin — Users')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.admin, UserRole.staff)
 @Controller('admin/users')
 export class AdminAuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create an admin, staff, or member account.' })
+  @ApiOperation({
+    summary:
+      'Create an admin, staff, or member account. Staff may only create staff or member accounts.',
+  })
   @ApiResponse({ status: 201, description: '{ user_id, email, role }' })
   @ApiResponse({ status: 409, description: 'Email already in use.' })
   createUser(
@@ -365,6 +369,6 @@ export class AdminAuthController {
       getHeaderValue(req.headers, 'x-forwarded-for')?.split(',')[0]?.trim() ??
       req.socket?.remoteAddress ??
       '';
-    return this.authService.adminCreateUser(dto, user.sub, ip);
+    return this.authService.adminCreateUser(dto, user.sub, user.role, ip);
   }
 }

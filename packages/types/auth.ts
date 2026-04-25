@@ -34,7 +34,7 @@ export interface User extends AuthUser {
   lastCheckIn?: string;
 }
 
-export type LoginFailureReason = "PORTAL_ROLE_MISMATCH";
+export type LoginFailureReason = "PORTAL_ROLE_MISMATCH" | "ACCOUNT_LOCKED";
 
 export interface IAuthContext {
   user: AuthUser | null;
@@ -42,8 +42,13 @@ export interface IAuthContext {
   isLoading: boolean;
   login: (
     email: string,
-    password: string
-  ) => Promise<{ success: boolean; otpRequired?: boolean; error?: string; reason?: LoginFailureReason }>;
+    password: string,
+  ) => Promise<{
+    success: boolean;
+    otpRequired?: boolean;
+    error?: string;
+    reason?: LoginFailureReason;
+  }>;
   register: (data: {
     firstName: string;
     lastName: string;
@@ -57,6 +62,9 @@ export interface IAuthContext {
   sendOTP: (destination: string) => Promise<{ success: boolean }>;
   verifyOTP: (code: string) => Promise<{ success: boolean; error?: string }>;
   verifyCurrentPassword?: (password: string) => Promise<boolean>;
-  changePassword?: (currentPassword: string, nextPassword: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword?: (
+    currentPassword: string,
+    nextPassword: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   commitLogin: () => Promise<void>;
 }

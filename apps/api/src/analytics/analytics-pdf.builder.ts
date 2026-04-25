@@ -36,9 +36,25 @@ type BuildAnalyticsPdfArgs = {
   attendanceLabel: string;
   dailyInsightsTrend: AnalyticsDailyInsightsTrendResponseDTO;
   generatedAt: string;
+  inventory: {
+    equipment_types: number;
+    equipment_under_maintenance: number;
+    equipment_units_available: number;
+    equipment_units_total: number;
+    low_stock_items: number;
+    out_of_stock_items: number;
+    retail_inventory_value: string;
+    retail_items: number;
+    top_products: Array<{
+      name: string;
+      quantity_sold: number;
+      revenue: string;
+    }>;
+  };
   insights: {
     attendance: AnalyticsPdfInsightBlock;
     dailyInsights: AnalyticsPdfInsightBlock;
+    inventory: AnalyticsPdfInsightBlock;
     performanceKpis: AnalyticsPdfInsightBlock;
     recentActivities: AnalyticsPdfInsightBlock;
     recommendations: AnalyticsPdfInsightBlock;
@@ -249,10 +265,6 @@ function wrapText(
   return lines;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
-
 function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0);
 }
@@ -358,7 +370,11 @@ class PdfPage {
     const fontSize = options.fontSize ?? 12;
     const color = options.color ?? TEXT_PRIMARY;
     const safeText = encodePdfText(text);
-    const textWidth = approximateTextWidth(safeText, fontSize, options.font ?? 'regular');
+    const textWidth = approximateTextWidth(
+      safeText,
+      fontSize,
+      options.font ?? 'regular',
+    );
     const drawX =
       options.align === 'center'
         ? x - textWidth / 2
@@ -393,7 +409,9 @@ class PdfDocument {
   toBuffer() {
     const objects: Buffer[] = [];
     const pushObject = (body: Buffer | string) => {
-      objects.push(typeof body === 'string' ? Buffer.from(body, 'ascii') : body);
+      objects.push(
+        typeof body === 'string' ? Buffer.from(body, 'ascii') : body,
+      );
       return objects.length;
     };
 
@@ -477,6 +495,7 @@ class AnalyticsPdfComposer {
     this.drawDailyInsightsSection(args);
     this.drawPerformanceSection(args);
     this.drawRevenueSection(args);
+    this.drawInventorySection(args);
     this.drawAttendanceSection(args);
     this.drawSystemAlertsSection(args);
     this.drawRecentActivitiesSection(args);
@@ -493,11 +512,16 @@ class AnalyticsPdfComposer {
       fillColor: HEADER_ACCENT,
     });
     this.cursorY += 16;
-    this.currentPage.drawText(PAGE_MARGIN_X, this.cursorY, 'FitTrack Analytics', {
-      color: HEADER_ACCENT,
-      font: 'bold',
-      fontSize: 11,
-    });
+    this.currentPage.drawText(
+      PAGE_MARGIN_X,
+      this.cursorY,
+      'FitTrack Analytics',
+      {
+        color: HEADER_ACCENT,
+        font: 'bold',
+        fontSize: 11,
+      },
+    );
     this.cursorY += 18;
     this.currentPage.drawText(PAGE_MARGIN_X, this.cursorY, 'Analytics Export', {
       color: TEXT_PRIMARY,
@@ -532,14 +556,20 @@ class AnalyticsPdfComposer {
       title: 'Active Members and Sessions Over Time',
       subtitle: `${this.describeWindow(args.dailyInsightsTrend.start_date, args.dailyInsightsTrend.end_date)} · ${args.dailyInsightsTrend.period} buckets`,
       labels: args.dailyInsightsTrend.series.map((point) =>
-        formatBucketLabel(point.bucket_start, args.dailyInsightsTrend.period, true),
+        formatBucketLabel(
+          point.bucket_start,
+          args.dailyInsightsTrend.period,
+          true,
+        ),
       ),
       series: [
         {
           color: BAR_COLORS[1],
           key: 'active_members',
           label: 'Active Members',
-          values: args.dailyInsightsTrend.series.map((point) => point.active_members),
+          values: args.dailyInsightsTrend.series.map(
+            (point) => point.active_members,
+          ),
         },
         {
           color: HEADER_ACCENT,
@@ -568,7 +598,10 @@ class AnalyticsPdfComposer {
     this.drawSimpleMetricTable([
       ['Active Members', String(args.snapshot.daily_insights.active_members)],
       ['Sessions Today', String(args.snapshot.daily_insights.sessions_today)],
-      ['Recent Activities', String(args.snapshot.daily_insights.recent_activities)],
+      [
+        'Recent Activities',
+        String(args.snapshot.daily_insights.recent_activities),
+      ],
     ]);
 
     this.drawInsightCard(args.insights.dailyInsights, SURFACE_WARN, TEXT_WARN);
@@ -594,7 +627,9 @@ class AnalyticsPdfComposer {
       {
         label: 'Appointments',
         value: args.snapshot.performance_kpis.total_coaching_appointments,
-        valueLabel: String(args.snapshot.performance_kpis.total_coaching_appointments),
+        valueLabel: String(
+          args.snapshot.performance_kpis.total_coaching_appointments,
+        ),
       },
       {
         label: 'New Members',
@@ -615,7 +650,8 @@ class AnalyticsPdfComposer {
 
     this.drawBarChartCard({
       title: 'KPI Comparison',
-      subtitle: 'Normalized grouped bars so revenue and volume metrics can be compared in one view.',
+      subtitle:
+        'Normalized grouped bars so revenue and volume metrics can be compared in one view.',
       items: kpis.map((item, index) => ({
         color: BAR_COLORS[index % BAR_COLORS.length],
         label: item.label,
@@ -625,7 +661,10 @@ class AnalyticsPdfComposer {
     });
 
     this.drawSimpleMetricTable([
-      ['Total Revenue', formatMoney(args.snapshot.performance_kpis.total_revenue)],
+      [
+        'Total Revenue',
+        formatMoney(args.snapshot.performance_kpis.total_revenue),
+      ],
       [
         'Total Venue Bookings',
         String(args.snapshot.performance_kpis.total_venue_bookings),
@@ -636,10 +675,17 @@ class AnalyticsPdfComposer {
       ],
       ['New Members', String(args.snapshot.performance_kpis.new_members)],
       ['Check-ins', String(args.snapshot.performance_kpis.check_ins)],
-      ['Coaching Sessions', String(args.snapshot.performance_kpis.coaching_sessions)],
+      [
+        'Coaching Sessions',
+        String(args.snapshot.performance_kpis.coaching_sessions),
+      ],
     ]);
 
-    this.drawInsightCard(args.insights.performanceKpis, SURFACE_WARN, TEXT_WARN);
+    this.drawInsightCard(
+      args.insights.performanceKpis,
+      SURFACE_WARN,
+      TEXT_WARN,
+    );
   }
 
   private drawRevenueSection(args: BuildAnalyticsPdfArgs) {
@@ -650,15 +696,85 @@ class AnalyticsPdfComposer {
 
     this.drawRevenueCharts(args.revenue);
     this.drawSimpleMetricTable([
-      ['Total Generated Revenue', formatMoney(args.revenue.totals.total_revenue)],
-      ...args.revenue.top_revenue_sources.map(
-        (source): [string, string] => [
-          `${source.source_label} (${source.share_percentage.toFixed(1)}%)`,
-          formatMoney(source.revenue),
-        ],
-      ),
+      [
+        'Total Generated Revenue',
+        formatMoney(args.revenue.totals.total_revenue),
+      ],
+      ...args.revenue.top_revenue_sources.map((source): [string, string] => [
+        `${source.source_label} (${source.share_percentage.toFixed(1)}%)`,
+        formatMoney(source.revenue),
+      ]),
     ]);
     this.drawInsightCard(args.insights.revenue, SURFACE_WARN, TEXT_WARN);
+  }
+
+  private drawInventorySection(args: BuildAnalyticsPdfArgs) {
+    this.drawSectionHeading(
+      'Inventory Performance',
+      'Current retail and equipment inventory health with top retail item performance from the selected revenue window.',
+    );
+
+    this.drawMetricTiles([
+      {
+        label: 'Retail Items',
+        value: String(args.inventory.retail_items),
+      },
+      {
+        label: 'Low Stock',
+        value: String(args.inventory.low_stock_items),
+      },
+      {
+        label: 'Out of Stock',
+        value: String(args.inventory.out_of_stock_items),
+      },
+      {
+        label: 'Inventory Value',
+        value: formatMoney(args.inventory.retail_inventory_value),
+      },
+    ]);
+
+    const topRetailItems =
+      args.inventory.top_products.length > 0
+        ? args.inventory.top_products.map((product, index) => ({
+            color: BAR_COLORS[index % BAR_COLORS.length],
+            label: product.name,
+            value: Math.max(toNumber(product.revenue), product.quantity_sold),
+            valueLabel: `${product.quantity_sold} sold`,
+          }))
+        : [
+            {
+              color: BAR_COLORS[0],
+              label: 'No sales data',
+              value: 0,
+              valueLabel: '0 sold',
+            },
+          ];
+
+    this.drawBarChartCard({
+      title: 'Top Retail Items',
+      subtitle:
+        'Top-selling retail products ranked by the selected export window activity.',
+      items: topRetailItems,
+    });
+
+    this.drawSimpleMetricTable([
+      ['Equipment Types', String(args.inventory.equipment_types)],
+      [
+        'Equipment Availability',
+        `${args.inventory.equipment_units_available} / ${args.inventory.equipment_units_total} units`,
+      ],
+      [
+        'Equipment Under Maintenance',
+        String(args.inventory.equipment_under_maintenance),
+      ],
+      [
+        'Top Retail Product',
+        args.inventory.top_products[0]
+          ? `${args.inventory.top_products[0].name} (${args.inventory.top_products[0].quantity_sold} sold)`
+          : 'No retail sales data for this window',
+      ],
+    ]);
+    this.drawInsightCard(args.insights.inventory, SURFACE_WARN, TEXT_WARN);
   }
 
   private drawAttendanceSection(args: BuildAnalyticsPdfArgs) {
@@ -728,7 +844,11 @@ class AnalyticsPdfComposer {
         details: activity.description,
       })),
     });
-    this.drawInsightCard(args.insights.recentActivities, SURFACE_WARN, TEXT_WARN);
+    this.drawInsightCard(
+      args.insights.recentActivities,
+      SURFACE_WARN,
+      TEXT_WARN,
+    );
   }
 
   private drawRecommendationsSection(insight: AnalyticsPdfInsightBlock) {
@@ -739,8 +859,17 @@ class AnalyticsPdfComposer {
 
     const cardHeight =
       34 +
-      this.measureParagraphHeight(insight.summary, CONTENT_WIDTH - 32, 11, 'regular') +
-      this.measureBulletListHeight(insight.highlights, CONTENT_WIDTH - 42, 10.5) +
+      this.measureParagraphHeight(
+        insight.summary,
+        CONTENT_WIDTH - 32,
+        11,
+        'regular',
+      ) +
+      this.measureBulletListHeight(
+        insight.highlights,
+        CONTENT_WIDTH - 42,
+        10.5,
+      ) +
       this.measureBulletListHeight(
         insight.recommendedActions,
         CONTENT_WIDTH - 42,
@@ -748,11 +877,17 @@ class AnalyticsPdfComposer {
       );
 
     this.ensureSpace(cardHeight + 10);
-    this.currentPage.drawRect(PAGE_MARGIN_X, this.cursorY, CONTENT_WIDTH, cardHeight, {
-      fillColor: SURFACE_RECOMMEND,
-      strokeColor: [0.7412, 0.8392, 0.9725],
-      lineWidth: 0.9,
-    });
+    this.currentPage.drawRect(
+      PAGE_MARGIN_X,
+      this.cursorY,
+      CONTENT_WIDTH,
+      cardHeight,
+      {
+        fillColor: SURFACE_RECOMMEND,
+        strokeColor: [0.7412, 0.8392, 0.9725],
+        lineWidth: 0.9,
+      },
+    );
     this.currentPage.drawText(
       PAGE_MARGIN_X + 14,
       this.cursorY + 10,
@@ -764,26 +899,26 @@ class AnalyticsPdfComposer {
       },
     );
 
-    let localTop = this.cursorY + 28;
-    localTop += this.drawParagraph(
+    let insightCursorY = this.cursorY + 28;
+    insightCursorY += this.drawParagraph(
       PAGE_MARGIN_X + 14,
-      localTop,
+      insightCursorY,
       CONTENT_WIDTH - 28,
       insight.summary,
       { color: TEXT_PRIMARY, fontSize: 11 },
     );
-    localTop += 8;
-    localTop += this.drawBulletList(
+    insightCursorY += 8;
+    insightCursorY += this.drawBulletList(
       PAGE_MARGIN_X + 18,
-      localTop,
+      insightCursorY,
       CONTENT_WIDTH - 36,
       insight.highlights.slice(0, 3),
       { color: TEXT_PRIMARY, fontSize: 10.5 },
     );
-    localTop += 4;
-    localTop += this.drawBulletList(
+    insightCursorY += 4;
+    this.drawBulletList(
       PAGE_MARGIN_X + 18,
-      localTop,
+      insightCursorY,
       CONTENT_WIDTH - 36,
       insight.recommendedActions.slice(0, 5),
       { color: TEXT_PRIMARY, fontSize: 10.5 },
@@ -800,10 +935,16 @@ class AnalyticsPdfComposer {
       fontSize: 18,
     });
     this.cursorY += 24;
-    const subtitleHeight = this.drawParagraph(PAGE_MARGIN_X, this.cursorY, CONTENT_WIDTH, subtitle, {
-      color: TEXT_SECONDARY,
-      fontSize: 10,
-    });
+    const subtitleHeight = this.drawParagraph(
+      PAGE_MARGIN_X,
+      this.cursorY,
+      CONTENT_WIDTH,
+      subtitle,
+      {
+        color: TEXT_SECONDARY,
+        fontSize: 10,
+      },
+    );
     this.cursorY += subtitleHeight + 12;
   }
 
@@ -820,11 +961,16 @@ class AnalyticsPdfComposer {
         strokeColor: BORDER_SOFT,
         lineWidth: 0.8,
       });
-      this.currentPage.drawText(x + 12, this.cursorY + 10, item.label.toUpperCase(), {
-        color: TEXT_MUTED,
-        font: 'bold',
-        fontSize: 8.5,
-      });
+      this.currentPage.drawText(
+        x + 12,
+        this.cursorY + 10,
+        item.label.toUpperCase(),
+        {
+          color: TEXT_MUTED,
+          font: 'bold',
+          fontSize: 8.5,
+        },
+      );
       this.currentPage.drawText(x + 12, this.cursorY + 28, item.value, {
         color: TEXT_PRIMARY,
         font: 'bold',
@@ -855,14 +1001,17 @@ class AnalyticsPdfComposer {
       chartTop + 28,
       args.subtitle.replace(/[^\x20-\x7E]+/g, ' - '),
       {
-      color: TEXT_SECONDARY,
-      fontSize: 9.5,
+        color: TEXT_SECONDARY,
+        fontSize: 9.5,
       },
     );
     this.drawLegend(
       PAGE_MARGIN_X + CONTENT_WIDTH - 110,
       chartTop + 12,
-      args.series.map((series) => ({ color: series.color, label: series.label })),
+      args.series.map((series) => ({
+        color: series.color,
+        label: series.label,
+      })),
       96,
     );
 
@@ -953,8 +1102,8 @@ class AnalyticsPdfComposer {
       chartTop + 28,
       args.subtitle.replace(/[^\x20-\x7E]+/g, ' - '),
       {
-      color: TEXT_SECONDARY,
-      fontSize: 9.5,
+        color: TEXT_SECONDARY,
+        fontSize: 9.5,
       },
     );
 
@@ -972,7 +1121,8 @@ class AnalyticsPdfComposer {
     const plotWidth = innerRight - innerLeft;
     const plotHeight = innerBottom - innerTop;
     const gap = 10;
-    const barWidth = (plotWidth - gap * (args.items.length - 1)) / args.items.length;
+    const barWidth =
+      (plotWidth - gap * (args.items.length - 1)) / args.items.length;
 
     this.drawChartGrid(innerLeft, innerTop, plotWidth, plotHeight, maxValue);
 
@@ -985,14 +1135,24 @@ class AnalyticsPdfComposer {
       this.currentPage.drawRect(x, barTop, barWidth, barHeight, {
         fillColor: item.color,
       });
-      this.currentPage.drawText(x + barWidth / 2, barTop - 14, item.valueLabel, {
-        align: 'center',
-        color: TEXT_PRIMARY,
-        font: 'bold',
-        fontSize: 8.5,
-      });
+      this.currentPage.drawText(
+        x + barWidth / 2,
+        barTop - 14,
+        item.valueLabel,
+        {
+          align: 'center',
+          color: TEXT_PRIMARY,
+          font: 'bold',
+          fontSize: 8.5,
+        },
+      );
 
-      const wrappedLabel = wrapText(item.label, barWidth + 12, 8.5, 'bold').slice(0, 2);
+      const wrappedLabel = wrapText(
+        item.label,
+        barWidth + 12,
+        8.5,
+        'bold',
+      ).slice(0, 2);
       wrappedLabel.forEach((line, lineIndex) => {
         this.currentPage.drawText(
           x + barWidth / 2,
@@ -1092,11 +1252,16 @@ class AnalyticsPdfComposer {
     this.ensureSpace(cardHeight + 14);
     const top = this.cursorY;
     this.drawCard(PAGE_MARGIN_X, top, CONTENT_WIDTH, cardHeight);
-    this.currentPage.drawText(PAGE_MARGIN_X + 14, top + 12, 'Attendance Volume', {
-      color: TEXT_PRIMARY,
-      font: 'bold',
-      fontSize: 12,
-    });
+    this.currentPage.drawText(
+      PAGE_MARGIN_X + 14,
+      top + 12,
+      'Attendance Volume',
+      {
+        color: TEXT_PRIMARY,
+        font: 'bold',
+        fontSize: 12,
+      },
+    );
     this.currentPage.drawText(
       PAGE_MARGIN_X + 14,
       top + 28,
@@ -1143,12 +1308,17 @@ class AnalyticsPdfComposer {
       });
 
       if (isPeak) {
-        this.currentPage.drawText(x + barWidth / 2, barTop - 12, String(entry.check_ins), {
-          align: 'center',
-          color: TEXT_PRIMARY,
-          font: 'bold',
-          fontSize: 8.5,
-        });
+        this.currentPage.drawText(
+          x + barWidth / 2,
+          barTop - 12,
+          String(entry.check_ins),
+          {
+            align: 'center',
+            color: TEXT_PRIMARY,
+            font: 'bold',
+            fontSize: 8.5,
+          },
+        );
       }
     });
 
@@ -1214,7 +1384,9 @@ class AnalyticsPdfComposer {
 
     drawTableTitle();
 
-    const columnWidths = args.columns.map((column) => CONTENT_WIDTH * column.width);
+    const columnWidths = args.columns.map(
+      (column) => CONTENT_WIDTH * column.width,
+    );
 
     rows.forEach((row, rowIndex) => {
       const cellLines = args.columns.map((column, index) =>
@@ -1222,7 +1394,11 @@ class AnalyticsPdfComposer {
           row[column.key] ?? '-',
           columnWidths[index] - rowPaddingX * 2,
           9.5,
-          column.align === 'right' ? 'regular' : index === 0 ? 'bold' : 'regular',
+          column.align === 'right'
+            ? 'regular'
+            : index === 0
+              ? 'bold'
+              : 'regular',
         ),
       );
       const lineCount = Math.max(...cellLines.map((lines) => lines.length), 1);
@@ -1233,18 +1409,24 @@ class AnalyticsPdfComposer {
         drawTableTitle(true);
       }
 
-      this.currentPage.drawRect(PAGE_MARGIN_X, this.cursorY, CONTENT_WIDTH, rowHeight, {
-        fillColor:
-          args.rowStyle === 'warning'
-            ? rowIndex % 2 === 0
-              ? [1, 0.9725, 0.949]
-              : [1, 0.9843, 0.9686]
-            : rowIndex % 2 === 0
-              ? [1, 1, 1]
-              : [0.9922, 0.9941, 0.998],
-        strokeColor: BORDER_SOFT,
-        lineWidth: 0.45,
-      });
+      this.currentPage.drawRect(
+        PAGE_MARGIN_X,
+        this.cursorY,
+        CONTENT_WIDTH,
+        rowHeight,
+        {
+          fillColor:
+            args.rowStyle === 'warning'
+              ? rowIndex % 2 === 0
+                ? [1, 0.9725, 0.949]
+                : [1, 0.9843, 0.9686]
+              : rowIndex % 2 === 0
+                ? [1, 1, 1]
+                : [0.9922, 0.9941, 0.998],
+          strokeColor: BORDER_SOFT,
+          lineWidth: 0.45,
+        },
+      );
 
       let cellX = PAGE_MARGIN_X;
       args.columns.forEach((column, index) => {
@@ -1262,7 +1444,12 @@ class AnalyticsPdfComposer {
             {
               align: column.align,
               color: index === 0 ? TEXT_PRIMARY : TEXT_SECONDARY,
-              font: column.align === 'right' ? 'regular' : index === 0 ? 'bold' : 'regular',
+              font:
+                column.align === 'right'
+                  ? 'regular'
+                  : index === 0
+                    ? 'bold'
+                    : 'regular',
               fontSize: 9.5,
             },
           );
@@ -1281,11 +1468,17 @@ class AnalyticsPdfComposer {
     headerHeight: number,
     paddingX: number,
   ) {
-    this.currentPage.drawRect(PAGE_MARGIN_X, this.cursorY, CONTENT_WIDTH, headerHeight, {
-      fillColor: SURFACE_PANEL,
-      strokeColor: BORDER_SOFT,
-      lineWidth: 0.8,
-    });
+    this.currentPage.drawRect(
+      PAGE_MARGIN_X,
+      this.cursorY,
+      CONTENT_WIDTH,
+      headerHeight,
+      {
+        fillColor: SURFACE_PANEL,
+        strokeColor: BORDER_SOFT,
+        lineWidth: 0.8,
+      },
+    );
 
     let cellX = PAGE_MARGIN_X;
     columns.forEach((column) => {
@@ -1294,12 +1487,17 @@ class AnalyticsPdfComposer {
           ? cellX + CONTENT_WIDTH * column.width - paddingX
           : cellX + paddingX;
 
-      this.currentPage.drawText(textX, this.cursorY + 8, column.label.toUpperCase(), {
-        align: column.align,
-        color: TEXT_MUTED,
-        font: 'bold',
-        fontSize: 8.5,
-      });
+      this.currentPage.drawText(
+        textX,
+        this.cursorY + 8,
+        column.label.toUpperCase(),
+        {
+          align: column.align,
+          color: TEXT_MUTED,
+          font: 'bold',
+          fontSize: 8.5,
+        },
+      );
       cellX += CONTENT_WIDTH * column.width;
     });
 
@@ -1408,7 +1606,13 @@ class AnalyticsPdfComposer {
         font: 'bold',
         fontSize: options.fontSize ?? 10,
       });
-      offset += this.drawParagraph(x + 10, bulletTop, width - 10, item, options);
+      offset += this.drawParagraph(
+        x + 10,
+        bulletTop,
+        width - 10,
+        item,
+        options,
+      );
       offset += 4;
     });
 
@@ -1433,7 +1637,9 @@ class AnalyticsPdfComposer {
       .slice(0, 5)
       .reduce(
         (total, item) =>
-          total + this.measureParagraphHeight(item, width - 10, fontSize, 'regular') + 4,
+          total +
+          this.measureParagraphHeight(item, width - 10, fontSize, 'regular') +
+          4,
         0,
       );
   }
@@ -1446,7 +1652,12 @@ class AnalyticsPdfComposer {
     });
   }
 
-  private drawChartFrame(x: number, top: number, width: number, height: number) {
+  private drawChartFrame(
+    x: number,
+    top: number,
+    width: number,
+    height: number,
+  ) {
     this.currentPage.drawRect(x, top, width, height, {
       fillColor: [1, 1, 1],
       strokeColor: BORDER_SOFT,
@@ -1502,7 +1713,10 @@ class AnalyticsPdfComposer {
         return;
       }
       const drawX =
-        x + (labels.length === 1 ? width / 2 : (index / (labels.length - 1)) * width);
+        x +
+        (labels.length === 1
+          ? width / 2
+          : (index / (labels.length - 1)) * width);
       this.currentPage.drawText(drawX, top, label, {
         align: 'center',
         color: TEXT_MUTED,
@@ -1526,7 +1740,8 @@ class AnalyticsPdfComposer {
         color: TEXT_SECONDARY,
         fontSize: 8.5,
       });
-      offset += this.measureParagraphHeight(item.label, width - 14, 8.5, 'regular') + 2;
+      offset +=
+        this.measureParagraphHeight(item.label, width - 14, 8.5, 'regular') + 2;
     });
   }
 
@@ -1539,7 +1754,12 @@ class AnalyticsPdfComposer {
     series: ChartSeries[];
     yValueFormatter?: (value: number) => string;
   }) {
-    this.drawChartFrame(args.frameX, args.frameTop, args.frameWidth, args.frameHeight);
+    this.drawChartFrame(
+      args.frameX,
+      args.frameTop,
+      args.frameWidth,
+      args.frameHeight,
+    );
 
     const innerLeft = args.frameX + 30;
     const innerRight = args.frameX + args.frameWidth - 10;

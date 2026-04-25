@@ -61,6 +61,17 @@ describe('Sales DTO validation', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 
+  it('accepts valid non-v4 product UUIDs from seeded retail items', async () => {
+    const dto = plainToInstance(CreateSaleDTO, {
+      payment_method: 'cash',
+      items: [
+        { product_id: '77cd4b99-4f52-5db1-9396-667a4cd575b9', quantity: 1 },
+      ],
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
   it('validates customer_user_id when provided', async () => {
     const dto = plainToInstance(CreateSaleDTO, {
       payment_method: 'paymongo',

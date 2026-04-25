@@ -243,14 +243,14 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
-    firstName: z.string().trim().min(1, "First name is required"),
-    lastName: z.string().trim().min(1, "Last name is required"),
-    email: z.string().email("Invalid email"),
-    phone: z.string().trim().refine((value) => isSupportedAuthPhilippineMobileNumber(value), {
+    firstName: buildAuthPersonNameSchema("First name"),
+    lastName: buildAuthPersonNameSchema("Last name"),
+    email: buildAuthAllowedEmailSchema("Email"),
+    phone: z.string().trim().refine((value) => value.length === 0 || isSupportedAuthPhilippineMobileNumber(value), {
       message: "Enter a valid PH mobile number (+639XXXXXXXXX, 09XXXXXXXXX, or 639XXXXXXXXX)"
     }),
-    password: z.string().min(8, "Minimum 8 characters"),
-    confirmPassword: z.string()
+    password: buildAuthStrongPasswordSchema("Password"),
+    confirmPassword: z.string().trim().min(1, "Please confirm your password")
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",

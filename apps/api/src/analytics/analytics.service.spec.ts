@@ -17,6 +17,7 @@ describe('AnalyticsService', () => {
     getOverviewMetrics: jest.fn(),
     getRecentActivityCountSince: jest.fn(),
     getRevenueMetrics: jest.fn(),
+    getInventorySummary: jest.fn(),
     getVenueBookingCount: jest.fn(),
     listRecentActivities: jest.fn(),
     listSystemAlerts: jest.fn(),
@@ -407,13 +408,27 @@ describe('AnalyticsService', () => {
         revenue: new Prisma.Decimal('4500.00'),
       },
     ]);
-    repo.getTopInventoryProducts.mockResolvedValue([
-      {
-        name: 'Protein Bar',
-        quantity_sold: 12,
-        revenue: new Prisma.Decimal('840.00'),
+    repo.getInventorySummary.mockResolvedValue({
+      retail: {
+        retail_items: 14,
+        low_stock_items: 2,
+        out_of_stock_items: 1,
+        retail_inventory_value: new Prisma.Decimal('16450.00'),
       },
-    ]);
+      equipment: {
+        equipment_types: 9,
+        equipment_units_available: 28,
+        equipment_units_total: 32,
+        equipment_under_maintenance: 2,
+      },
+      topProducts: [
+        {
+          name: 'Protein Bar',
+          quantity_sold: 12,
+          revenue: new Prisma.Decimal('840.00'),
+        },
+      ],
+    });
 
     await expect(
       service.buildBusinessInsightGroundingPayload({
@@ -503,6 +518,15 @@ describe('AnalyticsService', () => {
         ],
       },
       inventory: {
+        retail_items: 14,
+        low_stock_items: 2,
+        out_of_stock_items: 1,
+        retail_inventory_value: '16450.00',
+        retail_sales_revenue: '850.00',
+        equipment_types: 9,
+        equipment_units_available: 28,
+        equipment_units_total: 32,
+        equipment_under_maintenance: 2,
         top_products: [
           {
             name: 'Protein Bar',
@@ -523,7 +547,7 @@ describe('AnalyticsService', () => {
       new Date('2025-01-10T23:59:59.999Z'),
       InsightPeriod.custom,
     );
-    expect(repo.getTopInventoryProducts).toHaveBeenCalled();
+    expect(repo.getInventorySummary).toHaveBeenCalled();
   });
 
   it('omits inventory grounding when the focus does not need inventory rollups', async () => {
@@ -554,6 +578,21 @@ describe('AnalyticsService', () => {
     });
     repo.getCoachEarningsMetrics.mockResolvedValue({ coaches: [] });
     repo.getTopMembershipPlans.mockResolvedValue([]);
+    repo.getInventorySummary.mockResolvedValue({
+      retail: {
+        retail_items: 0,
+        low_stock_items: 0,
+        out_of_stock_items: 0,
+        retail_inventory_value: new Prisma.Decimal('0.00'),
+      },
+      equipment: {
+        equipment_types: 0,
+        equipment_units_available: 0,
+        equipment_units_total: 0,
+        equipment_under_maintenance: 0,
+      },
+      topProducts: [],
+    });
 
     const payload = await service.buildBusinessInsightGroundingPayload({
       focus: InsightFocus.membership,
@@ -561,6 +600,6 @@ describe('AnalyticsService', () => {
     });
 
     expect(payload.inventory).toBeUndefined();
-    expect(repo.getTopInventoryProducts).not.toHaveBeenCalled();
+    expect(repo.getInventorySummary).not.toHaveBeenCalled();
   });
 });

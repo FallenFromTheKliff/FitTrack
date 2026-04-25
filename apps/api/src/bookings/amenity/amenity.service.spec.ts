@@ -9,10 +9,12 @@ describe('AmenityService', () => {
 
   const repo = {
     listActiveAmenities: jest.fn(),
+    listArchivedAmenities: jest.fn(),
     findActiveAmenityByIdOrThrow: jest.fn(),
     createAmenity: jest.fn(),
     updateAmenity: jest.fn(),
     softDeleteAmenity: jest.fn(),
+    restoreAmenity: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -112,11 +114,27 @@ describe('AmenityService', () => {
     expect(repo.findActiveAmenityByIdOrThrow).toHaveBeenCalledWith('amenity-1');
   });
 
+  it('lists archived amenities through the repository', async () => {
+    repo.listArchivedAmenities.mockResolvedValue([{ id: 'amenity-1' }]);
+
+    await service.listArchivedAmenities();
+
+    expect(repo.listArchivedAmenities).toHaveBeenCalled();
+  });
+
   it('soft-deletes amenities through the repository', async () => {
     repo.softDeleteAmenity.mockResolvedValue({ id: 'amenity-1' });
 
     await service.deleteAmenity('amenity-1');
 
     expect(repo.softDeleteAmenity).toHaveBeenCalledWith('amenity-1');
+  });
+
+  it('restores amenities through the repository', async () => {
+    repo.restoreAmenity.mockResolvedValue({ id: 'amenity-1' });
+
+    await service.restoreAmenity('amenity-1');
+
+    expect(repo.restoreAmenity).toHaveBeenCalledWith('amenity-1');
   });
 });

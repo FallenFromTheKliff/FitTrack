@@ -12,6 +12,10 @@ import {
   PRODUCT_STOCK_CHANGED_EVENT,
   type ProductStockChangedEvent,
 } from './events/product-stock-changed.event';
+import {
+  INVENTORY_ACTIVITY_EVENT,
+  type InventoryActivityEvent,
+} from './events/inventory-activity.event';
 import { InventoryLifecycleRepository } from './inventory-lifecycle.repository';
 
 const LOW_STOCK_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -92,6 +96,22 @@ export class InventoryLifecycleService {
     });
   }
 
+  @OnEvent(INVENTORY_ACTIVITY_EVENT)
+  async handleInventoryActivity(event: InventoryActivityEvent): Promise<void> {
+    const recipients = await this.repo.listInventoryActivityRecipients();
+    const payload = this.buildInventoryActivityNotification(event);
+
+    await Promise.all(
+      recipients.map((recipient) =>
+        this.notificationsService.dispatch(
+          recipient.user_id,
+          NotificationType.system,
+          payload,
+        ),
+      ),
+    );
+  }
+
   private async notifyAdmins(
     type: NotificationType,
     payload: NotificationDispatchPayload,
@@ -104,6 +124,137 @@ export class InventoryLifecycleService {
         type,
         payload,
       );
+    }
+  }
+
+  private buildInventoryActivityNotification(
+    event: InventoryActivityEvent,
+  ): NotificationDispatchPayload {
+    switch (event.action) {
+      case 'product_created':
+        return {
+          title: `Retail product added: ${event.entityName}`,
+          body: `${event.entityName} was added to the retail inventory catalog.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'retail',
+            ...event.details,
+          },
+        };
+      case 'product_updated':
+        return {
+          title: `Retail product updated: ${event.entityName}`,
+          body: `${event.entityName} was updated in the retail inventory catalog.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'retail',
+            ...event.details,
+          },
+        };
+      case 'product_restocked':
+        return {
+          title: `Retail product restocked: ${event.entityName}`,
+          body: `${event.entityName} was restocked with ${event.details?.quantity_added ?? 0} additional unit(s).`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'retail',
+            ...event.details,
+          },
+        };
+      case 'product_sale_recorded': {
+        const sourceLabel =
+          event.details?.source === 'mobile'
+            ? 'mobile checkout'
+            : event.details?.source === 'manual'
+              ? 'manual sale'
+              : 'retail sale';
+
+        return {
+          title: `Retail sale recorded: ${event.entityName}`,
+          body: `${event.details?.quantity_sold ?? 0} unit(s) sold for PHP ${event.details?.total_amount ?? '0.00'} through ${sourceLabel}.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'retail',
+            ...event.details,
+          },
+        };
+      }
+      case 'product_archived':
+        return {
+          title: `Retail product archived: ${event.entityName}`,
+          body: `${event.entityName} was archived from the retail inventory catalog.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'retail',
+            ...event.details,
+          },
+        };
+      case 'equipment_created':
+        return {
+          title: `Equipment added: ${event.entityName}`,
+          body: `${event.entityName} was added to the equipment inventory list.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'equipment',
+            ...event.details,
+          },
+        };
+      case 'equipment_updated':
+        return {
+          title: `Equipment updated: ${event.entityName}`,
+          body: `${event.entityName} was updated in the equipment inventory list.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'equipment',
+            ...event.details,
+          },
+        };
+      case 'equipment_archived':
+        return {
+          title: `Equipment archived: ${event.entityName}`,
+          body: `${event.entityName} had active units archived from the equipment inventory list.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            inventory_domain: 'equipment',
+            ...event.details,
+          },
+        };
+      default:
+        return {
+          title: `Inventory updated: ${event.entityName}`,
+          body: `${event.entityName} changed in the inventory module.`,
+          data: {
+            action: event.action,
+            actor_id: event.actorId,
+            entity_id: event.entityId,
+            entity_name: event.entityName,
+            ...event.details,
+          },
+        };
     }
   }
 

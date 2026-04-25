@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { GymFaqCategory, Prisma } from '@prisma/client';
 
 import { PaginatedResult } from '../common/base-repository/base-repository';
 import { PaginationDTO } from '../user/dto/user-dto';
@@ -8,9 +8,11 @@ import {
   CreateGymPromotionDTO,
   CreateGymSpecialScheduleDTO,
   GymFaqEntryResponseDTO,
+  GymProfileResponseDTO,
   GymOperatingHourResponseDTO,
   GymPromotionResponseDTO,
   GymSpecialScheduleResponseDTO,
+  UpdateGymProfileDTO,
   UpsertGymOperatingHoursDTO,
 } from './dto/gym-knowledge.dto';
 import {
@@ -21,6 +23,22 @@ import {
   GymSpecialScheduleRecord,
 } from './gym-knowledge.repository';
 
+const GYM_PROFILE_DEFAULTS: GymProfileResponseDTO = {
+  closing_time: '22:00',
+  email: 'contact@sertfit.com',
+  location: '123 Fitness Ave, New York, NY 10001',
+  name: 'SERTFIT Gym',
+  opening_time: '06:00',
+  phone: '+639281234567',
+};
+
+const GYM_PROFILE_ENTRY_CONFIG = {
+  email: { question: 'Gym email', sortOrder: 3 },
+  location: { question: 'Gym location', sortOrder: 2 },
+  name: { question: 'Gym name', sortOrder: 0 },
+  phone: { question: 'Gym phone', sortOrder: 1 },
+} as const;
+
 @Injectable()
 export class GymKnowledgeService {
   constructor(
@@ -30,6 +48,66 @@ export class GymKnowledgeService {
   async getOperatingHours(): Promise<GymOperatingHourResponseDTO[]> {
     const records = await this.gymKnowledgeRepository.listOperatingHours();
     return records.map((record) => this.toOperatingHourResponse(record));
+  }
+
+  async getGymProfile(): Promise<GymProfileResponseDTO> {
+    const [faqEntries, operatingHours] = await Promise.all([
+      this.gymKnowledgeRepository.listFaqEntriesByQuestions(
+        GymFaqCategory.general,
+        Object.values(GYM_PROFILE_ENTRY_CONFIG).map((entry) => entry.question),
+      ),
+      this.gymKnowledgeRepository.listOperatingHours(),
+    ]);
+
+    return this.buildGymProfileResponse(faqEntries, operatingHours);
+  }
+
+  async updateGymProfile(
+    dto: UpdateGymProfileDTO,
+  ): Promise<GymProfileResponseDTO> {
+    if (!this.isClosingTimeAfterOpeningTime(dto.opening_time, dto.closing_time)) {
+      throw new BadRequestException(
+        'closing_time must be later than opening_time',
+      );
+    }
+
+    const faqEntries = await this.gymKnowledgeRepository.upsertFaqEntries(
+      GymFaqCategory.general,
+      [
+        {
+          question: GYM_PROFILE_ENTRY_CONFIG.name.question,
+          answer: dto.name,
+          sort_order: GYM_PROFILE_ENTRY_CONFIG.name.sortOrder,
+        },
+        {
+          question: GYM_PROFILE_ENTRY_CONFIG.phone.question,
+          answer: dto.phone,
+          sort_order: GYM_PROFILE_ENTRY_CONFIG.phone.sortOrder,
+        },
+        {
+          question: GYM_PROFILE_ENTRY_CONFIG.location.question,
+          answer: dto.location,
+          sort_order: GYM_PROFILE_ENTRY_CONFIG.location.sortOrder,
+        },
+        {
+          question: GYM_PROFILE_ENTRY_CONFIG.email.question,
+          answer: dto.email,
+          sort_order: GYM_PROFILE_ENTRY_CONFIG.email.sortOrder,
+        },
+      ],
+    );
+
+    const operatingHours = await this.gymKnowledgeRepository.replaceOperatingHours(
+      Array.from({ length: 7 }, (_, day) => ({
+        day_of_week: day,
+        opens_at: dto.opening_time,
+        closes_at: dto.closing_time,
+        is_closed: false,
+        label: 'Daily gym hours',
+      })),
+    );
+
+    return this.buildGymProfileResponse(faqEntries, operatingHours);
   }
 
   async replaceOperatingHours(
@@ -181,6 +259,55 @@ export class GymKnowledgeService {
           .join(', ')}`,
       );
     }
+  }
+
+  private buildGymProfileResponse(
+    faqEntries: GymFaqEntryRecord[],
+    operatingHours: GymOperatingHourRecord[],
+  ): GymProfileResponseDTO {
+    const entryByQuestion = new Map(
+      faqEntries.map((entry) => [entry.question.toLowerCase(), entry.answer]),
+    );
+    const referenceHour =
+      operatingHours.find((entry) => entry.day_of_week === 1) ??
+      operatingHours[0] ??
+      null;
+
+    return {
+      name:
+        entryByQuestion.get(GYM_PROFILE_ENTRY_CONFIG.name.question.toLowerCase()) ??
+        GYM_PROFILE_DEFAULTS.name,
+      phone:
+        entryByQuestion.get(GYM_PROFILE_ENTRY_CONFIG.phone.question.toLowerCase()) ??
+        GYM_PROFILE_DEFAULTS.phone,
+      location:
+        entryByQuestion.get(
+          GYM_PROFILE_ENTRY_CONFIG.location.question.toLowerCase(),
+        ) ?? GYM_PROFILE_DEFAULTS.location,
+      email:
+        entryByQuestion.get(GYM_PROFILE_ENTRY_CONFIG.email.question.toLowerCase()) ??
+        GYM_PROFILE_DEFAULTS.email,
+      opening_time: referenceHour
+        ? this.formatTime(referenceHour.opens_at)
+        : GYM_PROFILE_DEFAULTS.opening_time,
+      closing_time: referenceHour
+        ? this.formatTime(referenceHour.closes_at)
+        : GYM_PROFILE_DEFAULTS.closing_time,
+    };
+  }
+
+  private isClosingTimeAfterOpeningTime(
+    openingTime: string,
+    closingTime: string,
+  ): boolean {
+    const [openingHours, openingMinutes] = openingTime
+      .split(':')
+      .map((value) => Number(value));
+    const [closingHours, closingMinutes] = closingTime
+      .split(':')
+      .map((value) => Number(value));
+
+    return closingHours * 60 + closingMinutes > openingHours * 60 + openingMinutes;
   }
 
   private normalizeKeywords(value: Prisma.JsonValue | null): string[] | null {

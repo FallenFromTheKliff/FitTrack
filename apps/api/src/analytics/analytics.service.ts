@@ -24,6 +24,7 @@ import {
   type AnalyticsRecentActivityRow,
   type AnalyticsSystemAlertRow,
   type AttendanceMetricsRows,
+  type InventorySummaryRows,
   AnalyticsRepository,
   type RevenueMetricsRows,
 } from './analytics.repository';
@@ -257,13 +258,22 @@ export class AnalyticsService {
           overview.coaching.completed_coaching_sessions,
         ),
       },
-      system_alerts: systemAlerts.map((alert) =>
-        this.toSystemAlert(alert),
-      ),
+      system_alerts: systemAlerts.map((alert) => this.toSystemAlert(alert)),
       recent_activities: recentActivities.map((activity) =>
         this.toRecentActivity(activity),
       ),
     };
+  }
+
+  async getInventorySummary(dto: AnalyticsQueryDTO) {
+    const window = this.resolveWindow(dto);
+    const result = await this.repo.getInventorySummary(
+      window.start,
+      window.end,
+      GROUNDING_RANK_LIMIT,
+    );
+
+    return this.toInventorySummary(result);
   }
 
   async buildBusinessInsightGroundingPayload(
@@ -277,7 +287,7 @@ export class AnalyticsService {
       membership,
       coaching,
       topPlans,
-      topProducts,
+      inventorySummary,
     ] = await Promise.all([
       this.repo.getRevenueMetrics(window.start, window.end, window.period),
       this.repo.getAttendanceMetrics(window.start, window.end, window.period),
@@ -289,7 +299,7 @@ export class AnalyticsService {
         GROUNDING_RANK_LIMIT,
       ),
       includeInventory
-        ? this.repo.getTopInventoryProducts(
+        ? this.repo.getInventorySummary(
             window.start,
             window.end,
             GROUNDING_RANK_LIMIT,
@@ -332,9 +342,9 @@ export class AnalyticsService {
         peak_hours: attendance.peakHours
           .slice(0, GROUNDING_RANK_LIMIT)
           .map((row) => ({
-          hour_label: this.toHourLabel(row.hour_of_day),
-          check_ins: this.toCount(row.check_ins),
-        })),
+            hour_label: this.toHourLabel(row.hour_of_day),
+            check_ins: this.toCount(row.check_ins),
+          })),
       },
       membership: {
         new_members: this.toCount(membership.new_members),
@@ -351,11 +361,24 @@ export class AnalyticsService {
       ...(includeInventory
         ? {
             inventory: {
-              top_products: (topProducts ?? []).map((row) => ({
-                name: row.name,
-                quantity_sold: this.toCount(row.quantity_sold),
-                revenue: this.toMoneyNumber(row.revenue).toFixed(2),
-              })),
+              ...this.toInventorySummary(
+                inventorySummary ?? {
+                  equipment: {
+                    equipment_types: 0,
+                    equipment_under_maintenance: 0,
+                    equipment_units_available: 0,
+                    equipment_units_total: 0,
+                  },
+                  retail: {
+                    low_stock_items: 0,
+                    out_of_stock_items: 0,
+                    retail_inventory_value: new Prisma.Decimal(0),
+                    retail_items: 0,
+                  },
+                  topProducts: [],
+                },
+              ),
+              retail_sales_revenue: revenueTotals.product_revenue,
             },
           }
         : {}),
@@ -524,10 +547,7 @@ export class AnalyticsService {
         revenue: this.toMoneyNumber(snapshot.coaching_gym_revenue),
       },
     ].filter((entry) => entry.revenue > 0);
-    const totalRevenue = totals.reduce(
-      (sum, entry) => sum + entry.revenue,
-      0,
-    );
+    const totalRevenue = totals.reduce((sum, entry) => sum + entry.revenue, 0);
 
     return totals
       .sort((left, right) => right.revenue - left.revenue)
@@ -566,7 +586,9 @@ export class AnalyticsService {
     return `${this.toCount(value).toString().padStart(2, '0')}:00`;
   }
 
-  private toSystemAlert(alert: AnalyticsSystemAlertRow): AnalyticsSystemAlertDTO {
+  private toSystemAlert(
+    alert: AnalyticsSystemAlertRow,
+  ): AnalyticsSystemAlertDTO {
     return {
       action_label: alert.action_label,
       body: alert.body,
@@ -575,6 +597,32 @@ export class AnalyticsService {
       kind: alert.kind,
       severity: alert.severity,
       title: alert.title,
+    };
+  }
+
+  private toInventorySummary(result: InventorySummaryRows) {
+    return {
+      retail_items: this.toCount(result.retail.retail_items),
+      low_stock_items: this.toCount(result.retail.low_stock_items),
+      out_of_stock_items: this.toCount(result.retail.out_of_stock_items),
+      retail_inventory_value: this.toMoneyNumber(
+        result.retail.retail_inventory_value,
+      ).toFixed(2),
+      equipment_types: this.toCount(result.equipment.equipment_types),
+      equipment_units_available: this.toCount(
+        result.equipment.equipment_units_available,
+      ),
+      equipment_units_total: this.toCount(
+        result.equipment.equipment_units_total,
+      ),
+      equipment_under_maintenance: this.toCount(
+        result.equipment.equipment_under_maintenance,
+      ),
+      top_products: result.topProducts.map((row) => ({
+        name: row.name,
+        quantity_sold: this.toCount(row.quantity_sold),
+        revenue: this.toMoneyNumber(row.revenue).toFixed(2),
+      })),
     };
   }
 

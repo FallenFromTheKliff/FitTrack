@@ -46,10 +46,13 @@ import {
   USER_REGISTERED_EVENT,
   type UserRegisteredEvent,
 } from './events/user-registered.event';
+import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const REFRESH_TTL_DAYS = 7;
 const JTI_BLACKLIST_TTL = 900;
+const LOGIN_LOCK_MAX_ATTEMPTS = 5;
+const LOGIN_LOCK_TTL_SECONDS = 30 * 60;
 
 type NullableAuthenticatedUser = Awaited<
   ReturnType<AuthRepository['findUserWithProfile']>
@@ -141,17 +144,15 @@ export class AuthService {
     deviceInfo: string,
     ip: string,
   ): Promise<InternalTokenPairResponse> {
+    const normalizedEmail = this.normalizeLoginEmail(dto.email);
+    await this.assertLoginNotLocked(normalizedEmail);
+
     const identity = await this.repo.findIdentity(
       AuthProvider.email,
       dto.email,
     );
     if (!identity || !identity.credential_hash) {
-      throw new UnauthorizedException({
-        type: 'INVALID_CREDENTIALS',
-        title: 'Invalid Credentials',
-        status: 401,
-        detail: 'Email or password is incorrect.',
-      });
+      return this.throwInvalidCredentials(normalizedEmail);
     }
 
     const user = this.requireActiveAuthUser(
@@ -163,14 +164,10 @@ export class AuthService {
       identity.credential_hash,
     );
     if (!passwordMatch) {
-      throw new UnauthorizedException({
-        type: 'INVALID_CREDENTIALS',
-        title: 'Invalid Credentials',
-        status: 401,
-        detail: 'Email or password is incorrect.',
-      });
+      return this.throwInvalidCredentials(normalizedEmail);
     }
 
+    await this.clearLoginLockState(normalizedEmail);
     return this.issueTokenPair(user, deviceInfo, ip);
   }
 
@@ -418,7 +415,10 @@ export class AuthService {
       OtpPurpose.password_reset,
     );
 
-    await this.assertPasswordDoesNotReuseCurrent(credentialHash, dto.new_password);
+    await this.assertPasswordDoesNotReuseCurrent(
+      credentialHash,
+      dto.new_password,
+    );
 
     await this.otpService.consumeOtp(
       identity.user_id,
@@ -496,8 +496,18 @@ export class AuthService {
   async adminCreateUser(
     dto: AdminCreateUserDTO,
     actorId: string,
+    actorRole: UserRole,
     ip: string,
   ): Promise<{ user_id: string; email: string; role: string }> {
+    if (actorRole === UserRole.staff && dto.role === 'admin') {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Role Not Allowed',
+        status: 403,
+        detail: 'Staff accounts can only create staff or member accounts.',
+      });
+    }
+
     const existing = await this.repo.findIdentity(
       AuthProvider.email,
       dto.email,
@@ -562,6 +572,15 @@ export class AuthService {
         registeredAt: new Date().toISOString(),
       });
     }
+
+    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+      action: 'account_created',
+      actorId,
+      occurredAt: new Date().toISOString(),
+      targetEmail: dto.email,
+      targetRole: dto.role,
+      targetUserId: user.id,
+    });
 
     return { user_id: user.id, email: dto.email, role: dto.role };
   }
@@ -677,6 +696,95 @@ export class AuthService {
 
   private emitUserRegistered(event: UserRegisteredEvent): void {
     this.eventEmitter.emit(USER_REGISTERED_EVENT, event);
+  }
+
+  private normalizeLoginEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private getLoginAttemptKey(email: string): string {
+    return `auth:login_attempts:${email}`;
+  }
+
+  private getLoginLockKey(email: string): string {
+    return `auth:login_lock:${email}`;
+  }
+
+  private getLoginLockDetail(secondsRemaining?: number): string {
+    const minutes = Math.max(
+      1,
+      Math.ceil((secondsRemaining ?? LOGIN_LOCK_TTL_SECONDS) / 60),
+    );
+    return `Too many failed login attempts. Try again in ${minutes} minute(s).`;
+  }
+
+  private async assertLoginNotLocked(email: string): Promise<void> {
+    const lockKey = this.getLoginLockKey(email);
+    const locked = await this.redis.get(lockKey);
+    if (!locked) {
+      return;
+    }
+
+    const ttlSeconds = await this.redis.ttl(lockKey);
+    throw new HttpException(
+      {
+        type: 'ACCOUNT_LOCKED',
+        title: 'Account Locked',
+        status: 423,
+        detail: this.getLoginLockDetail(
+          ttlSeconds > 0 ? ttlSeconds : undefined,
+        ),
+      },
+      HttpStatus.LOCKED,
+    );
+  }
+
+  private async recordFailedLoginAttempt(
+    email: string,
+  ): Promise<{ locked: boolean }> {
+    const attemptKey = this.getLoginAttemptKey(email);
+    const lockKey = this.getLoginLockKey(email);
+    const attempts = await this.redis.incr(attemptKey);
+
+    if (attempts === 1) {
+      await this.redis.expire(attemptKey, LOGIN_LOCK_TTL_SECONDS);
+    }
+
+    if (attempts < LOGIN_LOCK_MAX_ATTEMPTS) {
+      return { locked: false };
+    }
+
+    await this.redis.setex(lockKey, LOGIN_LOCK_TTL_SECONDS, '1');
+    await this.redis.del(attemptKey);
+    return { locked: true };
+  }
+
+  private async clearLoginLockState(email: string): Promise<void> {
+    await this.redis.del(this.getLoginAttemptKey(email));
+    await this.redis.del(this.getLoginLockKey(email));
+  }
+
+  private async throwInvalidCredentials(email: string): Promise<never> {
+    const { locked } = await this.recordFailedLoginAttempt(email);
+
+    if (locked) {
+      throw new HttpException(
+        {
+          type: 'ACCOUNT_LOCKED',
+          title: 'Account Locked',
+          status: 423,
+          detail: this.getLoginLockDetail(LOGIN_LOCK_TTL_SECONDS),
+        },
+        HttpStatus.LOCKED,
+      );
+    }
+
+    throw new UnauthorizedException({
+      type: 'INVALID_CREDENTIALS',
+      title: 'Invalid Credentials',
+      status: 401,
+      detail: 'Email or password is incorrect.',
+    });
   }
 
   private generateQrToken(): string {

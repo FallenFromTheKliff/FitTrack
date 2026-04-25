@@ -140,30 +140,24 @@ function sleep(milliseconds) {
   });
 }
 
-function resolvePnpmCjs(repoRoot) {
-  const localCandidate = path.join(
-    repoRoot,
-    'node_modules',
-    'pnpm',
-    'bin',
-    'pnpm.cjs',
-  );
+function resolvePnpmCmd(repoRoot) {
+  const localCandidate = path.join(repoRoot, 'node_modules', '.bin', 'pnpm.cmd');
   if (fs.existsSync(localCandidate)) {
     return localCandidate;
   }
 
   const appDataCandidate = process.env.APPDATA
-    ? path.join(
-        process.env.APPDATA,
-        'npm',
-        'node_modules',
-        'pnpm',
-        'bin',
-        'pnpm.cjs',
-      )
+    ? path.join(process.env.APPDATA, 'npm', 'pnpm.cmd')
     : null;
   if (appDataCandidate && fs.existsSync(appDataCandidate)) {
     return appDataCandidate;
+  }
+
+  const pnpmHomeCandidate = process.env.PNPM_HOME
+    ? path.join(process.env.PNPM_HOME, 'pnpm.cmd')
+    : null;
+  if (pnpmHomeCandidate && fs.existsSync(pnpmHomeCandidate)) {
+    return pnpmHomeCandidate;
   }
 
   const whereResult = spawnSync('cmd.exe', ['/d', '/c', 'where pnpm.cmd'], {
@@ -184,18 +178,16 @@ function resolvePnpmCjs(repoRoot) {
     throw new Error('Unable to resolve pnpm.cmd from where.exe output.');
   }
 
-  const globalCandidate = path.join(
-    path.dirname(pnpmCmdPath),
-    'node_modules',
-    'pnpm',
-    'bin',
-    'pnpm.cjs',
-  );
-  if (fs.existsSync(globalCandidate)) {
-    return globalCandidate;
-  }
+  return pnpmCmdPath;
+}
 
-  throw new Error(`Unable to find pnpm.cjs next to ${pnpmCmdPath}`);
+function buildPnpmCommandArgs(pnpmCmdPath, pnpmArgs) {
+  return [
+    '/d',
+    '/c',
+    pnpmCmdPath,
+    ...pnpmArgs,
+  ];
 }
 
 function getTargets(repoRoot, includeAi, skipMobileWeb = false) {
@@ -329,8 +321,8 @@ function currentManifestPayload(runtimeState) {
     pid: entry.child?.pid ?? null,
     health_url: entry.target.healthUrl,
     working_directory: entry.target.workingDirectory,
-    command_path: process.execPath,
-    arguments: [runtimeState.options.pnpmCjsPath, ...entry.target.pnpmArgs],
+    command_path: 'cmd.exe',
+    arguments: buildPnpmCommandArgs(runtimeState.options.pnpmCmdPath, entry.target.pnpmArgs),
     stdout_path: entry.stdoutPath,
     stderr_path: entry.stderrPath,
     restart_count: entry.restartCount,
@@ -464,8 +456,8 @@ async function ensureWorkspaceInstall(options) {
   }
 
   const result = await runBufferedCommand(
-    process.execPath,
-    [options.pnpmCjsPath, 'install', '--frozen-lockfile'],
+    'cmd.exe',
+    buildPnpmCommandArgs(options.pnpmCmdPath, ['install', '--frozen-lockfile']),
     options.workspaceRoot,
     {
       CI: 'true',
@@ -534,8 +526,8 @@ function startTarget(target, runtimeState, existingEntry = null) {
   entry.lastExitSignal = null;
 
   const child = spawnManagedChild(
-    process.execPath,
-    [runtimeState.options.pnpmCjsPath, ...target.pnpmArgs],
+    'cmd.exe',
+    buildPnpmCommandArgs(runtimeState.options.pnpmCmdPath, target.pnpmArgs),
     target.workingDirectory,
     entry.stdoutPath,
     entry.stderrPath,
@@ -657,7 +649,7 @@ async function startCommand(options) {
 }
 
 async function runCommand(options) {
-  options.pnpmCjsPath = resolvePnpmCjs(options.workspaceRoot);
+  options.pnpmCmdPath = resolvePnpmCmd(options.workspaceRoot);
   options.startedAt = new Date().toISOString();
   ensureDirectory(options.artifactsDir);
 

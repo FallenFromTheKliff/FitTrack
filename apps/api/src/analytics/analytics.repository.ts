@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  InsightPeriod,
-  Prisma,
-  SaleStatus,
-} from '@prisma/client';
+import { InsightPeriod, Prisma, SaleStatus } from '@prisma/client';
 
 import { BaseRepository } from '../common/base-repository/base-repository';
 import { PrismaService } from '../prisma/prisma.service';
@@ -86,6 +82,20 @@ type TopInventoryProductRow = {
   revenue: Prisma.Decimal | null;
 };
 
+type RetailInventorySummaryRow = {
+  low_stock_items: bigint | number | null;
+  out_of_stock_items: bigint | number | null;
+  retail_inventory_value: Prisma.Decimal | null;
+  retail_items: bigint | number | null;
+};
+
+type EquipmentInventorySummaryRow = {
+  equipment_types: bigint | number | null;
+  equipment_under_maintenance: bigint | number | null;
+  equipment_units_available: bigint | number | null;
+  equipment_units_total: bigint | number | null;
+};
+
 export type AnalyticsOverviewRows = {
   attendance: AttendanceSummaryRow;
   coaching: CoachingRevenueSummaryRow;
@@ -118,6 +128,12 @@ export type TopMembershipPlanRows = TopMembershipPlanRow[];
 
 export type TopInventoryProductRows = TopInventoryProductRow[];
 
+export type InventorySummaryRows = {
+  equipment: EquipmentInventorySummaryRow;
+  retail: RetailInventorySummaryRow;
+  topProducts: TopInventoryProductRows;
+};
+
 export type ActiveMemberTrendRows = ActiveMemberTrendRow[];
 
 export type AnalyticsSystemAlertRow = {
@@ -142,12 +158,17 @@ export type AnalyticsRecentActivityRow = {
   title: string;
 };
 
-function toDisplayName(profile?: {
-  first_name: string | null;
-  last_name: string | null;
-} | null) {
+function toDisplayName(
+  profile?: {
+    first_name: string | null;
+    last_name: string | null;
+  } | null,
+) {
   if (!profile) return 'FitTrack member';
-  return `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'FitTrack member';
+  return (
+    `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() ||
+    'FitTrack member'
+  );
 }
 
 const VISIBLE_MEMBER_USER_WHERE = {
@@ -524,20 +545,14 @@ export class AnalyticsRepository extends BaseRepository {
         where: {
           is_active: true,
         },
-        orderBy: [
-          { stock_quantity: 'asc' },
-          { updated_at: 'desc' },
-        ],
+        orderBy: [{ stock_quantity: 'asc' }, { updated_at: 'desc' }],
         take: limit * 3,
       }),
       this.prisma.gymEquipmentItem.findMany({
         where: {
           is_active: true,
         },
-        orderBy: [
-          { quantity_current: 'asc' },
-          { updated_at: 'desc' },
-        ],
+        orderBy: [{ quantity_current: 'asc' }, { updated_at: 'desc' }],
         take: limit * 3,
       }),
     ]);
@@ -555,12 +570,14 @@ export class AnalyticsRepository extends BaseRepository {
         href: `/inventory?tab=retail&modal=restock&productId=${encodeURIComponent(product.id)}`,
       }));
 
-    const maintenanceAlerts: AnalyticsSystemAlertRow[] =
-      equipmentAttentionItems
-        .filter((item) => item.quantity_current < item.quantity_total)
-        .slice(0, perLane)
-        .map((item) => {
-        const missingCount = Math.max(item.quantity_total - item.quantity_current, 0);
+    const maintenanceAlerts: AnalyticsSystemAlertRow[] = equipmentAttentionItems
+      .filter((item) => item.quantity_current < item.quantity_total)
+      .slice(0, perLane)
+      .map((item) => {
+        const missingCount = Math.max(
+          item.quantity_total - item.quantity_current,
+          0,
+        );
 
         return {
           id: item.id,
@@ -571,7 +588,7 @@ export class AnalyticsRepository extends BaseRepository {
           action_label: 'REVIEW EQUIPMENT',
           href: `/inventory?tab=equipment&modal=details&equipmentId=${encodeURIComponent(item.id)}`,
         };
-        });
+      });
 
     return [...lowStockAlerts, ...maintenanceAlerts].slice(0, limit);
   }
@@ -760,14 +777,21 @@ export class AnalyticsRepository extends BaseRepository {
           (total, item) => total + item.quantity,
           0,
         );
+        const sourceLabel =
+          entry.source === 'mobile'
+            ? 'through the mobile app'
+            : 'from the retail counter';
 
         return {
           id: entry.id,
           kind: 'sale' as const,
           title: 'Retail sale completed',
-          description: `${actorName} purchased ${itemCount} item${itemCount === 1 ? '' : 's'} from the retail counter.`,
+          description: `${actorName} purchased ${itemCount} item${itemCount === 1 ? '' : 's'} ${sourceLabel}.`,
           occurred_at: entry.created_at,
-          actor_name: toDisplayName(entry.staff.profile),
+          actor_name:
+            entry.source === 'mobile'
+              ? actorName
+              : toDisplayName(entry.staff.profile),
           status: entry.status,
           entity_label: 'Retail sale',
           entity_id: entry.id,
@@ -850,6 +874,24 @@ export class AnalyticsRepository extends BaseRepository {
       ORDER BY revenue DESC, quantity_sold DESC, retail_products.name ASC
       LIMIT ${limit}
     `;
+  }
+
+  async getInventorySummary(
+    start: Date,
+    end: Date,
+    limit = 5,
+  ): Promise<InventorySummaryRows> {
+    const [retail, equipment, topProducts] = await Promise.all([
+      this.getRetailInventorySummary(),
+      this.getEquipmentInventorySummary(),
+      this.getTopInventoryProducts(start, end, limit),
+    ]);
+
+    return {
+      equipment,
+      retail,
+      topProducts,
+    };
   }
 
   private async getPaymentRevenueTotals(
@@ -950,6 +992,55 @@ export class AnalyticsRepository extends BaseRepository {
       new_members: Number(rows[0]?.new_members ?? 0),
       active_members: activeMembers,
     };
+  }
+
+  private async getRetailInventorySummary(): Promise<RetailInventorySummaryRow> {
+    const rows = await this.queryRaw<RetailInventorySummaryRow[]>`
+      SELECT
+        COUNT(*) AS retail_items,
+        COUNT(*) FILTER (
+          WHERE stock_quantity > 0
+            AND stock_quantity <= reorder_threshold
+        ) AS low_stock_items,
+        COUNT(*) FILTER (
+          WHERE stock_quantity <= 0
+        ) AS out_of_stock_items,
+        COALESCE(SUM(price * stock_quantity), 0) AS retail_inventory_value
+      FROM retail_products
+      WHERE is_active = true
+    `;
+
+    return (
+      rows[0] ?? {
+        retail_items: 0,
+        low_stock_items: 0,
+        out_of_stock_items: 0,
+        retail_inventory_value: new Prisma.Decimal(0),
+      }
+    );
+  }
+
+  private async getEquipmentInventorySummary(): Promise<EquipmentInventorySummaryRow> {
+    const rows = await this.queryRaw<EquipmentInventorySummaryRow[]>`
+      SELECT
+        COUNT(*) AS equipment_types,
+        COALESCE(SUM(quantity_current), 0) AS equipment_units_available,
+        COALESCE(SUM(quantity_total), 0) AS equipment_units_total,
+        COUNT(*) FILTER (
+          WHERE quantity_current < quantity_total
+        ) AS equipment_under_maintenance
+      FROM gym_equipment_items
+      WHERE is_active = true
+    `;
+
+    return (
+      rows[0] ?? {
+        equipment_types: 0,
+        equipment_units_available: 0,
+        equipment_units_total: 0,
+        equipment_under_maintenance: 0,
+      }
+    );
   }
 
   private getPaymentRevenueSeries(

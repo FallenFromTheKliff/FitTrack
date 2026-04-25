@@ -18,6 +18,7 @@ import {
 } from '../user/user.service';
 import {
   NotificationFilterDTO,
+  DeleteAllNotificationsResponseDTO,
   MarkAllReadResponseDTO,
   NotificationResponseDTO,
   UnreadCountResponseDTO,
@@ -140,6 +141,14 @@ export class NotificationsService {
 
   deleteNotification(userId: string, notificationId: string): Promise<void> {
     return this.repo.deleteOwnedInAppNotification(userId, notificationId);
+  }
+
+  async deleteAllNotifications(
+    userId: string,
+  ): Promise<DeleteAllNotificationsResponseDTO> {
+    return {
+      deleted_count: await this.repo.deleteAllOwnedInAppNotifications(userId),
+    };
   }
 
   @OnEvent(NOTIFICATION_DELIVERY_SENT_EVENT, { async: true })

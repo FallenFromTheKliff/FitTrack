@@ -2,8 +2,9 @@ import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles } from '../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { UpgradeToCoachDto } from './dto/admin.dto';
 import { AdminUsersService } from './admin-users.service';
 
@@ -23,7 +24,10 @@ export class AdminRoleManagementController {
     status: 201,
     description: 'Coach profile created and user role updated.',
   })
-  upgradeToCoach(@Body() dto: UpgradeToCoachDto) {
-    return this.adminUsersService.upgradeToCoach(dto);
+  upgradeToCoach(
+    @Body() dto: UpgradeToCoachDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.adminUsersService.upgradeToCoach(dto, user.sub);
   }
 }

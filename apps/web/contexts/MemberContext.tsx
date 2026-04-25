@@ -19,6 +19,8 @@ const MemberContext = createContext<IMemberContext | null>(null);
 export function MemberProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
+  const isStaff = user?.role === "STAFF";
+  const canInspectAccounts = isAdmin || isStaff;
   const queryClient = useQueryClient();
   const controller = useMemo(() => createMemberController(), []);
 
@@ -28,10 +30,10 @@ export function MemberProvider({ children }: { children: ReactNode }) {
     error: queryError
   } = useQuery({
     ...adminMembersQueryOptions(webApiClient),
-    enabled: isAdmin
+    enabled: canInspectAccounts
   });
 
-  const error = isAdmin && queryError
+  const error = canInspectAccounts && queryError
     ? controller.toMessage(queryError, "Failed to fetch members.")
     : null;
 

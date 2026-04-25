@@ -9,9 +9,11 @@ import { AmenityController } from './amenity.controller';
 function getGuardMetadata(
   methodName:
     | 'listAmenities'
+    | 'listArchivedAmenities'
     | 'getAmenityById'
     | 'createAmenity'
     | 'updateAmenity'
+    | 'restoreAmenity'
     | 'deleteAmenity',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
@@ -21,7 +23,12 @@ function getGuardMetadata(
 }
 
 function getRolesMetadata(
-  methodName: 'createAmenity' | 'updateAmenity' | 'deleteAmenity',
+  methodName:
+    | 'createAmenity'
+    | 'updateAmenity'
+    | 'restoreAmenity'
+    | 'deleteAmenity'
+    | 'listArchivedAmenities',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -32,9 +39,11 @@ function getRolesMetadata(
 describe('AmenityController', () => {
   const amenityService = {
     listAmenities: jest.fn(),
+    listArchivedAmenities: jest.fn(),
     getAmenityById: jest.fn(),
     createAmenity: jest.fn(),
     updateAmenity: jest.fn(),
+    restoreAmenity: jest.fn(),
     deleteAmenity: jest.fn(),
   };
 
@@ -57,6 +66,14 @@ describe('AmenityController', () => {
     expect(getGuardMetadata('listAmenities')).toBeUndefined();
   });
 
+  it('lists archived amenities through the service', async () => {
+    amenityService.listArchivedAmenities.mockResolvedValue([{ id: 'amenity-1' }]);
+
+    await controller.listArchivedAmenities();
+
+    expect(amenityService.listArchivedAmenities).toHaveBeenCalled();
+  });
+
   it('protects single amenity reads with JWT auth', () => {
     expect(getGuardMetadata('getAmenityById')).toEqual([JwtAuthGuard]);
   });
@@ -75,13 +92,21 @@ describe('AmenityController', () => {
     });
   });
 
-  it.each(['createAmenity', 'updateAmenity', 'deleteAmenity'] as const)(
+  it.each(['createAmenity', 'updateAmenity', 'restoreAmenity', 'deleteAmenity', 'listArchivedAmenities'] as const)(
     'locks %s to admin users',
     (methodName) => {
       expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
       expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
     },
   );
+
+  it('restores amenities through the service', async () => {
+    amenityService.restoreAmenity.mockResolvedValue({ id: 'amenity-1' });
+
+    await controller.restoreAmenity('amenity-1');
+
+    expect(amenityService.restoreAmenity).toHaveBeenCalledWith('amenity-1');
+  });
 
   it('returns a confirmation message after soft delete', async () => {
     amenityService.deleteAmenity.mockResolvedValue(undefined);

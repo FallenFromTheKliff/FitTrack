@@ -72,6 +72,22 @@ export class GymLayoutController {
     return this.gymLayoutService.listEquipment();
   }
 
+  @Get('equipment/archived')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List archived equipment from the gym layout map. Admin only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Archived gym layout equipment returned.',
+    schema: arrayEnvelopeSchema(getSchemaPath(GymLayoutEquipmentResponseDTO)),
+  })
+  listArchivedEquipment() {
+    return this.gymLayoutService.listArchivedEquipment();
+  }
+
   @Post('equipment')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.admin)
@@ -108,6 +124,23 @@ export class GymLayoutController {
     @Body() dto: UpdateEquipmentDTO,
   ) {
     return this.gymLayoutService.updateEquipment(id, dto);
+  }
+
+  @Patch('equipment/:id/restore')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Restore archived equipment to the gym layout map. Admin only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Gym layout equipment restored.',
+    schema: apiEnvelopeSchema(getSchemaPath(GymLayoutEquipmentResponseDTO)),
+  })
+  @ApiResponse({ status: 404, description: 'Equipment not found.' })
+  restoreEquipment(@Param('id', ParseUUIDPipe) id: string) {
+    return this.gymLayoutService.restoreEquipment(id);
   }
 
   @Delete('equipment/:id')

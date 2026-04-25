@@ -18,11 +18,7 @@ import { ForgotPasswordModal, OTPModal } from "@/components/modals";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import {
-  LOGIN_BACKGROUND_IMAGE_URL,
-  LOGIN_HERO_STATS,
-  MAX_LOGIN_ATTEMPTS,
-} from "@/data/auth/auth";
+import { LOGIN_BACKGROUND_IMAGE_URL, LOGIN_HERO_STATS } from "@/data/auth/auth";
 import { useAuthEntrance } from "@/hooks/animations/useAuthEntrance";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { authStyles } from "@/styles/authStyles";
@@ -57,11 +53,9 @@ export function AdminLoginPage() {
   const shouldAnimate = settings.animationLevel !== "none";
   const { floating } = useAuthEntrance(shouldAnimate);
 
-  const [attempts, setAttempts] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [locked, setLocked] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showBuffer, setShowBuffer] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
@@ -87,7 +81,7 @@ export function AdminLoginPage() {
   }, []);
 
   const onSubmit = async (data: LoginData) => {
-    if (loading || locked) {
+    if (loading) {
       return;
     }
 
@@ -99,22 +93,14 @@ export function AdminLoginPage() {
     setLoading(false);
 
     if (!result.success) {
-      if (result.reason !== "PORTAL_ROLE_MISMATCH") {
-        const nextAttempts = attempts + 1;
-        setAttempts(nextAttempts);
-
-        if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
-          setLocked(true);
-          router.replace("/locked");
-          return;
-        }
+      if (result.reason === "ACCOUNT_LOCKED") {
+        router.replace("/locked");
+        return;
       }
 
       setErrorMsg(result.error ?? "Invalid email or password.");
       return;
     }
-
-    setAttempts(0);
 
     if (result.otpRequired) {
       setShowOTP(true);
@@ -229,7 +215,7 @@ export function AdminLoginPage() {
                 <FitInputField
                   autoComplete="email"
                   control={control}
-                  disabled={loading || locked}
+                  disabled={loading}
                   errors={errors}
                   icon={Mail}
                   inputRowStyle={styles.loginInputRow}
@@ -249,7 +235,7 @@ export function AdminLoginPage() {
                 <FitInputField
                   autoComplete="current-password"
                   control={control}
-                  disabled={loading || locked}
+                  disabled={loading}
                   errors={errors}
                   icon={Lock}
                   inputRowStyle={styles.loginInputRow}
@@ -284,11 +270,6 @@ export function AdminLoginPage() {
                   <AlertCircle color={colors.danger} size={13} />
                   <FitText style={styles.errorText}>{errorMsg}</FitText>
                 </div>
-                {attempts > 0 && attempts < MAX_LOGIN_ATTEMPTS ? (
-                  <FitText style={styles.errorMeta}>
-                    Attempt {attempts} of {MAX_LOGIN_ATTEMPTS}
-                  </FitText>
-                ) : null}
               </div>
             ) : null}
 
@@ -299,7 +280,6 @@ export function AdminLoginPage() {
               transition={itemTransition(6)}
             >
               <FitButton
-                disabled={locked}
                 fullWidth
                 label={loading ? signInLabel : "SIGN IN"}
                 loading={loading}

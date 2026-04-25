@@ -33,17 +33,13 @@ export async function invalidateNotificationQueries(
   queryClient: QueryClient,
   userId?: string,
 ) {
-  await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.notificationInbox(userId),
-    }),
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.notificationUnreadCount(userId),
-    }),
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.notificationPreferences(userId),
-    }),
-  ]);
+  await queryClient.invalidateQueries({
+    predicate: (query) => {
+      const [scope, , queryUserId] = query.queryKey as [string, string?, string?];
+      if (scope !== "notifications") return false;
+      return !userId || queryUserId === userId || queryUserId === undefined;
+    }
+  });
 }
 
 export function invalidateGymLayoutQueries(queryClient: QueryClient) {
@@ -120,6 +116,7 @@ export async function invalidateStaffCoachManagementQueries(
   const tasks = [
     queryClient.invalidateQueries({ queryKey: queryKeys.staffAppointments() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.recurringCoachingPlanSessions() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.coaches() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.appointments() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule() })

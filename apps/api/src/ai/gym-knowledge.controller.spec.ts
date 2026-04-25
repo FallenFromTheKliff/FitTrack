@@ -7,6 +7,8 @@ import { GymKnowledgeController } from './gym-knowledge.controller';
 
 describe('GymKnowledgeController', () => {
   const gymKnowledgeService = {
+    getGymProfile: jest.fn(),
+    updateGymProfile: jest.fn(),
     getOperatingHours: jest.fn(),
     replaceOperatingHours: jest.fn(),
     getSpecialSchedules: jest.fn(),
@@ -43,6 +45,45 @@ describe('GymKnowledgeController', () => {
     await controller.getOperatingHours();
 
     expect(gymKnowledgeService.getOperatingHours).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads and updates the shared gym profile through the service', async () => {
+    gymKnowledgeService.getGymProfile.mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
+    gymKnowledgeService.updateGymProfile.mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
+
+    await controller.getGymProfile();
+    await controller.updateGymProfile({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
+
+    expect(gymKnowledgeService.getGymProfile).toHaveBeenCalledTimes(1);
+    expect(gymKnowledgeService.updateGymProfile).toHaveBeenCalledWith({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    });
   });
 
   it('replaces operating hours through the service', async () => {

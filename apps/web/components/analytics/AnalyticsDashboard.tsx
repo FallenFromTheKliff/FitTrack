@@ -38,7 +38,7 @@ import {
 } from "@/app/(admin)/analytics/helpers";
 import { FitButton, FitChartContainer, FitSection, FitSelect, FitText } from "@/components/fit";
 import { FitModal } from "@/components/modals";
-import { useAnalyticsDashboard } from "@/hooks/analytics/useAnalyticsDashboard";
+import { useAnalyticsDashboard } from "../../hooks/analytics/useAnalyticsDashboard";
 
 type RecentActivityFilter = "all" | "bookings" | "checkins";
 
@@ -138,7 +138,10 @@ export function AnalyticsDashboard() {
     useState<RecentActivityFilter>("all");
 
   const systemAlerts = analytics.snapshot?.systemAlerts ?? [];
-  const recentActivities = analytics.snapshot?.recentActivities ?? [];
+  const recentActivities = useMemo(
+    () => analytics.snapshot?.recentActivities ?? [],
+    [analytics.snapshot?.recentActivities]
+  );
   const filteredRecentActivities = useMemo(() => {
     if (recentActivityFilter === "checkins") {
       return recentActivities.filter((activity) => activity.kind === "attendance");

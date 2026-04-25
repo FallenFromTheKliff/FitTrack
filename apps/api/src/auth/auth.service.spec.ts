@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   GoneException,
+  HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -52,10 +53,57 @@ describe('AuthService', () => {
   };
 
   const redis = {
+    del: jest.fn(),
+    expire: jest.fn(),
+    get: jest.fn(),
+    incr: jest.fn(),
+    set: jest.fn(),
     setex: jest.fn(),
+    ttl: jest.fn(),
   };
 
   beforeEach(async () => {
+    const redisValues = new Map<string, string>();
+    const redisTtls = new Map<string, number>();
+
+    redis.get.mockImplementation((key: string) =>
+      Promise.resolve(
+        redisValues.has(key) ? (redisValues.get(key) ?? null) : null,
+      ),
+    );
+    redis.ttl.mockImplementation((key: string) =>
+      Promise.resolve(redisValues.has(key) ? (redisTtls.get(key) ?? -1) : -2),
+    );
+    redis.incr.mockImplementation((key: string) => {
+      const next = Number(redisValues.get(key) ?? '0') + 1;
+      redisValues.set(key, String(next));
+      return Promise.resolve(next);
+    });
+    redis.expire.mockImplementation((key: string, ttl: number) => {
+      if (!redisValues.has(key)) {
+        return Promise.resolve(0);
+      }
+      redisTtls.set(key, ttl);
+      return Promise.resolve(1);
+    });
+    redis.setex.mockImplementation(
+      (key: string, ttl: number, value: string) => {
+        redisValues.set(key, value);
+        redisTtls.set(key, ttl);
+        return Promise.resolve('OK');
+      },
+    );
+    redis.del.mockImplementation((...keys: string[]) => {
+      let deleted = 0;
+      for (const key of keys) {
+        if (redisValues.delete(key)) {
+          deleted += 1;
+        }
+        redisTtls.delete(key);
+      }
+      return Promise.resolve(deleted);
+    });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -147,6 +195,120 @@ describe('AuthService', () => {
         '127.0.0.1',
       ),
     ).rejects.toThrow(UnauthorizedException);
+
+    expect(redis.incr).toHaveBeenCalledWith(
+      'auth:login_attempts:member@example.com',
+    );
+  });
+
+  it('locks login after the fifth invalid credential attempt', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('CorrectPassword1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+
+    for (let attempt = 1; attempt < 5; attempt += 1) {
+      await expect(
+        service.login(
+          { email: 'member@example.com', password: 'WrongPassword1!' },
+          'device',
+          '127.0.0.1',
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    }
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'WrongPassword1!' },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        status: HttpStatus.LOCKED,
+        detail: 'Too many failed login attempts. Try again in 30 minute(s).',
+      },
+    });
+
+    expect(redis.setex).toHaveBeenCalledWith(
+      'auth:login_lock:member@example.com',
+      1800,
+      '1',
+    );
+    expect(redis.del).toHaveBeenCalledWith(
+      'auth:login_attempts:member@example.com',
+    );
+  });
+
+  it('rejects login while the account cooldown is still active', async () => {
+    redis.get.mockResolvedValueOnce('1');
+    redis.ttl.mockResolvedValueOnce(1200);
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'Password1!' },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        status: HttpStatus.LOCKED,
+        detail: 'Too many failed login attempts. Try again in 20 minute(s).',
+      },
+    });
+
+    expect(repo.findIdentity).not.toHaveBeenCalled();
+  });
+
+  it('clears any stored login cooldown after a successful login', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: new Date('2026-03-28T08:00:00.000Z'),
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+    repo.createRefreshToken.mockResolvedValue({
+      id: 'refresh-1',
+      token_hash: 'refresh-hash',
+      expires_at: new Date(Date.now() + 86_400_000),
+      revoked_at: null,
+      user_id: 'user-1',
+    });
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'Password1!' },
+        'device',
+        '127.0.0.1',
+      ),
+    ).resolves.toMatchObject({
+      access_token: 'access-token',
+      user: expect.objectContaining({
+        id: 'user-1',
+      }),
+    });
+
+    expect(redis.del).toHaveBeenCalledWith(
+      'auth:login_attempts:member@example.com',
+    );
+    expect(redis.del).toHaveBeenCalledWith(
+      'auth:login_lock:member@example.com',
+    );
   });
 
   it('rejects login for archived accounts', async () => {
@@ -456,6 +618,7 @@ describe('AuthService', () => {
         phone: '+639171234567',
       },
       'admin-1',
+      UserRole.admin,
       '127.0.0.1',
     );
 
@@ -509,6 +672,7 @@ describe('AuthService', () => {
         role: 'member',
       },
       'admin-1',
+      UserRole.admin,
       '127.0.0.1',
     );
 
@@ -548,5 +712,25 @@ describe('AuthService', () => {
       USER_REGISTERED_EVENT,
       expect.anything(),
     );
+  });
+
+  it('rejects staff attempts to create admin accounts', async () => {
+    await expect(
+      service.adminCreateUser(
+        {
+          email: 'admin@example.com',
+          password: 'Password1!',
+          first_name: 'Admin',
+          last_name: 'Blocked',
+          role: 'admin',
+        },
+        'staff-1',
+        UserRole.staff,
+        '127.0.0.1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(repo.findIdentity).not.toHaveBeenCalled();
+    expect(repo.createUserWithProfile).not.toHaveBeenCalled();
   });
 });

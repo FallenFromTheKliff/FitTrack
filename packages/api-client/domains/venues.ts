@@ -52,6 +52,12 @@ export function createVenuesApi(transport: ApiTransport) {
         "Unable to load venues."
       ).then((data) => data.map((record) => mapAmenityToVenueRecord(record)));
     },
+    listArchived() {
+      return unwrapResponse<AmenityApiRecord[]>(
+        transport.get("/bookings/amenities/archived"),
+        "Unable to load archived venues."
+      ).then((data) => data.map((record) => mapAmenityToVenueRecord(record)));
+    },
     async getAvailability<T>(venueId: string | number, date: string) {
       const amenityId = requireAmenityId(venueId);
       const data = await unwrapResponse<AmenityAvailabilitySlotApiRecord[]>(
@@ -82,6 +88,14 @@ export function createVenuesApi(transport: ApiTransport) {
         transport.delete(`/bookings/amenities/${amenityId}`),
         "Unable to delete venue."
       );
+    },
+    async restore(id: string | number) {
+      const amenityId = requireAmenityId(id);
+      const restored = await unwrapResponse<AmenityApiRecord>(
+        transport.patch(`/bookings/amenities/${amenityId}/restore`),
+        "Unable to restore venue."
+      );
+      return mapAmenityToVenueRecord(restored);
     }
   };
 }
