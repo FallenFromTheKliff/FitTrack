@@ -7,7 +7,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FitnessGoal, PlanSource, Prisma, SessionStatus } from '@prisma/client';
 
-import { WORKOUT_SESSION_COMPLETED_EVENT } from './events/workout-session-completed.event';
+import {
+  WORKOUT_SESSION_COMPLETED_EVENT,
+  type WorkoutSessionCompletedEvent,
+} from './events/workout-session-completed.event';
 import { WorkoutSessionRepository } from './session.repository';
 import { WorkoutSessionService } from './session.service';
 
@@ -20,6 +23,7 @@ describe('WorkoutSessionService', () => {
     findPlanOwnershipContextByIdOrThrow: jest.fn(),
     findActiveExerciseById: jest.fn(),
     findPoseSessionByIdOrThrow: jest.fn(),
+    getNextWorkoutSourceRevision: jest.fn(),
     createSession: jest.fn(),
     createExerciseLog: jest.fn(),
     completeSession: jest.fn(),
@@ -67,6 +71,7 @@ describe('WorkoutSessionService', () => {
         exercise: {
           id: 'exercise-1',
           name: 'Barbell Back Squat',
+          muscle_group: 'legs',
         },
         pose_session: null,
       },
@@ -116,11 +121,13 @@ describe('WorkoutSessionService', () => {
     exercise: {
       id: 'exercise-1',
       name: 'Barbell Back Squat',
+      muscle_group: 'legs',
     },
     pose_session: {
       id: 'pose-1',
       rep_count_ai: 12,
       confidence_avg: new Prisma.Decimal('0.925'),
+      analysis_summary: null,
       started_at: new Date('2026-03-26T08:16:00.000Z'),
       ended_at: new Date('2026-03-26T08:18:00.000Z'),
     },
@@ -138,6 +145,7 @@ describe('WorkoutSessionService', () => {
 
     service = module.get<WorkoutSessionService>(WorkoutSessionService);
     jest.clearAllMocks();
+    repo.getNextWorkoutSourceRevision.mockResolvedValue(1);
   });
 
   it('maps paginated session history to summary DTOs', async () => {
@@ -292,14 +300,117 @@ describe('WorkoutSessionService', () => {
       }),
     );
     expect(completeInput[0].totalVolumeKg).toBeInstanceOf(Prisma.Decimal);
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
-      WORKOUT_SESSION_COMPLETED_EVENT,
+    const [emittedEventName, emittedEvent] = eventEmitter.emit.mock
+      .calls[0] as [string, WorkoutSessionCompletedEvent];
+
+    expect(emittedEventName).toBe(WORKOUT_SESSION_COMPLETED_EVENT);
+    expect(emittedEvent).toEqual(
       expect.objectContaining({
+        eventType: 'progression_source_recorded',
+        sourceType: 'workout_session_completed',
+        sourceRevision: 1,
+        idempotencyKey: 'workout_session_completed:session-1:1',
         sessionId: 'session-1',
         userId: 'user-1',
         durationSeconds: 1800,
         totalVolumeKg: '480.00',
+        validationState: 'validated',
       }),
+    );
+    expect(repo.getNextWorkoutSourceRevision).toHaveBeenCalledWith('session-1');
+    expect(emittedEvent.correlation).toEqual(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        exerciseLogIds: ['log-1'],
+      }),
+    );
+    expect(emittedEvent.exerciseSummaries).toEqual([
+      expect.objectContaining({
+        exerciseLogId: 'log-1',
+        muscleGroupHint: 'legs',
+        exerciseNameSnapshot: 'Barbell Back Squat',
+      }),
+    ]);
+    jest.useRealTimers();
+  });
+
+  it('flags the completion event when linked pose evidence still needs review', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-26T08:30:00.000Z'));
+    const flaggedPoseSession = {
+      id: 'pose-1',
+      rep_count_ai: 12,
+      confidence_avg: new Prisma.Decimal('0.925'),
+      analysis_summary: {
+        integrity_state: 'suspicious',
+        terminal_state: 'flagged',
+        review_required_markers: ['low_classification_confidence'],
+      },
+      started_at: new Date('2026-03-26T08:16:00.000Z'),
+      ended_at: new Date('2026-03-26T08:18:00.000Z'),
+    };
+    repo.findSessionByIdOrThrow.mockResolvedValue(
+      makeSession({
+        exercise_logs: [makeExerciseLog({ pose_session: flaggedPoseSession })],
+      }),
+    );
+    repo.completeSession.mockResolvedValue(
+      makeSession({
+        status: SessionStatus.completed,
+        completed_at: new Date('2026-03-26T08:30:00.000Z'),
+        duration_seconds: 1800,
+        total_volume_kg: new Prisma.Decimal('510.00'),
+        last_activity_at: new Date('2026-03-26T08:30:00.000Z'),
+        exercise_logs: [makeExerciseLog({ pose_session: flaggedPoseSession })],
+      }),
+    );
+
+    await service.completeSession('user-1', 'session-1');
+
+    const [, emittedEvent] = eventEmitter.emit.mock.calls[0] as [
+      string,
+      WorkoutSessionCompletedEvent,
+    ];
+    expect(emittedEvent.validationState).toBe('flagged');
+    expect(emittedEvent.integrityState).toBe('suspicious');
+    expect(emittedEvent.eligibilityState).toBe('review_required');
+    expect(emittedEvent.terminalState).toBe('flagged');
+    expect(emittedEvent.validationMetadata).toEqual({
+      hasPoseEvidence: true,
+      hasManualWeightInput: true,
+      containsFlaggedSets: true,
+      correctionOrigin: 'linked_pose_session',
+      sourceQualityNotes: [
+        'flagged_pose_sessions_present',
+        'linked_pose_sessions_present',
+        'pose_session_requires_review:pose-1',
+      ],
+    });
+    jest.useRealTimers();
+  });
+
+  it('bumps workout source revision when a completion source is replayed', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-26T08:30:00.000Z'));
+    repo.getNextWorkoutSourceRevision.mockResolvedValue(3);
+    repo.findSessionByIdOrThrow.mockResolvedValue(makeSession());
+    repo.completeSession.mockResolvedValue(
+      makeSession({
+        status: SessionStatus.completed,
+        completed_at: new Date('2026-03-26T08:30:00.000Z'),
+        duration_seconds: 1800,
+        total_volume_kg: new Prisma.Decimal('480.00'),
+        last_activity_at: new Date('2026-03-26T08:30:00.000Z'),
+      }),
+    );
+
+    await service.completeSession('user-1', 'session-1');
+
+    const [, emittedEvent] = eventEmitter.emit.mock.calls[0] as [
+      string,
+      WorkoutSessionCompletedEvent,
+    ];
+    expect(emittedEvent.sourceRevision).toBe(3);
+    expect(emittedEvent.idempotencyKey).toBe(
+      'workout_session_completed:session-1:3',
     );
     jest.useRealTimers();
   });

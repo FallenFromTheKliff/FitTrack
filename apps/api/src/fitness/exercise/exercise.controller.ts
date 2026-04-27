@@ -20,7 +20,8 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
-import { Roles } from '../../common/decorators/roles.decorator';
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
+import { CurrentUser, Roles } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ExerciseService } from './exercise.service';
@@ -172,7 +173,8 @@ export class ExerciseController {
   updateReviewSubmission(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateExerciseReviewSubmissionDTO,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.exerciseService.updateReviewSubmission(id, dto);
+    return this.exerciseService.updateReviewSubmission(id, dto, user.sub);
   }
 }

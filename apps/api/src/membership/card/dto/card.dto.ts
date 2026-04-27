@@ -17,7 +17,10 @@ export class StartMembershipCardPurchaseDTO {
 }
 
 export class MembershipCardResponseDTO {
-  @ApiProperty({ enum: MembershipCardStatus, example: MembershipCardStatus.active })
+  @ApiProperty({
+    enum: MembershipCardStatus,
+    example: MembershipCardStatus.active,
+  })
   status: MembershipCardStatus;
 
   @ApiPropertyOptional({
@@ -51,7 +54,10 @@ export class MembershipCardResponseDTO {
   })
   revoked_at?: string | null;
 
-  @ApiPropertyOptional({ example: 'Rejected via members panel.', nullable: true })
+  @ApiPropertyOptional({
+    example: 'Rejected via members panel.',
+    nullable: true,
+  })
   revoke_reason?: string | null;
 
   @ApiPropertyOptional({

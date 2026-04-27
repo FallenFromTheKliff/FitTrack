@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-import Animated, { createAnimatedComponent, useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, Easing } from "react-native-reanimated";
+import Animated, { createAnimatedComponent, useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, Easing, runOnJS } from "react-native-reanimated";
 import { Dumbbell } from "lucide-react-native";
 import { useTypewriter } from "@fittrack/hooks";
 
@@ -38,6 +38,7 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
   const { activeFont, colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const [typingDone, setTypingDone] = useState(false);
+  const completedRef = useRef(false);
   const onBrand = colors.onBrand ?? "#FFFFFF";
 
   const iconScale = useSharedValue(0.4);
@@ -60,9 +61,20 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
     backgroundColor: ic.value.brand
   }));
 
+  const finishSplash = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    onDone();
+  }, [onDone]);
+
   useAnimatedReaction(
     () => doneSignal.value,
-    (val) => { if (val === 1) onDone(); }
+    (val, prev) => {
+      if (val === 1 && prev !== 1) {
+        runOnJS(finishSplash)();
+      }
+    },
+    [finishSplash]
   );
 
   useEffect(() => {

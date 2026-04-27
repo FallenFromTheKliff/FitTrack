@@ -5,6 +5,7 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "dependencies": {
+    "@fittrack/api-client": "workspace:*",
     "@fittrack/utils": "workspace:*"
   }
 }

@@ -12,6 +12,7 @@ Use this skill to design or repair the contract layer around FitTrack AI feature
 - Use Serena before broad repo scans.
 - Read only what is needed:
   - `references/contract-patterns.md`
+  - `references/pose-exercise-creation-contract.md` when the workflow creates or proposes exercise profiles from rep evidence
   - `context/python/00-python-microservice-contracts.md`
   - the domain contract file for the active feature
 - Confirm the real owner boundary before editing prompts:
@@ -47,6 +48,16 @@ Use this skill to design or repair the contract layer around FitTrack AI feature
 - Tell the model what to do when evidence is missing, contradictory, or out of scope.
 - Separate deterministic preprocessing from probabilistic generation whenever possible.
 - Treat retries and schema repair as contract features, not afterthoughts.
+
+## Pose exercise creation contracts
+
+When an AI workflow proposes a new exercise or movement profile from observed reps:
+
+- Require exactly three representative completed reps from one locked subject before allowing `create_candidate`.
+- Use derived pose/equipment summaries as input; do not place raw frames in the prompt unless the path is explicitly offline review.
+- Require a strict JSON object aligned with the pose movement contract, including bilateral/unilateral semantics, side-specific joints, spatial requirements, confidence, and admin-review flags.
+- Treat the model output as a proposal only. Nest/backend validation owns persistence, moderation, EXP mapping, safety gates, and existing-exercise matching.
+- Return `needs_more_evidence`, `match_existing`, or `reject` instead of inventing a new exercise when evidence is weak, already known, unsafe, contradictory, or not exercise-like.
 
 ## Output defaults
 

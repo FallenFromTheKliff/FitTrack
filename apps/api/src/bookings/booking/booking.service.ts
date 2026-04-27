@@ -719,7 +719,7 @@ export class BookingService {
         ? 'balance'
         : payment.payment_stage === PaymentStage.full
           ? 'full payment'
-        : 'downpayment';
+          : 'downpayment';
     const checkout = await this.paymongoCheckoutService.createCheckoutSession({
       amount: this.toMinorAmount(payment.amount),
       description: `${amenityName} booking ${paymentLabel}`,

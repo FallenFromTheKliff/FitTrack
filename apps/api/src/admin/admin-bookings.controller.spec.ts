@@ -6,9 +6,13 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AdminBookingsController } from './admin-bookings.controller';
 
-function getMethod(name: 'getAllBookings' | 'confirmBooking' | 'rejectBooking') {
-  return Object.getOwnPropertyDescriptor(AdminBookingsController.prototype, name)
-    ?.value as Function | undefined;
+function getMethod(
+  name: 'getAllBookings' | 'confirmBooking' | 'rejectBooking',
+) {
+  return Object.getOwnPropertyDescriptor(
+    AdminBookingsController.prototype,
+    name,
+  )?.value as Function | undefined;
 }
 
 describe('AdminBookingsController', () => {
@@ -21,10 +25,9 @@ describe('AdminBookingsController', () => {
   const controller = new AdminBookingsController(bookingService as never);
 
   it('protects the controller with JWT and role guards', () => {
-    expect(Reflect.getMetadata(GUARDS_METADATA, AdminBookingsController)).toEqual([
-      JwtAuthGuard,
-      RolesGuard,
-    ]);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, AdminBookingsController),
+    ).toEqual([JwtAuthGuard, RolesGuard]);
     expect(Reflect.getMetadata(ROLES_KEY, AdminBookingsController)).toEqual([
       UserRole.admin,
     ]);

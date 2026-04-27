@@ -9,6 +9,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, SessionStatus } from '@prisma/client';
 
 import { PaginatedResult } from '../../common/base-repository/base-repository';
+import { progressionSourceEventType } from '../progression-source.types';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import {
   ExerciseLogResponseDTO,
@@ -20,6 +21,7 @@ import {
 } from './dto/session.dto';
 import {
   WORKOUT_SESSION_COMPLETED_EVENT,
+  type WorkoutSessionExerciseSummary,
   type WorkoutSessionCompletedEvent,
 } from './events/workout-session-completed.event';
 import { WorkoutSessionRepository } from './session.repository';
@@ -35,6 +37,18 @@ type SessionSummaryRecord = Awaited<
 type ExerciseLogRecord = Awaited<
   ReturnType<WorkoutSessionRepository['createExerciseLog']>
 >;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
 
 @Injectable()
 export class WorkoutSessionService {
@@ -184,15 +198,54 @@ export class WorkoutSessionService {
       durationSeconds,
       totalVolumeKg,
     });
+    const validationSnapshot = this.toProgressionValidationSnapshot(updated);
+    const sourceRevision = await this.repo.getNextWorkoutSourceRevision(
+      updated.id,
+    );
+    const recordedAt = new Date().toISOString();
 
     this.emitWorkoutSessionCompleted({
+      eventType: progressionSourceEventType,
+      eventVersion: 1,
+      sourceType: 'workout_session_completed',
+      sourceId: updated.id,
+      sourceRevision,
+      idempotencyKey: `workout_session_completed:${updated.id}:${sourceRevision}`,
       sessionId: updated.id,
       userId: updated.user_id,
       planId: updated.plan_id ?? null,
+      occurredAt: completedAt.toISOString(),
+      recordedAt,
       completedAt: completedAt.toISOString(),
       durationSeconds,
+      eligibilityState: validationSnapshot.eligibilityState,
+      terminalState: validationSnapshot.terminalState,
+      integrityState: validationSnapshot.integrityState,
+      producerSystem: 'fitness-session-service',
+      producerRuntime: 'backend',
+      producerContext: {
+        appSurface: 'api',
+        producerVersion: 'batch2-v1',
+        runtimeContext: {
+          sessionStatus: updated.status,
+        },
+      },
+      correlation: this.toProgressionCorrelation(updated),
       totalVolumeKg: totalVolumeKg.toFixed(2),
       exerciseLogCount: updated.exercise_logs.length,
+      exerciseSummaries: updated.exercise_logs.map((log) =>
+        this.toExerciseSummary(log),
+      ),
+      performanceSummary: {
+        durationSeconds,
+        exerciseLogCount: updated.exercise_logs.length,
+        exerciseSummaries: updated.exercise_logs.map((log) =>
+          this.toExerciseSummary(log),
+        ),
+        totalVolumeKg: totalVolumeKg.toFixed(2),
+      },
+      validationState: validationSnapshot.validationState,
+      validationMetadata: validationSnapshot.validationMetadata,
     });
 
     return this.toDetailResponse(updated);
@@ -321,6 +374,185 @@ export class WorkoutSessionService {
         : null,
       created_at: log.created_at.toISOString(),
       updated_at: log.updated_at.toISOString(),
+    };
+  }
+
+  private toExerciseSummary(
+    log: ExerciseLogRecord,
+  ): WorkoutSessionExerciseSummary {
+    return {
+      exerciseLogId: log.id,
+      exerciseId: log.exercise_id,
+      exerciseNameSnapshot: log.exercise.name,
+      muscleGroupHint: log.exercise.muscle_group,
+      setNumber: log.set_number,
+      repsCompleted: log.reps_completed ?? null,
+      repsAiCounted: log.reps_ai_counted ?? null,
+      weightKg: log.weight_kg?.toString() ?? null,
+      durationSeconds: log.duration_seconds ?? null,
+      poseSessionId: log.pose_session?.id ?? null,
+    };
+  }
+
+  private toProgressionCorrelation(
+    session: SessionDetailRecord,
+  ): WorkoutSessionCompletedEvent['correlation'] {
+    const poseSessionIds = session.exercise_logs
+      .map((log) => log.pose_session?.id ?? null)
+      .filter((id): id is string => id !== null);
+
+    return {
+      sessionId: session.id,
+      poseSessionId: poseSessionIds[0] ?? null,
+      poseSessionIds,
+      planId: session.plan_id ?? null,
+      exerciseLogIds: session.exercise_logs.map((log) => log.id),
+      linkedSourceIds: poseSessionIds.map(
+        (poseSessionId) => `pose_session_finalized:${poseSessionId}`,
+      ),
+    };
+  }
+
+  private toValidationMetadata(
+    session: SessionDetailRecord,
+  ): WorkoutSessionCompletedEvent['validationMetadata'] {
+    return this.toProgressionValidationSnapshot(session).validationMetadata;
+  }
+
+  private toProgressionValidationSnapshot(
+    session: SessionDetailRecord,
+  ): Pick<
+    WorkoutSessionCompletedEvent,
+    | 'eligibilityState'
+    | 'integrityState'
+    | 'terminalState'
+    | 'validationMetadata'
+    | 'validationState'
+  > {
+    const hasPoseEvidence = session.exercise_logs.some(
+      (log) => log.pose_session !== null,
+    );
+    const hasManualWeightInput = session.exercise_logs.some(
+      (log) => log.weight_kg !== null,
+    );
+    const poseSessionsNeedingReview = session.exercise_logs
+      .map((log) => log.pose_session)
+      .filter((poseSession) => poseSession !== null)
+      .filter((poseSession) => {
+        if (!poseSession.ended_at) {
+          return true;
+        }
+
+        const summary = isRecord(poseSession.analysis_summary)
+          ? poseSession.analysis_summary
+          : null;
+        if (!summary) {
+          return true;
+        }
+
+        const terminalState =
+          typeof summary.terminal_state === 'string'
+            ? summary.terminal_state
+            : null;
+        const integrityState =
+          typeof summary.integrity_state === 'string'
+            ? summary.integrity_state
+            : null;
+        const reviewRequiredMarkers = toStringArray(
+          summary.review_required_markers,
+        );
+        const sessionQualityState =
+          typeof summary.session_quality_state === 'string'
+            ? summary.session_quality_state
+            : null;
+        const progressionDisposition =
+          typeof summary.progression_disposition === 'string'
+            ? summary.progression_disposition
+            : null;
+        const equipmentConflicts = toStringArray(summary.equipment_conflicts);
+
+        return (
+          terminalState === 'flagged' ||
+          terminalState === 'rejected' ||
+          integrityState === 'suspicious' ||
+          reviewRequiredMarkers.length > 0 ||
+          summary.review_recommended === true ||
+          (sessionQualityState !== null && sessionQualityState !== 'stable') ||
+          (progressionDisposition !== null &&
+            progressionDisposition !== 'normal') ||
+          equipmentConflicts.length > 0
+        );
+      });
+    const containsFlaggedSets = poseSessionsNeedingReview.length > 0;
+    const sourceQualityNotes: string[] = [];
+
+    if (hasPoseEvidence) {
+      sourceQualityNotes.push('linked_pose_sessions_present');
+    }
+
+    poseSessionsNeedingReview.forEach((poseSession) => {
+      if (!poseSession.ended_at) {
+        sourceQualityNotes.push(`pose_session_unfinalized:${poseSession.id}`);
+        return;
+      }
+
+      sourceQualityNotes.push(`pose_session_requires_review:${poseSession.id}`);
+      const summary = isRecord(poseSession.analysis_summary)
+        ? poseSession.analysis_summary
+        : null;
+      if (!summary) {
+        return;
+      }
+
+      const sessionQualityState =
+        typeof summary.session_quality_state === 'string'
+          ? summary.session_quality_state
+          : null;
+      if (sessionQualityState && sessionQualityState !== 'stable') {
+        sourceQualityNotes.push(
+          `pose_session_quality:${sessionQualityState}:${poseSession.id}`,
+        );
+      }
+      toStringArray(summary.integrity_reason_codes).forEach((reason) => {
+        sourceQualityNotes.push(`pose_integrity_reason:${reason}`);
+      });
+      toStringArray(summary.equipment_conflicts).forEach((conflict) => {
+        sourceQualityNotes.push(`pose_equipment_conflict:${conflict}`);
+      });
+    });
+
+    if (containsFlaggedSets) {
+      sourceQualityNotes.unshift('flagged_pose_sessions_present');
+    }
+
+    if (!containsFlaggedSets) {
+      return {
+        eligibilityState: 'eligible',
+        integrityState: 'clean',
+        terminalState: 'accepted',
+        validationState: 'validated',
+        validationMetadata: {
+          hasPoseEvidence,
+          hasManualWeightInput,
+          containsFlaggedSets: false,
+          correctionOrigin: null,
+          sourceQualityNotes,
+        },
+      };
+    }
+
+    return {
+      eligibilityState: 'review_required',
+      integrityState: 'suspicious',
+      terminalState: 'flagged',
+      validationState: 'flagged',
+      validationMetadata: {
+        hasPoseEvidence,
+        hasManualWeightInput,
+        containsFlaggedSets: true,
+        correctionOrigin: 'linked_pose_session',
+        sourceQualityNotes,
+      },
     };
   }
 

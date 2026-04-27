@@ -56,6 +56,6 @@ export class ResponseInterceptor implements NestInterceptor<
 
         return { data: result };
       }),
-    ) as Observable<ApiResponse<unknown> | StreamableFile>;
+    );
   }
 }

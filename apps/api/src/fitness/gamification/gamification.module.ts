@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { MembershipModule } from '../../membership/membership.module';
 import { NotificationsModule } from '../../notifications/notifications.module';
 import { UserModule } from '../../user/user.module';
+import { GamificationAdminController } from './gamification-admin.controller';
 import { GamificationController } from './gamification.controller';
 import { GamificationLifecycleService } from './gamification-lifecycle.service';
 import { GamificationRepository } from './gamification.repository';
@@ -10,7 +11,7 @@ import { GamificationService } from './gamification.service';
 
 @Module({
   imports: [UserModule, NotificationsModule, MembershipModule],
-  controllers: [GamificationController],
+  controllers: [GamificationController, GamificationAdminController],
   providers: [
     GamificationService,
     GamificationLifecycleService,

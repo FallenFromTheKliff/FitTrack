@@ -68,10 +68,7 @@ export class FilesController {
   @Header('access-control-allow-origin', '*')
   @Header('cache-control', 'public, max-age=300')
   @Header('cross-origin-resource-policy', 'cross-origin')
-  async renderImage(
-    @Query('key') key: string,
-    @Res() response: Response,
-  ) {
+  async renderImage(@Query('key') key: string, @Res() response: Response) {
     const image = await this.filesService.renderImage(key);
     response.setHeader('content-type', image.contentType);
     if (image.contentLength) {

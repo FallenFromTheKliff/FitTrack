@@ -18,10 +18,7 @@ describe('AdminService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AdminService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [AdminService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get<AdminService>(AdminService);
@@ -39,7 +36,11 @@ describe('AdminService', () => {
       userId: 'user-1',
       user: {
         auth_identities: [
-          { provider: 'email', identifier: 'member@example.com', verified_at: new Date() },
+          {
+            provider: 'email',
+            identifier: 'member@example.com',
+            verified_at: new Date(),
+          },
         ],
       },
     });
@@ -111,8 +112,16 @@ describe('AdminService', () => {
           email_verified_at: new Date('2026-03-30T02:00:00.000Z'),
           phone_verified_at: null,
           auth_identities: [
-            { provider: 'email', identifier: 'member@example.com', verified_at: new Date('2026-03-30T02:00:00.000Z') },
-            { provider: 'phone', identifier: '+639171234567', verified_at: null },
+            {
+              provider: 'email',
+              identifier: 'member@example.com',
+              verified_at: new Date('2026-03-30T02:00:00.000Z'),
+            },
+            {
+              provider: 'phone',
+              identifier: '+639171234567',
+              verified_at: null,
+            },
           ],
           profile: {
             first_name: 'Member',

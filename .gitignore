@@ -51,6 +51,13 @@ Thumbs.db
 
 # Python
 **/__pycache__/
+.pytest_cache/
+.uv-cache/
+.uv-cache-local/
+.uv-runtime/
+.venv/
+Ultralytics/
+pytest-cache-files-*/
 
 # Task runner scratch data
 tasks/backend-builder/tmp/

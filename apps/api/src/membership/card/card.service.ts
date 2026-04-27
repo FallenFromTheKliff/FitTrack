@@ -29,9 +29,7 @@ import {
   PaymongoCheckoutResult,
   PaymongoCheckoutService,
 } from '../payment/paymongo-checkout.service';
-import {
-  StartMembershipCardPurchaseDTO,
-} from './dto/card.dto';
+import { StartMembershipCardPurchaseDTO } from './dto/card.dto';
 import { MembershipCardRepository } from './card.repository';
 
 type MembershipCardPurchaseResult = {
@@ -78,21 +76,19 @@ export class MembershipCardService {
     this.assertCanStartNewPurchase(existingCard);
 
     if (existingCard) {
-      const latestPayment = await this.paymentRepo.findLatestPaymentForPayableStage(
-        MEMBERSHIP_CARD_PAYABLE_TYPE,
-        existingCard.id,
-        PaymentStage.full,
-      );
+      const latestPayment =
+        await this.paymentRepo.findLatestPaymentForPayableStage(
+          MEMBERSHIP_CARD_PAYABLE_TYPE,
+          existingCard.id,
+          PaymentStage.full,
+        );
       this.assertNoBlockingPurchase(latestPayment);
     }
 
     const initiation = await this.repo.createOrRefreshPendingPurchase({
       idempotencyKey: normalizedIdempotencyKey,
       provider: dto.provider,
-      source:
-        dto.provider === PaymentProvider.cash
-          ? 'cash'
-          : 'paymongo',
+      source: dto.provider === PaymentProvider.cash ? 'cash' : 'paymongo',
       userId,
     });
 

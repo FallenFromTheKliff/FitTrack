@@ -646,7 +646,9 @@ describe('AiPythonClientService', () => {
       ),
     };
     const fetchMock = jest.fn<typeof fetch>();
-    fetchMock.mockResolvedValue(new Response('{"detail":"Not Found"}', { status: 404 }));
+    fetchMock.mockResolvedValue(
+      new Response('{"detail":"Not Found"}', { status: 404 }),
+    );
     global.fetch = fetchMock;
 
     const service = new AiPythonClientService(config as ConfigService);
@@ -685,8 +687,11 @@ describe('AiPythonClientService', () => {
       new Response(
         JSON.stringify({
           rep_event: true,
+          rep_count_delta: 1,
           confidence: 0.94,
           exercise_class: 'squat',
+          processing_mode: 'legacy_frame',
+          phase: 'rising',
         }),
         { status: 200 },
       ),
@@ -715,8 +720,11 @@ describe('AiPythonClientService', () => {
     expect(body.frame_b64).toBe('frame-data');
     expect(result).toEqual({
       rep_event: true,
+      rep_count_delta: 1,
       confidence: 0.94,
       exercise_class: 'squat',
+      processing_mode: 'legacy_frame',
+      phase: 'rising',
     });
   });
 
@@ -904,14 +912,14 @@ describe('AiPythonClientService', () => {
     const calls = fetchMock.mock.calls as Array<
       [RequestInfo | URL, RequestInit | undefined]
     >;
-    const firstBody = JSON.parse(String(calls[0]?.[1]?.body)) as Record<
-      string,
-      unknown
-    >;
-    const secondBody = JSON.parse(String(calls[1]?.[1]?.body)) as Record<
-      string,
-      unknown
-    >;
+    const firstRequestBody = calls[0]?.[1]?.body;
+    const secondRequestBody = calls[1]?.[1]?.body;
+    const firstBody = JSON.parse(
+      typeof firstRequestBody === 'string' ? firstRequestBody : '{}',
+    ) as Record<string, unknown>;
+    const secondBody = JSON.parse(
+      typeof secondRequestBody === 'string' ? secondRequestBody : '{}',
+    ) as Record<string, unknown>;
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(firstBody.signals).toBeDefined();

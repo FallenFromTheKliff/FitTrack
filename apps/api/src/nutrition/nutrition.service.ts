@@ -21,6 +21,7 @@ import {
   DailySummaryDateQueryDTO,
   LogNutritionDTO,
   MacroTargetResponseDTO,
+  NutritionCoachingInsightResponseDTO,
   NutritionLogResponseDTO,
   RecalculateTdeeDTO,
   TdeeProfileResponseDTO,
@@ -30,7 +31,10 @@ import {
   TDEE_RECALCULATED_EVENT,
   type TdeeRecalculatedEvent,
 } from './events/tdee-recalculated.event';
-import { NutritionRepository } from './nutrition.repository';
+import {
+  NutritionRepository,
+  type NutritionProgressionSnapshot,
+} from './nutrition.repository';
 
 const NUTRITION_LOG_UPDATE_FIELDS = [
   'meal_name',
@@ -239,13 +243,20 @@ export class NutritionService {
           fat_g: summary.macroTarget.fat_g,
         })
       : null;
+    const remaining = target ? this.subtractDailyTotals(target, logged) : null;
 
     return {
       date: summary.date,
       macro_target_id: summary.macroTarget?.id ?? null,
       logged,
       target,
-      remaining: target ? this.subtractDailyTotals(target, logged) : null,
+      remaining,
+      coaching: this.buildCoachingInsights({
+        logged,
+        progressionSnapshot: summary.progressionSnapshot ?? null,
+        remaining,
+        target,
+      }),
     };
   }
 
@@ -379,6 +390,106 @@ export class NutritionService {
       carbs_g: this.subtractDecimalStrings(target.carbs_g, logged.carbs_g),
       fat_g: this.subtractDecimalStrings(target.fat_g, logged.fat_g),
     };
+  }
+
+  private buildCoachingInsights(input: {
+    logged: DailyMacroTotalsResponseDTO;
+    progressionSnapshot: NutritionProgressionSnapshot | null;
+    remaining: DailyMacroTotalsResponseDTO | null;
+    target: DailyMacroTotalsResponseDTO | null;
+  }): NutritionCoachingInsightResponseDTO[] {
+    const insights: NutritionCoachingInsightResponseDTO[] = [];
+
+    if (!input.target || !input.remaining) {
+      return [
+        {
+          id: 'nutrition-target-missing',
+          priority: 'info',
+          title: 'Set a macro target before coaching gets specific',
+          message:
+            'Daily totals are live, but coaching cards stay general until an active TDEE and macro target exists.',
+          reason_codes: ['missing_macro_target'],
+          source: 'nutrition_summary',
+        },
+      ];
+    }
+
+    const caloriesRemaining = Number(input.remaining.calories);
+    const proteinRemaining = Number(input.remaining.protein_g);
+    const carbsRemaining = Number(input.remaining.carbs_g);
+    const caloriesLogged = Number(input.logged.calories);
+    const targetCalories = Number(input.target.calories);
+    const streak = input.progressionSnapshot?.current_streak ?? 0;
+
+    if (streak >= 3 && proteinRemaining > 25) {
+      insights.push({
+        id: 'protein-streak-support',
+        priority: 'recovery',
+        title: 'Fuel the streak with protein first',
+        message:
+          'Your progression streak is active and protein is still behind target. Prioritize a protein-forward meal before chasing extra calories.',
+        reason_codes: ['active_progression_streak', 'protein_remaining'],
+        source: 'progression_summary',
+      });
+    }
+
+    if (caloriesRemaining < -150) {
+      insights.push({
+        id: 'calorie-overage-caution',
+        priority: 'warning',
+        title: `${Math.abs(caloriesRemaining).toFixed(0)} kcal over target`,
+        message:
+          'Keep the rest of today lighter and protein-focused. This card never changes targets automatically; it only explains the current summary.',
+        reason_codes: ['calories_over_target'],
+        source: 'nutrition_summary',
+      });
+    } else if (caloriesRemaining > 250 && proteinRemaining > 20) {
+      insights.push({
+        id: 'protein-energy-gap',
+        priority: 'opportunity',
+        title: 'Protein plus energy are both open',
+        message:
+          'A balanced protein-and-carb meal is the cleanest next move because both calories and protein still have meaningful room.',
+        reason_codes: ['calories_remaining', 'protein_remaining'],
+        source: 'nutrition_summary',
+      });
+    } else if (proteinRemaining > 25) {
+      insights.push({
+        id: 'protein-gap',
+        priority: 'opportunity',
+        title: `${proteinRemaining.toFixed(0)}g protein still open`,
+        message:
+          'Bias the next meal toward lean protein. Calories are secondary here; the macro gap is the stronger signal.',
+        reason_codes: ['protein_remaining'],
+        source: 'nutrition_summary',
+      });
+    }
+
+    if (carbsRemaining > 45 && caloriesLogged < targetCalories) {
+      insights.push({
+        id: 'carb-training-support',
+        priority: 'opportunity',
+        title: 'Carbs can support the next session',
+        message:
+          'Carbs are still meaningfully under target, so a rice, oats, fruit, or bread-based add-on can support training without touching exercise logic.',
+        reason_codes: ['carbs_remaining', 'under_calorie_target'],
+        source: 'nutrition_summary',
+      });
+    }
+
+    if (insights.length === 0) {
+      insights.push({
+        id: 'nutrition-steady',
+        priority: 'info',
+        title: 'Nutrition is sitting in a steady range',
+        message:
+          'Calories and macros are close enough to target that the next meal can be normal instead of corrective.',
+        reason_codes: ['summary_in_range'],
+        source: 'nutrition_summary',
+      });
+    }
+
+    return insights.slice(0, 3);
   }
 
   private subtractDecimalStrings(target: string, logged: string): string {

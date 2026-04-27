@@ -33,7 +33,9 @@ describe('ActiveMemberCardGuard', () => {
       ),
     ).resolves.toBe(true);
 
-    expect(membershipCardService.hasActiveMembershipCardAccess).not.toHaveBeenCalled();
+    expect(
+      membershipCardService.hasActiveMembershipCardAccess,
+    ).not.toHaveBeenCalled();
   });
 
   it('allows member accounts that have an active membership card', async () => {
@@ -45,24 +47,27 @@ describe('ActiveMemberCardGuard', () => {
       ),
     ).resolves.toBe(true);
 
-    expect(membershipCardService.hasActiveMembershipCardAccess).toHaveBeenCalledWith(
-      'user-1',
-    );
+    expect(
+      membershipCardService.hasActiveMembershipCardAccess,
+    ).toHaveBeenCalledWith('user-1');
   });
 
   it.each([
     ['missing card', false],
     ['pending card', false],
     ['revoked card', false],
-  ])('rejects member accounts with %s', async (_label, hasActiveMembershipCard) => {
-    membershipCardService.hasActiveMembershipCardAccess.mockResolvedValue(
-      hasActiveMembershipCard,
-    );
+  ])(
+    'rejects member accounts with %s',
+    async (_label, hasActiveMembershipCard) => {
+      membershipCardService.hasActiveMembershipCardAccess.mockResolvedValue(
+        hasActiveMembershipCard,
+      );
 
-    await expect(
-      guard.canActivate(
-        createExecutionContext({ role: UserRole.member, sub: 'user-1' }),
-      ),
-    ).rejects.toThrow(ForbiddenException);
-  });
+      await expect(
+        guard.canActivate(
+          createExecutionContext({ role: UserRole.member, sub: 'user-1' }),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    },
+  );
 });

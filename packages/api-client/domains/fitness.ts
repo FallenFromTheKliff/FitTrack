@@ -1,19 +1,35 @@
 import type {
   AnalyzePoseSequenceInput,
   CreateFitnessExerciseInput,
+  DetectPoseEquipmentInput,
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
-  FitnessExerciseCategory,
   ExerciseLogRecord,
   FinalizePoseSessionInput,
+  FitnessCreatorState,
+  PoseEquipmentContext,
+  PoseEquipmentDetectionBoxRecord,
+  PoseEquipmentDetectionRecord,
+  PoseEquipmentSource,
+  PoseProgressionDisposition,
+  PoseSessionQualityState,
   FitnessExerciseListParams,
   FitnessExerciseReviewSubmissionListParams,
   FitnessExerciseRecord,
+  FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
   FitnessPaginatedResult,
+  FitnessProgressionProfileRecord,
+  FitnessProgressionSourceListParams,
+  FitnessProgressionSourceRecord,
+  FitnessRankingGovernanceStatus,
+  FitnessRankingProfileRecord,
+  FitnessRankingVisibility,
+  FitnessSeasonStandingRecord,
   LogWorkoutSetInput,
   MuscleMasteryRecord,
   PoseClassificationSource,
@@ -25,6 +41,7 @@ import type {
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
+  UpdateFitnessRankingProfileInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   WorkoutSessionDetailRecord,
@@ -37,29 +54,46 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 export type {
   AnalyzePoseSequenceInput,
   CreateFitnessExerciseInput,
+  DetectPoseEquipmentInput,
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
+  FitnessCreatorState,
   FitnessExerciseCategory,
   ExerciseLogRecord,
   FinalizePoseSessionInput,
   FitnessExerciseListParams,
   FitnessExerciseReviewSubmissionListParams,
   FitnessExerciseRecord,
+  FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
   FitnessPaginatedResult,
+  FitnessProgressionProfileRecord,
+  FitnessProgressionSourceListParams,
+  FitnessProgressionSourceRecord,
+  FitnessRankingGovernanceStatus,
+  FitnessRankingProfileRecord,
+  FitnessRankingVisibility,
+  FitnessSeasonStandingRecord,
   LogWorkoutSetInput,
   MuscleMasteryRecord,
+  PoseEquipmentContext,
+  PoseEquipmentDetectionRecord,
+  PoseEquipmentSource,
   PoseFrameAnalysisRecord,
+  PoseProgressionDisposition,
   PoseSessionRecord,
+  PoseSessionQualityState,
   StartPoseSessionInput,
   StartedPoseSessionRecord,
   StartWorkoutSessionInput,
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
+  UpdateFitnessRankingProfileInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   WorkoutSessionDetailRecord,
@@ -83,6 +117,15 @@ type FitnessExerciseApiRecord = {
 
 type ExerciseReviewSubmissionApiRecord = {
   category: ExerciseReviewSubmissionRecord["category"];
+  creator_candidate_score?: number;
+  creator_governance_note?: string | null;
+  creator_last_state_changed_at?: string | null;
+  creator_profile_updated_at?: string | null;
+  creator_published_count?: number;
+  creator_rejected_count?: number;
+  creator_state?: FitnessCreatorState;
+  creator_state_label?: string;
+  creator_submission_count?: number;
   created_at: string;
   description: string | null;
   evidence_bars: number[] | null;
@@ -231,21 +274,77 @@ type PoseFrameAnalysisApiRecord = {
   confidence: number;
   exercise_class: string | null;
   form_feedback?: string[];
+  equipment_confidence?: number | null;
+  equipment_conflicts?: string[];
+  equipment_context?: PoseEquipmentContext | null;
+  equipment_source?: PoseEquipmentSource | null;
+  integrity_reason_codes?: string[];
+  keypoints?: Array<{
+    visibility: number;
+    x: number;
+    y: number;
+    z: number;
+  }> | null;
   matched_profile_id?: string | null;
   movement_contract?: {
+    degraded_conditions?: string[];
     dominant_joint: "elbow" | "shoulder" | "hip" | "knee";
     exercise: string;
+    no_count_conditions?: string[];
     oscillating_joints: string[];
+    phase_order?: string[];
+    primary_joints?: string[];
+    rep_model?:
+      | "bilateral"
+      | "unilateral_left"
+      | "unilateral_right"
+      | "alternating"
+      | "static_hold"
+      | "unknown";
     rep_thresholds: {
       down: { angle: number; tolerance: number };
       up: { angle: number; tolerance: number };
     };
+    required_sides?: "both" | "left" | "right" | "either" | "alternating";
     secondary_check: string;
+    secondary_joints?: string[];
+    spatial_requirements?: {
+      body_line_tolerance?: number | null;
+      body_x_drift_max?: number | null;
+      body_y_travel_min?: number | null;
+      left_right_symmetry_tolerance?: number | null;
+      phase_sync_tolerance_ms?: number | null;
+    } | null;
   } | null;
   needs_confirmation?: boolean;
+  phase?: string | null;
+  processing_mode?: "legacy_frame" | "sequence";
   pose_session_id: string;
+  progression_disposition?: PoseProgressionDisposition;
+  reliable_frame_ratio?: number | null;
+  rep_count_delta?: number;
+  rep_event?: boolean;
+  review_recommended?: boolean;
+  session_quality_reasons?: string[];
+  session_quality_state?: PoseSessionQualityState;
   subject_lock_confidence?: number;
   subject_locked?: boolean;
+};
+
+type PoseEquipmentDetectionApiRecord = {
+  equipment_confidence?: number | null;
+  equipment_conflicts?: string[];
+  equipment_context?: PoseEquipmentContext | null;
+  equipment_detections?: Array<{
+    confidence?: number | null;
+    height?: number | null;
+    label?: string | null;
+    width?: number | null;
+    x?: number | null;
+    y?: number | null;
+  }>;
+  equipment_source?: PoseEquipmentSource | null;
+  provider_enabled?: boolean;
 };
 
 type MuscleMasteryApiRecord = {
@@ -266,6 +365,107 @@ type LeaderboardEntryApiRecord = {
   display_name: string;
   rank_position: number;
   total_xp: number;
+  user_id: string;
+};
+
+type ProgressionActiveSeasonApiRecord = {
+  ends_at: string;
+  id: string;
+  starts_at: string;
+  status: NonNullable<
+    FitnessProgressionProfileRecord["activeSeason"]
+  >["status"];
+  title: string;
+};
+
+type ProgressionProfileApiRecord = {
+  active_season: ProgressionActiveSeasonApiRecord | null;
+  created_at: string | null;
+  current_season_points: number;
+  current_streak: number;
+  integrity_risk_level: FitnessIntegritySummaryRecord["riskLevel"];
+  last_progressed_at: string | null;
+  longest_streak: number;
+  ranking_governance_status: FitnessRankingGovernanceStatus;
+  ranking_visibility: FitnessRankingVisibility;
+  total_xp: number;
+  updated_at: string | null;
+  user_id: string;
+};
+
+type ProgressionSourceApiRecord = {
+  created_at: string;
+  eligibility_state: string | null;
+  exercise_log_ids: string[];
+  id: string;
+  integrity_state: string | null;
+  linked_source_ids: string[];
+  occurred_at: string | null;
+  pose_session_id: string | null;
+  pose_session_ids: string[];
+  processed_at: string | null;
+  producer_runtime: string | null;
+  recorded_at: string | null;
+  session_id: string | null;
+  source_id: string;
+  source_quality_notes: string[];
+  source_status: FitnessProgressionSourceRecord["sourceStatus"];
+  source_type: FitnessProgressionSourceRecord["sourceType"];
+  terminal_state: string | null;
+  updated_at: string;
+  validation_state: string | null;
+};
+
+type RankingProfileApiRecord = {
+  display_alias: string | null;
+  governance_status: FitnessRankingGovernanceStatus;
+  updated_at: string;
+  user_id: string;
+  visibility: FitnessRankingVisibility;
+};
+
+type SeasonStandingApiRecord = {
+  is_disqualified: boolean;
+  is_hidden: boolean;
+  last_earned_at: string | null;
+  rank_position: number | null;
+  season: ProgressionActiveSeasonApiRecord | null;
+  season_points: number;
+  user_id: string;
+};
+
+type MilestoneProgressApiRecord = {
+  category: FitnessMilestoneProgressRecord["category"];
+  claimed_at: string | null;
+  description: string | null;
+  is_hidden: boolean;
+  key: string;
+  milestone_definition_id: string;
+  progress_percent: number;
+  progress_value: number;
+  reward_payload: Record<string, unknown> | null;
+  status: FitnessMilestoneProgressRecord["status"];
+  target_value: number;
+  title: string;
+  trigger_type: FitnessMilestoneProgressRecord["triggerType"];
+  unlocked_at: string | null;
+  updated_at: string | null;
+};
+
+type IntegrityCaseSummaryApiRecord = {
+  id: string;
+  opened_at: string;
+  resolved_at: string | null;
+  status: FitnessIntegritySummaryRecord["recentCases"][number]["status"];
+  summary: string | null;
+};
+
+type IntegritySummaryApiRecord = {
+  last_flagged_at: string | null;
+  last_resolved_at: string | null;
+  open_case_count: number;
+  recent_cases: IntegrityCaseSummaryApiRecord[];
+  risk_level: FitnessIntegritySummaryRecord["riskLevel"];
   user_id: string;
 };
 
@@ -319,6 +519,15 @@ function mapExerciseReviewSubmission(
 ): ExerciseReviewSubmissionRecord {
   return {
     category: record.category,
+    creatorCandidateScore: record.creator_candidate_score ?? 0,
+    creatorGovernanceNote: record.creator_governance_note ?? null,
+    creatorLastStateChangedAt: record.creator_last_state_changed_at ?? null,
+    creatorProfileUpdatedAt: record.creator_profile_updated_at ?? null,
+    creatorPublishedCount: record.creator_published_count ?? 0,
+    creatorRejectedCount: record.creator_rejected_count ?? 0,
+    creatorState: record.creator_state ?? "none",
+    creatorStateLabel: record.creator_state_label ?? "None",
+    creatorSubmissionCount: record.creator_submission_count ?? 0,
     createdAt: record.created_at,
     description: record.description,
     evidenceBars: record.evidence_bars,
@@ -493,14 +702,33 @@ function mapPoseFrameAnalysis(
     candidateExercises: record.candidate_exercises ?? [],
     classificationSource: record.classification_source ?? "classifier",
     confidence: record.confidence,
+    equipmentConfidence: toNullableNumber(record.equipment_confidence),
+    equipmentConflicts: record.equipment_conflicts ?? [],
+    equipmentContext: record.equipment_context ?? null,
+    equipmentSource: record.equipment_source ?? null,
     exerciseClass: record.exercise_class,
     formFeedback: record.form_feedback ?? [],
+    integrityReasonCodes: record.integrity_reason_codes ?? [],
+    keypoints: Array.isArray(record.keypoints)
+      ? record.keypoints.map((keypoint) => ({
+          visibility: toRoundedDecimal(keypoint.visibility) ?? 0,
+          x: toRoundedDecimal(keypoint.x) ?? 0,
+          y: toRoundedDecimal(keypoint.y) ?? 0,
+          z: toRoundedDecimal(keypoint.z) ?? 0,
+        }))
+      : null,
     matchedProfileId: record.matched_profile_id ?? null,
     movementContract: record.movement_contract
       ? {
           dominantJoint: record.movement_contract.dominant_joint,
+          degradedConditions:
+            record.movement_contract.degraded_conditions ?? [],
           exercise: record.movement_contract.exercise,
+          noCountConditions: record.movement_contract.no_count_conditions ?? [],
           oscillatingJoints: record.movement_contract.oscillating_joints,
+          phaseOrder: record.movement_contract.phase_order ?? [],
+          primaryJoints: record.movement_contract.primary_joints ?? [],
+          repModel: record.movement_contract.rep_model,
           repThresholds: {
             down: {
               angle: record.movement_contract.rep_thresholds.down.angle,
@@ -511,13 +739,79 @@ function mapPoseFrameAnalysis(
               tolerance: record.movement_contract.rep_thresholds.up.tolerance,
             },
           },
+          requiredSides: record.movement_contract.required_sides,
           secondaryCheck: record.movement_contract.secondary_check,
+          secondaryJoints: record.movement_contract.secondary_joints ?? [],
+          spatialRequirements: record.movement_contract.spatial_requirements
+            ? {
+                bodyLineTolerance:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .body_line_tolerance,
+                  ),
+                bodyXDriftMax:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .body_x_drift_max,
+                  ),
+                bodyYTravelMin:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .body_y_travel_min,
+                  ),
+                leftRightSymmetryTolerance:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .left_right_symmetry_tolerance,
+                  ),
+                phaseSyncToleranceMs:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .phase_sync_tolerance_ms,
+                  ),
+              }
+            : null,
         }
       : null,
     needsConfirmation: record.needs_confirmation ?? false,
+    phase: record.phase ?? null,
+    processingMode: record.processing_mode ?? "sequence",
     poseSessionId: record.pose_session_id,
+    progressionDisposition: record.progression_disposition ?? "normal",
+    reliableFrameRatio: toNullableNumber(record.reliable_frame_ratio),
+    repCountDelta: record.rep_count_delta ?? 0,
+    repEvent: record.rep_event ?? false,
+    reviewRecommended: record.review_recommended ?? false,
+    sessionQualityReasons: record.session_quality_reasons ?? [],
+    sessionQualityState: record.session_quality_state ?? "stable",
     subjectLockConfidence: record.subject_lock_confidence ?? null,
     subjectLocked: record.subject_locked ?? null,
+  };
+}
+
+function mapPoseEquipmentDetection(
+  record: PoseEquipmentDetectionApiRecord,
+): PoseEquipmentDetectionRecord {
+  const equipmentDetections: PoseEquipmentDetectionBoxRecord[] = Array.isArray(
+    record.equipment_detections,
+  )
+    ? record.equipment_detections.map((detection) => ({
+        confidence: toNullableNumber(detection.confidence),
+        height: toNullableNumber(detection.height),
+        label: detection.label ?? null,
+        width: toNullableNumber(detection.width),
+        x: toNullableNumber(detection.x),
+        y: toNullableNumber(detection.y),
+      }))
+    : [];
+
+  return {
+    equipmentConfidence: toNullableNumber(record.equipment_confidence),
+    equipmentConflicts: record.equipment_conflicts ?? [],
+    equipmentContext: record.equipment_context ?? null,
+    equipmentDetections,
+    equipmentSource: record.equipment_source ?? null,
+    providerEnabled: record.provider_enabled ?? false,
   };
 }
 
@@ -544,6 +838,135 @@ function mapLeaderboardEntry(
     displayName: record.display_name,
     rankPosition: record.rank_position,
     totalXp: record.total_xp,
+    userId: record.user_id,
+  };
+}
+
+function mapActiveSeason(
+  record: ProgressionActiveSeasonApiRecord | null,
+): FitnessProgressionProfileRecord["activeSeason"] {
+  if (!record) {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    title: record.title,
+    status: record.status,
+    startsAt: record.starts_at,
+    endsAt: record.ends_at,
+  };
+}
+
+function mapProgressionProfile(
+  record: ProgressionProfileApiRecord,
+): FitnessProgressionProfileRecord {
+  return {
+    activeSeason: mapActiveSeason(record.active_season),
+    createdAt: record.created_at,
+    currentSeasonPoints: record.current_season_points,
+    currentStreak: record.current_streak,
+    integrityRiskLevel: record.integrity_risk_level,
+    lastProgressedAt: record.last_progressed_at,
+    longestStreak: record.longest_streak,
+    rankingGovernanceStatus: record.ranking_governance_status,
+    rankingVisibility: record.ranking_visibility,
+    totalXp: record.total_xp,
+    updatedAt: record.updated_at,
+    userId: record.user_id,
+  };
+}
+
+function mapProgressionSource(
+  record: ProgressionSourceApiRecord,
+): FitnessProgressionSourceRecord {
+  return {
+    createdAt: record.created_at,
+    eligibilityState: record.eligibility_state,
+    exerciseLogIds: record.exercise_log_ids,
+    id: record.id,
+    integrityState: record.integrity_state,
+    linkedSourceIds: record.linked_source_ids,
+    occurredAt: record.occurred_at,
+    poseSessionId: record.pose_session_id,
+    poseSessionIds: record.pose_session_ids,
+    processedAt: record.processed_at,
+    producerRuntime: record.producer_runtime,
+    recordedAt: record.recorded_at,
+    sessionId: record.session_id,
+    sourceId: record.source_id,
+    sourceQualityNotes: record.source_quality_notes,
+    sourceStatus: record.source_status,
+    sourceType: record.source_type,
+    terminalState: record.terminal_state,
+    updatedAt: record.updated_at,
+    validationState: record.validation_state,
+  };
+}
+
+function mapRankingProfile(
+  record: RankingProfileApiRecord,
+): FitnessRankingProfileRecord {
+  return {
+    displayAlias: record.display_alias,
+    governanceStatus: record.governance_status,
+    updatedAt: record.updated_at,
+    userId: record.user_id,
+    visibility: record.visibility,
+  };
+}
+
+function mapSeasonStanding(
+  record: SeasonStandingApiRecord,
+): FitnessSeasonStandingRecord {
+  return {
+    isDisqualified: record.is_disqualified,
+    isHidden: record.is_hidden,
+    lastEarnedAt: record.last_earned_at,
+    rankPosition: record.rank_position,
+    season: mapActiveSeason(record.season),
+    seasonPoints: record.season_points,
+    userId: record.user_id,
+  };
+}
+
+function mapMilestoneProgress(
+  record: MilestoneProgressApiRecord,
+): FitnessMilestoneProgressRecord {
+  return {
+    category: record.category,
+    claimedAt: record.claimed_at,
+    description: record.description,
+    isHidden: record.is_hidden,
+    key: record.key,
+    milestoneDefinitionId: record.milestone_definition_id,
+    progressPercent: record.progress_percent,
+    progressValue: record.progress_value,
+    rewardPayload: record.reward_payload,
+    status: record.status,
+    targetValue: record.target_value,
+    title: record.title,
+    triggerType: record.trigger_type,
+    unlockedAt: record.unlocked_at,
+    updatedAt: record.updated_at,
+  };
+}
+
+function mapIntegritySummary(
+  record: IntegritySummaryApiRecord,
+): FitnessIntegritySummaryRecord {
+  return {
+    lastFlaggedAt: record.last_flagged_at,
+    lastResolvedAt: record.last_resolved_at,
+    openCaseCount: record.open_case_count,
+    recentCases: record.recent_cases.map((entry) => ({
+      id: entry.id,
+      openedAt: entry.opened_at,
+      resolvedAt: entry.resolved_at,
+      status: entry.status,
+      summary: entry.summary,
+    })),
+    riskLevel: record.risk_level,
     userId: record.user_id,
   };
 }
@@ -596,6 +1019,10 @@ function toExerciseReviewSubmissionPayload(
   input: UpdateExerciseReviewSubmissionInput,
 ) {
   return {
+    ...(input.creatorGovernanceNote?.trim()
+      ? { creator_governance_note: input.creatorGovernanceNote.trim() }
+      : {}),
+    ...(input.creatorState ? { creator_state: input.creatorState } : {}),
     ...(input.status ? { status: input.status } : {}),
     ...(input.publishedExerciseId
       ? { published_exercise_id: input.publishedExerciseId }
@@ -620,12 +1047,32 @@ function toPlanListParams(params?: TrainingPlanListParams) {
   };
 }
 
+function toProgressionSourceListParams(
+  params?: FitnessProgressionSourceListParams,
+) {
+  return {
+    ...(params?.page !== undefined ? { page: params.page } : {}),
+    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params?.sourceType ? { source_type: params.sourceType } : {}),
+    ...(params?.sourceStatus ? { source_status: params.sourceStatus } : {}),
+  };
+}
+
 function toSessionListParams(params?: WorkoutSessionListParams) {
   return {
     ...(params?.page !== undefined ? { page: params.page } : {}),
     ...(params?.limit !== undefined ? { limit: params.limit } : {}),
     ...(params?.startDate ? { start_date: params.startDate } : {}),
     ...(params?.endDate ? { end_date: params.endDate } : {}),
+  };
+}
+
+function toRankingProfilePayload(input: UpdateFitnessRankingProfileInput) {
+  return {
+    visibility: input.visibility,
+    ...(input.displayAlias !== undefined
+      ? { display_alias: input.displayAlias }
+      : {}),
   };
 }
 
@@ -759,6 +1206,71 @@ export function createFitnessApi(transport: ApiTransport) {
         data: result.data.map(mapLeaderboardEntry),
       };
     },
+    async getProgressionProfile() {
+      return mapProgressionProfile(
+        await unwrapResponse<ProgressionProfileApiRecord>(
+          transport.get("/fitness/progression-profile"),
+          "Unable to load progression profile.",
+        ),
+      );
+    },
+    async listProgressionSources(
+      params?: FitnessProgressionSourceListParams,
+    ): Promise<FitnessPaginatedResult<FitnessProgressionSourceRecord>> {
+      const result = await unwrapPaginatedResponse<ProgressionSourceApiRecord>(
+        transport.get("/fitness/progression-sources", {
+          params: toProgressionSourceListParams(params),
+        }),
+        "Unable to load progression sources.",
+      );
+      return {
+        ...result,
+        data: result.data.map(mapProgressionSource),
+      };
+    },
+    async getRankingProfile() {
+      return mapRankingProfile(
+        await unwrapResponse<RankingProfileApiRecord>(
+          transport.get("/fitness/ranking-profile"),
+          "Unable to load ranking profile.",
+        ),
+      );
+    },
+    async updateRankingProfile(input: UpdateFitnessRankingProfileInput) {
+      return mapRankingProfile(
+        await unwrapResponse<RankingProfileApiRecord>(
+          transport.patch(
+            "/fitness/ranking-profile",
+            toRankingProfilePayload(input),
+          ),
+          "Unable to update ranking profile.",
+        ),
+      );
+    },
+    async getSeasonStanding() {
+      return mapSeasonStanding(
+        await unwrapResponse<SeasonStandingApiRecord>(
+          transport.get("/fitness/season-standing"),
+          "Unable to load active season standing.",
+        ),
+      );
+    },
+    async listMilestones() {
+      return (
+        await unwrapResponse<MilestoneProgressApiRecord[]>(
+          transport.get("/fitness/milestones"),
+          "Unable to load milestone progress.",
+        )
+      ).map(mapMilestoneProgress);
+    },
+    async getIntegritySummary() {
+      return mapIntegritySummary(
+        await unwrapResponse<IntegritySummaryApiRecord>(
+          transport.get("/fitness/integrity-summary"),
+          "Unable to load integrity summary.",
+        ),
+      );
+    },
     async getSessionById(sessionId: string) {
       return mapWorkoutSessionDetail(
         await unwrapResponse<WorkoutSessionDetailApiRecord>(
@@ -832,73 +1344,181 @@ export function createFitnessApi(transport: ApiTransport) {
       poseSessionId: string,
       input: AnalyzePoseSequenceInput,
     ) {
+      const body =
+        "frameBase64" in input
+          ? {
+              ...(input.cameraFacingMode
+                ? { camera_facing_mode: input.cameraFacingMode }
+                : {}),
+              ...(input.equipmentContext !== undefined
+                ? { equipment_context: input.equipmentContext }
+                : {}),
+              ...(input.equipmentSource !== undefined
+                ? { equipment_source: input.equipmentSource }
+                : {}),
+              ...(input.equipmentConfidence !== undefined
+                ? { equipment_confidence: input.equipmentConfidence }
+                : {}),
+              ...(input.equipmentConflicts !== undefined
+                ? { equipment_conflicts: input.equipmentConflicts }
+                : {}),
+              ...(input.exerciseHint !== undefined
+                ? { exercise_hint: input.exerciseHint }
+                : {}),
+              ...(input.subjectLocked !== undefined
+                ? { subject_locked: input.subjectLocked }
+                : {}),
+              ...(input.subjectLockConfidence !== undefined
+                ? { subject_lock_confidence: input.subjectLockConfidence }
+                : {}),
+              frame_b64: input.frameBase64,
+            }
+          : {
+              ...(input.cameraFacingMode
+                ? { camera_facing_mode: input.cameraFacingMode }
+                : {}),
+              ...(input.equipmentContext !== undefined
+                ? { equipment_context: input.equipmentContext }
+                : {}),
+              ...(input.equipmentSource !== undefined
+                ? { equipment_source: input.equipmentSource }
+                : {}),
+              ...(input.equipmentConfidence !== undefined
+                ? { equipment_confidence: input.equipmentConfidence }
+                : {}),
+              ...(input.equipmentConflicts !== undefined
+                ? { equipment_conflicts: input.equipmentConflicts }
+                : {}),
+              ...(input.exerciseHint !== undefined
+                ? { exercise_hint: input.exerciseHint }
+                : {}),
+              ...(input.subjectLocked !== undefined
+                ? { subject_locked: input.subjectLocked }
+                : {}),
+              ...(input.subjectLockConfidence !== undefined
+                ? { subject_lock_confidence: input.subjectLockConfidence }
+                : {}),
+              frames: input.frames.map((frame) => ({
+                captured_at_ms: frame.capturedAtMs,
+                keypoints: frame.keypoints.map((keypoint) => ({
+                  visibility: toRoundedDecimal(keypoint.visibility) ?? 0,
+                  x: toRoundedDecimal(keypoint.x) ?? 0,
+                  y: toRoundedDecimal(keypoint.y) ?? 0,
+                  z: toRoundedDecimal(keypoint.z) ?? 0,
+                })),
+              })),
+              landmark_schema: input.landmarkSchema,
+              signals: {
+                angles: input.signals.angles.map((entry) => ({
+                  captured_at_ms: entry.capturedAtMs,
+                  elbow: toRoundedDecimal(entry.elbow),
+                  hip: toRoundedDecimal(entry.hip),
+                  knee: toRoundedDecimal(entry.knee),
+                  left_elbow: toRoundedDecimal(entry.leftElbow),
+                  left_hip: toRoundedDecimal(entry.leftHip),
+                  left_knee: toRoundedDecimal(entry.leftKnee),
+                  left_shoulder: toRoundedDecimal(entry.leftShoulder),
+                  right_elbow: toRoundedDecimal(entry.rightElbow),
+                  right_hip: toRoundedDecimal(entry.rightHip),
+                  right_knee: toRoundedDecimal(entry.rightKnee),
+                  right_shoulder: toRoundedDecimal(entry.rightShoulder),
+                  shoulder: toRoundedDecimal(entry.shoulder),
+                })),
+                hip: {
+                  average_y: toRoundedDecimal(input.signals.hip.averageY) ?? 0,
+                  range_x: toRoundedDecimal(input.signals.hip.rangeX),
+                  range_y: toRoundedDecimal(input.signals.hip.rangeY) ?? 0,
+                  stable: input.signals.hip.stable,
+                },
+                orientation: {
+                  body_orientation: input.signals.orientation.bodyOrientation,
+                  torso_slope_deg:
+                    toRoundedDecimal(input.signals.orientation.torsoSlopeDeg) ??
+                    0,
+                  vector: {
+                    x:
+                      toRoundedDecimal(input.signals.orientation.vector.x) ?? 0,
+                    y:
+                      toRoundedDecimal(input.signals.orientation.vector.y) ?? 0,
+                  },
+                },
+                temporal: {
+                  amplitudes: roundNumericRecord(
+                    input.signals.temporal.amplitudes,
+                  ),
+                  oscillating_joints: input.signals.temporal.oscillatingJoints,
+                  phase_sync_ms: toRoundedDecimal(
+                    input.signals.temporal.phaseSyncMs,
+                  ),
+                },
+                visibility: {
+                  average_visibility:
+                    toRoundedDecimal(
+                      input.signals.visibility.averageVisibility,
+                    ) ?? 0,
+                  feet_visibility:
+                    toRoundedDecimal(input.signals.visibility.feetVisibility) ??
+                    0,
+                  left_arm_visibility: toRoundedDecimal(
+                    input.signals.visibility.leftArmVisibility,
+                  ),
+                  low_confidence_landmarks:
+                    input.signals.visibility.lowConfidenceLandmarks,
+                  reliable_frame_count:
+                    input.signals.visibility.reliableFrameCount,
+                  right_arm_visibility: toRoundedDecimal(
+                    input.signals.visibility.rightArmVisibility,
+                  ),
+                  wrist_visibility:
+                    toRoundedDecimal(
+                      input.signals.visibility.wristVisibility,
+                    ) ?? 0,
+                },
+              },
+            };
+
       return mapPoseFrameAnalysis(
         await unwrapResponse<PoseFrameAnalysisApiRecord>(
-          transport.post(`/pose/sessions/${poseSessionId}/analyze`, {
+          transport.post(`/pose/sessions/${poseSessionId}/analyze`, body),
+          "Unable to analyze pose input.",
+        ),
+      );
+    },
+    async detectPoseEquipment(input: DetectPoseEquipmentInput) {
+      if ("frameUri" in input && input.frameUri) {
+        const formData = new FormData();
+        formData.append("file", {
+          name: "equipment-frame.jpg",
+          type: "image/jpeg",
+          uri: input.frameUri,
+        } as unknown as Blob);
+        if (input.cameraFacingMode) {
+          formData.append("camera_facing_mode", input.cameraFacingMode);
+        }
+        if (input.exerciseHint !== undefined && input.exerciseHint !== null) {
+          formData.append("exercise_hint", input.exerciseHint);
+        }
+
+        return mapPoseEquipmentDetection(
+          await unwrapResponse<PoseEquipmentDetectionApiRecord>(
+            transport.post("/workout/equipment/detect-file", formData),
+            "Unable to detect workout equipment.",
+          ),
+        );
+      }
+
+      return mapPoseEquipmentDetection(
+        await unwrapResponse<PoseEquipmentDetectionApiRecord>(
+          transport.post("/workout/equipment/detect", {
             ...(input.cameraFacingMode
               ? { camera_facing_mode: input.cameraFacingMode }
               : {}),
             ...(input.exerciseHint !== undefined
               ? { exercise_hint: input.exerciseHint }
               : {}),
-            frames: input.frames.map((frame) => ({
-              captured_at_ms: frame.capturedAtMs,
-              keypoints: frame.keypoints.map((keypoint) => ({
-                visibility: toRoundedDecimal(keypoint.visibility) ?? 0,
-                x: toRoundedDecimal(keypoint.x) ?? 0,
-                y: toRoundedDecimal(keypoint.y) ?? 0,
-                z: toRoundedDecimal(keypoint.z) ?? 0,
-              })),
-            })),
-            landmark_schema: input.landmarkSchema,
-            signals: {
-              angles: input.signals.angles.map((entry) => ({
-                captured_at_ms: entry.capturedAtMs,
-                elbow: toRoundedDecimal(entry.elbow),
-                hip: toRoundedDecimal(entry.hip),
-                knee: toRoundedDecimal(entry.knee),
-                shoulder: toRoundedDecimal(entry.shoulder),
-              })),
-              hip: {
-                average_y: toRoundedDecimal(input.signals.hip.averageY) ?? 0,
-                range_y: toRoundedDecimal(input.signals.hip.rangeY) ?? 0,
-                stable: input.signals.hip.stable,
-              },
-              orientation: {
-                body_orientation: input.signals.orientation.bodyOrientation,
-                torso_slope_deg:
-                  toRoundedDecimal(input.signals.orientation.torsoSlopeDeg) ??
-                  0,
-                vector: {
-                  x: toRoundedDecimal(input.signals.orientation.vector.x) ?? 0,
-                  y: toRoundedDecimal(input.signals.orientation.vector.y) ?? 0,
-                },
-              },
-              temporal: {
-                amplitudes: roundNumericRecord(
-                  input.signals.temporal.amplitudes,
-                ),
-                oscillating_joints: input.signals.temporal.oscillatingJoints,
-              },
-              visibility: {
-                average_visibility:
-                  toRoundedDecimal(
-                    input.signals.visibility.averageVisibility,
-                  ) ?? 0,
-                feet_visibility:
-                  toRoundedDecimal(input.signals.visibility.feetVisibility) ??
-                  0,
-                low_confidence_landmarks:
-                  input.signals.visibility.lowConfidenceLandmarks,
-                reliable_frame_count:
-                  input.signals.visibility.reliableFrameCount,
-                wrist_visibility:
-                  toRoundedDecimal(input.signals.visibility.wristVisibility) ??
-                  0,
-              },
-            },
+            frame_b64: input.frameBase64,
           }),
-          "Unable to analyze pose sequence.",
+          "Unable to detect workout equipment.",
         ),
       );
     },
@@ -924,6 +1544,21 @@ export function createFitnessApi(transport: ApiTransport) {
             ...(input?.detectedExerciseName !== undefined
               ? { detected_exercise_name: input.detectedExerciseName }
               : {}),
+            ...(input?.equipmentContext !== undefined
+              ? { equipment_context: input.equipmentContext }
+              : {}),
+            ...(input?.equipmentSource !== undefined
+              ? { equipment_source: input.equipmentSource }
+              : {}),
+            ...(input?.equipmentConfidence !== undefined
+              ? { equipment_confidence: input.equipmentConfidence }
+              : {}),
+            ...(input?.equipmentConflicts !== undefined
+              ? { equipment_conflicts: input.equipmentConflicts }
+              : {}),
+            ...(input?.weightInputKg !== undefined
+              ? { weight_input_kg: input.weightInputKg }
+              : {}),
             final_rep_count: input?.finalRepCount ?? 0,
             ...(input?.formFeedback
               ? { form_feedback: input.formFeedback }
@@ -932,14 +1567,43 @@ export function createFitnessApi(transport: ApiTransport) {
               ? {
                   movement_contract: {
                     dominant_joint: input.movementContract.dominantJoint,
+                    degraded_conditions:
+                      input.movementContract.degradedConditions,
                     exercise: input.movementContract.exercise,
+                    no_count_conditions:
+                      input.movementContract.noCountConditions,
                     oscillating_joints:
                       input.movementContract.oscillatingJoints,
+                    phase_order: input.movementContract.phaseOrder,
+                    primary_joints: input.movementContract.primaryJoints,
+                    rep_model: input.movementContract.repModel,
                     rep_thresholds: {
                       down: input.movementContract.repThresholds.down,
                       up: input.movementContract.repThresholds.up,
                     },
+                    required_sides: input.movementContract.requiredSides,
                     secondary_check: input.movementContract.secondaryCheck,
+                    secondary_joints: input.movementContract.secondaryJoints,
+                    spatial_requirements: input.movementContract
+                      .spatialRequirements
+                      ? {
+                          body_line_tolerance:
+                            input.movementContract.spatialRequirements
+                              .bodyLineTolerance,
+                          body_x_drift_max:
+                            input.movementContract.spatialRequirements
+                              .bodyXDriftMax,
+                          body_y_travel_min:
+                            input.movementContract.spatialRequirements
+                              .bodyYTravelMin,
+                          left_right_symmetry_tolerance:
+                            input.movementContract.spatialRequirements
+                              .leftRightSymmetryTolerance,
+                          phase_sync_tolerance_ms:
+                            input.movementContract.spatialRequirements
+                              .phaseSyncToleranceMs,
+                        }
+                      : null,
                   },
                 }
               : {}),

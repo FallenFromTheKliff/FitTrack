@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { PoseProfileKind, PoseSession, Prisma } from '@prisma/client';
+import {
+  PoseProfileKind,
+  Prisma,
+  ProgressionSourceType,
+  type PoseSession,
+} from '@prisma/client';
 
 import {
   BaseRepository,
@@ -17,6 +22,12 @@ const poseSessionDetailSelect = {
   id: true,
   user_id: true,
   exercise_log_id: true,
+  exercise_log: {
+    select: {
+      id: true,
+      session_id: true,
+    },
+  },
   exercise_hint: true,
   rep_count_ai: true,
   confidence_avg: true,
@@ -73,6 +84,23 @@ const poseBootstrapProfileSelect = {
   rep_rules: true,
 } satisfies Prisma.PoseExerciseProfileSelect;
 
+function readSourceRevision(
+  sourceContext: Prisma.JsonValue | null | undefined,
+): number | null {
+  if (
+    !sourceContext ||
+    typeof sourceContext !== 'object' ||
+    Array.isArray(sourceContext)
+  ) {
+    return null;
+  }
+
+  const sourceRevision = sourceContext.source_revision;
+  return typeof sourceRevision === 'number' && Number.isFinite(sourceRevision)
+    ? sourceRevision
+    : null;
+}
+
 export type PoseSessionRecord = Pick<
   PoseSession,
   | 'id'
@@ -83,10 +111,9 @@ export type PoseSessionRecord = Pick<
   | 'ended_at'
 >;
 
-export type PoseSessionDetailRecord = Pick<
-  PoseSession,
-  keyof typeof poseSessionDetailSelect
->;
+export type PoseSessionDetailRecord = Prisma.PoseSessionGetPayload<{
+  select: typeof poseSessionDetailSelect;
+}>;
 
 export type PoseProfileRecord = Prisma.PoseExerciseProfileGetPayload<{
   select: typeof poseProfileSelect;
@@ -132,6 +159,22 @@ export class PoseRepository extends BaseRepository {
         },
       })
       .then(() => undefined);
+  }
+
+  async getNextPoseSourceRevision(poseSessionId: string): Promise<number> {
+    const sourceEvent = await this.prisma.progressionSourceEvent.findUnique({
+      where: {
+        source_type_source_id: {
+          source_id: poseSessionId,
+          source_type: ProgressionSourceType.pose_session_finalized,
+        },
+      },
+      select: {
+        source_context: true,
+      },
+    });
+
+    return (readSourceRevision(sourceEvent?.source_context) ?? 0) + 1;
   }
 
   listBootstrapPoseProfiles(input: {
@@ -181,19 +224,19 @@ export class PoseRepository extends BaseRepository {
     classificationConfidence: number | null;
     subjectLockConfidence: number | null;
     analysisSummary: Prisma.InputJsonObject | null;
-      learnedProfile?: {
-        canonicalName: string;
-        exerciseId: string | null;
-        landmarkSignature: Prisma.InputJsonObject;
-        angleSignature: Prisma.InputJsonObject;
-        orientationSignature: Prisma.InputJsonObject;
-        movementPattern: Prisma.InputJsonObject;
-        visibilityPattern: Prisma.InputJsonObject;
-        dominantJoint?: string | null;
-        tolerance?: number | null;
-        repThresholds?: Prisma.InputJsonObject | null;
-        repRules?: Prisma.InputJsonObject | null;
-      } | null;
+    learnedProfile?: {
+      canonicalName: string;
+      exerciseId: string | null;
+      landmarkSignature: Prisma.InputJsonObject;
+      angleSignature: Prisma.InputJsonObject;
+      orientationSignature: Prisma.InputJsonObject;
+      movementPattern: Prisma.InputJsonObject;
+      visibilityPattern: Prisma.InputJsonObject;
+      dominantJoint?: string | null;
+      tolerance?: number | null;
+      repThresholds?: Prisma.InputJsonObject | null;
+      repRules?: Prisma.InputJsonObject | null;
+    } | null;
   }): Promise<PoseSessionDetailRecord> {
     return this.prisma.$transaction(async (tx) => {
       let detectedProfileId = input.detectedProfileId;
@@ -259,7 +302,9 @@ export class PoseRepository extends BaseRepository {
           : {}),
         detected_exercise_name: input.detectedExerciseName,
         detected_profile_id: input.detectedProfileId,
-        classification_confidence: this.toDecimal(input.classificationConfidence),
+        classification_confidence: this.toDecimal(
+          input.classificationConfidence,
+        ),
         subject_lock_confidence: this.toDecimal(input.subjectLockConfidence),
         analysis_summary: input.analysisSummary ?? Prisma.JsonNull,
       },
@@ -392,9 +437,7 @@ export class PoseRepository extends BaseRepository {
     );
   }
 
-  private toDecimal(
-    value: number | null | undefined,
-  ): Prisma.Decimal | null {
+  private toDecimal(value: number | null | undefined): Prisma.Decimal | null {
     return value == null ? null : new Prisma.Decimal(value.toFixed(3));
   }
 }

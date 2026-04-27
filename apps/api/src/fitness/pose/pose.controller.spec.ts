@@ -5,7 +5,10 @@ import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import type { FinalizePoseSessionDTO } from './dto/pose.dto';
+import type {
+  AnalyzePoseSequenceDTO,
+  FinalizePoseSessionDTO,
+} from './dto/pose.dto';
 import { PoseController } from './pose.controller';
 
 function getGuardMetadata(
@@ -31,6 +34,7 @@ function getRolesMetadata(methodName: 'listProfiles'): UserRole[] | undefined {
 
 describe('PoseController', () => {
   const poseService = {
+    analyzePoseSessionById: jest.fn(),
     getPoseSessionById: jest.fn(),
     finalizePoseSessionById: jest.fn(),
     listPoseProfiles: jest.fn(),
@@ -86,6 +90,7 @@ describe('PoseController', () => {
     const finalizePayload: FinalizePoseSessionDTO = {
       ended_reason: 'manual_stop' as const,
       final_rep_count: 0,
+      form_feedback: [],
       raw_angle_data: [],
     };
 
@@ -99,6 +104,26 @@ describe('PoseController', () => {
       'user-1',
       'pose-1',
       finalizePayload,
+    );
+  });
+
+  it('analyzes a pose session through the service', async () => {
+    poseService.analyzePoseSessionById.mockResolvedValue({ id: 'pose-1' });
+    const analyzePayload: AnalyzePoseSequenceDTO = {
+      camera_facing_mode: 'environment',
+      frame_b64: 'frame-data',
+    };
+
+    await controller.analyzeSession(
+      'pose-1',
+      { sub: 'user-1' } as never,
+      analyzePayload,
+    );
+
+    expect(poseService.analyzePoseSessionById).toHaveBeenCalledWith(
+      'user-1',
+      'pose-1',
+      analyzePayload,
     );
   });
 

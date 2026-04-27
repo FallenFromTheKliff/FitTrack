@@ -210,11 +210,42 @@ export type PoseAnalyzeResponse = {
     };
     secondary_check: string;
     oscillating_joints: string[];
+    rep_model?:
+      | 'bilateral'
+      | 'unilateral_left'
+      | 'unilateral_right'
+      | 'alternating'
+      | 'static_hold'
+      | 'unknown';
+    required_sides?: 'both' | 'left' | 'right' | 'either' | 'alternating';
+    primary_joints?: string[];
+    secondary_joints?: string[];
+    phase_order?: string[];
+    spatial_requirements?: {
+      body_y_travel_min?: number | null;
+      body_x_drift_max?: number | null;
+      body_line_tolerance?: number | null;
+      left_right_symmetry_tolerance?: number | null;
+      phase_sync_tolerance_ms?: number | null;
+    } | null;
+    no_count_conditions?: string[];
+    degraded_conditions?: string[];
   } | null;
   subject_locked?: boolean;
   subject_lock_confidence?: number;
   classification_source?: 'preset' | 'classifier' | 'user_confirmed';
   needs_confirmation?: boolean;
+  processing_mode?: 'legacy_frame' | 'sequence';
+  rep_event?: boolean;
+  rep_count_delta?: number;
+  rep_count_total?: number;
+  phase?: string | null;
+  keypoints?: Array<{
+    visibility: number;
+    x: number;
+    y: number;
+    z: number;
+  }> | null;
   candidate_exercises?: string[];
   form_feedback?: string[];
   learned_profile?: {
@@ -252,6 +283,14 @@ export type PoseAnalyzeSequenceInput = {
       shoulder?: number | null;
       hip?: number | null;
       knee?: number | null;
+      left_elbow?: number | null;
+      right_elbow?: number | null;
+      left_shoulder?: number | null;
+      right_shoulder?: number | null;
+      left_hip?: number | null;
+      right_hip?: number | null;
+      left_knee?: number | null;
+      right_knee?: number | null;
     }>;
     orientation: {
       body_orientation: string;
@@ -264,15 +303,19 @@ export type PoseAnalyzeSequenceInput = {
       low_confidence_landmarks: string[];
       reliable_frame_count: number;
       wrist_visibility: number;
+      left_arm_visibility?: number | null;
+      right_arm_visibility?: number | null;
     };
     hip: {
       average_y: number;
       range_y: number;
+      range_x?: number | null;
       stable: boolean;
     };
     temporal: {
       amplitudes: Record<string, number>;
       oscillating_joints: string[];
+      phase_sync_ms?: number | null;
     };
   };
 };
@@ -330,6 +373,29 @@ export type PoseFinalizeResponse = {
     rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
   };
+};
+
+export type AiEquipmentDetectionBox = {
+  confidence: number | null;
+  height: number | null;
+  label: string | null;
+  width: number | null;
+  x: number | null;
+  y: number | null;
+};
+
+export type AiEquipmentDetectInput = {
+  cameraFacingMode?: 'user' | 'environment' | null;
+  exerciseHint?: string | null;
+  frameBase64: string;
+};
+
+export type AiEquipmentDetectResponse = {
+  equipment_confidence: number | null;
+  equipment_conflicts: string[];
+  equipment_context: string | null;
+  equipment_detections: AiEquipmentDetectionBox[];
+  equipment_family?: string | null;
 };
 
 export type AiCalculateTdeeResponse = {
@@ -728,6 +794,61 @@ export class AiPythonClientService {
     return payload;
   }
 
+  async detectEquipment(
+    input: AiEquipmentDetectInput,
+  ): Promise<AiEquipmentDetectResponse> {
+    const response = await this.performRequest(
+      '/equipment/detect',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...(input.cameraFacingMode
+            ? { camera_facing_mode: input.cameraFacingMode }
+            : {}),
+          ...(input.exerciseHint !== undefined
+            ? { exercise_hint: input.exerciseHint }
+            : {}),
+          frame_b64: input.frameBase64,
+        }),
+      },
+      {
+        unavailableDetail:
+          'Local equipment detection is unavailable right now.',
+        missingConfigDetail: 'Local equipment detection is not configured.',
+        timeoutDetail:
+          'Local equipment detection timed out while analyzing the frame.',
+      },
+    );
+
+    if (!response.ok) {
+      await this.throwHttpExceptionFromResponse(response, {
+        title: 'Equipment Detection Failed',
+        detail: 'The AI equipment service rejected the frame request.',
+      });
+    }
+
+    const payload = (await response.json()) as AiEquipmentDetectResponse;
+
+    if (!this.isValidEquipmentDetectPayload(payload)) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Invalid Equipment Detection Response',
+          status: 502,
+          detail:
+            'The AI equipment service returned an invalid detection payload.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return payload;
+  }
+
   async analyzePoseSequence(
     input: PoseAnalyzeSequenceInput,
   ): Promise<PoseAnalyzeResponse> {
@@ -919,14 +1040,12 @@ export class AiPythonClientService {
       const detail =
         error instanceof Error &&
         (error.name === 'TimeoutError' || error.name === 'AbortError')
-          ? options?.timeoutDetail ??
+          ? (options?.timeoutDetail ??
             options?.unavailableDetail ??
-            'The AI service timed out right now.'
-          : options?.unavailableDetail ??
-            'The AI plan service is unavailable right now.';
-      throw this.buildUnavailableException(
-        detail,
-      );
+            'The AI service timed out right now.')
+          : (options?.unavailableDetail ??
+            'The AI plan service is unavailable right now.');
+      throw this.buildUnavailableException(detail);
     }
   }
 
@@ -1116,6 +1235,23 @@ export class AiPythonClientService {
         payload.classification_source === 'user_confirmed') &&
       (payload.needs_confirmation === undefined ||
         typeof payload.needs_confirmation === 'boolean') &&
+      (payload.processing_mode === undefined ||
+        payload.processing_mode === 'legacy_frame' ||
+        payload.processing_mode === 'sequence') &&
+      (payload.rep_event === undefined ||
+        typeof payload.rep_event === 'boolean') &&
+      (payload.rep_count_delta === undefined ||
+        (typeof payload.rep_count_delta === 'number' &&
+          Number.isFinite(payload.rep_count_delta))) &&
+      (payload.rep_count_total === undefined ||
+        (typeof payload.rep_count_total === 'number' &&
+          Number.isFinite(payload.rep_count_total))) &&
+      (payload.phase === undefined ||
+        payload.phase === null ||
+        typeof payload.phase === 'string') &&
+      (payload.keypoints === undefined ||
+        payload.keypoints === null ||
+        this.isValidPoseKeypoints(payload.keypoints)) &&
       (payload.candidate_exercises === undefined ||
         this.isStringArray(payload.candidate_exercises)) &&
       (payload.form_feedback === undefined ||
@@ -1123,6 +1259,39 @@ export class AiPythonClientService {
       (payload.learned_profile === undefined ||
         payload.learned_profile === null ||
         this.isValidLearnedProfile(payload.learned_profile))
+    );
+  }
+
+  private isValidEquipmentDetectPayload(
+    payload: AiEquipmentDetectResponse,
+  ): payload is AiEquipmentDetectResponse {
+    return (
+      this.isObject(payload) &&
+      this.isNullableFiniteNumber(payload.equipment_confidence) &&
+      (payload.equipment_context === null ||
+        typeof payload.equipment_context === 'string') &&
+      this.isStringArray(payload.equipment_conflicts) &&
+      Array.isArray(payload.equipment_detections) &&
+      payload.equipment_detections.every((detection) =>
+        this.isValidEquipmentDetectionBox(detection),
+      ) &&
+      (payload.equipment_family === undefined ||
+        payload.equipment_family === null ||
+        typeof payload.equipment_family === 'string')
+    );
+  }
+
+  private isValidEquipmentDetectionBox(
+    value: unknown,
+  ): value is AiEquipmentDetectionBox {
+    return (
+      this.isObject(value) &&
+      this.isNullableFiniteNumber(value.confidence) &&
+      this.isNullableFiniteNumber(value.height) &&
+      this.isNullableFiniteNumber(value.width) &&
+      this.isNullableFiniteNumber(value.x) &&
+      this.isNullableFiniteNumber(value.y) &&
+      (value.label === null || typeof value.label === 'string')
     );
   }
 
@@ -1138,7 +1307,33 @@ export class AiPythonClientService {
       this.isObject(value.rep_thresholds.down) &&
       this.isObject(value.rep_thresholds.up) &&
       typeof value.secondary_check === 'string' &&
-      this.isStringArray(value.oscillating_joints)
+      this.isStringArray(value.oscillating_joints) &&
+      (value.rep_model === undefined ||
+        value.rep_model === 'bilateral' ||
+        value.rep_model === 'unilateral_left' ||
+        value.rep_model === 'unilateral_right' ||
+        value.rep_model === 'alternating' ||
+        value.rep_model === 'static_hold' ||
+        value.rep_model === 'unknown') &&
+      (value.required_sides === undefined ||
+        value.required_sides === 'both' ||
+        value.required_sides === 'left' ||
+        value.required_sides === 'right' ||
+        value.required_sides === 'either' ||
+        value.required_sides === 'alternating') &&
+      (value.primary_joints === undefined ||
+        this.isStringArray(value.primary_joints)) &&
+      (value.secondary_joints === undefined ||
+        this.isStringArray(value.secondary_joints)) &&
+      (value.phase_order === undefined ||
+        this.isStringArray(value.phase_order)) &&
+      (value.spatial_requirements === undefined ||
+        value.spatial_requirements === null ||
+        this.isObject(value.spatial_requirements)) &&
+      (value.no_count_conditions === undefined ||
+        this.isStringArray(value.no_count_conditions)) &&
+      (value.degraded_conditions === undefined ||
+        this.isStringArray(value.degraded_conditions))
     );
   }
 
@@ -1215,6 +1410,27 @@ export class AiPythonClientService {
   private isStringArray(value: unknown): value is string[] {
     return (
       Array.isArray(value) && value.every((item) => typeof item === 'string')
+    );
+  }
+
+  private isValidPoseKeypoints(
+    value: unknown,
+  ): value is NonNullable<PoseAnalyzeResponse['keypoints']> {
+    return (
+      Array.isArray(value) &&
+      value.length === 33 &&
+      value.every(
+        (point) =>
+          this.isObject(point) &&
+          typeof point.visibility === 'number' &&
+          Number.isFinite(point.visibility) &&
+          typeof point.x === 'number' &&
+          Number.isFinite(point.x) &&
+          typeof point.y === 'number' &&
+          Number.isFinite(point.y) &&
+          typeof point.z === 'number' &&
+          Number.isFinite(point.z),
+      )
     );
   }
 

@@ -27,11 +27,15 @@ describe('NutritionRepository', () => {
     delete: jest.fn(),
     aggregate: jest.fn(),
   };
+  const userProgressionProfile = {
+    findUnique: jest.fn(),
+  };
 
   const prisma = {
     tdeeProfile,
     macroTarget,
     nutritionLog,
+    userProgressionProfile,
     $transaction: jest.fn(),
   };
 
@@ -250,6 +254,12 @@ describe('NutritionRepository', () => {
       },
     });
     macroTarget.findFirst.mockResolvedValue({ id: 'macro-1' });
+    userProgressionProfile.findUnique.mockResolvedValue({
+      current_season_points: 120,
+      current_streak: 4,
+      last_progressed_at: new Date('2026-03-27T05:00:00.000Z'),
+      total_xp: 500,
+    });
 
     const result = await repo.getDailyNutritionSummary('user-1', '2026-03-27');
 
@@ -271,6 +281,12 @@ describe('NutritionRepository', () => {
     expect(result).toMatchObject({
       date: '2026-03-27',
       macroTarget: { id: 'macro-1' },
+      progressionSnapshot: {
+        current_season_points: 120,
+        current_streak: 4,
+        last_progressed_at: new Date('2026-03-27T05:00:00.000Z'),
+        total_xp: 500,
+      },
     });
   });
 

@@ -9,15 +9,15 @@
     "infra:logs": "docker compose -f docker-compose.local-infra.yml logs --tail=100",
     "install:api": "pnpm install --filter @fittrack/api...",
     "dev:api": "pnpm --filter @fittrack/api run start:dev",
-    "dev:ai": "cd apps/ai-microservice && set UV_CACHE_DIR=%CD%\\.uv-cache&& set UV_PROJECT_ENVIRONMENT=%CD%\\.uv-runtime&& set FITTRACK_ENV_FILE=%CD%\\..\\..\\.env&& set FITTRACK_ENV_OVERRIDE=1&& uv sync --frozen --no-dev --python .\\.uv-python\\cpython-3.11.15-windows-x86_64-none\\python.exe && .\\.uv-runtime\\Scripts\\python.exe -m uvicorn --app-dir . app.main:app --host 127.0.0.1 --port 8000",
-    "dev:stack": "node tasks/integration-builder/dev-stack-supervisor.mjs start --no-mobile-web && pnpm --dir apps/mobile exec expo start --lan",
-    "dev:stack:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai --no-mobile-web && pnpm --dir apps/mobile exec expo start --lan",
+    "dev:ai": "node tasks/integration-builder/dev-ai-service.mjs",
+    "dev:stack": "node tasks/integration-builder/dev-stack-supervisor.mjs start --no-mobile-web && pnpm --dir apps/mobile run dev",
+    "dev:stack:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai --no-mobile-web && pnpm --dir apps/mobile run dev",
     "dev:stack:paymongo:tunnel": "node tasks/integration-builder/paymongo-tunnel.mjs",
     "dev:stack:status": "node tasks/integration-builder/dev-stack-supervisor.mjs status",
     "dev:stack:stop": "node tasks/integration-builder/dev-stack-supervisor.mjs stop",
     "dev:web": "pnpm --filter @fittrack/web run dev",
     "dev:mobile": "pnpm --filter @fittrack/mobile run dev",
-    "dev:mobile:web": "pnpm --dir apps/mobile exec expo start --web --port 8081",
+    "dev:mobile:web": "pnpm --dir apps/mobile run web -- --port 8081",
     "db:ensure-local": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/ensure-local-db.ts",
     "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate",
     "db:push": "pnpm --filter @fittrack/api exec npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
@@ -43,6 +43,20 @@
     "typescript": "^5.9.3"
   },
   "pnpm": {
-    "patchedDependencies": {}
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "@shopify/react-native-skia",
+      "bcrypt",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ],
+    "patchedDependencies": {
+      "vision-camera-pose-detector@1.1.0": "patches/vision-camera-pose-detector@1.1.0.patch"
+    }
   }
 }

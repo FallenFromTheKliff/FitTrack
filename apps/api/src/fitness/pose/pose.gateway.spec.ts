@@ -68,8 +68,8 @@ describe('PoseGateway', () => {
     jest.clearAllMocks();
   });
 
-function makeSocket(): TestSocket {
-  return {
+  function makeSocket(): TestSocket {
+    return {
       id: 'socket-1',
       handshake: {
         auth: { token: 'token-1' },

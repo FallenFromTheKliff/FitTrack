@@ -21,6 +21,10 @@ describe('WorkoutSessionRepository', () => {
     findFirst: jest.fn(),
   };
 
+  const progressionSourceEvent = {
+    findUnique: jest.fn(),
+  };
+
   const poseSession = {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -41,6 +45,7 @@ describe('WorkoutSessionRepository', () => {
     workoutSession,
     trainingPlan,
     exerciseCatalog,
+    progressionSourceEvent,
     poseSession,
     exerciseLog,
     $transaction: jest.fn(),
@@ -121,6 +126,7 @@ describe('WorkoutSessionRepository', () => {
                 id: true,
                 rep_count_ai: true,
                 confidence_avg: true,
+                analysis_summary: true,
                 started_at: true,
                 ended_at: true,
               },
@@ -168,12 +174,37 @@ describe('WorkoutSessionRepository', () => {
                 id: true,
                 rep_count_ai: true,
                 confidence_avg: true,
+                analysis_summary: true,
                 started_at: true,
                 ended_at: true,
               },
             },
           },
         },
+      },
+    });
+  });
+
+  it('derives the next workout source revision from the stored progression source event', async () => {
+    progressionSourceEvent.findUnique.mockResolvedValue({
+      source_context: {
+        source_revision: 2,
+      },
+    });
+
+    await expect(repo.getNextWorkoutSourceRevision('session-1')).resolves.toBe(
+      3,
+    );
+
+    expect(progressionSourceEvent.findUnique).toHaveBeenCalledWith({
+      where: {
+        source_type_source_id: {
+          source_id: 'session-1',
+          source_type: 'workout_session_completed',
+        },
+      },
+      select: {
+        source_context: true,
       },
     });
   });

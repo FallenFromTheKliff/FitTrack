@@ -107,7 +107,8 @@ const MEMBERSHIP_PLAN_SEEDS: readonly MembershipPlanSeed[] = [
   {
     id: seedId('membership-plan:starter-monthly'),
     name: 'Starter Monthly',
-    description: 'General gym access with member-card-based attendance and standard amenities.',
+    description:
+      'General gym access with member-card-based attendance and standard amenities.',
     durationDays: 30,
     features: {
       perks: ['gym_access', 'attendance_tracking'],
@@ -119,7 +120,8 @@ const MEMBERSHIP_PLAN_SEEDS: readonly MembershipPlanSeed[] = [
   {
     id: seedId('membership-plan:strength-monthly'),
     name: 'Strength Monthly',
-    description: 'Higher-tier gym access for regular lifters who want more usage and tracking.',
+    description:
+      'Higher-tier gym access for regular lifters who want more usage and tracking.',
     durationDays: 30,
     features: {
       perks: ['gym_access', 'attendance_tracking', 'priority_slots'],
@@ -131,7 +133,8 @@ const MEMBERSHIP_PLAN_SEEDS: readonly MembershipPlanSeed[] = [
   {
     id: seedId('membership-plan:coaching-plus'),
     name: 'Coaching Plus',
-    description: 'Premium tier that keeps coaching-compatible plan access available for testing.',
+    description:
+      'Premium tier that keeps coaching-compatible plan access available for testing.',
     durationDays: 30,
     features: {
       perks: ['gym_access', 'attendance_tracking', 'coach_addon'],
@@ -174,14 +177,18 @@ function upcomingAt(dayOffset: number, hour: number, minute = 0) {
 }
 
 function planByName(name: MembershipPlanSeed['name']) {
-  const plan = MEMBERSHIP_PLAN_SEEDS.find((candidate) => candidate.name === name);
+  const plan = MEMBERSHIP_PLAN_SEEDS.find(
+    (candidate) => candidate.name === name,
+  );
   if (!plan) {
     throw new Error(`Unknown membership plan seed: ${name}`);
   }
   return plan;
 }
 
-async function ensureTestAccount(account: TestAccount): Promise<EnsuredAccount> {
+async function ensureTestAccount(
+  account: TestAccount,
+): Promise<EnsuredAccount> {
   const existingIdentity = await prisma.authIdentity.findFirst({
     where: {
       provider: AuthProvider.email,
@@ -195,7 +202,10 @@ async function ensureTestAccount(account: TestAccount): Promise<EnsuredAccount> 
 
   const userId = existingIdentity?.user_id ?? seedId(`user:${account.key}`);
   const verifiedAt = new Date();
-  const credentialHash = await bcrypt.hash(account.password, PASSWORD_HASH_ROUNDS);
+  const credentialHash = await bcrypt.hash(
+    account.password,
+    PASSWORD_HASH_ROUNDS,
+  );
 
   await prisma.user.upsert({
     where: { id: userId },
@@ -299,7 +309,9 @@ async function cleanupDeprecatedCoachSeeds() {
   const seededCoachUserIds = LEGACY_COACH_SEED_ACCOUNTS.map((account) =>
     seedId(`user:${account.key}`),
   );
-  const coachEmails = LEGACY_COACH_SEED_ACCOUNTS.map((account) => account.email);
+  const coachEmails = LEGACY_COACH_SEED_ACCOUNTS.map(
+    (account) => account.email,
+  );
 
   const legacyAuthIdentities = await prisma.authIdentity.findMany({
     where: {
@@ -314,7 +326,10 @@ async function cleanupDeprecatedCoachSeeds() {
   });
 
   const coachUserIds = Array.from(
-    new Set([...seededCoachUserIds, ...legacyAuthIdentities.map((row) => row.user_id)]),
+    new Set([
+      ...seededCoachUserIds,
+      ...legacyAuthIdentities.map((row) => row.user_id),
+    ]),
   );
 
   if (!coachUserIds.length) {
@@ -562,7 +577,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       endTime: '13:00:00',
     },
   ].filter(
-    (slot): slot is {
+    (
+      slot,
+    ): slot is {
       id: string;
       coachId: string;
       dayOfWeek: number;
@@ -585,11 +602,14 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
   }
 
   const memberActiveId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-active')
+      ?.userId ?? null;
   const memberPremiumId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-premium')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-premium')
+      ?.userId ?? null;
   const memberPendingId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-pending')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-pending')
+      ?.userId ?? null;
 
   const appointmentSeeds: Array<{
     id: string;
@@ -630,7 +650,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
 
   if (memberPremiumId && coachProfiles['member-nomembership']) {
     appointmentSeeds.push({
-      id: seedId('coach-appointment:member-premium:member-nomembership:pending-coach'),
+      id: seedId(
+        'coach-appointment:member-premium:member-nomembership:pending-coach',
+      ),
       userId: memberPremiumId,
       coachId: coachProfiles['member-nomembership'],
       status: AppointmentStatus.pending_coach,
@@ -647,7 +669,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
 
   if (memberPendingId && coachProfiles['member-expired']) {
     appointmentSeeds.push({
-      id: seedId('coach-appointment:member-pending:member-expired:pending-payment'),
+      id: seedId(
+        'coach-appointment:member-pending:member-expired:pending-payment',
+      ),
       userId: memberPendingId,
       coachId: coachProfiles['member-expired'],
       status: AppointmentStatus.pending_payment,
@@ -727,7 +751,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
   if (memberActiveId && coachProfiles['member-expired']) {
     await prisma.coachReview.upsert({
       where: {
-        appointment_id: seedId('coach-appointment:member-active:member-expired:completed'),
+        appointment_id: seedId(
+          'coach-appointment:member-active:member-expired:completed',
+        ),
       },
       update: {
         rating: 5,
@@ -737,7 +763,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         id: seedId('coach-review:member-active:member-expired:completed'),
         coach_id: coachProfiles['member-expired'],
         reviewer_id: memberActiveId,
-        appointment_id: seedId('coach-appointment:member-active:member-expired:completed'),
+        appointment_id: seedId(
+          'coach-appointment:member-active:member-expired:completed',
+        ),
         rating: 5,
         comment: 'Calm cues and a solid recovery-focused session.',
       },
@@ -752,11 +780,14 @@ async function ensureGymOperationsVenueBookings(
   coachProfiles: Record<string, string>,
 ) {
   const memberActiveId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-active')
+      ?.userId ?? null;
   const memberPremiumId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-premium')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-premium')
+      ?.userId ?? null;
   const memberPendingId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-pending')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-pending')
+      ?.userId ?? null;
 
   const amenitySeeds = [
     {
@@ -949,7 +980,8 @@ async function ensureGymOperationsVenueBookings(
 
 async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
   const adminUserId =
-    ensuredAccounts.find(({ account }) => account.key === 'admin')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'admin')?.userId ??
+    null;
 
   const membershipAccounts = ensuredAccounts.filter(
     ({ account }) => account.role === UserRole.member,
@@ -1095,7 +1127,8 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
         data: {
           id: seedId('deletion-request:member-frozen'),
           userId: userId,
-          reason: 'Member requested a freeze review while deciding on next billing cycle.',
+          reason:
+            'Member requested a freeze review while deciding on next billing cycle.',
           status: AccountDeletionRequestStatus.pending,
         },
       });
@@ -1142,7 +1175,8 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
           activated_at: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
           revoked_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
           revoked_by: adminUserId,
-          revoke_reason: 'Membership card expired after the prior billing cycle ended.',
+          revoke_reason:
+            'Membership card expired after the prior billing cycle ended.',
         },
         create: {
           id: seedId('membership-card:member-expired'),
@@ -1156,7 +1190,8 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
           activated_at: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
           revoked_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
           revoked_by: adminUserId,
-          revoke_reason: 'Membership card expired after the prior billing cycle ended.',
+          revoke_reason:
+            'Membership card expired after the prior billing cycle ended.',
         },
       });
 
@@ -1169,7 +1204,8 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
           starts_at: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
           expires_at: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
           cancelled_at: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-          cancellation_reason: 'Seeded expired state for member-card and subscription coverage.',
+          cancellation_reason:
+            'Seeded expired state for member-card and subscription coverage.',
         },
       });
       continue;
@@ -1181,7 +1217,9 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
   }
 }
 
-async function ensureMasteryProgress(ensuredAccounts: readonly EnsuredAccount[]) {
+async function ensureMasteryProgress(
+  ensuredAccounts: readonly EnsuredAccount[],
+) {
   const targetUserIds = ensuredAccounts
     .filter(({ account }) =>
       ['member-active', 'member-premium'].includes(account.key),
@@ -1195,11 +1233,11 @@ async function ensureMasteryProgress(ensuredAccounts: readonly EnsuredAccount[])
   });
 
   const memberActiveId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ??
-    null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-active')
+      ?.userId ?? null;
   const memberPremiumId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-premium')?.userId ??
-    null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-premium')
+      ?.userId ?? null;
 
   if (memberActiveId) {
     await prisma.muscleMasteryProgress.createMany({
@@ -1256,8 +1294,8 @@ async function ensureWorkoutFixtures(
   ensuredAccounts: readonly EnsuredAccount[],
 ) {
   const memberActiveId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ??
-    null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-active')
+      ?.userId ?? null;
 
   if (!memberActiveId) {
     return;
@@ -1299,6 +1337,30 @@ async function ensureWorkoutFixtures(
         'Keep a straight body line, lower with the elbows bending back, and press without letting the hips sag.',
       videoUrl: 'https://fittrack.dev/exercises/push-up',
       imageUrl: 'https://fittrack.dev/exercises/push-up.jpg',
+    },
+    {
+      key: 'dip',
+      name: 'Dip',
+      muscleGroup: 'Chest',
+      category: ExerciseCategory.strength,
+      description:
+        'Bodyweight vertical press seeded so bilateral arm-motion tuning can be verified with dip-specific thresholds.',
+      instructions:
+        'Lower until the elbows bend deeply, keep both arms moving together, and press to a tall lockout without shrugging.',
+      videoUrl: 'https://fittrack.dev/exercises/dip',
+      imageUrl: 'https://fittrack.dev/exercises/dip.jpg',
+    },
+    {
+      key: 'curl',
+      name: 'Dumbbell Bicep Curl',
+      muscleGroup: 'Arms',
+      category: ExerciseCategory.strength,
+      description:
+        'Dumbbell curl seeded so pose tracking can test equipment-aware elbow flexion.',
+      instructions:
+        'Stand tall, hold a dumbbell in each hand, curl without swinging the hips, and lower under control.',
+      videoUrl: 'https://fittrack.dev/exercises/dumbbell-bicep-curl',
+      imageUrl: 'https://fittrack.dev/exercises/dumbbell-bicep-curl.jpg',
     },
     {
       key: 'row',
@@ -1348,13 +1410,23 @@ async function ensureWorkoutFixtures(
         torso_slope_range: [76, 96],
       } as Prisma.InputJsonValue,
       movementPattern: {
-        oscillating_landmarks: ['left_hip', 'right_hip', 'left_knee', 'right_knee'],
+        oscillating_landmarks: [
+          'left_hip',
+          'right_hip',
+          'left_knee',
+          'right_knee',
+        ],
         stable_landmarks: ['left_ankle', 'right_ankle'],
         tracked_joint: 'hip_knee_ankle',
       } as Prisma.InputJsonValue,
       visibilityPattern: {
         min_visibility: 0.5,
-        required_landmarks: ['left_shoulder', 'right_shoulder', 'left_ankle', 'right_ankle'],
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_ankle',
+          'right_ankle',
+        ],
       } as Prisma.InputJsonValue,
     },
     {
@@ -1378,13 +1450,28 @@ async function ensureWorkoutFixtures(
         torso_slope_range: [0, 16],
       } as Prisma.InputJsonValue,
       movementPattern: {
-        oscillating_landmarks: ['left_wrist', 'right_wrist', 'left_elbow', 'right_elbow'],
-        stable_landmarks: ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder'],
+        oscillating_landmarks: [
+          'left_wrist',
+          'right_wrist',
+          'left_elbow',
+          'right_elbow',
+        ],
+        stable_landmarks: [
+          'left_hip',
+          'right_hip',
+          'left_shoulder',
+          'right_shoulder',
+        ],
         tracked_joint: 'shoulder_elbow_wrist',
       } as Prisma.InputJsonValue,
       visibilityPattern: {
         min_visibility: 0.45,
-        required_landmarks: ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow'],
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_elbow',
+          'right_elbow',
+        ],
       } as Prisma.InputJsonValue,
     },
     {
@@ -1395,26 +1482,143 @@ async function ensureWorkoutFixtures(
         setup: 'prone_press',
       } as Prisma.InputJsonValue,
       angleSignature: {
-        bottom: { elbow: [55, 95] },
-        top: { elbow: [150, 180] },
+        bottom: { elbow: [105, 145] },
+        top: { elbow: [158, 178] },
       } as Prisma.InputJsonValue,
       repRules: {
         body_line: 'shoulders_hips_ankles_stacked',
         depth: 'chest_between_hands',
+        no_count_conditions: [
+          'bilateral_arm_motion_unconfirmed',
+          'push_up_body_not_horizontal',
+          'left_right_phase_desync',
+        ],
       } as Prisma.InputJsonValue,
       orientationSignature: {
         body_orientation: 'prone_horizontal',
         nose_to_hip_vector: { x: 0.02, y: 0.16 },
-        torso_slope_range: [0, 28],
+        torso_slope_range: [0, 78],
       } as Prisma.InputJsonValue,
       movementPattern: {
-        oscillating_landmarks: ['left_wrist', 'right_wrist', 'left_elbow', 'right_elbow'],
-        stable_landmarks: ['left_hip', 'right_hip', 'left_ankle', 'right_ankle'],
+        oscillating_landmarks: [
+          'left_wrist',
+          'right_wrist',
+          'left_elbow',
+          'right_elbow',
+        ],
+        stable_landmarks: [
+          'left_hip',
+          'right_hip',
+          'left_ankle',
+          'right_ankle',
+        ],
         tracked_joint: 'elbow_wrist',
       } as Prisma.InputJsonValue,
       visibilityPattern: {
         min_visibility: 0.4,
-        required_landmarks: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'],
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_hip',
+          'right_hip',
+        ],
+      } as Prisma.InputJsonValue,
+    },
+    {
+      canonicalName: 'dip',
+      exerciseKey: 'dip',
+      landmarkSignature: {
+        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
+        setup: 'upright_vertical_press',
+      } as Prisma.InputJsonValue,
+      angleSignature: {
+        bottom: { elbow: [72, 104] },
+        top: { elbow: [144, 172] },
+      } as Prisma.InputJsonValue,
+      repRules: {
+        bilateral_control: 'both_elbows_extend_together',
+        no_count_conditions: [
+          'bilateral_arm_motion_unconfirmed',
+          'body_y_travel_below_min',
+          'left_right_phase_desync',
+        ],
+      } as Prisma.InputJsonValue,
+      orientationSignature: {
+        body_orientation: 'upright_vertical',
+        nose_to_hip_vector: { x: 0.01, y: 0.82 },
+        torso_slope_range: [60, 108],
+      } as Prisma.InputJsonValue,
+      movementPattern: {
+        oscillating_landmarks: [
+          'left_wrist',
+          'right_wrist',
+          'left_elbow',
+          'right_elbow',
+        ],
+        stable_landmarks: [
+          'left_hip',
+          'right_hip',
+          'left_shoulder',
+          'right_shoulder',
+        ],
+        tracked_joint: 'shoulder_elbow_wrist',
+      } as Prisma.InputJsonValue,
+      visibilityPattern: {
+        min_visibility: 0.42,
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_elbow',
+          'right_elbow',
+        ],
+      } as Prisma.InputJsonValue,
+    },
+    {
+      canonicalName: 'bicep_curl',
+      exerciseKey: 'curl',
+      landmarkSignature: {
+        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
+        setup: 'standing_weighted_curl',
+      } as Prisma.InputJsonValue,
+      angleSignature: {
+        bottom: { elbow: [112, 176] },
+        top: { elbow: [70, 128] },
+      } as Prisma.InputJsonValue,
+      repRules: {
+        equipment_required: 'dumbbell_or_weight_in_hand',
+        no_count_conditions: ['equipment_required', 'hip_swing_over_tolerance'],
+        partials_allowed: true,
+      } as Prisma.InputJsonValue,
+      orientationSignature: {
+        body_orientation: 'upright',
+        nose_to_hip_vector: { x: 0.01, y: 0.86 },
+        torso_slope_range: [64, 102],
+      } as Prisma.InputJsonValue,
+      movementPattern: {
+        oscillating_landmarks: [
+          'left_wrist',
+          'right_wrist',
+          'left_elbow',
+          'right_elbow',
+        ],
+        stable_landmarks: [
+          'left_hip',
+          'right_hip',
+          'left_shoulder',
+          'right_shoulder',
+        ],
+        tracked_joint: 'shoulder_elbow_wrist',
+      } as Prisma.InputJsonValue,
+      visibilityPattern: {
+        min_visibility: 0.42,
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_elbow',
+          'right_elbow',
+          'left_wrist',
+          'right_wrist',
+        ],
       } as Prisma.InputJsonValue,
     },
   ] as const;
@@ -1424,6 +1628,7 @@ async function ensureWorkoutFixtures(
   const squatPlanExerciseId = randomUUID();
   const rowPlanExerciseId = randomUUID();
   const benchPlanExerciseId = randomUUID();
+  const curlPlanExerciseId = randomUUID();
   const ropePlanExerciseId = randomUUID();
 
   const squatSessionId = randomUUID();
@@ -1437,7 +1642,9 @@ async function ensureWorkoutFixtures(
   const now = new Date();
   const squatStartedAt = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
   const squatCompletedAt = new Date(squatStartedAt.getTime() + 42 * 60 * 1000);
-  const squatPoseStartedAt = new Date(squatStartedAt.getTime() + 11 * 60 * 1000);
+  const squatPoseStartedAt = new Date(
+    squatStartedAt.getTime() + 11 * 60 * 1000,
+  );
   const squatPoseEndedAt = new Date(squatPoseStartedAt.getTime() + 95 * 1000);
 
   const benchStartedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -1617,7 +1824,8 @@ async function ensureWorkoutFixtures(
         sets: 3,
         reps: 12,
         rest_seconds: 90,
-        notes: 'Accessory pull to make the first schedule day feel like a real plan.',
+        notes:
+          'Accessory pull to make the first schedule day feel like a real plan.',
         order_index: 1,
       },
       {
@@ -1628,8 +1836,21 @@ async function ensureWorkoutFixtures(
         reps: 10,
         rest_seconds: 90,
         weight_kg_target: new Prisma.Decimal('22.5'),
-        notes: 'Upper-body push day reference used by the seeded history entry.',
+        notes:
+          'Upper-body push day reference used by the seeded history entry.',
         order_index: 0,
+      },
+      {
+        id: curlPlanExerciseId,
+        schedule_day_id: upperDayId,
+        exercise_id: exerciseIds.get('curl')!,
+        sets: 3,
+        reps: 12,
+        rest_seconds: 75,
+        weight_kg_target: new Prisma.Decimal('8'),
+        notes:
+          'Equipment-aware curl test exercise for live pose and object-context gating.',
+        order_index: 1,
       },
       {
         id: ropePlanExerciseId,
@@ -1639,7 +1860,7 @@ async function ensureWorkoutFixtures(
         duration_seconds: 60,
         rest_seconds: 45,
         notes: 'Short finisher to keep the plan from looking single-purpose.',
-        order_index: 1,
+        order_index: 2,
       },
     ],
   });
@@ -1847,17 +2068,17 @@ async function main() {
   const counts = await buildCounts();
   const notableIds = {
     activeMemberUserId:
-      ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ??
-      '',
+      ensuredAccounts.find(({ account }) => account.key === 'member-active')
+        ?.userId ?? '',
     premiumMemberUserId:
-      ensuredAccounts.find(({ account }) => account.key === 'member-premium')?.userId ??
-      '',
+      ensuredAccounts.find(({ account }) => account.key === 'member-premium')
+        ?.userId ?? '',
     pendingMemberUserId:
-      ensuredAccounts.find(({ account }) => account.key === 'member-pending')?.userId ??
-      '',
+      ensuredAccounts.find(({ account }) => account.key === 'member-pending')
+        ?.userId ?? '',
     frozenMemberUserId:
-      ensuredAccounts.find(({ account }) => account.key === 'member-frozen')?.userId ??
-      '',
+      ensuredAccounts.find(({ account }) => account.key === 'member-frozen')
+        ?.userId ?? '',
     memberActiveCardId: seedId('membership-card:member-active'),
     memberPremiumCardId: seedId('membership-card:member-premium'),
   };

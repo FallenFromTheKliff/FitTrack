@@ -30,6 +30,63 @@ export type ExerciseReviewSubmissionStatus =
   | "pending"
   | "published"
   | "rejected";
+export type FitnessCreatorState =
+  | "none"
+  | "candidate"
+  | "pending_review"
+  | "approved"
+  | "suspended"
+  | "revoked";
+export type FitnessSeasonStatus = "draft" | "active" | "closed" | "archived";
+export type FitnessMilestoneCategory =
+  | "training"
+  | "consistency"
+  | "season"
+  | "creator"
+  | "governance";
+export type FitnessMilestoneTriggerType =
+  | "source_event"
+  | "summary_threshold"
+  | "streak"
+  | "manual";
+export type FitnessMilestoneProgressStatus =
+  | "in_progress"
+  | "unlocked"
+  | "claimed";
+export type FitnessRankingVisibility = "public" | "anonymous" | "private";
+export type FitnessRankingGovernanceStatus =
+  | "normal"
+  | "hidden_by_user"
+  | "anonymized_by_user"
+  | "hidden_by_admin"
+  | "disqualified";
+export type FitnessIntegrityRiskLevel = "low" | "medium" | "high";
+export type FitnessIntegrityCaseStatus =
+  | "open"
+  | "under_review"
+  | "resolved_valid"
+  | "resolved_invalid"
+  | "escalated";
+export type FitnessProgressionSourceType =
+  | "workout_session_completed"
+  | "pose_session_finalized";
+export type FitnessProgressionSourceStatus =
+  | "pending"
+  | "applied"
+  | "blocked"
+  | "reduced"
+  | "voided"
+  | "invalidated";
+export type FitnessModerationActionType =
+  | "void_progression_grant"
+  | "restore_progression_grant"
+  | "hide_from_rankings"
+  | "disqualify_active_season"
+  | "approve_creator"
+  | "suspend_creator"
+  | "revoke_creator"
+  | "resolve_integrity_case_valid"
+  | "resolve_integrity_case_invalid";
 
 export type FitnessExerciseListParams = {
   category?: FitnessExerciseCategory;
@@ -61,6 +118,8 @@ export type UpdateFitnessExerciseInput = Partial<CreateFitnessExerciseInput> & {
 };
 
 export type UpdateExerciseReviewSubmissionInput = {
+  creatorGovernanceNote?: string;
+  creatorState?: FitnessCreatorState;
   publishedExerciseId?: string;
   reviewNotes?: string;
   status?: ExerciseReviewSubmissionStatus;
@@ -79,6 +138,46 @@ export type FitnessMasteryListParams = {
 export type FitnessLeaderboardListParams = {
   limit?: number;
   page?: number;
+};
+
+export type FitnessProgressionSourceListParams = {
+  limit?: number;
+  page?: number;
+  sourceStatus?: FitnessProgressionSourceStatus;
+  sourceType?: FitnessProgressionSourceType;
+};
+
+export type UpdateFitnessRankingProfileInput = {
+  displayAlias?: string | null;
+  visibility: FitnessRankingVisibility;
+};
+
+export type AdminGamificationSeasonStatusInput = {
+  rationale: string;
+  status: FitnessSeasonStatus;
+};
+
+export type AdminGamificationCreatorStateInput = {
+  adminNotes?: string | null;
+  rationale: string;
+  state: FitnessCreatorState;
+};
+
+export type AdminGamificationRankingOverrideInput = {
+  adminNote?: string | null;
+  governanceStatus: Extract<
+    FitnessRankingGovernanceStatus,
+    "normal" | "hidden_by_admin" | "disqualified"
+  >;
+  rationale?: string | null;
+};
+
+export type AdminGamificationIntegrityResolutionInput = {
+  rationale: string;
+  status: Extract<
+    FitnessIntegrityCaseStatus,
+    "resolved_valid" | "resolved_invalid"
+  >;
 };
 
 export type WorkoutSessionListParams = {
@@ -104,6 +203,15 @@ export type FitnessExerciseRecord = {
 
 export type ExerciseReviewSubmissionRecord = {
   category: FitnessExerciseCategory;
+  creatorCandidateScore: number;
+  creatorGovernanceNote: string | null;
+  creatorLastStateChangedAt: string | null;
+  creatorProfileUpdatedAt: string | null;
+  creatorPublishedCount: number;
+  creatorRejectedCount: number;
+  creatorState: FitnessCreatorState;
+  creatorStateLabel: string;
+  creatorSubmissionCount: number;
   createdAt: string;
   description: string | null;
   evidenceBars: number[] | null;
@@ -272,7 +380,49 @@ export type PoseClassificationSource =
   | "classifier"
   | "user_confirmed";
 
+export type PoseEquipmentContext =
+  | "bodyweight"
+  | "dumbbell"
+  | "barbell"
+  | "cable"
+  | "machine"
+  | "kettlebell"
+  | "band"
+  | "bench"
+  | "mixed"
+  | "unknown";
+
+export type PoseEquipmentSource =
+  | "catalog"
+  | "plan"
+  | "member"
+  | "inferred"
+  | "provider_api"
+  | "resolved_hybrid";
+
+export type PoseSessionQualityState = "stable" | "degraded" | "invalid";
+
+export type PoseProgressionDisposition =
+  | "normal"
+  | "cautionary"
+  | "hold_for_review";
+
 export type PoseJointName = "elbow" | "shoulder" | "hip" | "knee";
+
+export type PoseRepModel =
+  | "bilateral"
+  | "unilateral_left"
+  | "unilateral_right"
+  | "alternating"
+  | "static_hold"
+  | "unknown";
+
+export type PoseRequiredSides =
+  | "both"
+  | "left"
+  | "right"
+  | "either"
+  | "alternating";
 
 export type PoseKeypointRecord = {
   visibility: number;
@@ -291,6 +441,14 @@ export type PoseAngleFrameSignalRecord = {
   elbow: number | null;
   hip: number | null;
   knee: number | null;
+  leftElbow?: number | null;
+  leftHip?: number | null;
+  leftKnee?: number | null;
+  leftShoulder?: number | null;
+  rightElbow?: number | null;
+  rightHip?: number | null;
+  rightKnee?: number | null;
+  rightShoulder?: number | null;
   shoulder: number | null;
 };
 
@@ -306,13 +464,16 @@ export type PoseOrientationSignalRecord = {
 export type PoseVisibilitySignalRecord = {
   averageVisibility: number;
   feetVisibility: number;
+  leftArmVisibility?: number | null;
   lowConfidenceLandmarks: string[];
   reliableFrameCount: number;
+  rightArmVisibility?: number | null;
   wristVisibility: number;
 };
 
 export type PoseHipSignalRecord = {
   averageY: number;
+  rangeX?: number | null;
   rangeY: number;
   stable: boolean;
 };
@@ -320,6 +481,15 @@ export type PoseHipSignalRecord = {
 export type PoseTemporalMovementSignalRecord = {
   amplitudes: Record<string, number>;
   oscillatingJoints: string[];
+  phaseSyncMs?: number | null;
+};
+
+export type PoseSpatialRequirementsRecord = {
+  bodyLineTolerance?: number | null;
+  bodyXDriftMax?: number | null;
+  bodyYTravelMin?: number | null;
+  leftRightSymmetryTolerance?: number | null;
+  phaseSyncToleranceMs?: number | null;
 };
 
 export type PoseSequenceSignalsRecord = {
@@ -337,13 +507,21 @@ export type PoseRepThresholdRecord = {
 
 export type PoseMovementContractRecord = {
   dominantJoint: PoseJointName;
+  degradedConditions?: string[];
   exercise: string;
+  noCountConditions?: string[];
   oscillatingJoints: string[];
+  phaseOrder?: string[];
+  primaryJoints?: string[];
+  repModel?: PoseRepModel;
   repThresholds: {
     down: PoseRepThresholdRecord;
     up: PoseRepThresholdRecord;
   };
+  requiredSides?: PoseRequiredSides;
   secondaryCheck: string;
+  secondaryJoints?: string[];
+  spatialRequirements?: PoseSpatialRequirementsRecord | null;
 };
 
 export type PoseRepAngleDataRecord = {
@@ -354,12 +532,63 @@ export type PoseRepAngleDataRecord = {
   timestamp: number;
 };
 
-export type AnalyzePoseSequenceInput = {
+export type PoseAnalyzeProcessingMode = "legacy_frame" | "sequence";
+
+type AnalyzePoseInputBase = {
+  cameraFacingMode?: PoseCameraFacingMode;
+  equipmentConfidence?: number | null;
+  equipmentConflicts?: string[];
+  equipmentContext?: PoseEquipmentContext | null;
+  equipmentSource?: PoseEquipmentSource | null;
+  exerciseHint?: string | null;
+  subjectLockConfidence?: number | null;
+  subjectLocked?: boolean | null;
+};
+
+export type AnalyzePoseSequenceInput =
+  | (AnalyzePoseInputBase & {
+      frameBase64: string;
+      frames?: never;
+      landmarkSchema?: never;
+      signals?: never;
+    })
+  | (AnalyzePoseInputBase & {
+      frameBase64?: never;
+      frames: PoseSequenceFrameRecord[];
+      landmarkSchema: PoseLandmarkSchema;
+      signals: PoseSequenceSignalsRecord;
+    });
+
+export type DetectPoseEquipmentInput = {
   cameraFacingMode?: PoseCameraFacingMode;
   exerciseHint?: string | null;
-  frames: PoseSequenceFrameRecord[];
-  landmarkSchema: PoseLandmarkSchema;
-  signals: PoseSequenceSignalsRecord;
+} & (
+  | {
+      frameBase64: string;
+      frameUri?: never;
+    }
+  | {
+      frameBase64?: never;
+      frameUri: string;
+    }
+);
+
+export type PoseEquipmentDetectionBoxRecord = {
+  confidence: number | null;
+  height: number | null;
+  label: string | null;
+  width: number | null;
+  x: number | null;
+  y: number | null;
+};
+
+export type PoseEquipmentDetectionRecord = {
+  equipmentConfidence: number | null;
+  equipmentConflicts: string[];
+  equipmentContext: PoseEquipmentContext | null;
+  equipmentDetections: PoseEquipmentDetectionBoxRecord[];
+  equipmentSource: PoseEquipmentSource | null;
+  providerEnabled: boolean;
 };
 
 export type PoseFrameAnalysisRecord = {
@@ -368,10 +597,25 @@ export type PoseFrameAnalysisRecord = {
   confidence: number;
   exerciseClass: string | null;
   formFeedback: string[];
+  equipmentConfidence: number | null;
+  equipmentConflicts: string[];
+  equipmentContext: PoseEquipmentContext | null;
+  equipmentSource: PoseEquipmentSource | null;
+  integrityReasonCodes: string[];
+  keypoints: PoseKeypointRecord[] | null;
   matchedProfileId: string | null;
   movementContract: PoseMovementContractRecord | null;
   needsConfirmation: boolean;
+  phase: string | null;
+  processingMode: PoseAnalyzeProcessingMode;
   poseSessionId: string;
+  progressionDisposition: PoseProgressionDisposition;
+  reliableFrameRatio: number | null;
+  repCountDelta: number;
+  repEvent: boolean;
+  reviewRecommended: boolean;
+  sessionQualityReasons: string[];
+  sessionQualityState: PoseSessionQualityState;
   subjectLockConfidence: number | null;
   subjectLocked: boolean | null;
 };
@@ -380,10 +624,15 @@ export type FinalizePoseSessionInput = {
   averageConfidence?: number | null;
   detectedExerciseName?: string | null;
   endedReason?: PoseSessionEndReason;
+  equipmentConfidence?: number | null;
+  equipmentConflicts?: string[];
+  equipmentContext?: PoseEquipmentContext | null;
+  equipmentSource?: PoseEquipmentSource | null;
   finalRepCount: number;
   formFeedback?: string[];
   movementContract?: PoseMovementContractRecord | null;
   rawAngleData: PoseRepAngleDataRecord[];
+  weightInputKg?: number | null;
 };
 
 export type MuscleMasteryRecord = {
@@ -404,6 +653,240 @@ export type FitnessLeaderboardEntryRecord = {
   displayName: string;
   rankPosition: number;
   totalXp: number;
+  userId: string;
+};
+
+export type FitnessProgressionActiveSeasonRecord = {
+  endsAt: string;
+  id: string;
+  startsAt: string;
+  status: FitnessSeasonStatus;
+  title: string;
+};
+
+export type FitnessProgressionProfileRecord = {
+  activeSeason: FitnessProgressionActiveSeasonRecord | null;
+  createdAt: string | null;
+  currentSeasonPoints: number;
+  currentStreak: number;
+  integrityRiskLevel: FitnessIntegrityRiskLevel;
+  lastProgressedAt: string | null;
+  longestStreak: number;
+  rankingGovernanceStatus: FitnessRankingGovernanceStatus;
+  rankingVisibility: FitnessRankingVisibility;
+  totalXp: number;
+  updatedAt: string | null;
+  userId: string;
+};
+
+export type FitnessProgressionSourceRecord = {
+  createdAt: string;
+  eligibilityState: string | null;
+  exerciseLogIds: string[];
+  id: string;
+  integrityState: string | null;
+  linkedSourceIds: string[];
+  occurredAt: string | null;
+  poseSessionId: string | null;
+  poseSessionIds: string[];
+  processedAt: string | null;
+  producerRuntime: string | null;
+  recordedAt: string | null;
+  sessionId: string | null;
+  sourceId: string;
+  sourceQualityNotes: string[];
+  sourceStatus: FitnessProgressionSourceStatus;
+  sourceType: FitnessProgressionSourceType;
+  terminalState: string | null;
+  updatedAt: string;
+  validationState: string | null;
+};
+
+export type FitnessRankingProfileRecord = {
+  displayAlias: string | null;
+  governanceStatus: FitnessRankingGovernanceStatus;
+  updatedAt: string;
+  userId: string;
+  visibility: FitnessRankingVisibility;
+};
+
+export type FitnessSeasonStandingRecord = {
+  isDisqualified: boolean;
+  isHidden: boolean;
+  lastEarnedAt: string | null;
+  rankPosition: number | null;
+  season: FitnessProgressionActiveSeasonRecord | null;
+  seasonPoints: number;
+  userId: string;
+};
+
+export type FitnessMilestoneProgressRecord = {
+  category: FitnessMilestoneCategory;
+  claimedAt: string | null;
+  description: string | null;
+  isHidden: boolean;
+  key: string;
+  milestoneDefinitionId: string;
+  progressPercent: number;
+  progressValue: number;
+  rewardPayload: Record<string, unknown> | null;
+  status: FitnessMilestoneProgressStatus;
+  targetValue: number;
+  title: string;
+  triggerType: FitnessMilestoneTriggerType;
+  unlockedAt: string | null;
+  updatedAt: string | null;
+};
+
+export type FitnessIntegrityCaseSummaryRecord = {
+  id: string;
+  openedAt: string;
+  resolvedAt: string | null;
+  status: FitnessIntegrityCaseStatus;
+  summary: string | null;
+};
+
+export type FitnessIntegritySummaryRecord = {
+  lastFlaggedAt: string | null;
+  lastResolvedAt: string | null;
+  openCaseCount: number;
+  recentCases: FitnessIntegrityCaseSummaryRecord[];
+  riskLevel: FitnessIntegrityRiskLevel;
+  userId: string;
+};
+
+export type AdminGamificationSeasonSummaryRecord = {
+  archivedAt: string | null;
+  closedAt: string | null;
+  disqualifiedCount: number;
+  endsAt: string;
+  hiddenCount: number;
+  id: string;
+  standingCount: number;
+  startsAt: string;
+  status: FitnessSeasonStatus;
+  title: string;
+};
+
+export type AdminGamificationIntegrityCaseRecord = {
+  caseId: string;
+  evidenceEventCount: number;
+  memberName: string;
+  openedAt: string;
+  riskLevel: FitnessIntegrityRiskLevel;
+  status: FitnessIntegrityCaseStatus;
+  summary: string | null;
+  userId: string;
+};
+
+export type AdminGamificationIntegritySectionRecord = {
+  cases: AdminGamificationIntegrityCaseRecord[];
+  escalatedCaseCount: number;
+  highRiskProfileCount: number;
+  openCaseCount: number;
+};
+
+export type AdminGamificationRankingProfileRecord = {
+  adminNote: string | null;
+  displayAlias: string | null;
+  governanceStatus: FitnessRankingGovernanceStatus;
+  memberName: string;
+  seasonIsDisqualified: boolean;
+  seasonIsHidden: boolean;
+  updatedAt: string;
+  userId: string;
+  visibility: FitnessRankingVisibility;
+};
+
+export type AdminGamificationRankingSectionRecord = {
+  disqualifiedProfileCount: number;
+  governedProfileCount: number;
+  hiddenProfileCount: number;
+  profiles: AdminGamificationRankingProfileRecord[];
+};
+
+export type AdminGamificationCreatorProfileRecord = {
+  adminNotes: string | null;
+  lastStateChangedAt: string | null;
+  memberName: string;
+  publishedSubmissionCount: number;
+  state: FitnessCreatorState;
+  stateLabel: string;
+  submissionCount: number;
+  userId: string;
+};
+
+export type AdminGamificationCreatorSectionRecord = {
+  approvedCount: number;
+  candidateCount: number;
+  pendingReviewCount: number;
+  profiles: AdminGamificationCreatorProfileRecord[];
+  revokedCount: number;
+  suspendedCount: number;
+};
+
+export type AdminGamificationAuditActionRecord = {
+  actionType: FitnessModerationActionType;
+  createdAt: string;
+  id: string;
+  integrityCaseId: string | null;
+  progressionGrantId: string | null;
+  rationale: string | null;
+  seasonId: string | null;
+  targetName: string;
+  targetUserId: string;
+};
+
+export type AdminGamificationAuditSectionRecord = {
+  recentActions: AdminGamificationAuditActionRecord[];
+  recentCorrectionCount: number;
+};
+
+export type AdminGamificationOverviewRecord = {
+  activeSeason: AdminGamificationSeasonSummaryRecord | null;
+  audit: AdminGamificationAuditSectionRecord;
+  creators: AdminGamificationCreatorSectionRecord;
+  generatedAt: string;
+  integrity: AdminGamificationIntegritySectionRecord;
+  rankings: AdminGamificationRankingSectionRecord;
+};
+
+export type AdminGamificationSeasonGovernanceRecord = {
+  archivedAt: string | null;
+  closedAt: string | null;
+  seasonId: string;
+  status: FitnessSeasonStatus;
+  title: string;
+};
+
+export type AdminGamificationCreatorStateRecord = {
+  adminNotes: string | null;
+  lastStateChangedAt: string | null;
+  memberName: string;
+  moderationActionId: string | null;
+  state: FitnessCreatorState;
+  stateLabel: string;
+  userId: string;
+};
+
+export type AdminGamificationRankingOverrideRecord = {
+  adminNote: string | null;
+  displayAlias: string | null;
+  governanceStatus: FitnessRankingGovernanceStatus;
+  moderationActionId: string;
+  seasonIsDisqualified: boolean;
+  seasonIsHidden: boolean;
+  userId: string;
+  visibility: FitnessRankingVisibility;
+};
+
+export type AdminGamificationIntegrityCaseMutationRecord = {
+  caseId: string;
+  moderationActionId: string | null;
+  openCaseCount: number;
+  riskLevel: FitnessIntegrityRiskLevel;
+  status: FitnessIntegrityCaseStatus;
+  summary: string | null;
   userId: string;
 };
 

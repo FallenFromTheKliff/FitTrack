@@ -237,9 +237,7 @@ export class ScanQrDTO {
     description:
       'Preferred camelCase attendance QR value shown on the member mobile profile.',
   })
-  @ValidateIf(
-    (object: ScanQrDTO) => !object.qr_value && !object.qr_code_token,
-  )
+  @ValidateIf((object: ScanQrDTO) => !object.qr_value && !object.qr_code_token)
   @TrimString()
   @IsString({ message: 'qrValue must be a string' })
   @IsNotEmpty({ message: 'qrValue is required' })

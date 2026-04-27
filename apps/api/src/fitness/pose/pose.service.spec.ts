@@ -1,5 +1,6 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PoseProfileKind, Prisma, UserStatus } from '@prisma/client';
@@ -9,6 +10,7 @@ import type { Socket } from 'socket.io';
 import { AiPythonClientService } from '../../ai/ai-python-client.service';
 import type {
   AnalyzePoseSequenceDTO,
+  DetectPoseEquipmentDTO,
   FinalizePoseSessionDTO,
 } from './dto/pose.dto';
 import { PoseRepository } from './pose.repository';
@@ -16,12 +18,14 @@ import { PoseService } from './pose.service';
 
 describe('PoseService', () => {
   let service: PoseService;
+  const originalFetch = global.fetch;
 
   const repo = {
     createPoseSession: jest.fn(),
     listBootstrapPoseProfiles: jest.fn(),
     finalizePoseSession: jest.fn(),
     findPoseSessionByIdOrThrow: jest.fn(),
+    getNextPoseSourceRevision: jest.fn(),
     listPoseProfiles: jest.fn(),
     deletePoseSessionById: jest.fn(),
     updatePoseSessionAnalysis: jest.fn(),
@@ -42,11 +46,16 @@ describe('PoseService', () => {
     bootstrapPoseSession: jest.fn(),
     analyzePoseFrame: jest.fn(),
     analyzePoseSequence: jest.fn(),
+    detectEquipment: jest.fn(),
     finalizePoseSession: jest.fn(),
   };
 
   const redis = {
     get: jest.fn(),
+  };
+
+  const eventEmitter = {
+    emit: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -57,12 +66,22 @@ describe('PoseService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: config },
         { provide: AiPythonClientService, useValue: aiClient },
+        { provide: EventEmitter2, useValue: eventEmitter },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
     }).compile();
 
     service = module.get<PoseService>(PoseService);
     jest.clearAllMocks();
+    config.get.mockImplementation((key: string, fallback?: string) =>
+      key === 'jwt.secret' ? 'jwt-secret' : (fallback ?? ''),
+    );
+    global.fetch = originalFetch;
+    repo.getNextPoseSourceRevision.mockResolvedValue(1);
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   function makePoseSessionDetail(
@@ -72,6 +91,7 @@ describe('PoseService', () => {
       id: 'pose-1',
       user_id: 'user-1',
       exercise_log_id: null,
+      exercise_log: null,
       exercise_hint: 'Barbell Back Squat',
       rep_count_ai: 6,
       confidence_avg: new Prisma.Decimal('0.900'),
@@ -143,6 +163,28 @@ describe('PoseService', () => {
           oscillating_joints: ['hip', 'knee'],
         },
       },
+      ...overrides,
+    };
+  }
+
+  function makeFrameAnalyzeDto(
+    overrides: Partial<AnalyzePoseSequenceDTO> = {},
+  ): AnalyzePoseSequenceDTO {
+    return {
+      camera_facing_mode: 'environment',
+      exercise_hint: 'Barbell Back Squat',
+      frame_b64: 'frame-data',
+      ...overrides,
+    };
+  }
+
+  function makeDetectEquipmentDto(
+    overrides: Partial<DetectPoseEquipmentDTO> = {},
+  ): DetectPoseEquipmentDTO {
+    return {
+      camera_facing_mode: 'environment',
+      exercise_hint: 'Dumbbell Bicep Curl',
+      frame_b64: 'frame-data',
       ...overrides,
     };
   }
@@ -227,21 +269,21 @@ describe('PoseService', () => {
       ended_at: null,
     });
     repo.listBootstrapPoseProfiles.mockResolvedValue([
-        {
-          id: 'profile-1',
-          canonical_name: 'squat',
-          profile_kind: PoseProfileKind.seed,
-          landmark_signature: { left_shoulder: [0.1, 0.2] },
-          angle_signature: { hip_knee_ankle: 92.4 },
-          orientation_signature: {},
-          movement_pattern: {},
-          visibility_pattern: {},
-          dominant_joint: null,
-          tolerance: null,
-          rep_thresholds: null,
-          rep_rules: { rep_start_angle: 88 },
-        },
-      ]);
+      {
+        id: 'profile-1',
+        canonical_name: 'squat',
+        profile_kind: PoseProfileKind.seed,
+        landmark_signature: { left_shoulder: [0.1, 0.2] },
+        angle_signature: { hip_knee_ankle: 92.4 },
+        orientation_signature: {},
+        movement_pattern: {},
+        visibility_pattern: {},
+        dominant_joint: null,
+        tolerance: null,
+        rep_thresholds: null,
+        rep_rules: { rep_start_angle: 88 },
+      },
+    ]);
     aiClient.bootstrapPoseSession.mockResolvedValue({
       status: 'ready',
       accepted_fps: 15,
@@ -301,7 +343,9 @@ describe('PoseService', () => {
       ended_at: null,
     });
     repo.listBootstrapPoseProfiles.mockResolvedValue([]);
-    aiClient.bootstrapPoseSession.mockRejectedValue(new Error('bootstrap down'));
+    aiClient.bootstrapPoseSession.mockRejectedValue(
+      new Error('bootstrap down'),
+    );
 
     await expect(
       service.startPoseSession('user-1', 'Barbell Back Squat'),
@@ -370,7 +414,12 @@ describe('PoseService', () => {
           oscillating_landmarks: ['hip', 'knee'],
         },
         visibility_pattern: {
-          required_landmarks: ['left_shoulder', 'right_shoulder', 'left_ankle', 'right_ankle'],
+          required_landmarks: [
+            'left_shoulder',
+            'right_shoulder',
+            'left_ankle',
+            'right_ankle',
+          ],
         },
         dominant_joint: 'knee',
         tolerance: new Prisma.Decimal('12'),
@@ -410,16 +459,25 @@ describe('PoseService', () => {
         matched_profile_id: 'profile-1',
         classification_source: 'preset',
         needs_confirmation: false,
-        movement_contract: {
+        processing_mode: 'sequence',
+        rep_event: false,
+        rep_count_delta: 0,
+        phase: null,
+        movement_contract: expect.objectContaining({
           exercise: 'squat',
           dominant_joint: 'knee',
+          rep_model: 'bilateral',
+          required_sides: 'both',
+          primary_joints: ['left_knee', 'right_knee'],
+          secondary_joints: ['left_hip', 'right_hip'],
+          phase_order: ['setup', 'down', 'up'],
           rep_thresholds: {
             down: { angle: 88, tolerance: 12 },
             up: { angle: 166, tolerance: 10 },
           },
           secondary_check: 'depth_check',
           oscillating_joints: ['hip', 'knee'],
-        },
+        }),
       }),
     );
   });
@@ -442,7 +500,12 @@ describe('PoseService', () => {
           oscillating_landmarks: ['hip', 'knee'],
         },
         visibility_pattern: {
-          required_landmarks: ['left_shoulder', 'right_shoulder', 'left_ankle', 'right_ankle'],
+          required_landmarks: [
+            'left_shoulder',
+            'right_shoulder',
+            'left_ankle',
+            'right_ankle',
+          ],
         },
         dominant_joint: 'knee',
         tolerance: new Prisma.Decimal('12'),
@@ -532,13 +595,114 @@ describe('PoseService', () => {
         exerciseHint: null,
       }),
     );
+    expect(result.exercise_class).toBe('push_up');
+    expect(result.classification_source).toBe('classifier');
+    expect(result.processing_mode).toBe('sequence');
+    expect(result.movement_contract?.exercise).toBe('push_up');
+    expect(result.movement_contract?.dominant_joint).toBe('elbow');
+  });
+
+  it('accepts native frame payloads through the owned analyze endpoint', async () => {
+    repo.findPoseSessionByIdOrThrow.mockResolvedValue(makePoseSessionDetail());
+    repo.listBootstrapPoseProfiles.mockResolvedValue([
+      {
+        id: 'profile-1',
+        canonical_name: 'squat',
+        profile_kind: PoseProfileKind.seed,
+        landmark_signature: { left_shoulder: [0.1, 0.2] },
+        angle_signature: {
+          bottom: { knee: [80, 96] },
+          top: { knee: [160, 174] },
+        },
+        orientation_signature: { body_orientation: 'upright' },
+        movement_pattern: {
+          tracked_joint: 'knee',
+          oscillating_landmarks: ['hip', 'knee'],
+        },
+        visibility_pattern: {
+          required_landmarks: [
+            'left_shoulder',
+            'right_shoulder',
+            'left_ankle',
+            'right_ankle',
+          ],
+        },
+        dominant_joint: 'knee',
+        tolerance: new Prisma.Decimal('12'),
+        rep_thresholds: {
+          down: { angle: 88, tolerance: 12 },
+          up: { angle: 166, tolerance: 10 },
+        },
+        rep_rules: { depth_check: 'hip_depth' },
+      },
+    ]);
+    aiClient.analyzePoseFrame.mockResolvedValue({
+      confidence: 0.74,
+      exercise_class: 'squat',
+      matched_profile_id: null,
+      movement_contract: null,
+      classification_source: 'preset',
+      needs_confirmation: false,
+      processing_mode: 'legacy_frame',
+      rep_event: false,
+      rep_count_delta: 0,
+      phase: null,
+      candidate_exercises: ['squat'],
+      form_feedback: [
+        'Native snapshot mode can detect the exercise, but automatic rep counting still needs the native landmark runtime.',
+      ],
+      learned_profile: null,
+      subject_locked: true,
+      subject_lock_confidence: 0.72,
+    });
+    repo.updatePoseSessionAnalysis.mockResolvedValue(
+      makePoseSessionDetail({
+        detected_exercise_name: 'squat',
+        detected_profile_id: 'profile-1',
+      }),
+    );
+
+    const result = await service.analyzePoseSessionById(
+      'user-1',
+      'pose-1',
+      makeFrameAnalyzeDto(),
+    );
+
+    expect(aiClient.analyzePoseFrame).toHaveBeenCalledWith({
+      poseSessionId: 'pose-1',
+      frameBase64: 'frame-data',
+    });
+    expect(aiClient.analyzePoseSequence).not.toHaveBeenCalled();
+    expect(repo.updatePoseSessionAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({
+        poseSessionId: 'pose-1',
+        detectedExerciseName: 'squat',
+        detectedProfileId: 'profile-1',
+      }),
+    );
     expect(result).toEqual(
       expect.objectContaining({
-        exercise_class: 'push_up',
-        classification_source: 'classifier',
+        pose_session_id: 'pose-1',
+        exercise_class: 'squat',
+        matched_profile_id: 'profile-1',
+        processing_mode: 'legacy_frame',
+        rep_event: false,
+        rep_count_delta: 0,
+        phase: null,
         movement_contract: expect.objectContaining({
-          exercise: 'push_up',
-          dominant_joint: 'elbow',
+          exercise: 'squat',
+          dominant_joint: 'knee',
+          rep_model: 'bilateral',
+          required_sides: 'both',
+          primary_joints: ['left_knee', 'right_knee'],
+          secondary_joints: ['left_hip', 'right_hip'],
+          phase_order: ['setup', 'down', 'up'],
+          rep_thresholds: {
+            down: { angle: 88, tolerance: 12 },
+            up: { angle: 166, tolerance: 10 },
+          },
+          secondary_check: 'depth_check',
+          oscillating_joints: ['hip', 'knee'],
         }),
       }),
     );
@@ -559,12 +723,19 @@ describe('PoseService', () => {
           oscillating_landmarks: ['elbow', 'shoulder'],
         },
         visibility_pattern: {
-          required_landmarks: ['left_shoulder', 'right_shoulder', 'left_ankle', 'right_ankle'],
+          required_landmarks: [
+            'left_shoulder',
+            'right_shoulder',
+            'left_ankle',
+            'right_ankle',
+          ],
         },
         dominant_joint: 'elbow',
         tolerance: null,
         rep_thresholds: null,
-        rep_rules: { body_line: 'Maintain a straight line from shoulders to ankles.' },
+        rep_rules: {
+          body_line: 'Maintain a straight line from shoulders to ankles.',
+        },
       },
     ]);
     aiClient.analyzePoseSequence.mockResolvedValue({
@@ -593,7 +764,12 @@ describe('PoseService', () => {
         oscillating_landmarks: ['elbow', 'shoulder'],
       },
       visibility_pattern: {
-        required_landmarks: ['left_shoulder', 'right_shoulder', 'left_ankle', 'right_ankle'],
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_ankle',
+          'right_ankle',
+        ],
       },
       dominant_joint: 'elbow',
       tolerance: new Prisma.Decimal('14'),
@@ -601,7 +777,9 @@ describe('PoseService', () => {
         down: { angle: 84, tolerance: 14 },
         up: { angle: 166, tolerance: 14 },
       },
-      rep_rules: { body_line: 'Maintain a straight line from shoulders to ankles.' },
+      rep_rules: {
+        body_line: 'Maintain a straight line from shoulders to ankles.',
+      },
       sample_count: 3,
       confidence_threshold: new Prisma.Decimal('0.93'),
       is_active: true,
@@ -668,27 +846,203 @@ describe('PoseService', () => {
       }),
     );
 
-    expect(repo.upsertLearnedPoseProfile).toHaveBeenCalledWith(
+    const learnedProfileCalls = repo.upsertLearnedPoseProfile.mock
+      .calls as Array<
+      [
+        {
+          canonicalName: string;
+          dominantJoint: string | null;
+          repThresholds: {
+            down: { angle: number; tolerance: number };
+            up: { angle: number; tolerance: number };
+          } | null;
+        },
+      ]
+    >;
+    const learnedProfileInput = learnedProfileCalls[0][0];
+    expect(learnedProfileInput.canonicalName).toBe('push_up');
+    expect(learnedProfileInput.dominantJoint).toBe('elbow');
+    expect(typeof learnedProfileInput.repThresholds?.down.angle).toBe('number');
+    expect(typeof learnedProfileInput.repThresholds?.up.angle).toBe('number');
+    expect(result.exercise_class).toBe('push_up');
+    expect(result.matched_profile_id).toBe('profile-push-up-learned');
+    expect(result.needs_confirmation).toBe(false);
+    expect(result.movement_contract?.exercise).toBe('push_up');
+    expect(result.movement_contract?.dominant_joint).toBe('elbow');
+  });
+
+  it('returns provider-unavailable equipment metadata when hosted detection is not configured', async () => {
+    await expect(
+      service.detectPoseEquipment(makeDetectEquipmentDto()),
+    ).resolves.toEqual({
+      equipment_confidence: null,
+      equipment_conflicts: ['equipment_provider_unavailable'],
+      equipment_context: null,
+      equipment_detections: [],
+      equipment_source: null,
+      provider_enabled: false,
+    });
+  });
+
+  it('maps hosted provider predictions into normalized equipment context', async () => {
+    config.get.mockImplementation((key: string, fallback?: string | number) => {
+      switch (key) {
+        case 'jwt.secret':
+          return 'jwt-secret';
+        case 'equipmentDetection.provider':
+          return 'roboflow';
+        case 'equipmentDetection.roboflowApiKey':
+          return 'rf-test-key';
+        case 'equipmentDetection.roboflowModelId':
+          return 'gym-equipment/1';
+        case 'equipmentDetection.roboflowApiBaseUrl':
+          return 'https://example.roboflow.test';
+        case 'equipmentDetection.requestTimeoutMs':
+          return 2500;
+        default:
+          return fallback ?? '';
+      }
+    });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        image: { height: 800, width: 1000 },
+        predictions: [
+          {
+            class: 'dumbbell',
+            confidence: 0.88,
+            height: 160,
+            width: 240,
+            x: 500,
+            y: 400,
+          },
+        ],
+      }),
+    }) as typeof global.fetch;
+
+    await expect(
+      service.detectPoseEquipment(makeDetectEquipmentDto()),
+    ).resolves.toEqual({
+      equipment_confidence: 0.88,
+      equipment_conflicts: [],
+      equipment_context: 'dumbbell',
+      equipment_detections: [
+        {
+          confidence: 0.88,
+          height: 0.2,
+          label: 'dumbbell',
+          width: 0.24,
+          x: 0.38,
+          y: 0.4,
+        },
+      ],
+      equipment_source: 'provider_api',
+      provider_enabled: true,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.roboflow.test/gym-equipment/1?api_key=rf-test-key',
       expect.objectContaining({
-        canonicalName: 'push_up',
-        dominantJoint: 'elbow',
-        repThresholds: expect.objectContaining({
-          down: expect.objectContaining({ angle: expect.any(Number) }),
-          up: expect.objectContaining({ angle: expect.any(Number) }),
-        }),
+        body: 'frame-data',
+        method: 'POST',
       }),
     );
-    expect(result).toEqual(
-      expect.objectContaining({
-        exercise_class: 'push_up',
-        matched_profile_id: 'profile-push-up-learned',
-        needs_confirmation: false,
-        movement_contract: expect.objectContaining({
-          exercise: 'push_up',
-          dominant_joint: 'elbow',
-        }),
+  });
+
+  it('maps local AI equipment detections into the existing equipment contract', async () => {
+    config.get.mockImplementation((key: string, fallback?: string | number) => {
+      switch (key) {
+        case 'jwt.secret':
+          return 'jwt-secret';
+        case 'ai.apiBaseUrl':
+          return 'http://127.0.0.1:8000';
+        case 'equipmentDetection.provider':
+          return 'local_ai';
+        default:
+          return fallback ?? '';
+      }
+    });
+    aiClient.detectEquipment.mockResolvedValue({
+      equipment_confidence: 0.91,
+      equipment_conflicts: [],
+      equipment_context: 'dumbbell',
+      equipment_detections: [
+        {
+          confidence: 0.91,
+          height: 0.18,
+          label: 'Dumbbell',
+          width: 0.22,
+          x: 0.42,
+          y: 0.48,
+        },
+      ],
+      equipment_family: 'dumbbell',
+    });
+
+    await expect(
+      service.detectPoseEquipment(makeDetectEquipmentDto()),
+    ).resolves.toEqual({
+      equipment_confidence: 0.91,
+      equipment_conflicts: [],
+      equipment_context: 'dumbbell',
+      equipment_detections: [
+        {
+          confidence: 0.91,
+          height: 0.18,
+          label: 'Dumbbell',
+          width: 0.22,
+          x: 0.42,
+          y: 0.48,
+        },
+      ],
+      equipment_source: 'provider_api',
+      provider_enabled: true,
+    });
+
+    expect(aiClient.detectEquipment).toHaveBeenCalledWith({
+      frameBase64: 'frame-data',
+    });
+  });
+
+  it('ignores low-confidence or exercise-name-only provider predictions', async () => {
+    config.get.mockImplementation((key: string, fallback?: string | number) => {
+      switch (key) {
+        case 'jwt.secret':
+          return 'jwt-secret';
+        case 'equipmentDetection.provider':
+          return 'roboflow';
+        case 'equipmentDetection.roboflowApiKey':
+          return 'rf-test-key';
+        case 'equipmentDetection.roboflowModelId':
+          return 'gym-equipment/1';
+        case 'equipmentDetection.roboflowApiBaseUrl':
+          return 'https://example.roboflow.test';
+        case 'equipmentDetection.requestTimeoutMs':
+          return 2500;
+        default:
+          return fallback ?? '';
+      }
+    });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        predictions: [
+          { class: 'curl', confidence: 0.99 },
+          { class: 'dumbbell', confidence: 0.31 },
+        ],
       }),
-    );
+    }) as typeof global.fetch;
+
+    await expect(
+      service.detectPoseEquipment(makeDetectEquipmentDto()),
+    ).resolves.toEqual({
+      equipment_confidence: null,
+      equipment_conflicts: [],
+      equipment_context: null,
+      equipment_detections: [],
+      equipment_source: null,
+      provider_enabled: true,
+    });
   });
 
   it('finalizes open pose sessions through Python and persists learned-profile metadata', async () => {
@@ -753,36 +1107,75 @@ describe('PoseService', () => {
     expect(aiClient.finalizePoseSession).toHaveBeenCalledWith({
       poseSessionId: 'pose-1',
     });
-    expect(repo.finalizePoseSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        poseSessionId: 'pose-1',
-        repCountAi: 12,
-        confidenceAvg: 0.91,
-        detectedExerciseName: 'squat',
-        detectedProfileId: null,
-        classificationConfidence: 0.94,
-        subjectLockConfidence: 0.88,
-        analysisSummary: {
-          reps_detected: 12,
-          form_feedback: ['Keep your chest up.'],
-          average_confidence: 0.91,
-          dominant_joint_angles: { hip_knee_ankle: 92.4 },
+    const finalizeCalls = repo.finalizePoseSession.mock.calls as Array<
+      [
+        {
+          poseSessionId: string;
+          repCountAi: number;
+          confidenceAvg: number;
+          detectedExerciseName: string | null;
+          detectedProfileId: string | null;
+          classificationConfidence: number | null;
+          subjectLockConfidence: number | null;
+          analysisSummary: {
+            reps_detected: number;
+            form_feedback: string[];
+            average_confidence: number;
+            dominant_joint_angles: { hip_knee_ankle: number };
+            terminal_state: string;
+            eligibility_state: string;
+            integrity_state: string;
+          };
+          learnedProfile: {
+            canonicalName: string;
+            exerciseId: string | null;
+            landmarkSignature: Record<string, unknown>;
+            angleSignature: Record<string, unknown>;
+            orientationSignature: Record<string, unknown>;
+            movementPattern: Record<string, unknown>;
+            visibilityPattern: Record<string, unknown>;
+            dominantJoint: string | null;
+            tolerance: number | null;
+            repThresholds: Record<string, unknown> | null;
+            repRules: Record<string, unknown> | null;
+          } | null;
         },
-        learnedProfile: {
-          canonicalName: 'squat',
-          exerciseId: null,
-          landmarkSignature: { left_shoulder: [0.1, 0.2] },
-          angleSignature: { hip_knee_ankle: 92.4 },
-          orientationSignature: {},
-          movementPattern: {},
-          visibilityPattern: {},
-          dominantJoint: null,
-          tolerance: null,
-          repThresholds: null,
-          repRules: { rep_start_angle: 88 },
-        },
-      }),
+      ]
+    >;
+    const finalizeInput = finalizeCalls[0][0];
+    expect(finalizeInput.poseSessionId).toBe('pose-1');
+    expect(finalizeInput.repCountAi).toBe(12);
+    expect(finalizeInput.confidenceAvg).toBe(0.91);
+    expect(finalizeInput.detectedExerciseName).toBe('squat');
+    expect(finalizeInput.detectedProfileId).toBeNull();
+    expect(finalizeInput.classificationConfidence).toBe(0.94);
+    expect(finalizeInput.subjectLockConfidence).toBe(0.88);
+    expect(finalizeInput.analysisSummary.reps_detected).toBe(12);
+    expect(finalizeInput.analysisSummary.form_feedback).toEqual([
+      'Keep your chest up.',
+    ]);
+    expect(finalizeInput.analysisSummary.average_confidence).toBe(0.91);
+    expect(finalizeInput.analysisSummary.dominant_joint_angles).toEqual({
+      hip_knee_ankle: 92.4,
+    });
+    expect(finalizeInput.analysisSummary.terminal_state).toBe('flagged');
+    expect(finalizeInput.analysisSummary.eligibility_state).toBe(
+      'review_required',
     );
+    expect(finalizeInput.analysisSummary.integrity_state).toBe('suspicious');
+    expect(finalizeInput.learnedProfile).toEqual({
+      canonicalName: 'squat',
+      exerciseId: null,
+      landmarkSignature: { left_shoulder: [0.1, 0.2] },
+      angleSignature: { hip_knee_ankle: 92.4 },
+      orientationSignature: {},
+      movementPattern: {},
+      visibilityPattern: {},
+      dominantJoint: null,
+      tolerance: null,
+      repThresholds: null,
+      repRules: { rep_start_angle: 88 },
+    });
     expect(result).toEqual(
       expect.objectContaining({
         id: 'pose-1',
@@ -793,6 +1186,19 @@ describe('PoseService', () => {
         classification_confidence: '0.94',
       }),
     );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'fitness.pose-session.finalized',
+      expect.objectContaining({
+        sourceType: 'pose_session_finalized',
+        sourceId: 'pose-1',
+        sourceRevision: 1,
+        idempotencyKey: 'pose_session_finalized:pose-1:1',
+        terminalState: 'flagged',
+        eligibilityState: 'review_required',
+        integrityState: 'suspicious',
+      }),
+    );
+    expect(repo.getNextPoseSourceRevision).toHaveBeenCalledWith('pose-1');
   });
 
   it('returns the already-persisted summary when manual finalize is repeated', async () => {
@@ -816,6 +1222,7 @@ describe('PoseService', () => {
     const finalizePayload: FinalizePoseSessionDTO = {
       ended_reason: 'manual_stop',
       final_rep_count: 0,
+      form_feedback: [],
       raw_angle_data: [],
     };
 
@@ -827,11 +1234,68 @@ describe('PoseService', () => {
 
     expect(aiClient.finalizePoseSession).not.toHaveBeenCalled();
     expect(repo.finalizePoseSession).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
         id: 'pose-1',
         ended_at: '2026-03-27T08:05:00.000Z',
         detected_profile_id: 'profile-1',
+      }),
+    );
+  });
+
+  it('bumps pose source revision when finalized output is replayed', async () => {
+    repo.getNextPoseSourceRevision.mockResolvedValue(2);
+    repo.findPoseSessionByIdOrThrow.mockResolvedValue(makePoseSessionDetail());
+    aiClient.finalizePoseSession.mockResolvedValue({
+      detected_exercise_name: 'squat',
+      matched_profile_id: null,
+      classification_confidence: 0.94,
+      subject_lock_confidence: 0.88,
+      analysis_summary: {
+        reps_detected: 12,
+        form_feedback: ['Keep your chest up.'],
+        average_confidence: 0.91,
+      },
+      learned_profile: null,
+    });
+    repo.finalizePoseSession.mockResolvedValue(
+      makePoseSessionDetail({
+        rep_count_ai: 12,
+        confidence_avg: new Prisma.Decimal('0.910'),
+        detected_exercise_name: 'squat',
+        detected_profile_id: 'profile-1',
+        classification_confidence: new Prisma.Decimal('0.940'),
+        subject_lock_confidence: new Prisma.Decimal('0.880'),
+        analysis_summary: {
+          reps_detected: 12,
+          form_feedback: ['Keep your chest up.'],
+          average_confidence: 0.91,
+        },
+        ended_at: new Date('2026-03-27T08:05:00.000Z'),
+        updated_at: new Date('2026-03-27T08:05:00.000Z'),
+      }),
+    );
+
+    await service.finalizePoseSession(
+      {
+        poseSessionId: 'pose-1',
+        userId: 'user-1',
+        exerciseHint: 'Barbell Back Squat',
+        repCountAi: 10,
+        confidenceSum: 2.73,
+        confidenceSamples: 3,
+        acceptedFps: 15,
+        subjectLockMode: 'single_subject',
+      },
+      'client_disconnect',
+    );
+
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'fitness.pose-session.finalized',
+      expect.objectContaining({
+        sourceRevision: 2,
+        idempotencyKey: 'pose_session_finalized:pose-1:2',
       }),
     );
   });

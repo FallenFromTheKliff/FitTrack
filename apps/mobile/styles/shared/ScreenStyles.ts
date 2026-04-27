@@ -510,6 +510,27 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       alignItems: "center",
       transform: [{ translateY: -24 }]
     },
+    cameraSwitchOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.74)",
+      paddingHorizontal: 24,
+      zIndex: 8
+    },
+    cameraSwitchTitle: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "800",
+      textAlign: "center"
+    },
+    cameraSwitchHint: {
+      color: "rgba(255,255,255,0.72)",
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 6,
+      textAlign: "center"
+    },
     countdownOverlay: {
       position: "absolute" as const,
       top: 0,
@@ -531,6 +552,19 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       justifyContent: "space-between",
       alignItems: "center"
     },
+    previewTopRightCluster: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8
+    },
+    cameraToggleButton: {
+      minHeight: 0,
+      borderRadius: R.lg,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      paddingHorizontal: 10,
+      paddingVertical: 5
+    },
+    cameraToggleText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
     previewOverlayTopCenter: {
       position: "absolute" as const,
       left: 16,
@@ -607,8 +641,15 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       flexDirection: "row",
       justifyContent: "center",
       alignItems: "center",
-      gap: 16,
+      gap: 12,
       paddingVertical: 4
+    },
+    previewControlButton: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      paddingHorizontal: 0,
+      paddingVertical: 0
     },
     lowerContentWrap: { position: "relative" as const }
   });

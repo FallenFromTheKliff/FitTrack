@@ -43,7 +43,10 @@ export class PaymongoCheckoutService {
     input: CreatePaymongoCheckoutInput,
   ): Promise<PaymongoCheckoutResult> {
     const settings = this.getRequiredSettings();
-    const cancelUrl = this.buildReturnUrl(settings.cancelUrl, input.cancelQuery);
+    const cancelUrl = this.buildReturnUrl(
+      settings.cancelUrl,
+      input.cancelQuery,
+    );
     const successUrl = this.buildReturnUrl(
       settings.successUrl,
       input.successQuery,

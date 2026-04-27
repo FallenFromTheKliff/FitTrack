@@ -312,6 +312,39 @@ export class DailyMacroTotalsResponseDTO {
   fat_g: string;
 }
 
+export class NutritionCoachingInsightResponseDTO {
+  @ApiProperty({ example: 'protein-recovery-window' })
+  id: string;
+
+  @ApiProperty({
+    enum: ['info', 'opportunity', 'warning', 'recovery'],
+    example: 'opportunity',
+  })
+  priority: 'info' | 'opportunity' | 'warning' | 'recovery';
+
+  @ApiProperty({ example: 'Fuel the streak with protein first' })
+  title: string;
+
+  @ApiProperty({
+    example:
+      'Your training streak is active and protein is still behind target. Prioritize a protein-forward meal before chasing extra calories.',
+  })
+  message: string;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: ['active_progression_streak', 'protein_remaining'],
+  })
+  reason_codes: string[];
+
+  @ApiProperty({
+    enum: ['nutrition_summary', 'progression_summary'],
+    example: 'progression_summary',
+  })
+  source: 'nutrition_summary' | 'progression_summary';
+}
+
 export class DailyNutritionSummaryResponseDTO {
   @ApiProperty({ example: '2026-03-27' })
   date: string;
@@ -336,6 +369,12 @@ export class DailyNutritionSummaryResponseDTO {
     nullable: true,
   })
   remaining: DailyMacroTotalsResponseDTO | null;
+
+  @ApiProperty({
+    type: () => NutritionCoachingInsightResponseDTO,
+    isArray: true,
+  })
+  coaching: NutritionCoachingInsightResponseDTO[];
 }
 
 export class DailySummaryDateQueryDTO {

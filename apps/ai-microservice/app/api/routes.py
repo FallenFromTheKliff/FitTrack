@@ -12,6 +12,7 @@ from ..models.business_insights import (
     BusinessAnalyticsInsightRequest,
     BusinessAnalyticsInsightResponse,
 )
+from ..models.equipment import EquipmentDetectRequest, EquipmentDetectResponse
 from ..models.gym_chat import GymChatRequest, GymChatResponse
 from ..models.nutrition import CalculateTdeeRequest, CalculateTdeeResponse
 from ..models.pose import (
@@ -25,6 +26,7 @@ from ..models.pose import (
 )
 from ..services.assistant import AssistantService
 from ..services.business_insights import BusinessInsightService
+from ..services.equipment_detection import EquipmentDetectionService
 from ..services.gym_chat import GymChatService
 from ..services.nutrition import NutritionService
 from ..services.pose_sessions import PoseSessionService
@@ -32,6 +34,7 @@ from ..services.pose_sessions import PoseSessionService
 router = APIRouter()
 assistant_service = AssistantService()
 business_insight_service = BusinessInsightService()
+equipment_detection_service = EquipmentDetectionService()
 gym_chat_service = GymChatService()
 nutrition_service = NutritionService()
 pose_session_service = PoseSessionService()
@@ -72,6 +75,11 @@ def generate_business_insight(
 @router.post("/calculate-tdee", response_model=CalculateTdeeResponse)
 def calculate_tdee(payload: CalculateTdeeRequest) -> CalculateTdeeResponse:
     return nutrition_service.calculate_tdee(payload)
+
+
+@router.post("/equipment/detect", response_model=EquipmentDetectResponse)
+def detect_equipment(payload: EquipmentDetectRequest) -> EquipmentDetectResponse:
+    return equipment_detection_service.detect(payload)
 
 
 @router.post("/pose/session/bootstrap", response_model=PoseBootstrapResponse)

@@ -53,7 +53,11 @@ export class R2StorageService implements FilesStorageAdapter {
 
   async getObject(key: string): Promise<StorageObjectResult> {
     const settings = this.getRequiredSettings();
-    const endpoint = this.buildObjectEndpoint(settings.accountId, settings.bucket, key);
+    const endpoint = this.buildObjectEndpoint(
+      settings.accountId,
+      settings.bucket,
+      key,
+    );
     const response = await this.sendSignedRequest(settings, {
       method: 'GET',
       url: endpoint,
@@ -82,11 +86,15 @@ export class R2StorageService implements FilesStorageAdapter {
 
     const arrayBuffer = await response.arrayBuffer();
     const contentLengthHeader = response.headers.get('content-length');
-    const parsedContentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
+    const parsedContentLength = contentLengthHeader
+      ? Number(contentLengthHeader)
+      : Number.NaN;
 
     return {
       body: Buffer.from(arrayBuffer),
-      contentLength: Number.isFinite(parsedContentLength) ? parsedContentLength : null,
+      contentLength: Number.isFinite(parsedContentLength)
+        ? parsedContentLength
+        : null,
       contentType: response.headers.get('content-type'),
     };
   }

@@ -28,8 +28,10 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   AnalyzePoseSequenceDTO,
+  DetectPoseEquipmentDTO,
   PoseFrameAnalysisResponseDTO,
   FinalizePoseSessionDTO,
+  PoseEquipmentDetectionResponseDTO,
   PoseProfileFilterDTO,
   PoseSessionBootstrapResponseDTO,
   PoseProfileResponseDTO,
@@ -77,6 +79,7 @@ function paginatedEnvelopeSchema(dataRef: string) {
 @ApiExtraModels(
   PoseSessionBootstrapResponseDTO,
   PoseFrameAnalysisResponseDTO,
+  PoseEquipmentDetectionResponseDTO,
   PoseSessionResponseDTO,
   PoseProfileResponseDTO,
 )
@@ -124,10 +127,13 @@ export class PoseController {
   @HttpCode(200)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: AnalyzePoseSequenceDTO })
-  @ApiOperation({ summary: 'Analyze a pose keypoint sequence for an owned session.' })
+  @ApiOperation({
+    summary:
+      'Analyze owned pose input for a session using either a keypoint sequence or a native frame snapshot.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Pose sequence analyzed.',
+    description: 'Pose input analyzed.',
     schema: apiEnvelopeSchema(getSchemaPath(PoseFrameAnalysisResponseDTO)),
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
@@ -138,6 +144,24 @@ export class PoseController {
     @Body() dto: AnalyzePoseSequenceDTO,
   ) {
     return this.poseService.analyzePoseSessionById(user.sub, id, dto);
+  }
+
+  @Post('equipment/analyze')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @HttpCode(200)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: DetectPoseEquipmentDTO })
+  @ApiOperation({
+    summary:
+      'Detect visible workout equipment from a hosted provider without persisting the raw frame.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Equipment context returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(PoseEquipmentDetectionResponseDTO)),
+  })
+  detectEquipment(@Body() dto: DetectPoseEquipmentDTO) {
+    return this.poseService.detectPoseEquipment(dto);
   }
 
   @Post('sessions/:id/finalize')

@@ -50,6 +50,14 @@ export type DailyNutritionSummaryAggregate = {
     fat_g: Prisma.Decimal | null;
   };
   macroTarget: MacroTarget | null;
+  progressionSnapshot?: NutritionProgressionSnapshot | null;
+};
+
+export type NutritionProgressionSnapshot = {
+  current_season_points: number;
+  current_streak: number;
+  last_progressed_at: Date | null;
+  total_xp: number;
 };
 
 @Injectable()
@@ -209,7 +217,7 @@ export class NutritionRepository extends BaseRepository {
   ): Promise<DailyNutritionSummaryAggregate> {
     const { start, end } = this.toDateOnlyBounds(date);
 
-    const [aggregate, macroTarget] = await Promise.all([
+    const [aggregate, macroTarget, progressionSnapshot] = await Promise.all([
       this.prisma.nutritionLog.aggregate({
         where: {
           user_id: userId,
@@ -226,6 +234,15 @@ export class NutritionRepository extends BaseRepository {
         },
       }),
       this.findActiveMacroTarget(userId),
+      this.prisma.userProgressionProfile.findUnique({
+        where: { user_id: userId },
+        select: {
+          current_season_points: true,
+          current_streak: true,
+          last_progressed_at: true,
+          total_xp: true,
+        },
+      }),
     ]);
 
     return {
@@ -237,6 +254,7 @@ export class NutritionRepository extends BaseRepository {
         fat_g: aggregate._sum.fat_g,
       },
       macroTarget,
+      progressionSnapshot,
     };
   }
 

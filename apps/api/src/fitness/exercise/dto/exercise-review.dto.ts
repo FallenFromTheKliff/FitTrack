@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CreatorState,
   ExerciseCategory,
   ExerciseReviewSubmissionStatus,
 } from '@prisma/client';
@@ -56,6 +57,29 @@ export class UpdateExerciseReviewSubmissionDTO {
   @IsString({ message: 'review_notes must be a string' })
   @MaxLength(500, { message: 'review_notes must not exceed 500 characters' })
   review_notes?: string;
+
+  @ApiPropertyOptional({
+    enum: CreatorState,
+    example: CreatorState.candidate,
+  })
+  @IsOptional()
+  @IsEnum(CreatorState, {
+    message: `creator_state must be one of: ${Object.values(CreatorState).join(', ')}`,
+  })
+  creator_state?: CreatorState;
+
+  @ApiPropertyOptional({
+    example:
+      'Candidate has two high-signal submissions and no integrity concerns.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'creator_governance_note must be a string' })
+  @MaxLength(500, {
+    message: 'creator_governance_note must not exceed 500 characters',
+  })
+  creator_governance_note?: string;
 }
 
 export class ExerciseReviewSubmissionResponseDTO {
@@ -154,4 +178,41 @@ export class ExerciseReviewSubmissionResponseDTO {
     nullable: true,
   })
   reviewed_at: string | null;
+
+  @ApiProperty({ enum: CreatorState, example: CreatorState.candidate })
+  creator_state: CreatorState;
+
+  @ApiProperty({ example: 'Candidate' })
+  creator_state_label: string;
+
+  @ApiProperty({ example: 4 })
+  creator_submission_count: number;
+
+  @ApiProperty({ example: 2 })
+  creator_published_count: number;
+
+  @ApiProperty({ example: 1 })
+  creator_rejected_count: number;
+
+  @ApiProperty({ example: 78 })
+  creator_candidate_score: number;
+
+  @ApiPropertyOptional({
+    example:
+      'Candidate has two high-signal submissions and no integrity concerns.',
+    nullable: true,
+  })
+  creator_governance_note: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-04-21T00:00:00.000Z',
+    nullable: true,
+  })
+  creator_last_state_changed_at: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-04-21T00:00:00.000Z',
+    nullable: true,
+  })
+  creator_profile_updated_at: string | null;
 }

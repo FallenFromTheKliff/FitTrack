@@ -1,7 +1,11 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import {
+  CreatorProfile,
+  CreatorState,
   ExerciseCatalog,
   ExerciseReviewSubmission,
+  ExerciseReviewSubmissionStatus,
+  ModerationActionType,
   Prisma,
 } from '@prisma/client';
 
@@ -24,6 +28,21 @@ export type ActiveExerciseGenerationRecord = Pick<
 >;
 
 export type ExerciseReviewSubmissionRecord = ExerciseReviewSubmission;
+
+export type CreatorProfileRecord = CreatorProfile;
+
+export type ExerciseReviewSubmissionStatusRecord = Pick<
+  ExerciseReviewSubmission,
+  'status' | 'user_id'
+>;
+
+const creatorModerationActionByState: Partial<
+  Record<CreatorState, ModerationActionType>
+> = {
+  [CreatorState.approved]: ModerationActionType.approve_creator,
+  [CreatorState.suspended]: ModerationActionType.suspend_creator,
+  [CreatorState.revoked]: ModerationActionType.revoke_creator,
+};
 
 @Injectable()
 export class ExerciseRepository extends BaseRepository {
@@ -109,6 +128,30 @@ export class ExerciseRepository extends BaseRepository {
     );
   }
 
+  listCreatorProfilesByUserIds(
+    userIds: string[],
+  ): Promise<CreatorProfileRecord[]> {
+    if (!userIds.length) return Promise.resolve([]);
+
+    return this.prisma.creatorProfile.findMany({
+      where: { user_id: { in: userIds } },
+    });
+  }
+
+  listReviewSubmissionStatusesByUserIds(
+    userIds: string[],
+  ): Promise<ExerciseReviewSubmissionStatusRecord[]> {
+    if (!userIds.length) return Promise.resolve([]);
+
+    return this.prisma.exerciseReviewSubmission.findMany({
+      where: { user_id: { in: userIds } },
+      select: {
+        status: true,
+        user_id: true,
+      },
+    });
+  }
+
   async createExercise(
     data: Prisma.ExerciseCatalogCreateInput,
   ): Promise<ExerciseCatalog> {
@@ -155,15 +198,94 @@ export class ExerciseRepository extends BaseRepository {
     }
   }
 
-  updateReviewSubmission(
+  async updateReviewSubmission(
     id: string,
     data: Prisma.ExerciseReviewSubmissionUpdateInput,
+    creatorGovernance?: {
+      actorUserId?: string;
+      note?: string;
+      state?: CreatorState;
+    },
   ): Promise<ExerciseReviewSubmissionRecord> {
-    return this.updateById<ExerciseReviewSubmissionRecord>(
-      this.prisma.exerciseReviewSubmission,
-      id,
-      data,
-    );
+    const existingSubmission =
+      await this.findByIdOrThrow<ExerciseReviewSubmissionRecord>(
+        this.prisma.exerciseReviewSubmission,
+        id,
+        'Exercise review submission',
+      );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedSubmission = await tx.exerciseReviewSubmission.update({
+        where: { id },
+        data,
+      });
+
+      const existingProfile = await tx.creatorProfile.findUnique({
+        where: { user_id: existingSubmission.user_id },
+      });
+      const shouldAutoPromoteCandidate =
+        updatedSubmission.status === ExerciseReviewSubmissionStatus.published &&
+        (!existingProfile || existingProfile.state === CreatorState.none);
+      const nextCreatorState =
+        creatorGovernance?.state ??
+        (shouldAutoPromoteCandidate ? CreatorState.candidate : undefined);
+
+      if (!nextCreatorState && !creatorGovernance?.note?.trim()) {
+        return updatedSubmission;
+      }
+
+      const now = new Date();
+      const nextAdminNote =
+        creatorGovernance?.note?.trim() ||
+        (shouldAutoPromoteCandidate
+          ? `Auto-candidacy from published Exercise Lab submission: ${updatedSubmission.title}.`
+          : undefined);
+      const nextState =
+        nextCreatorState ?? existingProfile?.state ?? CreatorState.none;
+      const profile = await tx.creatorProfile.upsert({
+        where: { user_id: existingSubmission.user_id },
+        create: {
+          user_id: existingSubmission.user_id,
+          state: nextState,
+          last_state_changed_at: nextCreatorState ? now : null,
+          admin_notes: nextAdminNote,
+        },
+        update: {
+          ...(nextCreatorState
+            ? { state: nextState, last_state_changed_at: now }
+            : {}),
+          ...(nextAdminNote !== undefined
+            ? { admin_notes: nextAdminNote }
+            : {}),
+        },
+      });
+
+      const moderationActionType = creatorModerationActionByState[nextState];
+      const stateChanged = existingProfile?.state !== profile.state;
+      if (moderationActionType && stateChanged) {
+        await tx.moderationActionRecord.create({
+          data: {
+            actor_user_id: creatorGovernance?.actorUserId,
+            target_user_id: existingSubmission.user_id,
+            action_type: moderationActionType,
+            rationale:
+              nextAdminNote ?? `Creator state changed to ${nextState}.`,
+            before_state: {
+              creator_state: existingProfile?.state ?? CreatorState.none,
+              submission_id: updatedSubmission.id,
+              submission_status: existingSubmission.status,
+            } satisfies Prisma.JsonObject,
+            after_state: {
+              creator_state: profile.state,
+              submission_id: updatedSubmission.id,
+              submission_status: updatedSubmission.status,
+            } satisfies Prisma.JsonObject,
+          },
+        });
+      }
+
+      return updatedSubmission;
+    });
   }
 
   private buildDuplicateExerciseConflict(): ConflictException {

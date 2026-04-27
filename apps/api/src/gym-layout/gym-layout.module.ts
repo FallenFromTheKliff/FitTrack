@@ -7,7 +7,9 @@ import { GymLayoutGateway } from './gym-layout.gateway';
 import { GymLayoutRepository } from './gym-layout.repository';
 import { GymLayoutService } from './gym-layout.service';
 
-type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
+type JwtExpiresIn =
+  | number
+  | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
 @Module({
   imports: [

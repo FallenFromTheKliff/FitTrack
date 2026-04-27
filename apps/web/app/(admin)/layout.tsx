@@ -19,6 +19,7 @@ function getPageKey(pathname: string): PageKey {
   if (pathname.startsWith("/members")) return "members";
   if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/exercise-lab")) return "exercise-lab";
+  if (pathname.startsWith("/gamification")) return "gamification";
   if (pathname.startsWith("/ai")) return "ai";
   if (pathname.startsWith("/facilities")) return "facilities";
   if (pathname.startsWith("/inventory")) return "inventory";

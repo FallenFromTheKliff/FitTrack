@@ -74,9 +74,7 @@ export class UpdateMembershipCardDto {
   source?: 'admin_grant' | 'admin_repair';
 
   @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.trim() : value,
-  )
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MaxLength(500)
   reason?: string;

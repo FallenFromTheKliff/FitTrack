@@ -1,5 +1,13 @@
-import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
+import {
+  mutationOptions,
+  queryOptions,
+  type QueryClient,
+} from "@tanstack/react-query";
 import type {
+  AdminGamificationCreatorStateInput,
+  AdminGamificationIntegrityResolutionInput,
+  AdminGamificationRankingOverrideInput,
+  AdminGamificationSeasonStatusInput,
   ApiClient,
   ManualAttendanceCheckInInput,
   ReviewDeletionPayload,
@@ -7,13 +15,14 @@ import type {
   RestoreUserResult,
   UpdateMemberPayload,
   UpdateMembershipCardPayload,
-  UpgradeToCoachPayload
+  UpgradeToCoachPayload,
 } from "@fittrack/api-client";
 import {
   invalidateAdminBookingsQuery,
   invalidateAdminDeletionRequestsQuery,
+  invalidateAdminGamificationOverviewQuery,
   invalidateAdminMembersQuery,
-  invalidateStaffBookingQueries
+  invalidateStaffBookingQueries,
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
@@ -29,111 +38,247 @@ type CreateUserPayload = {
 export function adminMembersQueryOptions(client: Pick<ApiClient, "admin">) {
   return queryOptions({
     queryKey: queryKeys.adminMembers(),
-    queryFn: () => client.admin.listMembers()
+    queryFn: () => client.admin.listMembers(),
   });
 }
 
-export function adminDeletionRequestsQueryOptions<T>(client: Pick<ApiClient, "admin">) {
+export function adminDeletionRequestsQueryOptions<T>(
+  client: Pick<ApiClient, "admin">,
+) {
   return queryOptions({
     queryKey: queryKeys.adminDeletionRequests(),
-    queryFn: () => client.admin.listDeletionRequests<T>()
+    queryFn: () => client.admin.listDeletionRequests<T>(),
   });
 }
 
 export function adminBookingsQueryOptions<T>(client: Pick<ApiClient, "admin">) {
   return queryOptions({
     queryKey: queryKeys.adminBookings(),
-    queryFn: () => client.admin.listBookings<T>()
+    queryFn: () => client.admin.listBookings<T>(),
   });
 }
 
-export function confirmAdminBookingMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function adminGamificationOverviewQueryOptions(
+  client: Pick<ApiClient, "admin">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.adminGamificationOverview(),
+    queryFn: () => client.admin.getGamificationOverview(),
+  });
+}
+
+export function updateAdminGamificationSeasonStatusMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      seasonId,
+      payload,
+    }: {
+      payload: AdminGamificationSeasonStatusInput;
+      seasonId: string;
+    }) => client.admin.updateGamificationSeasonStatus(seasonId, payload),
+    onSuccess: async () => {
+      await invalidateAdminGamificationOverviewQuery(queryClient);
+    },
+  });
+}
+
+export function updateAdminGamificationCreatorStateMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      payload,
+      userId,
+    }: {
+      payload: AdminGamificationCreatorStateInput;
+      userId: string;
+    }) => client.admin.updateGamificationCreatorState(userId, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminGamificationOverviewQuery(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
+        }),
+      ]);
+    },
+  });
+}
+
+export function updateAdminGamificationRankingOverrideMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      payload,
+      userId,
+    }: {
+      payload: AdminGamificationRankingOverrideInput;
+      userId: string;
+    }) => client.admin.updateGamificationRankingOverride(userId, payload),
+    onSuccess: async () => {
+      await invalidateAdminGamificationOverviewQuery(queryClient);
+    },
+  });
+}
+
+export function resolveAdminGamificationIntegrityCaseMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      caseId,
+      payload,
+    }: {
+      caseId: string;
+      payload: AdminGamificationIntegrityResolutionInput;
+    }) => client.admin.resolveGamificationIntegrityCase(caseId, payload),
+    onSuccess: async () => {
+      await invalidateAdminGamificationOverviewQuery(queryClient);
+    },
+  });
+}
+
+export function confirmAdminBookingMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
     mutationFn: (bookingId: string) => client.admin.confirmBooking(bookingId),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminBookingsQuery(queryClient),
-        invalidateStaffBookingQueries(queryClient)
+        invalidateStaffBookingQueries(queryClient),
       ]);
-    }
+    },
   });
 }
 
-export function rejectAdminBookingMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function rejectAdminBookingMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
-      client.admin.rejectBooking(bookingId, reason),
+    mutationFn: ({
+      bookingId,
+      reason,
+    }: {
+      bookingId: string;
+      reason?: string;
+    }) => client.admin.rejectBooking(bookingId, reason),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminBookingsQuery(queryClient),
-        invalidateStaffBookingQueries(queryClient)
+        invalidateStaffBookingQueries(queryClient),
       ]);
-    }
+    },
   });
 }
 
-export function createUserMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function createUserMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: (payload: CreateUserPayload) => client.admin.createUser(payload),
+    mutationFn: (payload: CreateUserPayload) =>
+      client.admin.createUser(payload),
     onSuccess: async () => {
       await invalidateAdminMembersQuery(queryClient);
-    }
+    },
   });
 }
 
-export function updateAdminMemberMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function updateAdminMemberMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateMemberPayload }) => client.admin.updateMember(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: UpdateMemberPayload;
+    }) => client.admin.updateMember(id, payload),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() })
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
       ]);
-    }
+    },
   });
 }
 
-export function updateAdminMembershipCardMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function updateAdminMembershipCardMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateMembershipCardPayload }) =>
-      client.admin.updateMembershipCard(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: UpdateMembershipCardPayload;
+    }) => client.admin.updateMembershipCard(id, payload),
     onSuccess: async () => {
       await invalidateAdminMembersQuery(queryClient);
-    }
+    },
   });
 }
 
-export function scanAttendanceQrMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function scanAttendanceQrMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: (payload: ScanAttendanceQrInput) => client.admin.scanAttendanceQr(payload),
+    mutationFn: (payload: ScanAttendanceQrInput) =>
+      client.admin.scanAttendanceQr(payload),
     onSuccess: async () => {
       await invalidateAdminMembersQuery(queryClient);
-    }
+    },
   });
 }
 
-export function manualAttendanceCheckInMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function manualAttendanceCheckInMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: (payload: ManualAttendanceCheckInInput) => client.admin.manualAttendanceCheckIn(payload),
+    mutationFn: (payload: ManualAttendanceCheckInInput) =>
+      client.admin.manualAttendanceCheckIn(payload),
     onSuccess: async () => {
       await invalidateAdminMembersQuery(queryClient);
-    }
+    },
   });
 }
 
-export function deleteUserMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function deleteUserMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
     mutationFn: (id: string) => client.admin.deleteUser(id),
     onSuccess: async (_data, id) => {
-      queryClient.setQueryData(queryKeys.adminMembers(), (prev: { id: string }[] | undefined) =>
-        prev ? prev.filter((member) => member.id !== id) : []
+      queryClient.setQueryData(
+        queryKeys.adminMembers(),
+        (prev: { id: string }[] | undefined) =>
+          prev ? prev.filter((member) => member.id !== id) : [],
       );
-    }
+    },
   });
 }
 
-export function restoreUserMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function restoreUserMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
     mutationFn: (id: string) => client.admin.restoreUser(id),
     onSuccess: async (_data: RestoreUserResult) => {
@@ -141,51 +286,57 @@ export function restoreUserMutationOptions(client: Pick<ApiClient, "admin">, que
         invalidateAdminMembersQuery(queryClient),
         invalidateAdminDeletionRequestsQuery(queryClient),
       ]);
-    }
+    },
   });
 }
 
 export function approveDeletionRequestMutationOptions(
   client: Pick<ApiClient, "admin">,
   queryClient: QueryClient,
-  payload?: ReviewDeletionPayload
+  payload?: ReviewDeletionPayload,
 ) {
   return mutationOptions({
-    mutationFn: (requestId: string) => client.admin.approveDeletionRequest(requestId, payload),
+    mutationFn: (requestId: string) =>
+      client.admin.approveDeletionRequest(requestId, payload),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
-        invalidateAdminDeletionRequestsQuery(queryClient)
+        invalidateAdminDeletionRequestsQuery(queryClient),
       ]);
-    }
+    },
   });
 }
 
 export function rejectDeletionRequestMutationOptions(
   client: Pick<ApiClient, "admin">,
   queryClient: QueryClient,
-  payload?: ReviewDeletionPayload
+  payload?: ReviewDeletionPayload,
 ) {
   return mutationOptions({
-    mutationFn: (requestId: string) => client.admin.rejectDeletionRequest(requestId, payload),
+    mutationFn: (requestId: string) =>
+      client.admin.rejectDeletionRequest(requestId, payload),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
-        invalidateAdminDeletionRequestsQuery(queryClient)
+        invalidateAdminDeletionRequestsQuery(queryClient),
       ]);
-    }
+    },
   });
 }
 
-export function upgradeToCoachMutationOptions(client: Pick<ApiClient, "admin">, queryClient: QueryClient) {
+export function upgradeToCoachMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
   return mutationOptions({
-    mutationFn: (payload: UpgradeToCoachPayload) => client.admin.upgradeToCoach(payload),
+    mutationFn: (payload: UpgradeToCoachPayload) =>
+      client.admin.upgradeToCoach(payload),
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() })
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
       ]);
-    }
+    },
   });
 }

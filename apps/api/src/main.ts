@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded, type Request, type Response } from 'express';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
@@ -62,6 +63,16 @@ function isAllowedBrowserOrigin(
   );
 }
 
+function preserveRawBody(
+  request: Request & { rawBody?: Buffer },
+  _response: Response,
+  buffer: Buffer,
+): void {
+  if (buffer.length > 0) {
+    request.rawBody = Buffer.from(buffer);
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const winstonLogger = WinstonModule.createLogger({
     transports: [
@@ -107,7 +118,16 @@ async function bootstrap(): Promise<void> {
   const allowedBrowserOrigins = parseAllowedBrowserOrigins(
     config.get<string>('app.webAllowedOrigins', ''),
   );
+  const framePayloadLimit = '8mb';
 
+  app.use(json({ limit: framePayloadLimit, verify: preserveRawBody }));
+  app.use(
+    urlencoded({
+      extended: true,
+      limit: framePayloadLimit,
+      verify: preserveRawBody,
+    }),
+  );
   app.use(helmet());
   app.use(cookieParser());
   app.setGlobalPrefix(prefix);

@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CreatorProfile,
+  CreatorState,
   ExerciseCatalog,
   ExerciseReviewSubmission,
+  ExerciseReviewSubmissionStatus,
   Prisma,
 } from '@prisma/client';
 
@@ -38,6 +41,19 @@ const EXERCISE_REVIEW_SUBMISSION_UPDATE_FIELDS = [
   'published_exercise_id',
   'review_notes',
 ] as const;
+
+type CreatorReviewCounts = {
+  leftPrivate: number;
+  pending: number;
+  published: number;
+  rejected: number;
+  total: number;
+};
+
+type CreatorReviewContext = {
+  counts: CreatorReviewCounts;
+  profile: CreatorProfile | null;
+};
 
 function pickDefined<T extends object, K extends keyof T>(
   source: T,
@@ -84,10 +100,16 @@ export class ExerciseService {
     dto: ExerciseReviewSubmissionFilterDTO,
   ): Promise<PaginatedResult<ExerciseReviewSubmissionResponseDTO>> {
     const result = await this.repo.listReviewSubmissions(dto);
+    const creatorContextByUserId = await this.loadCreatorReviewContext(
+      result.data.map((submission) => submission.user_id),
+    );
 
     return {
       data: result.data.map((submission) =>
-        this.toReviewSubmissionResponse(submission),
+        this.toReviewSubmissionResponse(
+          submission,
+          creatorContextByUserId.get(submission.user_id),
+        ),
       ),
       meta: result.meta,
     };
@@ -111,15 +133,29 @@ export class ExerciseService {
   async updateReviewSubmission(
     id: string,
     dto: UpdateExerciseReviewSubmissionDTO,
+    actorUserId?: string,
   ): Promise<ExerciseReviewSubmissionResponseDTO> {
     const reviewedAt =
       dto.status && dto.status !== 'pending' ? new Date() : undefined;
-
-    return this.toReviewSubmissionResponse(
-      await this.repo.updateReviewSubmission(id, {
+    const updatedSubmission = await this.repo.updateReviewSubmission(
+      id,
+      {
         ...pickDefined(dto, EXERCISE_REVIEW_SUBMISSION_UPDATE_FIELDS),
         ...(reviewedAt ? { reviewed_at: reviewedAt } : {}),
-      }),
+      },
+      {
+        actorUserId,
+        note: dto.creator_governance_note,
+        state: dto.creator_state,
+      },
+    );
+    const creatorContextByUserId = await this.loadCreatorReviewContext([
+      updatedSubmission.user_id,
+    ]);
+
+    return this.toReviewSubmissionResponse(
+      updatedSubmission,
+      creatorContextByUserId.get(updatedSubmission.user_id),
     );
   }
 
@@ -163,7 +199,17 @@ export class ExerciseService {
 
   private toReviewSubmissionResponse(
     submission: ExerciseReviewSubmission,
+    creatorContext?: CreatorReviewContext,
   ): ExerciseReviewSubmissionResponseDTO {
+    const creatorState = creatorContext?.profile?.state ?? CreatorState.none;
+    const creatorCounts = creatorContext?.counts ?? {
+      leftPrivate: 0,
+      pending: 0,
+      published: 0,
+      rejected: 0,
+      total: 0,
+    };
+
     return {
       id: submission.id,
       user_id: submission.user_id,
@@ -189,6 +235,89 @@ export class ExerciseService {
       created_at: submission.created_at.toISOString(),
       updated_at: submission.updated_at.toISOString(),
       reviewed_at: submission.reviewed_at?.toISOString() ?? null,
+      creator_state: creatorState,
+      creator_state_label: this.toCreatorStateLabel(creatorState),
+      creator_submission_count: creatorCounts.total,
+      creator_published_count: creatorCounts.published,
+      creator_rejected_count: creatorCounts.rejected,
+      creator_candidate_score:
+        this.calculateCreatorCandidateScore(creatorCounts),
+      creator_governance_note: creatorContext?.profile?.admin_notes ?? null,
+      creator_last_state_changed_at:
+        creatorContext?.profile?.last_state_changed_at?.toISOString() ?? null,
+      creator_profile_updated_at:
+        creatorContext?.profile?.updated_at.toISOString() ?? null,
     };
+  }
+
+  private async loadCreatorReviewContext(
+    userIds: string[],
+  ): Promise<Map<string, CreatorReviewContext>> {
+    const uniqueUserIds = [...new Set(userIds)].filter(Boolean);
+    if (!uniqueUserIds.length) return new Map();
+
+    const [profiles, statusRows] = await Promise.all([
+      this.repo.listCreatorProfilesByUserIds(uniqueUserIds),
+      this.repo.listReviewSubmissionStatusesByUserIds(uniqueUserIds),
+    ]);
+    const contextByUserId = new Map<string, CreatorReviewContext>();
+
+    for (const userId of uniqueUserIds) {
+      contextByUserId.set(userId, {
+        counts: {
+          leftPrivate: 0,
+          pending: 0,
+          published: 0,
+          rejected: 0,
+          total: 0,
+        },
+        profile: null,
+      });
+    }
+
+    for (const profile of profiles) {
+      const context = contextByUserId.get(profile.user_id);
+      if (context) {
+        context.profile = profile;
+      }
+    }
+
+    for (const row of statusRows) {
+      const context = contextByUserId.get(row.user_id);
+      if (!context) continue;
+
+      context.counts.total += 1;
+      if (row.status === ExerciseReviewSubmissionStatus.pending) {
+        context.counts.pending += 1;
+      } else if (row.status === ExerciseReviewSubmissionStatus.published) {
+        context.counts.published += 1;
+      } else if (row.status === ExerciseReviewSubmissionStatus.rejected) {
+        context.counts.rejected += 1;
+      } else if (row.status === ExerciseReviewSubmissionStatus.left_private) {
+        context.counts.leftPrivate += 1;
+      }
+    }
+
+    return contextByUserId;
+  }
+
+  private calculateCreatorCandidateScore(counts: CreatorReviewCounts): number {
+    return Math.max(
+      0,
+      Math.min(
+        100,
+        counts.published * 35 +
+          counts.pending * 12 +
+          counts.leftPrivate * 5 -
+          counts.rejected * 10,
+      ),
+    );
+  }
+
+  private toCreatorStateLabel(state: CreatorState): string {
+    return state
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 }

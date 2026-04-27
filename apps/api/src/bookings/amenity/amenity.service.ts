@@ -108,7 +108,9 @@ function normalizeAmenityText(value?: string | null) {
   return value?.trim().toLowerCase() ?? '';
 }
 
-function inferAmenityIconKey(dto: Pick<CreateAmenityDTO, 'icon_key' | 'name' | 'type'>) {
+function inferAmenityIconKey(
+  dto: Pick<CreateAmenityDTO, 'icon_key' | 'name' | 'type'>,
+) {
   const iconKey = normalizeAmenityText(dto.icon_key);
   const name = normalizeAmenityText(dto.name);
   const type = normalizeAmenityText(dto.type);
@@ -167,7 +169,8 @@ export class AmenityService {
 
   private toCreateInput(dto: CreateAmenityDTO): Prisma.AmenityCreateInput {
     const iconKey = inferAmenityIconKey(dto);
-    const layout = DEFAULT_AMENITY_LAYOUTS[iconKey] ?? DEFAULT_AMENITY_LAYOUTS['gym-area'];
+    const layout =
+      DEFAULT_AMENITY_LAYOUTS[iconKey] ?? DEFAULT_AMENITY_LAYOUTS['gym-area'];
 
     return {
       name: dto.name,

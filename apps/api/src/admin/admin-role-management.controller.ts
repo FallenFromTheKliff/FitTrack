@@ -1,5 +1,10 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 import { Roles } from '../common/decorators';
@@ -17,7 +22,8 @@ export class AdminRoleManagementController {
 
   @Post('upgrade-to-coach')
   @ApiOperation({
-    summary: 'Upgrade an existing member or staff account into a coach account.',
+    summary:
+      'Upgrade an existing member or staff account into a coach account.',
   })
   @ApiResponse({
     status: 201,

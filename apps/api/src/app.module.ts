@@ -15,6 +15,7 @@ import { localEnvFilePath } from '../env-path';
 import {
   aiConfig,
   appConfig,
+  equipmentDetectionConfig,
   filesConfig,
   jwtConfig,
   redisConfig,
@@ -74,6 +75,7 @@ function buildRedisConnection(config: ConfigService) {
       load: [
         aiConfig,
         appConfig,
+        equipmentDetectionConfig,
         filesConfig,
         jwtConfig,
         redisConfig,

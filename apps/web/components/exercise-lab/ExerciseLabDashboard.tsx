@@ -21,6 +21,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateFitnessExerciseInput,
+  ExerciseReviewSubmissionRecord,
+  FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
   UpdateFitnessExerciseInput,
@@ -74,6 +76,15 @@ type SheetState =
 
 type ExerciseReviewCandidateLike = {
   category: FitnessExerciseCategory;
+  creatorCandidateScore: number;
+  creatorGovernanceNote: string | null;
+  creatorLastStateChangedAt: string | null;
+  creatorProfileUpdatedAt: string | null;
+  creatorPublishedCount: number;
+  creatorRejectedCount: number;
+  creatorState: FitnessCreatorState;
+  creatorStateLabel: string;
+  creatorSubmissionCount: number;
   description: string | null;
   evidenceBars: number[] | null;
   id: string;
@@ -101,6 +112,29 @@ type ExerciseDraft = {
 };
 
 const DRAWER_WIDTH = 420;
+const EMPTY_REVIEW_CANDIDATES: ExerciseReviewSubmissionRecord[] = [];
+const CREATOR_STATE_OPTIONS = [
+  { label: "None", value: "none" },
+  { label: "Candidate", value: "candidate" },
+  { label: "Pending review", value: "pending_review" },
+  { label: "Approved", value: "approved" },
+  { label: "Suspended", value: "suspended" },
+  { label: "Revoked", value: "revoked" },
+] as const;
+
+const CREATOR_DECISION_STATES = new Set<FitnessCreatorState>([
+  "approved",
+  "suspended",
+  "revoked",
+]);
+
+function getCreatorStateTone(state: FitnessCreatorState) {
+  if (state === "approved") return "success";
+  if (state === "suspended" || state === "revoked") return "danger";
+  if (state === "pending_review") return "warning";
+  if (state === "candidate") return "brand";
+  return "muted";
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -199,7 +233,10 @@ function scoreExerciseMatch(
     exercise.muscleGroup.toLowerCase() === candidate.muscleGroup.toLowerCase()
   )
     score += 12;
-  if (normalizedMatchHint && exercise.name.toLowerCase() === normalizedMatchHint)
+  if (
+    normalizedMatchHint &&
+    exercise.name.toLowerCase() === normalizedMatchHint
+  )
     score += 22;
   if (
     normalizedMatchHint &&
@@ -361,9 +398,10 @@ export function ExerciseLabDashboard() {
   const [matchSearch, setMatchSearch] = useState("");
   const [rejectTarget, setRejectTarget] =
     useState<ExerciseReviewCandidateLike | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState(
-    "",
-  );
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [creatorStateDraft, setCreatorStateDraft] =
+    useState<FitnessCreatorState>("none");
+  const [creatorGovernanceNote, setCreatorGovernanceNote] = useState("");
   const [milestoneReviews, setMilestoneReviews] = useState<
     AchievementReviewRecord[]
   >(ACHIEVEMENT_REVIEW_SEED);
@@ -440,7 +478,8 @@ export function ExerciseLabDashboard() {
     updateFitnessExerciseMutationOptions(webApiClient, queryClient),
   );
 
-  const pendingCandidates = reviewQueueQuery.data?.data ?? [];
+  const pendingCandidates =
+    reviewQueueQuery.data?.data ?? EMPTY_REVIEW_CANDIDATES;
   const reviewViewportHeight = Math.max(540, viewportHeight - 228);
   const workbenchMotionKey = `${mode}-${selectedCandidateId || "empty"}`;
 
@@ -462,6 +501,19 @@ export function ExerciseLabDashboard() {
     pendingCandidates.find(
       (candidate) => candidate.id === selectedCandidateId,
     ) ?? null;
+  const selectedCreatorTone = selectedCandidate
+    ? getCreatorStateTone(selectedCandidate.creatorState)
+    : "muted";
+  const selectedCreatorToneColor =
+    selectedCreatorTone === "success"
+      ? colors.success
+      : selectedCreatorTone === "danger"
+        ? colors.danger
+        : selectedCreatorTone === "warning"
+          ? colors.warning
+          : selectedCreatorTone === "brand"
+            ? colors.brand
+            : colors.textMuted;
   const filteredMilestones = useMemo(() => {
     if (milestoneScope === "all") return milestoneReviews;
     if (milestoneScope === "closed") {
@@ -497,6 +549,15 @@ export function ExerciseLabDashboard() {
   useEffect(() => {
     setMilestoneNotes(selectedMilestone?.reviewerNotes ?? "");
   }, [selectedMilestone]);
+
+  useEffect(() => {
+    setCreatorStateDraft(selectedCandidate?.creatorState ?? "none");
+    setCreatorGovernanceNote(selectedCandidate?.creatorGovernanceNote ?? "");
+  }, [
+    selectedCandidate?.creatorGovernanceNote,
+    selectedCandidate?.creatorState,
+    selectedCandidate?.id,
+  ]);
 
   useEffect(() => {
     if (mode !== "review") {
@@ -599,12 +660,43 @@ export function ExerciseLabDashboard() {
     resetSheet(null);
   };
 
+  const handleCreatorGovernanceUpdate = async () => {
+    if (!selectedCandidate) return;
+
+    const trimmedNote = creatorGovernanceNote.trim();
+    if (CREATOR_DECISION_STATES.has(creatorStateDraft) && !trimmedNote) {
+      showMessage("Add a short rationale before changing creator standing.");
+      return;
+    }
+
+    try {
+      await updateReviewSubmissionMutation.mutateAsync({
+        submissionId: selectedCandidate.id,
+        payload: {
+          creatorGovernanceNote: trimmedNote || undefined,
+          creatorState: creatorStateDraft,
+        },
+      });
+      showMessage(
+        `${selectedCandidate.title} creator state moved to ${toTitleCase(creatorStateDraft)}.`,
+      );
+    } catch (error) {
+      showMessage(
+        getErrorMessage(error, "Unable to update creator governance state."),
+      );
+    }
+  };
+
   const handleLeavePrivate = async () => {
     if (!selectedCandidate) return;
     try {
       await updateReviewSubmissionMutation.mutateAsync({
         submissionId: selectedCandidate.id,
-        payload: { status: "left_private" },
+        payload: {
+          reviewNotes:
+            "Left private from Exercise Lab review; not promoted to the global exercise library.",
+          status: "left_private",
+        },
       });
       showMessage(
         `${selectedCandidate.title} was left as a private custom exercise.`,
@@ -624,7 +716,11 @@ export function ExerciseLabDashboard() {
     try {
       await updateReviewSubmissionMutation.mutateAsync({
         submissionId: rejectTarget.id,
-        payload: { status: "rejected" },
+        payload: {
+          reviewNotes:
+            "Rejected from Exercise Lab review; submission did not meet global library criteria.",
+          status: "rejected",
+        },
       });
       showMessage(`${rejectTarget.title} was removed from the publish queue.`);
       setRejectTarget(null);
@@ -750,7 +846,7 @@ export function ExerciseLabDashboard() {
 
   const topActionLabel =
     mode === "review"
-      ? "Review publish candidates, compare existing global movements, and decide what reaches the shared library."
+      ? "Review publish candidates, compare existing global movements, and govern creator standing without mixing it up with one-off submission decisions."
       : mode === "milestones"
         ? "Review workout achievement claims, inspect proof, and close progression decisions without leaving Exercise Lab."
         : "Search, edit, archive, and create reusable global exercise records for the whole FitTrack ecosystem.";
@@ -796,7 +892,8 @@ export function ExerciseLabDashboard() {
                 }}
                 excludeGlobalScale
               >
-                Exercise review / milestone moderation / global exercise governance
+                Exercise review / milestone moderation / global exercise
+                governance
               </FitText>
             </div>
             {message ? (
@@ -815,14 +912,14 @@ export function ExerciseLabDashboard() {
               flexWrap: "wrap",
             }}
           >
-              <FitText
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: colors.textSecondary,
-                  maxWidth: 760,
-                  lineHeight: 1.45,
-                }}
+            <FitText
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: colors.textSecondary,
+                maxWidth: 760,
+                lineHeight: 1.45,
+              }}
             >
               {topActionLabel}
             </FitText>
@@ -953,6 +1050,19 @@ export function ExerciseLabDashboard() {
                 ) : pendingCandidates.length ? (
                   pendingCandidates.map((candidate, index) => {
                     const isActive = candidate.id === selectedCandidate?.id;
+                    const creatorTone = getCreatorStateTone(
+                      candidate.creatorState,
+                    );
+                    const creatorToneColor =
+                      creatorTone === "success"
+                        ? colors.success
+                        : creatorTone === "danger"
+                          ? colors.danger
+                          : creatorTone === "warning"
+                            ? colors.warning
+                            : creatorTone === "brand"
+                              ? colors.brand
+                              : colors.textMuted;
                     const queueAnimationDelay = fullMotion
                       ? `${Math.min(index, 5) * 38}ms`
                       : `${Math.min(index, 5) * 24}ms`;
@@ -982,24 +1092,26 @@ export function ExerciseLabDashboard() {
                             : "none",
                           textAlign: "left",
                           cursor: "pointer",
-                          ...(canAnimate ? { animationDelay: queueAnimationDelay } : {}),
+                          ...(canAnimate
+                            ? { animationDelay: queueAnimationDelay }
+                            : {}),
                         }}
                       >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 10,
+                          }}
+                        >
                           <div
                             style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 10,
+                              backgroundColor: `${colors.brand}12`,
+                              border: `1px solid ${colors.brand}30`,
                               display: "flex",
-                              alignItems: "flex-start",
-                              gap: 10,
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: 10,
-                                backgroundColor: `${colors.brand}12`,
-                                border: `1px solid ${colors.brand}30`,
-                                display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                               flexShrink: 0,
@@ -1026,6 +1138,16 @@ export function ExerciseLabDashboard() {
                             >
                               {candidate.sourceLabel}
                             </FitText>
+                            <FitText
+                              style={{
+                                fontSize: 10.5,
+                                color: creatorToneColor,
+                              }}
+                            >
+                              {candidate.creatorStateLabel} creator /{" "}
+                              {candidate.creatorPublishedCount} of{" "}
+                              {candidate.creatorSubmissionCount} published
+                            </FitText>
                           </div>
                           <div
                             style={{
@@ -1040,18 +1162,40 @@ export function ExerciseLabDashboard() {
                         </div>
                         <div
                           style={{
+                            display: "flex",
+                            gap: 8,
                             justifySelf: "start",
-                            padding: "4px 10px",
-                            borderRadius: 999,
-                            border: `1px solid ${colors.brand}35`,
-                            backgroundColor: `${colors.brand}10`,
+                            flexWrap: "wrap",
                           }}
                         >
-                          <FitText
-                            style={{ fontSize: 10, color: colors.brand }}
+                          <div
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              border: `1px solid ${colors.brand}35`,
+                              backgroundColor: `${colors.brand}10`,
+                            }}
                           >
-                            {candidate.queueTag}
-                          </FitText>
+                            <FitText
+                              style={{ fontSize: 10, color: colors.brand }}
+                            >
+                              {candidate.queueTag}
+                            </FitText>
+                          </div>
+                          <div
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              border: `1px solid ${colors.warning}35`,
+                              backgroundColor: `${colors.warning}10`,
+                            }}
+                          >
+                            <FitText
+                              style={{ fontSize: 10, color: colors.warning }}
+                            >
+                              score {candidate.creatorCandidateScore}
+                            </FitText>
+                          </div>
                         </div>
                       </button>
                     );
@@ -1122,489 +1266,695 @@ export function ExerciseLabDashboard() {
               </div>
 
               <div style={{ display: "grid", gap: 16 }}>
-              {selectedCandidate ? (
-                <div
-                  key={workbenchMotionKey}
-                  className={
-                    canAnimate
-                      ? "exercise-lab-workbench-body exercise-lab-workbench-body--animated"
-                      : "exercise-lab-workbench-body"
-                  }
-                  style={{ display: "grid", gap: 14 }}
-                >
+                {selectedCandidate ? (
                   <div
-                    style={{
-                      display: "grid",
-                      gap: 12,
-                      gridTemplateColumns: isCompact
-                        ? "minmax(0, 1fr)"
-                        : "minmax(0, 1fr) minmax(300px, 400px)",
-                    }}
+                    key={workbenchMotionKey}
+                    className={
+                      canAnimate
+                        ? "exercise-lab-workbench-body exercise-lab-workbench-body--animated"
+                        : "exercise-lab-workbench-body"
+                    }
+                    style={{ display: "grid", gap: 14 }}
                   >
                     <div
                       style={{
                         display: "grid",
-                        gap: 10,
-                        padding: 14,
-                        borderRadius: 22,
-                        border: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surface,
+                        gap: 12,
+                        gridTemplateColumns: isCompact
+                          ? "minmax(0, 1fr)"
+                          : "minmax(0, 1fr) minmax(300px, 400px)",
                       }}
                     >
-                      <div
-                        style={{
-                          justifySelf: "start",
-                          padding: "5px 12px",
-                          borderRadius: 999,
-                          border: `1px solid ${colors.brand}35`,
-                          backgroundColor: `${colors.brand}10`,
-                        }}
-                      >
-                        <FitText
-                          style={{ fontSize: 10, color: colors.brand }}
-                        >
-                          pose evidence
-                        </FitText>
-                      </div>
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <FitText style={{ fontSize: 16, fontWeight: 800 }}>
-                          Candidate
-                        </FitText>
-                        <FitText
-                          style={{
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                          }}
-                        >
-                          {selectedCandidate.summary}
-                        </FitText>
-                      </div>
                       <div
                         style={{
                           display: "grid",
                           gap: 10,
-                          borderRadius: 18,
+                          padding: 14,
+                          borderRadius: 22,
                           border: `1px solid ${colors.border}`,
-                          backgroundColor: colors.surfaceRaised,
-                          padding: 16,
+                          backgroundColor: colors.surface,
                         }}
                       >
                         <div
                           style={{
-                            height: 58,
-                            borderRadius: 16,
-                            border: `1px solid ${colors.border}`,
-                            background:
-                              "linear-gradient(180deg, rgba(25,27,36,0.92) 0%, rgba(16,18,23,0.98) 100%)",
-                            display: "flex",
-                            alignItems: "flex-end",
-                            gap: 8,
-                            padding: "0 14px 12px",
+                            justifySelf: "start",
+                            padding: "5px 12px",
+                            borderRadius: 999,
+                            border: `1px solid ${colors.brand}35`,
+                            backgroundColor: `${colors.brand}10`,
                           }}
                         >
-                          {(selectedCandidate.evidenceBars ?? [
-                            18, 28, 44, 34, 24, 20,
-                          ]).map((bar, index) => (
-                            <div
-                              key={`${selectedCandidate.id}-bar-${index}`}
-                              style={{
-                                width: 16,
-                                height: bar,
-                                borderRadius: 8,
-                                backgroundColor:
-                                  index === 2
-                                    ? colors.brand
-                                    : `${colors.brand}2E`,
-                                boxShadow:
-                                  index === 2
-                                    ? `0 0 0 1px ${colors.brand}55`
-                                    : "none",
-                              }}
-                            />
-                          ))}
+                          <FitText
+                            style={{ fontSize: 10, color: colors.brand }}
+                          >
+                            pose evidence
+                          </FitText>
                         </div>
-                        <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
-                        >
-                          {selectedCandidate.description}
-                        </FitText>
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 10,
-                        padding: 14,
-                        borderRadius: 22,
-                        border: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surface,
-                      }}
-                    >
-                      <FitText style={{ fontSize: 16, fontWeight: 800 }}>
-                        Closest match
-                      </FitText>
-                      {closestMatch ? (
-                        <>
-                          <div
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <FitText style={{ fontSize: 16, fontWeight: 800 }}>
+                            Candidate
+                          </FitText>
+                          <FitText
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 18,
-                              flexWrap: "wrap",
+                              fontSize: 11,
+                              color: colors.textSecondary,
                             }}
                           >
+                            {selectedCandidate.summary}
+                          </FitText>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 10,
+                            borderRadius: 18,
+                            border: `1px solid ${colors.border}`,
+                            backgroundColor: colors.surfaceRaised,
+                            padding: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: 58,
+                              borderRadius: 16,
+                              border: `1px solid ${colors.border}`,
+                              background:
+                                "linear-gradient(180deg, rgba(25,27,36,0.92) 0%, rgba(16,18,23,0.98) 100%)",
+                              display: "flex",
+                              alignItems: "flex-end",
+                              gap: 8,
+                              padding: "0 14px 12px",
+                            }}
+                          >
+                            {(
+                              selectedCandidate.evidenceBars ?? [
+                                18, 28, 44, 34, 24, 20,
+                              ]
+                            ).map((bar, index) => (
+                              <div
+                                key={`${selectedCandidate.id}-bar-${index}`}
+                                style={{
+                                  width: 16,
+                                  height: bar,
+                                  borderRadius: 8,
+                                  backgroundColor:
+                                    index === 2
+                                      ? colors.brand
+                                      : `${colors.brand}2E`,
+                                  boxShadow:
+                                    index === 2
+                                      ? `0 0 0 1px ${colors.brand}55`
+                                      : "none",
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <FitText
+                            style={{
+                              fontSize: 11.5,
+                              color: colors.textSecondary,
+                            }}
+                          >
+                            {selectedCandidate.description}
+                          </FitText>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 10,
+                          padding: 14,
+                          borderRadius: 22,
+                          border: `1px solid ${colors.border}`,
+                          backgroundColor: colors.surface,
+                        }}
+                      >
+                        <FitText style={{ fontSize: 16, fontWeight: 800 }}>
+                          Closest match
+                        </FitText>
+                        {closestMatch ? (
+                          <>
                             <div
                               style={{
-                                width: 68,
-                                height: 68,
-                                borderRadius: "50%",
-                                border: `3px solid ${colors.brand}`,
-                                display: "grid",
-                                placeItems: "center",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 18,
+                                flexWrap: "wrap",
                               }}
                             >
                               <div
                                 style={{
+                                  width: 68,
+                                  height: 68,
+                                  borderRadius: "50%",
+                                  border: `3px solid ${colors.brand}`,
                                   display: "grid",
                                   placeItems: "center",
                                 }}
                               >
-                                <FitText
+                                <div
                                   style={{
-                                    fontSize: 22,
-                                    fontWeight: 800,
-                                    color: colors.textPrimary,
+                                    display: "grid",
+                                    placeItems: "center",
                                   }}
                                 >
-                                  {Math.min(
-                                    99,
-                                    Math.max(
-                                      58,
-                                      matchSuggestions[0]?.score ?? 58,
-                                    ),
-                                  )}
-                                  %
-                                </FitText>
-                                <FitText
+                                  <FitText
+                                    style={{
+                                      fontSize: 22,
+                                      fontWeight: 800,
+                                      color: colors.textPrimary,
+                                    }}
+                                  >
+                                    {Math.min(
+                                      99,
+                                      Math.max(
+                                        58,
+                                        matchSuggestions[0]?.score ?? 58,
+                                      ),
+                                    )}
+                                    %
+                                  </FitText>
+                                  <FitText
+                                    style={{
+                                      fontSize: 9.5,
+                                      color: colors.textMuted,
+                                    }}
+                                  >
+                                    fit score
+                                  </FitText>
+                                </div>
+                              </div>
+                              <div style={{ display: "grid", gap: 10 }}>
+                                <div
                                   style={{
-                                    fontSize: 9.5,
-                                    color: colors.textMuted,
+                                    padding: "5px 12px",
+                                    borderRadius: 999,
+                                    border: `1px solid ${colors.brand}35`,
+                                    backgroundColor: `${colors.brand}10`,
+                                    justifySelf: "start",
                                   }}
                                 >
-                                  fit score
-                                </FitText>
+                                  <FitText
+                                    style={{
+                                      fontSize: 11,
+                                      color: colors.textPrimary,
+                                    }}
+                                  >
+                                    {closestMatch.name}
+                                  </FitText>
+                                </div>
+                                <div
+                                  style={{
+                                    padding: "5px 12px",
+                                    borderRadius: 999,
+                                    border: `1px solid ${colors.brand}35`,
+                                    backgroundColor: `${colors.brand}10`,
+                                    justifySelf: "start",
+                                  }}
+                                >
+                                  <FitText
+                                    style={{
+                                      fontSize: 11,
+                                      color: colors.textPrimary,
+                                    }}
+                                  >
+                                    {toTitleCase(closestMatch.category)} /{" "}
+                                    {toTitleCase(closestMatch.muscleGroup)}
+                                  </FitText>
+                                </div>
                               </div>
                             </div>
-                            <div style={{ display: "grid", gap: 10 }}>
-                              <div
-                                style={{
-                                  padding: "5px 12px",
-                                  borderRadius: 999,
-                                  border: `1px solid ${colors.brand}35`,
-                                  backgroundColor: `${colors.brand}10`,
-                                  justifySelf: "start",
-                                }}
-                              >
-                                <FitText
-                                  style={{
-                                    fontSize: 11,
-                                    color: colors.textPrimary,
-                                  }}
-                                >
-                                  {closestMatch.name}
-                                </FitText>
-                              </div>
-                              <div
-                                style={{
-                                  padding: "5px 12px",
-                                  borderRadius: 999,
-                                  border: `1px solid ${colors.brand}35`,
-                                  backgroundColor: `${colors.brand}10`,
-                                  justifySelf: "start",
-                                }}
-                              >
-                                <FitText
-                                  style={{
-                                    fontSize: 11,
-                                    color: colors.textPrimary,
-                                  }}
-                                >
-                                  {toTitleCase(closestMatch.category)} /{" "}
-                                  {toTitleCase(closestMatch.muscleGroup)}
-                                </FitText>
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setMatchDrawerOpen(true)}
+                            <button
+                              type="button"
+                              onClick={() => setMatchDrawerOpen(true)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                padding: "14px 18px",
+                                borderRadius: 16,
+                                border: `1px solid rgba(82, 102, 133, 0.75)`,
+                                backgroundColor: "rgba(46, 56, 71, 0.95)",
+                                color: "#dbe8f7",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <span>Open match drawer for comparison</span>
+                              <PanelRightOpen size={16} />
+                            </button>
+                          </>
+                        ) : (
+                          <div
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 12,
-                              padding: "14px 18px",
-                              borderRadius: 16,
-                              border: `1px solid rgba(82, 102, 133, 0.75)`,
-                              backgroundColor: "rgba(46, 56, 71, 0.95)",
-                              color: "#dbe8f7",
-                              cursor: "pointer",
+                              padding: 18,
+                              borderRadius: 18,
+                              border: `1px dashed ${colors.border}`,
+                              backgroundColor: colors.surfaceRaised,
                             }}
                           >
-                            <span>Open match drawer for comparison</span>
-                            <PanelRightOpen size={16} />
-                          </button>
-                        </>
-                      ) : (
+                            <FitText
+                              style={{
+                                fontSize: 13,
+                                color: colors.textSecondary,
+                              }}
+                            >
+                              No close live match surfaced yet. This candidate
+                              is a strong manual review case for creating a new
+                              global exercise.
+                            </FitText>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 14,
+                        gridTemplateColumns: isCompact
+                          ? "minmax(0, 1fr)"
+                          : "minmax(0, 1fr) minmax(0, 1fr)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 6,
+                          padding: 14,
+                          borderRadius: 20,
+                          border: `1px solid ${colors.border}`,
+                          backgroundColor: colors.surface,
+                        }}
+                      >
                         <div
                           style={{
-                            padding: 18,
-                            borderRadius: 18,
-                            border: `1px dashed ${colors.border}`,
-                            backgroundColor: colors.surfaceRaised,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              backgroundColor: `${colors.brand}12`,
+                              border: `1px solid ${colors.brand}30`,
+                              display: "grid",
+                              placeItems: "center",
+                            }}
+                          >
+                            <FileText size={13} color={colors.brand} />
+                          </div>
+                          <FitText style={{ fontSize: 16, fontWeight: 700 }}>
+                            Client submission
+                          </FitText>
+                        </div>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          source: {selectedCandidate.originLabel}
+                        </FitText>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          trigger: {selectedCandidate.triggerLabel}
+                        </FitText>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          status: pending publish review
+                        </FitText>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 6,
+                          padding: 14,
+                          borderRadius: 20,
+                          border: `1px solid ${colors.border}`,
+                          backgroundColor: colors.surface,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              backgroundColor: `${colors.brand}12`,
+                              border: `1px solid ${colors.brand}30`,
+                              display: "grid",
+                              placeItems: "center",
+                            }}
+                          >
+                            <ShieldCheck size={13} color={colors.brand} />
+                          </div>
+                          <FitText style={{ fontSize: 16, fontWeight: 700 }}>
+                            Global match
+                          </FitText>
+                        </div>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          {closestMatch?.name ??
+                            selectedCandidate.matchHint ??
+                            "Needs manual publish sheet"}
+                        </FitText>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          confidence:{" "}
+                          {closestMatch ? "medium-high" : "manual review"}
+                        </FitText>
+                        <FitText
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          action: ready for publish sheet
+                        </FitText>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 12,
+                        padding: 14,
+                        borderRadius: 20,
+                        border: `1px solid ${selectedCreatorToneColor}40`,
+                        background: `linear-gradient(135deg, ${selectedCreatorToneColor}14 0%, ${colors.surface} 72%)`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <FitText style={{ fontSize: 16, fontWeight: 800 }}>
+                            Creator governance
+                          </FitText>
+                          <FitText
+                            style={{
+                              fontSize: 11.5,
+                              color: colors.textSecondary,
+                              maxWidth: 620,
+                            }}
+                          >
+                            Keep creator standing separate from the publish
+                            decision while still capturing the operator
+                            rationale from Exercise Lab.
+                          </FitText>
+                        </div>
+                        <div
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 999,
+                            border: `1px solid ${selectedCreatorToneColor}55`,
+                            backgroundColor: `${selectedCreatorToneColor}12`,
                           }}
                         >
                           <FitText
                             style={{
-                              fontSize: 13,
-                              color: colors.textSecondary,
+                              fontSize: 11,
+                              color: selectedCreatorToneColor,
+                              fontWeight: 800,
                             }}
                           >
-                            No close live match surfaced yet. This candidate is
-                            a strong manual review case for creating a new
-                            global exercise.
+                            {selectedCandidate.creatorStateLabel}
                           </FitText>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 14,
-                      gridTemplateColumns: isCompact
-                        ? "minmax(0, 1fr)"
-                        : "minmax(0, 1fr) minmax(0, 1fr)",
-                    }}
-                  >
-                    <div
-                      style={{
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 10,
+                          gridTemplateColumns: isCompact
+                            ? "minmax(0, 1fr)"
+                            : "repeat(4, minmax(0, 1fr))",
+                        }}
+                      >
+                        {[
+                          {
+                            label: "Submissions",
+                            value: selectedCandidate.creatorSubmissionCount,
+                          },
+                          {
+                            label: "Published",
+                            value: selectedCandidate.creatorPublishedCount,
+                          },
+                          {
+                            label: "Rejected",
+                            value: selectedCandidate.creatorRejectedCount,
+                          },
+                          {
+                            label: "Candidate score",
+                            value: selectedCandidate.creatorCandidateScore,
+                          },
+                        ].map((metric) => (
+                          <div
+                            key={metric.label}
+                            style={{
                               display: "grid",
-                              gap: 6,
-                              padding: 14,
-                              borderRadius: 20,
+                              gap: 2,
+                              padding: 12,
+                              borderRadius: 14,
                               border: `1px solid ${colors.border}`,
-                              backgroundColor: colors.surface,
+                              backgroundColor: colors.surfaceRaised,
                             }}
-                    >
+                          >
+                            <FitText
+                              style={{
+                                fontSize: 10,
+                                color: colors.textMuted,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.06em",
+                              }}
+                            >
+                              {metric.label}
+                            </FitText>
+                            <FitText style={{ fontSize: 20, fontWeight: 800 }}>
+                              {metric.value}
+                            </FitText>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 10,
+                          gridTemplateColumns: isCompact
+                            ? "minmax(0, 1fr)"
+                            : "minmax(220px, 0.6fr) minmax(0, 1fr)",
+                        }}
+                      >
+                        <FitSelect
+                          fullWidth
+                          value={creatorStateDraft}
+                          options={[...CREATOR_STATE_OPTIONS]}
+                          onChange={(event) =>
+                            setCreatorStateDraft(
+                              event.target.value as FitnessCreatorState,
+                            )
+                          }
+                        />
+                        <FitTextArea
+                          value={creatorGovernanceNote}
+                          onChange={(event) =>
+                            setCreatorGovernanceNote(event.target.value)
+                          }
+                          placeholder="Rationale for creator state, escalation, or governance note"
+                          rows={3}
+                        />
+                      </div>
+
                       <div
                         style={{
                           display: "flex",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          flexWrap: "wrap",
                           alignItems: "center",
-                          gap: 10,
                         }}
                       >
-                        <div
+                        <FitText
                           style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            backgroundColor: `${colors.brand}12`,
-                            border: `1px solid ${colors.brand}30`,
-                            display: "grid",
-                            placeItems: "center",
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
                           }}
                         >
-                          <FileText size={13} color={colors.brand} />
-                        </div>
-                        <FitText style={{ fontSize: 16, fontWeight: 700 }}>
-                          Client submission
+                          Last state change:{" "}
+                          {formatDateTime(
+                            selectedCandidate.creatorLastStateChangedAt ??
+                              undefined,
+                          )}
                         </FitText>
+                        <FitButton
+                          label="Save creator state"
+                          variant="ghost"
+                          disabled={sheetPending}
+                          onClick={handleCreatorGovernanceUpdate}
+                        />
                       </div>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        source: {selectedCandidate.originLabel}
-                      </FitText>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        trigger: {selectedCandidate.triggerLabel}
-                      </FitText>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        status: pending publish review
-                      </FitText>
                     </div>
 
                     <div
+                      className={
+                        canAnimate
+                          ? "exercise-lab-action-dock exercise-lab-action-dock--animated"
+                          : "exercise-lab-action-dock"
+                      }
                       style={{
                         display: "grid",
-                        gap: 6,
+                        gap: 10,
                         padding: 14,
                         borderRadius: 20,
                         border: `1px solid ${colors.border}`,
                         backgroundColor: colors.surface,
+                        boxShadow: "0 12px 24px rgba(0,0,0,0.12)",
                       }}
                     >
                       <div
                         style={{
-                          display: "flex",
-                          alignItems: "center",
+                          height: 4,
+                          borderRadius: 999,
+                          backgroundColor: colors.brand,
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "grid",
                           gap: 10,
+                          gridTemplateColumns: isCompact
+                            ? "minmax(0, 1fr)"
+                            : "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr)",
                         }}
                       >
-                        <div
+                        <FitButton
+                          label="Publish global"
+                          variant="primary"
+                          onClick={handleOpenPublish}
                           style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            backgroundColor: `${colors.brand}12`,
-                            border: `1px solid ${colors.brand}30`,
-                            display: "grid",
-                            placeItems: "center",
+                            minHeight: 64,
+                            justifyContent: "flex-start",
+                            paddingInline: 16,
                           }}
                         >
-                          <ShieldCheck size={13} color={colors.brand} />
-                        </div>
-                        <FitText style={{ fontSize: 16, fontWeight: 700 }}>
-                          Global match
-                        </FitText>
+                          <div
+                            style={{
+                              display: "grid",
+                              textAlign: "left",
+                              gap: 4,
+                            }}
+                          >
+                            <span style={{ fontWeight: 800 }}>
+                              Publish global
+                            </span>
+                            <span style={{ fontSize: 11, opacity: 0.82 }}>
+                              normalize and add to library
+                            </span>
+                          </div>
+                        </FitButton>
+                        <FitButton
+                          label="Leave private"
+                          variant="ghost"
+                          onClick={handleLeavePrivate}
+                          style={{
+                            minHeight: 64,
+                            justifyContent: "flex-start",
+                            paddingInline: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "grid",
+                              textAlign: "left",
+                              gap: 2,
+                            }}
+                          >
+                            <span style={{ fontWeight: 800 }}>
+                              Leave private
+                            </span>
+                            <span style={{ fontSize: 10.5, opacity: 0.82 }}>
+                              keep as client custom
+                            </span>
+                          </div>
+                        </FitButton>
+                        <FitButton
+                          label="Reject"
+                          variant="ghost"
+                          onClick={() => setRejectTarget(selectedCandidate)}
+                          style={{
+                            minHeight: 64,
+                            justifyContent: "flex-start",
+                            paddingInline: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "grid",
+                              textAlign: "left",
+                              gap: 2,
+                            }}
+                          >
+                            <span style={{ fontWeight: 800 }}>Reject</span>
+                            <span style={{ fontSize: 10.5, opacity: 0.82 }}>
+                              remove candidate
+                            </span>
+                          </div>
+                        </FitButton>
                       </div>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        {closestMatch?.name ??
-                          selectedCandidate.matchHint ??
-                          "Needs manual publish sheet"}
-                      </FitText>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        confidence:{" "}
-                        {closestMatch ? "medium-high" : "manual review"}
-                      </FitText>
-                      <FitText
-                        style={{ fontSize: 11.5, color: colors.textSecondary }}
-                      >
-                        action: ready for publish sheet
-                      </FitText>
                     </div>
                   </div>
-
+                ) : (
                   <div
-                    className={
-                      canAnimate
-                        ? "exercise-lab-action-dock exercise-lab-action-dock--animated"
-                        : "exercise-lab-action-dock"
-                    }
                     style={{
-                      display: "grid",
-                      gap: 10,
-                      padding: 14,
-                      borderRadius: 20,
-                      border: `1px solid ${colors.border}`,
+                      padding: 20,
+                      borderRadius: 24,
+                      border: `1px dashed ${colors.border}`,
                       backgroundColor: colors.surface,
-                      boxShadow: "0 12px 24px rgba(0,0,0,0.12)",
                     }}
                   >
-                    <div
-                      style={{
-                        height: 4,
-                        borderRadius: 999,
-                        backgroundColor: colors.brand,
-                      }}
-                    />
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 10,
-                        gridTemplateColumns: isCompact
-                          ? "minmax(0, 1fr)"
-                          : "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr)",
-                      }}
+                    <FitText
+                      style={{ fontSize: 14, color: colors.textSecondary }}
                     >
-                      <FitButton
-                        label="Publish global"
-                        variant="primary"
-                        onClick={handleOpenPublish}
-                        style={{
-                          minHeight: 64,
-                          justifyContent: "flex-start",
-                          paddingInline: 16,
-                        }}
-                      >
-                        <div
-                          style={{ display: "grid", textAlign: "left", gap: 4 }}
-                        >
-                          <span style={{ fontWeight: 800 }}>
-                            Publish global
-                          </span>
-                          <span style={{ fontSize: 11, opacity: 0.82 }}>
-                            normalize and add to library
-                          </span>
-                        </div>
-                      </FitButton>
-                      <FitButton
-                        label="Leave private"
-                        variant="ghost"
-                        onClick={handleLeavePrivate}
-                        style={{
-                          minHeight: 64,
-                          justifyContent: "flex-start",
-                          paddingInline: 16,
-                        }}
-                      >
-                        <div
-                          style={{ display: "grid", textAlign: "left", gap: 2 }}
-                        >
-                          <span style={{ fontWeight: 800 }}>Leave private</span>
-                          <span style={{ fontSize: 10.5, opacity: 0.82 }}>
-                            keep as client custom
-                          </span>
-                        </div>
-                      </FitButton>
-                      <FitButton
-                        label="Reject"
-                        variant="ghost"
-                        onClick={() => setRejectTarget(selectedCandidate)}
-                        style={{
-                          minHeight: 64,
-                          justifyContent: "flex-start",
-                          paddingInline: 16,
-                        }}
-                      >
-                        <div
-                          style={{ display: "grid", textAlign: "left", gap: 2 }}
-                        >
-                          <span style={{ fontWeight: 800 }}>Reject</span>
-                          <span style={{ fontSize: 10.5, opacity: 0.82 }}>
-                            remove candidate
-                          </span>
-                        </div>
-                      </FitButton>
-                    </div>
+                      No pending candidates are left in the publish queue.
+                    </FitText>
                   </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: 20,
-                    borderRadius: 24,
-                    border: `1px dashed ${colors.border}`,
-                    backgroundColor: colors.surface,
-                  }}
-                >
-                  <FitText
-                    style={{ fontSize: 14, color: colors.textSecondary }}
-                  >
-                    No pending candidates are left in the publish queue.
-                  </FitText>
-                </div>
-              )}
+                )}
               </div>
             </section>
           </div>
@@ -1645,9 +1995,7 @@ export function ExerciseLabDashboard() {
               <FitPill
                 mode="toggle"
                 active={milestoneScope}
-                onChange={(value) =>
-                  setMilestoneScope(value as MilestoneScope)
-                }
+                onChange={(value) => setMilestoneScope(value as MilestoneScope)}
                 options={[
                   {
                     key: "pending",
@@ -1914,7 +2262,9 @@ export function ExerciseLabDashboard() {
                             backgroundColor: `${colors.brand}10`,
                           }}
                         >
-                          <FitText style={{ fontSize: 10, color: colors.brand }}>
+                          <FitText
+                            style={{ fontSize: 10, color: colors.brand }}
+                          >
                             proof image
                           </FitText>
                         </div>
@@ -2020,7 +2370,7 @@ export function ExerciseLabDashboard() {
                             </div>
                           </div>
                           <div style={{ display: "grid", gap: 10 }}>
-                            {[ 
+                            {[
                               getMilestonePrimaryTag(selectedMilestone),
                               getMilestoneSecondaryTag(selectedMilestone),
                             ].map((tag) => (
@@ -2112,17 +2462,26 @@ export function ExerciseLabDashboard() {
                           </FitText>
                         </div>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
                           member: {selectedMilestone.memberName.toLowerCase()}
                         </FitText>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
                           source: workout progression
                         </FitText>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
                           submitted: {formatDate(selectedMilestone.submittedAt)}
                         </FitText>
@@ -2163,21 +2522,31 @@ export function ExerciseLabDashboard() {
                           </FitText>
                         </div>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
                           status: {selectedMilestone.status.toLowerCase()}
                         </FitText>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
                           reviewer note:{" "}
                           {selectedMilestone.reviewerNotes?.trim() ||
                             "proof matches log"}
                         </FitText>
                         <FitText
-                          style={{ fontSize: 11.5, color: colors.textSecondary }}
+                          style={{
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                          }}
                         >
-                          reviewed: {formatDateTime(selectedMilestone.reviewedAt)}
+                          reviewed:{" "}
+                          {formatDateTime(selectedMilestone.reviewedAt)}
                         </FitText>
                       </div>
                     </div>
@@ -3113,8 +3482,7 @@ export function ExerciseLabDashboard() {
                     ...(canAnimate
                       ? {
                           animationDelay: `${
-                            Math.min(index, 5) *
-                            (fullMotion ? 34 : 20)
+                            Math.min(index, 5) * (fullMotion ? 34 : 20)
                           }ms`,
                         }
                       : {}),
@@ -3215,19 +3583,23 @@ export function ExerciseLabDashboard() {
         }
 
         .exercise-lab-queue-card--animated {
-          animation: exercise-lab-queue-in ${fullMotion ? 260 : 180}ms cubic-bezier(0.18, 0.88, 0.24, 1) both;
+          animation: exercise-lab-queue-in ${fullMotion ? 260 : 180}ms
+            cubic-bezier(0.18, 0.88, 0.24, 1) both;
         }
 
         .exercise-lab-workbench-body--animated {
-          animation: exercise-lab-workbench-in ${fullMotion ? 240 : 160}ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+          animation: exercise-lab-workbench-in ${fullMotion ? 240 : 160}ms
+            cubic-bezier(0.2, 0.8, 0.2, 1) both;
         }
 
         .exercise-lab-action-dock--animated {
-          animation: exercise-lab-dock-in ${fullMotion ? 240 : 180}ms cubic-bezier(0.2, 0.8, 0.2, 1) ${fullMotion ? 80 : 40}ms both;
+          animation: exercise-lab-dock-in ${fullMotion ? 240 : 180}ms
+            cubic-bezier(0.2, 0.8, 0.2, 1) ${fullMotion ? 80 : 40}ms both;
         }
 
         .exercise-lab-drawer-option--animated {
-          animation: exercise-lab-drawer-option-in ${fullMotion ? 220 : 160}ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+          animation: exercise-lab-drawer-option-in ${fullMotion ? 220 : 160}ms
+            cubic-bezier(0.2, 0.8, 0.2, 1) both;
         }
 
         @keyframes exercise-lab-queue-in {

@@ -8,8 +8,11 @@ import { PoseController } from './pose.controller';
 import { PoseGateway } from './pose.gateway';
 import { PoseRepository } from './pose.repository';
 import { PoseService } from './pose.service';
+import { WorkoutEquipmentController } from './workout-equipment.controller';
 
-type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
+type JwtExpiresIn =
+  | number
+  | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
 @Module({
   imports: [
@@ -27,7 +30,7 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
       }),
     }),
   ],
-  controllers: [PoseController],
+  controllers: [PoseController, WorkoutEquipmentController],
   providers: [PoseGateway, PoseService, PoseRepository, AiPythonClientService],
 })
 export class PoseModule {}

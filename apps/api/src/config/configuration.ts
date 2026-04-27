@@ -163,3 +163,15 @@ export const aiConfig = registerAs('ai', () => ({
   apiBaseUrl: process.env.AI_API_BASE_URL || '',
   requestTimeoutMs: parseEnvInteger(process.env.AI_REQUEST_TIMEOUT_MS, 60000),
 }));
+
+export const equipmentDetectionConfig = registerAs('equipmentDetection', () => ({
+  provider: process.env.EQUIPMENT_DETECTION_PROVIDER || '',
+  requestTimeoutMs: parseEnvInteger(
+    process.env.EQUIPMENT_DETECTION_REQUEST_TIMEOUT_MS,
+    5000,
+  ),
+  roboflowApiBaseUrl:
+    process.env.ROBOFLOW_API_BASE_URL || 'https://serverless.roboflow.com',
+  roboflowApiKey: process.env.ROBOFLOW_API_KEY || '',
+  roboflowModelId: process.env.ROBOFLOW_MODEL_ID || '',
+}));

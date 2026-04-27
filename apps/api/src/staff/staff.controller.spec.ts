@@ -190,9 +190,11 @@ describe('StaffController', () => {
     ).resolves.toEqual({
       id: 'appointment-1',
     });
-    expect(
-      appointmentService.respondToAppointmentAsStaff,
-    ).toHaveBeenCalledWith('staff-1', 'appointment-1', { accepted: true });
+    expect(appointmentService.respondToAppointmentAsStaff).toHaveBeenCalledWith(
+      'staff-1',
+      'appointment-1',
+      { accepted: true },
+    );
   });
 
   it('completes a coaching appointment through the appointment service', async () => {
@@ -209,11 +211,13 @@ describe('StaffController', () => {
     ).resolves.toEqual({
       id: 'appointment-1',
     });
-    expect(
-      appointmentService.completeAppointmentAsStaff,
-    ).toHaveBeenCalledWith('staff-1', 'appointment-1', {
-      session_notes: 'Completed on time.',
-    });
+    expect(appointmentService.completeAppointmentAsStaff).toHaveBeenCalledWith(
+      'staff-1',
+      'appointment-1',
+      {
+        session_notes: 'Completed on time.',
+      },
+    );
   });
 
   it('cancels a coaching appointment through the appointment service', async () => {

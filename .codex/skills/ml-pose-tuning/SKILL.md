@@ -27,6 +27,7 @@ Use this skill for pose-tracking and rep-detection tuning across FitTrack's work
 - Never introduce OpenRouter or another LLM into real-time frame analysis.
 - Use strict JSON only for finalize-time unknown exercise classification or other explicitly offline classification paths.
 - Preserve Nest ownership of session lifecycle, auth, and persistence.
+- For exercise creation from observed reps, use `ai-contract-core` and its pose exercise creation contract before tuning domain thresholds.
 
 ## MCP routing
 
@@ -42,6 +43,16 @@ Use this skill for pose-tracking and rep-detection tuning across FitTrack's work
 4. Tune ROM, confidence, visibility, and phase-transition rules.
 5. Verify full reps, realistic reps, partials when allowed, occlusion/noise, and false-positive prevention.
 6. Emit a compact tuning artifact with the chosen bands, rules, and known failure cases.
+
+## Exercise creation from reps
+
+When three observed reps are used to propose a new exercise profile:
+
+- Require one locked subject and exactly three representative completed reps.
+- Derive side-specific and spatial evidence before prompting: left/right joint angles, body x/y travel, body-line stability, phase timing, visibility, and equipment context.
+- Do not let one-arm evidence become a normal bilateral exercise. Mark it degraded, occluded, or a unilateral candidate.
+- The AI output must be a strict JSON proposal, not final persisted truth.
+- Nest/backend validation owns final exercise creation, moderation status, difficulty tier, EXP multiplier, and conflict handling.
 
 ## Normalized movement contract
 

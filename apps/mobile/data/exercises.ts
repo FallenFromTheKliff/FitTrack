@@ -22,6 +22,13 @@ export const EXERCISE_REFERENCES: ExerciseReference[] = [
     recommendation: "Keep a straight body line, lower until the elbows bend deeply, and press without letting the hips sag."
   },
   {
+    id: "ex-014",
+    name: "Dip",
+    muscleGroup: "Chest",
+    level: "Intermediate",
+    recommendation: "Lower with control, keep both elbows moving together, and press back to a tall top lockout."
+  },
+  {
     id: "ex-002",
     name: "Incline Push-Up",
     muscleGroup: "Chest",
@@ -69,6 +76,13 @@ export const EXERCISE_REFERENCES: ExerciseReference[] = [
     muscleGroup: "Shoulders",
     level: "Intermediate",
     recommendation: "Brace your core and press straight overhead without leaning back."
+  },
+  {
+    id: "ex-015",
+    name: "Dumbbell Bicep Curl",
+    muscleGroup: "Arms",
+    level: "Beginner",
+    recommendation: "Keep the elbows pinned, squeeze hard at the top, and avoid any hip swing."
   },
   {
     id: "ex-009",

@@ -115,7 +115,9 @@ describe('AppointmentService', () => {
       slots: [{ day_of_week: 2, start_time: '10:00', end_time: '12:00' }],
     });
 
-    expect(repo.findCoachScheduleContextOrThrow).toHaveBeenCalledWith('coach-1');
+    expect(repo.findCoachScheduleContextOrThrow).toHaveBeenCalledWith(
+      'coach-1',
+    );
     expect(repo.replaceAvailabilitySlots).toHaveBeenCalledWith({
       coachId: 'coach-1',
       slots: [
@@ -498,9 +500,13 @@ describe('AppointmentService', () => {
       updated_at: new Date('2099-03-25T10:00:00.000Z'),
     });
 
-    const result = await service.respondToAppointmentAsStaff('staff-1', 'appt-1', {
-      accepted: true,
-    });
+    const result = await service.respondToAppointmentAsStaff(
+      'staff-1',
+      'appt-1',
+      {
+        accepted: true,
+      },
+    );
 
     expect(repo.findCoachByUserIdOrThrow).not.toHaveBeenCalled();
     expect(repo.updateAppointment).toHaveBeenCalledWith('appt-1', {

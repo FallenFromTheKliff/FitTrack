@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { Prisma, SessionStatus } from '@prisma/client';
+import { Prisma, ProgressionSourceType, SessionStatus } from '@prisma/client';
 
 import {
   BaseRepository,
@@ -52,6 +52,7 @@ const exerciseLogPoseSessionInclude =
       id: true,
       rep_count_ai: true,
       confidence_avg: true,
+      analysis_summary: true,
       started_at: true,
       ended_at: true,
     },
@@ -80,6 +81,23 @@ const workoutSessionDetailInclude =
       include: exerciseLogInclude,
     },
   });
+
+function readSourceRevision(
+  sourceContext: Prisma.JsonValue | null | undefined,
+): number | null {
+  if (
+    !sourceContext ||
+    typeof sourceContext !== 'object' ||
+    Array.isArray(sourceContext)
+  ) {
+    return null;
+  }
+
+  const sourceRevision = sourceContext.source_revision;
+  return typeof sourceRevision === 'number' && Number.isFinite(sourceRevision)
+    ? sourceRevision
+    : null;
+}
 
 @Injectable()
 export class WorkoutSessionRepository extends BaseRepository {
@@ -177,6 +195,22 @@ export class WorkoutSessionRepository extends BaseRepository {
       },
       include: workoutSessionDetailInclude,
     });
+  }
+
+  async getNextWorkoutSourceRevision(sessionId: string): Promise<number> {
+    const sourceEvent = await this.prisma.progressionSourceEvent.findUnique({
+      where: {
+        source_type_source_id: {
+          source_id: sessionId,
+          source_type: ProgressionSourceType.workout_session_completed,
+        },
+      },
+      select: {
+        source_context: true,
+      },
+    });
+
+    return (readSourceRevision(sourceEvent?.source_context) ?? 0) + 1;
   }
 
   async createExerciseLog(input: {

@@ -23,9 +23,7 @@ import { MembershipCardService } from './card.service';
 @ApiBearerAuth('access-token')
 @Controller('membership/card')
 export class MembershipCardController {
-  constructor(
-    private readonly membershipCardService: MembershipCardService,
-  ) {}
+  constructor(private readonly membershipCardService: MembershipCardService) {}
 
   @Post('purchase')
   @ApiHeader({

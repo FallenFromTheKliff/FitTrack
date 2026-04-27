@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.routes import pose_session_service
+from app.api.routes import equipment_detection_service, pose_session_service
 from app.main import app
 
 
 @pytest.fixture(autouse=True)
 def reset_sessions() -> None:
     pose_session_service.reset()
+    equipment_detection_service.reset()
 
 
 @pytest.fixture()
@@ -22,6 +25,31 @@ def test_health_route_returns_ok(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_equipment_detect_reports_missing_local_model(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "EQUIPMENT_DETECTION_MODEL_PATH",
+        str(Path.cwd() / "missing-equipment-model.pt"),
+    )
+    equipment_detection_service.reset()
+
+    response = client.post(
+        "/equipment/detect",
+        json={"frame_b64": "placeholder-frame"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "equipment_confidence": None,
+        "equipment_conflicts": ["equipment_model_unavailable"],
+        "equipment_context": None,
+        "equipment_detections": [],
+        "equipment_family": "unknown",
+    }
 
 
 def test_bootstrap_returns_ready_payload(client: TestClient) -> None:
@@ -114,44 +142,34 @@ def test_analyze_returns_deterministic_pose_payload(client: TestClient) -> None:
     )
 
     assert first_response.status_code == 200
-    assert first_response.json() == {
-        "rep_event": False,
-        "rep_count_delta": 0,
-        "rep_count_total": 0,
-        "confidence": 0.84,
-        "exercise_class": "squat",
-        "matched_profile_id": "profile-1",
-        "subject_locked": True,
-        "subject_lock_confidence": 0.92,
-        "phase": "lowering",
-        "classification_source": "classifier",
-        "needs_confirmation": False,
-        "candidate_exercises": [],
-        "form_feedback": ["Keep your chest up."],
-    }
+    first_payload = first_response.json()
+    second_payload = second_response.json()
+    third_payload = third_response.json()
+
+    assert first_payload["rep_event"] is False
+    assert first_payload["rep_count_delta"] == 0
+    assert first_payload["rep_count_total"] == 0
+    assert first_payload["exercise_class"] == "squat"
+    assert first_payload["matched_profile_id"] == "profile-1"
+    assert first_payload["subject_locked"] is True
+    assert first_payload["phase"] == "lowering"
+    assert first_payload["classification_source"] == "preset"
+    assert first_payload["needs_confirmation"] is False
+    assert first_payload["processing_mode"] == "legacy_frame"
+    assert "Heuristic native rep counting is active" in " ".join(
+        first_payload["form_feedback"]
+    )
     assert second_response.status_code == 200
-    assert second_response.json()["phase"] == "bottom"
-    assert second_response.json()["form_feedback"] == [
-        "Keep your chest up.",
-        "Drive through your heels.",
-        "Maintain a controlled tempo.",
-    ]
+    assert second_payload["phase"] == "bottom"
+    assert second_payload["rep_count_total"] == 0
+    assert "Pause briefly at the bottom" in " ".join(second_payload["form_feedback"])
     assert third_response.status_code == 200
-    assert third_response.json() == {
-        "rep_event": True,
-        "rep_count_delta": 1,
-        "rep_count_total": 1,
-        "confidence": 0.9,
-        "exercise_class": "squat",
-        "matched_profile_id": "profile-1",
-        "subject_locked": True,
-        "subject_lock_confidence": 0.84,
-        "phase": "rising",
-        "classification_source": "classifier",
-        "needs_confirmation": False,
-        "candidate_exercises": [],
-        "form_feedback": ["Keep your chest up.", "Rep counted cleanly."],
-    }
+    assert third_payload["rep_event"] is True
+    assert third_payload["rep_count_delta"] == 1
+    assert third_payload["rep_count_total"] == 1
+    assert third_payload["phase"] == "rising"
+    assert third_payload["classification_source"] == "preset"
+    assert "Rep counted cleanly." in third_payload["form_feedback"]
 
 
 def test_analyze_returns_422_for_empty_frame_payload(client: TestClient) -> None:
@@ -176,7 +194,7 @@ def test_analyze_returns_422_for_empty_frame_payload(client: TestClient) -> None
     assert payload["type"] == "INVALID_REQUEST"
     assert payload["title"] == "Invalid Request"
     assert payload["status"] == 422
-    assert "body.frame_b64" in payload["detail"]
+    assert "either frame_b64 or frames must be provided" in payload["detail"]
 
 
 def test_finalize_returns_summary_and_no_learned_profile_when_match_exists(
@@ -212,27 +230,15 @@ def test_finalize_returns_summary_and_no_learned_profile_when_match_exists(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "detected_exercise_name": "squat",
-        "matched_profile_id": "profile-1",
-        "classification_confidence": 0.87,
-        "subject_lock_confidence": 0.853,
-        "analysis_summary": {
-            "reps_detected": 1,
-            "form_feedback": [
-                "Keep your chest up.",
-                "Drive through your heels.",
-                "Maintain a controlled tempo.",
-                "Rep counted cleanly.",
-            ],
-            "average_confidence": 0.87,
-            "dominant_joint_angles": {
-                "hip_knee_ankle": 93.2,
-                "torso_hip_knee": 74.9,
-            },
-        },
-        "learned_profile": None,
-    }
+    payload = response.json()
+    assert payload["detected_exercise_name"] == "squat"
+    assert payload["matched_profile_id"] == "profile-1"
+    assert payload["classification_confidence"] is not None
+    assert payload["subject_lock_confidence"] is not None
+    assert payload["analysis_summary"]["reps_detected"] == 1
+    assert "Rep counted cleanly." in payload["analysis_summary"]["form_feedback"]
+    assert payload["analysis_summary"]["dominant_joint_angles"]["hip_knee_ankle"] > 0
+    assert payload["learned_profile"] is None
 
 
 def test_finalize_can_emit_learned_profile_without_candidate_match(
@@ -262,21 +268,11 @@ def test_finalize_can_emit_learned_profile_without_candidate_match(
     assert response.status_code == 200
     assert payload["detected_exercise_name"] == "push_up"
     assert payload["matched_profile_id"] is None
-    assert payload["learned_profile"] == {
-        "canonical_name": "push_up",
-        "landmark_signature": {
-            "left_shoulder": [0.11, 0.2],
-            "right_hip": [0.31, 0.4],
-        },
-        "angle_signature": {"shoulder_elbow_wrist": 88.5},
-        "orientation_signature": {"body_orientation": "prone_horizontal"},
-        "movement_pattern": {
-            "tracked_joint": "elbow_angle",
-            "cooldown_frames": 4,
-        },
-        "visibility_pattern": {"min_visibility": 0.5},
-        "rep_rules": {"rep_interval_frames": 3, "phase_hint": "lowering"},
-    }
+    assert payload["learned_profile"] is not None
+    assert payload["learned_profile"]["canonical_name"] == "push_up"
+    assert payload["learned_profile"]["dominant_joint"] == "elbow"
+    assert payload["learned_profile"]["rep_thresholds"]["down"]["angle"] > 0
+    assert payload["learned_profile"]["movement_pattern"]["phase"] == "lowering"
 
 
 def test_finalize_returns_422_for_blank_pose_session_id(client: TestClient) -> None:

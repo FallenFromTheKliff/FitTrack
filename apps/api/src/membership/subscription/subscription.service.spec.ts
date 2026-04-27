@@ -113,7 +113,9 @@ describe('SubscriptionService', () => {
 
     const result = await service.getMySubscription('member-1');
 
-    expect(repo.findCurrentSubscriptionByUserId).toHaveBeenCalledWith('member-1');
+    expect(repo.findCurrentSubscriptionByUserId).toHaveBeenCalledWith(
+      'member-1',
+    );
     expect(result.id).toBe('sub-1');
   });
 

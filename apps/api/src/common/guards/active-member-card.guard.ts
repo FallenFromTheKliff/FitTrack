@@ -11,9 +11,7 @@ import { RequestWithUser } from '../types/request.types';
 
 @Injectable()
 export class ActiveMemberCardGuard implements CanActivate {
-  constructor(
-    private readonly membershipCardService: MembershipCardService,
-  ) {}
+  constructor(private readonly membershipCardService: MembershipCardService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithUser>();

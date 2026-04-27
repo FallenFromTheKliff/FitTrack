@@ -16,6 +16,7 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
+  Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,6 +42,7 @@ type NavItem = {
     | "members"
     | "schedule"
     | "exercise-lab"
+    | "gamification"
     | "ai"
     | "facilities"
     | "inventory"
@@ -67,6 +69,12 @@ const NAV: NavItem[] = [
     label: "Exercise Lab",
     icon: Dumbbell,
     pageKey: "exercise-lab",
+  },
+  {
+    href: "/gamification",
+    label: "Gamification",
+    icon: Trophy,
+    pageKey: "gamification",
   },
   { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
   {
@@ -129,7 +137,8 @@ export default function Sidebar({
       <div
         style={{
           ...s.logoMark,
-          transform: canToggleCollapse && isBrandHovered ? "translateY(-1px)" : "none",
+          transform:
+            canToggleCollapse && isBrandHovered ? "translateY(-1px)" : "none",
           boxShadow:
             canToggleCollapse && isBrandHovered
               ? `0 10px 24px ${colors.brand}26`
@@ -246,7 +255,9 @@ export default function Sidebar({
             ...s.logoRow,
             width: "100%",
             border: `1px solid ${isBrandHovered ? `${colors.brand}40` : "transparent"}`,
-            backgroundColor: isBrandHovered ? colors.surfaceRaised : "transparent",
+            backgroundColor: isBrandHovered
+              ? colors.surfaceRaised
+              : "transparent",
             borderRadius: 16,
             cursor: "pointer",
             justifyContent: collapsed ? "center" : "flex-start",
@@ -268,7 +279,9 @@ export default function Sidebar({
         aria-label={collapsed ? "Profile" : undefined}
         style={{
           ...s.profileCard(isProfileActive),
-          padding: collapsed ? "12px 10px" : s.profileCard(isProfileActive).padding,
+          padding: collapsed
+            ? "12px 10px"
+            : s.profileCard(isProfileActive).padding,
           alignItems: collapsed ? "center" : undefined,
         }}
         className={fontClass}

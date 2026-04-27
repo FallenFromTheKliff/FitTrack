@@ -22,7 +22,10 @@ export function buildFallbackAiChatResponse(
   input: AIChatInput,
 ): AIChatResponse {
   const latestMessage = resolveLatestUserMessage(input.messages);
-  const action = inferChatAction(latestMessage, input.sessionContext.context_type);
+  const action = inferChatAction(
+    latestMessage,
+    input.sessionContext.context_type,
+  );
   const params = buildActionParams(action, latestMessage, input);
 
   return {
@@ -38,35 +41,43 @@ export function buildFallbackGeneratePlanResponse(
   input: GeneratePlanInput,
 ): AiGeneratePlanResponse {
   return {
-    weeks: Array.from({ length: input.planInput.duration_weeks }, (_, index) => ({
-      week_number: index + 1,
-      days: buildFallbackWeekDays(input, index + 1),
-    })),
+    weeks: Array.from(
+      { length: input.planInput.duration_weeks },
+      (_, index) => ({
+        week_number: index + 1,
+        days: buildFallbackWeekDays(input, index + 1),
+      }),
+    ),
     model_used: MODEL_NAME,
     token_count: null,
   };
 }
 
 function buildFallbackWeekDays(input: GeneratePlanInput, weekNumber: number) {
-  return Array.from({ length: input.planInput.days_per_week }, (_, dayIndex) => {
-    const exercises = selectExercisesForDay(input, dayIndex);
-    const primary = exercises[0];
+  return Array.from(
+    { length: input.planInput.days_per_week },
+    (_, dayIndex) => {
+      const exercises = selectExercisesForDay(input, dayIndex);
+      const primary = exercises[0];
 
-    return {
-      day_of_week: DAY_SEQUENCE[dayIndex] ?? dayIndex % 7,
-      focus_label: primary
-        ? `${primary.muscle_group.replaceAll('_', ' ')} focus`
-            .replace(/\b\w/g, (char) => char.toUpperCase())
-        : 'Full Body Focus',
-      notes:
-        `Week ${weekNumber}: ` +
-        (input.planInput.preferences?.trim() ||
-          'Keep sessions sustainable and technically clean.'),
-      exercises: exercises.map((exercise, index) =>
-        toFallbackExercise(input, exercise, index),
-      ),
-    };
-  });
+      return {
+        day_of_week: DAY_SEQUENCE[dayIndex] ?? dayIndex % 7,
+        focus_label: primary
+          ? `${primary.muscle_group.replaceAll('_', ' ')} focus`.replace(
+              /\b\w/g,
+              (char) => char.toUpperCase(),
+            )
+          : 'Full Body Focus',
+        notes:
+          `Week ${weekNumber}: ` +
+          (input.planInput.preferences?.trim() ||
+            'Keep sessions sustainable and technically clean.'),
+        exercises: exercises.map((exercise, index) =>
+          toFallbackExercise(input, exercise, index),
+        ),
+      };
+    },
+  );
 }
 
 function selectExercisesForDay(input: GeneratePlanInput, dayIndex: number) {
@@ -81,7 +92,8 @@ function selectExercisesForDay(input: GeneratePlanInput, dayIndex: number) {
   const secondary = ordered.filter(
     (exercise) => exercise.category !== ExerciseCategory.strength,
   );
-  const prioritized = strength.length > 0 ? [...strength, ...secondary] : ordered;
+  const prioritized =
+    strength.length > 0 ? [...strength, ...secondary] : ordered;
 
   return prioritized.slice(0, Math.min(4, prioritized.length));
 }
@@ -163,7 +175,8 @@ function inferChatAction(
   contextType: string,
 ): AIChatAction {
   const normalized = latestMessage.toLowerCase();
-  const actionVerbMatch = /\b(build|create|generate|make|design|write|set up|adjust|recalculate|recalc|update|change|revise|set)\b/;
+  const actionVerbMatch =
+    /\b(build|create|generate|make|design|write|set up|adjust|recalculate|recalc|update|change|revise|set)\b/;
   const wantsPlan =
     /\b(plan|program|routine|split|workout plan|training plan)\b/.test(
       normalized,
@@ -191,7 +204,8 @@ function buildActionParams(
 ): Record<string, unknown> | null {
   if (action === 'GENERATE_PLAN') {
     return {
-      duration_weeks: extractNumber(latestMessage, /(\d+)\s*(?:week|weeks)/i) ?? 4,
+      duration_weeks:
+        extractNumber(latestMessage, /(\d+)\s*(?:week|weeks)/i) ?? 4,
       days_per_week: extractNumber(latestMessage, /(\d+)\s*(?:day|days)/i) ?? 3,
       preferences: latestMessage,
     };
@@ -234,8 +248,12 @@ function extractNumber(value: string, pattern: RegExp): number | null {
 
 function resolveLatestUserMessage(messages: AIChatInput['messages']): string {
   return (
-    [...messages].reverse().find((message) => message.role === 'user')?.content
-      .trim() ?? messages.at(-1)?.content.trim() ?? 'How can I improve this week?'
+    [...messages]
+      .reverse()
+      .find((message) => message.role === 'user')
+      ?.content.trim() ??
+    messages.at(-1)?.content.trim() ??
+    'How can I improve this week?'
   );
 }
 

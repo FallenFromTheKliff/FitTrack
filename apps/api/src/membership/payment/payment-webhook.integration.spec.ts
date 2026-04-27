@@ -219,8 +219,7 @@ function createCheckoutPaidEvent(input?: {
 }): PaymongoWebhookEvent {
   const checkoutSessionId = input?.checkoutSessionId ?? 'cs_test_checkout';
   const checkoutUrl =
-    input?.checkoutUrl ??
-    `https://checkout.paymongo.com/${checkoutSessionId}`;
+    input?.checkoutUrl ?? `https://checkout.paymongo.com/${checkoutSessionId}`;
   const referenceNumber = input?.referenceNumber ?? 'GCASH-1234';
 
   return {

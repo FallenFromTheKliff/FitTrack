@@ -59,6 +59,14 @@ class PoseAngleSignalEntry(StrictModel):
     shoulder: float | None = None
     hip: float | None = None
     knee: float | None = None
+    left_elbow: float | None = None
+    right_elbow: float | None = None
+    left_shoulder: float | None = None
+    right_shoulder: float | None = None
+    left_hip: float | None = None
+    right_hip: float | None = None
+    left_knee: float | None = None
+    right_knee: float | None = None
 
 
 class PoseOrientationVector(StrictModel):
@@ -78,17 +86,21 @@ class PoseVisibilitySignal(StrictModel):
     low_confidence_landmarks: list[str] = Field(default_factory=list)
     reliable_frame_count: int
     wrist_visibility: float
+    left_arm_visibility: float | None = None
+    right_arm_visibility: float | None = None
 
 
 class PoseHipSignal(StrictModel):
     average_y: float
     range_y: float
+    range_x: float | None = None
     stable: bool
 
 
 class PoseTemporalSignal(StrictModel):
     amplitudes: dict[str, float] = Field(default_factory=dict)
     oscillating_joints: list[str] = Field(default_factory=list)
+    phase_sync_ms: int | None = None
 
 
 class PoseDerivedSignals(StrictModel):
@@ -109,12 +121,35 @@ class PoseRepThresholdPair(StrictModel):
     up: PoseRepThreshold
 
 
+class PoseSpatialRequirements(StrictModel):
+    body_y_travel_min: float | None = None
+    body_x_drift_max: float | None = None
+    body_line_tolerance: float | None = None
+    left_right_symmetry_tolerance: float | None = None
+    phase_sync_tolerance_ms: int | None = None
+
+
 class PoseMovementContract(StrictModel):
     exercise: str = Field(min_length=1)
     dominant_joint: Literal["elbow", "shoulder", "hip", "knee"]
     rep_thresholds: PoseRepThresholdPair
     secondary_check: str = Field(min_length=1)
     oscillating_joints: list[str] = Field(default_factory=list)
+    rep_model: Literal[
+        "bilateral",
+        "unilateral_left",
+        "unilateral_right",
+        "alternating",
+        "static_hold",
+        "unknown",
+    ] = "unknown"
+    required_sides: Literal["both", "left", "right", "either", "alternating"] | None = None
+    primary_joints: list[str] = Field(default_factory=list)
+    secondary_joints: list[str] = Field(default_factory=list)
+    phase_order: list[str] = Field(default_factory=list)
+    spatial_requirements: PoseSpatialRequirements | None = None
+    no_count_conditions: list[str] = Field(default_factory=list)
+    degraded_conditions: list[str] = Field(default_factory=list)
 
 
 class PoseAnalyzeRequest(StrictModel):
@@ -148,6 +183,12 @@ class PoseAnalyzeResponse(StrictModel):
     subject_lock_confidence: float = Field(ge=0.0, le=1.0)
     classification_source: Literal["preset", "classifier", "user_confirmed"] = "classifier"
     needs_confirmation: bool = False
+    processing_mode: Literal["legacy_frame", "sequence"] = "sequence"
+    rep_event: bool = False
+    rep_count_delta: int = Field(default=0, ge=0)
+    rep_count_total: int = Field(default=0, ge=0)
+    phase: str | None = None
+    keypoints: list[PoseKeypoint] | None = Field(default=None, min_length=33, max_length=33)
     candidate_exercises: list[str] = Field(default_factory=list)
     form_feedback: list[str] = Field(default_factory=list)
     learned_profile: LearnedProfile | None = None

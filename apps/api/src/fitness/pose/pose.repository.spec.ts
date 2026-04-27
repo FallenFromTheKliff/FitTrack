@@ -15,10 +15,15 @@ describe('PoseRepository', () => {
     findMany: jest.fn(),
   };
 
+  const progressionSourceEvent = {
+    findUnique: jest.fn(),
+  };
+
   const prisma = {
     $transaction: jest.fn(),
     poseSession,
     poseExerciseProfile,
+    progressionSourceEvent,
   };
 
   let repo: PoseRepository;
@@ -91,6 +96,28 @@ describe('PoseRepository', () => {
         tolerance: true,
         rep_thresholds: true,
         rep_rules: true,
+      },
+    });
+  });
+
+  it('derives the next pose source revision from the stored progression source event', async () => {
+    progressionSourceEvent.findUnique.mockResolvedValue({
+      source_context: {
+        source_revision: 4,
+      },
+    });
+
+    await expect(repo.getNextPoseSourceRevision('pose-1')).resolves.toBe(5);
+
+    expect(progressionSourceEvent.findUnique).toHaveBeenCalledWith({
+      where: {
+        source_type_source_id: {
+          source_id: 'pose-1',
+          source_type: 'pose_session_finalized',
+        },
+      },
+      select: {
+        source_context: true,
       },
     });
   });
@@ -202,6 +229,12 @@ describe('PoseRepository', () => {
         id: true,
         user_id: true,
         exercise_log_id: true,
+        exercise_log: {
+          select: {
+            id: true,
+            session_id: true,
+          },
+        },
         exercise_hint: true,
         rep_count_ai: true,
         confidence_avg: true,

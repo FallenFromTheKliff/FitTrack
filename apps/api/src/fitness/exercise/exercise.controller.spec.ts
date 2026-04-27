@@ -11,7 +11,9 @@ function getGuardMetadata(
     | 'listExercises'
     | 'getExerciseById'
     | 'createExercise'
-    | 'updateExercise',
+    | 'updateExercise'
+    | 'listReviewSubmissions'
+    | 'updateReviewSubmission',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
     GUARDS_METADATA,
@@ -20,7 +22,11 @@ function getGuardMetadata(
 }
 
 function getRolesMetadata(
-  methodName: 'createExercise' | 'updateExercise',
+  methodName:
+    | 'createExercise'
+    | 'updateExercise'
+    | 'listReviewSubmissions'
+    | 'updateReviewSubmission',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -31,9 +37,11 @@ function getRolesMetadata(
 describe('ExerciseController', () => {
   const exerciseService = {
     listExercises: jest.fn(),
+    listReviewSubmissions: jest.fn(),
     getExerciseById: jest.fn(),
     createExercise: jest.fn(),
     updateExercise: jest.fn(),
+    updateReviewSubmission: jest.fn(),
   };
 
   let controller: ExerciseController;
@@ -59,13 +67,18 @@ describe('ExerciseController', () => {
     expect(exerciseService.listExercises).toHaveBeenCalledWith({});
   });
 
-  it.each(['createExercise', 'updateExercise'] as const)(
-    'locks %s to admin users',
-    (methodName) => {
-      expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
-      expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
-    },
-  );
+  it.each([
+    'createExercise',
+    'updateExercise',
+    'listReviewSubmissions',
+    'updateReviewSubmission',
+  ] as const)('locks %s to admin and staff users', (methodName) => {
+    expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
+    expect(getRolesMetadata(methodName)).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
+  });
 
   it('creates exercises through the service', async () => {
     exerciseService.createExercise.mockResolvedValue({ id: 'exercise-1' });
@@ -81,5 +94,23 @@ describe('ExerciseController', () => {
       muscle_group: 'legs',
       category: ExerciseCategory.strength,
     });
+  });
+
+  it('updates review submissions with the current operator as actor', async () => {
+    exerciseService.updateReviewSubmission.mockResolvedValue({
+      id: 'review-submission-1',
+    });
+
+    await controller.updateReviewSubmission(
+      'review-submission-1',
+      { creator_state: 'candidate' as never },
+      { sub: 'operator-1' } as never,
+    );
+
+    expect(exerciseService.updateReviewSubmission).toHaveBeenCalledWith(
+      'review-submission-1',
+      { creator_state: 'candidate' },
+      'operator-1',
+    );
   });
 });

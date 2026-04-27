@@ -582,7 +582,9 @@ describe('BookingService', () => {
         provider: PaymentProvider.cash,
       }),
     );
-    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+    expect(
+      paymongoCheckoutService.createCheckoutSession,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual({
       booking_id: 'booking-1',
       status: 'pending',

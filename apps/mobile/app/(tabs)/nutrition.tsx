@@ -8,6 +8,7 @@ import { useIsFocused } from "@react-navigation/native";
 
 import type {
   ActiveNutritionProfileRecord,
+  NutritionCoachingInsightRecord,
   DailyNutritionSummaryRecord,
   NutritionLogRecord,
   NutritionMacroTotalsRecord
@@ -110,6 +111,23 @@ function getAlertToneColor(tone: NutritionGuidanceAlertTone, colors: ThemeColors
   }
 }
 
+function mapCoachingInsightToAlert(insight: NutritionCoachingInsightRecord) {
+  const tone: NutritionGuidanceAlertTone =
+    insight.priority === "warning"
+      ? "warning"
+      : insight.priority === "recovery"
+        ? "success"
+        : "brand";
+
+  return {
+    id: insight.id,
+    tone,
+    eyebrow: insight.source === "progression_summary" ? "PROGRESSION-AWARE" : "LIVE SUMMARY",
+    title: insight.title,
+    message: insight.message
+  };
+}
+
 function getFoodTrailingLabel(item: NutritionFoodCatalogItem) {
   switch (item.focus[0]) {
     case "protein":
@@ -207,7 +225,13 @@ export default function NutritionScreen() {
   const hasGoal = !!activeNutrition?.macros;
   const goalLabel = formatGoalLabel(activeNutrition?.tdee.fitnessGoal);
   const macroRows = formatMacroRows(loggedTotals, targetTotals);
-  const guidanceAlerts = useMemo(() => getNutritionGuidanceAlerts(loggedTotals, targetTotals), [loggedTotals, targetTotals]);
+  const guidanceAlerts = useMemo(
+    () =>
+      dailySummary?.coaching?.length
+        ? dailySummary.coaching.map(mapCoachingInsightToAlert)
+        : getNutritionGuidanceAlerts(loggedTotals, targetTotals),
+    [dailySummary?.coaching, loggedTotals, targetTotals]
+  );
   const recommendedFoods = useMemo(
     () => getRecommendedFoodCatalogItems(loggedTotals, targetTotals, 3),
     [loggedTotals, targetTotals]

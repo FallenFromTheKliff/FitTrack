@@ -2,37 +2,82 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { getDefaultConfig } = require("expo/metro-config");
 
-const appRoot = __dirname;
-const workspaceRoot = path.resolve(appRoot, "..", "..");
-const mobilePackage = require("./package.json");
-
-function getSharedWorkspacePackageRoots() {
-  return Object.keys(mobilePackage.dependencies ?? {})
-    .filter((name) => name.startsWith("@fittrack/"))
-    .map((name) => path.join(workspaceRoot, "packages", name.replace("@fittrack/", "")))
-    .filter((folder) => fs.existsSync(folder));
+function safeRealpath(targetPath) {
+  try {
+    return fs.realpathSync.native?.(targetPath) ?? fs.realpathSync(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
 }
 
-const config = getDefaultConfig(appRoot);
-const allowedWatchRoots = new Set([
-  path.resolve(appRoot),
-  path.resolve(path.join(workspaceRoot, "node_modules")),
-  ...getSharedWorkspacePackageRoots().map((folder) => path.resolve(folder)),
-]);
+function uniqueExistingPaths(paths) {
+  return [
+    ...new Set(
+      paths
+        .filter(Boolean)
+        .map((folder) => safeRealpath(folder))
+        .filter((folder) => fs.existsSync(folder)),
+    ),
+  ];
+}
 
+function safeResolveModule(request, resolverPaths) {
+  try {
+    return require.resolve(request, { paths: resolverPaths });
+  } catch {
+    return null;
+  }
+}
+
+const logicalAppRoot = __dirname;
+const appRoot = safeRealpath(logicalAppRoot);
+const workspaceRoot = safeRealpath(path.resolve(logicalAppRoot, "..", ".."));
+
+const config = getDefaultConfig(appRoot);
 const extraBlockList = [
   /[\\/]playwright-core[\\/]\.local-browsers([\\/]|$)/,
-  /[\\/]\.artifacts[\\/].*/,
+  /[\\/]\.artifacts([\\/]|$)/,
+  /[\\/]\.pytest_cache([\\/]|$)/,
+  /[\\/]\.uv-cache([\\/]|$)/,
+  /[\\/]\.uv-cache-local([\\/]|$)/,
+  /[\\/]\.uv-runtime([\\/]|$)/,
+  /[\\/]\.venv([\\/]|$)/,
+  /[\\/]pytest-cache-files[^\\/]*([\\/]|$)/,
 ];
-
-config.watchFolders = (config.watchFolders ?? []).filter((folder) =>
-  allowedWatchRoots.has(path.resolve(folder)),
-);
-
-config.resolver.nodeModulesPaths = [
+const resolverPaths = uniqueExistingPaths([
+  path.join(logicalAppRoot, "node_modules"),
   path.join(appRoot, "node_modules"),
   path.join(workspaceRoot, "node_modules"),
-];
+]);
+const metroRuntimeEntry = safeResolveModule("@expo/metro-runtime/src/index.ts", resolverPaths);
+const preferredMetroRuntimeRoot = uniqueExistingPaths([
+  path.join(logicalAppRoot, "node_modules", "@expo", "metro-runtime"),
+  path.join(appRoot, "node_modules", "@expo", "metro-runtime"),
+])[0];
+
+config.watchFolders = uniqueExistingPaths([workspaceRoot]);
+
+config.resolver.nodeModulesPaths = resolverPaths;
+config.resolver.unstable_enableSymlinks = true;
+config.resolver.unstable_enablePackageExports = false;
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules ?? {}),
+  ...(preferredMetroRuntimeRoot
+    ? {
+        "@expo/metro-runtime": preferredMetroRuntimeRoot,
+      }
+    : {}),
+};
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "@expo/metro-runtime" && metroRuntimeEntry) {
+    return {
+      type: "sourceFile",
+      filePath: metroRuntimeEntry,
+    };
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
 
 config.resolver.blockList = [
   ...(Array.isArray(config.resolver.blockList)

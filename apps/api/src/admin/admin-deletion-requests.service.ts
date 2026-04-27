@@ -90,8 +90,10 @@ export class AdminDeletionRequestsService {
       total: requests.length,
       requests: requests.map((request) => {
         const email =
-          getIdentityIdentifier(request.user.auth_identities, AuthProvider.email) ??
-          '';
+          getIdentityIdentifier(
+            request.user.auth_identities,
+            AuthProvider.email,
+          ) ?? '';
         const phone = request.user.profile?.phone ?? null;
 
         return {
@@ -138,11 +140,7 @@ export class AdminDeletionRequestsService {
     };
   }
 
-  async approve(
-    requestId: string,
-    reviewedBy: string,
-    reviewNotes?: string,
-  ) {
+  async approve(requestId: string, reviewedBy: string, reviewNotes?: string) {
     const request = await this.prisma.accountDeletionRequest.findUnique({
       where: { id: requestId },
       include: {
@@ -193,11 +191,7 @@ export class AdminDeletionRequestsService {
     };
   }
 
-  async reject(
-    requestId: string,
-    reviewedBy: string,
-    reviewNotes?: string,
-  ) {
+  async reject(requestId: string, reviewedBy: string, reviewNotes?: string) {
     const request = await this.prisma.accountDeletionRequest.findUnique({
       where: { id: requestId },
     });

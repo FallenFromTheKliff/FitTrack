@@ -10,6 +10,25 @@ export interface NutritionMacroTotalsRecord {
   fatG: number;
 }
 
+export type NutritionCoachingInsightPriority =
+  | "info"
+  | "opportunity"
+  | "warning"
+  | "recovery";
+
+export type NutritionCoachingInsightSource =
+  | "nutrition_summary"
+  | "progression_summary";
+
+export interface NutritionCoachingInsightRecord {
+  id: string;
+  message: string;
+  priority: NutritionCoachingInsightPriority;
+  reasonCodes: string[];
+  source: NutritionCoachingInsightSource;
+  title: string;
+}
+
 export interface NutritionTdeeRecord {
   id: string;
   userId: string;
@@ -63,6 +82,7 @@ export interface NutritionLogRecord {
 }
 
 export interface DailyNutritionSummaryRecord {
+  coaching: NutritionCoachingInsightRecord[];
   date: string;
   macroTargetId: string | null;
   logged: NutritionMacroTotalsRecord;

@@ -1,8 +1,15 @@
 import {
   AmenityType,
   AuthProvider,
+  CreatorState,
+  IntegrityRiskLevel,
+  MilestoneCategory,
+  MilestoneTriggerType,
   Prisma,
   PrismaClient,
+  RankingGovernanceStatus,
+  RankingVisibility,
+  SeasonStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -77,8 +84,6 @@ const DEMO_MEMBER_EMAIL = 'member.demo.fittrack@gmail.com';
 const DEMO_MEMBER_PASSWORD = 'Password1!';
 const DEMO_MEMBER_FIRST_NAME = 'Demo';
 const DEMO_MEMBER_LAST_NAME = 'Member';
-
-type DefaultAmenity = (typeof DEFAULT_AMENITIES)[number];
 
 type SeededEmailUser = {
   email: string;
@@ -256,10 +261,219 @@ async function ensureDefaultAmenities(prisma: PrismaClient) {
   return { createdCount, existingCount, reactivatedCount };
 }
 
+function buildQuarterSeason(now: Date) {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const quarter = Math.floor(month / 3) + 1;
+  const quarterStartMonth = (quarter - 1) * 3;
+  const startsAt = new Date(Date.UTC(year, quarterStartMonth, 1, 0, 0, 0));
+  const endsAt = new Date(
+    Date.UTC(year, quarterStartMonth + 3, 0, 23, 59, 59, 999),
+  );
+
+  return {
+    title: `Capstone Season ${year} Q${quarter}`,
+    startsAt,
+    endsAt,
+  };
+}
+
+async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
+  const now = new Date();
+  const currentSeason = buildQuarterSeason(now);
+
+  await prisma.seasonDefinition.updateMany({
+    where: {
+      status: SeasonStatus.active,
+      title: {
+        not: currentSeason.title,
+      },
+    },
+    data: {
+      status: SeasonStatus.closed,
+      closed_at: now,
+    },
+  });
+
+  const existingSeason = await prisma.seasonDefinition.findFirst({
+    where: {
+      title: currentSeason.title,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingSeason) {
+    await prisma.seasonDefinition.update({
+      where: { id: existingSeason.id },
+      data: {
+        status: SeasonStatus.active,
+        starts_at: currentSeason.startsAt,
+        ends_at: currentSeason.endsAt,
+        closed_at: null,
+        archived_at: null,
+        description:
+          'Default capstone season used to exercise the gamification backbone.',
+        rules_version: 'capstone-v1',
+      },
+    });
+  } else {
+    await prisma.seasonDefinition.create({
+      data: {
+        title: currentSeason.title,
+        description:
+          'Default capstone season used to exercise the gamification backbone.',
+        status: SeasonStatus.active,
+        rules_version: 'capstone-v1',
+        starts_at: currentSeason.startsAt,
+        ends_at: currentSeason.endsAt,
+      },
+    });
+  }
+
+  const milestoneDefinitions = [
+    {
+      key: 'first-workout-complete',
+      title: 'First Workout Complete',
+      description: 'Complete your first validated workout session.',
+      category: MilestoneCategory.training,
+      trigger_type: MilestoneTriggerType.source_event,
+      condition_payload: {
+        metric: 'completed_workout_sessions',
+        target: 1,
+      } satisfies Prisma.JsonObject,
+      reward_payload: {
+        badge_tone: 'ember',
+        icon: 'flame',
+      } satisfies Prisma.JsonObject,
+      is_hidden: false,
+    },
+    {
+      key: 'streak-starter-3',
+      title: 'Streak Starter',
+      description: 'Build a three-day validated workout streak.',
+      category: MilestoneCategory.consistency,
+      trigger_type: MilestoneTriggerType.streak,
+      condition_payload: {
+        metric: 'current_streak',
+        target: 3,
+      } satisfies Prisma.JsonObject,
+      reward_payload: {
+        badge_tone: 'gold',
+        icon: 'calendar',
+      } satisfies Prisma.JsonObject,
+      is_hidden: false,
+    },
+    {
+      key: 'season-100-points',
+      title: 'Season Starter 100',
+      description: 'Earn 100 season points in the active capstone season.',
+      category: MilestoneCategory.season,
+      trigger_type: MilestoneTriggerType.summary_threshold,
+      condition_payload: {
+        metric: 'current_season_points',
+        target: 100,
+      } satisfies Prisma.JsonObject,
+      reward_payload: {
+        badge_tone: 'blue',
+        icon: 'trophy',
+      } satisfies Prisma.JsonObject,
+      is_hidden: false,
+    },
+    {
+      key: 'multi-muscle-foundation',
+      title: 'Multi-Muscle Foundation',
+      description: 'Track progression across three muscle groups.',
+      category: MilestoneCategory.training,
+      trigger_type: MilestoneTriggerType.summary_threshold,
+      condition_payload: {
+        metric: 'tracked_muscle_groups',
+        target: 3,
+      } satisfies Prisma.JsonObject,
+      reward_payload: {
+        badge_tone: 'green',
+        icon: 'layers',
+      } satisfies Prisma.JsonObject,
+      is_hidden: false,
+    },
+  ] as const;
+
+  for (const milestone of milestoneDefinitions) {
+    await prisma.milestoneDefinition.upsert({
+      where: { key: milestone.key },
+      update: {
+        title: milestone.title,
+        description: milestone.description,
+        category: milestone.category,
+        trigger_type: milestone.trigger_type,
+        condition_payload: milestone.condition_payload,
+        reward_payload: milestone.reward_payload,
+        is_active: true,
+        is_hidden: milestone.is_hidden,
+        retired_at: null,
+      },
+      create: {
+        key: milestone.key,
+        title: milestone.title,
+        description: milestone.description,
+        category: milestone.category,
+        trigger_type: milestone.trigger_type,
+        condition_payload: milestone.condition_payload,
+        reward_payload: milestone.reward_payload,
+        is_hidden: milestone.is_hidden,
+      },
+    });
+  }
+}
+
+async function ensureDefaultGamificationProfiles(prisma: PrismaClient) {
+  const users = await prisma.user.findMany({
+    where: {
+      role: {
+        in: [UserRole.admin, UserRole.member],
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  for (const user of users) {
+    await prisma.rankingProfile.upsert({
+      where: { user_id: user.id },
+      update: {},
+      create: {
+        user_id: user.id,
+        visibility: RankingVisibility.public,
+        governance_status: RankingGovernanceStatus.normal,
+      },
+    });
+    await prisma.integrityProfile.upsert({
+      where: { user_id: user.id },
+      update: {},
+      create: {
+        user_id: user.id,
+        risk_level: IntegrityRiskLevel.low,
+      },
+    });
+    await prisma.creatorProfile.upsert({
+      where: { user_id: user.id },
+      update: {},
+      create: {
+        user_id: user.id,
+        state: CreatorState.none,
+      },
+    });
+  }
+}
+
 export async function bootstrapDefaults(prisma: PrismaClient) {
   await ensureAdmin(prisma);
   await ensureDemoMember(prisma);
   const amenitySummary = await ensureDefaultAmenities(prisma);
+  await ensureDefaultGamificationBackbone(prisma);
+  await ensureDefaultGamificationProfiles(prisma);
 
   return {
     adminEmail: ADMIN_EMAIL,

@@ -23,17 +23,17 @@ datasource db {
 // =============================================================================
 
 model User {
-  id                String     @id @default(uuid()) @db.Uuid
-  role              UserRole
-  status            UserStatus @default(pending)
-  email_verified_at DateTime?  @db.Timestamptz(6)
-  phone_verified_at DateTime?  @db.Timestamptz(6)
-  qr_code_token     String?    @unique @db.VarChar(64)
-  qr_code_rotated_at DateTime? @db.Timestamptz(6)
-  qr_code_expires_at DateTime? @db.Timestamptz(6)
-  created_at        DateTime   @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime   @updatedAt @db.Timestamptz(6)
-  deletedAt         DateTime?  @db.Timestamptz(6)
+  id                 String     @id @default(uuid()) @db.Uuid
+  role               UserRole
+  status             UserStatus @default(pending)
+  email_verified_at  DateTime?  @db.Timestamptz(6)
+  phone_verified_at  DateTime?  @db.Timestamptz(6)
+  qr_code_token      String?    @unique @db.VarChar(64)
+  qr_code_rotated_at DateTime?  @db.Timestamptz(6)
+  qr_code_expires_at DateTime?  @db.Timestamptz(6)
+  created_at         DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime   @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?  @db.Timestamptz(6)
 
   // S2
   auth_identities             AuthIdentity[]
@@ -44,36 +44,48 @@ model User {
   notification_prefs          NotificationPreference?
   deletion_requests           AccountDeletionRequest[]
   progress_metrics            ProgressMetric[]
-  attendance_logs             AttendanceLog[]           @relation("attendee")
-  scanned_attendance          AttendanceLog[]           @relation("scanner")
+  attendance_logs             AttendanceLog[]            @relation("attendee")
+  scanned_attendance          AttendanceLog[]            @relation("scanner")
   // S4
   subscriptions               Subscription[]
   membership_card             MembershipCard?
   payments                    Payment[]
-  payments_verified           Payment[]                 @relation("payment_verifier")
+  payments_verified           Payment[]                  @relation("payment_verifier")
   // S5
   amenity_bookings            AmenityBooking[]
   // S6
   coach_profile               CoachProfile?
-  member_appointments         CoachAppointment[]        @relation("member")
+  member_appointments         CoachAppointment[]         @relation("member")
   coach_reviews               CoachReview[]
-  client_relationships        CoachClientRelationship[] @relation("member_rel")
+  client_relationships        CoachClientRelationship[]  @relation("member_rel")
   // S7
   training_plans              TrainingPlan[]
-  coach_assigned_plans        TrainingPlan[]            @relation("coach_trainer")
+  coach_assigned_plans        TrainingPlan[]             @relation("coach_trainer")
   workout_sessions            WorkoutSession[]
   exercise_logs               ExerciseLog[]
   exercise_review_submissions ExerciseReviewSubmission[]
   pose_sessions               PoseSession[]
   // S8
   muscle_mastery              MuscleMasteryProgress[]
+  progression_source_events   ProgressionSourceEvent[]
+  progression_grants          ProgressionGrantLedger[]
+  progression_profile         UserProgressionProfile?
+  seasonal_standings          SeasonalStanding[]
+  milestone_progress          UserMilestoneProgress[]
+  ranking_profile             RankingProfile?
+  integrity_profile           IntegrityProfile?
+  integrity_cases             IntegrityCase[]
+  integrity_events            IntegrityEvent[]
+  creator_profile             CreatorProfile?
+  moderation_actions_taken    ModerationActionRecord[]   @relation("moderation_actor")
+  moderation_actions_received ModerationActionRecord[]   @relation("moderation_target")
   // S9
   tdee_profiles               TdeeProfile[]
   macro_targets               MacroTarget[]
   nutrition_logs              NutritionLog[]
   // S10
-  sale_transactions_processed SaleTransaction[]         @relation("processed_by")
-  sale_transactions_customer  SaleTransaction[]         @relation("sale_customer")
+  sale_transactions_processed SaleTransaction[]          @relation("processed_by")
+  sale_transactions_customer  SaleTransaction[]          @relation("sale_customer")
   equipment_writeoffs         EquipmentWriteOff[]
   // S11
   ai_chat_sessions            AiChatSession[]
@@ -85,8 +97,8 @@ model User {
   audit_logs AuditLog[]
 
   // S16
-  gym_chat_sessions         GymChatSession[]
-  gym_chat_interaction_logs GymChatInteractionLog[]
+  gym_chat_sessions               GymChatSession[]
+  gym_chat_interaction_logs       GymChatInteractionLog[]
   // S17
   business_insight_runs_requested BusinessInsightRun[]
 
@@ -534,8 +546,8 @@ model AmenityBooking {
   created_at          DateTime      @default(now()) @db.Timestamptz(6)
   updated_at          DateTime      @updatedAt @db.Timestamptz(6)
 
-  user    User    @relation(fields: [user_id], references: [id])
-  amenity Amenity @relation(fields: [amenity_id], references: [id])
+  user    User          @relation(fields: [user_id], references: [id])
+  amenity Amenity       @relation(fields: [amenity_id], references: [id])
   coach   CoachProfile? @relation(fields: [coach_id], references: [id])
 
   @@index([user_id])
@@ -711,10 +723,10 @@ model ExerciseCatalog {
   created_at   DateTime         @default(now()) @db.Timestamptz(6)
   updated_at   DateTime         @updatedAt @db.Timestamptz(6)
 
-  plan_exercises PlanExercise[]
-  exercise_logs  ExerciseLog[]
+  plan_exercises               PlanExercise[]
+  exercise_logs                ExerciseLog[]
   published_review_submissions ExerciseReviewSubmission[] @relation("published_exercise_review_submissions")
-  pose_profiles  PoseExerciseProfile[]
+  pose_profiles                PoseExerciseProfile[]
 
   @@index([muscle_group, is_active])
   @@index([category])
@@ -902,24 +914,24 @@ model ExerciseLog {
 }
 
 model PoseExerciseProfile {
-  id                   String          @id @default(uuid()) @db.Uuid
-  exercise_id          String?         @db.Uuid
-  canonical_name       String          @db.VarChar(100)
-  profile_kind         PoseProfileKind @default(seed)
-  landmark_signature   Json
-  angle_signature      Json
+  id                    String          @id @default(uuid()) @db.Uuid
+  exercise_id           String?         @db.Uuid
+  canonical_name        String          @db.VarChar(100)
+  profile_kind          PoseProfileKind @default(seed)
+  landmark_signature    Json
+  angle_signature       Json
   orientation_signature Json
-  movement_pattern     Json
-  visibility_pattern   Json
-  dominant_joint       String?         @db.VarChar(32)
-  tolerance            Decimal?        @db.Decimal(5, 2)
-  rep_thresholds       Json?
-  rep_rules            Json?
-  sample_count         Int             @default(1)
-  confidence_threshold Decimal?        @db.Decimal(4, 3)
-  is_active            Boolean         @default(true)
-  created_at           DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime        @updatedAt @db.Timestamptz(6)
+  movement_pattern      Json
+  visibility_pattern    Json
+  dominant_joint        String?         @db.VarChar(32)
+  tolerance             Decimal?        @db.Decimal(5, 2)
+  rep_thresholds        Json?
+  rep_rules             Json?
+  sample_count          Int             @default(1)
+  confidence_threshold  Decimal?        @db.Decimal(4, 3)
+  is_active             Boolean         @default(true)
+  created_at            DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime        @updatedAt @db.Timestamptz(6)
 
   exercise ExerciseCatalog? @relation(fields: [exercise_id], references: [id], onDelete: SetNull)
   sessions PoseSession[]
@@ -946,10 +958,10 @@ model PoseSession {
   created_at                DateTime  @default(now()) @db.Timestamptz(6)
   updated_at                DateTime  @updatedAt @db.Timestamptz(6)
 
-  user         User                 @relation(fields: [user_id], references: [id])
-  exercise_log ExerciseLog?         @relation(fields: [exercise_log_id], references: [id])
+  user              User                      @relation(fields: [user_id], references: [id])
+  exercise_log      ExerciseLog?              @relation(fields: [exercise_log_id], references: [id])
   review_submission ExerciseReviewSubmission?
-  pose_profile PoseExerciseProfile? @relation(fields: [detected_profile_id], references: [id], onDelete: SetNull)
+  pose_profile      PoseExerciseProfile?      @relation(fields: [detected_profile_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([detected_exercise_name])
@@ -986,6 +998,379 @@ enum MasteryRank {
   gold
   platinum
   adamantite
+}
+
+model ProgressionSourceEvent {
+  id             String                  @id @default(uuid()) @db.Uuid
+  user_id        String                  @db.Uuid
+  source_type    ProgressionSourceType
+  source_id      String                  @db.VarChar(191)
+  source_status  ProgressionSourceStatus @default(pending)
+  source_context Json?
+  processed_at   DateTime?               @db.Timestamptz(6)
+  created_at     DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime                @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id])
+  progression_grants ProgressionGrantLedger[]
+  integrity_events   IntegrityEvent[]
+  moderation_actions ModerationActionRecord[]
+
+  @@unique([source_type, source_id])
+  @@index([user_id, created_at])
+  @@index([source_status, created_at])
+  @@map("progression_source_events")
+}
+
+model ProgressionGrantLedger {
+  id              String                 @id @default(uuid()) @db.Uuid
+  user_id         String                 @db.Uuid
+  source_event_id String?                @db.Uuid
+  season_id       String?                @db.Uuid
+  grant_type      ProgressionGrantType
+  grant_status    ProgressionGrantStatus @default(applied)
+  amount          Int
+  muscle_group    String?                @db.VarChar(100)
+  reason          String?                @db.VarChar(255)
+  metadata        Json?
+  voided_at       DateTime?              @db.Timestamptz(6)
+  created_at      DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime               @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id])
+  source_event       ProgressionSourceEvent?  @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  season             SeasonDefinition?        @relation(fields: [season_id], references: [id], onDelete: SetNull)
+  moderation_actions ModerationActionRecord[]
+
+  @@index([user_id, grant_type, created_at])
+  @@index([source_event_id])
+  @@index([season_id])
+  @@map("progression_grant_ledger")
+}
+
+model UserProgressionProfile {
+  id                    String    @id @default(uuid()) @db.Uuid
+  user_id               String    @unique @db.Uuid
+  active_season_id      String?   @db.Uuid
+  total_xp              Int       @default(0)
+  current_streak        Int       @default(0)
+  longest_streak        Int       @default(0)
+  current_season_points Int       @default(0)
+  last_progressed_at    DateTime? @db.Timestamptz(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @updatedAt @db.Timestamptz(6)
+
+  user          User              @relation(fields: [user_id], references: [id])
+  active_season SeasonDefinition? @relation("active_progression_season", fields: [active_season_id], references: [id], onDelete: SetNull)
+
+  @@index([active_season_id])
+  @@map("user_progression_profiles")
+}
+
+model SeasonDefinition {
+  id            String       @id @default(uuid()) @db.Uuid
+  title         String       @db.VarChar(160)
+  description   String?
+  status        SeasonStatus @default(draft)
+  rules_version String       @default("v1") @db.VarChar(50)
+  starts_at     DateTime     @db.Timestamptz(6)
+  ends_at       DateTime     @db.Timestamptz(6)
+  closed_at     DateTime?    @db.Timestamptz(6)
+  archived_at   DateTime?    @db.Timestamptz(6)
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime     @updatedAt @db.Timestamptz(6)
+
+  active_user_profiles UserProgressionProfile[] @relation("active_progression_season")
+  standings            SeasonalStanding[]
+  progression_grants   ProgressionGrantLedger[]
+  moderation_actions   ModerationActionRecord[]
+
+  @@index([status, starts_at])
+  @@map("season_definitions")
+}
+
+model SeasonalStanding {
+  id              String    @id @default(uuid()) @db.Uuid
+  season_id       String    @db.Uuid
+  user_id         String    @db.Uuid
+  season_points   Int       @default(0)
+  rank_position   Int?
+  is_hidden       Boolean   @default(false)
+  is_disqualified Boolean   @default(false)
+  last_earned_at  DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+
+  season SeasonDefinition @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([season_id, user_id])
+  @@index([season_id, season_points])
+  @@index([user_id])
+  @@map("seasonal_standings")
+}
+
+model MilestoneDefinition {
+  id                String               @id @default(uuid()) @db.Uuid
+  key               String               @unique @db.VarChar(120)
+  title             String               @db.VarChar(160)
+  description       String?
+  category          MilestoneCategory
+  trigger_type      MilestoneTriggerType
+  condition_payload Json?
+  reward_payload    Json?
+  is_active         Boolean              @default(true)
+  is_hidden         Boolean              @default(false)
+  retired_at        DateTime?            @db.Timestamptz(6)
+  created_at        DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime             @updatedAt @db.Timestamptz(6)
+
+  user_progress UserMilestoneProgress[]
+
+  @@index([category, is_active])
+  @@map("milestone_definitions")
+}
+
+model UserMilestoneProgress {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  user_id                 String                  @db.Uuid
+  milestone_definition_id String                  @db.Uuid
+  status                  MilestoneProgressStatus @default(in_progress)
+  progress_value          Int                     @default(0)
+  progress_payload        Json?
+  unlocked_at             DateTime?               @db.Timestamptz(6)
+  claimed_at              DateTime?               @db.Timestamptz(6)
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @updatedAt @db.Timestamptz(6)
+
+  user                 User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  milestone_definition MilestoneDefinition @relation(fields: [milestone_definition_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, milestone_definition_id])
+  @@index([status, unlocked_at])
+  @@map("user_milestone_progress")
+}
+
+model RankingProfile {
+  id                String                  @id @default(uuid()) @db.Uuid
+  user_id           String                  @unique @db.Uuid
+  visibility        RankingVisibility       @default(public)
+  governance_status RankingGovernanceStatus @default(normal)
+  display_alias     String?                 @db.VarChar(100)
+  admin_note        String?
+  created_at        DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime                @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([visibility, governance_status])
+  @@map("ranking_profiles")
+}
+
+model IntegrityProfile {
+  id               String             @id @default(uuid()) @db.Uuid
+  user_id          String             @unique @db.Uuid
+  risk_level       IntegrityRiskLevel @default(low)
+  open_case_count  Int                @default(0)
+  last_flagged_at  DateTime?          @db.Timestamptz(6)
+  last_resolved_at DateTime?          @db.Timestamptz(6)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([risk_level, open_case_count])
+  @@map("integrity_profiles")
+}
+
+model IntegrityCase {
+  id          String              @id @default(uuid()) @db.Uuid
+  user_id     String              @db.Uuid
+  status      IntegrityCaseStatus @default(open)
+  summary     String?             @db.VarChar(255)
+  opened_at   DateTime            @default(now()) @db.Timestamptz(6)
+  resolved_at DateTime?           @db.Timestamptz(6)
+  created_at  DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime            @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  integrity_events   IntegrityEvent[]
+  moderation_actions ModerationActionRecord[]
+
+  @@index([user_id, status, opened_at])
+  @@map("integrity_cases")
+}
+
+model IntegrityEvent {
+  id                String             @id @default(uuid()) @db.Uuid
+  user_id           String             @db.Uuid
+  source_event_id   String?            @db.Uuid
+  integrity_case_id String?            @db.Uuid
+  event_type        String             @db.VarChar(100)
+  reason_code       String?            @db.VarChar(100)
+  risk_level        IntegrityRiskLevel @default(low)
+  details           Json?
+  is_resolved       Boolean            @default(false)
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime           @updatedAt @db.Timestamptz(6)
+
+  user           User                    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  source_event   ProgressionSourceEvent? @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  integrity_case IntegrityCase?          @relation(fields: [integrity_case_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([integrity_case_id])
+  @@map("integrity_events")
+}
+
+model CreatorProfile {
+  id                    String       @id @default(uuid()) @db.Uuid
+  user_id               String       @unique @db.Uuid
+  state                 CreatorState @default(none)
+  last_state_changed_at DateTime?    @db.Timestamptz(6)
+  admin_notes           String?
+  created_at            DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime     @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([state, last_state_changed_at])
+  @@map("creator_profiles")
+}
+
+model ModerationActionRecord {
+  id                   String               @id @default(uuid()) @db.Uuid
+  actor_user_id        String?              @db.Uuid
+  target_user_id       String               @db.Uuid
+  source_event_id      String?              @db.Uuid
+  progression_grant_id String?              @db.Uuid
+  integrity_case_id    String?              @db.Uuid
+  season_id            String?              @db.Uuid
+  action_type          ModerationActionType
+  rationale            String?
+  before_state         Json?
+  after_state          Json?
+  created_at           DateTime             @default(now()) @db.Timestamptz(6)
+
+  actor_user        User?                   @relation("moderation_actor", fields: [actor_user_id], references: [id], onDelete: SetNull)
+  target_user       User                    @relation("moderation_target", fields: [target_user_id], references: [id], onDelete: Cascade)
+  source_event      ProgressionSourceEvent? @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  progression_grant ProgressionGrantLedger? @relation(fields: [progression_grant_id], references: [id], onDelete: SetNull)
+  integrity_case    IntegrityCase?          @relation(fields: [integrity_case_id], references: [id], onDelete: SetNull)
+  season            SeasonDefinition?       @relation(fields: [season_id], references: [id], onDelete: SetNull)
+
+  @@index([target_user_id, created_at])
+  @@index([actor_user_id, created_at])
+  @@index([action_type, created_at])
+  @@map("moderation_action_records")
+}
+
+enum ProgressionSourceType {
+  workout_session_completed
+  workout_session_invalidated
+  pose_session_finalized
+  pose_session_flagged
+  rep_log_accepted
+  rep_log_rejected
+  moderation_action
+}
+
+enum ProgressionSourceStatus {
+  pending
+  applied
+  blocked
+  reduced
+  voided
+  invalidated
+}
+
+enum ProgressionGrantType {
+  xp
+  season_points
+  streak_credit
+  penalty
+}
+
+enum ProgressionGrantStatus {
+  applied
+  voided
+}
+
+enum SeasonStatus {
+  draft
+  active
+  closed
+  archived
+}
+
+enum MilestoneCategory {
+  training
+  consistency
+  season
+  creator
+  governance
+}
+
+enum MilestoneTriggerType {
+  source_event
+  summary_threshold
+  streak
+  manual
+}
+
+enum MilestoneProgressStatus {
+  in_progress
+  unlocked
+  claimed
+}
+
+enum RankingVisibility {
+  public
+  anonymous
+  private
+}
+
+enum RankingGovernanceStatus {
+  normal
+  hidden_by_user
+  anonymized_by_user
+  hidden_by_admin
+  disqualified
+}
+
+enum IntegrityRiskLevel {
+  low
+  medium
+  high
+}
+
+enum IntegrityCaseStatus {
+  open
+  under_review
+  resolved_valid
+  resolved_invalid
+  escalated
+}
+
+enum CreatorState {
+  none
+  candidate
+  pending_review
+  approved
+  suspended
+  revoked
+}
+
+enum ModerationActionType {
+  void_progression_grant
+  restore_progression_grant
+  hide_from_rankings
+  disqualify_active_season
+  approve_creator
+  suspend_creator
+  revoke_creator
+  resolve_integrity_case_valid
+  resolve_integrity_case_invalid
 }
 
 // =============================================================================
@@ -1340,19 +1725,19 @@ enum NotificationStatus {
 // =============================================================================
 
 model GymEquipment {
-  id         String          @id @default(uuid()) @db.Uuid
-  name       String          @db.VarChar(255)
-  type       String          @db.VarChar(100)
-  floor_id   String          @default("floor-1") @db.VarChar(20)
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String          @db.VarChar(255)
+  type        String          @db.VarChar(100)
+  floor_id    String          @default("floor-1") @db.VarChar(20)
   grid_column Int?
-  grid_row   Int?
-  position_x Decimal         @db.Decimal(8, 2)
-  position_y Decimal         @db.Decimal(8, 2)
-  status     EquipmentStatus @default(available)
-  icon_key   String?         @db.VarChar(100)
-  is_active  Boolean         @default(true)
-  created_at DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at DateTime        @updatedAt @db.Timestamptz(6)
+  grid_row    Int?
+  position_x  Decimal         @db.Decimal(8, 2)
+  position_y  Decimal         @db.Decimal(8, 2)
+  status      EquipmentStatus @default(available)
+  icon_key    String?         @db.VarChar(100)
+  is_active   Boolean         @default(true)
+  created_at  DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime        @updatedAt @db.Timestamptz(6)
 
   @@index([status])
   @@index([is_active])

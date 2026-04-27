@@ -530,7 +530,9 @@ export class AiService {
       }
     }
 
-    return selectedDays.sort((left, right) => left.day_of_week - right.day_of_week);
+    return selectedDays.sort(
+      (left, right) => left.day_of_week - right.day_of_week,
+    );
   }
 
   private assertValidWeek(week: AiGeneratedWeek, durationWeeks: number): void {
@@ -1027,7 +1029,12 @@ export class AiService {
         'Stay inside the current FitTrack workflow and keep the reply grounded in the user context and recent conversation.',
       ],
       actionPolicy: {
-        allowedActions: ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE'],
+        allowedActions: [
+          'ADJUST_TDEE',
+          'GENERATE_PLAN',
+          'LOG_NUTRITION',
+          'NONE',
+        ],
         triggerNotes: [
           'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',
           'Return ADJUST_TDEE when the user asks to recalculate calories or macros.',
@@ -1104,7 +1111,10 @@ export class AiService {
   private enrichRequestPayloadWithBlueprint<
     TPayload extends object,
     TBlueprint extends object,
-  >(payload: TPayload, promptBlueprint: TBlueprint): TPayload & {
+  >(
+    payload: TPayload,
+    promptBlueprint: TBlueprint,
+  ): TPayload & {
     promptBlueprint: TBlueprint;
   } {
     return {

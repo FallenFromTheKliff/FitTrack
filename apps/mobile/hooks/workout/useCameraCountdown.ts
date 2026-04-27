@@ -10,14 +10,18 @@ export function useCameraCountdown() {
   const [permission, requestPermission] = useCameraPermissions();
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const setCameraMounted = useCallback((active: boolean) => {
+    setCameraActive(active);
+    setGlobalCameraActive(active);
+  }, [setGlobalCameraActive]);
+
   const initCamera = useCallback(async (isFrozen: boolean) => {
     if (isFrozen) return false;
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) return false;
     }
-    setCameraActive(true);
-    setGlobalCameraActive(true);
+    setCameraMounted(true);
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
@@ -37,21 +41,20 @@ export function useCameraCountdown() {
       }
     }, 1000);
     return true;
-  }, [permission?.granted, requestPermission, setGlobalCameraActive]);
+  }, [permission?.granted, requestPermission, setCameraMounted]);
 
   const cleanupCamera = useCallback(() => {
-    setCameraActive(false);
-    setGlobalCameraActive(false);
+    setCameraMounted(false);
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
     }
     setCountdownValue(null);
-  }, [setGlobalCameraActive]);
+  }, [setCameraMounted]);
 
   return {
     cameraActive,
-    setCameraActive,
+    setCameraActive: setCameraMounted,
     countdownValue,
     setCountdownValue,
     permission,

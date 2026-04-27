@@ -1,5 +1,9 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { AuditAction } from '../../audit/audit.service';
@@ -241,7 +245,11 @@ describe('CoachService', () => {
     repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
 
     await expect(
-      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+      service.assertCoachReservableForBookingWindow(
+        'coach-1',
+        startsAt,
+        endsAt,
+      ),
     ).resolves.toBeUndefined();
 
     expect(repo.hasActiveAppointmentConflict).toHaveBeenCalledWith(
@@ -273,7 +281,11 @@ describe('CoachService', () => {
     );
 
     await expect(
-      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+      service.assertCoachReservableForBookingWindow(
+        'coach-1',
+        startsAt,
+        endsAt,
+      ),
     ).rejects.toBeInstanceOf(HttpException);
 
     expect(repo.hasActiveAppointmentConflict).not.toHaveBeenCalled();
@@ -299,7 +311,11 @@ describe('CoachService', () => {
     repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
 
     await expect(
-      service.assertCoachReservableForBookingWindow('coach-1', startsAt, endsAt),
+      service.assertCoachReservableForBookingWindow(
+        'coach-1',
+        startsAt,
+        endsAt,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 });

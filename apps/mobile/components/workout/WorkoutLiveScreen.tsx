@@ -35,6 +35,8 @@ export function WorkoutLiveScreen() {
           ) : null}
           <WorkoutTrackingSection
             cameraActive={controller.cameraActive}
+            cameraFacing={controller.cameraFacing}
+            cameraRemountKey={controller.cameraRemountKey}
             cameraRef={controller.cameraRef}
             calories={controller.calories}
             colors={controller.colors}
@@ -42,21 +44,34 @@ export function WorkoutLiveScreen() {
             currentAngle={controller.currentAngle}
             currentKeypoints={controller.currentKeypoints}
             currentPhase={controller.currentPhase}
+            equipmentDetected={controller.equipmentDetected}
+            equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
+            equipmentDetectionStatusText={controller.equipmentDetectionStatusText}
+            equipmentSnapshotActive={controller.equipmentSnapshotActive}
             guidanceLabel={controller.trackingOverlayLabel}
             isFrozen={controller.isFrozen}
+            isCameraSwitching={controller.isCameraSwitching}
             isRecording={controller.isRecording}
             isTrackingReady={controller.isTrackingReady}
             lowConfidenceLandmarks={controller.lowConfidenceLandmarks}
             movementContract={controller.movementContract}
             onInitCamera={controller.onInitCamera}
+            onNativeEquipmentSnapshot={controller.onNativeEquipmentSnapshot}
+            onNativePoseFrame={controller.onNativePoseFrame}
             onPause={controller.onPause}
             onResumeRecord={controller.onResumeRecord}
             onStartRecord={controller.onStartRecord}
             onStopRecord={controller.onStopRecord}
+            onToggleCameraFacing={controller.onToggleCameraFacing}
+            onToggleSubjectLock={controller.onToggleSubjectLock}
             permissionGranted={controller.permissionGranted}
             reps={controller.reps}
             seconds={controller.seconds}
             s={controller.s}
+            subjectLockGestureProgress={controller.subjectLockGestureProgress}
+            subjectLockReady={controller.subjectLockReady}
+            subjectLockStatusText={controller.subjectLockStatusText}
+            subjectLocked={controller.subjectLocked}
             trackingDisabledReason={controller.trackingDisabledReason}
           />
           <WorkoutContextSection

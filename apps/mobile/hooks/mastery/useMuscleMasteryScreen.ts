@@ -1,14 +1,25 @@
 import { useMemo } from "react";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  fitnessIntegritySummaryQueryOptions,
   fitnessLeaderboardQueryOptions,
-  fitnessMasteryQueryOptions
+  fitnessMasteryQueryOptions,
+  fitnessMilestonesQueryOptions,
+  fitnessProgressionProfileQueryOptions,
+  fitnessRankingProfileQueryOptions,
+  fitnessSeasonStandingQueryOptions,
+  updateFitnessRankingProfileMutationOptions,
 } from "@fittrack/query";
 import type {
-  FitnessLeaderboardEntryRecord,
+  FitnessIntegritySummaryRecord,
   FitnessMasteryRank,
-  MuscleMasteryRecord
+  FitnessMilestoneProgressRecord,
+  FitnessProgressionProfileRecord,
+  FitnessRankingProfileRecord,
+  FitnessRankingVisibility,
+  FitnessSeasonStandingRecord,
+  MuscleMasteryRecord,
 } from "@fittrack/types";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,10 +30,21 @@ type UseMuscleMasteryScreenOptions = {
 };
 
 type AchievementCard = {
+  category: string;
   description: string;
   id: string;
   isUnlocked: boolean;
   label: string;
+  progressLabel: string;
+  progressPercent: number;
+  statusLabel: string;
+};
+
+type RankingVisibilityOption = {
+  description: string;
+  isSelected: boolean;
+  label: string;
+  value: FitnessRankingVisibility;
 };
 
 const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
@@ -30,11 +52,67 @@ const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
   silver: 2,
   gold: 3,
   platinum: 4,
-  adamantite: 5
+  adamantite: 5,
 };
+
+const EMPTY_MILESTONES: FitnessMilestoneProgressRecord[] = [];
+
+const RANKING_VISIBILITY_OPTIONS: Array<
+  Omit<RankingVisibilityOption, "isSelected">
+> = [
+  {
+    value: "public",
+    label: "Public",
+    description: "Show your profile name on ranked member surfaces.",
+  },
+  {
+    value: "anonymous",
+    label: "Anonymous",
+    description: "Stay ranked while masking your member identity.",
+  },
+  {
+    value: "private",
+    label: "Private",
+    description: "Hide your visible ranking while keeping progression history.",
+  },
+];
 
 function formatCompactNumber(value: number) {
   return value.toLocaleString("en-US");
+}
+
+function formatTitle(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatMilestoneProgress(milestone: FitnessMilestoneProgressRecord) {
+  if (milestone.status === "claimed") return "Claimed";
+  if (milestone.status === "unlocked") return "Unlocked";
+  return `${Math.round(milestone.progressPercent)}%`;
+}
+
+function formatDateRange(
+  season: FitnessProgressionProfileRecord["activeSeason"] | null,
+) {
+  if (!season) return "No active season";
+
+  const startsAt = new Date(season.startsAt);
+  const endsAt = new Date(season.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    return season.title;
+  }
+
+  return `${season.title} | ${startsAt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} - ${endsAt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
 }
 
 function resolveHighestRank(mastery: MuscleMasteryRecord[]) {
@@ -53,67 +131,103 @@ function resolveHighestRank(mastery: MuscleMasteryRecord[]) {
   }, null);
 }
 
-function buildAchievements(
-  mastery: MuscleMasteryRecord[],
-  leaderboard: FitnessLeaderboardEntryRecord[],
-  userId?: string
-): AchievementCard[] {
-  const currentPlacement =
-    leaderboard.find((entry) => entry.userId === userId)?.rankPosition ?? null;
-  const promotedMuscle = mastery.find((entry) => entry.rank !== "bronze") ?? null;
+function sortMilestones(
+  left: FitnessMilestoneProgressRecord,
+  right: FitnessMilestoneProgressRecord,
+) {
+  const statusWeight = {
+    claimed: 3,
+    unlocked: 2,
+    in_progress: 1,
+  };
+  const statusDelta = statusWeight[right.status] - statusWeight[left.status];
+  if (statusDelta !== 0) return statusDelta;
+  return right.progressPercent - left.progressPercent;
+}
 
-  return [
-    {
-      id: "tracked-muscle",
-      label: "First Sparks",
-      isUnlocked: mastery.length > 0,
-      description:
-        mastery.length > 0
-          ? `You already have ${mastery.length} tracked muscle group${mastery.length === 1 ? "" : "s"} in the mastery board.`
-          : "Log your first workout session to light up the mastery board."
-    },
-    {
-      id: "rank-climb",
-      label: "Rank Climber",
-      isUnlocked: promotedMuscle !== null,
-      description:
-        promotedMuscle !== null
-          ? `${promotedMuscle.muscleGroup} reached ${promotedMuscle.rankDisplay}.`
-          : "Push one muscle group past Bronze to unlock this achievement."
-    },
-    {
-      id: "balanced-builder",
-      label: "Balanced Builder",
-      isUnlocked: mastery.length >= 3,
-      description:
-        mastery.length >= 3
-          ? `You are progressing across ${mastery.length} muscle groups already.`
-          : "Track at least 3 muscle groups to unlock this achievement."
-    },
-    {
-      id: "podium-pace",
-      label: "Podium Pace",
-      isUnlocked: currentPlacement !== null && currentPlacement <= 3,
-      description:
-        currentPlacement !== null && currentPlacement <= 3
-          ? `You are currently #${currentPlacement} on the gym leaderboard.`
-          : "Break into the top 3 leaderboard spots to unlock this achievement."
-    }
-  ];
+function buildAchievementCards(
+  milestones: FitnessMilestoneProgressRecord[],
+): AchievementCard[] {
+  return [...milestones]
+    .filter((milestone) => !milestone.isHidden)
+    .sort(sortMilestones)
+    .slice(0, 4)
+    .map((milestone) => {
+      const isUnlocked =
+        milestone.status === "unlocked" || milestone.status === "claimed";
+      return {
+        category: formatTitle(milestone.category),
+        description:
+          milestone.description ??
+          `${formatTitle(milestone.triggerType)} milestone progress.`,
+        id: milestone.milestoneDefinitionId,
+        isUnlocked,
+        label: milestone.title,
+        progressLabel: `${formatCompactNumber(
+          milestone.progressValue,
+        )} / ${formatCompactNumber(milestone.targetValue)}`,
+        progressPercent: Math.min(
+          Math.max(milestone.progressPercent / 100, 0),
+          1,
+        ),
+        statusLabel: formatMilestoneProgress(milestone),
+      };
+    });
+}
+
+function resolveRankingVisibility(
+  rankingProfile: FitnessRankingProfileRecord | null,
+  progressionProfile: FitnessProgressionProfileRecord | null,
+): FitnessRankingVisibility {
+  return (
+    rankingProfile?.visibility ??
+    progressionProfile?.rankingVisibility ??
+    "public"
+  );
+}
+
+function resolveSeasonRankLabel(
+  standing: FitnessSeasonStandingRecord | null,
+  visibility: FitnessRankingVisibility,
+) {
+  if (!standing?.season) return "No active season";
+  if (standing.isDisqualified) return "Under review";
+  if (standing.isHidden || visibility === "private") return "Hidden";
+  return standing.rankPosition ? `#${standing.rankPosition}` : "Unranked";
+}
+
+function resolveIntegrityNotice(
+  summary: FitnessIntegritySummaryRecord | null,
+  progressionProfile: FitnessProgressionProfileRecord | null,
+) {
+  const riskLevel =
+    summary?.riskLevel ?? progressionProfile?.integrityRiskLevel;
+  if (!riskLevel || riskLevel === "low") return null;
+
+  return {
+    title:
+      riskLevel === "high" ? "Progress under review" : "Progress check active",
+    body:
+      summary && summary.openCaseCount > 0
+        ? `${summary.openCaseCount} progression review ${summary.openCaseCount === 1 ? "case is" : "cases are"} open. Some gains may stay pending until review closes.`
+        : "Some progression may stay pending while the system finishes its integrity checks.",
+  };
 }
 
 function resolveLockStatusLabel(
   membershipCardStatus: string,
-  hasMemberCardAccess: boolean
+  hasMemberCardAccess: boolean,
 ) {
-  if (membershipCardStatus === "pending_verification") return "Pending verification";
+  if (membershipCardStatus === "pending_verification") {
+    return "Pending verification";
+  }
   if (membershipCardStatus === "revoked") return "Revoked";
   return hasMemberCardAccess ? "Member" : "Non-member";
 }
 
 function resolveLockMessage(
   membershipCardStatus: string,
-  hasMemberCardAccess: boolean
+  hasMemberCardAccess: boolean,
 ) {
   if (membershipCardStatus === "pending_verification") {
     return "Your membership card payment is waiting for verification. Muscle Mastery unlocks as soon as staff confirms it.";
@@ -128,93 +242,230 @@ function resolveLockMessage(
 }
 
 export function useMuscleMasteryScreen({
-  isFocused = true
+  isFocused = true,
 }: UseMuscleMasteryScreenOptions = {}) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
   const hasMemberCardAccess = user?.membershipAccess === "member";
   const isMemberLocked = !!user && !hasMemberCardAccess;
+  const canLoadProgression = isFocused && !!user?.id && hasMemberCardAccess;
 
   const masteryQuery = useQuery({
     ...fitnessMasteryQueryOptions(mobileApiClient, user?.id),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: canLoadProgression,
   });
   const leaderboardQuery = useQuery({
-    ...fitnessLeaderboardQueryOptions(mobileApiClient, user?.id, { limit: 5, page: 1 }),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    ...fitnessLeaderboardQueryOptions(mobileApiClient, user?.id, {
+      limit: 5,
+      page: 1,
+    }),
+    enabled: canLoadProgression,
   });
+  const progressionProfileQuery = useQuery({
+    ...fitnessProgressionProfileQueryOptions(mobileApiClient, user?.id),
+    enabled: canLoadProgression,
+  });
+  const rankingProfileQuery = useQuery({
+    ...fitnessRankingProfileQueryOptions(mobileApiClient, user?.id),
+    enabled: canLoadProgression,
+  });
+  const seasonStandingQuery = useQuery({
+    ...fitnessSeasonStandingQueryOptions(mobileApiClient, user?.id),
+    enabled: canLoadProgression,
+  });
+  const milestonesQuery = useQuery({
+    ...fitnessMilestonesQueryOptions(mobileApiClient, user?.id),
+    enabled: canLoadProgression,
+  });
+  const integritySummaryQuery = useQuery({
+    ...fitnessIntegritySummaryQueryOptions(mobileApiClient, user?.id),
+    enabled: canLoadProgression,
+  });
+  const updateRankingProfileMutation = useMutation(
+    updateFitnessRankingProfileMutationOptions(mobileApiClient, queryClient),
+  );
 
   const mastery = useMemo(
-    () => [...(masteryQuery.data ?? [])].sort((left, right) => right.xpPoints - left.xpPoints),
-    [masteryQuery.data]
+    () =>
+      [...(masteryQuery.data ?? [])].sort(
+        (left, right) => right.xpPoints - left.xpPoints,
+      ),
+    [masteryQuery.data],
+  );
+  const progressionProfile = progressionProfileQuery.data ?? null;
+  const rankingProfile = rankingProfileQuery.data ?? null;
+  const seasonStanding = seasonStandingQuery.data ?? null;
+  const milestones = milestonesQuery.data ?? EMPTY_MILESTONES;
+  const integritySummary = integritySummaryQuery.data ?? null;
+  const rankingVisibility = resolveRankingVisibility(
+    rankingProfile,
+    progressionProfile,
   );
   const leaderboard = leaderboardQuery.data?.data ?? [];
+  const visibleLeaderboard = rankingVisibility === "private" ? [] : leaderboard;
   const topMuscle = mastery[0] ?? null;
   const highestRankEntry = resolveHighestRank(mastery);
-  const totalXp = mastery.reduce((sum, entry) => sum + entry.xpPoints, 0);
-  const totalVolumeKg = mastery.reduce((sum, entry) => sum + entry.totalVolumeKg, 0);
-  const leaderboardEntry = leaderboard.find((entry) => entry.userId === user?.id) ?? null;
-  const achievements = useMemo(
-    () => buildAchievements(mastery, leaderboard, user?.id),
-    [leaderboard, mastery, user?.id]
+  const totalXp =
+    progressionProfile?.totalXp ??
+    mastery.reduce((sum, entry) => sum + entry.xpPoints, 0);
+  const totalVolumeKg = mastery.reduce(
+    (sum, entry) => sum + entry.totalVolumeKg,
+    0,
+  );
+  const leaderboardEntry =
+    rankingVisibility === "private"
+      ? null
+      : (leaderboard.find((entry) => entry.userId === user?.id) ?? null);
+  const achievementCards = useMemo(
+    () => buildAchievementCards(milestones),
+    [milestones],
+  );
+  const activeMilestones = useMemo(
+    () =>
+      [...milestones]
+        .filter(
+          (milestone) =>
+            !milestone.isHidden && milestone.status === "in_progress",
+        )
+        .sort((left, right) => right.progressPercent - left.progressPercent)
+        .slice(0, 3),
+    [milestones],
+  );
+  const recentUnlocks = useMemo(
+    () =>
+      [...milestones]
+        .filter(
+          (milestone) =>
+            !milestone.isHidden && milestone.status !== "in_progress",
+        )
+        .sort((left, right) => {
+          const leftTime = left.unlockedAt
+            ? new Date(left.unlockedAt).getTime()
+            : 0;
+          const rightTime = right.unlockedAt
+            ? new Date(right.unlockedAt).getTime()
+            : 0;
+          return rightTime - leftTime;
+        })
+        .slice(0, 3),
+    [milestones],
+  );
+  const rankingVisibilityOptions = RANKING_VISIBILITY_OPTIONS.map((option) => ({
+    ...option,
+    isSelected: option.value === rankingVisibility,
+  }));
+  const seasonRankLabel = resolveSeasonRankLabel(
+    seasonStanding,
+    rankingVisibility,
+  );
+  const integrityNotice = resolveIntegrityNotice(
+    integritySummary,
+    progressionProfile,
   );
 
   const summaryCards = [
     { id: "xp", label: "Total EXP", value: formatCompactNumber(totalXp) },
-    { id: "muscles", label: "Muscles", value: String(mastery.length) },
     {
-      id: "rank",
-      label: "Best Rank",
-      value: highestRankEntry?.rankDisplay ?? "Unranked"
+      id: "streak",
+      label: "Current Streak",
+      value: String(progressionProfile?.currentStreak ?? 0),
+    },
+    {
+      id: "season",
+      label: "Season Points",
+      value: formatCompactNumber(seasonStanding?.seasonPoints ?? 0),
     },
     {
       id: "standing",
-      label: "Gym Rank",
-      value: leaderboardEntry ? `#${leaderboardEntry.rankPosition}` : "--"
-    }
+      label: "Season Rank",
+      value: seasonRankLabel,
+    },
   ];
 
+  const loadingQueries = [
+    masteryQuery,
+    leaderboardQuery,
+    progressionProfileQuery,
+    rankingProfileQuery,
+    seasonStandingQuery,
+    milestonesQuery,
+    integritySummaryQuery,
+  ];
   const isLoading =
     hasMemberCardAccess &&
-    (masteryQuery.status === "pending" || leaderboardQuery.status === "pending");
-  const isError = masteryQuery.isError || leaderboardQuery.isError;
+    loadingQueries.some((query) => query.status === "pending");
+  const isError = loadingQueries.some((query) => query.isError);
   const errorMessage =
     (masteryQuery.error as Error | null)?.message ??
     (leaderboardQuery.error as Error | null)?.message ??
+    (progressionProfileQuery.error as Error | null)?.message ??
+    (rankingProfileQuery.error as Error | null)?.message ??
+    (seasonStandingQuery.error as Error | null)?.message ??
+    (milestonesQuery.error as Error | null)?.message ??
+    (integritySummaryQuery.error as Error | null)?.message ??
     "Unable to load Muscle Mastery right now.";
 
   return {
-    achievements,
+    achievementCards,
+    activeMilestones,
     errorMessage,
     hasMemberCardAccess,
-    isEmpty: !isLoading && !isError && mastery.length === 0,
+    highestRankEntry,
+    integrityNotice,
+    isEmpty:
+      !isLoading && !isError && mastery.length === 0 && milestones.length === 0,
     isError,
     isLoading,
     isMemberLocked,
     isRefreshing:
-      hasMemberCardAccess && (masteryQuery.isFetching || leaderboardQuery.isFetching),
-    leaderboard,
+      hasMemberCardAccess && loadingQueries.some((query) => query.isFetching),
+    isUpdatingRankingVisibility: updateRankingProfileMutation.isPending,
+    leaderboard: visibleLeaderboard,
     leaderboardEntry,
-    memberLockMessage: resolveLockMessage(membershipCardStatus, hasMemberCardAccess),
+    memberLockMessage: resolveLockMessage(
+      membershipCardStatus,
+      hasMemberCardAccess,
+    ),
     memberLockStatusLabel: resolveLockStatusLabel(
       membershipCardStatus,
-      hasMemberCardAccess
+      hasMemberCardAccess,
     ),
+    milestones,
     mastery,
     onOpenChatbot: () =>
       router.push({
         pathname: "/(tabs)/chatbot",
-        params: { from: "mastery", sessionId: "new" }
+        params: { from: "mastery", sessionId: "new" },
       }),
     onOpenNutrition: () => router.push("/(tabs)/nutrition"),
     onOpenProfile: () => router.push("/(tabs)/profile"),
     onOpenWorkout: () => router.push("/(tabs)/workout"),
     onRefresh: async () => {
-      await Promise.all([masteryQuery.refetch(), leaderboardQuery.refetch()]);
+      await Promise.all(loadingQueries.map((query) => query.refetch()));
     },
+    onSelectRankingVisibility: async (visibility: FitnessRankingVisibility) => {
+      if (visibility === rankingVisibility || !user?.id) return;
+      await updateRankingProfileMutation.mutateAsync({
+        input: { visibility },
+        userId: user.id,
+      });
+    },
+    privacyError:
+      (updateRankingProfileMutation.error as Error | null)?.message ?? null,
+    progressionProfile,
+    rankingProfile,
+    rankingVisibility,
+    rankingVisibilityOptions,
+    recentUnlocks,
+    seasonCaption: formatDateRange(
+      seasonStanding?.season ?? progressionProfile?.activeSeason ?? null,
+    ),
+    seasonRankLabel,
+    seasonStanding,
     summaryCards,
     topMuscle,
-    totalVolumeKg
+    totalVolumeKg,
   };
 }

@@ -5,24 +5,37 @@ const config: ExpoConfig = {
   slug: "fittrack-mobile",
   version: "1.0.0",
   orientation: "portrait",
-  icon: "./assets/icon.png",
+  icon: "./assets/expo/icon.png",
   userInterfaceStyle: "dark",
   splash: {
-    image: "./assets/splash-icon.png",
+    image: "./assets/expo/splash-icon.png",
     resizeMode: "contain",
     backgroundColor: "#111111",
   },
-  ios: { supportsTablet: false },
+  ios: {
+    bundleIdentifier: "com.fittrack.mobile",
+    supportsTablet: false,
+  },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/expo/android-icon-foreground.png",
       backgroundColor: "#111111",
     },
+    package: "com.fittrack.mobile",
   },
   plugins: [
+    "expo-dev-client",
     "expo-router",
     "expo-camera",
-    ["expo-notifications", { icon: "./assets/icon.png", color: "#E87722" }],
+    [
+      "react-native-vision-camera",
+      {
+        cameraPermissionText:
+          "FitTrack needs camera access for live exercise detection and rep tracking.",
+        enableFrameProcessors: true,
+      },
+    ],
+    ["expo-notifications", { icon: "./assets/expo/android-icon-monochrome.png", color: "#E87722" }],
   ],
   scheme: "fittrack",
   experiments: { typedRoutes: true },

@@ -1,6 +1,8 @@
 import type {
   ActiveNutritionProfileRecord,
   DailyNutritionSummaryRecord,
+  NutritionCoachingInsightPriority,
+  NutritionCoachingInsightSource,
   NutritionActivityLevel,
   NutritionFitnessGoal,
   NutritionGender,
@@ -107,11 +109,21 @@ type DailyMacroTotalsApiRecord = {
 };
 
 type DailyNutritionSummaryApiRecord = {
+  coaching?: NutritionCoachingInsightApiRecord[];
   date: string;
   logged: DailyMacroTotalsApiRecord;
   macro_target_id: string | null;
   remaining: DailyMacroTotalsApiRecord | null;
   target: DailyMacroTotalsApiRecord | null;
+};
+
+type NutritionCoachingInsightApiRecord = {
+  id: string;
+  message: string;
+  priority: NutritionCoachingInsightPriority;
+  reason_codes?: string[];
+  source: NutritionCoachingInsightSource;
+  title: string;
 };
 
 function toNumber(value: string | number | null | undefined) {
@@ -207,6 +219,14 @@ function toRecalculateRequest(payload: RecalculateNutritionPayload) {
 
 function mapDailySummary(record: DailyNutritionSummaryApiRecord): DailyNutritionSummaryRecord {
   return {
+    coaching: (record.coaching ?? []).map((insight) => ({
+      id: insight.id,
+      message: insight.message,
+      priority: insight.priority,
+      reasonCodes: insight.reason_codes ?? [],
+      source: insight.source,
+      title: insight.title
+    })),
     date: record.date,
     logged: mapMacroTotals(record.logged),
     macroTargetId: record.macro_target_id,

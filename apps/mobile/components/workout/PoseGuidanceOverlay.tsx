@@ -35,6 +35,33 @@ const SKELETON_CONNECTIONS: Array<[number, number]> = [
   [28, 32],
 ];
 
+const GUIDE_KEYPOINTS: PoseKeypointRecord[] = Array.from({ length: 33 }, () => ({
+  visibility: 0,
+  x: 0,
+  y: 0,
+  z: 0,
+}));
+
+[
+  [0, 0.5, 0.16],
+  [11, 0.42, 0.29],
+  [12, 0.58, 0.29],
+  [13, 0.35, 0.43],
+  [14, 0.65, 0.43],
+  [15, 0.31, 0.59],
+  [16, 0.69, 0.59],
+  [23, 0.45, 0.56],
+  [24, 0.55, 0.56],
+  [25, 0.43, 0.75],
+  [26, 0.57, 0.75],
+  [27, 0.42, 0.92],
+  [28, 0.58, 0.92],
+  [31, 0.39, 0.95],
+  [32, 0.61, 0.95],
+].forEach(([index, x, y]) => {
+  GUIDE_KEYPOINTS[index] = { visibility: 0.72, x, y, z: 0 };
+});
+
 const JOINT_POINTS: Record<PoseJointName, [number, number, number, number, number, number]> = {
   elbow: [11, 13, 15, 12, 14, 16],
   hip: [11, 23, 25, 12, 24, 26],
@@ -126,18 +153,31 @@ export function PoseGuidanceOverlay({
   lowConfidenceLandmarks,
   movementContract,
 }: PoseGuidanceOverlayProps) {
-  if (!keypoints || keypoints.length !== 33) {
+  const hasLiveKeypoints = keypoints?.length === 33;
+  const drawableKeypoints = hasLiveKeypoints ? keypoints : GUIDE_KEYPOINTS;
+
+  if (drawableKeypoints.length !== 33) {
     return null;
   }
 
   const angleArc =
-    movementContract ? buildAngleArc(keypoints, movementContract.dominantJoint) : null;
-  const phaseText = currentPhase === "down" ? "DOWN" : currentPhase === "up" ? "UP" : "READY";
-  const guidanceText = guidanceLabel
-    ? guidanceLabel.replace(/_/g, " ")
-    : movementContract
-      ? `${movementContract.exercise.replace(/_/g, " ")}`
-      : "Detecting movement";
+    hasLiveKeypoints && movementContract
+      ? buildAngleArc(drawableKeypoints, movementContract.dominantJoint)
+      : null;
+  const phaseText = !hasLiveKeypoints
+    ? "GUIDE"
+    : currentPhase === "down"
+      ? "DOWN"
+      : currentPhase === "up"
+        ? "UP"
+        : "READY";
+  const guidanceText = !hasLiveKeypoints
+    ? "Align full body in frame"
+    : guidanceLabel
+      ? guidanceLabel.replace(/_/g, " ")
+      : movementContract
+        ? `${movementContract.exercise.replace(/_/g, " ")}`
+        : "Detecting movement";
 
   return (
     <View
@@ -145,10 +185,35 @@ export function PoseGuidanceOverlay({
       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 2 }}
     >
       <Svg width="100%" height="100%" viewBox="0 0 1 1" preserveAspectRatio="none">
+        {!hasLiveKeypoints ? (
+          <>
+            <Rect
+              x={0.22}
+              y={0.1}
+              rx={0.035}
+              width={0.56}
+              height={0.82}
+              stroke="rgba(255,255,255,0.36)"
+              strokeWidth={0.006}
+              strokeDasharray="0.025 0.018"
+              fill="rgba(0,0,0,0)"
+            />
+            <Line
+              x1={0.5}
+              y1={0.1}
+              x2={0.5}
+              y2={0.92}
+              stroke="rgba(255,255,255,0.22)"
+              strokeWidth={0.004}
+              strokeDasharray="0.018 0.018"
+              strokeLinecap="round"
+            />
+          </>
+        ) : null}
         {SKELETON_CONNECTIONS.map(([start, end]) => {
-          const from = keypoints[start];
-          const to = keypoints[end];
-          if (!from || !to || from.visibility < 0.4 || to.visibility < 0.4) {
+          const from = drawableKeypoints[start];
+          const to = drawableKeypoints[end];
+          if (!from || !to || from.visibility < 0.3 || to.visibility < 0.3) {
             return null;
           }
           return (
@@ -158,24 +223,32 @@ export function PoseGuidanceOverlay({
               y1={from.y}
               x2={to.x}
               y2={to.y}
-              stroke="rgba(255,255,255,0.68)"
-              strokeWidth={0.006}
+              stroke={hasLiveKeypoints ? "rgba(255,255,255,0.68)" : "rgba(255,255,255,0.42)"}
+              strokeWidth={hasLiveKeypoints ? 0.006 : 0.005}
               strokeLinecap="round"
             />
           );
         })}
-        {keypoints.map((point, index) => (
-          <Circle
-            key={`joint-${index}`}
-            cx={point.x}
-            cy={point.y}
-            r={point.visibility >= 0.5 ? 0.01 : 0.007}
-            fill={point.visibility >= 0.5 ? colors.brand : "rgba(255,255,255,0.35)"}
-          />
-        ))}
+        {drawableKeypoints.map((point, index) =>
+          point.visibility >= 0.2 ? (
+            <Circle
+              key={`joint-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r={point.visibility >= 0.5 ? 0.01 : 0.007}
+              fill={
+                hasLiveKeypoints
+                  ? point.visibility >= 0.5
+                    ? colors.brand
+                    : "rgba(255,255,255,0.35)"
+                  : "rgba(255,255,255,0.5)"
+              }
+            />
+          ) : null,
+        )}
         {movementContract
-          ? getRepresentativeJointPoints(keypoints, movementContract.dominantJoint)
-              ? [getRepresentativeJointPoints(keypoints, movementContract.dominantJoint)].map((points, index) => (
+          ? getRepresentativeJointPoints(drawableKeypoints, movementContract.dominantJoint)
+              ? [getRepresentativeJointPoints(drawableKeypoints, movementContract.dominantJoint)].map((points, index) => (
                   <Circle
                     key={`dominant-${index}`}
                     cx={points.b.x}
@@ -223,6 +296,36 @@ export function PoseGuidanceOverlay({
         >
           {guidanceText}
         </SvgText>
+        {!hasLiveKeypoints ? (
+          <>
+            <Rect
+              x={0.04}
+              y={0.76}
+              rx={0.018}
+              width={0.62}
+              height={0.1}
+              fill="rgba(0,0,0,0.58)"
+            />
+            <SvgText
+              x={0.06}
+              y={0.805}
+              fill="#FFFFFF"
+              fontSize={0.022}
+              fontWeight="700"
+            >
+              Snapshot tracking active
+            </SvgText>
+            <SvgText
+              x={0.06}
+              y={0.835}
+              fill="rgba(255,255,255,0.76)"
+              fontSize={0.018}
+              fontWeight="600"
+            >
+              Guide overlay only until live landmarks are available
+            </SvgText>
+          </>
+        ) : null}
         {movementContract && currentAngle !== null ? (
           <>
             <Rect
@@ -240,7 +343,7 @@ export function PoseGuidanceOverlay({
               fontSize={0.034}
               fontWeight="700"
             >
-              {Math.round(currentAngle)}°
+              {Math.round(currentAngle)} deg
             </SvgText>
             <SvgText
               x={0.69}

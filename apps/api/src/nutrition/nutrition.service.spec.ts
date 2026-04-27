@@ -527,6 +527,26 @@ describe('NutritionService', () => {
         carbs_g: '130.00',
         fat_g: '40.00',
       },
+      coaching: [
+        {
+          id: 'protein-energy-gap',
+          priority: 'opportunity',
+          title: 'Protein plus energy are both open',
+          message:
+            'A balanced protein-and-carb meal is the cleanest next move because both calories and protein still have meaningful room.',
+          reason_codes: ['calories_remaining', 'protein_remaining'],
+          source: 'nutrition_summary',
+        },
+        {
+          id: 'carb-training-support',
+          priority: 'opportunity',
+          title: 'Carbs can support the next session',
+          message:
+            'Carbs are still meaningfully under target, so a rice, oats, fruit, or bread-based add-on can support training without touching exercise logic.',
+          reason_codes: ['carbs_remaining', 'under_calorie_target'],
+          source: 'nutrition_summary',
+        },
+      ],
     });
   });
 
@@ -557,6 +577,17 @@ describe('NutritionService', () => {
       },
       target: null,
       remaining: null,
+      coaching: [
+        {
+          id: 'nutrition-target-missing',
+          priority: 'info',
+          title: 'Set a macro target before coaching gets specific',
+          message:
+            'Daily totals are live, but coaching cards stay general until an active TDEE and macro target exists.',
+          reason_codes: ['missing_macro_target'],
+          source: 'nutrition_summary',
+        },
+      ],
     });
   });
 });

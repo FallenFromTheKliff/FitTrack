@@ -68,9 +68,10 @@ function clampGridRow(value: number) {
 
 function gridColumnToPositionX(gridColumn: number) {
   return Number(
-    (((clampGridColumn(gridColumn) - 0.5) / GYM_LAYOUT_GRID_COLUMNS) * 100).toFixed(
-      2,
-    ),
+    (
+      ((clampGridColumn(gridColumn) - 0.5) / GYM_LAYOUT_GRID_COLUMNS) *
+      100
+    ).toFixed(2),
   );
 }
 
@@ -81,11 +82,11 @@ function gridRowToPositionY(gridRow: number) {
 }
 
 function positionXToGridColumn(positionX: number) {
-  return clampGridColumn(((positionX / 100) * GYM_LAYOUT_GRID_COLUMNS) + 0.5);
+  return clampGridColumn((positionX / 100) * GYM_LAYOUT_GRID_COLUMNS + 0.5);
 }
 
 function positionYToGridRow(positionY: number) {
-  return clampGridRow(((positionY / 100) * GYM_LAYOUT_GRID_ROWS) + 0.5);
+  return clampGridRow((positionY / 100) * GYM_LAYOUT_GRID_ROWS + 0.5);
 }
 
 type PlacementInput = {
@@ -123,10 +124,7 @@ export class GymLayoutService {
     dto: UpdateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
     const updateData = await this.toResolvedUpdateInput(id, dto);
-    const equipment = await this.repo.updateEquipment(
-      id,
-      updateData,
-    );
+    const equipment = await this.repo.updateEquipment(id, updateData);
     await this.publishRealtimeDelta(
       equipment,
       equipment.is_active ? 'upsert' : 'remove',

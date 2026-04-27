@@ -11,7 +11,9 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { QueueModule } from '../queue/queue.module';
 import { AuthOtpService } from './otp/auth-otp.service';
 
-type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
+type JwtExpiresIn =
+  | number
+  | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
 @Module({
   imports: [

@@ -418,7 +418,10 @@ export class AuthService {
       OtpPurpose.password_reset,
     );
 
-    await this.assertPasswordDoesNotReuseCurrent(credentialHash, dto.new_password);
+    await this.assertPasswordDoesNotReuseCurrent(
+      credentialHash,
+      dto.new_password,
+    );
 
     await this.otpService.consumeOtp(
       identity.user_id,

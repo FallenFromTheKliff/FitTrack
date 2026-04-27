@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, StyleSheet, TextInput, View } from "react-native";
-import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, withTiming, runOnJS } from "react-native-reanimated";
 import { ShieldCheck } from "lucide-react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -67,11 +67,18 @@ export default function OTPModal({
     onSuccessRef.current = onSuccess;
   }, [onDismiss, onSuccess]);
 
+  const finishSuccess = useCallback(() => {
+    onSuccessRef.current();
+  }, []);
+
   useAnimatedReaction(
     () => successSignal.value,
-    (val) => {
-      if (val === 1) onSuccessRef.current();
+    (val, prev) => {
+      if (val === 1 && prev !== 1) {
+        runOnJS(finishSuccess)();
+      }
     },
+    [finishSuccess]
   );
 
   const code = digits.join("");

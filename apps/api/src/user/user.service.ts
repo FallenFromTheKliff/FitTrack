@@ -292,10 +292,7 @@ export class UserService {
       user.qr_code_rotated_at,
     );
 
-    if (
-      refreshAvailableAt &&
-      refreshAvailableAt.getTime() > now.getTime()
-    ) {
+    if (refreshAvailableAt && refreshAvailableAt.getTime() > now.getTime()) {
       throw new HttpException(
         {
           type: 'QR_REFRESH_COOLDOWN',
@@ -539,7 +536,10 @@ export class AttendanceService {
 
   async scanQr(scannerUserId: string | null, dto: ScanQrDTO) {
     const qrValue =
-      dto.qrValue?.trim() || dto.qr_value?.trim() || dto.qr_code_token?.trim() || '';
+      dto.qrValue?.trim() ||
+      dto.qr_value?.trim() ||
+      dto.qr_code_token?.trim() ||
+      '';
 
     if (!qrValue) {
       throw new HttpException(

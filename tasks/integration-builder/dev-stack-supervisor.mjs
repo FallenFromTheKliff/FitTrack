@@ -392,13 +392,13 @@ async function testUrlReachability(url) {
   }
 }
 
-async function runBufferedCommand(commandPath, args, workingDirectory) {
+async function runBufferedCommand(commandPath, args, workingDirectory, envOverrides = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(commandPath, args, {
       cwd: workingDirectory,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      env: process.env,
+      env: { ...process.env, ...envOverrides },
     });
 
     let stdout = '';
@@ -423,10 +423,25 @@ async function runBufferedCommand(commandPath, args, workingDirectory) {
 }
 
 async function ensureWorkspaceInstall(options) {
+  const localStoreRoot = path.resolve(options.workspaceRoot, '..', '.pnpm-store');
+  const installArgs = [
+    options.pnpmCjsPath,
+    'install',
+    '--frozen-lockfile',
+  ];
+  if (fs.existsSync(localStoreRoot)) {
+    installArgs.push('--store-dir', localStoreRoot);
+  }
+
   const result = await runBufferedCommand(
     process.execPath,
-    [options.pnpmCjsPath, 'install'],
+    installArgs,
     options.workspaceRoot,
+    {
+      CI: process.env.CI || 'true',
+      npm_config_cache:
+        process.env.npm_config_cache || path.join(options.workspaceRoot, '.npm-cache'),
+    },
   );
 
   if (result.code !== 0) {
@@ -465,6 +480,28 @@ async function ensureLocalInfra(repoRoot) {
   if (result.status !== 0 && !(await hasHealthyLocalInfra())) {
     throw new Error(
       result.stderr || result.stdout || result.error?.message || 'docker compose up failed',
+    );
+  }
+}
+
+async function ensureApiPrerequisites(options) {
+  const apiRoot = path.join(options.workspaceRoot, 'apps', 'api');
+  if (!fs.existsSync(apiRoot)) {
+    return;
+  }
+
+  const result = await runBufferedCommand(
+    process.execPath,
+    [options.pnpmCjsPath, 'db:generate'],
+    options.workspaceRoot,
+    {
+      CI: process.env.CI || 'true',
+    },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || 'pnpm db:generate failed',
     );
   }
 }
@@ -614,6 +651,7 @@ async function runCommand(options) {
 
   await ensureWorkspaceInstall(options);
   await ensureLocalInfra(options.workspaceRoot);
+  await ensureApiPrerequisites(options);
 
   const runtimeState = createRuntimeState(options);
   attachShutdownHandlers(runtimeState);

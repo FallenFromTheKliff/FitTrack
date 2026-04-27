@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AccountDeletionRequestStatus, AuthProvider, UserRole } from '@prisma/client';
+import {
+  AccountDeletionRequestStatus,
+  AuthProvider,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from 'prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import {
@@ -31,7 +35,10 @@ function getIdentityIdentifier(
   }>,
   provider: AuthProvider,
 ) {
-  return identities.find((identity) => identity.provider === provider)?.identifier ?? null;
+  return (
+    identities.find((identity) => identity.provider === provider)?.identifier ??
+    null
+  );
 }
 
 function toFrontendRole(role: UserRole) {
@@ -216,10 +223,11 @@ export class AdminService {
     return {
       total: requests.length,
       requests: requests.map((request) => {
-        const email = getIdentityIdentifier(
-          request.user.auth_identities,
-          AuthProvider.email,
-        ) ?? '';
+        const email =
+          getIdentityIdentifier(
+            request.user.auth_identities,
+            AuthProvider.email,
+          ) ?? '';
         const phone = request.user.profile?.phone ?? null;
 
         return {

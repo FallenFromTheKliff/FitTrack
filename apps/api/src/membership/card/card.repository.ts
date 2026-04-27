@@ -24,7 +24,8 @@ type MembershipCardPurchaseRecord = {
 };
 
 const MEMBERSHIP_CARD_PRICE = new Prisma.Decimal(400);
-const MEMBERSHIP_CARD_PAYABLE_TYPE = 'membership_card' as unknown as Payment['payable_type'];
+const MEMBERSHIP_CARD_PAYABLE_TYPE =
+  'membership_card' as unknown as Payment['payable_type'];
 
 @Injectable()
 export class MembershipCardRepository extends BaseRepository {

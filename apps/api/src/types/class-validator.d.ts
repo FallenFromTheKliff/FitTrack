@@ -75,9 +75,7 @@ declare module 'class-validator' {
     validatorOptions?: ValidatorOptions,
   ): ValidationError[];
   export function isUUID(value: unknown, version?: UuidVersion): boolean;
-  export function registerDecorator(
-    options: ValidationDecoratorOptions,
-  ): void;
+  export function registerDecorator(options: ValidationDecoratorOptions): void;
   export function ValidatorConstraint(
     options?: ValidatorConstraintOptions,
   ): ClassDecorator;

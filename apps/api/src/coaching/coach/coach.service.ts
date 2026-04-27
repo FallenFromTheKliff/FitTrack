@@ -78,7 +78,9 @@ export class CoachService {
   }
 
   async getMyProfile(userId: string): Promise<CoachSelfDetailResponseDTO> {
-    return this.toCoachSelfDetail(await this.repo.findCoachByUserIdOrThrow(userId));
+    return this.toCoachSelfDetail(
+      await this.repo.findCoachByUserIdOrThrow(userId),
+    );
   }
 
   async updateMyProfile(
@@ -292,15 +294,7 @@ export class CoachService {
 
   private toTimeValue(value: Date): Date {
     return new Date(
-      Date.UTC(
-        1970,
-        0,
-        1,
-        value.getUTCHours(),
-        value.getUTCMinutes(),
-        0,
-        0,
-      ),
+      Date.UTC(1970, 0, 1, value.getUTCHours(), value.getUTCMinutes(), 0, 0),
     );
   }
 

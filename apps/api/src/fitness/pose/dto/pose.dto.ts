@@ -8,7 +8,6 @@ import {
   IsBoolean,
   IsEnum,
   IsIn,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsObject,
@@ -16,6 +15,7 @@ import {
   Min,
   MaxLength,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 
 import { TrimString } from '../../../common/validators';
@@ -39,8 +39,66 @@ export const poseClassificationSources = [
 ] as const;
 export type PoseClassificationSource =
   (typeof poseClassificationSources)[number];
+export const poseProcessingModes = ['legacy_frame', 'sequence'] as const;
+export type PoseProcessingMode = (typeof poseProcessingModes)[number];
 export const poseJointNames = ['elbow', 'shoulder', 'hip', 'knee'] as const;
 export type PoseJointName = (typeof poseJointNames)[number];
+export const poseRepModels = [
+  'bilateral',
+  'unilateral_left',
+  'unilateral_right',
+  'alternating',
+  'static_hold',
+  'unknown',
+] as const;
+export type PoseRepModel = (typeof poseRepModels)[number];
+export const poseRequiredSides = [
+  'both',
+  'left',
+  'right',
+  'either',
+  'alternating',
+] as const;
+export type PoseRequiredSides = (typeof poseRequiredSides)[number];
+export const poseEquipmentContexts = [
+  'bodyweight',
+  'dumbbell',
+  'barbell',
+  'cable',
+  'machine',
+  'kettlebell',
+  'band',
+  'bench',
+  'mixed',
+  'unknown',
+] as const;
+export type PoseEquipmentContext = (typeof poseEquipmentContexts)[number];
+export const poseEquipmentSources = [
+  'catalog',
+  'plan',
+  'member',
+  'inferred',
+  'provider_api',
+  'resolved_hybrid',
+] as const;
+export type PoseEquipmentSource = (typeof poseEquipmentSources)[number];
+export const poseSessionQualityStates = [
+  'stable',
+  'degraded',
+  'invalid',
+] as const;
+export type PoseSessionQualityState = (typeof poseSessionQualityStates)[number];
+export const poseProgressionDispositions = [
+  'normal',
+  'cautionary',
+  'hold_for_review',
+] as const;
+export type PoseProgressionDisposition =
+  (typeof poseProgressionDispositions)[number];
+
+function hasFramePayload(value: string | null | undefined) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
 
 export class StartPoseSessionDTO {
   @ApiPropertyOptional({ example: 'Barbell Back Squat', nullable: true })
@@ -70,7 +128,11 @@ export class FinalizePoseSessionDTO {
   @Min(0, { message: 'final_rep_count must be at least 0' })
   final_rep_count: number;
 
-  @ApiProperty({ type: String, isArray: true, example: ['Keep your chest up.'] })
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: ['Keep your chest up.'],
+  })
   @IsArray({ message: 'form_feedback must be an array' })
   @IsString({ each: true, message: 'form_feedback entries must be strings' })
   form_feedback: string[];
@@ -103,6 +165,59 @@ export class FinalizePoseSessionDTO {
   @ValidateNested()
   @Type(() => PoseMovementContractDTO)
   movement_contract?: PoseMovementContractDTO | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentContexts,
+    example: 'barbell',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(poseEquipmentContexts, {
+    message: `equipment_context must be one of: ${poseEquipmentContexts.join(', ')}`,
+  })
+  equipment_context?: PoseEquipmentContext | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentSources,
+    example: 'member',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(poseEquipmentSources, {
+    message: `equipment_source must be one of: ${poseEquipmentSources.join(', ')}`,
+  })
+  equipment_source?: PoseEquipmentSource | null;
+
+  @ApiPropertyOptional({ example: 0.86, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'equipment_confidence must be a finite number' },
+  )
+  @Min(0, { message: 'equipment_confidence must be at least 0' })
+  equipment_confidence?: number | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['declared_inferred_equipment_mismatch'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'equipment_conflicts must be an array' })
+  @IsString({
+    each: true,
+    message: 'equipment_conflicts entries must be strings',
+  })
+  equipment_conflicts?: string[];
+
+  @ApiPropertyOptional({ example: 40, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'weight_input_kg must be a finite number' },
+  )
+  @Min(0, { message: 'weight_input_kg must be at least 0' })
+  weight_input_kg?: number | null;
 }
 
 export class PoseKeypointDTO {
@@ -191,6 +306,70 @@ export class PoseAngleSignalEntryDTO {
     { message: 'knee must be a finite number' },
   )
   knee?: number | null;
+
+  @ApiPropertyOptional({ example: 112.4, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_elbow must be a finite number' },
+  )
+  left_elbow?: number | null;
+
+  @ApiPropertyOptional({ example: 113.8, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_elbow must be a finite number' },
+  )
+  right_elbow?: number | null;
+
+  @ApiPropertyOptional({ example: 144.2, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_shoulder must be a finite number' },
+  )
+  left_shoulder?: number | null;
+
+  @ApiPropertyOptional({ example: 145.6, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_shoulder must be a finite number' },
+  )
+  right_shoulder?: number | null;
+
+  @ApiPropertyOptional({ example: 96.1, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_hip must be a finite number' },
+  )
+  left_hip?: number | null;
+
+  @ApiPropertyOptional({ example: 97.4, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_hip must be a finite number' },
+  )
+  right_hip?: number | null;
+
+  @ApiPropertyOptional({ example: 83.7, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_knee must be a finite number' },
+  )
+  left_knee?: number | null;
+
+  @ApiPropertyOptional({ example: 84.9, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_knee must be a finite number' },
+  )
+  right_knee?: number | null;
 }
 
 export class PoseOrientationVectorDTO {
@@ -263,6 +442,22 @@ export class PoseVisibilitySignalDTO {
     { message: 'wrist_visibility must be a finite number' },
   )
   wrist_visibility: number;
+
+  @ApiPropertyOptional({ example: 0.79, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_arm_visibility must be a finite number' },
+  )
+  left_arm_visibility?: number | null;
+
+  @ApiPropertyOptional({ example: 0.81, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_arm_visibility must be a finite number' },
+  )
+  right_arm_visibility?: number | null;
 }
 
 export class PoseHipSignalDTO {
@@ -280,6 +475,14 @@ export class PoseHipSignalDTO {
   )
   range_y: number;
 
+  @ApiPropertyOptional({ example: 0.012, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'range_x must be a finite number' },
+  )
+  range_x?: number | null;
+
   @ApiProperty({ example: true })
   @IsBoolean({ message: 'stable must be a boolean' })
   stable: boolean;
@@ -296,8 +499,19 @@ export class PoseTemporalMovementSignalDTO {
 
   @ApiProperty({ type: String, isArray: true, example: ['elbow', 'knee'] })
   @IsArray({ message: 'oscillating_joints must be an array' })
-  @IsString({ each: true, message: 'oscillating_joints entries must be strings' })
+  @IsString({
+    each: true,
+    message: 'oscillating_joints entries must be strings',
+  })
   oscillating_joints: string[];
+
+  @ApiPropertyOptional({ example: 180, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 0 },
+    { message: 'phase_sync_ms must be a finite number' },
+  )
+  phase_sync_ms?: number | null;
 }
 
 export class PoseDerivedSignalsDTO {
@@ -356,6 +570,48 @@ export class PoseRepThresholdPairDTO {
   up: PoseRepThresholdDTO;
 }
 
+export class PoseSpatialRequirementsDTO {
+  @ApiPropertyOptional({ example: 0.012, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'body_y_travel_min must be a finite number' },
+  )
+  body_y_travel_min?: number | null;
+
+  @ApiPropertyOptional({ example: 0.05, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'body_x_drift_max must be a finite number' },
+  )
+  body_x_drift_max?: number | null;
+
+  @ApiPropertyOptional({ example: 0.08, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'body_line_tolerance must be a finite number' },
+  )
+  body_line_tolerance?: number | null;
+
+  @ApiPropertyOptional({ example: 0.18, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_right_symmetry_tolerance must be a finite number' },
+  )
+  left_right_symmetry_tolerance?: number | null;
+
+  @ApiPropertyOptional({ example: 450, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 0 },
+    { message: 'phase_sync_tolerance_ms must be a finite number' },
+  )
+  phase_sync_tolerance_ms?: number | null;
+}
+
 export class PoseMovementContractDTO {
   @ApiProperty({ example: 'squat' })
   @IsString({ message: 'exercise must be a string' })
@@ -384,8 +640,93 @@ export class PoseMovementContractDTO {
 
   @ApiProperty({ type: String, isArray: true, example: ['hip', 'knee'] })
   @IsArray({ message: 'oscillating_joints must be an array' })
-  @IsString({ each: true, message: 'oscillating_joints entries must be strings' })
+  @IsString({
+    each: true,
+    message: 'oscillating_joints entries must be strings',
+  })
   oscillating_joints: string[];
+
+  @ApiPropertyOptional({ enum: poseRepModels, example: 'bilateral' })
+  @IsOptional()
+  @IsIn(poseRepModels, {
+    message: `rep_model must be one of: ${poseRepModels.join(', ')}`,
+  })
+  rep_model?: PoseRepModel;
+
+  @ApiPropertyOptional({ enum: poseRequiredSides, example: 'both' })
+  @IsOptional()
+  @IsIn(poseRequiredSides, {
+    message: `required_sides must be one of: ${poseRequiredSides.join(', ')}`,
+  })
+  required_sides?: PoseRequiredSides;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['left_elbow', 'right_elbow'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'primary_joints must be an array' })
+  @IsString({
+    each: true,
+    message: 'primary_joints entries must be strings',
+  })
+  primary_joints?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['left_shoulder', 'right_shoulder', 'hip'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'secondary_joints must be an array' })
+  @IsString({
+    each: true,
+    message: 'secondary_joints entries must be strings',
+  })
+  secondary_joints?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['setup', 'eccentric', 'bottom', 'concentric', 'lockout'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'phase_order must be an array' })
+  @IsString({ each: true, message: 'phase_order entries must be strings' })
+  phase_order?: string[];
+
+  @ApiPropertyOptional({ type: () => PoseSpatialRequirementsDTO })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PoseSpatialRequirementsDTO)
+  spatial_requirements?: PoseSpatialRequirementsDTO | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['one_arm_only', 'body_y_travel_below_min'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'no_count_conditions must be an array' })
+  @IsString({
+    each: true,
+    message: 'no_count_conditions entries must be strings',
+  })
+  no_count_conditions?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['occluded_side', 'low_lock_confidence'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'degraded_conditions must be an array' })
+  @IsString({
+    each: true,
+    message: 'degraded_conditions entries must be strings',
+  })
+  degraded_conditions?: string[];
 }
 
 export class PoseRepAngleDataDTO {
@@ -426,11 +767,17 @@ export class PoseRepAngleDataDTO {
 }
 
 export class AnalyzePoseSequenceDTO {
-  @ApiProperty({ enum: poseLandmarkSchemaValues, example: 'mediapipe_pose_v1' })
+  @ApiPropertyOptional({
+    enum: poseLandmarkSchemaValues,
+    example: 'mediapipe_pose_v1',
+  })
+  @ValidateIf(
+    (object: AnalyzePoseSequenceDTO) => !hasFramePayload(object.frame_b64),
+  )
   @IsIn(poseLandmarkSchemaValues, {
     message: `landmark_schema must be one of: ${poseLandmarkSchemaValues.join(', ')}`,
   })
-  landmark_schema: PoseLandmarkSchema;
+  landmark_schema?: PoseLandmarkSchema;
 
   @ApiPropertyOptional({
     enum: poseCameraFacingModes,
@@ -450,18 +797,168 @@ export class AnalyzePoseSequenceDTO {
   @MaxLength(255, { message: 'exercise_hint must not exceed 255 characters' })
   exercise_hint?: string | null;
 
-  @ApiProperty({ type: PoseSequenceFrameDTO, isArray: true })
+  @ApiPropertyOptional({ example: 'base64-frame-payload', nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'frame_b64 must be a string' })
+  frame_b64?: string | null;
+
+  @ApiPropertyOptional({ type: PoseSequenceFrameDTO, isArray: true })
+  @ValidateIf(
+    (object: AnalyzePoseSequenceDTO) => !hasFramePayload(object.frame_b64),
+  )
   @IsArray({ message: 'frames must be an array' })
-  @ArrayMinSize(12, { message: 'frames must contain between 12 and 20 entries' })
-  @ArrayMaxSize(20, { message: 'frames must contain between 12 and 20 entries' })
+  @ArrayMinSize(12, {
+    message: 'frames must contain between 12 and 20 entries',
+  })
+  @ArrayMaxSize(20, {
+    message: 'frames must contain between 12 and 20 entries',
+  })
   @ValidateNested({ each: true })
   @Type(() => PoseSequenceFrameDTO)
-  frames: PoseSequenceFrameDTO[];
+  frames?: PoseSequenceFrameDTO[];
 
-  @ApiProperty({ type: PoseDerivedSignalsDTO })
+  @ApiPropertyOptional({ type: PoseDerivedSignalsDTO })
+  @ValidateIf(
+    (object: AnalyzePoseSequenceDTO) => !hasFramePayload(object.frame_b64),
+  )
   @ValidateNested()
   @Type(() => PoseDerivedSignalsDTO)
-  signals: PoseDerivedSignalsDTO;
+  signals?: PoseDerivedSignalsDTO;
+
+  @ApiPropertyOptional({ example: true, nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'subject_locked must be a boolean' })
+  subject_locked?: boolean | null;
+
+  @ApiPropertyOptional({ example: 0.92, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'subject_lock_confidence must be a finite number' },
+  )
+  @Min(0, { message: 'subject_lock_confidence must be at least 0' })
+  subject_lock_confidence?: number | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentContexts,
+    example: 'bodyweight',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(poseEquipmentContexts, {
+    message: `equipment_context must be one of: ${poseEquipmentContexts.join(', ')}`,
+  })
+  equipment_context?: PoseEquipmentContext | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentSources,
+    example: 'catalog',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(poseEquipmentSources, {
+    message: `equipment_source must be one of: ${poseEquipmentSources.join(', ')}`,
+  })
+  equipment_source?: PoseEquipmentSource | null;
+
+  @ApiPropertyOptional({ example: 0.72, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'equipment_confidence must be a finite number' },
+  )
+  @Min(0, { message: 'equipment_confidence must be at least 0' })
+  equipment_confidence?: number | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['declared_inferred_equipment_mismatch'],
+  })
+  @IsOptional()
+  @IsArray({ message: 'equipment_conflicts must be an array' })
+  @IsString({
+    each: true,
+    message: 'equipment_conflicts entries must be strings',
+  })
+  equipment_conflicts?: string[];
+}
+
+export class DetectPoseEquipmentDTO {
+  @ApiProperty({ example: 'base64-frame-payload' })
+  @TrimString()
+  @IsString({ message: 'frame_b64 must be a string' })
+  frame_b64: string;
+
+  @ApiPropertyOptional({
+    enum: poseCameraFacingModes,
+    example: 'user',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(poseCameraFacingModes, {
+    message: `camera_facing_mode must be one of: ${poseCameraFacingModes.join(', ')}`,
+  })
+  camera_facing_mode?: PoseCameraFacingMode;
+
+  @ApiPropertyOptional({ example: 'Dumbbell Bicep Curl', nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'exercise_hint must be a string' })
+  @MaxLength(255, { message: 'exercise_hint must not exceed 255 characters' })
+  exercise_hint?: string | null;
+}
+
+export class PoseEquipmentDetectionResponseDTO {
+  @ApiProperty({
+    example: [
+      {
+        confidence: 0.81,
+        height: 0.18,
+        label: 'dumbbell',
+        width: 0.24,
+        x: 0.38,
+        y: 0.56,
+      },
+    ],
+    isArray: true,
+  })
+  equipment_detections: Array<{
+    confidence: number | null;
+    height: number | null;
+    label: string | null;
+    width: number | null;
+    x: number | null;
+    y: number | null;
+  }>;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentContexts,
+    example: 'dumbbell',
+    nullable: true,
+  })
+  equipment_context: PoseEquipmentContext | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentSources,
+    example: 'provider_api',
+    nullable: true,
+  })
+  equipment_source: PoseEquipmentSource | null;
+
+  @ApiPropertyOptional({ example: 0.81, nullable: true })
+  equipment_confidence: number | null;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: [],
+  })
+  equipment_conflicts: string[];
+
+  @ApiProperty({ example: true })
+  provider_enabled: boolean;
 }
 
 export class PoseSessionBootstrapResponseDTO {
@@ -504,6 +1001,28 @@ export class PoseFrameAnalysisResponseDTO {
   needs_confirmation: boolean;
 
   @ApiProperty({
+    enum: poseProcessingModes,
+    example: 'sequence',
+  })
+  processing_mode: PoseProcessingMode;
+
+  @ApiProperty({ example: false })
+  rep_event: boolean;
+
+  @ApiProperty({ example: 0 })
+  rep_count_delta: number;
+
+  @ApiPropertyOptional({ example: 'rising', nullable: true })
+  phase: string | null;
+
+  @ApiPropertyOptional({
+    type: PoseKeypointDTO,
+    isArray: true,
+    nullable: true,
+  })
+  keypoints?: PoseKeypointDTO[] | null;
+
+  @ApiProperty({
     type: String,
     isArray: true,
     example: ['push_up', 'bench_press'],
@@ -522,6 +1041,56 @@ export class PoseFrameAnalysisResponseDTO {
     nullable: true,
   })
   movement_contract: PoseMovementContractDTO | null;
+
+  @ApiProperty({ enum: poseSessionQualityStates, example: 'stable' })
+  session_quality_state: PoseSessionQualityState;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: ['low_reliable_frame_ratio'],
+  })
+  session_quality_reasons: string[];
+
+  @ApiPropertyOptional({ example: 0.82, nullable: true })
+  reliable_frame_ratio: number | null;
+
+  @ApiProperty({ enum: poseProgressionDispositions, example: 'normal' })
+  progression_disposition: PoseProgressionDisposition;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: ['weak_subject_lock'],
+  })
+  integrity_reason_codes: string[];
+
+  @ApiProperty({ example: false })
+  review_recommended: boolean;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentContexts,
+    example: 'dumbbell',
+    nullable: true,
+  })
+  equipment_context: PoseEquipmentContext | null;
+
+  @ApiPropertyOptional({
+    enum: poseEquipmentSources,
+    example: 'resolved_hybrid',
+    nullable: true,
+  })
+  equipment_source: PoseEquipmentSource | null;
+
+  @ApiPropertyOptional({ example: 0.78, nullable: true })
+  equipment_confidence: number | null;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: [],
+  })
+  equipment_conflicts: string[];
 }
 
 export class PoseProfileFilterDTO extends PaginationDTO {
@@ -647,7 +1216,11 @@ export class PoseProfileResponseDTO {
   })
   rep_rules: Record<string, unknown> | null;
 
-  @ApiPropertyOptional({ example: 'knee', nullable: true, enum: poseJointNames })
+  @ApiPropertyOptional({
+    example: 'knee',
+    nullable: true,
+    enum: poseJointNames,
+  })
   dominant_joint: PoseJointName | null;
 
   @ApiPropertyOptional({ example: '12.000', nullable: true })

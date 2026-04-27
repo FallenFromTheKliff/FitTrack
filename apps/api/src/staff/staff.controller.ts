@@ -155,7 +155,11 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CompleteAppointmentDTO,
   ) {
-    return this.appointmentService.completeAppointmentAsStaff(user.sub, id, dto);
+    return this.appointmentService.completeAppointmentAsStaff(
+      user.sub,
+      id,
+      dto,
+    );
   }
 
   @Patch('appointments/:id/cancel')
