@@ -2213,13 +2213,6 @@ export default function GymOperationsPage() {
                 {activeOperationsTab === "schedule" ? (
                   <>
                     <FitButton
-                      variant="primary"
-                      label="WEEK VIEW"
-                      disabled
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
-                      textStyle={{ fontSize: 13, fontWeight: 700 }}
-                    />
-                    <FitButton
                       variant="ghost"
                       label={coachFilterId ? "COACH FILTERED" : "COACH FILTER"}
                       onClick={() => {
@@ -2238,16 +2231,6 @@ export default function GymOperationsPage() {
                   </>
                 ) : (
                   <>
-                    <FitButton
-                      variant="primary"
-                      label="ALL COACHES"
-                      onClick={() => {
-                        setCoachFilterId(null);
-                        setCoachVisibilityScope("all");
-                      }}
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
-                      textStyle={{ fontSize: 13, fontWeight: 700 }}
-                    />
                     <FitButton
                       variant="ghost"
                       label={coachVisibilityScope === "visible" ? "VISIBLE ONLY" : "BOOKING VISIBLE"}
@@ -2276,84 +2259,7 @@ export default function GymOperationsPage() {
             </div>
           </div>
         </div>
-        {activeOperationsTab === "schedule" && !isAdmin ? (
-          <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              <div
-                style={{
-                  padding: 14,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 12,
-                  backgroundColor: colors.surface,
-                }}
-              >
-                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                  Pending Approvals
-                </FitText>
-                <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-                  {pendingBookings.length}
-                </FitText>
-              </div>
-              <div
-                style={{
-                  padding: 14,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 12,
-                  backgroundColor: colors.surface,
-                }}
-              >
-                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                  Confirmed Bookings
-                </FitText>
-                <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-                  {
-                    rawBookings.filter((booking) => booking.status === "confirmed")
-                      .length
-                  }
-                </FitText>
-              </div>
-              <div
-                style={{
-                  padding: 14,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 12,
-                  backgroundColor: colors.surface,
-                }}
-              >
-                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                  All Visible Bookings
-                </FitText>
-                <FitText style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-                  {rawBookings.length}
-                </FitText>
-              </div>
-            </div>
-            <FitSection heading="Booking Operations" className="mb-0">
-              <div style={{ marginBottom: 12 }}>
-                <FitText style={{ fontSize: 13, color: colors.textMuted }}>
-                  Booking statuses now follow the live payment workflow. Staff can
-                  monitor bookings here, while status changes are handled by payment
-                  and cancellation flows.
-                </FitText>
-              </div>
-              <FitTable
-                columns={staffColumns}
-                rows={rawBookings}
-                getRowKey={(booking) => booking.id}
-                isLoading={scheduleLoading}
-                loadingMessage="Loading staff bookings..."
-                emptyMessage="No bookings available."
-              />
-            </FitSection>
-          </>
-        ) : activeOperationsTab === "schedule" ? (
+        {activeOperationsTab === "schedule" ? (
           <div style={{ display: "grid", gap: 14 }}>
             <div
               style={{
@@ -2826,21 +2732,6 @@ export default function GymOperationsPage() {
                     Maintain coach-facing booking trust, weekly availability, and member-visible profile quality from one contained tab.
                   </FitText>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
-                    <FitText excludeGlobalScale style={controlLabelStyle}>
-                      Focus coach
-                    </FitText>
-                    <FitSelect
-                      value={coachFilterId ?? ""}
-                      onChange={(event) => setCoachFilterId(event.target.value || null)}
-                      options={coachOptions}
-                      placeholder="All coaches"
-                      compact
-                      fullWidth
-                    />
-                  </div>
-                </div>
               </div>
               <div
                 style={{
@@ -3098,17 +2989,6 @@ export default function GymOperationsPage() {
                         setCoachDetailsOpen(true);
                       }}
                       disabled={!selectedCoachRoster}
-                      style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
-                      textStyle={{ fontSize: 11, fontWeight: 700 }}
-                    />
-                    <FitButton
-                      variant="ghost"
-                      label="EDIT PROFILE"
-                      onClick={() => {
-                        if (!selectedCoachProfile) return;
-                        setProfileEditorCoachId(selectedCoachProfile.id);
-                      }}
-                      disabled={!selectedCoachProfile}
                       style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
                       textStyle={{ fontSize: 11, fontWeight: 700 }}
                     />

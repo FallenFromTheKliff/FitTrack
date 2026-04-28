@@ -1,0 +1,15 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+index 0097ab5..d762856 100644
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -1,6 +1,10 @@
+ project(Worklets)
+ cmake_minimum_required(VERSION 3.8)
+ 
++# Windows + pnpm can produce extremely long object paths under node_modules/.pnpm.
++# Force CMake to hash object filenames earlier so native builds stay under path limits.
++set(CMAKE_OBJECT_PATH_MAX 128)
++
+ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ 
+ set(CMAKE_CXX_STANDARD 20)

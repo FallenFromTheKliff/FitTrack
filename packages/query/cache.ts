@@ -60,9 +60,14 @@ export async function invalidateNotificationQueries(
 }
 
 export function invalidateGymLayoutQueries(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({
-    queryKey: queryKeys.gymLayoutEquipment(),
-  });
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.gymLayoutEquipment(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.gymLayoutFloorPlanMedia(),
+    }),
+  ]);
 }
 
 export function invalidateAiChatSessionsQuery(queryClient: QueryClient) {

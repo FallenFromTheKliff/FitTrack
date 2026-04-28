@@ -56,6 +56,7 @@ model User {
   // S6
   coach_profile               CoachProfile?
   member_appointments         CoachAppointment[]         @relation("member")
+  recurring_coaching_plans    RecurringCoachingPlan[]    @relation("recurring_plan_member")
   coach_reviews               CoachReview[]
   client_relationships        CoachClientRelationship[]  @relation("member_rel")
   // S7
@@ -507,6 +508,7 @@ model Amenity {
   grid_row              Int?
   grid_width            Int?
   grid_height           Int?
+  image_url             String?     @db.VarChar(500)
   is_reservable         Boolean?
   display_order         Int?
   floor_id              String?     @db.VarChar(20)
@@ -519,6 +521,15 @@ model Amenity {
 
   @@index([is_active, type])
   @@map("amenities")
+}
+
+model FacilityFloorPlanMedia {
+  floor_id   String   @id @db.VarChar(20)
+  image_url  String?  @db.VarChar(500)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("facility_floor_plan_media")
 }
 
 enum AmenityType {
@@ -586,6 +597,7 @@ model CoachProfile {
 
   user                 User                      @relation(fields: [user_id], references: [id])
   appointments         CoachAppointment[]
+  recurring_plans      RecurringCoachingPlan[]
   amenity_bookings     AmenityBooking[]
   reviews              CoachReview[]
   availability_slots   CoachAvailabilitySlot[]
@@ -596,35 +608,40 @@ model CoachProfile {
 }
 
 model CoachAppointment {
-  id                  String            @id @default(uuid()) @db.Uuid
-  user_id             String            @db.Uuid
-  coach_id            String            @db.Uuid
-  status              AppointmentStatus @default(pending_coach)
-  is_free_session     Boolean           @default(false)
-  scheduled_at        DateTime          @db.Timestamptz(6)
-  duration_minutes    Int               @default(60)
-  total_amount        Decimal           @default(0) @db.Decimal(10, 2)
-  downpayment_amount  Decimal           @default(0) @db.Decimal(10, 2)
-  balance_amount      Decimal           @default(0) @db.Decimal(10, 2)
-  gym_revenue         Decimal           @default(0) @db.Decimal(10, 2)
-  coach_earnings      Decimal           @default(0) @db.Decimal(10, 2)
-  downpayment_paid_at DateTime?         @db.Timestamptz(6)
-  balance_paid_at     DateTime?         @db.Timestamptz(6)
-  session_notes       String?
-  member_notes        String?
-  completed_at        DateTime?         @db.Timestamptz(6)
-  no_show_at          DateTime?         @db.Timestamptz(6)
-  cancellation_reason String?
-  cancelled_at        DateTime?         @db.Timestamptz(6)
-  created_at          DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime          @updatedAt @db.Timestamptz(6)
+  id                    String                         @id @default(uuid()) @db.Uuid
+  user_id               String                         @db.Uuid
+  coach_id              String                         @db.Uuid
+  recurring_plan_id     String?                        @db.Uuid
+  status                AppointmentStatus              @default(pending_coach)
+  recurring_state       RecurringCoachingSessionState?
+  original_scheduled_at DateTime?                      @db.Timestamptz(6)
+  is_free_session       Boolean                        @default(false)
+  scheduled_at          DateTime                       @db.Timestamptz(6)
+  duration_minutes      Int                            @default(60)
+  total_amount          Decimal                        @default(0) @db.Decimal(10, 2)
+  downpayment_amount    Decimal                        @default(0) @db.Decimal(10, 2)
+  balance_amount        Decimal                        @default(0) @db.Decimal(10, 2)
+  gym_revenue           Decimal                        @default(0) @db.Decimal(10, 2)
+  coach_earnings        Decimal                        @default(0) @db.Decimal(10, 2)
+  downpayment_paid_at   DateTime?                      @db.Timestamptz(6)
+  balance_paid_at       DateTime?                      @db.Timestamptz(6)
+  session_notes         String?
+  member_notes          String?
+  completed_at          DateTime?                      @db.Timestamptz(6)
+  no_show_at            DateTime?                      @db.Timestamptz(6)
+  cancellation_reason   String?
+  cancelled_at          DateTime?                      @db.Timestamptz(6)
+  created_at            DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                       @updatedAt @db.Timestamptz(6)
 
-  user   User         @relation("member", fields: [user_id], references: [id])
-  coach  CoachProfile @relation(fields: [coach_id], references: [id])
-  review CoachReview?
+  user           User                   @relation("member", fields: [user_id], references: [id])
+  coach          CoachProfile           @relation(fields: [coach_id], references: [id])
+  recurring_plan RecurringCoachingPlan? @relation(fields: [recurring_plan_id], references: [id], onDelete: SetNull)
+  review         CoachReview?
 
   @@index([user_id, status])
   @@index([coach_id, scheduled_at])
+  @@index([recurring_plan_id, scheduled_at])
   @@index([scheduled_at, status])
   @@map("coach_appointments")
 }
@@ -636,6 +653,55 @@ enum AppointmentStatus {
   cancelled
   completed
   no_show
+}
+
+model RecurringCoachingPlan {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  member_id           String                      @db.Uuid
+  coach_id            String                      @db.Uuid
+  created_by          String?                     @db.Uuid
+  frequency           RecurringCoachingFrequency
+  preferred_days      Int[]                       @default([])
+  preferred_time      DateTime                    @db.Time(0)
+  start_date          DateTime                    @db.Date
+  end_date            DateTime                    @db.Date
+  duration_minutes    Int                         @default(60)
+  status              RecurringCoachingPlanStatus @default(active)
+  total_sessions      Int                         @default(0)
+  completed_sessions  Int                         @default(0)
+  cancellation_reason String?
+  cancelled_at        DateTime?                   @db.Timestamptz(6)
+  created_at          DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime                    @updatedAt @db.Timestamptz(6)
+
+  member       User               @relation("recurring_plan_member", fields: [member_id], references: [id])
+  coach        CoachProfile       @relation(fields: [coach_id], references: [id])
+  appointments CoachAppointment[]
+
+  @@index([member_id, status])
+  @@index([coach_id, status])
+  @@index([status, start_date, end_date])
+  @@map("recurring_coaching_plans")
+}
+
+enum RecurringCoachingFrequency {
+  weekly
+  biweekly
+}
+
+enum RecurringCoachingPlanStatus {
+  active
+  paused
+  cancelled
+  completed
+}
+
+enum RecurringCoachingSessionState {
+  generated
+  skipped
+  individually_rescheduled
+  cancelled
+  completed
 }
 
 model CoachReview {
@@ -1474,6 +1540,7 @@ model RetailProduct {
   category                String    @default("other") @db.VarChar(80)
   description             String?
   price                   Decimal   @db.Decimal(10, 2)
+  cost                    Decimal   @default(0) @db.Decimal(10, 2)
   stock_quantity          Int       @default(0)
   reorder_threshold       Int       @default(10)
   last_low_stock_alert_at DateTime? @db.Timestamptz(6)
@@ -1494,6 +1561,8 @@ model SaleTransaction {
   id               String            @id @default(uuid()) @db.Uuid
   customer_name    String?           @db.VarChar(255)
   customer_user_id String?           @db.Uuid
+  notes            String?
+  source           SaleSource        @default(manual)
   total_amount     Decimal           @db.Decimal(10, 2)
   payment_method   SalePaymentMethod
   payment_id       String?           @db.Uuid
@@ -1515,6 +1584,11 @@ model SaleTransaction {
 enum SalePaymentMethod {
   cash
   paymongo
+}
+
+enum SaleSource {
+  manual
+  mobile
 }
 
 enum SaleStatus {
@@ -1547,6 +1621,7 @@ model GymEquipmentItem {
   id               String   @id @default(uuid()) @db.Uuid
   name             String   @db.VarChar(255)
   description      String?
+  image_url        String?  @db.VarChar(500)
   quantity_total   Int
   quantity_current Int
   unit             String   @default("units") @db.VarChar(50)

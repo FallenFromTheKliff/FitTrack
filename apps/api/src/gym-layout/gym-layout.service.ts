@@ -19,10 +19,15 @@ import type { Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
   CreateEquipmentDTO,
+  FacilityFloorPlanMediaResponseDTO,
   GymLayoutEquipmentResponseDTO,
+  UpdateFacilityFloorPlanMediaDTO,
   UpdateEquipmentDTO,
 } from './dto/gym-layout.dto';
-import { GymLayoutRepository } from './gym-layout.repository';
+import {
+  GymLayoutRepository,
+  type FacilityFloorPlanMediaRow,
+} from './gym-layout.repository';
 import {
   GYM_LAYOUT_STATUS_CHANNEL,
   GYM_LAYOUT_STATUS_HASH_KEY,
@@ -41,6 +46,7 @@ const GYM_LAYOUT_UPDATE_FIELDS = [
 
 const GYM_LAYOUT_GRID_COLUMNS = 14;
 const GYM_LAYOUT_GRID_ROWS = 10;
+const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
 
 function pickDefined<T extends object, K extends readonly (keyof T)[]>(
   source: T,
@@ -96,6 +102,14 @@ type PlacementInput = {
   position_y?: number;
 };
 
+function isFacilityFloorId(
+  value: string,
+): value is (typeof FACILITY_FLOOR_IDS)[number] {
+  return FACILITY_FLOOR_IDS.includes(
+    value as (typeof FACILITY_FLOOR_IDS)[number],
+  );
+}
+
 @Injectable()
 export class GymLayoutService {
   constructor(
@@ -113,6 +127,11 @@ export class GymLayoutService {
   async listArchivedEquipment(): Promise<GymLayoutEquipmentResponseDTO[]> {
     const equipment = await this.repo.listArchivedEquipment();
     return equipment.map((item) => this.toEquipmentResponse(item));
+  }
+
+  async listFloorPlanMedia(): Promise<FacilityFloorPlanMediaResponseDTO[]> {
+    const media = await this.repo.listFloorPlanMedia();
+    return media.map((item) => this.toFloorPlanMediaResponse(item));
   }
 
   async createEquipment(
@@ -148,6 +167,26 @@ export class GymLayoutService {
     await this.publishRealtimeDelta(equipment, 'upsert');
 
     return this.toEquipmentResponse(equipment);
+  }
+
+  async updateFloorPlanMedia(
+    floorId: string,
+    dto: UpdateFacilityFloorPlanMediaDTO,
+  ): Promise<FacilityFloorPlanMediaResponseDTO> {
+    if (!isFacilityFloorId(floorId)) {
+      throw new BadRequestException({
+        type: 'BAD_REQUEST',
+        title: 'Invalid Floor Plan',
+        status: 400,
+        detail: `floor_id must be one of: ${FACILITY_FLOOR_IDS.join(', ')}.`,
+      });
+    }
+
+    const media = await this.repo.upsertFloorPlanMedia(
+      floorId,
+      dto.image_url ?? null,
+    );
+    return this.toFloorPlanMediaResponse(media);
   }
 
   async authenticateSocket(client: Socket): Promise<JwtPayload> {
@@ -325,6 +364,17 @@ export class GymLayoutService {
       status: this.toCachedStatus(cachedStatus) ?? item.status,
       icon_key: item.icon_key ?? null,
       is_active: item.is_active,
+      created_at: item.created_at.toISOString(),
+      updated_at: item.updated_at.toISOString(),
+    };
+  }
+
+  private toFloorPlanMediaResponse(
+    item: FacilityFloorPlanMediaRow,
+  ): FacilityFloorPlanMediaResponseDTO {
+    return {
+      floor_id: item.floor_id as (typeof FACILITY_FLOOR_IDS)[number],
+      image_url: item.image_url,
       created_at: item.created_at.toISOString(),
       updated_at: item.updated_at.toISOString(),
     };

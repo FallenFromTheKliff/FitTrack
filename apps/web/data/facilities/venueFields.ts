@@ -66,6 +66,7 @@ export const VENUE_INITIAL_VALUES = {
     hourlyRate: "",
     minimumHours: "1",
     iconKey: "gym-area",
+    imageUrl: "",
     floorId: "floor-1",
     gridColumn: "1",
     gridRow: "1",

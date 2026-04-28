@@ -87,7 +87,9 @@ export type {
   VerifyEmailPayload,
 } from "./domains/auth";
 export type {
+  AppointmentCheckoutResponse,
   AppointmentRecord,
+  AppointmentPaymentProvider,
   CoachScheduleRecord,
   CreateAppointmentPayload,
 } from "./domains/appointments";
@@ -220,6 +222,8 @@ export type {
   UpdateNutritionLogPayload,
 } from "./domains/nutrition";
 export type {
+  FacilityFloorPlanMediaMutationInput,
+  FacilityFloorPlanMediaRecord,
   GymLayoutEquipmentMutationInput,
   GymLayoutEquipmentRecord,
 } from "./domains/gym-layout";

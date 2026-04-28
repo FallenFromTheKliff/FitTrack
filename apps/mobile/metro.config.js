@@ -43,6 +43,7 @@ const extraBlockList = [
   /[\\/]\.uv-runtime([\\/]|$)/,
   /[\\/]\.venv([\\/]|$)/,
   /[\\/]pytest-cache-files[^\\/]*([\\/]|$)/,
+  /[\\/]node_modules[\\/]\.pnpm[\\/]next@[^\\/]+[\\/]node_modules[\\/]next_tmp_[^\\/]+([\\/]|$)/,
 ];
 const resolverPaths = uniqueExistingPaths([
   path.join(logicalAppRoot, "node_modules"),

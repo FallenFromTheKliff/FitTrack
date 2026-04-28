@@ -1,5 +1,9 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ApiClient, GymLayoutEquipmentMutationInput } from "@fittrack/api-client";
+import type {
+  ApiClient,
+  FacilityFloorPlanMediaMutationInput,
+  GymLayoutEquipmentMutationInput,
+} from "@fittrack/api-client";
 import { invalidateGymLayoutQueries } from "./cache";
 import { queryKeys } from "./query-keys";
 
@@ -30,6 +34,15 @@ export function archivedGymLayoutEquipmentQueryOptions(
     ...(config?.refetchInterval !== undefined
       ? { refetchInterval: config.refetchInterval }
       : {}),
+  });
+}
+
+export function gymLayoutFloorPlanMediaQueryOptions(
+  client: Pick<ApiClient, "gymLayout">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.gymLayoutFloorPlanMedia(),
+    queryFn: () => client.gymLayout.listFloorPlanMedia(),
   });
 }
 
@@ -88,6 +101,19 @@ export function restoreGymLayoutEquipmentMutationOptions(
   return mutationOptions({
     mutationFn: (equipmentId: string) =>
       client.gymLayout.restoreEquipment(equipmentId),
+    onSuccess: async () => {
+      await invalidateGymLayout(queryClient);
+    },
+  });
+}
+
+export function updateGymLayoutFloorPlanMediaMutationOptions(
+  client: Pick<ApiClient, "gymLayout">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (payload: FacilityFloorPlanMediaMutationInput) =>
+      client.gymLayout.updateFloorPlanMedia(payload),
     onSuccess: async () => {
       await invalidateGymLayout(queryClient);
     },

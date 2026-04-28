@@ -14,7 +14,7 @@ export type PageKey =
 export const PAGE_NAMES: Record<PageKey, string> = {
   dashboard: "Dashboard",
   ai: "BrodigyAI",
-  members: "Members",
+  members: "Account Module",
   schedule: "Gym Operations",
   "exercise-lab": "Exercise Lab",
   gamification: "Gamification",

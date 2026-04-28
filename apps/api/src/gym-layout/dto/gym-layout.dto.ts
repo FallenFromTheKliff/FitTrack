@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -15,6 +16,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EquipmentStatus } from '@prisma/client';
 
 import { TrimString } from '../../common/validators';
+
+const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
 
 export class CreateEquipmentDTO {
   @ApiProperty({ example: 'Leg Press Station' })
@@ -184,5 +187,34 @@ export class GymLayoutEquipmentResponseDTO {
   created_at: string;
 
   @ApiProperty({ example: '2026-03-27T03:00:00.000Z' })
+  updated_at: string;
+}
+
+export class UpdateFacilityFloorPlanMediaDTO {
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/facilities/floor-1.png',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsUrl({}, { message: 'image_url must be a valid URL' })
+  @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
+  image_url?: string | null;
+}
+
+export class FacilityFloorPlanMediaResponseDTO {
+  @ApiProperty({ example: 'floor-1', enum: FACILITY_FLOOR_IDS })
+  floor_id: (typeof FACILITY_FLOOR_IDS)[number];
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/facilities/floor-1.png',
+    nullable: true,
+  })
+  image_url: string | null;
+
+  @ApiProperty({ example: '2026-04-28T03:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-04-28T03:00:00.000Z' })
   updated_at: string;
 }

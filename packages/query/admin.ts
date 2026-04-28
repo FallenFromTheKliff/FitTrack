@@ -22,6 +22,7 @@ import {
   invalidateAdminDeletionRequestsQuery,
   invalidateAdminGamificationOverviewQuery,
   invalidateAdminMembersQuery,
+  invalidateNotificationQueries,
   invalidateStaffBookingQueries,
 } from "./cache";
 import { queryKeys } from "./query-keys";
@@ -188,7 +189,10 @@ export function createUserMutationOptions(
     mutationFn: (payload: CreateUserPayload) =>
       client.admin.createUser(payload),
     onSuccess: async () => {
-      await invalidateAdminMembersQuery(queryClient);
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+      ]);
     },
   });
 }
@@ -208,6 +212,7 @@ export function updateAdminMemberMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
       ]);
@@ -228,7 +233,10 @@ export function updateAdminMembershipCardMutationOptions(
       payload: UpdateMembershipCardPayload;
     }) => client.admin.updateMembershipCard(id, payload),
     onSuccess: async () => {
-      await invalidateAdminMembersQuery(queryClient);
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+      ]);
     },
   });
 }
@@ -241,7 +249,10 @@ export function scanAttendanceQrMutationOptions(
     mutationFn: (payload: ScanAttendanceQrInput) =>
       client.admin.scanAttendanceQr(payload),
     onSuccess: async () => {
-      await invalidateAdminMembersQuery(queryClient);
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+      ]);
     },
   });
 }
@@ -254,7 +265,10 @@ export function manualAttendanceCheckInMutationOptions(
     mutationFn: (payload: ManualAttendanceCheckInInput) =>
       client.admin.manualAttendanceCheckIn(payload),
     onSuccess: async () => {
-      await invalidateAdminMembersQuery(queryClient);
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+      ]);
     },
   });
 }
@@ -271,6 +285,7 @@ export function deleteUserMutationOptions(
         (prev: { id: string }[] | undefined) =>
           prev ? prev.filter((member) => member.id !== id) : [],
       );
+      await invalidateNotificationQueries(queryClient);
     },
   });
 }
@@ -285,6 +300,7 @@ export function restoreUserMutationOptions(
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
         invalidateAdminDeletionRequestsQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
       ]);
     },
   });
@@ -302,6 +318,7 @@ export function approveDeletionRequestMutationOptions(
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
         invalidateAdminDeletionRequestsQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
       ]);
     },
   });
@@ -319,6 +336,7 @@ export function rejectDeletionRequestMutationOptions(
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
         invalidateAdminDeletionRequestsQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
       ]);
     },
   });
@@ -334,6 +352,7 @@ export function upgradeToCoachMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.staffCoaches() }),
       ]);

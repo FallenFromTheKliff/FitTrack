@@ -36,6 +36,16 @@ type AttendanceDrilldownSelection = {
   label: string;
 };
 
+function isPrimaryBusinessInsight(
+  insight: BusinessInsightRunDetailRecord | null | undefined,
+): insight is BusinessInsightRunDetailRecord {
+  return Boolean(
+    insight &&
+      insight.modelUsed !== "grounded-fallback" &&
+      !insight.summary.startsWith("Fallback insight:"),
+  );
+}
+
 function getAttendanceDrilldownSubtitle(
   attendanceFilter: AnalyticsAttendanceFilter,
   selectedDrilldown: AttendanceDrilldownSelection | null,
@@ -135,7 +145,10 @@ export function useAnalyticsDashboard() {
   const snapshot = snapshotQuery.data;
   const revenue = revenueQuery.data;
   const attendance = attendanceQuery.data;
-  const latestInsight = generatedInsight ?? latestInsightQuery.data ?? null;
+  const latestInsightCandidate = generatedInsight ?? latestInsightQuery.data ?? null;
+  const latestInsight = isPrimaryBusinessInsight(latestInsightCandidate)
+    ? latestInsightCandidate
+    : null;
   const revenueSeries = useMemo(() => toRevenueChartSeries(revenue), [revenue]);
   const attendanceSeries = useMemo(
     () => toAttendanceChartSeries(attendance, attendanceFilter),

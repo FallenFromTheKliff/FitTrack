@@ -2,7 +2,9 @@ export {
   archivedGymLayoutEquipmentQueryOptions,
   deleteGymLayoutEquipmentMutationOptions,
   gymLayoutEquipmentQueryOptions,
+  gymLayoutFloorPlanMediaQueryOptions,
   restoreGymLayoutEquipmentMutationOptions,
+  updateGymLayoutFloorPlanMediaMutationOptions,
   updateGymLayoutEquipmentMutationOptions,
   createGymLayoutEquipmentMutationOptions,
 } from "./gym-layout";
@@ -71,6 +73,7 @@ export {
   confirmCoachAppointmentMutationOptions,
   createAppointmentMutationOptions,
   declineCoachAppointmentMutationOptions,
+  payAppointmentDownpaymentMutationOptions,
 } from "./appointments";
 export {
   adminBookingsQueryOptions,

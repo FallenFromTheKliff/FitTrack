@@ -46,6 +46,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 initialValues={controller.venueInitialValues}
                 submitLabel={controller.isVenueSubmitting ? controller.venueSavingLabel : "SAVE VENUE"}
                 isLoading={controller.isVenueSubmitting}
+                onUploadImage={controller.handleUploadVenueImage}
                 onSubmit={(data) => controller.handleVenueSubmit(data, controller.venueEditTarget, controller.handleCloseVenueEditor)}
                 onDelete={() => {
                   if (!controller.venueEditTarget) return;

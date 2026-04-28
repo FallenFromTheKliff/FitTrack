@@ -11,6 +11,7 @@ type VenueLikePayload = {
   gridWidth: number;
   hourlyRate?: number;
   iconKey: string;
+  imageUrl?: string | null;
   isReservable: boolean;
   minimumHours: number;
   name: string;
@@ -34,6 +35,7 @@ export type AmenityApiRecord = {
   minimum_hours?: number | null;
   name?: string | null;
   icon_key?: string | null;
+  image_url?: string | null;
   requires_subscription?: boolean;
   type?: string | null;
 };
@@ -155,7 +157,8 @@ export function mapAmenityToVenueRecord(record: AmenityApiRecord): VenueRecord {
     isReservable: record.is_reservable ?? layout.isReservable,
     isSystem: false,
     displayOrder: toInteger(record.display_order) ?? layout.displayOrder,
-    isActive: record.is_active ?? true
+    isActive: record.is_active ?? true,
+    imageUrl: record.image_url ?? null
   };
 }
 
@@ -171,6 +174,7 @@ export function mapVenueMutationPayloadToAmenityPayload(payload: VenueLikePayloa
     grid_width: payload.gridWidth,
     hourly_rate: payload.hourlyRate ?? 0,
     icon_key: payload.iconKey,
+    ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
     is_reservable: payload.isReservable,
     minimum_hours: payload.minimumHours,
     name: payload.name.trim(),

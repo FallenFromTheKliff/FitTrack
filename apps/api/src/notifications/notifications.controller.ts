@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -123,6 +124,8 @@ export class NotificationsController {
     description: 'Notification inbox returned.',
     schema: paginatedEnvelopeSchema(getSchemaPath(NotificationResponseDTO)),
   })
+  @Header('Cache-Control', 'no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
   getMyNotifications(
     @CurrentUser() user: JwtPayload,
     @Query() dto: NotificationFilterDTO,
@@ -137,6 +140,8 @@ export class NotificationsController {
     description: 'Unread count returned.',
     schema: apiEnvelopeSchema(getSchemaPath(UnreadCountResponseDTO)),
   })
+  @Header('Cache-Control', 'no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
   getUnreadCount(@CurrentUser() user: JwtPayload) {
     return this.notificationsService.getUnreadCount(user.sub);
   }

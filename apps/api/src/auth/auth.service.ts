@@ -573,7 +573,7 @@ export class AuthService {
       });
     }
 
-    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+    await this.eventEmitter.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       action: 'account_created',
       actorId,
       occurredAt: new Date().toISOString(),

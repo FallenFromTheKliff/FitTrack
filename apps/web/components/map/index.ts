@@ -1,6 +1,7 @@
 export { DraggableEquipment } from "./DndEquipment";
 export { EquipmentPanel } from "./EquipmentPanel";
 export { LayoutStatusPanel } from "./LayoutStatusPanel";
+export { FacilityImageUploadCard } from "./FacilityImageUploadCard";
 export { FloorPlanPanel } from "./FloorPlanPanel";
 export { FloorToggle } from "./FloorToggle";
 export { LayoutEditorPanel } from "./LayoutEditorPanel";

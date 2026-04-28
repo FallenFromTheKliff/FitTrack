@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent }
 import { useDroppable } from "@dnd-kit/core";
 import { Map } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
 import type { ThemeColors } from "@fittrack/types";
 
@@ -18,6 +19,7 @@ import {
   VENUE_ICON_OPTIONS,
 } from "@/data/facilities/venueFields";
 import type { QuickFloorRegionTemplate } from "@/hooks/facilities/useFacilities";
+import { WEB_API_BASE_URL } from "@/lib/api-client";
 
 type AssignedEquipmentDisplay = {
   color: string;
@@ -41,7 +43,10 @@ type Props = {
   venues: FloorVenueRecord[];
   floorPlanPadding: number;
   floorPlanMinHeight: number;
+  floorImageUrl?: string | null;
+  isFloorImageUploading?: boolean;
   selectedVenueMapId?: string | null;
+  onUploadFloorImage?: (file: File) => void;
   onRequestDelete: (venueMapId: string, equipmentId: string) => void;
   selectedEquipmentId?: string | null;
   selectedEquipmentName?: string | null;
@@ -478,7 +483,10 @@ export function FloorPlanPanel({
   venues,
   floorPlanPadding,
   floorPlanMinHeight,
+  floorImageUrl,
+  isFloorImageUploading = false,
   selectedVenueMapId,
+  onUploadFloorImage,
   onRequestDelete,
   selectedEquipmentId,
   selectedEquipmentName,
@@ -504,6 +512,7 @@ export function FloorPlanPanel({
   const mapBackground = lowContrast ? darken(colors.base, 0.16) : colors.base;
   const markerBackground = lowContrast ? colors.surface : colors.surfaceRaised;
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const floorImageInputRef = useRef<HTMLInputElement | null>(null);
   const panStartRef = useRef<{ pointerX: number; pointerY: number; panX: number; panY: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -516,6 +525,10 @@ export function FloorPlanPanel({
 
   const canvasWidth = isCompact ? 940 : 1260;
   const canvasHeight = Math.round((canvasWidth * ROWS) / COLS);
+  const renderableFloorImageUrl = buildRenderableAssetUrl({
+    apiBaseUrl: WEB_API_BASE_URL,
+    assetUrl: floorImageUrl ?? null,
+  });
 
   const quickRegionPlacement = useMemo(() => {
     if (!quickRegionTemplate || !hoverCell) {
@@ -723,6 +736,34 @@ export function FloorPlanPanel({
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <FitText style={{ fontSize: 13, fontWeight: 700 }}>{floor.label} Floor Plan</FitText>
             <FitButton variant="ghost" label="VENUES >" onClick={onOpenVenues} />
+            {onUploadFloorImage ? (
+              <>
+                <input
+                  ref={floorImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    onUploadFloorImage(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <FitButton
+                  variant="ghost"
+                  label={
+                    isFloorImageUploading
+                      ? "UPLOADING..."
+                      : renderableFloorImageUrl
+                        ? "EDIT IMAGE"
+                        : "ADD IMAGE"
+                  }
+                  onClick={() => floorImageInputRef.current?.click()}
+                  disabled={isFloorImageUploading}
+                />
+              </>
+            ) : null}
           </div>
           <FitText style={{ fontSize: 11, color: colors.textMuted }}>{floor.subtitle}</FitText>
         </div>
@@ -823,6 +864,20 @@ export function FloorPlanPanel({
             onDragLeave={() => setIsRegionDragOver(false)}
           >
             <div style={{ position: "absolute", inset: 0, borderRadius: 14, overflow: "hidden" }}>
+              {renderableFloorImageUrl ? (
+                <img
+                  src={renderableFloorImageUrl}
+                  alt={`${floor.label} uploaded floor plan`}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    opacity: 0.42,
+                  }}
+                />
+              ) : null}
               <FloorPlanSvg colors={colors} floor={floor} />
             </div>
             <div

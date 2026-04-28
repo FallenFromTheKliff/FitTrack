@@ -30,6 +30,18 @@ export type GymLayoutEquipmentMutationInput = {
   type?: string;
 };
 
+export type FacilityFloorPlanMediaRecord = {
+  createdAt: string;
+  floorId: FacilityFloorId;
+  imageUrl: string | null;
+  updatedAt: string;
+};
+
+export type FacilityFloorPlanMediaMutationInput = {
+  floorId: FacilityFloorId;
+  imageUrl: string | null;
+};
+
 export type GymLayoutDeltaOperation = "remove" | "upsert";
 
 export type GymLayoutRealtimeDelta = {

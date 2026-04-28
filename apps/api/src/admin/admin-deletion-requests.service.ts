@@ -192,7 +192,7 @@ export class AdminDeletionRequestsService {
       data: { deletedAt: new Date() },
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'termination_approved',
       actorId: reviewedBy,
       targetEmail: getIdentityIdentifier(
@@ -250,7 +250,7 @@ export class AdminDeletionRequestsService {
       },
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'termination_rejected',
       actorId: reviewedBy,
       targetEmail: getIdentityIdentifier(
@@ -266,14 +266,14 @@ export class AdminDeletionRequestsService {
     };
   }
 
-  private emitAccountActivity(event: {
+  private async emitAccountActivity(event: {
     action: 'termination_approved' | 'termination_rejected';
     actorId: string;
     targetEmail?: string | null;
     targetRole?: UserRole | string | null;
     targetUserId: string;
   }) {
-    this.eventEmitter?.emit(ACCOUNT_ACTIVITY_EVENT, {
+    await this.eventEmitter?.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       ...event,
       occurredAt: new Date().toISOString(),
     });

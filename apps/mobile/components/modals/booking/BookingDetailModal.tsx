@@ -70,6 +70,14 @@ function parseTimeToMinutes(value: string): number | null {
   return hour * 60 + minute;
 }
 
+function formatStatusLabel(status: string) {
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function BookingDetailModal({ isVisible, booking, venue = null, onClose, actions = [] }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
@@ -95,7 +103,7 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
   const venuePresentation = venue ? getVenuePresentation(venue) : null;
   const timeValue = booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time;
   const statusColor = STATUS_COLORS[booking.status] ?? colors.textMuted;
-  const statusValue = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
+  const statusValue = formatStatusLabel(booking.status);
   const participantName = booking.participantName ?? booking.trainerName ?? "No linked person";
   const participantLabel = booking.participantLabel ?? "Coach";
   const participantInitials = participantName

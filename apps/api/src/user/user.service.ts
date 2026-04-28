@@ -394,7 +394,7 @@ export class UserService {
     const target = await this.repo.findUserAggregateOrThrow(id);
     const updatedProfile = await this.updateExistingUserProfile(id, dto);
 
-    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+    await this.eventEmitter.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       action: 'account_updated',
       actorId,
       occurredAt: new Date().toISOString(),
@@ -623,7 +623,7 @@ export class AttendanceService {
     const target = await this.repo.findUserAggregateOrThrow(userId);
     const profile = target.profile;
 
-    this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+    await this.eventEmitter.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       action: 'attendance_check_in',
       actorId: scannerUserId ?? userId,
       details: {

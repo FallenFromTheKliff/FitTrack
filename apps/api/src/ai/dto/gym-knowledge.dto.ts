@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsISO8601,
   IsInt,
@@ -17,7 +18,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { GymFaqCategory } from '@prisma/client';
 
 import {
-  IsAllowedEmail,
   IsOnOrAfter,
   IsPhilippineMobileNumber,
   TrimString,
@@ -200,7 +200,8 @@ export class UpdateGymProfileDTO {
   location: string;
 
   @ApiProperty({ example: 'contact@sertfit.com' })
-  @IsAllowedEmail('email')
+  @TrimString()
+  @IsEmail({}, { message: 'email must be a valid email address' })
   email: string;
 
   @ApiProperty({ example: '06:00' })

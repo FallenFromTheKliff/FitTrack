@@ -262,6 +262,9 @@ function getDirectoryStatusLabel(
 
   if (status === "Termination Requests") return "Termination request";
   if (status === "Archived") return "Archived";
+  if (member.status === "pending") return "Pending";
+  if (member.status === "suspended") return "Suspended";
+  if (member.status === "banned") return "Banned";
   if (accessLabel === "Pending verification" || accessLabel === "Non-member" || accessLabel === "Revoked") return "Pending";
 
   return "Active";
@@ -546,6 +549,7 @@ export default function MembersDashboard() {
       editTarget &&
       !isSelfEdit &&
       editTarget.role?.name === "USER" &&
+      editTarget.status === "active" &&
       !editPendingRequest &&
       !isEditTargetArchived
   );

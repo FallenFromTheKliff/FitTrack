@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -73,6 +74,16 @@ export class CreateAmenityDTO {
   @IsString({ message: 'icon_key must be a string' })
   @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
   icon_key?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/facilities/main-court.jpg',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsUrl({}, { message: 'image_url must be a valid URL' })
+  @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
+  image_url?: string;
 
   @ApiPropertyOptional({ example: 9, default: 1 })
   @IsOptional()
@@ -188,6 +199,16 @@ export class UpdateAmenityDTO {
   @IsString({ message: 'icon_key must be a string' })
   @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
   icon_key?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/facilities/main-court.jpg',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsUrl({}, { message: 'image_url must be a valid URL' })
+  @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
+  image_url?: string;
 
   @ApiPropertyOptional({ example: 9 })
   @IsOptional()

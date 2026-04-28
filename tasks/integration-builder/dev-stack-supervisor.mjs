@@ -296,7 +296,29 @@ function createRuntimeState(options) {
     options,
     shuttingDown: false,
     targets: new Map(),
+    keepAliveTimer: null,
   };
+}
+
+function startKeepAlive(runtimeState) {
+  if (runtimeState.keepAliveTimer) {
+    return;
+  }
+
+  runtimeState.keepAliveTimer = setInterval(() => {
+    if (!runtimeState.shuttingDown) {
+      flushManifest(runtimeState);
+    }
+  }, 30000);
+}
+
+function stopKeepAlive(runtimeState) {
+  if (!runtimeState.keepAliveTimer) {
+    return;
+  }
+
+  clearInterval(runtimeState.keepAliveTimer);
+  runtimeState.keepAliveTimer = null;
 }
 
 function currentManifestPayload(runtimeState) {
@@ -422,7 +444,22 @@ async function runBufferedCommand(commandPath, args, workingDirectory, envOverri
   });
 }
 
+function workspaceInstallLooksHealthy(repoRoot) {
+  const requiredPaths = [
+    path.join(repoRoot, 'node_modules', '.bin', 'turbo.cmd'),
+    path.join(repoRoot, 'apps', 'web', 'node_modules', 'next', 'package.json'),
+    path.join(repoRoot, 'apps', 'mobile', 'node_modules', 'expo', 'package.json'),
+    path.join(repoRoot, 'apps', 'api', 'node_modules', '@nestjs', 'core', 'package.json'),
+  ];
+
+  return requiredPaths.every((targetPath) => fs.existsSync(targetPath));
+}
+
 async function ensureWorkspaceInstall(options) {
+  if (workspaceInstallLooksHealthy(options.workspaceRoot)) {
+    return;
+  }
+
   const localStoreRoot = path.resolve(options.workspaceRoot, '..', '.pnpm-store');
   const installArgs = [
     options.pnpmCjsPath,
@@ -572,6 +609,7 @@ function startTarget(target, runtimeState, existingEntry = null) {
 
 function stopAllTargets(runtimeState) {
   runtimeState.shuttingDown = true;
+  stopKeepAlive(runtimeState);
 
   for (const entry of runtimeState.targets.values()) {
     if (entry.restartTimer) {
@@ -619,7 +657,12 @@ async function startCommand(options) {
   fs.writeFileSync(stderrPath, '', 'utf8');
   const pid = startBackgroundProcess(
     process.execPath,
-    [scriptPath, 'run', ...(options.includeAi ? ['--include-ai'] : [])],
+    [
+      scriptPath,
+      'run',
+      ...(options.includeAi ? ['--include-ai'] : []),
+      ...(options.skipMobileWeb ? ['--no-mobile-web'] : []),
+    ],
     options.workspaceRoot,
     stdoutPath,
     stderrPath,
@@ -678,6 +721,7 @@ async function runCommand(options) {
   }
 
   flushManifest(runtimeState);
+  startKeepAlive(runtimeState);
 
   await new Promise(() => {});
 }
@@ -779,6 +823,6 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
   process.exit(1);
 }

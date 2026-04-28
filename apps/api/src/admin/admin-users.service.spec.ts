@@ -2,6 +2,7 @@ import {
   AccountDeletionRequestStatus,
   AuthProvider,
   UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import { AdminUsersService } from './admin-users.service';
@@ -15,6 +16,10 @@ describe('AdminUsersService', () => {
     user: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    membershipCard: {
+      upsert: jest.fn(),
       update: jest.fn(),
     },
     coachProfile: {
@@ -36,6 +41,7 @@ describe('AdminUsersService', () => {
       {
         id: 'admin-1',
         role: UserRole.admin,
+        status: UserStatus.active,
         qr_code_token: null,
         email_verified_at: new Date('2026-04-01T00:00:00.000Z'),
         deletedAt: null,
@@ -66,6 +72,7 @@ describe('AdminUsersService', () => {
       {
         id: 'member-1',
         role: UserRole.member,
+        status: UserStatus.pending,
         qr_code_token: 'member-qr-token',
         email_verified_at: null,
         deletedAt: null,
@@ -110,6 +117,7 @@ describe('AdminUsersService', () => {
         email: 'admin@fittrack.test',
         phone_no: '09171111111',
         role: { id: 1, name: 'ADMIN' },
+        status: 'active',
         emailVerified: true,
         phoneVerified: false,
         deletedAt: null,
@@ -137,6 +145,7 @@ describe('AdminUsersService', () => {
         email: 'member@fittrack.test',
         phone_no: '09172222222',
         role: { id: 4, name: 'USER' },
+        status: 'pending',
         emailVerified: false,
         phoneVerified: false,
         deletedAt: null,
@@ -176,6 +185,7 @@ describe('AdminUsersService', () => {
       ['pending_verification', 'revoked'].map((status, index) => ({
         id: `member-${index + 1}`,
         role: UserRole.member,
+        status: UserStatus.active,
         qr_code_token: `member-qr-token-${index + 1}`,
         email_verified_at: null,
         deletedAt: null,
@@ -227,6 +237,85 @@ describe('AdminUsersService', () => {
       'pending_verification',
       'revoked',
     ]);
+  });
+
+  it('promotes pending member accounts when granting membership-card access', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'member-1',
+      role: UserRole.member,
+      status: UserStatus.pending,
+      qr_code_token: null,
+      deletedAt: null,
+      auth_identities: [
+        {
+          provider: AuthProvider.email,
+          identifier: 'member@fittrack.test',
+          is_primary: true,
+        },
+      ],
+      membership_card: null,
+    });
+    prisma.$transaction.mockImplementation(
+      (
+        callback: (tx: {
+          membershipCard: {
+            upsert: typeof prisma.membershipCard.upsert;
+          };
+          user: { update: typeof prisma.user.update };
+        }) => unknown,
+      ) =>
+        callback({
+          membershipCard: {
+            upsert: prisma.membershipCard.upsert,
+          },
+          user: {
+            update: prisma.user.update,
+          },
+        }),
+    );
+    prisma.membershipCard.upsert.mockResolvedValue({
+      activated_at: new Date('2026-04-28T10:00:00.000Z'),
+      purchased_at: new Date('2026-04-28T09:00:00.000Z'),
+      revoke_reason: null,
+      revoked_at: null,
+      source: 'admin_grant',
+      status: 'active',
+      updated_at: new Date('2026-04-28T10:00:00.000Z'),
+      verified_at: new Date('2026-04-28T10:00:00.000Z'),
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'member-1',
+      status: UserStatus.active,
+      qr_code_token: 'generated-qr-token',
+    });
+
+    const result = await service.updateMembershipCard(
+      'member-1',
+      { action: 'grant' },
+      'admin-1',
+    );
+
+    expect(prisma.membershipCard.upsert).toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'member-1' },
+      data: expect.objectContaining({
+        status: UserStatus.active,
+        qr_code_token: expect.any(String),
+      }),
+    });
+    expect(result).toEqual({
+      membershipCard: {
+        activatedAt: '2026-04-28T10:00:00.000Z',
+        purchasedAt: '2026-04-28T09:00:00.000Z',
+        revokeReason: null,
+        revokedAt: null,
+        source: 'admin_grant',
+        status: 'active',
+        updatedAt: '2026-04-28T10:00:00.000Z',
+        verifiedAt: '2026-04-28T10:00:00.000Z',
+      },
+      message: 'Membership card access granted.',
+    });
   });
 
   it('soft deletes eligible directory users', async () => {

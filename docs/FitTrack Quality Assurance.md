@@ -1,11 +1,12 @@
-# FITTRACK CODEX PROMPTS & INTEGRATION CHECKLIST (REFINED)
+# FitTrack Quality Assurance
 
-_Refined on April 25, 2026 from:_
+_Refined on April 28, 2026 from:_
 - `C:\Users\Khristiane\Downloads\CODEX_PROMPTS_AND_CHECKLIST (1).md`
 - `C:\Users\Khristiane\Downloads\SYSTEM-FINAL-DESIGN-LAHJET.docx` including Word comments
-- current FitTrack codebase and live Swagger contract at `http://127.0.0.1:3001/v1/docs-json`
+- current merged FitTrack worktree after `temporary-branch` + `lucky-integration`
+- current FitTrack codebase and live Swagger contract at `http://127.0.0.1:3001/v1/docs-json` when the stack is running
 
-This version is optimized for **integration-first execution**.
+This version is optimized for **integration-first quality assurance**.
 
 The goal is:
 - verify what already exists before touching anything
@@ -15,10 +16,12 @@ The goal is:
 
 Current execution context:
 - Project root: `C:\Users\Khristiane\Documents\GitHub\FitTrack`
-- Runtime target: local web on `http://127.0.0.1:8080`, API on `http://127.0.0.1:3001/v1`
+- Runtime target: local web on `http://127.0.0.1:8080`, mobile web on `http://127.0.0.1:8081`, API on `http://127.0.0.1:3001/v1`
 - Repo-pinned Node version: `20` from `.nvmrc`
 - Package manager: `pnpm@10.30.3`
 - On Windows, prefer `cmd /c pnpm ...` or `pnpm.cmd ...` when PowerShell blocks script execution.
+- Web dev is intentionally forced through webpack via `next dev --webpack --port 8080` to avoid the observed Windows/Turbopack `spawn EPERM` / `0xc0000142` crash.
+- Local Prisma engine commands may fail on this machine with `schema-engine-windows.exe spawn EPERM`; use Prisma MCP, direct DB checks, or targeted Postgres verification when that happens.
 
 ---
 
@@ -104,8 +107,26 @@ These are already present in the current repo and should be treated as **verify-
 - inventory activity events create notification rows for product add/update/restock/archive, manual sale, equipment add/update/archive/write-off
 - analytics export PDF backend exists
 - admin deletion requests endpoint exists
-- Swagger currently exposes 174 paths on the running local API
-- recurring coaching plan files/contracts exist in the worktree, but `W-4A` remains pending until its runtime acceptance checks pass
+- gamification admin contracts from `lucky-integration` are present:
+  - Prisma models and migration `20260423150000_add_gamification_backbone_foundation`
+  - backend admin controller/service/repository
+  - web `/gamification` route and query/API-client wiring
+- local DB warning:
+  - the merged code requires gamification tables such as `ranking_profiles`
+  - if the running DB throws `The table public.ranking_profiles does not exist`, the code is not the issue; the local DB schema is behind the merged Prisma schema
+  - on this machine, Prisma migrate/db-push may be blocked by `schema-engine-windows.exe spawn EPERM`, so verify DB truth with Prisma MCP or direct Postgres checks before assuming an application bug
+- Swagger currently exposes 194 paths on the running local API
+- recurring coaching plan files/contracts exist and have passed targeted backend/runtime checks in the current worktree:
+  - preview endpoint generated sessions without increasing persisted appointment count
+  - create endpoint persisted one parent plan and the expected child appointment rows
+  - child sessions appeared through the existing staff/Gym Operations appointment endpoints
+  - single-session reschedule changed only the selected child session
+  - bulk future update changed selected-and-future sessions while preserving earlier sessions
+  - cancel preserved completed/past sessions and cancelled only future non-completed sessions
+- Facilities media contracts are present in the current codebase:
+  - venue image fields are wired through venue/facility contracts
+  - floor-plan media endpoints exist under `/v1/gym-layout/floor-plans/media` and `/v1/gym-layout/floor-plans/:floorId/media`
+  - web facility map surfaces include image upload/edit wiring
 
 ### Mobile
 - tab routes already exist for:
@@ -122,21 +143,28 @@ These are already present in the current repo and should be treated as **verify-
   - Attendance QR handling
   - loaded plan state
   - request termination flow
+- mobile Muscle Mastery reads the shared `/v1/fitness/*` backend contracts and renders expected empty state when the active browser user has no mastery records
+- mobile Workout reads the shared exercise/session contracts; direct runtime API smoke confirmed workout session start -> set log -> complete persistence
 
 ### Current Prompt Status
 
-Treat these as currently passed:
+Treat these as currently passed from current code scan, Swagger/direct API checks, and targeted browser evidence where available:
 - Web: `W-0`, `W-1`, `W-2`, `W-3`, `W-4`, `W-4A`, `W-5`, `W-6`, `W-7`, `W-8`, `W-9`, `W-10`
-- Mobile: `M-1`, `M-2`, `M-3`, `M-4`, `M-5`, `M-6`, `M-7`, `M-10`, `M-11`
+- Mobile: `M-1`, `M-2`, `M-3`, `M-4`, `M-5`, `M-6`, `M-7`, `M-8`, `M-9`, `M-10`, `M-11`
 
-Treat these as remaining work:
-- `M-8` Mobile Muscle Mastery
-- `M-9` Mobile Workout
+Treat these as still requiring broader final-regression proof, not feature implementation:
+- complete one consolidated web browser walkthrough after the local stack is stable
+- complete one consolidated mobile device/native walkthrough after the Android build environment is stable
+- run API lint/type gates after the existing CRLF/Prettier and unsafe-type lint blockers are cleaned up
 
 Current proof gaps to prioritize:
-- browser proof for the notification bell visual badge after cross-module mutations
-- mobile browser/device evidence for remaining mobile modules (`M-8`, `M-9`)
-- recurring coaching plan runtime acceptance checks
+- full browser evidence for every module in the master QA prompt, not only targeted proof points
+- native-device evidence for mobile modules, because current proof is mostly mobile web/API for the latest pass
+- clean migration-history reconciliation for the local database if Prisma migrate remains drifted
+- API lint cleanup:
+  - `pnpm.cmd --dir apps/api lint:check` currently fails on existing Prettier CRLF issues and unsafe-type findings across API files
+  - `pnpm.cmd --dir apps/web typecheck` passes
+  - `pnpm.cmd --dir apps/mobile typecheck` passes
 
 ---
 
@@ -191,7 +219,7 @@ Cross-reference:
 Known current state:
 - inbox, unread count, mark-read, mark-all-read, and delete use the shared notifications API
 - direct runtime smoke verified inventory activity mutations create unread inbox rows immediately
-- visual browser proof for the header bell should still be captured when browser tooling is available
+- browser proof now confirms an inventory restock mutation creates a notification row and updates the header bell with a red unread badge
 
 Use the master prompt wrapper above, then:
 
@@ -348,6 +376,13 @@ Cross-reference:
 
 ## PROMPT W-7 — FACILITIES MODULE - WEB -DONE
 
+Known current state:
+- archive, venue, equipment, and floor-plan surfaces exist.
+- persisted venue/facility image fields are represented in shared contracts.
+- persisted floor-plan media has backend contracts under `/v1/gym-layout/floor-plans/media`.
+- web facility map surfaces include image upload/edit wiring.
+- full browser upload proof is still needed before final release clearance.
+
 Use the master prompt wrapper above, then:
 
 - inspect:
@@ -362,6 +397,8 @@ Use the master prompt wrapper above, then:
   - view/edit lock behavior where present
   - floor layout save/clear behavior
   - drag/drop persistence
+  - venue image upload/edit persistence
+  - floor-plan image upload/edit persistence
 
 Cross-reference:
 - venue availability must feed booking constraints consistently across web/mobile
@@ -536,7 +573,7 @@ Use the master prompt wrapper above, then:
 Cross-reference:
 - venue bookings and coach appointments must write to the same web-visible tables
 
-## PROMPT M-6 — FACILITIES MODULE - MOBILE
+## PROMPT M-6 — FACILITIES MODULE - MOBILE -DONE
 
 Use the master prompt wrapper above, then:
 
@@ -549,7 +586,7 @@ Use the master prompt wrapper above, then:
 - verify shared venue/equipment data access if rendered
 - do not invent new UI unless a broken existing dependency requires a fix
 
-## PROMPT M-7 — NUTRITION MODULE - MOBILE
+## PROMPT M-7 — NUTRITION MODULE - MOBILE -DONE
 
 Use the master prompt wrapper above, then:
 
@@ -562,7 +599,22 @@ Use the master prompt wrapper above, then:
 - report current implementation truth
 - do not build new UI without a fuller spec
 
-## PROMPT M-8 — MUSCLE MASTERY MODULE - MOBILE
+## PROMPT M-8 — MUSCLE MASTERY MODULE - MOBILE -DONE
+
+Known current state:
+- mobile Muscle Mastery is routed through `apps/mobile/app/(tabs)/mastery.tsx`.
+- the screen uses `useMuscleMasteryScreen` and shared query contracts from `packages/query/fitness.ts`.
+- live API/Swagger verification confirmed the shared endpoints:
+  - `/v1/fitness/mastery`
+  - `/v1/fitness/leaderboard`
+  - `/v1/fitness/progression-profile`
+  - `/v1/fitness/ranking-profile`
+  - `/v1/fitness/season-standing`
+  - `/v1/fitness/milestones`
+  - `/v1/fitness/integrity-summary`
+- mobile web runtime on `http://127.0.0.1:8081/mastery` loaded those shared contracts.
+- the active browser user had no mastery rows, so the observed empty state was expected.
+- direct API smoke with the seeded premium member confirmed real mastery data exists and is returned by the backend.
 
 Use the master prompt wrapper above, then:
 
@@ -570,7 +622,22 @@ Use the master prompt wrapper above, then:
 - verify exercise source-of-truth only
 - do not build new UI without a fuller spec
 
-## PROMPT M-9 — WORKOUT MODULE - MOBILE
+## PROMPT M-9 — WORKOUT MODULE - MOBILE -DONE
+
+Known current state:
+- mobile Workout is routed through `apps/mobile/app/(tabs)/workout.tsx`.
+- the live screen uses `WorkoutLiveScreen` and `useWorkoutLiveController`.
+- the workout surface reads shared fitness contracts for:
+  - `/v1/fitness/exercises`
+  - `/v1/fitness/plans`
+  - `/v1/fitness/sessions`
+  - `/v1/fitness/sessions/start`
+  - `/v1/fitness/sessions/:id/sets`
+  - `/v1/fitness/sessions/:id/complete`
+  - `/v1/fitness/sessions/:id/cancel`
+- mobile web runtime on `http://127.0.0.1:8081/workout` loaded the shared exercise catalog.
+- direct API smoke with the seeded premium member confirmed session start, set logging, completion, and persisted completed-session retrieval.
+- no duplicate workout session table was identified in the verified path.
 
 Use the master prompt wrapper above, then:
 
@@ -578,7 +645,7 @@ Use the master prompt wrapper above, then:
 - verify exercise source-of-truth only
 - do not build new UI without a fuller spec
 
-## PROMPT M-10 — BRODIGY AI MODULE - MOBILE
+## PROMPT M-10 — BRODIGY AI MODULE - MOBILE -DONE
 
 Use the master prompt wrapper above, then:
 
@@ -728,8 +795,8 @@ Mobile/member scope:
 
 Role rules:
 - Admin can create, view, edit single session, edit future sessions, and cancel any recurring coaching plan
-- Staff can view plans tied to their own coach profile
-- Staff can edit/cancel only if current role rules already allow that level of booking control; otherwise flag the permission decision before implementing
+- Staff currently has Gym Operations parity with Admin for recurring-plan access in the backend and web flow
+- Members are allowed by backend contract to create and view their own recurring plans, but mobile/member creation UI is not currently implemented in the verified mobile surface
 - Members should not be able to alter another member's plan
 
 Existing behavior to fix if still present:
@@ -760,7 +827,7 @@ QA requirements:
 - prove a single-session edit does not change future sessions
 - prove a future-series edit does not alter completed or past sessions
 - prove cancel preserves completed sessions and cancels only future non-completed sessions
-- prove Admin/Staff role restrictions match the agreed access rules
+- prove Admin/Staff role access matches the current Staff-parity decision for Gym Operations
 
 ---
 
@@ -788,7 +855,7 @@ Use this checklist after module work is done.
 - [x] Delete works.
 - [x] Delete all works in source/client wiring for the web notification panel.
 - [x] Inventory cross-module mutations increment unread-count API immediately.
-- [ ] Header notification bell visually updates after cross-module mutations in browser evidence.
+- [x] Header notification bell visually updates after cross-module mutations in browser evidence.
 - [x] Cross-module events that should notify actually create inbox rows.
 - [x] Account-module management actions now publish notification events in source/build verification, including manual staff/admin check-in.
 
@@ -807,14 +874,14 @@ Use this checklist after module work is done.
 - [x] Analytics active member count uses active membership-card truth and excludes pending termination in the verified local data set.
 
 ### E2. Recurring Coaching Plans
-- [ ] Preview endpoint generates sessions without persisting rows.
-- [ ] Confirm endpoint creates one parent plan and child appointment rows.
-- [ ] Child sessions render through the existing Gym Operations schedule endpoints.
-- [ ] Single-session edit creates an exception without changing future sessions.
-- [ ] Future-series edit updates only future non-completed sessions.
-- [ ] Cancel plan preserves completed sessions and cancels future non-completed sessions.
-- [ ] Admin and Staff role restrictions match agreed access rules.
-- [ ] Mobile/member creation is either wired to the same backend or explicitly deferred.
+- [x] Preview endpoint generates sessions without persisting rows.
+- [x] Confirm endpoint creates one parent plan and child appointment rows.
+- [x] Child sessions render through the existing Gym Operations schedule endpoints.
+- [x] Single-session edit creates an exception without changing future sessions.
+- [x] Future-series edit updates only future non-completed sessions.
+- [x] Cancel plan preserves completed/past sessions and cancels future non-completed sessions.
+- [x] Admin and Staff role access matches the current Staff-parity decision for Gym Operations.
+- [x] Mobile/member creation is explicitly deferred; backend member-owned contract exists, but mobile creation UI was not found in the verified mobile surface.
 
 ### F. AI / Export / Reporting
 - [x] Analytics export PDF uses real section data.
@@ -822,12 +889,21 @@ Use this checklist after module work is done.
 - [x] Inventory-backed data is included where intended.
 - [x] Export route works on the running API, not just in source.
 
-### G. Verification Discipline
+### G. Facilities Media
+- [x] Venue image support is represented in the shared venue/facility contracts.
+- [x] Floor-plan media endpoints exist in Swagger/source under `/v1/gym-layout`.
+- [x] Web facility map surfaces include image upload/edit wiring.
+- [ ] Full browser upload proof for venue and floor-plan images is still needed before final release clearance.
+
+### H. Verification Discipline
 - [x] Serena/code scan completed before edits.
 - [x] Browser evidence captured where tooling allowed.
 - [x] Swagger contract checked for touched inventory, notification, analytics, auth, and recurring-plan surfaces where runtime API was available.
 - [x] Prisma/DB truth checked for data-sensitive inventory, notification, analytics, and account-count flows.
 - [x] Tests/typecheck run where practical and blockers reported honestly.
+- [x] Web typecheck passed in the latest QA pass.
+- [x] Mobile typecheck passed in the latest QA pass.
+- [ ] API lint is not clean yet; current blocker is existing CRLF/Prettier and unsafe-type errors across API files.
 
 ---
 

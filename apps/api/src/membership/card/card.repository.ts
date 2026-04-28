@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { ConflictException, Injectable } from '@nestjs/common';
 import {
   MembershipCard,
@@ -7,6 +9,7 @@ import {
   PaymentProvider,
   Prisma,
   UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
@@ -128,18 +131,49 @@ export class MembershipCardRepository extends BaseRepository {
     }
   }
 
-  activateMembershipCard(
+  async activateMembershipCard(
     id: string,
     input: { activatedAt: Date; verifiedAt: Date; verifiedBy?: string | null },
   ): Promise<MembershipCard> {
-    return this.updateById<MembershipCard>(this.prisma.membershipCard, id, {
-      activated_at: input.activatedAt,
-      revoke_reason: null,
-      revoked_at: null,
-      revoked_by: null,
-      status: MembershipCardStatus.active,
-      verified_at: input.verifiedAt,
-      verified_by: input.verifiedBy ?? null,
+    return this.transaction(async (tx) => {
+      const membershipCard = await this.updateById<MembershipCard>(
+        tx.membershipCard,
+        id,
+        {
+          activated_at: input.activatedAt,
+          revoke_reason: null,
+          revoked_at: null,
+          revoked_by: null,
+          status: MembershipCardStatus.active,
+          verified_at: input.verifiedAt,
+          verified_by: input.verifiedBy ?? null,
+        },
+      );
+
+      const owner = await tx.user.findUnique({
+        where: { id: membershipCard.user_id },
+        select: {
+          id: true,
+          qr_code_token: true,
+          status: true,
+        },
+      });
+
+      if (owner && (owner.status === UserStatus.pending || !owner.qr_code_token)) {
+        await tx.user.update({
+          where: { id: owner.id },
+          data: {
+            ...(owner.status === UserStatus.pending
+              ? { status: UserStatus.active }
+              : {}),
+            ...(!owner.qr_code_token
+              ? { qr_code_token: randomBytes(32).toString('hex') }
+              : {}),
+          },
+        });
+      }
+
+      return membershipCard;
     });
   }
 

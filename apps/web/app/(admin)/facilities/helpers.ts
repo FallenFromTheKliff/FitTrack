@@ -30,6 +30,7 @@ export function buildVenueInitialValues(venueEditTarget: VenueRecord | null) {
     hourlyRate: String(venueEditTarget.hourlyRate ?? ""),
     minimumHours: String(venueEditTarget.minimumHours ?? 1),
     iconKey: venueEditTarget.iconKey ?? "gym-area",
+    imageUrl: venueEditTarget.imageUrl ?? "",
     floorId: venueEditTarget.floorId ?? "floor-1",
     gridColumn: String(venueEditTarget.gridColumn ?? 1),
     gridRow: String(venueEditTarget.gridRow ?? 1),

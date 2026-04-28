@@ -9,6 +9,7 @@ import type { VenueRecord } from "@/data/facilities/mapTypes";
 import FitButton from "@/components/fit/FitButton";
 import { FitSelect } from "@/components/fit/FitCard";
 import { FitText, FitTextInput, FitTextArea } from "@/components/fit/FitText";
+import { FacilityImageUploadCard } from "./FacilityImageUploadCard";
 
 type Props = {
   isVisible: boolean;
@@ -16,6 +17,7 @@ type Props = {
   initialValues: Record<string, string>;
   submitLabel: string;
   isLoading: boolean;
+  onUploadImage?: (file: File) => Promise<string | null>;
   onSubmit: (data: Record<string, string>) => void;
   onDelete: () => void;
 };
@@ -28,6 +30,7 @@ export function EditVenueModal({
   initialValues,
   submitLabel,
   isLoading,
+  onUploadImage,
   onSubmit,
   onDelete
 }: Props) {
@@ -74,6 +77,17 @@ export function EditVenueModal({
     }
 
     onSubmit(formData);
+  };
+
+  const handleVenueImageUpload = async (file: File) => {
+    if (!onUploadImage || isLoading) {
+      return;
+    }
+
+    const imageUrl = await onUploadImage(file);
+    if (imageUrl) {
+      handleChange("imageUrl", imageUrl);
+    }
   };
 
   const renderField = ({
@@ -137,6 +151,14 @@ export function EditVenueModal({
       <div style={{ display: "grid", gap: 16 }}>
         {renderField({ name: "name", label: "Name", required: true, placeholder: "e.g., Boxing Ring" })}
         {renderField({ name: "description", label: "Description", type: "textarea", placeholder: "Optional venue description" })}
+        <FacilityImageUploadCard
+          title="Venue image"
+          helperText="Upload an image that appears in the venue details preview and member-facing facility surfaces."
+          buttonLabel={formData.imageUrl ? "UPLOAD NEW IMAGE" : "ADD IMAGE"}
+          imageUrl={formData.imageUrl ?? ""}
+          onUpload={handleVenueImageUpload}
+          disabled={isLoading || !onUploadImage}
+        />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
           {renderField({ name: "capacity", label: "Capacity", required: true, placeholder: "e.g., 25" })}
           {renderField({ name: "hourlyRate", label: "Hourly Rate", placeholder: "Leave blank for facility-only zones" })}

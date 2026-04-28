@@ -201,6 +201,13 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const remainingBalance = paymentOption === "cash_full" ? 0 : splitRemainingBalance;
   const paymentProvider = paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
   const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const confirmButtonLabel = isFreeReservation
+    ? "Confirm Reservation"
+    : paymentOption === "paymongo_downpayment" && canUsePaymongo
+      ? "Pay with PayMongo"
+      : paymentOption === "cash_full"
+        ? "Submit Full Cash Payment"
+        : "Submit Downpayment";
   const paymentOptionSummary = useMemo(() => {
     if (isFreeReservation) {
       return {
@@ -700,7 +707,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton label="Cancel" variant="ghost" onPress={handleClose} disabled={isSubmitting} flex={1} />
             <FitButton
-              label={isSubmitting ? reservingText : "Confirm Reservation"}
+              label={isSubmitting ? reservingText : confirmButtonLabel}
               variant="primary"
               onPress={handleConfirm}
               disabled={!canConfirm || isSubmitting}

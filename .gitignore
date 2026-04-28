@@ -15,6 +15,7 @@ agents/
 # Build outputs
 .artifacts/
 .npm-cache/
+.gradle-user-home/
 .next/
 .expo/
 .turbo/

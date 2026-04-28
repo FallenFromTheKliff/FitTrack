@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Pressable, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Activity, Bell, CalendarCheck, CalendarDays, CalendarPlus, Dumbbell, Swords, Users, SlidersHorizontal, CheckCircle2, CircleOff } from "lucide-react-native";
@@ -17,6 +17,7 @@ import {
   completeCoachAppointmentMutationOptions,
   confirmCoachAppointmentMutationOptions,
   declineCoachAppointmentMutationOptions,
+  payAppointmentDownpaymentMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
 import { normalizeBookingStatus, toDateTimeRange } from "@fittrack/app-core";
@@ -63,6 +64,14 @@ const COACH_FILTER_OPTIONS = [
 
 type BookingSection = "bookings" | "appointments" | "coach";
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
+
+function formatStatusLabel(status: string) {
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export default function BookingsScreen() {
   const { colors } = useTheme();
@@ -146,22 +155,33 @@ export default function BookingsScreen() {
       const firstName = appointment.coach?.user?.profile?.firstName?.trim() ?? "";
       const lastName = appointment.coach?.user?.profile?.lastName?.trim() ?? "";
       const coachName = `${firstName} ${lastName}`.trim() || "Coach Session";
+      const normalizedStatus = normalizeBookingStatus(appointment.status);
       return {
+        amountDueNow:
+          normalizedStatus === "pending_payment" ? appointment.amountDueNow ?? undefined : undefined,
         id: appointment.id,
+        nextPaymentDate:
+          normalizedStatus === "pending_payment" ? appointment.nextPaymentDate ?? undefined : undefined,
+        paymentPlan:
+          normalizedStatus === "pending_payment" ? appointment.paymentPlan ?? undefined : undefined,
+        remainingBalance:
+          normalizedStatus === "pending_payment" ? appointment.remainingBalance ?? undefined : undefined,
         resourceId: appointment.coachId ?? "coach",
         resourceName: coachName,
         time: `${startLabel} - ${endLabel}`,
         startTime: startLabel,
         endTime: endLabel,
         date,
-        status: normalizeBookingStatus(appointment.status),
+        status: normalizedStatus,
         price: appointment.coach?.hourlyRate ?? 0,
         trainerName: coachName,
         participantName: coachName,
         participantLabel: "Coach",
         description: appointment.notes ?? undefined,
         detailTitle: "Appointment Details",
-        detailSubtitle: coachName
+        detailSubtitle: coachName,
+        totalAmount:
+          normalizedStatus === "pending_payment" ? appointment.totalAmount ?? undefined : undefined,
       };
     }),
     [appointmentsRaw]
@@ -255,12 +275,14 @@ export default function BookingsScreen() {
   const confirmCoachMutation = useMutation(confirmCoachAppointmentMutationOptions(mobileApiClient, queryClient));
   const declineCoachMutation = useMutation(declineCoachAppointmentMutationOptions(mobileApiClient, queryClient));
   const completeCoachMutation = useMutation(completeCoachAppointmentMutationOptions(mobileApiClient, queryClient));
+  const payAppointmentMutation = useMutation(payAppointmentDownpaymentMutationOptions(mobileApiClient, queryClient));
 
   const cancellingReservationLabel = useLoadingText("CANCELLING", cancelBookingMutation.isPending);
   const cancellingAppointmentLabel = useLoadingText("CANCELLING", cancelAppointmentMutation.isPending);
   const confirmingAppointmentLabel = useLoadingText("CONFIRMING", confirmCoachMutation.isPending);
   const decliningAppointmentLabel = useLoadingText("DECLINING", declineCoachMutation.isPending);
   const completingAppointmentLabel = useLoadingText("COMPLETING", completeCoachMutation.isPending);
+  const openingPaymongoLabel = useLoadingText("OPENING PAYMONGO", payAppointmentMutation.isPending);
 
   const handleStartDateSelect = (date: string) => {
     setStartDate(date);
@@ -414,6 +436,40 @@ export default function BookingsScreen() {
         }
       ];
     }
+    if (detailBooking.status === "pending_payment") {
+      return [
+        {
+          key: "pay-appointment",
+          label: payAppointmentMutation.isPending ? openingPaymongoLabel : "Pay with PayMongo",
+          variant: "primary" as const,
+          icon: CheckCircle2,
+          onPress: async (booking: DetailBooking) => {
+            const result = await payAppointmentMutation.mutateAsync({
+              appointmentId: booking.id,
+              provider: "paymongo",
+              userId: user?.id
+            });
+            if (result.checkoutUrl) {
+              setDetailBooking(null);
+              void Linking.openURL(result.checkoutUrl);
+            }
+          },
+          disabled: payAppointmentMutation.isPending || isCancelling,
+          loading: payAppointmentMutation.isPending,
+          loadingLabel: openingPaymongoLabel
+        },
+        {
+          key: "cancel-appointment",
+          label: isCancelling ? cancellingAppointmentLabel : "Cancel Appointment",
+          variant: "danger" as const,
+          icon: CircleOff,
+          onPress: handleCancelAppointment,
+          disabled: payAppointmentMutation.isPending || isCancelling,
+          loading: isCancelling,
+          loadingLabel: cancellingAppointmentLabel
+        }
+      ];
+    }
     return [
       {
         key: "cancel-appointment",
@@ -441,6 +497,8 @@ export default function BookingsScreen() {
     handleCancelReservation,
     isCancelling,
     isCoach,
+    openingPaymongoLabel,
+    payAppointmentMutation,
     user?.id
   ]);
 
@@ -540,7 +598,7 @@ export default function BookingsScreen() {
                             iconSize={18}
                             label={booking.resourceName}
                             subtitle={`${formatBookingDate(booking.date)} | ${detailSubtitle}`}
-                            trailingLabel={booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                            trailingLabel={formatStatusLabel(booking.status)}
                             trailingLabelColor={STATUS_COLORS[booking.status] ?? colors.textMuted}
                             onPress={() => setDetailBooking(booking)}
                           />

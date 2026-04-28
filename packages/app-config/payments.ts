@@ -1,8 +1,8 @@
 export const PAYMONGO_AVAILABILITY = {
-  enabled: false,
+  enabled: true,
   modalBody:
-    "Online checkout is temporarily unavailable while the PayMongo integration is deferred. Please try again later or use the gym's manual payment flow if one is offered for this service.",
-  modalTitle: "PayMongo is temporarily down"
+    "PayMongo checkout is currently unavailable for this action. Please try again in a moment or use the gym's manual payment flow if one is offered for this service.",
+  modalTitle: "PayMongo checkout unavailable"
 } as const;
 
 export function isPaymongoCheckoutEnabled() {

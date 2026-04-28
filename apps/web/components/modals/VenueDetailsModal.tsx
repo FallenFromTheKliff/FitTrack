@@ -3,9 +3,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { gymLayoutEquipmentQueryOptions } from "@fittrack/query";
 import { listVenueEquipment } from "@fittrack/types";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import { webApiClient } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { FACILITY_FLOOR_MAP, type FloorVenueRecord } from "@/data/facilities/floorPlans";
 import { getVenueIcon } from "@/data/facilities/mapTypes";
 import { FitText } from "@/components/fit/FitText";
@@ -46,7 +47,11 @@ export default function VenueDetailsModal({ venue, isOpen, onClose }: Props) {
   if (!venue) return null;
 
   const subtitle = `${FACILITY_FLOOR_MAP[venue.floorId].label} • ${venue.isReservable === false ? "Facility zone" : "Reservable venue"}`;
-  const heroImage = buildHeroImage(venue.name, colors.brand, colors.surfaceRaised);
+  const heroImage =
+    buildRenderableAssetUrl({
+      apiBaseUrl: WEB_API_BASE_URL,
+      assetUrl: venue.imageUrl ?? null,
+    }) ?? buildHeroImage(venue.name, colors.brand, colors.surfaceRaised);
   const assignedEquipment = listVenueEquipment(liveEquipment, venue);
   const infoItems = [
     { label: "Capacity", value: String(venue.capacity ?? "N/A") },

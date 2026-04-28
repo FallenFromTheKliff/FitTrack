@@ -115,6 +115,7 @@ export function useFacilitiesPageController() {
     handleVenueSubmit,
     handleDeleteVenue,
     handleRestoreVenue,
+    handleUploadVenueImage,
     handleCreateQuickFloorRegion,
     handleCreateQuickFloorRegionAt,
     handleUpdateVenueLayout,
@@ -136,6 +137,7 @@ export function useFacilitiesPageController() {
     deleteTarget,
     setDeleteTarget,
     assignedEquipment,
+    activeFloorImageUrl,
     archivedEquipment,
     archivedEquipmentLoading,
     availableEquipment,
@@ -144,6 +146,7 @@ export function useFacilitiesPageController() {
     assignedCount,
     deleteEquipmentMutation,
     restoreEquipmentMutation,
+    updateFloorPlanMediaMutation,
     message: layoutMessage,
     handleSaveLayout,
     handleToggleEditMode,
@@ -152,6 +155,7 @@ export function useFacilitiesPageController() {
     handleRequestClearFloor,
     handleClearFloor,
     handleRestoreEquipment,
+    handleUploadFloorPlanImage,
     assignEquipmentToVenue,
   } = useFloorLayout();
 
@@ -454,7 +458,10 @@ export function useFacilitiesPageController() {
       venues={activeFloorVenues}
       floorPlanPadding={isCompact ? 10 : 14}
       floorPlanMinHeight={isCompact ? 360 : 500}
+      floorImageUrl={activeFloorImageUrl}
+      isFloorImageUploading={updateFloorPlanMediaMutation.isPending}
       selectedVenueMapId={selectedFloorVenue?.mapId}
+      onUploadFloorImage={handleUploadFloorPlanImage}
       onRequestDelete={(venueMapId, equipmentId) => setDeleteTarget({ venueMapId, equipmentId })}
       selectedEquipmentId={selectedEquipmentId}
       selectedEquipmentName={selectedEquipmentName}
@@ -660,6 +667,7 @@ export function useFacilitiesPageController() {
     handleRestoreVenue,
     handleSaveAndExit,
     handleVenueSubmit,
+    handleUploadVenueImage,
     handleToggleEditMode,
     hasUnsavedChanges,
     isCompact,

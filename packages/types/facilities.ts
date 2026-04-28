@@ -19,6 +19,7 @@ export type VenueRecord = {
   isSystem?: boolean;
   displayOrder?: number | null;
   isActive?: boolean;
+  imageUrl?: string | null;
 };
 
 export const VENUE_ICON_KEYS = [

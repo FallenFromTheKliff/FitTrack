@@ -19,6 +19,7 @@ export type VenueMutationPayload = {
   gridWidth: number;
   hourlyRate?: number;
   iconKey: string;
+  imageUrl?: string | null;
   isReservable: boolean;
   minimumHours: number;
   name: string;

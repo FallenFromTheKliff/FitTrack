@@ -8,6 +8,10 @@ type StaffAppointmentFilters = {
   status?: string;
 };
 
+type RecurringPlanSessionsKey = {
+  planId?: string;
+};
+
 type AiPaginationParams = {
   limit?: number;
   page?: number;
@@ -50,6 +54,7 @@ const staffKeys = {
 const memberKeys = {
   venues: (userId?: string) =>
     userId ? (["venues", userId] as const) : (["venues"] as const),
+  archivedVenues: () => ["venues", "archived"] as const,
   venueDetail: (venueId?: string | number) =>
     venueId != null
       ? (["venues", "detail", String(venueId)] as const)
@@ -135,6 +140,15 @@ const notificationKeys = {
 
 const gymLayoutKeys = {
   equipment: () => ["gym-layout", "equipment"] as const,
+  archivedEquipment: () => ["gym-layout", "equipment", "archived"] as const,
+  floorPlanMedia: () => ["gym-layout", "floor-plans", "media"] as const,
+};
+
+const recurringCoachingPlanKeys = {
+  sessions: (params?: RecurringPlanSessionsKey) =>
+    params?.planId
+      ? (["recurring-coaching-plans", params.planId, "sessions"] as const)
+      : (["recurring-coaching-plans", "sessions"] as const),
 };
 
 const coachKeys = {
@@ -238,6 +252,7 @@ const inventoryKeys = {
 };
 
 const analyticsKeys = {
+  snapshot: () => ["analytics", "snapshot"] as const,
   overview: (params?: {
     endDate?: string;
     period?: string;
@@ -440,7 +455,9 @@ export const queryKeys = {
   staffUserDetail: staffKeys.userDetail,
   staffCoaches: staffKeys.coaches,
   staffCoachDetail: staffKeys.coachDetail,
+  recurringCoachingPlanSessions: recurringCoachingPlanKeys.sessions,
   venues: memberKeys.venues,
+  archivedVenues: memberKeys.archivedVenues,
   venueDetail: memberKeys.venueDetail,
   venueAvailability: memberKeys.venueAvailability,
   bookings: memberKeys.bookings,
@@ -472,6 +489,7 @@ export const queryKeys = {
   inventoryEquipmentDetail: inventoryKeys.equipmentDetail,
   inventorySales: inventoryKeys.sales,
   inventorySaleDetail: inventoryKeys.saleDetail,
+  analyticsSnapshot: analyticsKeys.snapshot,
   analyticsOverview: analyticsKeys.overview,
   analyticsRevenue: analyticsKeys.revenue,
   analyticsAttendance: analyticsKeys.attendance,
@@ -494,4 +512,6 @@ export const queryKeys = {
   fitnessIntegritySummary: fitnessKeys.integritySummary,
   fitnessPoseSession: fitnessKeys.poseSession,
   gymLayoutEquipment: gymLayoutKeys.equipment,
+  gymLayoutArchivedEquipment: gymLayoutKeys.archivedEquipment,
+  gymLayoutFloorPlanMedia: gymLayoutKeys.floorPlanMedia,
 };

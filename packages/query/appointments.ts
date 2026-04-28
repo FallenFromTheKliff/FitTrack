@@ -23,6 +23,29 @@ export function createAppointmentMutationOptions(client: Pick<ApiClient, "appoin
   });
 }
 
+export function payAppointmentDownpaymentMutationOptions(
+  client: Pick<ApiClient, "appointments">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      appointmentId,
+      provider = "paymongo",
+      userId,
+    }: {
+      appointmentId: string;
+      provider?: "cash" | "paymongo";
+      userId?: string;
+    }) => client.appointments.initiateDownpayment(appointmentId, provider),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        invalidateAppointmentQueries(queryClient, variables.userId),
+        invalidateCoachScheduleQueries(queryClient),
+      ]);
+    },
+  });
+}
+
 export function cancelAppointmentMutationOptions(client: Pick<ApiClient, "appointments">, queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: ({ appointmentId, cancelReason }: { appointmentId: string; cancelReason: string; userId?: string }) =>

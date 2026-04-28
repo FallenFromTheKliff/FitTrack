@@ -15,10 +15,13 @@ import {
   deleteGymLayoutEquipmentMutationOptions,
   deleteVenueMutationOptions,
   gymLayoutEquipmentQueryOptions,
+  gymLayoutFloorPlanMediaQueryOptions,
   inventoryEquipmentQueryOptions,
   restoreGymLayoutEquipmentMutationOptions,
   restoreVenueMutationOptions,
+  updateGymLayoutFloorPlanMediaMutationOptions,
   updateVenueMutationOptions,
+  uploadImageMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
 import {
@@ -355,6 +358,7 @@ function buildVenueMutationPayloadFromRecord(
     hourlyRate: venue.hourlyRate ?? undefined,
     minimumHours: venue.minimumHours ?? 1,
     iconKey: venue.iconKey ?? "gym-area",
+    imageUrl: venue.imageUrl ?? undefined,
     floorId: normalizeFloorId(venue.floorId),
     gridColumn: venue.gridColumn ?? 1,
     gridRow: venue.gridRow ?? 1,
@@ -402,6 +406,7 @@ export function useVenueMutations() {
 
   const deleteVenueMutation = useMutation(deleteVenueMutationOptions(webApiClient, queryClient));
   const restoreVenueMutation = useMutation(restoreVenueMutationOptions(webApiClient, queryClient));
+  const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
 
   const isVenueSubmitting = createVenueMutation.isPending || updateVenueMutation.isPending;
   const venueSavingLabel = useLoadingText("SAVING VENUE", isVenueSubmitting);
@@ -436,6 +441,7 @@ export function useVenueMutations() {
       hourlyRate,
       minimumHours: Number.isFinite(minHoursRaw) && minHoursRaw > 0 ? minHoursRaw : 1,
       iconKey: (data.iconKey ?? "").trim() || "gym-area",
+      imageUrl: (data.imageUrl ?? "").trim() || undefined,
       floorId,
       gridColumn,
       gridRow,
@@ -502,6 +508,20 @@ export function useVenueMutations() {
       onSuccess?.();
     } catch {
       showMessage("Unable to restore venue.");
+    }
+  };
+
+  const handleUploadVenueImage = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadResult = await uploadImageMutation.mutateAsync(formData);
+      const nextUrl = uploadResult.url ?? "";
+      showMessage("Venue image uploaded.");
+      return nextUrl || null;
+    } catch {
+      showMessage("Unable to upload venue image.");
+      return null;
     }
   };
 
@@ -677,6 +697,7 @@ export function useVenueMutations() {
     handleVenueSubmit,
     handleDeleteVenue,
     handleRestoreVenue,
+    handleUploadVenueImage,
     handleCreateQuickFloorRegion,
     handleCreateQuickFloorRegionAt
   };
@@ -695,6 +716,7 @@ export function useFloorLayout() {
   const { message, showMessage } = useTimedMessage(2200);
   const { data: venues = [] } = useQuery(venuesQueryOptions(webApiClient));
   const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
+  const { data: floorPlanMedia = [] } = useQuery(gymLayoutFloorPlanMediaQueryOptions(webApiClient));
   const { data: archivedEquipment = [], isLoading: archivedEquipmentLoading } = useQuery(
     archivedGymLayoutEquipmentQueryOptions(webApiClient)
   );
@@ -791,6 +813,10 @@ export function useFloorLayout() {
   const restoreEquipmentMutation = useMutation(
     restoreGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
   );
+  const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
+  const updateFloorPlanMediaMutation = useMutation(
+    updateGymLayoutFloorPlanMediaMutationOptions(webApiClient, queryClient)
+  );
 
   const equipmentById = useMemo(
     () =>
@@ -803,6 +829,14 @@ export function useFloorLayout() {
     [displayEquipmentCatalogById, liveEquipment]
   );
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
+  const floorPlanImageByFloor = useMemo(
+    () =>
+      Object.fromEntries(
+        floorPlanMedia.map((item) => [item.floorId, item.imageUrl])
+      ) as Record<FacilityFloorId, string | null>,
+    [floorPlanMedia]
+  );
+  const activeFloorImageUrl = floorPlanImageByFloor[activeFloor] ?? null;
   const assignedEquipment = useMemo(
     () =>
       buildVenueEquipmentAssignmentsFromRecords(liveEquipment, floorVenues)[activeFloor] ?? {},
@@ -879,6 +913,27 @@ export function useFloorLayout() {
     }
   };
 
+  const handleUploadFloorPlanImage = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadResult = await uploadImageMutation.mutateAsync(formData);
+      const nextUrl = uploadResult.url ?? null;
+      if (!nextUrl) {
+        showMessage("Unable to resolve the uploaded floor plan image.");
+        return;
+      }
+
+      await updateFloorPlanMediaMutation.mutateAsync({
+        floorId: activeFloor,
+        imageUrl: nextUrl,
+      });
+      showMessage(`${activeFloor.replace("floor-", "Floor ")} image updated.`);
+    } catch {
+      showMessage("Unable to upload floor plan image.");
+    }
+  };
+
   const assignEquipmentToVenue = async (
     equipmentId: string,
     venueMapId: string,
@@ -948,6 +1003,7 @@ export function useFloorLayout() {
     deleteTarget,
     setDeleteTarget,
     assignedEquipment,
+    activeFloorImageUrl,
     archivedEquipment,
     archivedEquipmentLoading,
     availableEquipment,
@@ -956,6 +1012,7 @@ export function useFloorLayout() {
     assignedCount,
     deleteEquipmentMutation,
     restoreEquipmentMutation,
+    updateFloorPlanMediaMutation,
     message,
     handleSaveLayout,
     handleToggleEditMode,
@@ -964,6 +1021,7 @@ export function useFloorLayout() {
     handleRequestClearFloor,
     handleClearFloor,
     handleRestoreEquipment,
+    handleUploadFloorPlanImage,
     assignEquipmentToVenue
   };
 }

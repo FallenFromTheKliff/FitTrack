@@ -30,6 +30,8 @@ export type MembershipCardSource =
   | "admin_grant"
   | "admin_repair";
 
+export type MemberAccountStatus = "pending" | "active" | "suspended" | "banned";
+
 export interface MembershipCardRecord {
   activatedAt?: string | null;
   purchasedAt?: string | null;
@@ -45,6 +47,7 @@ export interface MemberRecord {
   id: string;
   email: string;
   phone_no?: string | null;
+  status?: MemberAccountStatus | null;
   lastCheckInAt?: string | null;
   membershipCard?: MembershipCardRecord | null;
   roleId?: number;

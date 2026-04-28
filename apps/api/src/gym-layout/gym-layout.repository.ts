@@ -7,6 +7,13 @@ import { PrismaService } from '../prisma/prisma.service';
 const gymLayoutEquipmentOrderBy: Prisma.GymEquipmentOrderByWithRelationInput[] =
   [{ type: 'asc' }, { name: 'asc' }];
 
+export type FacilityFloorPlanMediaRow = {
+  created_at: Date;
+  floor_id: string;
+  image_url: string | null;
+  updated_at: Date;
+};
+
 @Injectable()
 export class GymLayoutRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -59,5 +66,28 @@ export class GymLayoutRepository extends BaseRepository {
     return this.updateById<GymEquipment>(this.prisma.gymEquipment, id, {
       is_active: true,
     });
+  }
+
+  listFloorPlanMedia(): Promise<FacilityFloorPlanMediaRow[]> {
+    return this.prisma.$queryRaw<FacilityFloorPlanMediaRow[]>`
+      SELECT floor_id, image_url, created_at, updated_at
+      FROM facility_floor_plan_media
+      ORDER BY floor_id ASC
+    `;
+  }
+
+  async upsertFloorPlanMedia(
+    floorId: string,
+    imageUrl: string | null,
+  ): Promise<FacilityFloorPlanMediaRow> {
+    const rows = await this.prisma.$queryRaw<FacilityFloorPlanMediaRow[]>`
+      INSERT INTO facility_floor_plan_media (floor_id, image_url)
+      VALUES (${floorId}, ${imageUrl})
+      ON CONFLICT (floor_id)
+      DO UPDATE SET image_url = EXCLUDED.image_url, updated_at = CURRENT_TIMESTAMP
+      RETURNING floor_id, image_url, created_at, updated_at
+    `;
+
+    return rows[0];
   }
 }

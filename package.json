@@ -12,6 +12,8 @@
     "dev:ai": "node tasks/integration-builder/dev-ai-service.mjs",
     "dev:stack": "node tasks/integration-builder/dev-stack-supervisor.mjs start --no-mobile-web && pnpm --dir apps/mobile run dev",
     "dev:stack:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai --no-mobile-web && pnpm --dir apps/mobile run dev",
+    "dev:stack:web": "node tasks/integration-builder/dev-stack-supervisor.mjs start",
+    "dev:stack:web:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai",
     "dev:stack:paymongo:tunnel": "node tasks/integration-builder/paymongo-tunnel.mjs",
     "dev:stack:status": "node tasks/integration-builder/dev-stack-supervisor.mjs status",
     "dev:stack:stop": "node tasks/integration-builder/dev-stack-supervisor.mjs stop",
@@ -19,7 +21,7 @@
     "dev:mobile": "pnpm --filter @fittrack/mobile run dev",
     "dev:mobile:web": "pnpm --dir apps/mobile run web -- --port 8081",
     "db:ensure-local": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/ensure-local-db.ts",
-    "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate",
+    "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate && node tasks/ensure-prisma-client-link.mjs",
     "db:push": "pnpm --filter @fittrack/api exec npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
     "db:bootstrap": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/bootstrap-defaults.ts",
     "db:migrate": "pnpm --filter @fittrack/api exec npx prisma migrate dev",
@@ -56,6 +58,8 @@
       "unrs-resolver"
     ],
     "patchedDependencies": {
+      "@react-native/gradle-plugin@0.83.4": "patches/@react-native__gradle-plugin@0.83.4.patch",
+      "react-native-worklets@0.7.4": "patches/react-native-worklets@0.7.4.patch",
       "vision-camera-pose-detector@1.1.0": "patches/vision-camera-pose-detector@1.1.0.patch"
     }
   }

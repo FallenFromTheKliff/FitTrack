@@ -25,7 +25,17 @@ function ensureDirectoryLink(targetPath, sourcePath) {
     );
   }
 
-  if (fs.existsSync(targetPath)) {
+  let targetPathExists = false;
+  try {
+    fs.lstatSync(targetPath);
+    targetPathExists = true;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  if (targetPathExists) {
     try {
       const targetRealPath = fs.realpathSync(targetPath);
       const sourceRealPath = fs.realpathSync(sourcePath);

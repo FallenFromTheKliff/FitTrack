@@ -48,7 +48,13 @@ export function useProfilePage() {
   const updatePhoneMutation = useMutation(updatePhoneMutationOptions(webApiClient));
   const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
 
-  const initialName = splitFullName(user?.name ?? "");
+  const resolvedName = (() => {
+    const fallbackName = splitFullName(user?.name ?? "");
+    return {
+      firstName: user?.profile?.firstName?.trim() || fallbackName.firstName,
+      lastName: user?.profile?.lastName?.trim() || fallbackName.lastName
+    };
+  })();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,8 +69,8 @@ export function useProfilePage() {
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
 
   const [personalData, setPersonalData] = useState<PersonalData>({
-    firstName: initialName.firstName,
-    lastName: initialName.lastName,
+    firstName: resolvedName.firstName,
+    lastName: resolvedName.lastName,
     email: user?.email ?? "",
     phone: formatPhilippineMobileForInput(user?.phone_no),
     dateOfBirth: user?.dateOfBirth ?? ""
@@ -75,7 +81,10 @@ export function useProfilePage() {
   useEffect(() => {
     if (editing) return;
 
-    const nextName = splitFullName(user?.name ?? "");
+    const nextName = {
+      firstName: user?.profile?.firstName?.trim() || splitFullName(user?.name ?? "").firstName,
+      lastName: user?.profile?.lastName?.trim() || splitFullName(user?.name ?? "").lastName
+    };
     setPersonalData({
       firstName: nextName.firstName,
       lastName: nextName.lastName,
@@ -120,7 +129,10 @@ export function useProfilePage() {
   }, [heightCm, weightKg]);
 
   const hasChanges = useMemo(() => {
-    const baselineName = splitFullName(user?.name ?? "");
+    const baselineName = {
+      firstName: user?.profile?.firstName?.trim() || splitFullName(user?.name ?? "").firstName,
+      lastName: user?.profile?.lastName?.trim() || splitFullName(user?.name ?? "").lastName
+    };
     return (
       personalData.firstName !== baselineName.firstName ||
       personalData.lastName !== baselineName.lastName ||
@@ -248,7 +260,10 @@ export function useProfilePage() {
   };
 
   const resetPersonalData = () => {
-    const resetName = splitFullName(user?.name ?? "");
+    const resetName = {
+      firstName: user?.profile?.firstName?.trim() || splitFullName(user?.name ?? "").firstName,
+      lastName: user?.profile?.lastName?.trim() || splitFullName(user?.name ?? "").lastName
+    };
     setPersonalData({
       firstName: resetName.firstName,
       lastName: resetName.lastName,

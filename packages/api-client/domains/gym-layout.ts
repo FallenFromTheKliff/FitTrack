@@ -3,11 +3,15 @@ import {
   positionYToGridRow,
   type GymLayoutEquipmentMutationInput,
   type GymLayoutEquipmentRecord,
+  type FacilityFloorPlanMediaMutationInput,
+  type FacilityFloorPlanMediaRecord,
 } from "@fittrack/types";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 
 export type {
+  FacilityFloorPlanMediaMutationInput,
+  FacilityFloorPlanMediaRecord,
   GymLayoutEquipmentMutationInput,
   GymLayoutEquipmentRecord,
 } from "@fittrack/types";
@@ -28,6 +32,13 @@ type GymLayoutEquipmentApiRecord = {
   updated_at: string;
 };
 
+type FacilityFloorPlanMediaApiRecord = {
+  created_at: string;
+  floor_id: FacilityFloorPlanMediaRecord["floorId"];
+  image_url: string | null;
+  updated_at: string;
+};
+
 function mapGymLayoutEquipment(
   record: GymLayoutEquipmentApiRecord,
 ): GymLayoutEquipmentRecord {
@@ -44,6 +55,17 @@ function mapGymLayoutEquipment(
     positionY: record.position_y,
     status: record.status,
     type: record.type,
+    updatedAt: record.updated_at,
+  };
+}
+
+function mapFloorPlanMedia(
+  record: FacilityFloorPlanMediaApiRecord,
+): FacilityFloorPlanMediaRecord {
+  return {
+    createdAt: record.created_at,
+    floorId: record.floor_id,
+    imageUrl: record.image_url,
     updatedAt: record.updated_at,
   };
 }
@@ -76,6 +98,12 @@ function toGymLayoutCreatePayload(payload: GymLayoutEquipmentMutationInput) {
   };
 }
 
+function toFloorPlanMediaPayload(payload: FacilityFloorPlanMediaMutationInput) {
+  return {
+    image_url: payload.imageUrl,
+  };
+}
+
 export function createGymLayoutApi(transport: ApiTransport) {
   return {
     async listEquipment() {
@@ -91,6 +119,13 @@ export function createGymLayoutApi(transport: ApiTransport) {
         "Unable to load archived gym layout equipment.",
       );
       return equipment.map(mapGymLayoutEquipment);
+    },
+    async listFloorPlanMedia() {
+      const media = await unwrapResponse<FacilityFloorPlanMediaApiRecord[]>(
+        transport.get("/gym-layout/floor-plans/media"),
+        "Unable to load floor plan media.",
+      );
+      return media.map(mapFloorPlanMedia);
     },
     async createEquipment(payload: GymLayoutEquipmentMutationInput) {
       return mapGymLayoutEquipment(
@@ -128,6 +163,17 @@ export function createGymLayoutApi(transport: ApiTransport) {
         await unwrapResponse<GymLayoutEquipmentApiRecord>(
           transport.patch(`/gym-layout/equipment/${equipmentId}/restore`),
           "Unable to restore gym layout equipment.",
+        ),
+      );
+    },
+    async updateFloorPlanMedia(payload: FacilityFloorPlanMediaMutationInput) {
+      return mapFloorPlanMedia(
+        await unwrapResponse<FacilityFloorPlanMediaApiRecord>(
+          transport.patch(
+            `/gym-layout/floor-plans/${payload.floorId}/media`,
+            toFloorPlanMediaPayload(payload),
+          ),
+          "Unable to update floor plan media.",
         ),
       );
     },

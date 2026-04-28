@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import {
   BadRequestException,
   ConflictException,
@@ -10,6 +12,7 @@ import {
   AuthProvider,
   MembershipCardSource,
   UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import { PrismaService } from 'prisma/prisma.service';
@@ -153,6 +156,7 @@ export class AdminUsersService {
         email: primaryEmail?.identifier ?? '',
         phone_no: user.profile?.phone ?? null,
         role: toFrontendRole(user.role),
+        status: user.status,
         emailVerified: Boolean(user.email_verified_at),
         phoneVerified: false,
         deletedAt: user.deletedAt?.toISOString() ?? null,
@@ -204,6 +208,8 @@ export class AdminUsersService {
       select: {
         id: true,
         role: true,
+        status: true,
+        qr_code_token: true,
         deletedAt: true,
         auth_identities: {
           select: {
@@ -246,29 +252,47 @@ export class AdminUsersService {
           ? MembershipCardSource.admin_repair
           : MembershipCardSource.admin_grant);
 
-      const membershipCard = await this.prisma.membershipCard.upsert({
-        where: { user_id: userId },
-        create: {
-          user: { connect: { id: userId } },
-          status: 'active',
-          source,
-          verified_at: now,
-          verified_by: actingUserId,
-          activated_at: now,
-        },
-        update: {
-          status: 'active',
-          source,
-          verified_at: now,
-          verified_by: actingUserId,
-          activated_at: now,
-          revoked_at: null,
-          revoked_by: null,
-          revoke_reason: null,
-        },
+      const membershipCard = await this.prisma.$transaction(async (tx) => {
+        const updatedCard = await tx.membershipCard.upsert({
+          where: { user_id: userId },
+          create: {
+            user: { connect: { id: userId } },
+            status: 'active',
+            source,
+            verified_at: now,
+            verified_by: actingUserId,
+            activated_at: now,
+          },
+          update: {
+            status: 'active',
+            source,
+            verified_at: now,
+            verified_by: actingUserId,
+            activated_at: now,
+            revoked_at: null,
+            revoked_by: null,
+            revoke_reason: null,
+          },
+        });
+
+        if (user.status === UserStatus.pending || !user.qr_code_token) {
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              ...(user.status === UserStatus.pending
+                ? { status: UserStatus.active }
+                : {}),
+              ...(!user.qr_code_token
+                ? { qr_code_token: randomBytes(32).toString('hex') }
+                : {}),
+            },
+          });
+        }
+
+        return updatedCard;
       });
 
-      this.emitAccountActivity({
+      await this.emitAccountActivity({
         action: 'membership_card_granted',
         actorId: actingUserId,
         targetEmail: getPreferredAccountEmail(user.auth_identities),
@@ -296,7 +320,7 @@ export class AdminUsersService {
       },
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'membership_card_revoked',
       actorId: actingUserId,
       details: {
@@ -361,7 +385,7 @@ export class AdminUsersService {
       },
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'account_archived',
       actorId: actingUserId,
       targetEmail: getPreferredAccountEmail(user.auth_identities),
@@ -442,7 +466,7 @@ export class AdminUsersService {
       });
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'account_restored',
       actorId: actingUserId,
       targetEmail: getPreferredAccountEmail(user.auth_identities),
@@ -519,7 +543,7 @@ export class AdminUsersService {
       });
     });
 
-    this.emitAccountActivity({
+    await this.emitAccountActivity({
       action: 'coach_upgraded',
       actorId: actingUserId,
       targetEmail: getPreferredAccountEmail(user.auth_identities),
@@ -536,7 +560,7 @@ export class AdminUsersService {
     };
   }
 
-  private emitAccountActivity(event: {
+  private async emitAccountActivity(event: {
     action:
       | 'account_archived'
       | 'account_restored'
@@ -549,7 +573,7 @@ export class AdminUsersService {
     targetRole?: UserRole | string | null;
     targetUserId: string;
   }) {
-    this.eventEmitter?.emit(ACCOUNT_ACTIVITY_EVENT, {
+    await this.eventEmitter?.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       ...event,
       occurredAt: new Date().toISOString(),
     });

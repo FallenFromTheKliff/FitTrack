@@ -25,7 +25,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import {
   CreateEquipmentDTO,
+  FacilityFloorPlanMediaResponseDTO,
   GymLayoutEquipmentResponseDTO,
+  UpdateFacilityFloorPlanMediaDTO,
   UpdateEquipmentDTO,
 } from './dto/gym-layout.dto';
 import { GymLayoutService } from './gym-layout.service';
@@ -52,7 +54,7 @@ function arrayEnvelopeSchema(ref: string) {
 }
 
 @ApiTags('Gym Layout')
-@ApiExtraModels(GymLayoutEquipmentResponseDTO)
+@ApiExtraModels(GymLayoutEquipmentResponseDTO, FacilityFloorPlanMediaResponseDTO)
 @Controller('gym-layout')
 export class GymLayoutController {
   constructor(private readonly gymLayoutService: GymLayoutService) {}
@@ -86,6 +88,23 @@ export class GymLayoutController {
   })
   listArchivedEquipment() {
     return this.gymLayoutService.listArchivedEquipment();
+  }
+
+  @Get('floor-plans/media')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List persisted floor-plan media for the facility map.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Floor-plan media returned.',
+    schema: arrayEnvelopeSchema(
+      getSchemaPath(FacilityFloorPlanMediaResponseDTO),
+    ),
+  })
+  listFloorPlanMedia() {
+    return this.gymLayoutService.listFloorPlanMedia();
   }
 
   @Post('equipment')
@@ -141,6 +160,28 @@ export class GymLayoutController {
   @ApiResponse({ status: 404, description: 'Equipment not found.' })
   restoreEquipment(@Param('id', ParseUUIDPipe) id: string) {
     return this.gymLayoutService.restoreEquipment(id);
+  }
+
+  @Patch('floor-plans/:floorId/media')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: UpdateFacilityFloorPlanMediaDTO })
+  @ApiOperation({
+    summary: 'Update the persisted image for a facility floor plan. Admin only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Floor-plan media updated.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(FacilityFloorPlanMediaResponseDTO),
+    ),
+  })
+  updateFloorPlanMedia(
+    @Param('floorId') floorId: string,
+    @Body() dto: UpdateFacilityFloorPlanMediaDTO,
+  ) {
+    return this.gymLayoutService.updateFloorPlanMedia(floorId, dto);
   }
 
   @Delete('equipment/:id')
