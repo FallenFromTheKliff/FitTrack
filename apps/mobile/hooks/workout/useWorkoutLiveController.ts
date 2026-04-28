@@ -107,14 +107,14 @@ const POSE_FRAME_WINDOW_SIZE = 20;
 const POSE_FRAME_BATCH_TRIGGER = 4;
 const POSE_MIN_ANALYZE_FRAMES = 20;
 const TRACKING_UNRELIABLE_MESSAGE =
-  "Pose tracking is waiting for a reliable movement window. Keep shoulders, hips, knees, and ankles visible to resume live counting.";
+  "Pose tracking is waiting for a reliable movement window. Keep shoulders, hips, and at least one full arm chain visible to resume live counting.";
 const SUBJECT_LOCK_GESTURE_HOLD_MS = 3000;
 const SUBJECT_LOCK_GESTURE_HOLD_SECONDS = Math.ceil(
   SUBJECT_LOCK_GESTURE_HOLD_MS / 1000,
 );
 const SUBJECT_LOCK_VISIBILITY_THRESHOLD = 0.4;
-const SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD = 0.28;
-const SUBJECT_LOCK_MIN_VISIBLE_RIG_POINTS = 6;
+const SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD = 0.24;
+const SUBJECT_LOCK_MIN_VISIBLE_RIG_POINTS = 5;
 const SUBJECT_LOCK_LOST_FRAME_LIMIT = 10;
 const CAMERA_SWITCH_REMOUNT_MS = 350;
 const EQUIPMENT_CONTEXT_FRESH_MS = 6500;
@@ -123,15 +123,15 @@ const EQUIPMENT_DETECTION_SAMPLE_WINDOW_MS = 7500;
 const EQUIPMENT_DETECTION_STRONG_CONFIDENCE = 0.52;
 const EQUIPMENT_DETECTION_WEAK_CONFIDENCE = 0.35;
 const EQUIPMENT_DETECTION_MIN_WEAK_HITS = 2;
-const NATIVE_MIN_RELIABLE_LANDMARKS = 14;
-const NATIVE_MIN_AVERAGE_VISIBILITY = 0.42;
-const NATIVE_POSE_LOW_VISIBILITY_ALPHA = 0.24;
-const NATIVE_POSE_NORMAL_ALPHA = 0.38;
-const NATIVE_POSE_HIGH_VISIBILITY_ALPHA = 0.52;
-const NATIVE_POSE_HOLD_LAST_GOOD_MS = 320;
-const NATIVE_POSE_CORE_TELEPORT_DISTANCE = 0.18;
-const NATIVE_POSE_SEGMENT_SHIFT_DISTANCE = 0.16;
-const NATIVE_POSE_MIN_STABILIZER_VISIBILITY = 0.18;
+const NATIVE_MIN_RELIABLE_LANDMARKS = 12;
+const NATIVE_MIN_AVERAGE_VISIBILITY = 0.36;
+const NATIVE_POSE_LOW_VISIBILITY_ALPHA = 0.2;
+const NATIVE_POSE_NORMAL_ALPHA = 0.32;
+const NATIVE_POSE_HIGH_VISIBILITY_ALPHA = 0.44;
+const NATIVE_POSE_HOLD_LAST_GOOD_MS = 420;
+const NATIVE_POSE_CORE_TELEPORT_DISTANCE = 0.14;
+const NATIVE_POSE_SEGMENT_SHIFT_DISTANCE = 0.12;
+const NATIVE_POSE_MIN_STABILIZER_VISIBILITY = 0.14;
 const SUBJECT_LOCK_CORE_LANDMARK_INDEXES = [11, 12, 23, 24] as const;
 const SUBJECT_LOCK_RIG_LANDMARK_INDEXES = [
   0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28,
@@ -164,6 +164,7 @@ const EXERCISE_NAME_ALIAS_GROUPS = [
   ["incline push up", "incline push-up", "incline pushup"],
   ["dumbbell bicep curl", "dumbbell curl", "bicep curl", "curl", "bicep_curl"],
   ["dip", "tricep dip", "bench dip", "assisted dip", "parallel bar dip"],
+  ["pull up", "pull-up", "pullup", "chin up", "chin-up", "chinup", "pull_up"],
   ["seated cable row", "cable row"],
   ["jump rope", "jump-rope", "jump rope"],
 ] as const;
@@ -265,7 +266,8 @@ function averageTrackedJump(
       if (
         !previousPoint ||
         !currentPoint ||
-        toPointVisibility(previousPoint) < NATIVE_POSE_MIN_STABILIZER_VISIBILITY ||
+        toPointVisibility(previousPoint) <
+          NATIVE_POSE_MIN_STABILIZER_VISIBILITY ||
         toPointVisibility(currentPoint) < NATIVE_POSE_MIN_STABILIZER_VISIBILITY
       ) {
         return null;
@@ -370,8 +372,14 @@ function isSubjectLockBodyRigVisible(
   const visibleRigPoints = SUBJECT_LOCK_RIG_LANDMARK_INDEXES.filter((index) =>
     isRigPointVisible(keypoints[index]),
   ).length;
-  const leftArmVisibility = averageVisibilityForIndexes(keypoints, [11, 13, 15]);
-  const rightArmVisibility = averageVisibilityForIndexes(keypoints, [12, 14, 16]);
+  const leftArmVisibility = averageVisibilityForIndexes(
+    keypoints,
+    [11, 13, 15],
+  );
+  const rightArmVisibility = averageVisibilityForIndexes(
+    keypoints,
+    [12, 14, 16],
+  );
   const armChainVisible =
     Math.max(leftArmVisibility, rightArmVisibility) >=
     SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD;
@@ -675,7 +683,11 @@ function inferEquipmentContextFromDetectionBoxes(
   const contexts = new Set<PoseEquipmentContext>();
   for (const detection of detections) {
     const label = normalizeExerciseName(detection.label);
-    if (/\b(dumbbell|dumbbells|dumbell|dumbells|db|free weight|hand weight)\b/.test(label)) {
+    if (
+      /\b(dumbbell|dumbbells|dumbell|dumbells|db|free weight|hand weight)\b/.test(
+        label,
+      )
+    ) {
       contexts.add("dumbbell");
     } else if (/\b(barbell|olympic bar|ez bar)\b/.test(label)) {
       contexts.add("barbell");
@@ -727,8 +739,7 @@ function getProviderEquipmentContext(
 function averageEquipmentConfidence(samples: EquipmentDetectionSample[]) {
   if (!samples.length) return null;
   return (
-    samples.reduce((sum, sample) => sum + sample.confidence, 0) /
-    samples.length
+    samples.reduce((sum, sample) => sum + sample.confidence, 0) / samples.length
   );
 }
 
@@ -871,7 +882,9 @@ function readNativeEquipmentErrorMessage(
   if (typeof message === "string" && message.trim()) return message.trim();
   if (Array.isArray(message)) {
     const joined = message
-      .filter((item): item is string => typeof item === "string" && !!item.trim())
+      .filter(
+        (item): item is string => typeof item === "string" && !!item.trim(),
+      )
       .join(" ");
     if (joined) return joined;
   }
@@ -989,9 +1002,7 @@ function inferExerciseEquipmentContext(
     matches.add("dumbbell");
   }
   if (
-    /\b(barbell|bench press|deadlift|back squat|front squat)\b/.test(
-      normalized,
-    )
+    /\b(barbell|bench press|deadlift|back squat|front squat)\b/.test(normalized)
   ) {
     matches.add("barbell");
   }
@@ -1030,9 +1041,7 @@ function toEquipmentSource(
   return isConfirmedByMember ? "member" : "catalog";
 }
 
-function requiresVisualEquipmentContext(
-  context: PoseEquipmentContext | null,
-) {
+function requiresVisualEquipmentContext(context: PoseEquipmentContext | null) {
   if (!context) return false;
   return WEIGHTED_EQUIPMENT_CONTEXTS.has(context);
 }
@@ -1185,16 +1194,15 @@ export function useWorkoutLiveController() {
   >(null);
   const [providerEquipmentConfidence, setProviderEquipmentConfidence] =
     useState<number | null>(null);
-  const [providerEquipmentConflicts, setProviderEquipmentConflicts] =
-    useState<string[]>([]);
-  const [providerEquipmentContext, setProviderEquipmentContext] = useState<
-    PoseEquipmentContext | null
-  >(null);
+  const [providerEquipmentConflicts, setProviderEquipmentConflicts] = useState<
+    string[]
+  >([]);
+  const [providerEquipmentContext, setProviderEquipmentContext] =
+    useState<PoseEquipmentContext | null>(null);
   const [providerEquipmentDetections, setProviderEquipmentDetections] =
     useState<PoseEquipmentDetectionBoxRecord[]>([]);
-  const [providerEquipmentSource, setProviderEquipmentSource] = useState<
-    PoseEquipmentSource | null
-  >(null);
+  const [providerEquipmentSource, setProviderEquipmentSource] =
+    useState<PoseEquipmentSource | null>(null);
   const [providerEquipmentDetectedAtMs, setProviderEquipmentDetectedAtMs] =
     useState<number | null>(null);
   const [, setProviderEquipmentCheckedAtMs] = useState<number | null>(null);
@@ -1216,7 +1224,9 @@ export function useWorkoutLiveController() {
 
   const cameraRef = useRef<CameraView | null>(null);
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const cameraSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cameraSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const frameInFlightRef = useRef(false);
   const countdownValueRef = useRef<number | null>(null);
   const isExerciseConfirmationVisibleRef = useRef(
@@ -1561,8 +1571,8 @@ export function useWorkoutLiveController() {
     selectedExercise?.label ??
     null;
   const trackingCatalogExerciseName =
-    findExerciseReferenceByName(exerciseReferences, trackingExerciseLabel)?.name ??
-    null;
+    findExerciseReferenceByName(exerciseReferences, trackingExerciseLabel)
+      ?.name ?? null;
   const equipmentContextLabel =
     trackingCatalogExerciseName ??
     suggestedExerciseHint ??
@@ -1590,43 +1600,39 @@ export function useWorkoutLiveController() {
     isExplicitWeightedExerciseLabel(equipmentContextLabel) &&
     !shouldUseProviderEquipmentResolution &&
     equipmentProviderEnabled === false;
-  const poseEquipmentContext =
-    requiresEquipmentSnapshot
-      ? (shouldUseProviderEquipmentResolution
-          ? providerEquipmentContext
-          : shouldUseDeclaredEquipmentFallback
-            ? declaredExerciseEquipmentContext
-          : null)
-      : declaredExerciseEquipmentContext;
-  const poseEquipmentSource =
-    requiresEquipmentSnapshot
-      ? (shouldUseProviderEquipmentResolution
-          ? providerEquipmentSource ?? undefined
-          : shouldUseDeclaredEquipmentFallback
-            ? toEquipmentSource(
-                confirmedExerciseLabel !== null,
-                declaredExerciseEquipmentContext,
-              )
-          : undefined)
-      : toEquipmentSource(
-          confirmedExerciseLabel !== null,
-          declaredExerciseEquipmentContext,
-        );
-  const poseEquipmentConfidence =
-    requiresEquipmentSnapshot
-      ? (shouldUseProviderEquipmentResolution
-          ? providerEquipmentConfidence ?? undefined
-          : shouldUseDeclaredEquipmentFallback
-            ? 0.58
-          : undefined)
-      : declaredExerciseEquipmentContext
-        ? 0.7
-        : undefined;
-  const poseEquipmentConflicts =
-    shouldUseProviderEquipmentResolution
-      ? providerEquipmentConflicts
+  const poseEquipmentContext = requiresEquipmentSnapshot
+    ? shouldUseProviderEquipmentResolution
+      ? providerEquipmentContext
       : shouldUseDeclaredEquipmentFallback
-        ? ["equipment_provider_missed_selected_weighted_exercise"]
+        ? declaredExerciseEquipmentContext
+        : null
+    : declaredExerciseEquipmentContext;
+  const poseEquipmentSource = requiresEquipmentSnapshot
+    ? shouldUseProviderEquipmentResolution
+      ? (providerEquipmentSource ?? undefined)
+      : shouldUseDeclaredEquipmentFallback
+        ? toEquipmentSource(
+            confirmedExerciseLabel !== null,
+            declaredExerciseEquipmentContext,
+          )
+        : undefined
+    : toEquipmentSource(
+        confirmedExerciseLabel !== null,
+        declaredExerciseEquipmentContext,
+      );
+  const poseEquipmentConfidence = requiresEquipmentSnapshot
+    ? shouldUseProviderEquipmentResolution
+      ? (providerEquipmentConfidence ?? undefined)
+      : shouldUseDeclaredEquipmentFallback
+        ? 0.58
+        : undefined
+    : declaredExerciseEquipmentContext
+      ? 0.7
+      : undefined;
+  const poseEquipmentConflicts = shouldUseProviderEquipmentResolution
+    ? providerEquipmentConflicts
+    : shouldUseDeclaredEquipmentFallback
+      ? ["equipment_provider_missed_selected_weighted_exercise"]
       : requiresEquipmentSnapshot && equipmentProviderEnabled === false
         ? ["equipment_provider_unavailable"]
         : [];
@@ -1945,14 +1951,19 @@ export function useWorkoutLiveController() {
         signals.visibility.lowConfidenceLandmarks,
       );
       setPoseFeedback(
-        guidanceTips.length > 0 ? guidanceTips.slice(0, 3) : NATIVE_POSE_FEEDBACK,
+        guidanceTips.length > 0
+          ? guidanceTips.slice(0, 3)
+          : NATIVE_POSE_FEEDBACK,
       );
       setPoseStatusOverride(
         repStep.noCountReason
-          ? `Native landmarks are live. ${buildPoseNoCountStatusText(repStep.noCountReason, {
-              equipmentProviderEnabled,
-              requiresEquipmentSnapshot,
-            })}`
+          ? `Native landmarks are live. ${buildPoseNoCountStatusText(
+              repStep.noCountReason,
+              {
+                equipmentProviderEnabled,
+                requiresEquipmentSnapshot,
+              },
+            )}`
           : `Native landmark rep counting is live for ${toDisplayExerciseName(
               movementContractRef.current.exercise,
             )}.`,
@@ -2158,7 +2169,9 @@ export function useWorkoutLiveController() {
         setProviderEquipmentConfidence(
           heldDetection.detection.equipmentConfidence,
         );
-        setProviderEquipmentConflicts(heldDetection.detection.equipmentConflicts);
+        setProviderEquipmentConflicts(
+          heldDetection.detection.equipmentConflicts,
+        );
         setProviderEquipmentContext(heldDetection.detection.equipmentContext);
         setProviderEquipmentDetections(
           heldDetection.detection.equipmentDetections,
@@ -2227,7 +2240,10 @@ export function useWorkoutLiveController() {
       framesSinceAnalyzeRef.current = 0;
       if (movementContractRef.current) {
         setCurrentAngle(
-          getPoseMovementContractAngle(movementContractRef.current, frame.keypoints),
+          getPoseMovementContractAngle(
+            movementContractRef.current,
+            frame.keypoints,
+          ),
         );
       } else {
         setCurrentAngle(null);
@@ -2407,16 +2423,14 @@ export function useWorkoutLiveController() {
         setPoseFeedback(
           analysis.sessionQualityState !== "stable"
             ? buildPoseQualityFeedback(
-                guidanceTips.length > 0
-                  ? guidanceTips
-                  : analysis.formFeedback,
+                guidanceTips.length > 0 ? guidanceTips : analysis.formFeedback,
                 analysis.sessionQualityState,
                 analysis.sessionQualityReasons,
                 DEFAULT_POSE_FEEDBACK,
               )
             : guidanceTips.length > 0
-            ? guidanceTips.slice(0, 3)
-            : analysis.formFeedback.slice(0, 3),
+              ? guidanceTips.slice(0, 3)
+              : analysis.formFeedback.slice(0, 3),
         );
       }
 
@@ -2479,7 +2493,10 @@ export function useWorkoutLiveController() {
       );
       return;
     }
-    const intervalMs = Math.max(120, Math.round(1000 / Math.max(acceptedFps ?? 8, 1)));
+    const intervalMs = Math.max(
+      120,
+      Math.round(1000 / Math.max(acceptedFps ?? 8, 1)),
+    );
     frameIntervalRef.current = setInterval(() => {
       void captureAndAnalyzeFrame(activePoseSessionId);
     }, intervalMs);
@@ -2724,14 +2741,15 @@ export function useWorkoutLiveController() {
         const finalizedDeclaredEquipmentContext = inferExerciseEquipmentContext(
           finalizedEquipmentContextLabel,
         );
-        const finalizedRequiresEquipmentSnapshot = requiresVisualEquipmentContext(
-          finalizedDeclaredEquipmentContext,
-        );
+        const finalizedRequiresEquipmentSnapshot =
+          requiresVisualEquipmentContext(finalizedDeclaredEquipmentContext);
         const finalizedProviderEquipmentFresh =
           providerEquipmentDetectedAtMs !== null &&
-          Date.now() - providerEquipmentDetectedAtMs <= EQUIPMENT_CONTEXT_FRESH_MS;
+          Date.now() - providerEquipmentDetectedAtMs <=
+            EQUIPMENT_CONTEXT_FRESH_MS;
         const finalizedProviderEquipmentHasPositiveContext =
-          providerEquipmentContext !== null && providerEquipmentContext !== "unknown";
+          providerEquipmentContext !== null &&
+          providerEquipmentContext !== "unknown";
         const finalizedUseProviderEquipmentResolution =
           finalizedRequiresEquipmentSnapshot &&
           equipmentProviderEnabled === true &&
@@ -2746,33 +2764,33 @@ export function useWorkoutLiveController() {
           equipmentProviderEnabled === false;
         const finalizedResolvedEquipmentContext =
           finalizedRequiresEquipmentSnapshot
-            ? (finalizedUseProviderEquipmentResolution
-                ? providerEquipmentContext
-                : finalizedUseDeclaredEquipmentFallback
-                  ? finalizedDeclaredEquipmentContext
-                : null)
+            ? finalizedUseProviderEquipmentResolution
+              ? providerEquipmentContext
+              : finalizedUseDeclaredEquipmentFallback
+                ? finalizedDeclaredEquipmentContext
+                : null
             : finalizedDeclaredEquipmentContext;
         const finalizedResolvedEquipmentSource =
           finalizedRequiresEquipmentSnapshot
-            ? (finalizedUseProviderEquipmentResolution
-                ? providerEquipmentSource ?? undefined
-                : finalizedUseDeclaredEquipmentFallback
-                  ? toEquipmentSource(
-                      confirmedExerciseLabelRef.current !== null,
-                      finalizedDeclaredEquipmentContext,
-                    )
-                : undefined)
+            ? finalizedUseProviderEquipmentResolution
+              ? (providerEquipmentSource ?? undefined)
+              : finalizedUseDeclaredEquipmentFallback
+                ? toEquipmentSource(
+                    confirmedExerciseLabelRef.current !== null,
+                    finalizedDeclaredEquipmentContext,
+                  )
+                : undefined
             : toEquipmentSource(
                 confirmedExerciseLabelRef.current !== null,
                 finalizedDeclaredEquipmentContext,
               );
         const finalizedResolvedEquipmentConfidence =
           finalizedRequiresEquipmentSnapshot
-            ? (finalizedUseProviderEquipmentResolution
-                ? providerEquipmentConfidence ?? undefined
-                : finalizedUseDeclaredEquipmentFallback
-                  ? 0.58
-                : undefined)
+            ? finalizedUseProviderEquipmentResolution
+              ? (providerEquipmentConfidence ?? undefined)
+              : finalizedUseDeclaredEquipmentFallback
+                ? 0.58
+                : undefined
             : finalizedDeclaredEquipmentContext
               ? 0.7
               : undefined;
@@ -2781,10 +2799,10 @@ export function useWorkoutLiveController() {
             ? providerEquipmentConflicts
             : finalizedUseDeclaredEquipmentFallback
               ? ["equipment_provider_missed_selected_weighted_exercise"]
-            : finalizedRequiresEquipmentSnapshot &&
-                equipmentProviderEnabled === false
-              ? ["equipment_provider_unavailable"]
-              : [];
+              : finalizedRequiresEquipmentSnapshot &&
+                  equipmentProviderEnabled === false
+                ? ["equipment_provider_unavailable"]
+                : [];
         const finalizedPose = await finalizePoseSessionMutation.mutateAsync({
           poseSessionId,
           input: {
@@ -2974,9 +2992,9 @@ export function useWorkoutLiveController() {
             }`
           : shouldUseDeclaredEquipmentFallback
             ? "DUMBBELL SELECTED - AI MISS"
-          : isRecording
-            ? "Looking for dumbbell"
-            : "Dumbbell check armed"
+            : isRecording
+              ? "Looking for dumbbell"
+              : "Dumbbell check armed"
       : null,
     equipmentDetected:
       (shouldUseProviderEquipmentResolution &&
@@ -3051,7 +3069,7 @@ export function useWorkoutLiveController() {
             ? "Camera permission is required for pose tracking."
             : cameraActive
               ? isWebPoseRuntime
-            ? "Pose session will start with the next recording pass."
+                ? "Pose session will start with the next recording pass."
                 : "Native landmarks will arm the next recording pass."
               : "Initialize the camera to unlock the live pose path.",
     reps,

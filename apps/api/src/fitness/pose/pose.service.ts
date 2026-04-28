@@ -612,10 +612,7 @@ type PoseMovementContractDefaults = {
   spatialRequirements: PoseSpatialRequirementsValue;
 };
 
-const movementContractDefaults: Record<
-  string,
-  PoseMovementContractDefaults
-> = {
+const movementContractDefaults: Record<string, PoseMovementContractDefaults> = {
   bench_press: {
     degradedConditions: [
       'left_arm_occluded',
@@ -719,11 +716,31 @@ const movementContractDefaults: Record<
     requiredSides: 'both',
     secondaryJoints: ['left_shoulder', 'right_shoulder', 'hip'],
     spatialRequirements: {
-      body_line_tolerance: 74,
+      body_line_tolerance: 86,
       body_x_drift_max: 0.22,
       body_y_travel_min: 0,
       left_right_symmetry_tolerance: 55,
       phase_sync_tolerance_ms: 650,
+    },
+  },
+  pull_up: {
+    degradedConditions: [
+      'left_arm_occluded',
+      'right_arm_occluded',
+      'bar_unavailable',
+    ],
+    noCountConditions: ['insufficient_elbow_rom', 'body_swing_over_tolerance'],
+    phaseOrder: ['setup', 'pull', 'lower'],
+    primaryJoints: ['left_elbow', 'right_elbow'],
+    repModel: 'bilateral',
+    requiredSides: 'either',
+    secondaryJoints: ['left_shoulder', 'right_shoulder', 'hip'],
+    spatialRequirements: {
+      body_line_tolerance: 45,
+      body_x_drift_max: 0.16,
+      body_y_travel_min: 0,
+      left_right_symmetry_tolerance: 60,
+      phase_sync_tolerance_ms: 700,
     },
   },
   shoulder_press: {
@@ -838,8 +855,9 @@ function toSpatialRequirements(
         getObjectValue(value, 'body_line_tolerance', 'bodyLineTolerance'),
       ) ?? fallback?.body_line_tolerance,
     body_x_drift_max:
-      toOptionalNumber(getObjectValue(value, 'body_x_drift_max', 'bodyXDriftMax')) ??
-      fallback?.body_x_drift_max,
+      toOptionalNumber(
+        getObjectValue(value, 'body_x_drift_max', 'bodyXDriftMax'),
+      ) ?? fallback?.body_x_drift_max,
     body_y_travel_min:
       toOptionalNumber(
         getObjectValue(value, 'body_y_travel_min', 'bodyYTravelMin'),
@@ -854,7 +872,11 @@ function toSpatialRequirements(
       ) ?? fallback?.left_right_symmetry_tolerance,
     phase_sync_tolerance_ms:
       toOptionalNumber(
-        getObjectValue(value, 'phase_sync_tolerance_ms', 'phaseSyncToleranceMs'),
+        getObjectValue(
+          value,
+          'phase_sync_tolerance_ms',
+          'phaseSyncToleranceMs',
+        ),
       ) ?? fallback?.phase_sync_tolerance_ms,
   };
 }
@@ -893,7 +915,9 @@ function enrichMovementContract(
       contract.rep_model ?? defaults.repModel,
     ),
     required_sides: toRequiredSides(
-      source?.required_sides ?? source?.requiredSides ?? contract.required_sides,
+      source?.required_sides ??
+        source?.requiredSides ??
+        contract.required_sides,
       contract.required_sides ?? defaults.requiredSides,
     ),
     secondary_joints: toContractStringArray(
@@ -962,21 +986,21 @@ function buildMovementContractFromProfile(
 
   return enrichMovementContract(
     {
-    exercise: profile.canonical_name,
-    dominant_joint: dominantJoint,
-    rep_thresholds: {
-      down,
-      up,
-    },
-    secondary_check:
-      repRules !== null
-        ? toSecondaryCheck(repRules)
-        : toSecondaryCheck(movementPattern),
-    oscillating_joints: toOscillatingJoints(
-      movementPattern.oscillating_landmarks ??
-        movementPattern.oscillating_joints ??
-        repRules?.oscillating_joints,
-    ),
+      exercise: profile.canonical_name,
+      dominant_joint: dominantJoint,
+      rep_thresholds: {
+        down,
+        up,
+      },
+      secondary_check:
+        repRules !== null
+          ? toSecondaryCheck(repRules)
+          : toSecondaryCheck(movementPattern),
+      oscillating_joints: toOscillatingJoints(
+        movementPattern.oscillating_landmarks ??
+          movementPattern.oscillating_joints ??
+          repRules?.oscillating_joints,
+      ),
     },
     contractSource,
   );
@@ -1159,10 +1183,18 @@ function buildGeneratedMovementContract(
     },
     push_up: {
       dominantJoint: 'elbow' as const,
-      downAngle: 145,
-      upAngle: 158,
+      downAngle: 150,
+      upAngle: 154,
       tolerance: 12,
       secondaryCheck: 'body_line',
+      oscillatingJoints: ['elbow', 'shoulder'],
+    },
+    pull_up: {
+      dominantJoint: 'elbow' as const,
+      downAngle: 138,
+      upAngle: 105,
+      tolerance: 28,
+      secondaryCheck: 'vertical_pull',
       oscillatingJoints: ['elbow', 'shoulder'],
     },
     shoulder_press: {
@@ -1302,7 +1334,7 @@ function scoreBootstrapProfile(
   const hasHardUprightPushUpConflict =
     liveOrientation === 'upright' &&
     profileCanonical === 'push_up' &&
-    (liveTorsoSlopeDeg ?? 90) > 74;
+    (liveTorsoSlopeDeg ?? 90) > 86;
 
   if (hasHardUprightPushUpConflict) {
     return 0;
@@ -1554,7 +1586,10 @@ export class PoseService {
 
   private isEquipmentDetectionProviderEnabled(): boolean {
     const provider = this.getEquipmentDetectionProvider();
-    const apiKey = this.config.get<string>('equipmentDetection.roboflowApiKey', '');
+    const apiKey = this.config.get<string>(
+      'equipmentDetection.roboflowApiKey',
+      '',
+    );
     const modelId = this.config.get<string>(
       'equipmentDetection.roboflowModelId',
       '',
@@ -1681,7 +1716,10 @@ export class PoseService {
       return null;
     }
 
-    const apiKey = this.config.get<string>('equipmentDetection.roboflowApiKey', '');
+    const apiKey = this.config.get<string>(
+      'equipmentDetection.roboflowApiKey',
+      '',
+    );
     const modelId = this.config.get<string>(
       'equipmentDetection.roboflowModelId',
       '',
@@ -1950,7 +1988,8 @@ export class PoseService {
           : null);
       const needsConfirmation =
         analysis.needs_confirmation ?? movementContract === null;
-      const subjectLocked = dto.subject_locked ?? analysis.subject_locked ?? null;
+      const subjectLocked =
+        dto.subject_locked ?? analysis.subject_locked ?? null;
       const subjectLockConfidence =
         dto.subject_lock_confidence ?? analysis.subject_lock_confidence ?? null;
 
@@ -1971,7 +2010,8 @@ export class PoseService {
               'Native snapshot analysis is active.',
               'Automatic rep counting still depends on the upcoming native landmark runtime.',
             ];
-      const providerEquipment = await this.detectEquipmentFromFrame(frameBase64);
+      const providerEquipment =
+        await this.detectEquipmentFromFrame(frameBase64);
       const equipment = resolvePoseEquipment({
         declaredConfidence:
           providerEquipment?.equipmentConfidence ?? dto.equipment_confidence,
@@ -2839,7 +2879,8 @@ export class PoseService {
       toNullableString(input.movementContract?.exercise);
     const subjectLocked =
       toOptionalBoolean(input.existingSummary.subject_locked) ??
-      (input.subjectLockConfidence !== null && input.subjectLockConfidence >= 0.6);
+      (input.subjectLockConfidence !== null &&
+        input.subjectLockConfidence >= 0.6);
     const evidenceFlags: string[] = [];
 
     if (!subjectLocked) {
@@ -2891,18 +2932,22 @@ export class PoseService {
       input.movementContract?.no_count_conditions?.includes(
         'equipment_required',
       ) ?? false;
-    const difficultyTier =
-      proposedName === 'push_up'
-        ? repModel === 'unilateral_left' || repModel === 'unilateral_right'
+    let difficultyTier = 'unknown';
+    if (proposedName === 'push_up') {
+      difficultyTier =
+        repModel === 'unilateral_left' || repModel === 'unilateral_right'
           ? 'advanced'
-          : 'intermediate'
-        : proposedName === 'bench_press' ||
-            proposedName === 'shoulder_press' ||
-            proposedName === 'dip'
-          ? 'intermediate'
-        : proposedName === 'bicep_curl' || proposedName === 'plank'
-          ? 'beginner'
-          : 'unknown';
+          : 'intermediate';
+    } else if (
+      proposedName === 'bench_press' ||
+      proposedName === 'shoulder_press' ||
+      proposedName === 'dip' ||
+      proposedName === 'pull_up'
+    ) {
+      difficultyTier = 'intermediate';
+    } else if (proposedName === 'bicep_curl' || proposedName === 'plank') {
+      difficultyTier = 'beginner';
+    }
     const unilateralMultiplier =
       repModel === 'unilateral_left' || repModel === 'unilateral_right'
         ? 1.2

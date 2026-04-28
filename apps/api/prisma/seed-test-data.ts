@@ -207,8 +207,6 @@ function analyticsAt(args: {
   return target;
 }
 
-
-
 function planByName(name: MembershipPlanSeed['name']) {
   const plan = MEMBERSHIP_PLAN_SEEDS.find(
     (candidate) => candidate.name === name,
@@ -1255,20 +1253,26 @@ async function ensureAnalyticsFixtures(
   coachProfiles: Record<string, string>,
 ) {
   const adminUserId =
-    ensuredAccounts.find(({ account }) => account.key === 'admin')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'admin')?.userId ??
+    null;
   const staffUserId =
     ensuredAccounts.find(({ account }) => account.key === 'staff')?.userId ??
     adminUserId;
   const memberActiveId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-active')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-active')
+      ?.userId ?? null;
   const memberPremiumId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-premium')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-premium')
+      ?.userId ?? null;
   const memberFrozenId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-frozen')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-frozen')
+      ?.userId ?? null;
   const memberExpiredId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-expired')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-expired')
+      ?.userId ?? null;
   const memberPendingId =
-    ensuredAccounts.find(({ account }) => account.key === 'member-pending')?.userId ?? null;
+    ensuredAccounts.find(({ account }) => account.key === 'member-pending')
+      ?.userId ?? null;
 
   const amenityRows = await prisma.amenity.findMany({
     where: {
@@ -1288,7 +1292,8 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-retail:whey-isolate'),
       name: 'FitTrack Whey Isolate',
       category: 'supplements',
-      description: 'Fast-moving protein tub frequently highlighted in the front counter lineup.',
+      description:
+        'Fast-moving protein tub frequently highlighted in the front counter lineup.',
       cost: new Prisma.Decimal('1199'),
       price: new Prisma.Decimal('1899'),
       stockQuantity: 4,
@@ -1300,7 +1305,8 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-retail:creatine'),
       name: 'Creatine Monohydrate',
       category: 'supplements',
-      description: 'Daily creatine SKU used to keep supplement revenue visible in analytics.',
+      description:
+        'Daily creatine SKU used to keep supplement revenue visible in analytics.',
       cost: new Prisma.Decimal('499'),
       price: new Prisma.Decimal('799'),
       stockQuantity: 7,
@@ -1324,7 +1330,8 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-retail:lifting-straps'),
       name: 'Lifting Straps',
       category: 'accessories',
-      description: 'Accessory item for strength members and personal training clients.',
+      description:
+        'Accessory item for strength members and personal training clients.',
       cost: new Prisma.Decimal('210'),
       price: new Prisma.Decimal('450'),
       stockQuantity: 14,
@@ -1336,7 +1343,8 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-retail:recovery-balm'),
       name: 'Recovery Balm',
       category: 'recovery',
-      description: 'Recovery shelf item that intentionally sits at low stock for alert coverage.',
+      description:
+        'Recovery shelf item that intentionally sits at low stock for alert coverage.',
       cost: new Prisma.Decimal('180'),
       price: new Prisma.Decimal('349'),
       stockQuantity: 2,
@@ -1348,7 +1356,8 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-retail:shaker-bottle'),
       name: 'FitTrack Shaker Bottle',
       category: 'merchandise',
-      description: 'Branded shaker bottle used to keep merchandise visible in sales.',
+      description:
+        'Branded shaker bottle used to keep merchandise visible in sales.',
       cost: new Prisma.Decimal('135'),
       price: new Prisma.Decimal('299'),
       stockQuantity: 18,
@@ -1393,7 +1402,8 @@ async function ensureAnalyticsFixtures(
     {
       id: seedId('analytics-equipment:adjustable-bench'),
       name: 'Adjustable Bench',
-      description: 'One bench is currently pulled from the floor for upholstery replacement.',
+      description:
+        'One bench is currently pulled from the floor for upholstery replacement.',
       imageUrl: 'https://fittrack.dev/assets/adjustable-bench.jpg',
       quantityTotal: 6,
       quantityCurrent: 5,
@@ -1403,7 +1413,8 @@ async function ensureAnalyticsFixtures(
     {
       id: seedId('analytics-equipment:spin-bike'),
       name: 'Spin Bike',
-      description: 'Cardio bike fleet with a few units waiting on drivetrain servicing.',
+      description:
+        'Cardio bike fleet with a few units waiting on drivetrain servicing.',
       imageUrl: 'https://fittrack.dev/assets/spin-bike.jpg',
       quantityTotal: 10,
       quantityCurrent: 7,
@@ -1413,7 +1424,8 @@ async function ensureAnalyticsFixtures(
     {
       id: seedId('analytics-equipment:hex-dumbbell-set'),
       name: 'Hex Dumbbell Set',
-      description: 'Strength floor dumbbells with two pairs temporarily unavailable.',
+      description:
+        'Strength floor dumbbells with two pairs temporarily unavailable.',
       imageUrl: 'https://fittrack.dev/assets/hex-dumbbell-set.jpg',
       quantityTotal: 20,
       quantityCurrent: 18,
@@ -1423,7 +1435,8 @@ async function ensureAnalyticsFixtures(
     {
       id: seedId('analytics-equipment:concept-rower'),
       name: 'Concept Rower',
-      description: 'Cardio rowers currently fully available and used as a healthy control.',
+      description:
+        'Cardio rowers currently fully available and used as a healthy control.',
       imageUrl: 'https://fittrack.dev/assets/concept-rower.jpg',
       quantityTotal: 4,
       quantityCurrent: 4,
@@ -1527,39 +1540,66 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-attendance:member-active:month-1'),
       userId: memberActiveId,
       scannedBy: staffUserId,
-      checkInAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 8, hour: 7, minute: 25 }),
+      checkInAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 8,
+        hour: 7,
+        minute: 25,
+      }),
       durationMinutes: 83,
     },
     {
       id: seedId('analytics-attendance:member-premium:month-2'),
       userId: memberPremiumId,
       scannedBy: staffUserId,
-      checkInAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 12, hour: 18, minute: 10 }),
+      checkInAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 12,
+        hour: 18,
+        minute: 10,
+      }),
       durationMinutes: 67,
     },
     {
       id: seedId('analytics-attendance:member-frozen:month-3'),
       userId: memberFrozenId,
       scannedBy: staffUserId,
-      checkInAt: analyticsAt({ monthsAgo: 3, dayOfMonth: 5, hour: 6, minute: 55 }),
+      checkInAt: analyticsAt({
+        monthsAgo: 3,
+        dayOfMonth: 5,
+        hour: 6,
+        minute: 55,
+      }),
       durationMinutes: 74,
     },
     {
       id: seedId('analytics-attendance:member-active:month-4'),
       userId: memberActiveId,
       scannedBy: staffUserId,
-      checkInAt: analyticsAt({ monthsAgo: 4, dayOfMonth: 16, hour: 12, minute: 5 }),
+      checkInAt: analyticsAt({
+        monthsAgo: 4,
+        dayOfMonth: 16,
+        hour: 12,
+        minute: 5,
+      }),
       durationMinutes: 58,
     },
     {
       id: seedId('analytics-attendance:member-premium:month-5'),
       userId: memberPremiumId,
       scannedBy: staffUserId,
-      checkInAt: analyticsAt({ monthsAgo: 5, dayOfMonth: 23, hour: 19, minute: 0 }),
+      checkInAt: analyticsAt({
+        monthsAgo: 5,
+        dayOfMonth: 23,
+        hour: 19,
+        minute: 0,
+      }),
       durationMinutes: 69,
     },
   ].filter(
-    (entry): entry is {
+    (
+      entry,
+    ): entry is {
       id: string;
       userId: string;
       scannedBy: string | null;
@@ -1641,8 +1681,18 @@ async function ensureAnalyticsFixtures(
       downpaymentAmount: new Prisma.Decimal('600'),
       balanceAmount: new Prisma.Decimal('600'),
       downpaymentPaidAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 8, hour: 16 }),
-      balancePaidAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 10, hour: 17, minute: 45 }),
-      completedAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 10, hour: 19, minute: 5 }),
+      balancePaidAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 10,
+        hour: 17,
+        minute: 45,
+      }),
+      completedAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 10,
+        hour: 19,
+        minute: 5,
+      }),
       cancelledAt: null,
       createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 5, hour: 12 }),
       notes: 'Completed boxing-ring session used for prior-month comparisons.',
@@ -1658,12 +1708,22 @@ async function ensureAnalyticsFixtures(
       totalAmount: new Prisma.Decimal('900'),
       downpaymentAmount: new Prisma.Decimal('900'),
       balanceAmount: new Prisma.Decimal('0'),
-      downpaymentPaidAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 13, hour: 15 }),
+      downpaymentPaidAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 13,
+        hour: 15,
+      }),
       balancePaidAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 13, hour: 15 }),
-      completedAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 14, hour: 7, minute: 5 }),
+      completedAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 14,
+        hour: 7,
+        minute: 5,
+      }),
       cancelledAt: null,
       createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 11, hour: 10 }),
-      notes: 'Prior-month yoga booking used for attendance and revenue correlation.',
+      notes:
+        'Prior-month yoga booking used for attendance and revenue correlation.',
     },
     {
       id: seedId('analytics-booking:member-pending:basketball-cancelled'),
@@ -1686,7 +1746,9 @@ async function ensureAnalyticsFixtures(
   ];
 
   const validBookingSeeds = bookingSeeds.filter(
-    (entry): entry is {
+    (
+      entry,
+    ): entry is {
       id: string;
       userId: string;
       amenityId: string;
@@ -1797,9 +1859,23 @@ async function ensureAnalyticsFixtures(
       balanceAmount: new Prisma.Decimal('600'),
       gymRevenue: new Prisma.Decimal('180'),
       coachEarnings: new Prisma.Decimal('720'),
-      downpaymentPaidAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 14, hour: 15 }),
-      balancePaidAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 18, hour: 16, minute: 40 }),
-      completedAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 18, hour: 18, minute: 10 }),
+      downpaymentPaidAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 14,
+        hour: 15,
+      }),
+      balancePaidAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 18,
+        hour: 16,
+        minute: 40,
+      }),
+      completedAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 18,
+        hour: 18,
+        minute: 10,
+      }),
       createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 12, hour: 10 }),
       memberNotes: 'Padwork and conditioning session.',
       sessionNotes: 'Strong tempo and clean finishing rounds.',
@@ -1816,9 +1892,23 @@ async function ensureAnalyticsFixtures(
       balanceAmount: new Prisma.Decimal('500'),
       gymRevenue: new Prisma.Decimal('156'),
       coachEarnings: new Prisma.Decimal('624'),
-      downpaymentPaidAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 19, hour: 13 }),
-      balancePaidAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 22, hour: 6, minute: 45 }),
-      completedAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 22, hour: 7, minute: 55 }),
+      downpaymentPaidAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 19,
+        hour: 13,
+      }),
+      balancePaidAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 22,
+        hour: 6,
+        minute: 45,
+      }),
+      completedAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 22,
+        hour: 7,
+        minute: 55,
+      }),
       createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 16, hour: 9 }),
       memberNotes: 'Mobility and breathing reset.',
       sessionNotes: 'Better thoracic rotation and calmer tempo.',
@@ -1845,7 +1935,9 @@ async function ensureAnalyticsFixtures(
   ];
 
   const validAppointmentSeeds = appointmentSeeds.filter(
-    (entry): entry is {
+    (
+      entry,
+    ): entry is {
       id: string;
       userId: string;
       coachId: string;
@@ -1959,7 +2051,12 @@ async function ensureAnalyticsFixtures(
       processedBy: adminUserId ?? staffUserId,
       status: SaleStatus.completed,
       paymentMethod: SalePaymentMethod.paymongo,
-      createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 12, hour: 12, minute: 35 }),
+      createdAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 12,
+        hour: 12,
+        minute: 35,
+      }),
       items: [
         {
           id: seedId('analytics-sale-item:premium-recovery:creatine'),
@@ -1984,7 +2081,12 @@ async function ensureAnalyticsFixtures(
       processedBy: staffUserId,
       status: SaleStatus.completed,
       paymentMethod: SalePaymentMethod.cash,
-      createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 20, hour: 18, minute: 5 }),
+      createdAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 20,
+        hour: 18,
+        minute: 5,
+      }),
       items: [
         {
           id: seedId('analytics-sale-item:member-active-hydration:drink'),
@@ -2009,7 +2111,12 @@ async function ensureAnalyticsFixtures(
       processedBy: adminUserId ?? staffUserId,
       status: SaleStatus.completed,
       paymentMethod: SalePaymentMethod.paymongo,
-      createdAt: analyticsAt({ monthsAgo: 4, dayOfMonth: 15, hour: 11, minute: 20 }),
+      createdAt: analyticsAt({
+        monthsAgo: 4,
+        dayOfMonth: 15,
+        hour: 11,
+        minute: 20,
+      }),
       items: [
         {
           id: seedId('analytics-sale-item:starter-kit-quarter:whey'),
@@ -2030,7 +2137,9 @@ async function ensureAnalyticsFixtures(
   ];
 
   const validSaleSeeds = saleSeeds.filter(
-    (entry): entry is {
+    (
+      entry,
+    ): entry is {
       id: string;
       customerName: string | null;
       customerUserId: string | null;
@@ -2059,7 +2168,9 @@ async function ensureAnalyticsFixtures(
       where: { id: sale.id },
       update: {
         ...(sale.customerName ? { customer_name: sale.customerName } : {}),
-        ...(sale.customerUserId ? { customer_user_id: sale.customerUserId } : {}),
+        ...(sale.customerUserId
+          ? { customer_user_id: sale.customerUserId }
+          : {}),
         total_amount: totalAmount,
         payment_method: sale.paymentMethod,
         payment_id: paymentId,
@@ -2070,7 +2181,9 @@ async function ensureAnalyticsFixtures(
       create: {
         id: sale.id,
         ...(sale.customerName ? { customer_name: sale.customerName } : {}),
-        ...(sale.customerUserId ? { customer_user_id: sale.customerUserId } : {}),
+        ...(sale.customerUserId
+          ? { customer_user_id: sale.customerUserId }
+          : {}),
         total_amount: totalAmount,
         payment_method: sale.paymentMethod,
         payment_id: paymentId,
@@ -2157,7 +2270,12 @@ async function ensureAnalyticsFixtures(
       amount: new Prisma.Decimal('799'),
       provider: PaymentProvider.paymongo,
       status: PaymentStatus.completed,
-      createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 4, hour: 11, minute: 10 }),
+      createdAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 4,
+        hour: 11,
+        minute: 10,
+      }),
     },
     {
       id: seedId('analytics-payment:booking:active-current'),
@@ -2179,7 +2297,12 @@ async function ensureAnalyticsFixtures(
       amount: new Prisma.Decimal('1200'),
       provider: PaymentProvider.paymongo,
       status: PaymentStatus.completed,
-      createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 10, hour: 17, minute: 50 }),
+      createdAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 10,
+        hour: 17,
+        minute: 50,
+      }),
     },
     {
       id: seedId('analytics-payment:booking:yoga-prior'),
@@ -2190,7 +2313,12 @@ async function ensureAnalyticsFixtures(
       amount: new Prisma.Decimal('900'),
       provider: PaymentProvider.cash,
       status: PaymentStatus.completed,
-      createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 14, hour: 6, minute: 30 }),
+      createdAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 14,
+        hour: 6,
+        minute: 30,
+      }),
     },
     {
       id: seedId('analytics-payment:coaching:active-current'),
@@ -2207,23 +2335,37 @@ async function ensureAnalyticsFixtures(
       id: seedId('analytics-payment:coaching:premium-prior'),
       userId: memberPremiumId,
       payableType: PayableType.coaching,
-      payableId: seedId('analytics-appointment:member-premium:boxing-last-month'),
+      payableId: seedId(
+        'analytics-appointment:member-premium:boxing-last-month',
+      ),
       paymentStage: PaymentStage.full,
       amount: new Prisma.Decimal('900'),
       provider: PaymentProvider.paymongo,
       status: PaymentStatus.completed,
-      createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 18, hour: 16, minute: 35 }),
+      createdAt: analyticsAt({
+        monthsAgo: 1,
+        dayOfMonth: 18,
+        hour: 16,
+        minute: 35,
+      }),
     },
     {
       id: seedId('analytics-payment:coaching:recovery-prior'),
       userId: memberActiveId,
       payableType: PayableType.coaching,
-      payableId: seedId('analytics-appointment:member-active:recovery-two-months'),
+      payableId: seedId(
+        'analytics-appointment:member-active:recovery-two-months',
+      ),
       paymentStage: PaymentStage.full,
       amount: new Prisma.Decimal('780'),
       provider: PaymentProvider.cash,
       status: PaymentStatus.completed,
-      createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 22, hour: 6, minute: 25 }),
+      createdAt: analyticsAt({
+        monthsAgo: 2,
+        dayOfMonth: 22,
+        hour: 6,
+        minute: 25,
+      }),
     },
     ...validSaleSeeds.map((sale) => ({
       id: seedId(`analytics-payment:product:${sale.id}`),
@@ -2245,7 +2387,9 @@ async function ensureAnalyticsFixtures(
   ];
 
   const validPaymentSeeds = paymentSeeds.filter(
-    (entry): entry is {
+    (
+      entry,
+    ): entry is {
       id: string;
       userId: string;
       payableType: PayableType;
@@ -2305,8 +2449,6 @@ async function ensureAnalyticsFixtures(
     });
   }
 }
-
-
 
 async function ensureMasteryProgress(
   ensuredAccounts: readonly EnsuredAccount[],
@@ -2442,6 +2584,18 @@ async function ensureWorkoutFixtures(
       imageUrl: 'https://fittrack.dev/exercises/dip.jpg',
     },
     {
+      key: 'pull',
+      name: 'Pull-Up',
+      muscleGroup: 'Back',
+      category: ExerciseCategory.strength,
+      description:
+        'Bodyweight vertical pull seeded so pull-up pose tracking and back mastery can be tested end to end.',
+      instructions:
+        'Start from a controlled hang, pull until the elbows flex and the chest rises, then lower without swinging.',
+      videoUrl: 'https://fittrack.dev/exercises/pull-up',
+      imageUrl: 'https://fittrack.dev/exercises/pull-up.jpg',
+    },
+    {
       key: 'curl',
       name: 'Dumbbell Bicep Curl',
       muscleGroup: 'Arms',
@@ -2573,12 +2727,13 @@ async function ensureWorkoutFixtures(
         setup: 'prone_press',
       } as Prisma.InputJsonValue,
       angleSignature: {
-        bottom: { elbow: [105, 145] },
-        top: { elbow: [158, 178] },
+        bottom: { elbow: [95, 155] },
+        top: { elbow: [142, 178] },
       } as Prisma.InputJsonValue,
       repRules: {
         body_line: 'shoulders_hips_ankles_stacked',
         depth: 'chest_between_hands',
+        partials_allowed: true,
         no_count_conditions: [
           'bilateral_arm_motion_unconfirmed',
           'push_up_body_not_horizontal',
@@ -2588,7 +2743,7 @@ async function ensureWorkoutFixtures(
       orientationSignature: {
         body_orientation: 'prone_horizontal',
         nose_to_hip_vector: { x: 0.02, y: 0.16 },
-        torso_slope_range: [0, 78],
+        torso_slope_range: [0, 88],
       } as Prisma.InputJsonValue,
       movementPattern: {
         oscillating_landmarks: [
@@ -2661,6 +2816,54 @@ async function ensureWorkoutFixtures(
           'right_shoulder',
           'left_elbow',
           'right_elbow',
+        ],
+      } as Prisma.InputJsonValue,
+    },
+    {
+      canonicalName: 'pull_up',
+      exerciseKey: 'pull',
+      landmarkSignature: {
+        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
+        setup: 'upright_vertical_pull',
+      } as Prisma.InputJsonValue,
+      angleSignature: {
+        bottom: { elbow: [128, 178] },
+        top: { elbow: [70, 135] },
+      } as Prisma.InputJsonValue,
+      repRules: {
+        partials_allowed: true,
+        vertical_pull: 'elbows_flex_as_chest_rises',
+        no_count_conditions: [
+          'insufficient_elbow_rom',
+          'body_swing_over_tolerance',
+        ],
+      } as Prisma.InputJsonValue,
+      orientationSignature: {
+        body_orientation: 'upright_vertical',
+        nose_to_hip_vector: { x: 0.01, y: 0.82 },
+        torso_slope_range: [58, 108],
+      } as Prisma.InputJsonValue,
+      movementPattern: {
+        oscillating_landmarks: [
+          'left_wrist',
+          'right_wrist',
+          'left_elbow',
+          'right_elbow',
+          'left_shoulder',
+          'right_shoulder',
+        ],
+        stable_landmarks: ['left_hip', 'right_hip'],
+        tracked_joint: 'shoulder_elbow_wrist',
+      } as Prisma.InputJsonValue,
+      visibilityPattern: {
+        min_visibility: 0.38,
+        required_landmarks: [
+          'left_shoulder',
+          'right_shoulder',
+          'left_elbow',
+          'right_elbow',
+          'left_wrist',
+          'right_wrist',
         ],
       } as Prisma.InputJsonValue,
     },

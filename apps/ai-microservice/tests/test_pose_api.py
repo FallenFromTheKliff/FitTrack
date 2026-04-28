@@ -75,7 +75,7 @@ def test_bootstrap_returns_ready_payload(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "accepted_fps": 15,
+        "accepted_fps": 20,
         "subject_lock_mode": "single_subject",
     }
 

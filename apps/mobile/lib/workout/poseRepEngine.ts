@@ -5,7 +5,10 @@ import type {
   PoseRepAngleDataRecord,
   PoseSequenceSignalsRecord,
 } from "@fittrack/types";
-import { buildRepAngleData, toCanonicalPoseExerciseLabel } from "@fittrack/utils";
+import {
+  buildRepAngleData,
+  toCanonicalPoseExerciseLabel,
+} from "@fittrack/utils";
 
 export type PoseRepPhase = "primed" | "down" | "up";
 
@@ -30,28 +33,33 @@ export type PoseRepEngineEvidence = {
 
 const REQUIRED_STREAK = 2;
 const MIN_REP_TRAVEL = 18;
-const BICEP_CURL_MIN_REP_TRAVEL = 10;
-const BICEP_CURL_MIN_REP_INTERVAL_MS = 700;
-const BICEP_CURL_PEAK_REVERSAL_DELTA = 3;
-const BICEP_CURL_PEAK_LIMIT = 128;
-const BICEP_CURL_START_LIMIT = 132;
+const BICEP_CURL_MIN_REP_TRAVEL = 8;
+const BICEP_CURL_MIN_REP_INTERVAL_MS = 650;
+const BICEP_CURL_PEAK_REVERSAL_DELTA = 2;
+const BICEP_CURL_PEAK_LIMIT = 142;
+const BICEP_CURL_START_LIMIT = 118;
 const DIP_BOTTOM_LIMIT = 100;
 const DIP_MIN_REP_INTERVAL_MS = 900;
 const DIP_MIN_REP_TRAVEL = 12;
 const DIP_PEAK_LIMIT = 142;
 const DEFAULT_MIN_REP_INTERVAL_MS = 850;
-const PUSH_UP_BOTTOM_LIMIT = 145;
-const PUSH_UP_MIN_REP_INTERVAL_MS = 1200;
-const PUSH_UP_MIN_REP_TRAVEL = 12;
+const PUSH_UP_BOTTOM_LIMIT = 155;
+const PUSH_UP_MIN_REP_INTERVAL_MS = 850;
+const PUSH_UP_MIN_REP_TRAVEL = 5;
 const PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY = 0.12;
-const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 2.5;
-const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.2;
-const PUSH_UP_PEAK_REVERSAL_DELTA = 3;
-const PUSH_UP_PEAK_LIMIT = 158;
-const PUSH_UP_STRONG_SIDE_ELBOW_AMPLITUDE = 8;
+const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 1.5;
+const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.14;
+const PUSH_UP_PEAK_REVERSAL_DELTA = 2;
+const PUSH_UP_PEAK_LIMIT = 142;
+const PUSH_UP_STRONG_SIDE_ELBOW_AMPLITUDE = 5;
 const PUSH_UP_MAX_HIP_X_DRIFT = 0.22;
-const PUSH_UP_MAX_TORSO_SLOPE_DEG = 74;
+const PUSH_UP_MAX_TORSO_SLOPE_DEG = 86;
 const PUSH_UP_PHASE_SYNC_TOLERANCE_MS = 750;
+const PULL_UP_MIN_REP_INTERVAL_MS = 900;
+const PULL_UP_MIN_REP_TRAVEL = 8;
+const PULL_UP_PEAK_LIMIT = 135;
+const PULL_UP_PEAK_REVERSAL_DELTA = 2;
+const PULL_UP_START_LIMIT = 138;
 const WEIGHTED_CURL_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "dumbbell",
   "barbell",
@@ -75,13 +83,20 @@ function getRepEngineThresholds(contract: PoseMovementContractRecord) {
   if (canonicalExercise === "bicep_curl") {
     return {
       minRepTravel: BICEP_CURL_MIN_REP_TRAVEL,
-      requiredStreak: REQUIRED_STREAK,
+      requiredStreak: 1,
     };
   }
 
   if (canonicalExercise === "dip") {
     return {
       minRepTravel: DIP_MIN_REP_TRAVEL,
+      requiredStreak: 1,
+    };
+  }
+
+  if (canonicalExercise === "pull_up") {
+    return {
+      minRepTravel: PULL_UP_MIN_REP_TRAVEL,
       requiredStreak: 1,
     };
   }
@@ -101,23 +116,17 @@ function getRepAngleLimits(contract: PoseMovementContractRecord) {
 
   if (canonicalExercise === "push_up") {
     return {
-      peakLimit: Math.max(peakLimit, PUSH_UP_PEAK_LIMIT),
+      peakLimit: PUSH_UP_PEAK_LIMIT,
       progressDirection: "increase" as const,
-      startLimit: Math.min(startLimit, PUSH_UP_BOTTOM_LIMIT),
+      startLimit: PUSH_UP_BOTTOM_LIMIT,
     };
   }
 
   if (canonicalExercise === "bicep_curl") {
     return {
-      peakLimit: Math.min(
-        contract.repThresholds.up.angle + contract.repThresholds.up.tolerance,
-        BICEP_CURL_PEAK_LIMIT,
-      ),
+      peakLimit: BICEP_CURL_PEAK_LIMIT,
       progressDirection: "decrease" as const,
-      startLimit: Math.max(
-        contract.repThresholds.down.angle - contract.repThresholds.down.tolerance,
-        BICEP_CURL_START_LIMIT,
-      ),
+      startLimit: BICEP_CURL_START_LIMIT,
     };
   }
 
@@ -129,12 +138,18 @@ function getRepAngleLimits(contract: PoseMovementContractRecord) {
     };
   }
 
+  if (canonicalExercise === "pull_up") {
+    return {
+      peakLimit: PULL_UP_PEAK_LIMIT,
+      progressDirection: "decrease" as const,
+      startLimit: PULL_UP_START_LIMIT,
+    };
+  }
+
   return { peakLimit, progressDirection: "increase" as const, startLimit };
 }
 
-function getPeakContractionReversalDelta(
-  contract: PoseMovementContractRecord,
-) {
+function getPeakContractionReversalDelta(contract: PoseMovementContractRecord) {
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
 
   if (canonicalExercise === "push_up") {
@@ -149,6 +164,10 @@ function getPeakContractionReversalDelta(
     return PUSH_UP_PEAK_REVERSAL_DELTA;
   }
 
+  if (canonicalExercise === "pull_up") {
+    return PULL_UP_PEAK_REVERSAL_DELTA;
+  }
+
   return 3;
 }
 
@@ -158,6 +177,7 @@ function getMinimumRepIntervalMs(contract: PoseMovementContractRecord) {
   if (canonicalExercise === "push_up") return PUSH_UP_MIN_REP_INTERVAL_MS;
   if (canonicalExercise === "bicep_curl") return BICEP_CURL_MIN_REP_INTERVAL_MS;
   if (canonicalExercise === "dip") return DIP_MIN_REP_INTERVAL_MS;
+  if (canonicalExercise === "pull_up") return PULL_UP_MIN_REP_INTERVAL_MS;
   return DEFAULT_MIN_REP_INTERVAL_MS;
 }
 
@@ -167,7 +187,9 @@ function hasRepCooldownElapsed(
   timestamp: number,
 ) {
   if (state.lastRepCompletedAtMs === null) return true;
-  return timestamp - state.lastRepCompletedAtMs >= getMinimumRepIntervalMs(contract);
+  return (
+    timestamp - state.lastRepCompletedAtMs >= getMinimumRepIntervalMs(contract)
+  );
 }
 
 function resetCycleAfterRejectedRep(
@@ -190,7 +212,8 @@ function countsRepOnPeakArrival(contract: PoseMovementContractRecord) {
   return (
     canonicalExercise === "push_up" ||
     canonicalExercise === "bicep_curl" ||
-    canonicalExercise === "dip"
+    canonicalExercise === "dip" ||
+    canonicalExercise === "pull_up"
   );
 }
 
@@ -211,24 +234,40 @@ function getPoseRepNoCountReason(
   }
 
   if (canonicalExercise === "push_up" || canonicalExercise === "dip") {
-    const leftArmVisibility = evidence.signals.visibility.leftArmVisibility ?? 0;
-    const rightArmVisibility = evidence.signals.visibility.rightArmVisibility ?? 0;
-    const leftElbowAmplitude = evidence.signals.temporal.amplitudes.left_elbow ?? 0;
-    const rightElbowAmplitude = evidence.signals.temporal.amplitudes.right_elbow ?? 0;
-    const weakestArmVisibility = Math.min(leftArmVisibility, rightArmVisibility);
-    const weakestElbowAmplitude = Math.min(leftElbowAmplitude, rightElbowAmplitude);
-    const strongestElbowAmplitude = Math.max(leftElbowAmplitude, rightElbowAmplitude);
+    const leftArmVisibility =
+      evidence.signals.visibility.leftArmVisibility ?? 0;
+    const rightArmVisibility =
+      evidence.signals.visibility.rightArmVisibility ?? 0;
+    const leftElbowAmplitude =
+      evidence.signals.temporal.amplitudes.left_elbow ?? 0;
+    const rightElbowAmplitude =
+      evidence.signals.temporal.amplitudes.right_elbow ?? 0;
+    const weakestArmVisibility = Math.min(
+      leftArmVisibility,
+      rightArmVisibility,
+    );
+    const weakestElbowAmplitude = Math.min(
+      leftElbowAmplitude,
+      rightElbowAmplitude,
+    );
+    const strongestElbowAmplitude = Math.max(
+      leftElbowAmplitude,
+      rightElbowAmplitude,
+    );
     const weakestArmRatio =
       strongestElbowAmplitude > 0
         ? weakestElbowAmplitude / strongestElbowAmplitude
         : 0;
+    const areBothArmsVisible =
+      weakestArmVisibility >= PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY;
     if (
-      weakestArmVisibility < PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY &&
+      areBothArmsVisible &&
       weakestElbowAmplitude < PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE
     ) {
       return "bilateral_arm_motion_unconfirmed";
     }
     if (
+      areBothArmsVisible &&
       strongestElbowAmplitude >= PUSH_UP_STRONG_SIDE_ELBOW_AMPLITUDE &&
       (weakestElbowAmplitude < PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE ||
         weakestArmRatio < PUSH_UP_MIN_SECONDARY_ELBOW_RATIO)
@@ -246,7 +285,9 @@ function getPoseRepNoCountReason(
 
   if (
     canonicalExercise === "bicep_curl" &&
-    !WEIGHTED_CURL_EQUIPMENT_CONTEXTS.has(evidence.equipmentContext ?? "unknown")
+    !WEIGHTED_CURL_EQUIPMENT_CONTEXTS.has(
+      evidence.equipmentContext ?? "unknown",
+    )
   ) {
     return "equipment_required";
   }
@@ -274,7 +315,10 @@ function getPoseRepNoCountReason(
     typeof evidence.signals.temporal.phaseSyncMs === "number" &&
     evidence.signals.temporal.phaseSyncMs >
       (canonicalExercise === "push_up"
-        ? Math.max(spatial.phaseSyncToleranceMs, PUSH_UP_PHASE_SYNC_TOLERANCE_MS)
+        ? Math.max(
+            spatial.phaseSyncToleranceMs,
+            PUSH_UP_PHASE_SYNC_TOLERANCE_MS,
+          )
         : spatial.phaseSyncToleranceMs)
   ) {
     return "left_right_phase_desync";
@@ -330,7 +374,8 @@ export function stepPoseRepEngine(
     };
   }
 
-  const { peakLimit, progressDirection, startLimit } = getRepAngleLimits(contract);
+  const { peakLimit, progressDirection, startLimit } =
+    getRepAngleLimits(contract);
   const { minRepTravel, requiredStreak } = getRepEngineThresholds(contract);
   const peakContractionReversalDelta =
     getPeakContractionReversalDelta(contract);

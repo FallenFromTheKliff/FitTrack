@@ -29,6 +29,7 @@ from ..models.pose import (
 
 KNOWN_EXERCISES = (
     "push_up",
+    "pull_up",
     "bench_press",
     "squat",
     "bicep_curl",
@@ -131,7 +132,7 @@ MOVEMENT_CONTRACT_DEFAULTS: dict[str, dict[str, object]] = {
         "secondary_joints": ["left_shoulder", "right_shoulder", "hip"],
         "phase_order": ["setup", "down", "up"],
         "spatial_requirements": {
-            "body_line_tolerance": 74.0,
+            "body_line_tolerance": 86.0,
             "body_x_drift_max": 0.22,
             "body_y_travel_min": 0.0,
             "left_right_symmetry_tolerance": 55.0,
@@ -148,6 +149,29 @@ MOVEMENT_CONTRACT_DEFAULTS: dict[str, dict[str, object]] = {
             "right_arm_occluded",
             "body_line_failure",
             "phase_desync",
+        ],
+    },
+    "pull_up": {
+        "rep_model": "bilateral",
+        "required_sides": "either",
+        "primary_joints": ["left_elbow", "right_elbow"],
+        "secondary_joints": ["left_shoulder", "right_shoulder", "hip"],
+        "phase_order": ["setup", "pull", "lower"],
+        "spatial_requirements": {
+            "body_line_tolerance": 45.0,
+            "body_x_drift_max": 0.16,
+            "body_y_travel_min": 0.0,
+            "left_right_symmetry_tolerance": 60.0,
+            "phase_sync_tolerance_ms": 700,
+        },
+        "no_count_conditions": [
+            "insufficient_elbow_rom",
+            "body_swing_over_tolerance",
+        ],
+        "degraded_conditions": [
+            "left_arm_occluded",
+            "right_arm_occluded",
+            "bar_unavailable",
         ],
     },
     "shoulder_press": {
@@ -230,7 +254,7 @@ class PoseSessionState:
 
 
 class PoseSessionService:
-    accepted_fps = 15
+    accepted_fps = 20
     confirmation_threshold = 0.80
     min_reliable_frames = 6
     fallback_tolerance = 12.0
@@ -707,6 +731,7 @@ class PoseSessionService:
             scores["squat"] += 0.18
             scores["bicep_curl"] += 0.2
             scores["dip"] += 0.18
+            scores["pull_up"] += 0.14
             scores["shoulder_press"] += 0.18
             scores["push_up"] -= 0.1
             scores["bench_press"] -= 0.06
@@ -715,14 +740,17 @@ class PoseSessionService:
             scores["squat"] += 0.3
         if angle_ranges["elbow"] >= 24:
             scores["push_up"] += 0.18
+            scores["pull_up"] += 0.16
             scores["bench_press"] += 0.14
             scores["bicep_curl"] += 0.12
         if bilateral_elbow_range >= 20:
             scores["push_up"] += 0.1
+            scores["pull_up"] += 0.08
             scores["bench_press"] += 0.08
             scores["dip"] += 0.09
         if angle_ranges["shoulder"] >= 20:
             scores["shoulder_press"] += 0.2
+            scores["pull_up"] += 0.08
         if bilateral_shoulder_range >= 16:
             scores["shoulder_press"] += 0.08
             scores["dip"] += 0.04
@@ -761,6 +789,7 @@ class PoseSessionService:
             scores["dip"] += 0.12
         if "shoulder" in oscillating:
             scores["shoulder_press"] += 0.1
+            scores["pull_up"] += 0.05
         if total_motion <= 0.05 and stable_hips:
             scores["plank"] += 0.3
         if feet_visibility < 0.4:
@@ -971,6 +1000,7 @@ class PoseSessionService:
         dominant_joint = {
             "squat": "knee",
             "push_up": "elbow",
+            "pull_up": "elbow",
             "bench_press": "elbow",
             "bicep_curl": "elbow",
             "dip": "elbow",
@@ -1003,9 +1033,14 @@ class PoseSessionService:
                 "up_angle": 178.0,
             },
             "push_up": {
-                "down_angle": 145.0,
+                "down_angle": 150.0,
                 "tolerance": 12.0,
-                "up_angle": 158.0,
+                "up_angle": 154.0,
+            },
+            "pull_up": {
+                "down_angle": 138.0,
+                "tolerance": 28.0,
+                "up_angle": 105.0,
             },
             "shoulder_press": {
                 "down_angle": 74.0,
@@ -1029,6 +1064,7 @@ class PoseSessionService:
         secondary_check = {
             "squat": "hip_depth",
             "push_up": "body_line",
+            "pull_up": "vertical_pull",
             "bench_press": "bar_path",
             "bicep_curl": "hip_stability",
             "dip": "vertical_body_travel",
@@ -1091,10 +1127,18 @@ class PoseSessionService:
             },
             "push_up": {
                 "dominant_joint": "elbow",
-                "down_angle": 145.0,
-                "up_angle": 158.0,
+                "down_angle": 150.0,
+                "up_angle": 154.0,
                 "tolerance": 12.0,
                 "secondary_check": "body_line",
+                "oscillating_joints": ["elbow", "shoulder"],
+            },
+            "pull_up": {
+                "dominant_joint": "elbow",
+                "down_angle": 138.0,
+                "up_angle": 105.0,
+                "tolerance": 28.0,
+                "secondary_check": "vertical_pull",
                 "oscillating_joints": ["elbow", "shoulder"],
             },
             "shoulder_press": {
@@ -1421,6 +1465,8 @@ class PoseSessionService:
             return "squat"
         if "bench" in normalized:
             return "bench_press"
+        if "pull" in normalized or "chin" in normalized:
+            return "pull_up"
         if "push" in normalized:
             return "push_up"
         if "curl" in normalized:
@@ -1438,6 +1484,8 @@ class PoseSessionService:
             return "Drive through your heels and keep the chest tall."
         if exercise_name == "push_up":
             return "Keep the body in one line and lower with control."
+        if exercise_name == "pull_up":
+            return "Pull until the elbows flex clearly, then lower with control."
         if exercise_name == "bench_press":
             return "Keep the wrists stacked and press through a consistent path."
         if exercise_name == "bicep_curl":
@@ -1551,6 +1599,7 @@ class PoseSessionService:
             "dip": 0.47,
             "plank": 0.31,
             "push_up": 0.37,
+            "pull_up": 0.44,
             "shoulder_press": 0.59,
             "squat": 0.48,
         }.get(exercise_name, 0.5)
@@ -1560,6 +1609,7 @@ class PoseSessionService:
             "dip": 0.024,
             "plank": 0.008,
             "push_up": 0.03,
+            "pull_up": 0.026,
             "shoulder_press": 0.024,
             "squat": 0.028,
         }.get(exercise_name, 0.02)
@@ -1593,6 +1643,7 @@ class PoseSessionService:
             "plank": 0.012,
             "bicep_curl": 0.015,
             "dip": 0.017,
+            "pull_up": 0.017,
             "shoulder_press": 0.017,
             "bench_press": 0.018,
             "push_up": 0.018,

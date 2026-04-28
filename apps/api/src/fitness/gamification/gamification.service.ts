@@ -1076,7 +1076,7 @@ export class GamificationService {
         .toNumber();
 
       deltas.set(log.muscleGroupHint, {
-        xp: current.xp + xp,
+        xp: current.xp + Math.max(1, xp),
         volumeKg: current.volumeKg.plus(volumeKg),
       });
     }

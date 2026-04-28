@@ -93,9 +93,26 @@ const SIDE_JOINT_MAP: Record<PoseSideJointName, JointIndexes> = {
 const MIN_CONFIDENCE = 0.5;
 const PUSH_UP_SIDE_ANGLE_CONFIDENCE = 0.25;
 const PUSH_UP_SYMMETRY_TOLERANCE = 55;
-const MIN_RELIABLE_FRAME_LANDMARKS = 16;
+const PULL_UP_SIDE_ANGLE_CONFIDENCE = 0.3;
+const PULL_UP_SYMMETRY_TOLERANCE = 60;
+const MIN_RELIABLE_FRAME_LANDMARKS = 12;
 const POSE_EXERCISE_ALIAS_GROUPS = [
-  { canonical: "push_up", aliases: ["push up", "push-up", "pushup", "push_up"] },
+  {
+    canonical: "push_up",
+    aliases: ["push up", "push-up", "pushup", "push_up"],
+  },
+  {
+    canonical: "pull_up",
+    aliases: [
+      "pull up",
+      "pull-up",
+      "pullup",
+      "pull_up",
+      "chin up",
+      "chin-up",
+      "chinup",
+    ],
+  },
   { canonical: "squat", aliases: ["squat", "back squat"] },
   {
     canonical: "bicep_curl",
@@ -109,9 +126,18 @@ const POSE_EXERCISE_ALIAS_GROUPS = [
   },
   {
     canonical: "dip",
-    aliases: ["dip", "tricep dip", "bench dip", "assisted dip", "parallel bar dip"],
+    aliases: [
+      "dip",
+      "tricep dip",
+      "bench dip",
+      "assisted dip",
+      "parallel bar dip",
+    ],
   },
-  { canonical: "shoulder_press", aliases: ["shoulder press", "press", "shoulder_press"] },
+  {
+    canonical: "shoulder_press",
+    aliases: ["shoulder press", "press", "shoulder_press"],
+  },
   { canonical: "plank", aliases: ["plank"] },
   { canonical: "bench_press", aliases: ["bench press", "bench_press"] },
 ] as const;
@@ -121,9 +147,17 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
 > = {
   bench_press: {
     dominantJoint: "elbow",
-    degradedConditions: ["left_arm_occluded", "right_arm_occluded", "asymmetry_over_tolerance"],
+    degradedConditions: [
+      "left_arm_occluded",
+      "right_arm_occluded",
+      "asymmetry_over_tolerance",
+    ],
     exercise: "bench_press",
-    noCountConditions: ["one_arm_only", "left_right_phase_desync", "bar_path_unavailable"],
+    noCountConditions: [
+      "one_arm_only",
+      "left_right_phase_desync",
+      "bar_path_unavailable",
+    ],
     oscillatingJoints: ["elbow", "shoulder"],
     phaseOrder: ["setup", "down", "up"],
     primaryJoints: ["left_elbow", "right_elbow"],
@@ -146,12 +180,16 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
   bicep_curl: {
     dominantJoint: "elbow",
     exercise: "bicep_curl",
-    noCountConditions: ["equipment_required", "insufficient_elbow_rom", "hip_swing_over_tolerance"],
+    noCountConditions: [
+      "equipment_required",
+      "insufficient_elbow_rom",
+      "hip_swing_over_tolerance",
+    ],
     oscillatingJoints: ["elbow"],
     primaryJoints: ["left_elbow", "right_elbow"],
     repThresholds: {
-      down: { angle: 136, tolerance: 24 },
-      up: { angle: 96, tolerance: 32 },
+      down: { angle: 136, tolerance: 18 },
+      up: { angle: 110, tolerance: 32 },
     },
     repModel: "alternating",
     requiredSides: "either",
@@ -167,7 +205,11 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
   },
   dip: {
     dominantJoint: "elbow",
-    degradedConditions: ["left_arm_occluded", "right_arm_occluded", "phase_desync"],
+    degradedConditions: [
+      "left_arm_occluded",
+      "right_arm_occluded",
+      "phase_desync",
+    ],
     exercise: "dip",
     noCountConditions: [
       "bilateral_arm_motion_unconfirmed",
@@ -214,33 +256,79 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
   },
   push_up: {
     dominantJoint: "elbow",
-    degradedConditions: ["left_arm_occluded", "right_arm_occluded", "body_line_failure", "phase_desync"],
+    degradedConditions: [
+      "left_arm_occluded",
+      "right_arm_occluded",
+      "body_line_failure",
+      "phase_desync",
+    ],
     exercise: "push_up",
-    noCountConditions: ["bilateral_arm_motion_unconfirmed", "push_up_body_not_horizontal", "body_line_failure", "left_right_phase_desync"],
+    noCountConditions: [
+      "bilateral_arm_motion_unconfirmed",
+      "push_up_body_not_horizontal",
+      "body_line_failure",
+      "left_right_phase_desync",
+    ],
     oscillatingJoints: ["elbow", "shoulder"],
     phaseOrder: ["setup", "down", "up"],
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 145, tolerance: 12 },
-      up: { angle: 158, tolerance: 10 },
+      down: { angle: 150, tolerance: 5 },
+      up: { angle: 154, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "body_line",
     secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
     spatialRequirements: {
-      bodyLineTolerance: 74,
+      bodyLineTolerance: 86,
       bodyXDriftMax: 0.22,
       bodyYTravelMin: 0,
       leftRightSymmetryTolerance: PUSH_UP_SYMMETRY_TOLERANCE,
       phaseSyncToleranceMs: 650,
     },
   },
+  pull_up: {
+    dominantJoint: "elbow",
+    degradedConditions: [
+      "left_arm_occluded",
+      "right_arm_occluded",
+      "bar_unavailable",
+    ],
+    exercise: "pull_up",
+    noCountConditions: ["insufficient_elbow_rom", "body_swing_over_tolerance"],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "pull", "lower"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 138, tolerance: 24 },
+      up: { angle: 105, tolerance: 34 },
+    },
+    requiredSides: "either",
+    secondaryCheck: "vertical_pull",
+    secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.16,
+      bodyYTravelMin: 0,
+      leftRightSymmetryTolerance: PULL_UP_SYMMETRY_TOLERANCE,
+      phaseSyncToleranceMs: 700,
+    },
+  },
   shoulder_press: {
     dominantJoint: "shoulder",
-    degradedConditions: ["left_arm_occluded", "right_arm_occluded", "asymmetry_over_tolerance"],
+    degradedConditions: [
+      "left_arm_occluded",
+      "right_arm_occluded",
+      "asymmetry_over_tolerance",
+    ],
     exercise: "shoulder_press",
-    noCountConditions: ["one_arm_only", "left_right_phase_desync", "lockout_control_failure"],
+    noCountConditions: [
+      "one_arm_only",
+      "left_right_phase_desync",
+      "lockout_control_failure",
+    ],
     oscillatingJoints: ["shoulder", "elbow"],
     phaseOrder: ["setup", "down", "up"],
     primaryJoints: ["left_shoulder", "right_shoulder"],
@@ -344,7 +432,10 @@ function averageJointAngle(
       }
       return angleAtPoint(pointA, pointB, pointC);
     })
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    .filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    );
 
   if (!values.length) return null;
   return Number(average(values).toFixed(3));
@@ -386,8 +477,16 @@ function isPoseSideJointName(value: string): value is PoseSideJointName {
   return Object.prototype.hasOwnProperty.call(SIDE_JOINT_MAP, value);
 }
 
-function isPushUpContract(contract: Pick<PoseMovementContractRecord, "exercise">) {
+function isPushUpContract(
+  contract: Pick<PoseMovementContractRecord, "exercise">,
+) {
   return toCanonicalPoseExerciseLabel(contract.exercise) === "push_up";
+}
+
+function isPullUpContract(
+  contract: Pick<PoseMovementContractRecord, "exercise">,
+) {
+  return toCanonicalPoseExerciseLabel(contract.exercise) === "pull_up";
 }
 
 function getLatestExtremumTime(
@@ -399,7 +498,9 @@ function getLatestExtremumTime(
     .map((value, index) => ({ frame: frames[index], value }))
     .filter(
       (entry): entry is { frame: PoseSequenceFrameRecord; value: number } =>
-        !!entry.frame && typeof entry.value === "number" && Number.isFinite(entry.value),
+        !!entry.frame &&
+        typeof entry.value === "number" &&
+        Number.isFinite(entry.value),
     );
   if (!candidates.length) return null;
   const sorted = [...candidates].sort((left, right) =>
@@ -416,17 +517,16 @@ function averageLandmarkVisibility(
 }
 
 function summarizeAmplitude(values: Array<number | null>) {
-  const usable = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const usable = values.filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value),
+  );
   if (!usable.length) return 0;
   return Math.max(...usable) - Math.min(...usable);
 }
 
 function normalizePoseExerciseLabel(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
+  return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
 export function getPoseLandmarkNames() {
@@ -496,7 +596,8 @@ export function getPoseMovementContractAngle(
         ),
       );
     const usable = pushUpSideAngles.filter(
-      (angle): angle is number => typeof angle === "number" && Number.isFinite(angle),
+      (angle): angle is number =>
+        typeof angle === "number" && Number.isFinite(angle),
     );
     if (!usable.length) {
       return null;
@@ -505,6 +606,35 @@ export function getPoseMovementContractAngle(
       const symmetryTolerance = Math.max(
         contract.spatialRequirements?.leftRightSymmetryTolerance ?? 0,
         PUSH_UP_SYMMETRY_TOLERANCE,
+      );
+      if (Math.max(...usable) - Math.min(...usable) > symmetryTolerance) {
+        return null;
+      }
+    }
+    return Number(average(usable).toFixed(3));
+  }
+
+  if (isPullUpContract(contract)) {
+    const pullUpSideAngles = primaryJoints
+      .filter(isPoseSideJointName)
+      .map((joint) =>
+        sideJointAngleWithConfidence(
+          keypoints,
+          SIDE_JOINT_MAP[joint],
+          PULL_UP_SIDE_ANGLE_CONFIDENCE,
+        ),
+      );
+    const usable = pullUpSideAngles.filter(
+      (angle): angle is number =>
+        typeof angle === "number" && Number.isFinite(angle),
+    );
+    if (!usable.length) {
+      return null;
+    }
+    if (usable.length >= 2) {
+      const symmetryTolerance = Math.max(
+        contract.spatialRequirements?.leftRightSymmetryTolerance ?? 0,
+        PULL_UP_SYMMETRY_TOLERANCE,
       );
       if (Math.max(...usable) - Math.min(...usable) > symmetryTolerance) {
         return null;
@@ -572,8 +702,6 @@ export function computePoseSignals(
   const angles = computePoseAngleSignals(frames);
   const lastFrame = frames.at(-1);
   const latestKeypoints = lastFrame?.keypoints ?? [];
-  const leftHip = latestKeypoints[23];
-  const rightHip = latestKeypoints[24];
   const leftWrist = latestKeypoints[15];
   const rightWrist = latestKeypoints[16];
   const leftFoot = latestKeypoints[31];
@@ -619,7 +747,9 @@ export function computePoseSignals(
   const leftElbowSeries = angles.map((entry) => entry.leftElbow ?? null);
   const rightElbowSeries = angles.map((entry) => entry.rightElbow ?? null);
   const leftShoulderSeries = angles.map((entry) => entry.leftShoulder ?? null);
-  const rightShoulderSeries = angles.map((entry) => entry.rightShoulder ?? null);
+  const rightShoulderSeries = angles.map(
+    (entry) => entry.rightShoulder ?? null,
+  );
   const leftKneeSeries = angles.map((entry) => entry.leftKnee ?? null);
   const rightKneeSeries = angles.map((entry) => entry.rightKnee ?? null);
   const amplitudes = {
@@ -639,16 +769,19 @@ export function computePoseSignals(
     .map(([joint]) => joint);
 
   const reliableFrameCount = frames.filter((frame) => {
-    const visible = frame.keypoints.filter((point) => point.visibility >= MIN_CONFIDENCE);
+    const visible = frame.keypoints.filter(
+      (point) => point.visibility >= MIN_CONFIDENCE,
+    );
     return visible.length >= MIN_RELIABLE_FRAME_LANDMARKS;
   }).length;
 
-  const torsoVector = nose && hipCenter
-    ? {
-        x: Number((hipCenter.x - nose.x).toFixed(4)),
-        y: Number((hipCenter.y - nose.y).toFixed(4)),
-      }
-    : { x: 0, y: 0 };
+  const torsoVector =
+    nose && hipCenter
+      ? {
+          x: Number((hipCenter.x - nose.x).toFixed(4)),
+          y: Number((hipCenter.y - nose.y).toFixed(4)),
+        }
+      : { x: 0, y: 0 };
   const torsoSlopeDeg =
     shoulderCenter && hipCenter
       ? Number(
@@ -663,12 +796,28 @@ export function computePoseSignals(
         )
       : 0;
   const bodyOrientation =
-    torsoSlopeDeg > 55 ? "upright" : torsoSlopeDeg < 35 ? "horizontal" : "inclined";
+    torsoSlopeDeg > 55
+      ? "upright"
+      : torsoSlopeDeg < 35
+        ? "horizontal"
+        : "inclined";
 
-  const hipRange = hipYValues.length ? Math.max(...hipYValues) - Math.min(...hipYValues) : 0;
-  const hipXRange = hipXValues.length ? Math.max(...hipXValues) - Math.min(...hipXValues) : 0;
-  const leftElbowBottomMs = getLatestExtremumTime(frames, leftElbowSeries, "min");
-  const rightElbowBottomMs = getLatestExtremumTime(frames, rightElbowSeries, "min");
+  const hipRange = hipYValues.length
+    ? Math.max(...hipYValues) - Math.min(...hipYValues)
+    : 0;
+  const hipXRange = hipXValues.length
+    ? Math.max(...hipXValues) - Math.min(...hipXValues)
+    : 0;
+  const leftElbowBottomMs = getLatestExtremumTime(
+    frames,
+    leftElbowSeries,
+    "min",
+  );
+  const rightElbowBottomMs = getLatestExtremumTime(
+    frames,
+    rightElbowSeries,
+    "min",
+  );
   const phaseSyncMs =
     leftElbowBottomMs !== null && rightElbowBottomMs !== null
       ? Math.abs(leftElbowBottomMs - rightElbowBottomMs)
@@ -695,7 +844,10 @@ export function computePoseSignals(
     visibility: {
       averageVisibility: Number(averageVisibility.toFixed(4)),
       feetVisibility: Number(
-        average([leftFoot?.visibility ?? 0, rightFoot?.visibility ?? 0]).toFixed(4),
+        average([
+          leftFoot?.visibility ?? 0,
+          rightFoot?.visibility ?? 0,
+        ]).toFixed(4),
       ),
       leftArmVisibility: Number(
         averageLandmarkVisibility(latestKeypoints, [11, 13, 15]).toFixed(4),
@@ -706,7 +858,10 @@ export function computePoseSignals(
         averageLandmarkVisibility(latestKeypoints, [12, 14, 16]).toFixed(4),
       ),
       wristVisibility: Number(
-        average([leftWrist?.visibility ?? 0, rightWrist?.visibility ?? 0]).toFixed(4),
+        average([
+          leftWrist?.visibility ?? 0,
+          rightWrist?.visibility ?? 0,
+        ]).toFixed(4),
       ),
     },
   };
@@ -729,7 +884,9 @@ export function summarizeMovementGuidance(
 
   if (
     contract.requiredSides === "both" &&
-    contract.primaryJoints?.some((joint) => lowConfidenceLandmarks.includes(joint))
+    contract.primaryJoints?.some((joint) =>
+      lowConfidenceLandmarks.includes(joint),
+    )
   ) {
     tips.push("Keep both arms visible so bilateral reps count cleanly.");
   }
@@ -745,8 +902,10 @@ export function summarizeMovementGuidance(
     Math.PI;
 
   if (contract.secondaryCheck === "body_line") {
-    if (isPushUpContract(contract) && torsoSlopeDeg > 74) {
-      tips.push("Set up side-on and horizontal; upright curls will not count as push-ups.");
+    if (isPushUpContract(contract) && torsoSlopeDeg > 86) {
+      tips.push(
+        "Set up side-on and horizontal; upright curls will not count as push-ups.",
+      );
     } else {
       tips.push("Keep shoulders, hips, and ankles moving as one line.");
     }

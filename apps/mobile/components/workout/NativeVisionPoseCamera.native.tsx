@@ -17,7 +17,7 @@ import type {
   NativeVisionPoseCameraProps,
 } from "@/components/workout/NativeVisionPoseCamera.types";
 
-const TARGET_POSE_FPS = 15;
+const TARGET_POSE_FPS = 20;
 const EQUIPMENT_SNAPSHOT_INTERVAL_MS = 1800;
 const LANDMARK_KEY_ALIASES = [
   ["nose"],

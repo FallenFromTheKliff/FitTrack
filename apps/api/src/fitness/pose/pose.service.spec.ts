@@ -312,6 +312,7 @@ describe('PoseService', () => {
       exerciseHint: null,
       starterCatalog: [
         'push_up',
+        'pull_up',
         'squat',
         'bicep_curl',
         'shoulder_press',
@@ -1000,6 +1001,8 @@ describe('PoseService', () => {
     });
 
     expect(aiClient.detectEquipment).toHaveBeenCalledWith({
+      cameraFacingMode: 'environment',
+      exerciseHint: 'Dumbbell Bicep Curl',
       frameBase64: 'frame-data',
     });
   });

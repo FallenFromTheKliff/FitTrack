@@ -29,7 +29,10 @@ export function normalizePoseExerciseHint(value: unknown): string | null {
 export function toCanonicalPoseExerciseHint(
   exerciseHint: string | null,
 ): string | null {
-  const normalized = exerciseHint?.trim().toLowerCase().replace(/\s+/g, '_');
+  const normalized = exerciseHint
+    ?.trim()
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, '_');
 
   if (!normalized) {
     return null;
