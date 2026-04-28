@@ -6,7 +6,7 @@ test('load members page', async ({ page }) => {
 
     await page.goto('http://localhost:8080/login');
     await page.fill('input[type="email"]', 'seed.admin@fittrack.com');
-    await page.fill('input[type="password"]', 'Password123!');
+    await page.fill('input[type="password"]', 'SeedAdmin!2026');
     await page.click('button[type="submit"]');
 
     await page.waitForURL('http://localhost:8080/dashboard');

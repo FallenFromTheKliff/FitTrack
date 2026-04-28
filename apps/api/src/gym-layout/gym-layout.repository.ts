@@ -21,6 +21,15 @@ export class GymLayoutRepository extends BaseRepository {
     );
   }
 
+  listArchivedEquipment(): Promise<GymEquipment[]> {
+    return this.findAll<GymEquipment>(
+      this.prisma.gymEquipment,
+      { is_active: false },
+      undefined,
+      gymLayoutEquipmentOrderBy,
+    );
+  }
+
   findEquipmentByIdOrThrow(id: string): Promise<GymEquipment> {
     return this.findByIdOrThrow<GymEquipment>(
       this.prisma.gymEquipment,
@@ -43,6 +52,12 @@ export class GymLayoutRepository extends BaseRepository {
   softDeleteEquipment(id: string): Promise<GymEquipment> {
     return this.updateById<GymEquipment>(this.prisma.gymEquipment, id, {
       is_active: false,
+    });
+  }
+
+  restoreEquipment(id: string): Promise<GymEquipment> {
+    return this.updateById<GymEquipment>(this.prisma.gymEquipment, id, {
+      is_active: true,
     });
   }
 }

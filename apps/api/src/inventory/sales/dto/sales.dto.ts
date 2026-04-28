@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -12,14 +13,19 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentStatus, SalePaymentMethod, SaleStatus } from '@prisma/client';
+import {
+  PaymentStatus,
+  SalePaymentMethod,
+  SaleSource,
+  SaleStatus,
+} from '@prisma/client';
 
 import { TrimString } from '../../../common/validators';
 import { DateRangeDTO } from '../../../user/dto/user-dto';
 
 export class CreateSaleItemDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
-  @IsUUID('4', { message: 'product_id must be a valid UUID' })
+  @IsUUID('all', { message: 'product_id must be a valid UUID' })
   product_id: string;
 
   @ApiProperty({ example: 2 })
@@ -27,6 +33,16 @@ export class CreateSaleItemDTO {
   @IsInt({ message: 'quantity must be an integer' })
   @Min(1, { message: 'quantity must be at least 1' })
   quantity: number;
+
+  @ApiPropertyOptional({ example: 1299.0, nullable: true })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'unit_price must be a valid price with up to 2 decimals' },
+  )
+  @Min(0.01, { message: 'unit_price must be greater than 0' })
+  unit_price?: number;
 }
 
 export class CreateSaleDTO {
@@ -44,8 +60,18 @@ export class CreateSaleDTO {
     nullable: true,
   })
   @IsOptional()
-  @IsUUID('4', { message: 'customer_user_id must be a valid UUID' })
+  @IsUUID('all', { message: 'customer_user_id must be a valid UUID' })
   customer_user_id?: string;
+
+  @ApiPropertyOptional({
+    example: 'Counter sale paid in cash after a quick stock check.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'notes must be a string' })
+  @MaxLength(500, { message: 'notes must not exceed 500 characters' })
+  notes?: string;
 
   @ApiProperty({ enum: SalePaymentMethod, example: SalePaymentMethod.cash })
   @IsEnum(SalePaymentMethod, {
@@ -133,8 +159,17 @@ export class SaleTransactionSummaryResponseDTO {
   })
   customer_user_id: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Counter sale paid in cash after a quick stock check.',
+    nullable: true,
+  })
+  notes: string | null;
+
   @ApiProperty({ example: '2998.00' })
   total_amount: string;
+
+  @ApiProperty({ enum: SaleSource, example: SaleSource.manual })
+  source: SaleSource;
 
   @ApiProperty({ enum: SalePaymentMethod, example: SalePaymentMethod.cash })
   payment_method: SalePaymentMethod;

@@ -12,10 +12,12 @@ describe('GymLayoutService', () => {
 
   const repo = {
     listActiveEquipment: jest.fn(),
+    listArchivedEquipment: jest.fn(),
     createEquipment: jest.fn(),
     findEquipmentByIdOrThrow: jest.fn(),
     updateEquipment: jest.fn(),
     softDeleteEquipment: jest.fn(),
+    restoreEquipment: jest.fn(),
   };
 
   const jwtService = {
@@ -117,6 +119,35 @@ describe('GymLayoutService', () => {
         created_at: '2026-03-27T02:00:00.000Z',
         updated_at: '2026-03-27T03:00:00.000Z',
       },
+    ]);
+  });
+
+  it('lists archived equipment with decimal positions mapped to numbers', async () => {
+    repo.listArchivedEquipment.mockResolvedValue([
+      {
+        id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 10,
+        grid_row: 4,
+        name: 'Leg Press Station',
+        type: 'strength',
+        position_x: { toString: () => '67.86' },
+        position_y: { toString: () => '35' },
+        status: EquipmentStatus.available,
+        icon_key: null,
+        is_active: false,
+        created_at: new Date('2026-03-27T02:00:00.000Z'),
+        updated_at: new Date('2026-03-27T03:00:00.000Z'),
+      },
+    ]);
+
+    await expect(service.listArchivedEquipment()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'equipment-1',
+        is_active: false,
+        position_x: 67.86,
+        position_y: 35,
+      }),
     ]);
   });
 
@@ -293,6 +324,39 @@ describe('GymLayoutService', () => {
     expect(redis.publish).toHaveBeenCalledWith(
       'equipment:status',
       expect.stringContaining('"operation":"remove"'),
+    );
+  });
+
+  it('restores equipment through the repository and realtime cache', async () => {
+    repo.restoreEquipment.mockResolvedValue({
+      id: 'equipment-1',
+      floor_id: 'floor-1',
+      grid_column: 10,
+      grid_row: 4,
+      name: 'Leg Press Station',
+      type: 'strength',
+      position_x: 67.86,
+      position_y: 35,
+      status: EquipmentStatus.available,
+      icon_key: null,
+      is_active: true,
+      created_at: new Date('2026-03-27T02:00:00.000Z'),
+      updated_at: new Date('2026-03-27T03:00:00.000Z'),
+    });
+    redis.hset.mockResolvedValue(1);
+    redis.publish.mockResolvedValue(1);
+
+    await service.restoreEquipment('equipment-1');
+
+    expect(repo.restoreEquipment).toHaveBeenCalledWith('equipment-1');
+    expect(redis.hset).toHaveBeenCalledWith(
+      'equipment_status',
+      'equipment-1',
+      EquipmentStatus.available,
+    );
+    expect(redis.publish).toHaveBeenCalledWith(
+      'equipment:status',
+      expect.stringContaining('"operation":"upsert"'),
     );
   });
 });

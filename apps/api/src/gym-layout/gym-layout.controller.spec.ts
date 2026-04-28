@@ -9,8 +9,10 @@ import { GymLayoutController } from './gym-layout.controller';
 function getGuardMetadata(
   methodName:
     | 'listEquipment'
+    | 'listArchivedEquipment'
     | 'createEquipment'
     | 'updateEquipment'
+    | 'restoreEquipment'
     | 'deleteEquipment',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
@@ -20,7 +22,12 @@ function getGuardMetadata(
 }
 
 function getRolesMetadata(
-  methodName: 'createEquipment' | 'updateEquipment' | 'deleteEquipment',
+  methodName:
+    | 'listArchivedEquipment'
+    | 'createEquipment'
+    | 'updateEquipment'
+    | 'restoreEquipment'
+    | 'deleteEquipment',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -31,8 +38,10 @@ function getRolesMetadata(
 describe('GymLayoutController', () => {
   const gymLayoutService = {
     listEquipment: jest.fn(),
+    listArchivedEquipment: jest.fn(),
     createEquipment: jest.fn(),
     updateEquipment: jest.fn(),
+    restoreEquipment: jest.fn(),
     deleteEquipment: jest.fn(),
   };
 
@@ -55,6 +64,14 @@ describe('GymLayoutController', () => {
     expect(getGuardMetadata('listEquipment')).toEqual([JwtAuthGuard]);
   });
 
+  it('lists archived equipment through the service', async () => {
+    gymLayoutService.listArchivedEquipment.mockResolvedValue([{ id: 'equipment-1' }]);
+
+    await controller.listArchivedEquipment();
+
+    expect(gymLayoutService.listArchivedEquipment).toHaveBeenCalled();
+  });
+
   it('creates equipment through the service', async () => {
     gymLayoutService.createEquipment.mockResolvedValue({ id: 'equipment-1' });
 
@@ -75,13 +92,23 @@ describe('GymLayoutController', () => {
     });
   });
 
-  it.each(['createEquipment', 'updateEquipment', 'deleteEquipment'] as const)(
+  it.each(['listArchivedEquipment', 'createEquipment', 'updateEquipment', 'restoreEquipment', 'deleteEquipment'] as const)(
     'locks %s to admin users',
     (methodName) => {
       expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
       expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
     },
   );
+
+  it('restores equipment through the service', async () => {
+    gymLayoutService.restoreEquipment.mockResolvedValue({ id: 'equipment-1' });
+
+    await controller.restoreEquipment('equipment-1');
+
+    expect(gymLayoutService.restoreEquipment).toHaveBeenCalledWith(
+      'equipment-1',
+    );
+  });
 
   it('returns a confirmation message after soft delete', async () => {
     gymLayoutService.deleteEquipment.mockResolvedValue(undefined);

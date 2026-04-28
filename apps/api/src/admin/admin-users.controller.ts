@@ -21,7 +21,7 @@ import { AdminUsersService } from './admin-users.service';
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.admin, UserRole.staff)
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
@@ -36,6 +36,7 @@ export class AdminUsersController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary: 'Archive a user directory record by soft deleting the account.',
   })
@@ -47,6 +48,7 @@ export class AdminUsersController {
   }
 
   @Patch(':id/restore')
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary: 'Restore an archived user directory record to active status.',
   })
@@ -58,15 +60,20 @@ export class AdminUsersController {
   }
 
   @Post('upgrade-to-coach')
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Upgrade an existing member or staff account into a coach account.',
   })
-  upgradeToCoach(@Body() dto: UpgradeToCoachDto) {
-    return this.adminUsersService.upgradeToCoach(dto);
+  upgradeToCoach(
+    @Body() dto: UpgradeToCoachDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.adminUsersService.upgradeToCoach(dto, user.sub);
   }
 
   @Patch(':id/membership-card')
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Grant or revoke membership-card access for a member directory record.',

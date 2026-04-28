@@ -8,6 +8,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 
 import type { NotificationDispatchPayload } from './notification-dispatch.types';
 import { NotificationDomainEventsListener } from './notification-domain-events.listener';
+import { NotificationsRepository } from './notifications.repository';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationDomainEventsListener', () => {
@@ -16,12 +17,19 @@ describe('NotificationDomainEventsListener', () => {
   const notificationsService = {
     dispatch: jest.fn(),
   };
+  const notificationsRepository = {
+    listManagementNotificationRecipients: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationDomainEventsListener,
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: NotificationsRepository,
+          useValue: notificationsRepository,
+        },
       ],
     }).compile();
 
@@ -29,6 +37,9 @@ describe('NotificationDomainEventsListener', () => {
       NotificationDomainEventsListener,
     );
     jest.clearAllMocks();
+    notificationsRepository.listManagementNotificationRecipients.mockResolvedValue(
+      [],
+    );
   });
 
   it('dispatches welcome notices for registered users through the system path', async () => {
@@ -112,5 +123,35 @@ describe('NotificationDomainEventsListener', () => {
     expect(
       (dispatchCalls[0]?.[2].data as Record<string, unknown>).payment_id,
     ).toBe('payment-1');
+  });
+
+  it('dispatches account activity notices to management recipients', async () => {
+    notificationsRepository.listManagementNotificationRecipients.mockResolvedValue(
+      [{ user_id: 'admin-1' }, { user_id: 'staff-1' }],
+    );
+
+    await listener.handleAccountActivity({
+      action: 'account_archived',
+      actorId: 'actor-1',
+      occurredAt: '2026-04-25T08:00:00.000Z',
+      targetEmail: 'member@fittrack.test',
+      targetRole: UserRole.member,
+      targetUserId: 'member-1',
+    });
+
+    const dispatchCalls = notificationsService.dispatch.mock.calls as Array<
+      [string, NotificationType, NotificationDispatchPayload]
+    >;
+
+    expect(dispatchCalls).toHaveLength(2);
+    expect(dispatchCalls[0]?.[0]).toBe('admin-1');
+    expect(dispatchCalls[1]?.[0]).toBe('staff-1');
+    expect(dispatchCalls[0]?.[1]).toBe(NotificationType.system);
+    expect(dispatchCalls[0]?.[2].title).toBe(
+      'Account archived: member@fittrack.test',
+    );
+    expect(
+      (dispatchCalls[0]?.[2].data as Record<string, unknown>).action,
+    ).toBe('account_archived');
   });
 });

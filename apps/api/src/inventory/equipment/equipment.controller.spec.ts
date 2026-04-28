@@ -103,6 +103,42 @@ describe('EquipmentController', () => {
     );
   });
 
+  it('forwards equipment create and update requests with the authenticated actor id', async () => {
+    equipmentService.createEquipmentItem.mockResolvedValue({
+      id: 'equipment-1',
+    });
+    equipmentService.updateEquipmentItem.mockResolvedValue({
+      id: 'equipment-1',
+    });
+
+    await controller.createEquipment({ sub: 'admin-1' } as never, {
+      name: 'Adjustable Bench',
+      quantity_total: 8,
+      quantity_current: 6,
+    });
+    await controller.updateEquipment(
+      { sub: 'admin-1' } as never,
+      'equipment-1',
+      {
+        unit: 'sets',
+      },
+    );
+
+    expect(equipmentService.createEquipmentItem).toHaveBeenCalledWith(
+      'admin-1',
+      expect.objectContaining({
+        name: 'Adjustable Bench',
+      }),
+    );
+    expect(equipmentService.updateEquipmentItem).toHaveBeenCalledWith(
+      'admin-1',
+      'equipment-1',
+      {
+        unit: 'sets',
+      },
+    );
+  });
+
   it('loads paginated write-off history through the service', async () => {
     equipmentService.getWriteOffHistory.mockResolvedValue({
       data: [],

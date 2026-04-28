@@ -38,11 +38,11 @@ describe('SalesController', () => {
     jest.clearAllMocks();
   });
 
-  it('locks sale creation to staff users', async () => {
+  it('allows admin, staff, and member actors to create sales', async () => {
     salesService.createSale.mockResolvedValue({ id: 'sale-1' });
 
     await controller.createSale(
-      { sub: 'staff-1' } as never,
+      { sub: 'staff-1', role: UserRole.staff } as never,
       {
         payment_method: 'cash',
         items: [{ product_id: 'product-1', quantity: 2 }],
@@ -51,9 +51,13 @@ describe('SalesController', () => {
     );
 
     expect(getGuardMetadata('createSale')).toEqual([JwtAuthGuard, RolesGuard]);
-    expect(getRolesMetadata('createSale')).toEqual([UserRole.staff]);
+    expect(getRolesMetadata('createSale')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+      UserRole.member,
+    ]);
     expect(salesService.createSale).toHaveBeenCalledWith(
-      'staff-1',
+      { sub: 'staff-1', role: UserRole.staff },
       {
         payment_method: 'cash',
         items: [{ product_id: 'product-1', quantity: 2 }],

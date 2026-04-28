@@ -99,3 +99,16 @@ export function deleteNotificationMutationOptions(
     },
   });
 }
+
+export function deleteAllNotificationsMutationOptions(
+  client: Pick<ApiClient, "notifications">,
+  queryClient: QueryClient,
+  userId?: string,
+) {
+  return mutationOptions({
+    mutationFn: () => client.notifications.deleteAllNotifications(),
+    onSuccess: async () => {
+      await invalidateNotifications(queryClient, userId);
+    },
+  });
+}

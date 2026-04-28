@@ -1,18 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue
 } from "react-native-reanimated";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import {
   CalendarDays,
   Dumbbell,
+  Flame,
   ShieldCheck,
   Sparkles,
+  Target,
   Trophy,
   User,
   Zap,
@@ -50,9 +52,10 @@ import { makeHomeStyles, makeScreenStyles } from "@/styles/shared/ScreenStyles";
 import { getTodayString } from "@/data/bookings";
 import { toMobileBookings } from "@/utils/venueBookings";
 
-import { AnimatedFitText, FitText } from "@/components/fit/FitText";
+import FitButton from "@/components/fit/FitButton";
 import FitCard from "@/components/fit/FitCard";
 import FitSection from "@/components/fit/FitSection";
+import { AnimatedFitText, FitText } from "@/components/fit/FitText";
 import BookingDetailModal from "@/components/modals/booking/BookingDetailModal";
 
 type HomeStatCard = {
@@ -67,6 +70,14 @@ type HomeSnapshotRow = {
   subtitle: string;
   trailingLabel: string;
   trailingLabelColor: string;
+};
+
+type HomeQuickAction = {
+  icon: LucideIcon;
+  key: string;
+  label: string;
+  onPress: () => void;
+  subtitle: string;
 };
 
 const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
@@ -134,8 +145,31 @@ function countRecentCompletedSessions(sessions: WorkoutSessionSummaryRecord[]) {
   }).length;
 }
 
+function countCurrentStreakDays(sessions: WorkoutSessionSummaryRecord[]) {
+  const completedDayKeys = new Set(
+    sessions
+      .filter((session) => session.status === "completed")
+      .map((session) => getLocalDayKey(session.completedAt ?? session.startedAt))
+  );
+
+  let streak = 0;
+  const cursor = new Date();
+  while (
+    completedDayKeys.has(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(
+        cursor.getDate()
+      ).padStart(2, "0")}`
+    )
+  ) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 export default function HomeScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const isFocused = useIsFocused();
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
@@ -238,6 +272,11 @@ export default function HomeScreen() {
   const leaderboardEntry = leaderboard.find((entry) => entry.userId === user?.id) ?? null;
   const completedSessionsLast7Days = countRecentCompletedSessions(sessions);
   const activeDaysLast7Days = countRecentActiveDays(sessions);
+  const currentStreakDays = countCurrentStreakDays(sessions);
+  const currentTimeLabel = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  });
   const bookingsLoading = venuesQuery.isPending || bookingsQuery.isPending;
   const bookingsErrorMessage =
     (venuesQuery.error as Error | null)?.message ??
@@ -300,7 +339,7 @@ export default function HomeScreen() {
         },
         {
           label: "Workout Momentum",
-          subtitle: `${completedSessionsLast7Days} completed session${completedSessionsLast7Days === 1 ? "" : "s"} across ${activeDaysLast7Days} active day${activeDaysLast7Days === 1 ? "" : "s"} in the last 7 days.`,
+          subtitle: `${completedSessionsLast7Days} completed session${completedSessionsLast7Days === 1 ? "" : "s"} across ${activeDaysLast7Days} active day${activeDaysLast7Days === 1 ? "" : "s"} in the last 7 days, with a current ${currentStreakDays}-day streak.`,
           trailingLabel: highestRankEntry?.rankDisplay ?? "Unranked",
           trailingLabelColor: highestRankEntry ? colors.success : colors.textMuted,
           progress: clampProgress(completedSessionsLast7Days / 4)
@@ -352,6 +391,7 @@ export default function HomeScreen() {
     colors.textMuted,
     colors.warning,
     completedSessionsLast7Days,
+    currentStreakDays,
     hasMemberCardAccess,
     highestRankEntry,
     leaderboardEntry,
@@ -364,7 +404,107 @@ export default function HomeScreen() {
     targetCalories
   ]);
 
-  const insightCard = useMemo(() => {
+  const quickActions = useMemo<HomeQuickAction[]>(() => {
+    if (isCoach) {
+      return [
+        {
+          key: "view-schedule",
+          icon: CalendarDays,
+          label: "View Coach Schedule",
+          subtitle: "Open bookings to review the appointments assigned to you.",
+          onPress: () => router.push("/(tabs)/bookings")
+        },
+        {
+          key: "open-facilities",
+          icon: Dumbbell,
+          label: "Open Facilities",
+          subtitle: "Jump into the live venue and equipment view for floor awareness.",
+          onPress: () => router.push("/(tabs)/facilities")
+        }
+      ];
+    }
+
+    if (!hasMemberCardAccess) {
+      return [
+        {
+          key: "book-now",
+          icon: CalendarDays,
+          label: "Book Now",
+          subtitle: "Reserve a venue slot and keep the member flow moving.",
+          onPress: () => router.push("/(tabs)/bookings?openReservation=true")
+        },
+        {
+          key: "unlock-access",
+          icon: ShieldCheck,
+          label: "Unlock Member Access",
+          subtitle: "Open Profile to buy, verify, or repair your membership card.",
+          onPress: () => router.push("/(tabs)/profile")
+        }
+      ];
+    }
+
+    if (targetCalories === null) {
+      return [
+        {
+          key: "set-target",
+          icon: Target,
+          label: "Set Nutrition Goal",
+          subtitle: "Save a target calorie plan so the home snapshot can coach you better.",
+          onPress: () => router.push("/(tabs)/nutrition")
+        },
+        {
+          key: "book-session",
+          icon: CalendarDays,
+          label: todayBookings.length > 0 ? "View Bookings" : "Book Now",
+          subtitle: todayBookings.length > 0
+            ? "Review today's schedule and upcoming reservations."
+            : "Reserve a slot if you want a session lined up for today.",
+          onPress: () =>
+            router.push(
+              todayBookings.length > 0
+                ? "/(tabs)/bookings"
+                : "/(tabs)/bookings?openReservation=true"
+            )
+        }
+      ];
+    }
+
+    return [
+      {
+        key: "start-workout",
+        icon: Dumbbell,
+        label: completedSessionsLast7Days === 0 ? "Start Workout" : "Continue Workout",
+        subtitle: completedSessionsLast7Days === 0
+          ? "No completed workout is logged this week yet. Start one now."
+          : "Keep your current streak alive with another logged session.",
+        onPress: () => router.push("/(tabs)/workout")
+      },
+      {
+        key: "book-session",
+        icon: CalendarDays,
+        label: todayBookings.length > 0 ? "View Schedule" : "Book Now",
+        subtitle: todayBookings.length > 0
+          ? "Open bookings to review or manage the rest of today's plan."
+          : "No booking is lined up for today yet. Reserve one in a few taps.",
+        onPress: () =>
+          router.push(
+            todayBookings.length > 0
+              ? "/(tabs)/bookings"
+              : "/(tabs)/bookings?openReservation=true"
+          )
+      }
+    ];
+  }, [completedSessionsLast7Days, hasMemberCardAccess, isCoach, router, targetCalories, todayBookings.length]);
+
+  const pinnedGoalCard = useMemo(() => {
+    if (isCoach) {
+      return {
+        body: "Coach bookings, member appointments, and the shared booking truth are already wired into the mobile stack.",
+        icon: CalendarDays as LucideIcon,
+        title: "Pinned Goal: keep your coach schedule clean"
+      };
+    }
+
     if (!hasMemberCardAccess) {
       return {
         body: membershipCardStatus === "pending_verification"
@@ -377,7 +517,7 @@ export default function HomeScreen() {
           ? "Membership card verification in progress"
           : membershipCardStatus === "revoked"
             ? "Member access needs repair"
-            : "Unlock the full member stack"
+            : "Pinned Goal: unlock the full member stack"
       };
     }
 
@@ -385,15 +525,23 @@ export default function HomeScreen() {
       return {
         body: "Refreshing nutrition, workouts, bookings, and mastery from the live stack.",
         icon: Sparkles as LucideIcon,
-        title: "Loading your live member snapshot"
+        title: "Pinned Goal is loading"
       };
     }
 
     if (targetCalories === null) {
       return {
-        body: "Daily calories are live, but saving a nutrition target gives this screen a much sharper coaching snapshot.",
-        icon: Sparkles as LucideIcon,
-        title: "Nutrition target still open"
+        body: "Save a nutrition target so daily calories, recovery planning, and AI coaching can stay anchored to a real goal.",
+        icon: Target as LucideIcon,
+        title: "Pinned Goal: set your nutrition target"
+      };
+    }
+
+    if (currentStreakDays < 3) {
+      return {
+        body: `You are on a ${currentStreakDays}-day streak. Log ${Math.max(3 - currentStreakDays, 1)} more active day${currentStreakDays === 2 ? "" : "s"} to hit the next consistency checkpoint.`,
+        icon: Flame as LucideIcon,
+        title: "Pinned Goal: build a 3-day streak"
       };
     }
 
@@ -401,27 +549,29 @@ export default function HomeScreen() {
       return {
         body: `You have ${todayBookings.length} booking${todayBookings.length === 1 ? "" : "s"} today and ${completedSessionsLast7Days} completed workout session${completedSessionsLast7Days === 1 ? "" : "s"} in the last 7 days.`,
         icon: CalendarDays as LucideIcon,
-        title: "Today's schedule is already moving"
+        title: "Pinned Goal: stay on today's plan"
       };
     }
 
     if (highestRankEntry) {
       return {
-        body: `${highestRankEntry.muscleGroup} is currently your strongest tracked group, and the rest of the member stack is ready when you are.`,
+        body: `${highestRankEntry.muscleGroup} is currently your strongest tracked group. One more strong session keeps ${highestRankEntry.rankDisplay} momentum moving.`,
         icon: Trophy as LucideIcon,
-        title: `${highestRankEntry.rankDisplay} momentum is active`
+        title: `Pinned Goal: defend ${highestRankEntry.rankDisplay}`
       };
     }
 
     return {
-      body: "BrodigyAI, bookings, nutrition, and future workouts are already aligned around the current member contract.",
+      body: "BrodigyAI, bookings, nutrition, and future workouts are already aligned around the current member contract. Your best next move is another workout session.",
       icon: Sparkles as LucideIcon,
-      title: "Member stack is live"
+      title: "Pinned Goal: keep the member stack moving"
     };
   }, [
     completedSessionsLast7Days,
+    currentStreakDays,
     hasMemberCardAccess,
     highestRankEntry,
+    isCoach,
     memberSnapshotLoading,
     membershipCardStatus,
     targetCalories,
@@ -457,7 +607,7 @@ export default function HomeScreen() {
               Welcome Back, {firstName}!
             </AnimatedFitText>
             <AnimatedFitText style={[s.greetingDate, greetingDateStyle]}>
-              {formatTodayLong()}
+              {formatTodayLong()} • {currentTimeLabel}
             </AnimatedFitText>
           </View>
           {bookingsErrorMessage || memberSnapshotError ? (
@@ -492,6 +642,14 @@ export default function HomeScreen() {
                 <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
                   <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
                   <FitText style={{ fontSize: 14, color: colors.textMuted }}>No bookings scheduled for today</FitText>
+                  {!isCoach ? (
+                    <View style={{ width: "100%", marginTop: 10 }}>
+                      <FitButton
+                        label="Book Now"
+                        onPress={() => router.push("/(tabs)/bookings?openReservation=true")}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               ) : (
                 <ScrollView
@@ -532,13 +690,34 @@ export default function HomeScreen() {
             </FitSection>
           </View>
           <View style={s.sectionWrap}>
+            <FitSection heading="WORKOUT SUGGESTIONS">
+              <View style={s.quickGrid}>
+                {quickActions.map((action) => (
+                  <Pressable
+                    key={action.key}
+                    onPress={action.onPress}
+                    style={s.quickCard}
+                  >
+                    <View style={[s.quickIconBox, { backgroundColor: colors.brand + "18" }]}>
+                      <action.icon size={20} color={colors.brand} strokeWidth={1.8} />
+                    </View>
+                    <View>
+                      <FitText style={s.quickLabel}>{action.label}</FitText>
+                      <FitText style={s.quickSub}>{action.subtitle}</FitText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </FitSection>
+          </View>
+          <View style={s.sectionWrap}>
             <Animated.View style={[s.badgeBanner, surfaceStyle]}>
               <View style={s.badgeIconBox}>
-                <insightCard.icon size={22} color={colors.brand} strokeWidth={2} />
+                <pinnedGoalCard.icon size={22} color={colors.brand} strokeWidth={2} />
               </View>
               <View style={{ flex: 1 }}>
-                <FitText style={s.badgeBannerTitle}>{insightCard.title}</FitText>
-                <FitText style={s.badgeBannerBody}>{insightCard.body}</FitText>
+                <FitText style={s.badgeBannerTitle}>{pinnedGoalCard.title}</FitText>
+                <FitText style={s.badgeBannerBody}>{pinnedGoalCard.body}</FitText>
               </View>
             </Animated.View>
           </View>

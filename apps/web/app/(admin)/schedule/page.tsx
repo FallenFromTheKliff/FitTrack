@@ -15,14 +15,26 @@ import {
 } from "@tanstack/react-query";
 import type { MotionStyle } from "framer-motion";
 import { toast } from "sonner";
-import type { StaffAppointmentRecord } from "@fittrack/api-client";
+import type {
+  RecurringCoachingPlanInput,
+  RecurringCoachingPlanPreviewResult,
+  StaffAppointmentRecord,
+} from "@fittrack/api-client";
+import type { MemberRecord } from "@fittrack/types";
 import {
+  bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelStaffAppointmentMutationOptions,
+  cancelRecurringCoachingPlanMutationOptions,
   completeStaffAppointmentMutationOptions,
+  createRecurringCoachingPlanMutationOptions,
+  previewRecurringCoachingPlanMutationOptions,
+  recurringCoachingPlanSessionsQueryOptions,
   replaceStaffCoachAvailabilityMutationOptions,
   respondToStaffAppointmentMutationOptions,
   staffAppointmentsQueryOptions,
   staffCoachesQueryOptions,
+  staffUsersQueryOptions,
+  updateRecurringCoachingSessionMutationOptions,
   updateStaffCoachProfileMutationOptions,
 } from "@fittrack/query";
 import { coachProfileSchema } from "@fittrack/validators";
@@ -73,6 +85,23 @@ import {
 
 type GymOperationsTab = "schedule" | "coaches";
 type ScheduleSurfaceTab = "coach-schedule" | "venue-bookings";
+type RecurringPlanActionMode = "single" | "future" | "cancel";
+
+type RecurringPlanFormState = {
+  coachId: string;
+  durationMinutes: number;
+  durationMonths: number;
+  frequency: "weekly" | "biweekly";
+  memberId: string;
+  preferredDays: number[];
+  preferredTime: string;
+  startDate: string;
+};
+
+type RecurringPlanActionState = {
+  appointment: StaffAppointmentRecord;
+  mode: RecurringPlanActionMode;
+};
 
 const EMPTY_APPOINTMENT_RESULT = {
   data: [] as StaffAppointmentRecord[],
@@ -109,6 +138,72 @@ const VENUE_STATUS_OPTIONS = [
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
 ];
+
+const WEEKDAY_OPTIONS = [
+  { label: "Sun", value: 0 },
+  { label: "Mon", value: 1 },
+  { label: "Tue", value: 2 },
+  { label: "Wed", value: 3 },
+  { label: "Thu", value: 4 },
+  { label: "Fri", value: 5 },
+  { label: "Sat", value: 6 },
+];
+
+const RECURRING_FREQUENCY_OPTIONS = [
+  { label: "Weekly", value: "weekly" },
+  { label: "Biweekly", value: "biweekly" },
+];
+
+const RECURRING_DURATION_OPTIONS = [
+  { label: "1 month", value: "1" },
+  { label: "3 months", value: "3" },
+  { label: "6 months", value: "6" },
+];
+
+function createDefaultRecurringPlanForm(): RecurringPlanFormState {
+  const tomorrow = addDays(new Date(), 1);
+  return {
+    coachId: "",
+    durationMinutes: 60,
+    durationMonths: 3,
+    frequency: "weekly",
+    memberId: "",
+    preferredDays: [tomorrow.getDay()],
+    preferredTime: "09:00",
+    startDate: toYmd(tomorrow),
+  };
+}
+
+function buildLocalIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
+function formatRecurringDateTime(value: string) {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getRecurringInput(
+  form: RecurringPlanFormState,
+  conflictOverrides?: RecurringCoachingPlanInput["sessionOverrides"],
+): RecurringCoachingPlanInput {
+  return {
+    coachId: form.coachId,
+    durationMinutes: form.durationMinutes,
+    durationMonths: form.durationMonths,
+    frequency: form.frequency,
+    memberId: form.memberId,
+    preferredDays: form.preferredDays,
+    preferredTime: form.preferredTime,
+    sessionOverrides: conflictOverrides,
+    startDate: form.startDate,
+  };
+}
 
 function normalizeOperationsTab(
   value: string | null,
@@ -239,20 +334,38 @@ function formatAppointmentWindow(appointment: StaffAppointmentRecord) {
   };
 }
 
-function canRespondToAppointment(status?: string) {
-  return status === "pending_coach";
-}
-
-function canCompleteAppointment(status?: string) {
-  return status === "confirmed";
-}
-
-function canCancelAppointment(status?: string) {
-  return (
-    status === "pending_coach" ||
-    status === "pending_payment" ||
-    status === "confirmed"
+function mapAppointmentToTimelineBooking(
+  appointment: StaffAppointmentRecord,
+  colors: ReturnType<typeof useTheme>["colors"],
+): Booking {
+  const start = new Date(appointment.scheduledAt);
+  const memberName = getPersonDisplayName(
+    appointment.user.profile,
+    appointment.user.email,
+    "Member",
   );
+  const coachName = getPersonDisplayName(
+    appointment.coach.profile,
+    null,
+    "Coach",
+  );
+
+  return {
+    id: appointment.id,
+    title: appointment.recurringPlanId
+      ? `${memberName} recurring coaching`
+      : `${memberName} coaching session`,
+    resourceId: appointment.coachId,
+    resourceName: memberName,
+    startHour: start.getHours(),
+    startMinute: start.getMinutes(),
+    durationMin: appointment.duration,
+    color: getAppointmentStatusColor(appointment.status, colors),
+    status: appointment.status ?? "pending_coach",
+    source: "api",
+    date: toYmd(start),
+    venueLabel: coachName,
+  };
 }
 
 function getAppointmentActionLabel(status?: string) {
@@ -286,21 +399,6 @@ function getVenueBookingActionLabel(status?: string) {
     default:
       return "Open";
   }
-}
-
-function toAppointmentActionLabel(appointment: StaffAppointmentRecord) {
-  const memberName = getPersonDisplayName(
-    appointment.user.profile,
-    appointment.user.email,
-    "Member",
-  );
-  const coachName = getPersonDisplayName(
-    appointment.coach.profile,
-    undefined,
-    "Coach",
-  );
-  const { dateLabel, timeLabel } = formatAppointmentWindow(appointment);
-  return `${memberName} with ${coachName} - ${dateLabel} - ${timeLabel}`;
 }
 
 function getDisplayInitials(label: string) {
@@ -534,13 +632,17 @@ function CoachAppointmentsTable({
                   excludeGlobalScale
                   style={{
                     fontSize: 10.5,
-                    color: colors.textMuted,
+                    color: appointment.recurringPlanId
+                      ? colors.brand
+                      : colors.textMuted,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                   }}
                 >
-                  {appointment.user.email ?? "No email recorded"}
+                  {appointment.recurringPlanId
+                    ? "Recurring coaching plan"
+                    : appointment.user.email ?? "No email recorded"}
                 </FitText>
               </div>
             </div>
@@ -802,7 +904,6 @@ export default function GymOperationsPage() {
   const isAdmin = user?.role === "ADMIN";
   const canManageCoaching = isAdmin || user?.role === "STAFF";
   const {
-    bookings: scheduleBookings,
     confirmBooking,
     rejectBooking,
     rawBookings,
@@ -872,9 +973,26 @@ export default function GymOperationsPage() {
     useState<StaffAppointmentRecord | null>(null);
   const [venueReviewTarget, setVenueReviewTarget] =
     useState<VenueBookingRecord | null>(null);
+  const [recurringPlanOpen, setRecurringPlanOpen] = useState(false);
+  const [recurringPlanForm, setRecurringPlanForm] =
+    useState<RecurringPlanFormState>(() => createDefaultRecurringPlanForm());
+  const [recurringPlanPreview, setRecurringPlanPreview] =
+    useState<RecurringCoachingPlanPreviewResult | null>(null);
+  const [recurringPlanAction, setRecurringPlanAction] =
+    useState<RecurringPlanActionState | null>(null);
+  const [recurringActionDate, setRecurringActionDate] = useState("");
+  const [recurringActionTime, setRecurringActionTime] = useState("09:00");
+  const [recurringActionCoachId, setRecurringActionCoachId] = useState("");
+  const [recurringActionDays, setRecurringActionDays] = useState<number[]>([]);
+  const [recurringActionReason, setRecurringActionReason] = useState("");
 
   const { data: coachProfiles = [] } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
+    enabled: canManageCoaching,
+    staleTime: 60_000,
+  });
+  const { data: staffUsers = [] } = useQuery({
+    ...staffUsersQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
@@ -883,12 +1001,14 @@ export default function GymOperationsPage() {
     () => ({
       limit: 100,
       page: 1,
+      startDate: toYmd(weekDays[0] ?? weekStart),
+      endDate: toYmd(weekDays[weekDays.length - 1] ?? weekStart),
       ...(coachFilterId ? { coachId: coachFilterId } : {}),
       ...(appointmentStatusFilter !== "all"
         ? { status: appointmentStatusFilter }
         : {}),
     }),
-    [appointmentStatusFilter, coachFilterId],
+    [appointmentStatusFilter, coachFilterId, weekDays, weekStart],
   );
 
   const {
@@ -918,6 +1038,24 @@ export default function GymOperationsPage() {
   const updateCoachProfileMutation = useMutation(
     updateStaffCoachProfileMutationOptions(webApiClient, queryClient),
   );
+  const previewRecurringPlanMutation = useMutation(
+    previewRecurringCoachingPlanMutationOptions(webApiClient),
+  );
+  const createRecurringPlanMutation = useMutation(
+    createRecurringCoachingPlanMutationOptions(webApiClient, queryClient),
+  );
+  const updateRecurringSessionMutation = useMutation(
+    updateRecurringCoachingSessionMutationOptions(webApiClient, queryClient),
+  );
+  const bulkUpdateRecurringSessionsMutation = useMutation(
+    bulkUpdateRecurringCoachingSessionsMutationOptions(
+      webApiClient,
+      queryClient,
+    ),
+  );
+  const cancelRecurringPlanMutation = useMutation(
+    cancelRecurringCoachingPlanMutationOptions(webApiClient, queryClient),
+  );
 
   const coachRoster = useMemo(
     () => mapCoachesToRoster(coachProfiles),
@@ -932,23 +1070,108 @@ export default function GymOperationsPage() {
       })),
     [coachRoster],
   );
-
-  const apiBookings = useMemo<Booking[]>(
+  const memberOptions = useMemo(
     () =>
-      scheduleBookings.map((booking) => ({
-        ...booking,
-        source: "api" as const,
-      })),
-    [scheduleBookings],
+      (staffUsers as MemberRecord[])
+        .filter((member) => {
+          const roleName = member.role?.name?.toUpperCase();
+          const status = (member as MemberRecord & { status?: string | null }).status?.toLowerCase();
+          const isActive = !status || status === "active";
+          return (
+            (roleName === "USER" || roleName === "MEMBER") &&
+            isActive &&
+            !member.deletedAt
+          );
+        })
+        .map((member) => {
+          const label = getPersonDisplayName(
+            member.profile,
+            member.email,
+            "Member",
+          );
+          return { label, value: member.id };
+        }),
+    [staffUsers],
+  );
+  const coachAppointments = appointmentResult.data;
+  const activeRecurringPlanId =
+    recurringPlanAction?.appointment.recurringPlanId ?? null;
+  const { data: recurringPlanSessions } = useQuery({
+    ...recurringCoachingPlanSessionsQueryOptions(
+      webApiClient,
+      activeRecurringPlanId ?? "pending",
+    ),
+    enabled: Boolean(activeRecurringPlanId),
+    staleTime: 20_000,
+  });
+  const recurringSessionRows = recurringPlanSessions?.sessions ?? [];
+  const recurringCompletedCount = recurringSessionRows.filter(
+    (session) =>
+      session.status === "completed" || session.recurringState === "completed",
+  ).length;
+  const recurringRemainingCount = recurringSessionRows.filter(
+    (session) =>
+      session.status !== "completed" &&
+      session.status !== "cancelled" &&
+      session.recurringState !== "completed" &&
+      session.recurringState !== "cancelled" &&
+      session.recurringState !== "skipped",
+  ).length;
+  const recurringCreateBusy =
+    previewRecurringPlanMutation.isPending ||
+    createRecurringPlanMutation.isPending;
+  const recurringActionBusy =
+    updateRecurringSessionMutation.isPending ||
+    bulkUpdateRecurringSessionsMutation.isPending ||
+    cancelRecurringPlanMutation.isPending;
+  const recurringPlanInputInvalid =
+    !recurringPlanForm.memberId ||
+    !recurringPlanForm.coachId ||
+    !recurringPlanForm.startDate ||
+    !recurringPlanForm.preferredTime ||
+    recurringPlanForm.preferredDays.length === 0;
+  const recurringPreviewConflictOverrides = useMemo(
+    () =>
+      recurringPlanPreview?.sessions
+        .filter((session) => session.conflict)
+        .map((session) => ({
+          action: "skip" as const,
+          reason: "Skipped during recurring plan conflict review.",
+          scheduledAt: session.scheduledAt,
+        })) ?? [],
+    [recurringPlanPreview],
+  );
+  const recurringFormFieldStyle = useMemo(
+    () => ({
+      width: "100%",
+      minHeight: 42,
+      borderRadius: 13,
+      border: `1px solid ${colors.border}`,
+      backgroundColor: colors.surfaceRaised,
+      color: colors.textPrimary,
+      padding: "9px 11px",
+      fontSize: 13,
+      fontWeight: 650,
+      outline: "none",
+    }),
+    [colors.border, colors.surfaceRaised, colors.textPrimary],
+  );
+
+  const appointmentBookings = useMemo<Booking[]>(
+    () =>
+      coachAppointments.map((appointment) =>
+        mapAppointmentToTimelineBooking(appointment, colors),
+      ),
+    [coachAppointments, colors],
   );
 
   const allBookings = useMemo(
     () =>
-      [...apiBookings, ...manualBookings].map((booking) => {
+      [...appointmentBookings, ...manualBookings].map((booking) => {
         const override = bookingOverrides[booking.id];
         return override ? { ...booking, ...override } : booking;
       }),
-    [apiBookings, bookingOverrides, manualBookings],
+    [appointmentBookings, bookingOverrides, manualBookings],
   );
 
   const filteredStaff = useMemo(
@@ -965,7 +1188,6 @@ export default function GymOperationsPage() {
     [coachRoster, coachVisibilityScope, debouncedQuery],
   );
 
-  const coachAppointments = appointmentResult.data;
   const defaultCoachId = coachRoster[0]?.id ?? null;
   const focusedCoachId = coachFilterId ?? defaultCoachId;
   const selectedCoachProfile = useMemo(
@@ -975,6 +1197,13 @@ export default function GymOperationsPage() {
   const selectedCoachRoster = useMemo(
     () => coachRoster.find((coach) => coach.id === focusedCoachId) ?? null,
     [coachRoster, focusedCoachId],
+  );
+  const focusedCoachScheduleBookings = useMemo(
+    () =>
+      allBookings.filter((booking) =>
+        focusedCoachId ? booking.resourceId === focusedCoachId : true,
+      ),
+    [allBookings, focusedCoachId],
   );
   const availabilityEditorCoach = useMemo(
     () =>
@@ -1026,6 +1255,28 @@ export default function GymOperationsPage() {
     }),
     [coachAppointments],
   );
+
+  useEffect(() => {
+    setRecurringPlanForm((current) => ({
+      ...current,
+      coachId: current.coachId || coachOptions[0]?.value || "",
+      memberId: current.memberId || memberOptions[0]?.value || "",
+    }));
+  }, [coachOptions, memberOptions]);
+
+  useEffect(() => {
+    if (!recurringPlanAction) return;
+    const start = new Date(recurringPlanAction.appointment.scheduledAt);
+    setRecurringActionDate(toYmd(start));
+    setRecurringActionTime(
+      `${String(start.getHours()).padStart(2, "0")}:${String(
+        start.getMinutes(),
+      ).padStart(2, "0")}`,
+    );
+    setRecurringActionCoachId(recurringPlanAction.appointment.coachId);
+    setRecurringActionDays([start.getDay()]);
+    setRecurringActionReason("");
+  }, [recurringPlanAction]);
 
   const sensors = useFitSensors();
 
@@ -1113,6 +1364,15 @@ export default function GymOperationsPage() {
   const [blockDetailOpen, setBlockDetailOpen] = useState(false);
 
   const handleBlockClick = (block: Booking) => {
+    if (block.source === "api") {
+      const appointment = coachAppointments.find(
+        (record) => record.id === block.id,
+      );
+      if (appointment) {
+        setAppointmentReviewTarget(appointment);
+        return;
+      }
+    }
     setActiveBlock(block);
     setBlockDetailOpen(true);
   };
@@ -1463,6 +1723,208 @@ export default function GymOperationsPage() {
     router,
     searchParams,
   ]);
+
+  const toggleRecurringPlanDay = (day: number) => {
+    setRecurringPlanPreview(null);
+    setRecurringPlanForm((current) => {
+      const exists = current.preferredDays.includes(day);
+      const preferredDays = exists
+        ? current.preferredDays.filter((value) => value !== day)
+        : [...current.preferredDays, day].sort((left, right) => left - right);
+
+      return {
+        ...current,
+        preferredDays: preferredDays.length > 0 ? preferredDays : [day],
+      };
+    });
+  };
+
+  const toggleRecurringActionDay = (day: number) => {
+    setRecurringActionDays((current) => {
+      const exists = current.includes(day);
+      const next = exists
+        ? current.filter((value) => value !== day)
+        : [...current, day].sort((left, right) => left - right);
+      return next.length > 0 ? next : [day];
+    });
+  };
+
+  const handlePreviewRecurringPlan = async () => {
+    if (recurringPlanInputInvalid) {
+      showFeedback(
+        "Choose a member, coach, start date, time, and at least one weekday.",
+        "danger",
+      );
+      return;
+    }
+
+    try {
+      const preview = await previewRecurringPlanMutation.mutateAsync(
+        getRecurringInput(recurringPlanForm),
+      );
+      setRecurringPlanPreview(preview);
+      showFeedback(
+        preview.conflictCount > 0
+          ? `${preview.conflictCount} generated session conflict(s) need review.`
+          : `${preview.totalSessions} recurring sessions are clear to confirm.`,
+        preview.conflictCount > 0 ? "danger" : "success",
+      );
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to preview recurring coaching plan."),
+        "danger",
+      );
+    }
+  };
+
+  const handleConfirmRecurringPlan = async (skipConflicts = false) => {
+    if (recurringPlanInputInvalid) {
+      showFeedback(
+        "Complete the recurring plan details before confirming.",
+        "danger",
+      );
+      return;
+    }
+    if (!recurringPlanPreview) {
+      showFeedback("Preview the schedule before confirming the plan.", "danger");
+      return;
+    }
+    if (recurringPlanPreview.conflictCount > 0 && !skipConflicts) {
+      showFeedback(
+        "Resolve conflicts first, or confirm while skipping conflicted sessions.",
+        "danger",
+      );
+      return;
+    }
+
+    try {
+      const result = await createRecurringPlanMutation.mutateAsync(
+        getRecurringInput(
+          recurringPlanForm,
+          skipConflicts ? recurringPreviewConflictOverrides : undefined,
+        ),
+      );
+      showFeedback(
+        `Recurring coaching plan created with ${result.sessions.length} session(s).`,
+      );
+      setRecurringPlanOpen(false);
+      setRecurringPlanPreview(null);
+      setRecurringPlanForm(createDefaultRecurringPlanForm());
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to create recurring coaching plan."),
+        "danger",
+      );
+    }
+  };
+
+  const handleRecurringSessionReschedule = async () => {
+    const appointment = recurringPlanAction?.appointment;
+    const planId = appointment?.recurringPlanId;
+    if (!appointment || !planId) return;
+
+    try {
+      await updateRecurringSessionMutation.mutateAsync({
+        input: {
+          action: "reschedule",
+          coachId: recurringActionCoachId || appointment.coachId,
+          newScheduledAt: buildLocalIso(recurringActionDate, recurringActionTime),
+          reason: recurringActionReason || undefined,
+        },
+        planId,
+        sessionId: appointment.id,
+      });
+      showFeedback("Recurring session updated.");
+      setRecurringPlanAction(null);
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to reschedule recurring session."),
+        "danger",
+      );
+    }
+  };
+
+  const handleRecurringSessionSkip = async () => {
+    const appointment = recurringPlanAction?.appointment;
+    const planId = appointment?.recurringPlanId;
+    if (!appointment || !planId) return;
+
+    try {
+      await updateRecurringSessionMutation.mutateAsync({
+        input: {
+          action: "skip",
+          reason: recurringActionReason || "Skipped from Gym Operations.",
+        },
+        planId,
+        sessionId: appointment.id,
+      });
+      showFeedback("Recurring session skipped.");
+      setRecurringPlanAction(null);
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to skip recurring session."),
+        "danger",
+      );
+    }
+  };
+
+  const handleRecurringFutureUpdate = async () => {
+    const appointment = recurringPlanAction?.appointment;
+    const planId = appointment?.recurringPlanId;
+    if (!appointment || !planId) return;
+
+    try {
+      const result = await bulkUpdateRecurringSessionsMutation.mutateAsync({
+        input: {
+          coachId: recurringActionCoachId || appointment.coachId,
+          fromSessionId: appointment.id,
+          preferredDays: recurringActionDays,
+          preferredTime: recurringActionTime,
+        },
+        planId,
+      });
+
+      if ("canConfirm" in result && result.conflictCount > 0) {
+        showFeedback(
+          `${result.conflictCount} future recurring session conflict(s) need manual review.`,
+          "danger",
+        );
+        return;
+      }
+
+      showFeedback("Future recurring sessions updated.");
+      setRecurringPlanAction(null);
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to update future recurring sessions."),
+        "danger",
+      );
+    }
+  };
+
+  const handleRecurringPlanCancel = async () => {
+    const appointment = recurringPlanAction?.appointment;
+    const planId = appointment?.recurringPlanId;
+    if (!appointment || !planId) return;
+
+    try {
+      await cancelRecurringPlanMutation.mutateAsync({
+        planId,
+        reason: recurringActionReason || undefined,
+      });
+      showFeedback("Recurring coaching plan cancelled.");
+      setRecurringPlanAction(null);
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to cancel recurring coaching plan."),
+        "danger",
+      );
+    }
+  };
 
   const handleConfirmAppointment = async () => {
     if (!appointmentReviewTarget) return;
@@ -1897,8 +2359,23 @@ export default function GymOperationsPage() {
               style={{
                 display: "flex",
                 justifyContent: "flex-end",
+                gap: 10,
+                flexWrap: "wrap",
               }}
             >
+              {activeScheduleSurfaceTab === "coach-schedule" ? (
+                <FitButton
+                  variant="primary"
+                  label="CREATE RECURRING PLAN"
+                  onClick={() => {
+                    setRecurringPlanPreview(null);
+                    setRecurringPlanOpen(true);
+                  }}
+                  disabled={memberOptions.length === 0 || coachOptions.length === 0}
+                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+              ) : null}
               <FitPill
                 options={SCHEDULE_SURFACE_TABS}
                 active={activeScheduleSurfaceTab}
@@ -1921,7 +2398,7 @@ export default function GymOperationsPage() {
                   onStaffQueryChange={setCoachQuery}
                   filteredStaff={filteredStaff}
                   bookings={allBookings}
-                  canDrag={isAdmin}
+                  canDrag={false}
                   canSelect={isAdmin}
                   selectedStaffId={focusedCoachId}
                   onStaffClick={handleStaffClick}
@@ -1967,8 +2444,8 @@ export default function GymOperationsPage() {
                         lineHeight: 1.15,
                       }}
                     >
-                      Review appointment pressure, shift the active week, and drag coaches
-                      directly into the live floor grid.
+                      Review appointment pressure, shift the active week, and inspect
+                      live coaching sessions without leaving Gym Operations.
                     </FitText>
                   </div>
                   <div
@@ -2027,10 +2504,11 @@ export default function GymOperationsPage() {
                       <WeeklyTimeline
                         weekDays={weekDays}
                         hours={HOURS}
-                        bookings={allBookings}
+                        bookings={focusedCoachScheduleBookings}
                         slideStyle={slideStyle as MotionStyle}
-                        isLoading={scheduleLoading}
+                        isLoading={appointmentsLoading}
                         colors={colors}
+                        allowDrag={false}
                         onBlockClick={handleBlockClick}
                       />
                     </div>
@@ -2637,7 +3115,10 @@ export default function GymOperationsPage() {
                     <FitButton
                       variant="ghost"
                       label="OPEN IN SCHEDULE"
-                      onClick={() => setActiveOperationsTab("schedule")}
+                      onClick={() => {
+                        setActiveOperationsTab("schedule");
+                        setActiveScheduleSurfaceTab("coach-schedule");
+                      }}
                       disabled={!selectedCoachProfile}
                       style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
                       textStyle={{ fontSize: 11, fontWeight: 700 }}
@@ -2796,6 +3277,440 @@ export default function GymOperationsPage() {
           }}
           onClose={() => setCalendarOpen(false)}
         />
+        {recurringPlanOpen ? (
+          <div
+            onClick={() => {
+              if (!recurringCreateBusy) setRecurringPlanOpen(false);
+            }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 80,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 24,
+              backgroundColor: colors.overlay,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                width: 920,
+                maxWidth: "min(920px, calc(100vw - 48px))",
+                maxHeight: "min(780px, calc(100vh - 48px))",
+                overflow: "auto",
+                borderRadius: 26,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface,
+                padding: 30,
+                display: "grid",
+                gap: 18,
+                boxShadow: "0 20px 48px rgba(0,0,0,0.3)",
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: colors.brand,
+                  }}
+                >
+                  RECURRING COACHING PLAN
+                </FitText>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 850,
+                    lineHeight: 1.08,
+                    color: colors.textPrimary,
+                  }}
+                >
+                  Preview the generated sessions before creating the plan.
+                </FitText>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    maxWidth: 720,
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                    color: colors.textMuted,
+                  }}
+                >
+                  This creates one durable plan record plus child coaching
+                  appointments after confirmation. Conflicted sessions can be
+                  skipped from the first pass and handled manually later.
+                </FitText>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                  gap: 16,
+                }}
+              >
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      Member
+                    </FitText>
+                    <FitSelect
+                      value={recurringPlanForm.memberId}
+                      onChange={(event) => {
+                        setRecurringPlanPreview(null);
+                        setRecurringPlanForm((current) => ({
+                          ...current,
+                          memberId: event.target.value,
+                        }));
+                      }}
+                      options={memberOptions}
+                      placeholder="Choose member"
+                      compact
+                      fullWidth
+                    />
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      Coach
+                    </FitText>
+                    <FitSelect
+                      value={recurringPlanForm.coachId}
+                      onChange={(event) => {
+                        setRecurringPlanPreview(null);
+                        setRecurringPlanForm((current) => ({
+                          ...current,
+                          coachId: event.target.value,
+                        }));
+                      }}
+                      options={coachOptions}
+                      placeholder="Choose coach"
+                      compact
+                      fullWidth
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        Frequency
+                      </FitText>
+                      <FitSelect
+                        value={recurringPlanForm.frequency}
+                        onChange={(event) => {
+                          setRecurringPlanPreview(null);
+                          setRecurringPlanForm((current) => ({
+                            ...current,
+                            frequency: event.target
+                              .value as RecurringPlanFormState["frequency"],
+                          }));
+                        }}
+                        options={RECURRING_FREQUENCY_OPTIONS}
+                        compact
+                        fullWidth
+                      />
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        Duration
+                      </FitText>
+                      <FitSelect
+                        value={String(recurringPlanForm.durationMonths)}
+                        onChange={(event) => {
+                          setRecurringPlanPreview(null);
+                          setRecurringPlanForm((current) => ({
+                            ...current,
+                            durationMonths: Number(event.target.value) || 3,
+                          }));
+                        }}
+                        options={RECURRING_DURATION_OPTIONS}
+                        compact
+                        fullWidth
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        Start Date
+                      </FitText>
+                      <input
+                        type="date"
+                        value={recurringPlanForm.startDate}
+                        onChange={(event) => {
+                          setRecurringPlanPreview(null);
+                          setRecurringPlanForm((current) => ({
+                            ...current,
+                            startDate: event.target.value,
+                          }));
+                        }}
+                        style={recurringFormFieldStyle}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        Preferred Time
+                      </FitText>
+                      <input
+                        type="time"
+                        value={recurringPlanForm.preferredTime}
+                        onChange={(event) => {
+                          setRecurringPlanPreview(null);
+                          setRecurringPlanForm((current) => ({
+                            ...current,
+                            preferredTime: event.target.value,
+                          }));
+                        }}
+                        style={recurringFormFieldStyle}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      Session Duration
+                    </FitText>
+                    <input
+                      type="number"
+                      min={30}
+                      max={180}
+                      step={15}
+                      value={recurringPlanForm.durationMinutes}
+                      onChange={(event) => {
+                        setRecurringPlanPreview(null);
+                        setRecurringPlanForm((current) => ({
+                          ...current,
+                          durationMinutes: Number(event.target.value) || 60,
+                        }));
+                      }}
+                      style={recurringFormFieldStyle}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      Preferred Days
+                    </FitText>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {WEEKDAY_OPTIONS.map((day) => {
+                        const active = recurringPlanForm.preferredDays.includes(
+                          day.value,
+                        );
+                        return (
+                          <FitButton
+                            key={day.value}
+                            variant={active ? "primary" : "ghost"}
+                            label={day.label}
+                            onClick={() => toggleRecurringPlanDay(day.value)}
+                            style={{
+                              minHeight: 34,
+                              minWidth: 48,
+                              borderRadius: 12,
+                              padding: "7px 10px",
+                            }}
+                            textStyle={{ fontSize: 11, fontWeight: 800 }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 18,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surfaceRaised,
+                  padding: 16,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <FitText
+                    excludeGlobalScale
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    Schedule preview
+                  </FitText>
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 12, color: colors.textMuted }}
+                  >
+                    {recurringPlanPreview
+                      ? `${recurringPlanPreview.totalSessions} sessions / ${recurringPlanPreview.conflictCount} conflicts`
+                      : "Preview required before confirm"}
+                  </FitText>
+                </div>
+                <div
+                  style={{
+                    maxHeight: 220,
+                    overflowY: "auto",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  {recurringPlanPreview ? (
+                    recurringPlanPreview.sessions.map((session) => (
+                      <div
+                        key={session.scheduledAt}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                          gap: 12,
+                          alignItems: "center",
+                          borderRadius: 14,
+                          border: `1px solid ${
+                            session.conflict ? `${colors.danger}55` : colors.border
+                          }`,
+                          backgroundColor: session.conflict
+                            ? `${colors.danger}12`
+                            : colors.surface,
+                          padding: "10px 12px",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 3 }}>
+                          <FitText
+                            excludeGlobalScale
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 750,
+                              color: colors.textPrimary,
+                            }}
+                          >
+                            {formatRecurringDateTime(session.scheduledAt)}
+                          </FitText>
+                          <FitText
+                            excludeGlobalScale
+                            style={{ fontSize: 11, color: colors.textMuted }}
+                          >
+                            {session.conflict
+                              ? session.conflictReasons.join(" / ")
+                              : "Coach availability and appointment conflict check passed."}
+                          </FitText>
+                        </div>
+                        <FitPill
+                          mode="status"
+                          label={session.conflict ? "CONFLICT" : "CLEAR"}
+                          color={session.conflict ? colors.danger : colors.success}
+                          fontSize={9}
+                          fontWeight={800}
+                          borderOpacity="28"
+                          bgOpacity="12"
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 13,
+                        color: colors.textMuted,
+                        padding: "8px 0",
+                      }}
+                    >
+                      Fill the plan details and generate a preview. No rows are
+                      written until you confirm.
+                    </FitText>
+                  )}
+                </div>
+                {recurringPlanPreview?.venueConflictsChecked === false ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.warning }}
+                  >
+                    Venue conflicts: {recurringPlanPreview.venueConflictsNote}
+                  </FitText>
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <FitButton
+                  variant="ghost"
+                  label="CLOSE"
+                  onClick={() => setRecurringPlanOpen(false)}
+                  disabled={recurringCreateBusy}
+                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+                <FitButton
+                  variant="ghost"
+                  label={recurringCreateBusy ? "PREVIEWING..." : "PREVIEW SCHEDULE"}
+                  onClick={() => void handlePreviewRecurringPlan()}
+                  disabled={recurringCreateBusy || recurringPlanInputInvalid}
+                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+                {recurringPlanPreview?.conflictCount ? (
+                  <FitButton
+                    variant="ghost"
+                    label="CONFIRM + SKIP CONFLICTS"
+                    onClick={() => void handleConfirmRecurringPlan(true)}
+                    disabled={recurringCreateBusy}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 16,
+                      padding: "8px 14px",
+                    }}
+                    textStyle={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: colors.warning,
+                    }}
+                  />
+                ) : null}
+                <FitButton
+                  variant="primary"
+                  label={createRecurringPlanMutation.isPending ? "CREATING..." : "CONFIRM PLAN"}
+                  onClick={() => void handleConfirmRecurringPlan(false)}
+                  disabled={
+                    recurringCreateBusy ||
+                    !recurringPlanPreview ||
+                    recurringPlanPreview.conflictCount > 0
+                  }
+                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
         <GymOperationsCoachAppointmentModal
           appointment={appointmentReviewTarget}
           coachReadiness={appointmentReviewReadiness}
@@ -2819,7 +3734,331 @@ export default function GymOperationsPage() {
             if (!appointmentReviewTarget) return;
             void handleCancelAppointment(appointmentReviewTarget, note);
           }}
+          onEditRecurringSession={() => {
+            if (!appointmentReviewTarget?.recurringPlanId) return;
+            setRecurringPlanAction({
+              appointment: appointmentReviewTarget,
+              mode: "single",
+            });
+          }}
+          onEditRecurringFuture={() => {
+            if (!appointmentReviewTarget?.recurringPlanId) return;
+            setRecurringPlanAction({
+              appointment: appointmentReviewTarget,
+              mode: "future",
+            });
+          }}
+          onCancelRecurringPlan={() => {
+            if (!appointmentReviewTarget?.recurringPlanId) return;
+            setRecurringPlanAction({
+              appointment: appointmentReviewTarget,
+              mode: "cancel",
+            });
+          }}
         />
+        {recurringPlanAction ? (
+          <div
+            onClick={() => {
+              if (!recurringActionBusy) setRecurringPlanAction(null);
+            }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 90,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 24,
+              backgroundColor: colors.overlay,
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                width: 720,
+                maxWidth: "min(720px, calc(100vw - 48px))",
+                maxHeight: "min(720px, calc(100vh - 48px))",
+                overflow: "auto",
+                borderRadius: 24,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface,
+                padding: 28,
+                display: "grid",
+                gap: 16,
+                boxShadow: "0 20px 48px rgba(0,0,0,0.32)",
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: colors.brand,
+                  }}
+                >
+                  RECURRING PLAN ACTION
+                </FitText>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 850,
+                    color: colors.textPrimary,
+                    lineHeight: 1.12,
+                  }}
+                >
+                  {recurringPlanAction.mode === "single"
+                    ? "Edit this generated session only"
+                    : recurringPlanAction.mode === "future"
+                      ? "Update this and all future sessions"
+                      : "Cancel this recurring coaching plan"}
+                </FitText>
+                <FitText
+                  excludeGlobalScale
+                  style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.45 }}
+                >
+                  Current session:{" "}
+                  {formatRecurringDateTime(
+                    recurringPlanAction.appointment.scheduledAt,
+                  )}
+                </FitText>
+              </div>
+
+              {recurringPlanAction.mode === "cancel" ? (
+                <div
+                  style={{
+                    borderRadius: 18,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surfaceRaised,
+                    padding: 16,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    <OperationsMetricCard
+                      colors={colors}
+                      label="Completed Sessions"
+                      value={recurringCompletedCount}
+                      tone={colors.success}
+                    />
+                    <OperationsMetricCard
+                      colors={colors}
+                      label="Future Sessions"
+                      value={recurringRemainingCount}
+                      tone={colors.warning}
+                    />
+                  </div>
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 12, color: colors.textMuted }}
+                  >
+                    Cancelling preserves completed sessions and cancels only future
+                    non-completed sessions.
+                  </FitText>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      recurringPlanAction.mode === "single"
+                        ? "1fr 1fr"
+                        : "1fr",
+                    gap: 12,
+                  }}
+                >
+                  {recurringPlanAction.mode === "single" ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        New Date
+                      </FitText>
+                      <input
+                        type="date"
+                        value={recurringActionDate}
+                        onChange={(event) =>
+                          setRecurringActionDate(event.target.value)
+                        }
+                        style={recurringFormFieldStyle}
+                      />
+                    </div>
+                  ) : null}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      New Time
+                    </FitText>
+                    <input
+                      type="time"
+                      value={recurringActionTime}
+                      onChange={(event) =>
+                        setRecurringActionTime(event.target.value)
+                      }
+                      style={recurringFormFieldStyle}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText excludeGlobalScale style={controlLabelStyle}>
+                      Coach
+                    </FitText>
+                    <FitSelect
+                      value={recurringActionCoachId}
+                      onChange={(event) =>
+                        setRecurringActionCoachId(event.target.value)
+                      }
+                      options={coachOptions}
+                      compact
+                      fullWidth
+                    />
+                  </div>
+                  {recurringPlanAction.mode === "future" ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <FitText excludeGlobalScale style={controlLabelStyle}>
+                        Future Weekdays
+                      </FitText>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {WEEKDAY_OPTIONS.map((day) => {
+                          const active = recurringActionDays.includes(day.value);
+                          return (
+                            <FitButton
+                              key={day.value}
+                              variant={active ? "primary" : "ghost"}
+                              label={day.label}
+                              onClick={() => toggleRecurringActionDay(day.value)}
+                              style={{
+                                minHeight: 34,
+                                minWidth: 48,
+                                borderRadius: 12,
+                                padding: "7px 10px",
+                              }}
+                              textStyle={{ fontSize: 11, fontWeight: 800 }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <FitText
+                        excludeGlobalScale
+                        style={{ fontSize: 12, color: colors.textMuted }}
+                      >
+                        Affects {recurringRemainingCount || "the remaining"} future
+                        session(s), starting from the selected appointment.
+                      </FitText>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText excludeGlobalScale style={controlLabelStyle}>
+                  Reason / Notes
+                </FitText>
+                <textarea
+                  value={recurringActionReason}
+                  onChange={(event) => setRecurringActionReason(event.target.value)}
+                  placeholder="Optional audit note..."
+                  rows={3}
+                  style={{
+                    ...recurringFormFieldStyle,
+                    resize: "vertical",
+                    lineHeight: 1.45,
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <FitButton
+                  variant="ghost"
+                  label="CLOSE"
+                  onClick={() => setRecurringPlanAction(null)}
+                  disabled={recurringActionBusy}
+                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+                {recurringPlanAction.mode === "single" ? (
+                  <>
+                    <FitButton
+                      variant="ghost"
+                      label={updateRecurringSessionMutation.isPending ? "SKIPPING..." : "SKIP SESSION"}
+                      onClick={() => void handleRecurringSessionSkip()}
+                      disabled={recurringActionBusy}
+                      style={{
+                        minHeight: 38,
+                        borderRadius: 16,
+                        padding: "8px 14px",
+                      }}
+                      textStyle={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: colors.warning,
+                      }}
+                    />
+                    <FitButton
+                      variant="primary"
+                      label={updateRecurringSessionMutation.isPending ? "SAVING..." : "RESCHEDULE SESSION"}
+                      onClick={() => void handleRecurringSessionReschedule()}
+                      disabled={
+                        recurringActionBusy ||
+                        !recurringActionDate ||
+                        !recurringActionTime
+                      }
+                      style={{
+                        minHeight: 38,
+                        borderRadius: 16,
+                        padding: "8px 14px",
+                      }}
+                      textStyle={{ fontSize: 11, fontWeight: 800 }}
+                    />
+                  </>
+                ) : recurringPlanAction.mode === "future" ? (
+                  <FitButton
+                    variant="primary"
+                    label={bulkUpdateRecurringSessionsMutation.isPending ? "UPDATING..." : "UPDATE FUTURE SESSIONS"}
+                    onClick={() => void handleRecurringFutureUpdate()}
+                    disabled={
+                      recurringActionBusy ||
+                      !recurringActionTime ||
+                      recurringActionDays.length === 0
+                    }
+                    style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                    textStyle={{ fontSize: 11, fontWeight: 800 }}
+                  />
+                ) : (
+                  <FitButton
+                    variant="ghost"
+                    label={cancelRecurringPlanMutation.isPending ? "CANCELLING..." : "CANCEL PLAN"}
+                    onClick={() => void handleRecurringPlanCancel()}
+                    disabled={recurringActionBusy}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 16,
+                      padding: "8px 14px",
+                      borderColor: `${colors.danger}66`,
+                    }}
+                    textStyle={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: colors.danger,
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
         <GymOperationsAvailabilityDrawer
           isOpen={!!availabilityEditorCoach}
           coachName={

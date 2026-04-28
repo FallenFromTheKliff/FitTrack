@@ -81,11 +81,13 @@ export class AdminController {
   }
 
   @Get('deletion-requests')
+  @Roles('ADMIN', 'STAFF')
   async getAllDeletionRequests(@Body() body?: { status?: string }) {
     return this.adminService.getAllDeletionRequests(body?.status);
   }
 
   @Patch('deletion-requests/:id/approve')
+  @Roles('ADMIN', 'STAFF')
   async approveDeletionRequest(
     @Request() req,
     @Param('id') id: string,
@@ -99,6 +101,7 @@ export class AdminController {
   }
 
   @Patch('deletion-requests/:id/reject')
+  @Roles('ADMIN', 'STAFF')
   async rejectDeletionRequest(
     @Request() req,
     @Param('id') id: string,

@@ -8,8 +8,13 @@ import {
   EQUIPMENT_WRITEOFF_EVENT,
   type EquipmentWriteOffEvent,
 } from '../events/equipment-write-off.event';
+import {
+  INVENTORY_ACTIVITY_EVENT,
+  type InventoryActivityEvent,
+} from '../events/inventory-activity.event';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
+  ArchiveEquipmentItemDTO,
   CreateEquipmentItemDTO,
   EquipmentItemDetailResponseDTO,
   EquipmentItemResponseDTO,
@@ -26,7 +31,10 @@ import {
 const EQUIPMENT_UPDATE_FIELDS = [
   'name',
   'description',
+  'image_url',
   'unit',
+  'quantity_total',
+  'quantity_current',
   'is_active',
 ] as const;
 
@@ -73,22 +81,94 @@ export class EquipmentService {
   }
 
   async createEquipmentItem(
+    actorId: string,
     dto: CreateEquipmentItemDTO,
   ): Promise<EquipmentItemResponseDTO> {
     this.assertInitialCurrentWithinTotal(dto);
 
-    return this.toEquipmentResponse(
-      await this.repo.createEquipmentItem(this.toCreateInput(dto)),
-    );
+    const item = await this.repo.createEquipmentItem(this.toCreateInput(dto));
+
+    await this.emitInventoryActivity({
+      action: 'equipment_created',
+      actorId,
+      entityId: item.id,
+      entityName: item.name,
+      details: {
+        quantity_current: item.quantity_current,
+        quantity_total: item.quantity_total,
+      },
+    });
+
+    return this.toEquipmentResponse(item);
   }
 
   async updateEquipmentItem(
+    actorId: string,
     id: string,
     dto: UpdateEquipmentItemDTO,
   ): Promise<EquipmentItemResponseDTO> {
-    return this.toEquipmentResponse(
-      await this.repo.updateEquipmentItem(id, this.toUpdateInput(dto)),
+    this.assertUpdatedCurrentWithinTotal(dto);
+
+    const item = await this.repo.updateEquipmentItem(
+      id,
+      this.toUpdateInput(dto),
     );
+
+    await this.emitInventoryActivity({
+      action: 'equipment_updated',
+      actorId,
+      entityId: item.id,
+      entityName: item.name,
+      details: {
+        quantity_current: item.quantity_current,
+        quantity_total: item.quantity_total,
+      },
+    });
+
+    return this.toEquipmentResponse(item);
+  }
+
+  async archiveEquipmentItem(
+    performerId: string,
+    equipmentId: string,
+    dto: ArchiveEquipmentItemDTO,
+  ): Promise<EquipmentItemResponseDTO> {
+    const { equipment, quantityBefore, quantitySetTo } =
+      await this.repo.archiveEquipmentUnits(
+        performerId,
+        equipmentId,
+        dto.quantity_to_archive,
+        dto.reason,
+      );
+
+    this.emitAudit({
+      userId: performerId,
+      action: AuditAction.EQUIPMENT_WRITEOFF,
+      entity: 'GymEquipmentItem',
+      entityId: equipment.id,
+      before: {
+        quantity_current: quantityBefore,
+      },
+      after: {
+        quantity_current: quantitySetTo,
+        quantity_total: equipment.quantity_total,
+        reason: dto.reason,
+        quantity_archived: dto.quantity_to_archive,
+      },
+    });
+    await this.emitInventoryActivity({
+      action: 'equipment_archived',
+      actorId: performerId,
+      entityId: equipment.id,
+      entityName: equipment.name,
+      details: {
+        quantity_archived: dto.quantity_to_archive,
+        quantity_current: quantitySetTo,
+        quantity_total: equipment.quantity_total,
+      },
+    });
+
+    return this.toEquipmentResponse(equipment);
   }
 
   async writeOffEquipment(
@@ -160,12 +240,32 @@ export class EquipmentService {
     }
   }
 
+  private assertUpdatedCurrentWithinTotal(dto: UpdateEquipmentItemDTO): void {
+    if (
+      dto.quantity_current !== undefined &&
+      dto.quantity_total !== undefined &&
+      dto.quantity_current > dto.quantity_total
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Equipment Quantity',
+          status: 422,
+          detail:
+            'quantity_current cannot be greater than quantity_total when updating equipment.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
   private toCreateInput(
     dto: CreateEquipmentItemDTO,
   ): Prisma.GymEquipmentItemCreateInput {
     return {
       name: dto.name,
       description: dto.description ?? null,
+      image_url: dto.image_url ?? null,
       quantity_total: dto.quantity_total,
       quantity_current: dto.quantity_current,
       unit: dto.unit ?? 'units',
@@ -187,6 +287,7 @@ export class EquipmentService {
       id: item.id,
       name: item.name,
       description: item.description ?? null,
+      image_url: item.image_url ?? null,
       quantity_total: item.quantity_total,
       quantity_current: item.quantity_current,
       unit: item.unit,
@@ -236,5 +337,11 @@ export class EquipmentService {
 
   private emitEquipmentWriteOff(event: EquipmentWriteOffEvent): void {
     this.eventEmitter.emit(EQUIPMENT_WRITEOFF_EVENT, event);
+  }
+
+  private async emitInventoryActivity(
+    event: InventoryActivityEvent,
+  ): Promise<void> {
+    await this.eventEmitter.emitAsync(INVENTORY_ACTIVITY_EVENT, event);
   }
 }

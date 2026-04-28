@@ -8,12 +8,16 @@ import type {
 } from "@fittrack/api-client";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import {
+  archivedGymLayoutEquipmentQueryOptions,
+  archivedVenuesQueryOptions,
   createGymLayoutEquipmentMutationOptions,
   createVenueMutationOptions,
   deleteGymLayoutEquipmentMutationOptions,
   deleteVenueMutationOptions,
   gymLayoutEquipmentQueryOptions,
   inventoryEquipmentQueryOptions,
+  restoreGymLayoutEquipmentMutationOptions,
+  restoreVenueMutationOptions,
   updateVenueMutationOptions,
   venuesQueryOptions
 } from "@fittrack/query";
@@ -388,12 +392,16 @@ export function useVenueMutations() {
   const { message, showMessage } = useTimedMessage(2200);
 
   const { data: venues = [], isLoading: venuesLoading } = useQuery(venuesQueryOptions(webApiClient));
+  const { data: archivedVenues = [], isLoading: archivedVenuesLoading } = useQuery(
+    archivedVenuesQueryOptions(webApiClient)
+  );
 
   const createVenueMutation = useMutation(createVenueMutationOptions(webApiClient, queryClient));
 
   const updateVenueMutation = useMutation(updateVenueMutationOptions(webApiClient, queryClient));
 
   const deleteVenueMutation = useMutation(deleteVenueMutationOptions(webApiClient, queryClient));
+  const restoreVenueMutation = useMutation(restoreVenueMutationOptions(webApiClient, queryClient));
 
   const isVenueSubmitting = createVenueMutation.isPending || updateVenueMutation.isPending;
   const venueSavingLabel = useLoadingText("SAVING VENUE", isVenueSubmitting);
@@ -476,10 +484,24 @@ export function useVenueMutations() {
     if (!target) return;
     try {
       await deleteVenueMutation.mutateAsync(target.id);
-      showMessage("Venue deleted.");
+      showMessage("Venue archived.");
       onSuccess();
     } catch {
       showMessage("Unable to delete venue.");
+    }
+  };
+
+  const handleRestoreVenue = async (
+    target: VenueRecord | null,
+    onSuccess?: () => void,
+  ) => {
+    if (!target) return;
+    try {
+      await restoreVenueMutation.mutateAsync(target.id);
+      showMessage(`${target.name} restored to active venues.`);
+      onSuccess?.();
+    } catch {
+      showMessage("Unable to restore venue.");
     }
   };
 
@@ -642,15 +664,19 @@ export function useVenueMutations() {
 
   return {
     venues,
+    archivedVenues,
     venuesLoading,
+    archivedVenuesLoading,
     isVenueSubmitting,
     venueSavingLabel,
     deleteVenueMutation,
+    restoreVenueMutation,
     message,
     showMessage,
     handleUpdateVenueLayout,
     handleVenueSubmit,
     handleDeleteVenue,
+    handleRestoreVenue,
     handleCreateQuickFloorRegion,
     handleCreateQuickFloorRegionAt
   };
@@ -661,6 +687,7 @@ export function useFloorLayout() {
   const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
   const [isEditMode, setIsEditMode] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const [clearFloorConfirmOpen, setClearFloorConfirmOpen] = useState(false);
   const [layoutName, setLayoutName] = useState("Main Floor Plan");
   const [layoutType, setLayoutType] = useState("custom");
   const [gridSize, setGridSize] = useState("40");
@@ -668,6 +695,9 @@ export function useFloorLayout() {
   const { message, showMessage } = useTimedMessage(2200);
   const { data: venues = [] } = useQuery(venuesQueryOptions(webApiClient));
   const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
+  const { data: archivedEquipment = [], isLoading: archivedEquipmentLoading } = useQuery(
+    archivedGymLayoutEquipmentQueryOptions(webApiClient)
+  );
   const { data: inventoryEquipmentPage } = useQuery(
     inventoryEquipmentQueryOptions(webApiClient, { limit: 100, page: 1 })
   );
@@ -758,6 +788,9 @@ export function useFloorLayout() {
   const deleteEquipmentMutation = useMutation(
     deleteGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
   );
+  const restoreEquipmentMutation = useMutation(
+    restoreGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
+  );
 
   const equipmentById = useMemo(
     () =>
@@ -803,6 +836,16 @@ export function useFloorLayout() {
     }
   };
 
+  const handleRequestClearFloor = () => {
+    if (!isEditMode) return;
+    const floorEquipment = liveEquipment.filter((item) => item.floorId === activeFloor);
+    if (floorEquipment.length === 0) {
+      showMessage("No equipment is assigned on this floor yet.");
+      return;
+    }
+    setClearFloorConfirmOpen(true);
+  };
+
   const handleClearFloor = async () => {
     if (!isEditMode) return;
     const floorEquipment = liveEquipment.filter((item) => item.floorId === activeFloor);
@@ -816,8 +859,23 @@ export function useFloorLayout() {
         floorEquipment.map((item) => deleteEquipmentMutation.mutateAsync(item.id))
       );
       showMessage("Floor equipment cleared.");
+      setClearFloorConfirmOpen(false);
     } catch {
       showMessage("Unable to clear the current floor.");
+    }
+  };
+
+  const handleRestoreEquipment = async (
+    equipment: GymLayoutEquipmentRecord | null,
+    onSuccess?: () => void,
+  ) => {
+    if (!equipment) return;
+    try {
+      await restoreEquipmentMutation.mutateAsync(equipment.id);
+      showMessage(`${equipment.name} restored to the floor plan.`);
+      onSuccess?.();
+    } catch {
+      showMessage("Unable to restore equipment.");
     }
   };
 
@@ -879,6 +937,8 @@ export function useFloorLayout() {
     hasUnsavedChanges,
     showUnsavedConfirm,
     setShowUnsavedConfirm,
+    clearFloorConfirmOpen,
+    setClearFloorConfirmOpen,
     layoutName,
     setLayoutName,
     layoutType,
@@ -888,16 +948,22 @@ export function useFloorLayout() {
     deleteTarget,
     setDeleteTarget,
     assignedEquipment,
+    archivedEquipment,
+    archivedEquipmentLoading,
     availableEquipment,
     equipmentRemainingById,
     equipmentById,
     assignedCount,
+    deleteEquipmentMutation,
+    restoreEquipmentMutation,
     message,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
+    handleRequestClearFloor,
     handleClearFloor,
+    handleRestoreEquipment,
     assignEquipmentToVenue
   };
 }

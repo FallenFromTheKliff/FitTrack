@@ -52,6 +52,7 @@ describe('AiService', () => {
     findOwnedActiveSessionByContext: jest.fn(),
     findOwnedSessionByIdOrThrow: jest.fn(),
     archiveOwnedSessionByIdOrThrow: jest.fn(),
+    restoreOwnedSessionByIdOrThrow: jest.fn(),
   };
 
   const aiChatMessageRepository = {
@@ -217,14 +218,25 @@ describe('AiService', () => {
     expect(
       aiChatSessionRepository.archiveOwnedSessionByIdOrThrow,
     ).toHaveBeenCalledWith('user-1', 'session-1');
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
-      AI_SESSION_ARCHIVED_EVENT,
-      expect.objectContaining({
-        userId: 'user-1',
-        sessionId: 'session-1',
-        contextType: ChatContext.general,
-      }),
-    );
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('restores owned sessions through the repository seam', async () => {
+    aiChatSessionRepository.restoreOwnedSessionByIdOrThrow.mockResolvedValue({
+      id: 'session-1',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      is_active: true,
+    });
+
+    await expect(
+      service.restoreSession('user-1', 'session-1'),
+    ).resolves.toBeUndefined();
+
+    expect(
+      aiChatSessionRepository.restoreOwnedSessionByIdOrThrow,
+    ).toHaveBeenCalledWith('user-1', 'session-1');
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
 
   it('creates a new general chat session, forwards recent history, persists the exchange, and seeds the title', async () => {

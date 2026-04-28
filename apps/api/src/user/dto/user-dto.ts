@@ -271,13 +271,13 @@ export class ScanQrDTO {
 
 export class ManualAttendanceCheckInDTO {
   @ApiProperty({ example: '2d1fb357-3ffd-4e5e-9f74-4546e408d0a2' })
-  @IsUUID('4', { message: 'user_id must be a valid UUID' })
+  @IsUUID('all', { message: 'user_id must be a valid UUID' })
   user_id: string;
 }
 
 export class AttendanceFilterDTO extends DateRangeDTO {
   @ApiPropertyOptional({ description: 'Filter by a specific user UUID.' })
   @IsOptional()
-  @IsUUID('4', { message: 'user_id must be a valid UUID' })
+  @IsUUID('all', { message: 'user_id must be a valid UUID' })
   user_id?: string;
 }

@@ -27,6 +27,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
+  ArchiveEquipmentItemDTO,
   CreateEquipmentItemDTO,
   EquipmentItemDetailResponseDTO,
   EquipmentItemResponseDTO,
@@ -141,8 +142,11 @@ export class EquipmentController {
     schema: apiEnvelopeSchema(getSchemaPath(EquipmentItemResponseDTO)),
   })
   @ApiResponse({ status: 422, description: 'Invalid equipment quantities.' })
-  createEquipment(@Body() dto: CreateEquipmentItemDTO) {
-    return this.equipmentService.createEquipmentItem(dto);
+  createEquipment(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateEquipmentItemDTO,
+  ) {
+    return this.equipmentService.createEquipmentItem(user.sub, dto);
   }
 
   @Patch('equipment/:id')
@@ -158,10 +162,11 @@ export class EquipmentController {
   })
   @ApiResponse({ status: 404, description: 'Equipment item not found.' })
   updateEquipment(
+    @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateEquipmentItemDTO,
   ) {
-    return this.equipmentService.updateEquipmentItem(id, dto);
+    return this.equipmentService.updateEquipmentItem(user.sub, id, dto);
   }
 
   @Post('equipment/:id/writeoff')
@@ -185,5 +190,29 @@ export class EquipmentController {
     @Body() dto: EquipmentWriteOffDTO,
   ) {
     return this.equipmentService.writeOffEquipment(user.sub, id, dto);
+  }
+
+  @Post('equipment/:id/archive')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: ArchiveEquipmentItemDTO })
+  @ApiOperation({
+    summary:
+      'Archive active equipment units from inventory with quantity and reason. Admin only.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Equipment units archived.',
+    schema: apiEnvelopeSchema(getSchemaPath(EquipmentItemResponseDTO)),
+  })
+  @ApiResponse({ status: 404, description: 'Equipment item not found.' })
+  @ApiResponse({ status: 422, description: 'Invalid archive quantity.' })
+  archiveEquipment(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ArchiveEquipmentItemDTO,
+  ) {
+    return this.equipmentService.archiveEquipmentItem(user.sub, id, dto);
   }
 }

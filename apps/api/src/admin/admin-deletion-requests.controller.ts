@@ -20,7 +20,7 @@ import { AdminDeletionRequestsService } from './admin-deletion-requests.service'
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.admin, UserRole.staff)
 @Controller('admin/deletion-requests')
 export class AdminDeletionRequestsController {
   constructor(
@@ -29,15 +29,17 @@ export class AdminDeletionRequestsController {
 
   @Get()
   @ApiOperation({
-    summary: 'List member account deletion requests. Admin only.',
+    summary: 'List member account deletion requests. Admin and staff only.',
   })
   getAllDeletionRequests(@Query('status') status?: string) {
     return this.adminDeletionRequestsService.getAll(status);
   }
 
   @Patch(':id/approve')
+  @Roles(UserRole.admin)
   @ApiOperation({
-    summary: 'Approve a pending member account deletion request. Admin only.',
+    summary:
+      'Approve a pending member account deletion request. Admin only.',
   })
   approveDeletionRequest(
     @Param('id', ParseUUIDPipe) id: string,
@@ -52,8 +54,10 @@ export class AdminDeletionRequestsController {
   }
 
   @Patch(':id/reject')
+  @Roles(UserRole.admin)
   @ApiOperation({
-    summary: 'Reject a pending member account deletion request. Admin only.',
+    summary:
+      'Reject a pending member account deletion request. Admin only.',
   })
   rejectDeletionRequest(
     @Param('id', ParseUUIDPipe) id: string,

@@ -85,6 +85,13 @@ export function createGymLayoutApi(transport: ApiTransport) {
       );
       return equipment.map(mapGymLayoutEquipment);
     },
+    async listArchivedEquipment() {
+      const equipment = await unwrapResponse<GymLayoutEquipmentApiRecord[]>(
+        transport.get("/gym-layout/equipment/archived"),
+        "Unable to load archived gym layout equipment.",
+      );
+      return equipment.map(mapGymLayoutEquipment);
+    },
     async createEquipment(payload: GymLayoutEquipmentMutationInput) {
       return mapGymLayoutEquipment(
         await unwrapResponse<GymLayoutEquipmentApiRecord>(
@@ -114,6 +121,14 @@ export function createGymLayoutApi(transport: ApiTransport) {
       return unwrapVoidResponse(
         transport.delete(`/gym-layout/equipment/${equipmentId}`),
         "Unable to delete gym layout equipment.",
+      );
+    },
+    async restoreEquipment(equipmentId: string) {
+      return mapGymLayoutEquipment(
+        await unwrapResponse<GymLayoutEquipmentApiRecord>(
+          transport.patch(`/gym-layout/equipment/${equipmentId}/restore`),
+          "Unable to restore gym layout equipment.",
+        ),
       );
     },
   };

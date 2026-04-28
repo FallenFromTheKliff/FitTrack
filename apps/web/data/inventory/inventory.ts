@@ -2,7 +2,17 @@ import type { InventoryProductCategory } from "@fittrack/types";
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
 export type RetailStockStatus = "In Stock" | "Low Stock" | "Out of Stock";
-export type EquipmentAvailabilityStatus = "Ready" | "Attention" | "Unavailable";
+export type EquipmentAvailabilityStatus =
+  | "Available"
+  | "Under Maintenance"
+  | "Broken";
+export type InventoryAnalyticsPeriod =
+  | "Daily"
+  | "Weekly"
+  | "Monthly"
+  | "Quarterly"
+  | "Yearly";
+export type InventoryTopRetailMetric = "By Inventory Value" | "By Stocks Sold";
 
 export const INVENTORY_TABS = [
   { key: "retail", label: "Retail" },
@@ -40,9 +50,9 @@ export const RETAIL_STOCK_STATUS_COLOR: Record<RetailStockStatus, string> = {
 };
 
 export const EQUIPMENT_STATUS_COLOR: Record<EquipmentAvailabilityStatus, string> = {
-  Ready: "var(--fit-success)",
-  Attention: "var(--fit-warning)",
-  Unavailable: "var(--fit-danger)"
+  Available: "var(--fit-success)",
+  "Under Maintenance": "var(--fit-warning)",
+  Broken: "var(--fit-danger)"
 };
 
 export const RETAIL_STOCK_FILTER_OPTIONS: Array<{
@@ -60,9 +70,41 @@ export const EQUIPMENT_STATUS_FILTER_OPTIONS: Array<{
   value: "All" | EquipmentAvailabilityStatus;
 }> = [
   { label: "All", value: "All" },
-  { label: "Ready", value: "Ready" },
-  { label: "Attention", value: "Attention" },
-  { label: "Unavailable", value: "Unavailable" }
+  { label: "Available", value: "Available" },
+  { label: "Under Maintenance", value: "Under Maintenance" },
+  { label: "Broken", value: "Broken" }
+];
+
+export const INVENTORY_ANALYTICS_PERIOD_OPTIONS: Array<{
+  label: InventoryAnalyticsPeriod;
+  value: InventoryAnalyticsPeriod;
+}> = [
+  { label: "Daily", value: "Daily" },
+  { label: "Weekly", value: "Weekly" },
+  { label: "Monthly", value: "Monthly" },
+  { label: "Quarterly", value: "Quarterly" },
+  { label: "Yearly", value: "Yearly" }
+];
+
+export const INVENTORY_TOP_RETAIL_FILTER_OPTIONS: Array<{
+  label: InventoryTopRetailMetric;
+  value: InventoryTopRetailMetric;
+}> = [
+  { label: "By Inventory Value", value: "By Inventory Value" },
+  { label: "By Stocks Sold", value: "By Stocks Sold" }
+];
+
+export const INVENTORY_EQUIPMENT_PRESET_OPTIONS: Array<{
+  label: string;
+  value: string;
+}> = [
+  { label: "New Equipment", value: "new" },
+  { label: "Adjustable Bench", value: "adjustable-bench" },
+  { label: "Concept Rower", value: "concept-rower" },
+  { label: "Hex Dumbbell Set", value: "hex-dumbbell-set" },
+  { label: "Spin Bike", value: "spin-bike" },
+  { label: "Squat Rack", value: "squat-rack" },
+  { label: "Treadmill", value: "treadmill" }
 ];
 
 export const INVENTORY_RETAIL_PRODUCT_FIELDS: FieldConfig[] = [
@@ -95,6 +137,13 @@ export const INVENTORY_RETAIL_PRODUCT_FIELDS: FieldConfig[] = [
     placeholder: "e.g., 1499"
   },
   {
+    name: "cost",
+    label: "Cost (PHP)",
+    type: "text",
+    required: true,
+    placeholder: "e.g., 899"
+  },
+  {
     name: "stockQuantity",
     label: "Stock Quantity",
     type: "text",
@@ -109,12 +158,6 @@ export const INVENTORY_RETAIL_PRODUCT_FIELDS: FieldConfig[] = [
     required: true,
     placeholder: "e.g., 10",
     hint: "Use this to flag low-stock retail inventory before it runs out."
-  },
-  {
-    name: "imageUrl",
-    label: "Image URL",
-    type: "text",
-    placeholder: "https://..."
   }
 ];
 
@@ -213,6 +256,49 @@ export const INVENTORY_EQUIPMENT_WRITEOFF_FIELDS: FieldConfig[] = [
     type: "textarea",
     required: true,
     placeholder: "Explain why this equipment count changed.",
+    maxLength: 400
+  }
+];
+
+export const INVENTORY_RETAIL_SALE_FIELDS: FieldConfig[] = [
+  {
+    name: "quantitySold",
+    label: "Quantity Sold",
+    type: "text",
+    required: true,
+    placeholder: "e.g., 1"
+  },
+  {
+    name: "price",
+    label: "Price (PHP)",
+    type: "text",
+    required: true,
+    placeholder: "e.g., 1499"
+  },
+  {
+    name: "notes",
+    label: "Notes",
+    type: "textarea",
+    placeholder: "Optional cashier or walk-in sale notes",
+    maxLength: 500
+  }
+];
+
+export const INVENTORY_EQUIPMENT_ARCHIVE_FIELDS: FieldConfig[] = [
+  {
+    name: "quantityToArchive",
+    label: "Quantity to Archive",
+    type: "text",
+    required: true,
+    placeholder: "e.g., 2",
+    hint: "Archive only the currently available units you want removed from active inventory."
+  },
+  {
+    name: "reason",
+    label: "Reason",
+    type: "textarea",
+    required: true,
+    placeholder: "Explain why these units are being archived.",
     maxLength: 400
   }
 ];

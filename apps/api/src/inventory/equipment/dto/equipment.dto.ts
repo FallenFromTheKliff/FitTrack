@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -28,6 +29,14 @@ export class CreateEquipmentItemDTO {
   @TrimString()
   @IsString({ message: 'description must be a string' })
   description?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/images/adjustable-bench.png',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUrl({}, { message: 'image_url must be a valid URL' })
+  image_url?: string;
 
   @ApiProperty({ example: 8 })
   @Type(() => Number)
@@ -66,12 +75,34 @@ export class UpdateEquipmentItemDTO {
   @IsString({ message: 'description must be a string' })
   description?: string;
 
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/images/adjustable-bench.png',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUrl({}, { message: 'image_url must be a valid URL' })
+  image_url?: string;
+
   @ApiPropertyOptional({ example: 'units' })
   @IsOptional()
   @TrimString()
   @IsString({ message: 'unit must be a string' })
   @MaxLength(50, { message: 'unit must not exceed 50 characters' })
   unit?: string;
+
+  @ApiPropertyOptional({ example: 8 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_total must be an integer' })
+  @Min(0, { message: 'quantity_total must be at least 0' })
+  quantity_total?: number;
+
+  @ApiPropertyOptional({ example: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_current must be an integer' })
+  @Min(0, { message: 'quantity_current must be at least 0' })
+  quantity_current?: number;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -88,6 +119,23 @@ export class EquipmentWriteOffDTO {
 
   @ApiProperty({
     example: 'Two benches were damaged and removed from the floor.',
+  })
+  @TrimString()
+  @IsString({ message: 'reason must be a string' })
+  @IsNotEmpty({ message: 'reason is required' })
+  @MaxLength(1000, { message: 'reason must not exceed 1000 characters' })
+  reason: string;
+}
+
+export class ArchiveEquipmentItemDTO {
+  @ApiProperty({ example: 2 })
+  @Type(() => Number)
+  @IsInt({ message: 'quantity_to_archive must be an integer' })
+  @Min(1, { message: 'quantity_to_archive must be at least 1' })
+  quantity_to_archive: number;
+
+  @ApiProperty({
+    example: 'Two benches were retired from the active floor inventory.',
   })
   @TrimString()
   @IsString({ message: 'reason must be a string' })
@@ -156,6 +204,12 @@ export class EquipmentItemResponseDTO {
     nullable: true,
   })
   description: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/images/adjustable-bench.png',
+    nullable: true,
+  })
+  image_url: string | null;
 
   @ApiProperty({ example: 8 })
   quantity_total: number;

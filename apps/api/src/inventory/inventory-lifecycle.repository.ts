@@ -4,7 +4,7 @@ import { RetailProduct, UserRole, UserStatus } from '@prisma/client';
 import { BaseRepository } from '../common/base-repository/base-repository';
 import { PrismaService } from '../prisma/prisma.service';
 
-export type InventoryAdminAlertRecipient = {
+export type InventoryAlertRecipient = {
   display_name: string;
   email: string | null;
   user_id: string;
@@ -60,7 +60,7 @@ export class InventoryLifecycleRepository extends BaseRepository {
     return result.count === 1;
   }
 
-  async listAdminAlertRecipients(): Promise<InventoryAdminAlertRecipient[]> {
+  async listAdminAlertRecipients(): Promise<InventoryAlertRecipient[]> {
     const users = await this.prisma.user.findMany({
       where: {
         role: UserRole.admin,
@@ -99,9 +99,46 @@ export class InventoryLifecycleRepository extends BaseRepository {
     return users.map((user) => this.toAlertRecipient(user));
   }
 
+  async listInventoryActivityRecipients(): Promise<InventoryAlertRecipient[]> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: {
+          in: [UserRole.admin, UserRole.staff],
+        },
+        status: UserStatus.active,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
+        auth_identities: {
+          where: {
+            provider: {
+              in: ['email', 'google'],
+            },
+          },
+          orderBy: {
+            created_at: 'asc',
+          },
+          select: {
+            identifier: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    return users.map((user) => this.toAlertRecipient(user));
+  }
+
   private toAlertRecipient(
     user: AlertRecipientRecord,
-  ): InventoryAdminAlertRecipient {
+  ): InventoryAlertRecipient {
     const firstName = user.profile?.first_name ?? 'Admin';
     const lastName = user.profile?.last_name ?? '';
 

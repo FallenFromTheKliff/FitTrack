@@ -481,6 +481,18 @@ class BusinessInsightService:
                 "Inventory sales data is present, but the top product has zero quantity sold."
             )
 
+        if (
+            grounding.inventory is not None
+            and grounding.inventory.retail_items > 0
+            and BusinessInsightService._parse_money(
+                grounding.inventory.retail_inventory_value
+            )
+            == 0
+        ):
+            anomalies.append(
+                "Inventory items exist, but the recorded retail inventory value is zero."
+            )
+
         return anomalies
 
     @staticmethod
@@ -505,6 +517,7 @@ class BusinessInsightService:
             if grounding.inventory and grounding.inventory.top_products
             else None
         )
+        inventory = grounding.inventory
         peak_hour = grounding.attendance.peak_hours[0] if grounding.attendance.peak_hours else None
 
         highlights = [
@@ -526,6 +539,12 @@ class BusinessInsightService:
                 f"Top coach performer is {BusinessInsightService._coach_name(top_coach)} "
                 f"with {top_coach.completed_sessions} completed sessions."
             )
+        if inventory:
+            highlights.append(
+                f"Inventory currently holds {inventory.retail_items} retail items, "
+                f"with {inventory.low_stock_items} low-stock items and "
+                f"{inventory.equipment_under_maintenance} equipment type(s) under maintenance."
+            )
 
         risks = (
             anomaly_flags.copy()
@@ -541,6 +560,10 @@ class BusinessInsightService:
         if top_product:
             opportunities.append(
                 f"Promote {top_product.name} during peak hours to lift secondary spend."
+            )
+        if inventory and inventory.low_stock_items > 0:
+            opportunities.append(
+                f"Restock the {inventory.low_stock_items} low-stock retail item(s) before peak foot traffic loses add-on sales."
             )
         if top_plan:
             opportunities.append(
@@ -572,6 +595,10 @@ class BusinessInsightService:
             recommended_actions.append(
                 f"Bundle {top_product.name} with memberships or coaching packages to improve spend per visit."
             )
+        if inventory and inventory.equipment_under_maintenance > 0:
+            recommended_actions.append(
+                f"Resolve {inventory.equipment_under_maintenance} maintenance queue item(s) so equipment availability stays ahead of attendance demand."
+            )
         if not recommended_actions:
             recommended_actions.append(
                 "Review this grounded fallback insight and regenerate once the external AI provider stabilizes."
@@ -580,7 +607,8 @@ class BusinessInsightService:
         summary = (
             f"Fallback insight: revenue is {grounding.overview.total_revenue}, "
             f"attendance is {grounding.overview.total_check_ins} check-ins, "
-            f"and active membership is {grounding.membership.active_members} for the selected window."
+            f"active membership is {grounding.membership.active_members}, and "
+            f"inventory value is {inventory.retail_inventory_value if inventory else '0.00'} for the selected window."
         )
 
         return BusinessAnalyticsInsightResponse(

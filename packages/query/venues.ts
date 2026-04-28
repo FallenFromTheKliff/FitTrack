@@ -10,6 +10,13 @@ export function venuesQueryOptions(client: Pick<ApiClient, "venues">, userId?: s
   });
 }
 
+export function archivedVenuesQueryOptions(client: Pick<ApiClient, "venues">) {
+  return queryOptions({
+    queryKey: queryKeys.archivedVenues(),
+    queryFn: () => client.venues.listArchived()
+  });
+}
+
 export function venueAvailabilityQueryOptions<T>(
   client: Pick<ApiClient, "venues">,
   venueId?: string | number,
@@ -47,6 +54,15 @@ export function updateVenueMutationOptions(client: Pick<ApiClient, "venues">, qu
 export function deleteVenueMutationOptions(client: Pick<ApiClient, "venues">, queryClient: QueryClient, userId?: string) {
   return mutationOptions({
     mutationFn: (id: string | number) => client.venues.delete(id),
+    onSuccess: async () => {
+      await invalidateVenueQueries(queryClient, userId);
+    }
+  });
+}
+
+export function restoreVenueMutationOptions(client: Pick<ApiClient, "venues">, queryClient: QueryClient, userId?: string) {
+  return mutationOptions({
+    mutationFn: (id: string | number) => client.venues.restore(id),
     onSuccess: async () => {
       await invalidateVenueQueries(queryClient, userId);
     }

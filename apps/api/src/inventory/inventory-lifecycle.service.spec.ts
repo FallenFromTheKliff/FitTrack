@@ -13,6 +13,7 @@ describe('InventoryLifecycleService', () => {
     findProductsByIds: jest.fn(),
     markLowStockAlertSentIfDue: jest.fn(),
     listAdminAlertRecipients: jest.fn(),
+    listInventoryActivityRecipients: jest.fn(),
   };
 
   const notificationsService = {
@@ -119,5 +120,86 @@ describe('InventoryLifecycleService', () => {
     expect(dispatchCalls[0]?.[2].email?.subject).toBe(
       'Equipment write-off: Adjustable Bench',
     );
+  });
+
+  it('dispatches in-app system notifications for inventory activity updates', async () => {
+    repo.listInventoryActivityRecipients.mockResolvedValue([
+      {
+        user_id: 'admin-1',
+        display_name: 'Admin One',
+        email: 'admin@example.com',
+      },
+      {
+        user_id: 'staff-1',
+        display_name: 'Staff One',
+        email: 'staff@example.com',
+      },
+    ]);
+
+    await service.handleInventoryActivity({
+      action: 'product_updated',
+      actorId: 'admin-1',
+      entityId: 'product-1',
+      entityName: 'Creatine',
+      details: {
+        stock_quantity: 8,
+      },
+    });
+
+    const dispatchCalls = notificationsService.dispatch.mock.calls as Array<
+      [string, NotificationType, NotificationDispatchPayload]
+    >;
+
+    expect(dispatchCalls).toHaveLength(2);
+    expect(dispatchCalls[0]?.[1]).toBe(NotificationType.system);
+    expect(dispatchCalls[0]?.[2]).toMatchObject({
+      title: 'Retail product updated: Creatine',
+      body: 'Creatine was updated in the retail inventory catalog.',
+    });
+    expect(dispatchCalls[0]?.[2].email).toBeUndefined();
+  });
+
+  it('maps recorded retail sales into inventory activity notifications', async () => {
+    repo.listInventoryActivityRecipients.mockResolvedValue([
+      {
+        user_id: 'admin-1',
+        display_name: 'Admin One',
+        email: 'admin@example.com',
+      },
+    ]);
+
+    await service.handleInventoryActivity({
+      action: 'product_sale_recorded',
+      actorId: 'staff-1',
+      entityId: 'sale-1',
+      entityName: 'Whey Protein Isolate',
+      details: {
+        item_count: 1,
+        payment_method: 'cash',
+        quantity_sold: 2,
+        sale_id: 'sale-1',
+        source: 'manual',
+        status: 'completed',
+        total_amount: '2998.00',
+      },
+    });
+
+    const dispatchCalls = notificationsService.dispatch.mock.calls as Array<
+      [string, NotificationType, NotificationDispatchPayload]
+    >;
+
+    expect(dispatchCalls).toHaveLength(1);
+    expect(dispatchCalls[0]?.[0]).toBe('admin-1');
+    expect(dispatchCalls[0]?.[1]).toBe(NotificationType.system);
+    expect(dispatchCalls[0]?.[2]).toMatchObject({
+      title: 'Retail sale recorded: Whey Protein Isolate',
+      body: '2 unit(s) sold for PHP 2998.00 through manual sale.',
+    });
+    expect(dispatchCalls[0]?.[2].data).toMatchObject({
+      action: 'product_sale_recorded',
+      inventory_domain: 'retail',
+      sale_id: 'sale-1',
+    });
+    expect(dispatchCalls[0]?.[2].email).toBeUndefined();
   });
 });

@@ -1,17 +1,10 @@
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 import type { MemberRecord } from "@fittrack/types";
-export type {
-  AchievementReviewRecord,
-  AchievementReviewStatus,
-} from "@/data/progress/milestones";
-export {
-  ACHIEVEMENT_REVIEW_SEED,
-  ACHIEVEMENT_REVIEW_STATUS_COLORS,
-} from "@/data/progress/milestones";
 
 export const MEMBER_STATUS_TABS = [
   { key: "Active", label: "Active" },
-  { key: "Archived", label: "Archived" }
+  { key: "Archived", label: "Archived" },
+  { key: "Termination Requests", label: "Termination Requests" }
 ] as const;
 
 export type MemberStatusTab = typeof MEMBER_STATUS_TABS[number]["key"];
@@ -39,7 +32,9 @@ export const MEMBERSHIP_CARD_STATUS_COLORS: Record<string, string> = {
 
 export const STATUS_COLORS: Record<string, string> = {
   Active: "var(--fit-success)",
-  Archived: "var(--fit-warning)"
+  Archived: "var(--fit-warning)",
+  "Termination request": "var(--fit-warning)",
+  "Termination Requests": "var(--fit-warning)"
 };
 
 export const TIER_COLORS: Record<string, string> = {

@@ -31,6 +31,7 @@ export default function Header({
     unreadCount,
     markAllRead,
     markRead,
+    removeAllNotifications,
     removeNotification
   } = useHeaderNotifications();
 
@@ -73,6 +74,7 @@ export default function Header({
       unreadCount={unreadCount}
       onClose={() => setNotifOpen(false)}
       onDelete={removeNotification}
+      onDeleteAll={removeAllNotifications}
       onMarkAllRead={markAllRead}
       onMarkRead={markRead}
     />

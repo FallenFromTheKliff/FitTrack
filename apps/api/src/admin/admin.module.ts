@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { BookingsModule } from '../bookings/bookings.module';
 import { AdminBookingsController } from './admin-bookings.controller';
@@ -10,7 +11,7 @@ import { AdminUsersService } from './admin-users.service';
 import { PrismaService } from 'prisma/prisma.service';
 
 @Module({
-  imports: [BookingsModule],
+  imports: [BookingsModule, EventEmitterModule],
   controllers: [
     AdminBookingsController,
     AdminDeletionRequestsController,

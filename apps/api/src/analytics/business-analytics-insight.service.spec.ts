@@ -273,4 +273,25 @@ describe('BusinessAnalyticsInsightService', () => {
       meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
     });
   });
+
+  it('generates a transient insight without persisting an insight run', async () => {
+    analyticsService.buildBusinessInsightGroundingPayload.mockResolvedValue(
+      groundingPayload,
+    );
+    aiPythonClientService.generateBusinessInsight.mockResolvedValue(
+      insightPayload,
+    );
+
+    await expect(
+      service.generateTransientInsight({ focus: InsightFocus.revenue }),
+    ).resolves.toEqual(insightPayload);
+
+    expect(
+      analyticsService.buildBusinessInsightGroundingPayload,
+    ).toHaveBeenCalledWith({ focus: InsightFocus.revenue });
+    expect(aiPythonClientService.generateBusinessInsight).toHaveBeenCalledWith({
+      grounding: groundingPayload,
+    });
+    expect(insightRunRepository.createInsightRun).not.toHaveBeenCalled();
+  });
 });

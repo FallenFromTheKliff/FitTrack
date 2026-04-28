@@ -206,8 +206,9 @@ export class UserController {
   adminUpdateUser(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProfileDTO,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.usersService.adminUpdateUser(id, dto);
+    return this.usersService.adminUpdateUser(id, dto, user.sub);
   }
 
   @Patch(':id/status')

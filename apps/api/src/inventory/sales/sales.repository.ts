@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   Prisma,
   RetailProduct,
+  SaleSource,
 } from '@prisma/client';
 
 import {
@@ -117,7 +118,9 @@ export class SalesRepository extends BaseRepository {
     processedBy: string;
     customerName?: string;
     customerUserId?: string;
+    notes?: string;
     items: CreateSaleItemDTO[];
+    source: SaleSource;
   }): Promise<SaleDetailRecord> {
     return this.transaction(async (tx) => {
       const saleDraft = await this.buildSaleDraft(tx, input.items);
@@ -127,6 +130,8 @@ export class SalesRepository extends BaseRepository {
         data: {
           customer_name: input.customerName ?? null,
           customer_user_id: input.customerUserId ?? null,
+          notes: input.notes ?? null,
+          source: input.source,
           total_amount: saleDraft.totalAmount.toDecimalPlaces(2),
           payment_method: 'cash',
           processed_by: input.processedBy,
@@ -154,8 +159,10 @@ export class SalesRepository extends BaseRepository {
     processedBy: string;
     customerName?: string;
     customerUserId: string;
+    notes?: string;
     items: CreateSaleItemDTO[];
     idempotencyKey: string;
+    source: SaleSource;
   }): Promise<PendingPaymongoSaleResult> {
     return this.transaction(async (tx) => {
       const saleDraft = await this.buildSaleDraft(tx, input.items);
@@ -165,6 +172,8 @@ export class SalesRepository extends BaseRepository {
         data: {
           customer_name: input.customerName ?? null,
           customer_user_id: input.customerUserId,
+          notes: input.notes ?? null,
+          source: input.source,
           total_amount: saleDraft.totalAmount.toDecimalPlaces(2),
           payment_method: 'paymongo',
           processed_by: input.processedBy,
@@ -325,12 +334,17 @@ export class SalesRepository extends BaseRepository {
       }
 
       const unitPrice = new Prisma.Decimal(product.price);
-      const subtotal = unitPrice.mul(item.quantity).toDecimalPlaces(2);
+      const overrideUnitPrice =
+        item.unit_price !== undefined
+          ? new Prisma.Decimal(item.unit_price)
+          : null;
+      const effectiveUnitPrice = overrideUnitPrice ?? unitPrice;
+      const subtotal = effectiveUnitPrice.mul(item.quantity).toDecimalPlaces(2);
 
       return {
         productId: product.id,
         quantity: item.quantity,
-        unitPrice,
+        unitPrice: effectiveUnitPrice,
         subtotal,
       };
     });

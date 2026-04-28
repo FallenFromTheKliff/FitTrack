@@ -22,7 +22,7 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     gamification: ["ADMIN"],
     ai: ["ADMIN", "STAFF"],
     facilities: ["ADMIN"],
-    inventory: ["ADMIN"],
+    inventory: ["ADMIN", "STAFF"],
     analytics: ["ADMIN"],
     settings: WEB_PORTAL_ALLOWED_ROLES,
     profile: WEB_PORTAL_ALLOWED_ROLES,

@@ -110,7 +110,8 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         } as CSSProperties,
         notificationsListWrap: {
             flex: 1,
-            overflowY: "auto"
+            overflowY: "auto",
+            padding: 16
         } as CSSProperties,
         notificationsEmptyState: {
             minHeight: "100%",
@@ -121,8 +122,57 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             padding: 24,
             textAlign: "center"
         } as CSSProperties,
-        notificationRow: {
-            padding: "14px 20px"
+        notificationCard: (isRead: boolean): CSSProperties => ({
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            padding: 16,
+            borderRadius: 18,
+            border: `1px solid ${isRead ? colors.border : colors.brand}`,
+            backgroundColor: isRead ? colors.surface : colors.surfaceRaised,
+            boxShadow: `0 14px 34px ${colors.overlay}`
+        }),
+        notificationCardHeader: {
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12
+        } as CSSProperties,
+        notificationCardCopy: {
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6
+        } as CSSProperties,
+        notificationStateBadge: (isRead: boolean): CSSProperties => ({
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: 60,
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: `1px solid ${isRead ? colors.border : colors.brand}`,
+            color: isRead ? colors.textMuted : colors.brand,
+            backgroundColor: colors.surface
+        }),
+        notificationCardFooter: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap"
+        } as CSSProperties,
+        notificationTimestamp: {
+            fontSize: 12,
+            color: colors.textMuted
+        } as CSSProperties,
+        notificationActionGroup: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 8,
+            flexWrap: "wrap"
         } as CSSProperties
     };
 }

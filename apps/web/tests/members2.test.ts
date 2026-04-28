@@ -9,7 +9,7 @@ test('load members page bypassing login by directly generating dom.html', async 
     // We can just visit /login and log the DOM to see why it timed out.
     await page.goto('http://localhost:8080/login');
     await page.fill('input[type="email"]', 'seed.admin@fittrack.com');
-    await page.fill('input[type="password"]', 'Password123!');
+    await page.fill('input[type="password"]', 'SeedAdmin!2026');
 
     // Use generic button
     await page.click('button:has-text("SIGN IN"), button:has-text("Log in"), button[type="submit"]');

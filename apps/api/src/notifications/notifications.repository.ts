@@ -6,6 +6,8 @@ import {
   NotificationStatus,
   NotificationType,
   Prisma,
+  UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import {
@@ -25,6 +27,10 @@ interface DispatchNotificationWriteInput {
   read_at?: Date | null;
   error?: string | null;
 }
+
+export type ManagementNotificationRecipient = {
+  user_id: string;
+};
 
 @Injectable()
 export class NotificationsRepository extends BaseRepository {
@@ -173,6 +179,32 @@ export class NotificationsRepository extends BaseRepository {
   ): Promise<void> {
     await this.findOwnedInAppNotificationByIdOrThrow(userId, notificationId);
     await this.deleteById(this.prisma.notification, notificationId);
+  }
+
+  async deleteAllOwnedInAppNotifications(userId: string): Promise<number> {
+    const result = await this.deleteMany(this.prisma.notification, {
+      user_id: userId,
+      channel: NotificationChannel.in_app,
+    });
+
+    return result.count;
+  }
+
+  async listManagementNotificationRecipients(): Promise<
+    ManagementNotificationRecipient[]
+  > {
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: { in: [UserRole.admin, UserRole.staff] },
+        status: UserStatus.active,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return users.map((user) => ({ user_id: user.id }));
   }
 
   async markAllOwnedInAppNotificationsRead(userId: string): Promise<number> {

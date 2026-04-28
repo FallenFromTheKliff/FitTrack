@@ -22,6 +22,7 @@ type Props = {
   slideStyle: MotionStyle;
   isLoading: boolean;
   colors: ThemeColors;
+  allowDrag?: boolean;
   onBlockClick: (booking: Booking) => void;
 };
 
@@ -54,12 +55,14 @@ function BookingNode({
   colors,
   bookingMutedTextColor,
   bookingTextColor,
+  allowDrag,
   onBlockClick,
 }: {
   booking: Booking;
   colors: ThemeColors;
   bookingMutedTextColor: string;
   bookingTextColor: string;
+  allowDrag: boolean;
   onBlockClick: (booking: Booking) => void;
 }) {
   const { settings } = useTheme();
@@ -71,6 +74,7 @@ function BookingNode({
       kind: "booking",
       bookingId: booking.id,
     },
+    disabled: !allowDrag,
   });
 
   return (
@@ -78,8 +82,8 @@ function BookingNode({
       buttonRef={setNodeRef}
       variant="primary"
       onClick={() => onBlockClick(booking)}
-      {...listeners}
-      {...attributes}
+      {...(allowDrag ? listeners : {})}
+      {...(allowDrag ? attributes : {})}
       style={{
         position: "absolute",
         top: 6,
@@ -97,8 +101,8 @@ function BookingNode({
           ? "0 10px 24px rgba(0,0,0,0.22)"
           : "0 2px 8px rgba(0,0,0,0.2)",
         alignItems: "flex-start",
-        cursor: isDragging ? "grabbing" : "grab",
-        touchAction: "none",
+        cursor: allowDrag ? (isDragging ? "grabbing" : "grab") : "pointer",
+        touchAction: allowDrag ? "none" : "auto",
         opacity: isDragging ? 0.56 : 1,
         transform: CSS.Translate.toString(transform),
         transition: canAnimate
@@ -164,7 +168,16 @@ function BookingNode({
   );
 }
 
-export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, isLoading, colors, onBlockClick }: Props) {
+export default function WeeklyTimeline({
+  weekDays,
+  hours,
+  bookings,
+  slideStyle,
+  isLoading,
+  colors,
+  allowDrag = true,
+  onBlockClick,
+}: Props) {
   const today = toYmd(new Date());
   const bookingTextColor = colors.onBrand ?? colors.surface;
   const bookingMutedTextColor = `${bookingTextColor}CC`;
@@ -238,6 +251,7 @@ export default function WeeklyTimeline({ weekDays, hours, bookings, slideStyle, 
                         colors={colors}
                         bookingMutedTextColor={bookingMutedTextColor}
                         bookingTextColor={bookingTextColor}
+                        allowDrag={allowDrag}
                         onBlockClick={onBlockClick}
                       />
                     ))}

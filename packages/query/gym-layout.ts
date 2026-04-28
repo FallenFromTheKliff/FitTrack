@@ -20,6 +20,19 @@ export function gymLayoutEquipmentQueryOptions(
   });
 }
 
+export function archivedGymLayoutEquipmentQueryOptions(
+  client: Pick<ApiClient, "gymLayout">,
+  config?: GymLayoutEquipmentQueryConfig,
+) {
+  return queryOptions({
+    queryKey: queryKeys.gymLayoutArchivedEquipment(),
+    queryFn: () => client.gymLayout.listArchivedEquipment(),
+    ...(config?.refetchInterval !== undefined
+      ? { refetchInterval: config.refetchInterval }
+      : {}),
+  });
+}
+
 async function invalidateGymLayout(queryClient: QueryClient) {
   await invalidateGymLayoutQueries(queryClient);
 }
@@ -62,6 +75,19 @@ export function deleteGymLayoutEquipmentMutationOptions(
   return mutationOptions({
     mutationFn: (equipmentId: string) =>
       client.gymLayout.deleteEquipment(equipmentId),
+    onSuccess: async () => {
+      await invalidateGymLayout(queryClient);
+    },
+  });
+}
+
+export function restoreGymLayoutEquipmentMutationOptions(
+  client: Pick<ApiClient, "gymLayout">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (equipmentId: string) =>
+      client.gymLayout.restoreEquipment(equipmentId),
     onSuccess: async () => {
       await invalidateGymLayout(queryClient);
     },

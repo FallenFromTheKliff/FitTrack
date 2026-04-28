@@ -139,3 +139,8 @@ export class DeleteNotificationResponseDTO {
   @ApiProperty({ example: 'Notification deleted.' })
   message: string;
 }
+
+export class DeleteAllNotificationsResponseDTO {
+  @ApiProperty({ example: 8 })
+  deleted_count: number;
+}

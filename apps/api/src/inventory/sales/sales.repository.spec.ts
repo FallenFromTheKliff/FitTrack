@@ -155,13 +155,17 @@ describe('SalesRepository', () => {
       processedBy: 'staff-1',
       customerName: 'Walk-in Customer',
       customerUserId: 'customer-1',
+      notes: 'Cash drawer sale.',
       items: [{ product_id: 'product-1', quantity: 2 }],
+      source: 'manual',
     });
 
     expect(tx.saleTransaction.create).toHaveBeenCalledWith({
       data: {
         customer_name: 'Walk-in Customer',
         customer_user_id: 'customer-1',
+        notes: 'Cash drawer sale.',
+        source: 'manual',
         total_amount: new Prisma.Decimal('2998.00'),
         payment_method: 'cash',
         processed_by: 'staff-1',
@@ -221,8 +225,10 @@ describe('SalesRepository', () => {
       processedBy: 'staff-1',
       customerName: 'Walk-in Customer',
       customerUserId: 'customer-1',
+      notes: 'Customer started checkout at the front desk.',
       items: [{ product_id: 'product-1', quantity: 2 }],
       idempotencyKey: '11111111-1111-4111-8111-111111111111',
+      source: 'manual',
     });
 
     expect(tx.payment.create).toHaveBeenCalledWith({
@@ -329,6 +335,7 @@ describe('SalesRepository', () => {
       repo.createCashSale({
         processedBy: 'staff-1',
         items: [{ product_id: 'product-1', quantity: 2 }],
+        source: 'manual',
       }),
     ).rejects.toBeInstanceOf(HttpException);
 
@@ -354,6 +361,7 @@ describe('SalesRepository', () => {
         customerUserId: 'missing-user',
         items: [{ product_id: 'product-1', quantity: 1 }],
         idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        source: 'manual',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -380,6 +388,7 @@ describe('SalesRepository', () => {
         customerUserId: 'customer-1',
         items: [{ product_id: 'product-1', quantity: 2 }],
         idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        source: 'manual',
       }),
     ).rejects.toBeInstanceOf(HttpException);
 
@@ -393,6 +402,7 @@ describe('SalesRepository', () => {
       repo.createCashSale({
         processedBy: 'staff-1',
         items: [{ product_id: 'missing-product', quantity: 1 }],
+        source: 'manual',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });

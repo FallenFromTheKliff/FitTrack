@@ -1,10 +1,13 @@
 export {
+  archivedGymLayoutEquipmentQueryOptions,
   deleteGymLayoutEquipmentMutationOptions,
   gymLayoutEquipmentQueryOptions,
+  restoreGymLayoutEquipmentMutationOptions,
   updateGymLayoutEquipmentMutationOptions,
   createGymLayoutEquipmentMutationOptions,
 } from "./gym-layout";
 export {
+  deleteAllNotificationsMutationOptions,
   deleteNotificationMutationOptions,
   markAllNotificationsReadMutationOptions,
   markNotificationReadMutationOptions,
@@ -13,6 +16,14 @@ export {
   notificationUnreadCountQueryOptions,
   updateNotificationPreferencesMutationOptions,
 } from "./notifications";
+export {
+  bulkUpdateRecurringCoachingSessionsMutationOptions,
+  cancelRecurringCoachingPlanMutationOptions,
+  createRecurringCoachingPlanMutationOptions,
+  previewRecurringCoachingPlanMutationOptions,
+  recurringCoachingPlanSessionsQueryOptions,
+  updateRecurringCoachingSessionMutationOptions,
+} from "./recurring-coaching-plans";
 export { uploadImageMutationOptions } from "./files";
 export {
   analyticsAttendanceQueryOptions,
@@ -22,6 +33,7 @@ export {
   analyticsMembersQueryOptions,
   analyticsOverviewQueryOptions,
   analyticsRevenueQueryOptions,
+  analyticsSnapshotQueryOptions,
   generateAnalyticsInsightMutationOptions,
 } from "./analytics";
 export {
@@ -30,6 +42,7 @@ export {
   aiChatSessionQueryOptions,
   aiChatSessionsQueryOptions,
   archiveAiChatSessionMutationOptions,
+  restoreAiChatSessionMutationOptions,
   generateAiPlanMutationOptions,
 } from "./ai";
 export {
@@ -115,12 +128,15 @@ export {
   updateFitnessExerciseMutationOptions,
 } from "./fitness";
 export {
+  archiveInventoryEquipmentMutationOptions,
+  createInventorySaleMutationOptions,
   createInventoryEquipmentMutationOptions,
   createInventoryProductMutationOptions,
   inventoryEquipmentDetailQueryOptions,
   inventoryEquipmentQueryOptions,
   inventoryProductDetailQueryOptions,
   inventoryProductsQueryOptions,
+  inventorySaleDetailQueryOptions,
   inventorySalesQueryOptions,
   restockInventoryProductMutationOptions,
   updateInventoryEquipmentMutationOptions,
@@ -207,8 +223,10 @@ export {
   staffUsersQueryOptions,
 } from "./staff";
 export {
+  archivedVenuesQueryOptions,
   createVenueMutationOptions,
   deleteVenueMutationOptions,
+  restoreVenueMutationOptions,
   venueAvailabilityQueryOptions,
   updateVenueMutationOptions,
   venuesQueryOptions,

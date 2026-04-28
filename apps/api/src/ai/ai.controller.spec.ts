@@ -14,6 +14,7 @@ function getMethodGuardMetadata(
     | 'getChatSessionById'
     | 'getChatMessages'
     | 'archiveSession'
+    | 'restoreSession'
     | 'generatePlan',
 ): unknown[] | undefined {
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -54,6 +55,7 @@ describe('AiController', () => {
     getChatSessionById: jest.fn(),
     getChatMessages: jest.fn(),
     archiveSession: jest.fn(),
+    restoreSession: jest.fn(),
     generatePlan: jest.fn(),
   };
 
@@ -70,6 +72,7 @@ describe('AiController', () => {
     'getChatSessionById',
     'getChatMessages',
     'archiveSession',
+    'restoreSession',
     'generatePlan',
   ] as const)('protects %s with JWT auth', (methodName) => {
     expect(getMethodGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
@@ -157,10 +160,27 @@ describe('AiController', () => {
         sub: 'user-1',
       } as never),
     ).resolves.toEqual({
-      message: 'AI chat session archived.',
+      message: 'AI chat session deleted.',
     });
 
     expect(aiService.archiveSession).toHaveBeenCalledWith(
+      'user-1',
+      '11111111-1111-4111-8111-111111111111',
+    );
+  });
+
+  it('restores chat sessions through the service and returns a confirmation message', async () => {
+    aiService.restoreSession.mockResolvedValue(undefined);
+
+    await expect(
+      controller.restoreSession('11111111-1111-4111-8111-111111111111', {
+        sub: 'user-1',
+      } as never),
+    ).resolves.toEqual({
+      message: 'AI chat session restored.',
+    });
+
+    expect(aiService.restoreSession).toHaveBeenCalledWith(
       'user-1',
       '11111111-1111-4111-8111-111111111111',
     );

@@ -117,6 +117,7 @@ function createProductResponse(
     id: string;
     name: string;
     description: string | null;
+    cost: string;
     price: string;
     stock_quantity: number;
     reorder_threshold: number;
@@ -130,6 +131,7 @@ function createProductResponse(
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     name: 'Whey Protein Isolate',
     description: 'Vanilla whey isolate tub.',
+    cost: '899.00',
     price: '1499.00',
     stock_quantity: 8,
     reorder_threshold: 10,
@@ -146,6 +148,7 @@ function createEquipmentResponse(
     id: string;
     name: string;
     description: string | null;
+    image_url: string | null;
     quantity_total: number;
     quantity_current: number;
     unit: string;
@@ -158,6 +161,7 @@ function createEquipmentResponse(
     id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     name: 'Adjustable Bench',
     description: 'Commercial-grade bench.',
+    image_url: 'https://cdn.fittrack.test/images/bench.png',
     quantity_total: 8,
     quantity_current: 6,
     unit: 'units',

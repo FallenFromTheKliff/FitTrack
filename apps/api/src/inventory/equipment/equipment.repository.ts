@@ -58,6 +58,12 @@ export type EquipmentDetailRecord = Prisma.GymEquipmentItemGetPayload<{
   include: typeof equipmentDetailInclude;
 }>;
 
+export type ArchivedEquipmentRecord = {
+  equipment: GymEquipmentItem;
+  quantityBefore: number;
+  quantitySetTo: number;
+};
+
 @Injectable()
 export class EquipmentRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -224,6 +230,98 @@ export class EquipmentRepository extends BaseRepository {
         },
         include: equipmentWriteOffInclude,
       });
+    });
+  }
+
+  archiveEquipmentUnits(
+    performerId: string,
+    equipmentId: string,
+    quantityToArchive: number,
+    reason: string,
+  ): Promise<ArchivedEquipmentRecord> {
+    return this.transaction(async (tx) => {
+      const equipment = await tx.gymEquipmentItem.findUnique({
+        where: { id: equipmentId },
+      });
+
+      if (!equipment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'GymEquipmentItem Not Found',
+          status: 404,
+          detail: `GymEquipmentItem with id "${equipmentId}" does not exist.`,
+        });
+      }
+
+      if (quantityToArchive > equipment.quantity_current) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Invalid Equipment Archive',
+            status: 422,
+            detail:
+              'quantity_to_archive cannot be greater than the current equipment quantity.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      const quantityBefore = equipment.quantity_current;
+      const quantitySetTo = quantityBefore - quantityToArchive;
+      const quantityTotal = equipment.quantity_total - quantityToArchive;
+
+      const updateResult = await tx.gymEquipmentItem.updateMany({
+        where: {
+          id: equipmentId,
+          quantity_current: quantityBefore,
+          quantity_total: equipment.quantity_total,
+        },
+        data: {
+          quantity_current: quantitySetTo,
+          quantity_total: quantityTotal,
+          is_active: quantityTotal > 0 ? equipment.is_active : false,
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Equipment Quantity Changed',
+          status: 409,
+          detail:
+            'Equipment quantity changed before the archive could be recorded. Refresh the item and try again.',
+        });
+      }
+
+      await tx.equipmentWriteOff.create({
+        data: {
+          quantity_before: quantityBefore,
+          quantity_set_to: quantitySetTo,
+          quantity_lost: quantityToArchive,
+          reason,
+          equipment: { connect: { id: equipmentId } },
+          performer: { connect: { id: performerId } },
+        },
+      });
+
+      const updatedEquipment = await tx.gymEquipmentItem.findUnique({
+        where: { id: equipmentId },
+      });
+
+      if (!updatedEquipment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'GymEquipmentItem Not Found',
+          status: 404,
+          detail: `GymEquipmentItem with id "${equipmentId}" does not exist.`,
+        });
+      }
+
+      return {
+        equipment: updatedEquipment,
+        quantityBefore,
+        quantitySetTo,
+      };
     });
   }
 }

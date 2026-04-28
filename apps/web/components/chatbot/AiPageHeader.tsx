@@ -1,26 +1,20 @@
-import { MessageSquarePlus, Trash2 } from "lucide-react";
+import { MessageSquarePlus } from "lucide-react";
 
 import { FitButton, FitText } from "@/components/fit";
 
 type AiPageHeaderProps = {
-  activeSessionId: string | null;
   dangerColor: string;
-  isArchiving: boolean;
   lastError: string;
   message: string;
   mutedColor: string;
-  onArchive: () => void;
   onStartFresh: () => void;
 };
 
 export default function AiPageHeader({
-  activeSessionId,
   dangerColor,
-  isArchiving,
   lastError,
   message,
   mutedColor,
-  onArchive,
   onStartFresh
 }: AiPageHeaderProps) {
   return (
@@ -43,15 +37,6 @@ export default function AiPageHeader({
       </div>
       <div className="flex flex-wrap gap-2">
         <FitButton variant="ghost" icon={MessageSquarePlus} label="New Chat" onClick={onStartFresh} />
-        <FitButton
-          variant="danger"
-          icon={Trash2}
-          label="Archive Session"
-          onClick={onArchive}
-          disabled={!activeSessionId}
-          loading={isArchiving}
-          loadingLabel="ARCHIVING"
-        />
       </div>
     </div>
   );

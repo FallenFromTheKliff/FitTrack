@@ -19,6 +19,7 @@ describe('RetailProductService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
 
   const makeProduct = (overrides: Record<string, unknown> = {}) => ({
@@ -27,6 +28,7 @@ describe('RetailProductService', () => {
     name: 'Whey Protein Isolate',
     description: 'Vanilla whey isolate tub with 30 servings.',
     price: new Prisma.Decimal('1499.00'),
+    cost: new Prisma.Decimal('899.00'),
     stock_quantity: 25,
     reorder_threshold: 10,
     image_url: 'https://cdn.fittrack.test/images/whey.png',
@@ -73,7 +75,7 @@ describe('RetailProductService', () => {
   it('creates products with defaults for optional inventory fields', async () => {
     repo.createProduct.mockResolvedValue(makeProduct());
 
-    await service.createProduct({
+    await service.createProduct('admin-1', {
       name: 'Whey Protein Isolate',
       price: 1499,
     });
@@ -83,10 +85,19 @@ describe('RetailProductService', () => {
       name: 'Whey Protein Isolate',
       description: null,
       price: 1499,
+      cost: 0,
       stock_quantity: 0,
       reorder_threshold: 10,
       image_url: null,
     });
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'product_created',
+        actorId: 'admin-1',
+        entityName: 'Whey Protein Isolate',
+      }),
+    );
   });
 
   it('updates only fields provided in the DTO', async () => {
@@ -94,7 +105,7 @@ describe('RetailProductService', () => {
       makeProduct({ is_active: false, image_url: null }),
     );
 
-    await service.updateProduct('product-1', {
+    await service.updateProduct('admin-1', 'product-1', {
       category: 'recovery',
       is_active: false,
       stock_quantity: 12,
@@ -108,6 +119,14 @@ describe('RetailProductService', () => {
       image_url: 'https://cdn.fittrack.test/images/whey-v2.png',
       stock_quantity: 12,
     });
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'product_archived',
+        actorId: 'admin-1',
+        entityId: 'product-1',
+      }),
+    );
   });
 
   it('restocks products through the repository contract', async () => {
@@ -124,6 +143,14 @@ describe('RetailProductService', () => {
       'audit.log',
       expect.objectContaining({
         userId: 'staff-1',
+        entityId: 'product-1',
+      }),
+    );
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'inventory.activity',
+      expect.objectContaining({
+        action: 'product_restocked',
+        actorId: 'staff-1',
         entityId: 'product-1',
       }),
     );

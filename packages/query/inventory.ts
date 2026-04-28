@@ -1,17 +1,71 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
+  InventoryCreateSaleInput,
+  InventoryEquipmentArchiveInput,
   InventoryEquipmentCreateInput,
+  InventoryEquipmentRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentUpdateInput,
   InventoryEquipmentWriteOffInput,
+  InventoryPaginatedResult,
   InventoryProductMutationInput,
+  InventoryProductRecord,
   InventoryProductListParams,
   InventoryRestockInput,
   InventorySaleListParams
 } from "@fittrack/api-client";
-import { invalidateInventoryQueries } from "./cache";
+import {
+  invalidateAnalyticsQueries,
+  invalidateInventoryQueries,
+  invalidateNotificationQueries
+} from "./cache";
 import { queryKeys } from "./query-keys";
+
+function syncProductCaches(
+  queryClient: QueryClient,
+  product: InventoryProductRecord,
+) {
+  queryClient.setQueryData(queryKeys.inventoryProductDetail(product.id), product);
+  queryClient.setQueriesData<InventoryPaginatedResult<InventoryProductRecord>>(
+    { queryKey: queryKeys.inventoryProducts() },
+    (previous) => {
+      if (!previous || !Array.isArray(previous.data)) return previous;
+
+      return {
+        ...previous,
+        data: previous.data.map((item) =>
+          item.id === product.id ? product : item
+        ),
+      };
+    },
+  );
+}
+
+function syncEquipmentCaches(
+  queryClient: QueryClient,
+  equipment: InventoryEquipmentRecord,
+) {
+  queryClient.setQueriesData<InventoryPaginatedResult<InventoryEquipmentRecord>>(
+    { queryKey: queryKeys.inventoryEquipment() },
+    (previous) => {
+      if (!previous || !Array.isArray(previous.data)) return previous;
+
+      return {
+        ...previous,
+        data: previous.data.map((item) =>
+          item.id === equipment.id ? equipment : item
+        ),
+      };
+    },
+  );
+}
+
+async function settleInventoryInvalidations(
+  invalidations: Array<Promise<unknown>>,
+) {
+  await Promise.allSettled(invalidations);
+}
 
 export function inventoryProductsQueryOptions(
   client: Pick<ApiClient, "inventory">,
@@ -46,6 +100,19 @@ export function inventorySalesQueryOptions(
   });
 }
 
+export function inventorySaleDetailQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  saleId?: string
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventorySaleDetail(saleId),
+    queryFn: async () => {
+      if (!saleId) return null;
+      return client.inventory.getSaleById(saleId);
+    }
+  });
+}
+
 export function inventoryEquipmentQueryOptions(
   client: Pick<ApiClient, "inventory">,
   params?: InventoryEquipmentListParams
@@ -71,33 +138,46 @@ export function inventoryEquipmentDetailQueryOptions(
 
 export function createInventoryProductMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({ payload }: { payload: InventoryProductMutationInput }) =>
       client.inventory.createProduct(payload),
-    onSuccess: async () => {
-      await invalidateInventoryQueries(queryClient);
+    onSuccess: async (product) => {
+      syncProductCaches(queryClient, product);
+      await settleInventoryInvalidations([
+        invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId)
+      ]);
     }
   });
 }
 
 export function createInventoryEquipmentMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({ payload }: { payload: InventoryEquipmentCreateInput }) =>
       client.inventory.createEquipment(payload),
-    onSuccess: async () => {
-      await invalidateInventoryQueries(queryClient);
+    onSuccess: async (equipment) => {
+      syncEquipmentCaches(queryClient, equipment);
+      await settleInventoryInvalidations([
+        invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId)
+      ]);
     }
   });
 }
 
 export function updateInventoryProductMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({
@@ -107,9 +187,12 @@ export function updateInventoryProductMutationOptions(
       payload: InventoryProductMutationInput;
       productId: string;
     }) => client.inventory.updateProduct(productId, payload),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+    onSuccess: async (product, variables) => {
+      syncProductCaches(queryClient, product);
+      await settleInventoryInvalidations([
         invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
         queryClient.invalidateQueries({
           queryKey: queryKeys.inventoryProductDetail(variables.productId)
         })
@@ -120,7 +203,8 @@ export function updateInventoryProductMutationOptions(
 
 export function updateInventoryEquipmentMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({
@@ -130,9 +214,12 @@ export function updateInventoryEquipmentMutationOptions(
       equipmentId: string;
       payload: InventoryEquipmentUpdateInput;
     }) => client.inventory.updateEquipment(equipmentId, payload),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+    onSuccess: async (equipment, variables) => {
+      syncEquipmentCaches(queryClient, equipment);
+      await settleInventoryInvalidations([
         invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
         queryClient.invalidateQueries({
           queryKey: queryKeys.inventoryEquipmentDetail(variables.equipmentId)
         })
@@ -143,7 +230,8 @@ export function updateInventoryEquipmentMutationOptions(
 
 export function restockInventoryProductMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({
@@ -153,9 +241,12 @@ export function restockInventoryProductMutationOptions(
       payload: InventoryRestockInput;
       productId: string;
     }) => client.inventory.restockProduct(productId, payload),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+    onSuccess: async (product, variables) => {
+      syncProductCaches(queryClient, product);
+      await settleInventoryInvalidations([
         invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
         queryClient.invalidateQueries({
           queryKey: queryKeys.inventoryProductDetail(variables.productId)
         })
@@ -166,7 +257,8 @@ export function restockInventoryProductMutationOptions(
 
 export function writeOffInventoryEquipmentMutationOptions(
   client: Pick<ApiClient, "inventory">,
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  userId?: string
 ) {
   return mutationOptions({
     mutationFn: ({
@@ -177,8 +269,60 @@ export function writeOffInventoryEquipmentMutationOptions(
       payload: InventoryEquipmentWriteOffInput;
     }) => client.inventory.writeOffEquipment(equipmentId, payload),
     onSuccess: async (_, variables) => {
-      await Promise.all([
+      await settleInventoryInvalidations([
         invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.inventoryEquipmentDetail(variables.equipmentId)
+        })
+      ]);
+    }
+  });
+}
+
+export function createInventorySaleMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient,
+  userId?: string
+) {
+  return mutationOptions({
+    mutationFn: ({ payload }: { payload: InventoryCreateSaleInput }) =>
+      client.inventory.createSale(payload),
+    onSuccess: async (_, variables) => {
+      await settleInventoryInvalidations([
+        invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
+        ...variables.payload.items.map((item) =>
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.inventoryProductDetail(item.productId)
+          })
+        )
+      ]);
+    }
+  });
+}
+
+export function archiveInventoryEquipmentMutationOptions(
+  client: Pick<ApiClient, "inventory">,
+  queryClient: QueryClient,
+  userId?: string
+) {
+  return mutationOptions({
+    mutationFn: ({
+      equipmentId,
+      payload
+    }: {
+      equipmentId: string;
+      payload: InventoryEquipmentArchiveInput;
+    }) => client.inventory.archiveEquipment(equipmentId, payload),
+    onSuccess: async (equipment, variables) => {
+      syncEquipmentCaches(queryClient, equipment);
+      await settleInventoryInvalidations([
+        invalidateInventoryQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateNotificationQueries(queryClient, userId),
         queryClient.invalidateQueries({
           queryKey: queryKeys.inventoryEquipmentDetail(variables.equipmentId)
         })

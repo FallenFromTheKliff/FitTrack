@@ -17,6 +17,15 @@ export class AmenityRepository extends BaseRepository {
     ]);
   }
 
+  listArchivedAmenities(): Promise<Amenity[]> {
+    return this.findAll<Amenity>(
+      this.prisma.amenity,
+      { is_active: false },
+      undefined,
+      [{ type: 'asc' }, { name: 'asc' }],
+    );
+  }
+
   findActiveAmenityByIdOrThrow(id: string): Promise<Amenity> {
     return this.findOneOrThrow<Amenity>(
       this.prisma.amenity,
@@ -40,6 +49,12 @@ export class AmenityRepository extends BaseRepository {
   softDeleteAmenity(id: string): Promise<Amenity> {
     return this.updateById<Amenity>(this.prisma.amenity, id, {
       is_active: false,
+    });
+  }
+
+  restoreAmenity(id: string): Promise<Amenity> {
+    return this.updateById<Amenity>(this.prisma.amenity, id, {
+      is_active: true,
     });
   }
 }

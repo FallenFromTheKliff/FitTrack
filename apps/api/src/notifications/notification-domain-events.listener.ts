@@ -18,11 +18,19 @@ import {
   TDEE_RECALCULATED_EVENT,
   type TdeeRecalculatedEvent,
 } from '../nutrition/events/tdee-recalculated.event';
+import {
+  ACCOUNT_ACTIVITY_EVENT,
+  type AccountActivityEvent,
+} from '../user/events/account-activity.event';
+import { NotificationsRepository } from './notifications.repository';
 import { NotificationsService } from './notifications.service';
 
 @Injectable()
 export class NotificationDomainEventsListener {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationsRepository: NotificationsRepository,
+  ) {}
 
   @OnEvent(USER_REGISTERED_EVENT, { async: true })
   async handleUserRegistered(event: UserRegisteredEvent): Promise<void> {
@@ -127,6 +135,37 @@ export class NotificationDomainEventsListener {
     );
   }
 
+  @OnEvent(ACCOUNT_ACTIVITY_EVENT, { async: true })
+  async handleAccountActivity(event: AccountActivityEvent): Promise<void> {
+    const recipients =
+      await this.notificationsRepository.listManagementNotificationRecipients();
+    const body = this.buildAccountActivityBody(event);
+    const title = this.buildAccountActivityTitle(event);
+
+    await Promise.all(
+      recipients.map((recipient) =>
+        this.notificationsService.dispatch(
+          recipient.user_id,
+          NotificationType.system,
+          {
+            title,
+            body,
+            data: {
+              kind: 'account_activity',
+              action: event.action,
+              actor_id: event.actorId,
+              target_user_id: event.targetUserId,
+              target_email: event.targetEmail ?? null,
+              target_role: event.targetRole ?? null,
+              occurred_at: event.occurredAt,
+              ...(event.details ?? {}),
+            },
+          },
+        ),
+      ),
+    );
+  }
+
   private buildRegistrationBody(
     role: UserRole,
     source: UserRegisteredEvent['source'],
@@ -149,6 +188,69 @@ export class NotificationDomainEventsListener {
       default:
         return 'general';
     }
+  }
+
+  private buildAccountActivityTitle(event: AccountActivityEvent): string {
+    const target = this.formatAccountTarget(event);
+
+    switch (event.action) {
+      case 'account_created':
+        return `Account created: ${target}`;
+      case 'account_updated':
+        return `Account updated: ${target}`;
+      case 'account_archived':
+        return `Account archived: ${target}`;
+      case 'account_restored':
+        return `Account restored: ${target}`;
+      case 'coach_upgraded':
+        return `Coach access granted: ${target}`;
+      case 'attendance_check_in':
+        return `Attendance check-in: ${target}`;
+      case 'membership_card_granted':
+        return `Member card granted: ${target}`;
+      case 'membership_card_revoked':
+        return `Member card revoked: ${target}`;
+      case 'termination_approved':
+        return `Termination approved: ${target}`;
+      case 'termination_rejected':
+        return `Termination denied: ${target}`;
+      default:
+        return `Account activity: ${target}`;
+    }
+  }
+
+  private buildAccountActivityBody(event: AccountActivityEvent): string {
+    const target = this.formatAccountTarget(event);
+    const role = event.targetRole ? ` (${event.targetRole})` : '';
+
+    switch (event.action) {
+      case 'account_created':
+        return `${target}${role} was created from the Account Module.`;
+      case 'account_updated':
+        return `${target}${role} had profile details updated from the Account Module.`;
+      case 'account_archived':
+        return `${target}${role} was archived and moved out of the active account directory.`;
+      case 'account_restored':
+        return `${target}${role} was restored to the active account directory.`;
+      case 'coach_upgraded':
+        return `${target}${role} was upgraded to a coach account.`;
+      case 'attendance_check_in':
+        return `${target}${role} was manually checked in from the Account Module.`;
+      case 'membership_card_granted':
+        return `${target}${role} received active membership-card access.`;
+      case 'membership_card_revoked':
+        return `${target}${role} had membership-card access revoked.`;
+      case 'termination_approved':
+        return `${target}${role} had a termination request approved and was soft-deleted.`;
+      case 'termination_rejected':
+        return `${target}${role} had a termination request denied and remains active.`;
+      default:
+        return `${target}${role} changed in the Account Module.`;
+    }
+  }
+
+  private formatAccountTarget(event: AccountActivityEvent): string {
+    return event.targetEmail?.trim() || event.targetUserId;
   }
 
   private wrapEmailHtml(title: string, body: string): string {

@@ -1,5 +1,6 @@
 import type {
   MarkAllNotificationsReadResult,
+  DeleteAllNotificationsResult,
   NotificationInboxResult,
   NotificationListParams,
   NotificationPreferencesRecord,
@@ -12,6 +13,7 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 
 export type {
   MarkAllNotificationsReadResult,
+  DeleteAllNotificationsResult,
   NotificationInboxResult,
   NotificationListParams,
   NotificationPreferencesRecord,
@@ -53,6 +55,10 @@ type NotificationPreferencesApiRecord = {
 
 type MarkAllReadApiRecord = {
   updated_count: number;
+};
+
+type DeleteAllNotificationsApiRecord = {
+  deleted_count: number;
 };
 
 function mapNotification(record: NotificationApiRecord): NotificationRecord {
@@ -215,6 +221,16 @@ export function createNotificationsApi(transport: ApiTransport) {
         transport.delete(`/notifications/${notificationId}`),
         "Unable to delete notification.",
       );
+    },
+    async deleteAllNotifications(): Promise<DeleteAllNotificationsResult> {
+      const result = await unwrapResponse<DeleteAllNotificationsApiRecord>(
+        transport.delete("/notifications"),
+        "Unable to delete notifications.",
+      );
+
+      return {
+        deletedCount: result.deleted_count,
+      };
     },
   };
 }

@@ -77,7 +77,7 @@ export class SalesController {
 
   @Post('sales')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.staff)
+  @Roles(UserRole.admin, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiHeader({
     name: 'Idempotency-Key',
@@ -88,7 +88,7 @@ export class SalesController {
   @ApiBody({ type: CreateSaleDTO })
   @ApiOperation({
     summary:
-      'Create a cash sale or start a PayMongo product checkout. Staff only.',
+      'Create a cash sale or start a shared retail checkout. Admin/staff can record on-site sales, and members can start their own product checkout.',
   })
   @ApiResponse({
     status: 201,
@@ -107,7 +107,7 @@ export class SalesController {
     @Body() dto: CreateSaleDTO,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
   ) {
-    return this.salesService.createSale(user.sub, dto, idempotencyKey);
+    return this.salesService.createSale(user, dto, idempotencyKey);
   }
 
   @Get('sales')

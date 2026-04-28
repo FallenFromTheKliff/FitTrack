@@ -14,12 +14,30 @@ type NotificationsPanelProps = {
   unreadCount: number;
   onClose: () => void;
   onDelete: (notificationId: string) => Promise<unknown>;
+  onDeleteAll: () => Promise<unknown>;
   onMarkAllRead: () => Promise<unknown>;
   onMarkRead: (notificationId: string) => Promise<unknown>;
 };
 
-function formatTimestamp(value: string) {
-  return new Date(value).toLocaleString();
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return "Date unavailable";
+  }
+
+  const timestamp = new Date(value);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  return timestamp.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+}
+
+function getNotificationTimestamp(item: NotificationRecord) {
+  return item.createdAt || item.sentAt;
 }
 
 export default function NotificationsPanel({
@@ -29,6 +47,7 @@ export default function NotificationsPanel({
   unreadCount,
   onClose,
   onDelete,
+  onDeleteAll,
   onMarkAllRead,
   onMarkRead
 }: NotificationsPanelProps) {
@@ -36,6 +55,16 @@ export default function NotificationsPanel({
   const s = layoutStyles(colors);
 
   if (!isOpen) return null;
+
+  const handleDeleteAll = () => {
+    if (notifications.length === 0 || isBusy) return;
+    const confirmed = window.confirm(
+      "Delete all notifications from this inbox?",
+    );
+
+    if (!confirmed) return;
+    void onDeleteAll();
+  };
 
   return (
     <>
@@ -68,6 +97,13 @@ export default function NotificationsPanel({
               disabled={unreadCount === 0 || isBusy}
               style={{ fontSize: 12 }}
             />
+            <FitButton
+              variant="ghost"
+              label="DELETE ALL"
+              onClick={handleDeleteAll}
+              disabled={notifications.length === 0 || isBusy}
+              style={{ fontSize: 12, color: colors.danger }}
+            />
             <FitButton variant="ghost" iconOnly icon={X} iconSize={16} onClick={onClose} style={s.notificationsCloseBtn} aria-label="Close notifications panel" />
           </div>
         </div>
@@ -84,24 +120,34 @@ export default function NotificationsPanel({
               <div
                 key={item.id}
                 style={{
-                  ...s.notificationRow,
-                  borderBottom: index < notifications.length - 1 ? `1px solid ${colors.border}` : "none",
-                  backgroundColor: item.readAt ? colors.surface : colors.surfaceRaised
+                  ...s.notificationCard(item.readAt !== null),
+                  marginBottom: index < notifications.length - 1 ? 12 : 0
                 }}
               >
-                <FitText style={{ fontSize: 14, fontWeight: 600 }}>{item.title}</FitText>
-                <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, marginTop: 3 }}>
-                  {item.body}
-                </FitText>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
-                  <FitText as="p" style={{ fontSize: 11, color: colors.textMuted }}>
-                    {formatTimestamp(item.createdAt)}
+                <div style={s.notificationCardHeader}>
+                  <div style={s.notificationCardCopy}>
+                    <FitText as="h3" style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>
+                      {item.title}
+                    </FitText>
+                    <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.5 }}>
+                      {item.body}
+                    </FitText>
+                  </div>
+                  <div style={s.notificationStateBadge(item.readAt !== null)}>
+                    <FitText style={{ fontSize: 11, fontWeight: 700 }}>
+                      {item.readAt ? "Read" : "Unread"}
+                    </FitText>
+                  </div>
+                </div>
+                <div style={s.notificationCardFooter}>
+                  <FitText as="p" style={s.notificationTimestamp}>
+                    {formatTimestamp(getNotificationTimestamp(item))}
                   </FitText>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={s.notificationActionGroup}>
                     {!item.readAt ? (
                       <FitButton
                         variant="ghost"
-                        label="READ"
+                        label="MARK READ"
                         onClick={() => void onMarkRead(item.id)}
                         disabled={isBusy}
                         style={{ fontSize: 12 }}

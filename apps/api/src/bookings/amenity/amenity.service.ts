@@ -151,6 +151,10 @@ export class AmenityService {
     return this.repo.listActiveAmenities();
   }
 
+  listArchivedAmenities(): Promise<Amenity[]> {
+    return this.repo.listArchivedAmenities();
+  }
+
   getAmenityById(id: string): Promise<Amenity> {
     return this.repo.findActiveAmenityByIdOrThrow(id);
   }
@@ -165,6 +169,10 @@ export class AmenityService {
 
   async deleteAmenity(id: string): Promise<void> {
     await this.repo.softDeleteAmenity(id);
+  }
+
+  restoreAmenity(id: string): Promise<Amenity> {
+    return this.repo.restoreAmenity(id);
   }
 
   private toCreateInput(dto: CreateAmenityDTO): Prisma.AmenityCreateInput {

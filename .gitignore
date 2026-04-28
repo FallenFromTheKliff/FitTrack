@@ -8,8 +8,6 @@ apps/mobile/.env
 # Environment files
 .env
 .env.*
-!.env.format
-!.env.docker.format
 
 # Agent prompts and working docs
 agents/

@@ -16,6 +16,7 @@ import {
   PaymentStage,
   PaymentStatus,
   Prisma,
+  RecurringCoachingSessionState,
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -64,6 +65,7 @@ import {
   APPOINTMENT_CONFIRMED_EVENT,
   type AppointmentConfirmedEvent,
 } from './events/appointment-confirmed.event';
+import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
 
 const DOWNPAYMENT_RATE = new Prisma.Decimal('0.30');
 const ZERO_DECIMAL = new Prisma.Decimal('0');
@@ -107,6 +109,7 @@ export class AppointmentService {
     private readonly paymentRepository: PaymentRepository,
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly recurringPlanService: RecurringCoachingPlanService,
   ) {}
 
   async setAvailability(
@@ -524,6 +527,9 @@ export class AppointmentService {
       status: AppointmentStatus.completed,
       session_notes: dto.session_notes ?? null,
       completed_at: completedAt,
+      ...(appointment.recurring_plan_id
+        ? { recurring_state: RecurringCoachingSessionState.completed }
+        : {}),
     });
 
     this.emitAppointmentCompleted({
@@ -532,6 +538,9 @@ export class AppointmentService {
       coachId: updated.coach_id,
       completedAt: completedAt.toISOString(),
     });
+    await this.recurringPlanService.refreshPlanProgress(
+      updated.recurring_plan_id,
+    );
 
     return this.toAppointmentResponse(updated);
   }
@@ -708,6 +717,10 @@ export class AppointmentService {
       gym_revenue: appointment.gym_revenue.toString(),
       coach_earnings: appointment.coach_earnings.toString(),
       member_notes: appointment.member_notes ?? null,
+      recurring_plan_id: appointment.recurring_plan_id ?? null,
+      recurring_state: appointment.recurring_state ?? null,
+      original_scheduled_at:
+        appointment.original_scheduled_at?.toISOString() ?? null,
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
@@ -732,6 +745,10 @@ export class AppointmentService {
       scheduled_at: appointment.scheduled_at.toISOString(),
       duration_minutes: appointment.duration_minutes,
       member_notes: appointment.member_notes ?? null,
+      recurring_plan_id: appointment.recurring_plan_id ?? null,
+      recurring_state: appointment.recurring_state ?? null,
+      original_scheduled_at:
+        appointment.original_scheduled_at?.toISOString() ?? null,
       user: {
         id: appointment.user.id,
         profile: {
@@ -756,6 +773,10 @@ export class AppointmentService {
       scheduled_at: appointment.scheduled_at.toISOString(),
       duration_minutes: appointment.duration_minutes,
       member_notes: appointment.member_notes ?? null,
+      recurring_plan_id: appointment.recurring_plan_id ?? null,
+      recurring_state: appointment.recurring_state ?? null,
+      original_scheduled_at:
+        appointment.original_scheduled_at?.toISOString() ?? null,
       user: {
         id: appointment.user.id,
         email: findPrimaryIdentifier(appointment.user.auth_identities),

@@ -29,6 +29,7 @@ export type InventorySaleListParams = {
 
 export type InventoryProductRecord = {
   category: InventoryProductCategory;
+  cost: number;
   createdAt: string;
   description: string | null;
   id: string;
@@ -43,6 +44,7 @@ export type InventoryProductRecord = {
 
 export type InventoryProductMutationInput = {
   category?: InventoryProductCategory;
+  cost?: number;
   description?: string;
   imageUrl?: string;
   isActive?: boolean;
@@ -66,6 +68,7 @@ export type InventoryEquipmentRecord = {
   createdAt: string;
   description: string | null;
   id: string;
+  imageUrl: string | null;
   isActive: boolean;
   name: string;
   quantityCurrent: number;
@@ -76,6 +79,7 @@ export type InventoryEquipmentRecord = {
 
 export type InventoryEquipmentCreateInput = {
   description?: string;
+  imageUrl?: string;
   name: string;
   quantityCurrent: number;
   quantityTotal: number;
@@ -84,13 +88,21 @@ export type InventoryEquipmentCreateInput = {
 
 export type InventoryEquipmentUpdateInput = {
   description?: string;
+  imageUrl?: string;
   isActive?: boolean;
   name?: string;
+  quantityCurrent?: number;
+  quantityTotal?: number;
   unit?: string;
 };
 
 export type InventoryEquipmentWriteOffInput = {
   quantitySetTo: number;
+  reason: string;
+};
+
+export type InventoryEquipmentArchiveInput = {
+  quantityToArchive: number;
   reason: string;
 };
 
@@ -118,6 +130,7 @@ export type InventoryEquipmentDetailRecord = InventoryEquipmentRecord & {
 };
 
 export type InventorySalePaymentMethod = "cash" | "paymongo";
+export type InventorySaleSource = "manual" | "mobile";
 export type InventorySaleStatus = "cancelled" | "completed" | "pending";
 export type InventoryPaymentStatus =
   | "awaiting_verification"
@@ -153,9 +166,11 @@ export type InventorySaleTransactionSummaryRecord = {
   customerUserId: string | null;
   id: string;
   itemsCount: number;
+  notes: string | null;
   paymentId: string | null;
   paymentMethod: InventorySalePaymentMethod;
   processedBy: string;
+  source: InventorySaleSource;
   staff: InventorySaleStaffRecord | null;
   status: InventorySaleStatus;
   totalAmount: number;
@@ -178,12 +193,14 @@ export type InventorySaleCheckoutRecord = {
 export type InventoryCreateSaleItemInput = {
   productId: string;
   quantity: number;
+  unitPrice?: number;
 };
 
 export type InventoryCreateSaleInput = {
   customerName?: string;
   customerUserId?: string;
   items: InventoryCreateSaleItemInput[];
+  notes?: string;
   paymentMethod: InventorySalePaymentMethod;
 };
 

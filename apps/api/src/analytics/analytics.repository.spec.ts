@@ -4,6 +4,28 @@ describe('AnalyticsRepository', () => {
   const prisma = {
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
+    attendanceLog: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    amenityBooking: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    coachAppointment: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    gymEquipmentItem: {
+      findMany: jest.fn(),
+    },
+    retailProduct: {
+      findMany: jest.fn(),
+    },
+    saleTransaction: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
 
   let repo: AnalyticsRepository;
@@ -75,15 +97,22 @@ describe('AnalyticsRepository', () => {
     const start = new Date('2025-01-01T00:00:00.000Z');
     const end = new Date('2025-01-31T23:59:59.999Z');
 
-    prisma.$queryRaw.mockResolvedValueOnce([
-      { bucket_start: new Date('2025-01-01T00:00:00.000Z'), check_ins: 12 },
-    ]);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ total_check_ins: 12 }])
+      .mockResolvedValueOnce([{ hour_of_day: 9, check_ins: 4 }])
+      .mockResolvedValueOnce([
+        { bucket_start: new Date('2025-01-01T00:00:00.000Z'), check_ins: 12 },
+      ]);
 
     await repo.getAttendanceMetrics(start, end, 'weekly');
 
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(getQueryText(0)).toContain("date_trunc('week', check_in_at)");
-    expect(getQueryText(0)).toContain('FROM attendance_logs');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(getQueryText(0)).toContain('COUNT(*) AS total_check_ins');
+    expect(getQueryText(1)).toContain(
+      "EXTRACT(HOUR FROM check_in_at AT TIME ZONE 'UTC')::int AS hour_of_day",
+    );
+    expect(getQueryText(2)).toContain("date_trunc('week', check_in_at)");
+    expect(getQueryText(2)).toContain('FROM attendance_logs');
   });
 
   it('queries member metrics from users and subscriptions', async () => {
@@ -139,7 +168,7 @@ describe('AnalyticsRepository', () => {
 
     expect(getQueryText(2)).toContain("date_trunc('day', created_at)");
     expect(getQueryText(3)).toContain("date_trunc('day', completed_at)");
-    expect(getQueryText(4)).toContain("date_trunc('day', check_in_at)");
+    expect(getQueryText(6)).toContain("date_trunc('day', check_in_at)");
   });
 
   it('queries attendance peak hours with deterministic hour ordering', async () => {
@@ -196,5 +225,46 @@ describe('AnalyticsRepository', () => {
     expect(getQueryText(0)).toContain(
       "WHERE sale_transactions.status = 'completed'",
     );
+  });
+
+  it('builds warning alerts from low-stock products and equipment attention items', async () => {
+    prisma.retailProduct.findMany.mockResolvedValueOnce([
+      {
+        id: 'product-1',
+        name: 'Creatine',
+        stock_quantity: 1,
+        reorder_threshold: 10,
+      },
+    ]);
+    prisma.gymEquipmentItem.findMany.mockResolvedValueOnce([
+      {
+        id: 'equipment-1',
+        name: 'Treadmill belt',
+        quantity_total: 4,
+        quantity_current: 2,
+        unit: 'units',
+      },
+    ]);
+
+    await expect(repo.listSystemAlerts(4)).resolves.toEqual([
+      {
+        id: 'product-1',
+        kind: 'low_stock',
+        severity: 'warning',
+        title: 'Low Stock Alert',
+        body: 'Creatine is down to 1 units and needs replenishment to stay above the 10-unit threshold.',
+        action_label: 'OPEN RESTOCK',
+        href: '/inventory?tab=retail&modal=restock&productId=product-1',
+      },
+      {
+        id: 'equipment-1',
+        kind: 'maintenance_due',
+        severity: 'warning',
+        title: 'Maintenance Due',
+        body: 'Treadmill belt has 2 units unavailable and needs maintenance follow-up.',
+        action_label: 'REVIEW EQUIPMENT',
+        href: '/inventory?tab=equipment&modal=details&equipmentId=equipment-1',
+      },
+    ]);
   });
 });

@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AppointmentStatus, PaymentProvider } from '@prisma/client';
+import {
+  AppointmentStatus,
+  PaymentProvider,
+  RecurringCoachingSessionState,
+} from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -228,6 +232,21 @@ export class AppointmentResponseDTO {
   })
   member_notes: string | null;
 
+  @ApiPropertyOptional({
+    example: '55555555-5555-4555-8555-555555555555',
+    nullable: true,
+  })
+  recurring_plan_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: RecurringCoachingSessionState,
+    nullable: true,
+  })
+  recurring_state?: RecurringCoachingSessionState | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T08:00:00.000Z', nullable: true })
+  original_scheduled_at?: string | null;
+
   @ApiPropertyOptional({ example: '2026-04-01T08:15:00.000Z', nullable: true })
   downpayment_paid_at: string | null;
 
@@ -312,6 +331,21 @@ export class CoachScheduleAppointmentResponseDTO {
   })
   member_notes: string | null;
 
+  @ApiPropertyOptional({
+    example: '55555555-5555-4555-8555-555555555555',
+    nullable: true,
+  })
+  recurring_plan_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: RecurringCoachingSessionState,
+    nullable: true,
+  })
+  recurring_state?: RecurringCoachingSessionState | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T08:00:00.000Z', nullable: true })
+  original_scheduled_at?: string | null;
+
   @ApiProperty({ type: CoachScheduleUserResponseDTO })
   user: CoachScheduleUserResponseDTO;
 
@@ -385,6 +419,21 @@ export class StaffAppointmentResponseDTO {
     nullable: true,
   })
   member_notes: string | null;
+
+  @ApiPropertyOptional({
+    example: '55555555-5555-4555-8555-555555555555',
+    nullable: true,
+  })
+  recurring_plan_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: RecurringCoachingSessionState,
+    nullable: true,
+  })
+  recurring_state?: RecurringCoachingSessionState | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T08:00:00.000Z', nullable: true })
+  original_scheduled_at?: string | null;
 
   @ApiProperty({ type: StaffAppointmentMemberResponseDTO })
   user: StaffAppointmentMemberResponseDTO;

@@ -107,14 +107,14 @@ export default function RegisterScreen() {
       phone: normalizedPhone || undefined,
       password: data.password
     });
-    if (result) {
+    if ("user" in result) {
       setPendingEmail(data.email);
       setShowOTP(true);
       setIsLoading(false);
       return;
     }
     setStatusTone("danger");
-    showStatus("Could not create account. Please try again.");
+    showStatus(result.error);
     setIsLoading(false);
   };
 

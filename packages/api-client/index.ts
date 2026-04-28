@@ -10,10 +10,12 @@ import { createCoachesApi } from "./domains/coaches";
 import { createAdminApi } from "./domains/admin";
 import { createFitnessApi } from "./domains/fitness";
 import { createFilesApi } from "./domains/files";
+import { createGymKnowledgeApi } from "./domains/gym-knowledge";
 import { createInventoryApi } from "./domains/inventory";
 import { createMembershipApi } from "./domains/membership";
 import { createNutritionApi } from "./domains/nutrition";
 import { createNotificationsApi } from "./domains/notifications";
+import { createRecurringCoachingPlansApi } from "./domains/recurring-coaching-plans";
 import { createStaffApi } from "./domains/staff";
 import { createGymLayoutApi } from "./domains/gym-layout";
 import { resolveApiBaseUrl } from "./base-url";
@@ -44,20 +46,29 @@ export type {
   AiPaginationParams,
 } from "./domains/ai";
 export type {
+  AnalyticsAttendancePeakHourRecord,
   AnalyticsAttendanceRecord,
   AnalyticsCoachesRecord,
+  AnalyticsDailyInsightsRecord,
+  AnalyticsPdfExportResult,
   AnalyticsMembersRecord,
   AnalyticsOverviewRecord,
   AnalyticsPaginatedResult,
+  AnalyticsPerformanceKpisRecord,
   AnalyticsPeriod,
   AnalyticsQueryParams,
+  AnalyticsRecentActivityRecord,
   AnalyticsRevenueRecord,
   AnalyticsRevenueTotalsRecord,
+  AnalyticsSnapshotRecord,
+  AnalyticsSystemAlertRecord,
+  AnalyticsTopRevenueSourceRecord,
   BusinessInsightFocus,
   BusinessInsightHistoryParams,
   BusinessInsightPeriod,
   BusinessInsightRunDetailRecord,
   BusinessInsightRunSummaryRecord,
+  ExportAnalyticsPdfInput,
   GenerateBusinessInsightInput,
 } from "./domains/analytics";
 export type {
@@ -135,7 +146,12 @@ export type {
 } from "./domains/fitness";
 export type { UploadedFileRecord } from "./domains/files";
 export type {
+  GymProfileRecord,
+  UpdateGymProfileInput,
+} from "./domains/gym-knowledge";
+export type {
   InventoryCreateSaleInput,
+  InventoryEquipmentArchiveInput,
   InventoryEquipmentCreateInput,
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
@@ -151,6 +167,7 @@ export type {
   InventoryRestockInput,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
+  InventorySaleSource,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord,
 } from "./domains/inventory";
@@ -173,6 +190,7 @@ export type {
 } from "./domains/membership";
 export type {
   MarkAllNotificationsReadResult,
+  DeleteAllNotificationsResult,
   NotificationInboxResult,
   NotificationListParams,
   NotificationPreferencesRecord,
@@ -180,6 +198,20 @@ export type {
   NotificationRecord,
   NotificationUnreadCountRecord,
 } from "./domains/notifications";
+export type {
+  BulkUpdateRecurringCoachingSessionsInput,
+  RecurringCoachingFrequency,
+  RecurringCoachingPlanInput,
+  RecurringCoachingPlanMutationResult,
+  RecurringCoachingPlanPreviewResult,
+  RecurringCoachingPlanRecord,
+  RecurringCoachingPlanSessionRecord,
+  RecurringCoachingPlanStatus,
+  RecurringCoachingPreviewSession,
+  RecurringCoachingSessionOverrideInput,
+  RecurringCoachingSessionState,
+  UpdateRecurringCoachingSessionInput,
+} from "./domains/recurring-coaching-plans";
 export type {
   CreateNutritionLogPayload,
   NutritionHistoryParams,
@@ -257,10 +289,12 @@ export function createApiClient(config: CreateApiClientConfig) {
     admin: createAdminApi(transport),
     fitness: createFitnessApi(transport),
     files: createFilesApi(transport),
+    gymKnowledge: createGymKnowledgeApi(transport),
     inventory: createInventoryApi(transport),
     gymLayout: createGymLayoutApi(transport),
     membership: createMembershipApi(transport),
     notifications: createNotificationsApi(transport),
+    recurringCoachingPlans: createRecurringCoachingPlansApi(transport),
     nutrition: createNutritionApi(transport),
     staff: createStaffApi(transport),
   };

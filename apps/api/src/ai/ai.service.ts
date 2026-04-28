@@ -216,17 +216,17 @@ export class AiService {
   }
 
   async archiveSession(userId: string, sessionId: string): Promise<void> {
-    const session =
-      await this.aiChatSessionRepository.archiveOwnedSessionByIdOrThrow(
-        userId,
-        sessionId,
-      );
-    this.emitAiSessionArchived({
-      userId: session.user_id,
-      sessionId: session.id,
-      contextType: session.context_type,
-      archivedAt: new Date().toISOString(),
-    });
+    await this.aiChatSessionRepository.archiveOwnedSessionByIdOrThrow(
+      userId,
+      sessionId,
+    );
+  }
+
+  async restoreSession(userId: string, sessionId: string): Promise<void> {
+    await this.aiChatSessionRepository.restoreOwnedSessionByIdOrThrow(
+      userId,
+      sessionId,
+    );
   }
 
   async chat(userId: string, dto: AIChatDTO): Promise<AIChatResponseDTO> {

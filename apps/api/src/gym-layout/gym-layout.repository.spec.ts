@@ -31,6 +31,19 @@ describe('GymLayoutRepository', () => {
     });
   });
 
+  it('lists archived layout equipment ordered by type then name', async () => {
+    gymEquipment.findMany.mockResolvedValue([{ id: 'equipment-1', is_active: false }]);
+
+    await repo.listArchivedEquipment();
+
+    expect(gymEquipment.findMany).toHaveBeenCalledWith({
+      where: { is_active: false },
+      include: undefined,
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      select: undefined,
+    });
+  });
+
   it('creates layout equipment through the gym_equipment delegate', async () => {
     gymEquipment.create.mockResolvedValue({ id: 'equipment-1' });
 
@@ -65,6 +78,21 @@ describe('GymLayoutRepository', () => {
     expect(gymEquipment.update).toHaveBeenCalledWith({
       where: { id: 'equipment-1' },
       data: { is_active: false },
+      include: undefined,
+    });
+  });
+
+  it('restores layout equipment by setting is_active to true', async () => {
+    gymEquipment.update.mockResolvedValue({
+      id: 'equipment-1',
+      is_active: true,
+    });
+
+    await repo.restoreEquipment('equipment-1');
+
+    expect(gymEquipment.update).toHaveBeenCalledWith({
+      where: { id: 'equipment-1' },
+      data: { is_active: true },
       include: undefined,
     });
   });

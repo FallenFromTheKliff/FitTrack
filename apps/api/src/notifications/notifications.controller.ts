@@ -23,6 +23,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import {
+  DeleteAllNotificationsResponseDTO,
   DeleteNotificationResponseDTO,
   MarkAllReadResponseDTO,
   NotificationFilterDTO,
@@ -72,6 +73,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   NotificationResponseDTO,
   UnreadCountResponseDTO,
   MarkAllReadResponseDTO,
+  DeleteAllNotificationsResponseDTO,
   DeleteNotificationResponseDTO,
   NotificationPreferencesResponseDTO,
 )
@@ -171,6 +173,17 @@ export class NotificationsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.notificationsService.markRead(user.sub, id);
+  }
+
+  @Delete()
+  @ApiOperation({ summary: 'Delete all owned in-app notifications.' })
+  @ApiResponse({
+    status: 200,
+    description: 'All owned in-app notifications deleted.',
+    schema: apiEnvelopeSchema(getSchemaPath(DeleteAllNotificationsResponseDTO)),
+  })
+  deleteAllNotifications(@CurrentUser() user: JwtPayload) {
+    return this.notificationsService.deleteAllNotifications(user.sub);
   }
 
   @Delete(':id')

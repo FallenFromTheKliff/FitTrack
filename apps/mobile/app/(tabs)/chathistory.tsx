@@ -2,11 +2,15 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Bot, MessageSquarePlus, Trash2, X, SlidersHorizontal } from "lucide-react-native";
+import { Bot, MessageSquarePlus, RotateCcw, Trash2, X, SlidersHorizontal } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import { getAiContextLabel, getAiSessionDisplayTitle } from "@fittrack/app-config";
-import { archiveAiChatSessionMutationOptions, aiChatSessionsQueryOptions } from "@fittrack/query";
+import {
+  archiveAiChatSessionMutationOptions,
+  aiChatSessionsQueryOptions,
+  restoreAiChatSessionMutationOptions
+} from "@fittrack/query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
@@ -32,9 +36,18 @@ type HistoryItem = {
   contextLabel: string;
   date: string;
   id: string;
+  isActive: boolean;
   lastActivityAt: string;
   title: string;
 };
+
+type ChatStatusFilter = "active" | "all" | "deleted";
+
+const CHAT_STATUS_FILTERS: { label: string; value: ChatStatusFilter }[] = [
+  { label: "Active", value: "active" },
+  { label: "All", value: "all" },
+  { label: "Deleted", value: "deleted" }
+];
 
 export default function ChatHistoryScreen() {
   const router = useRouter();
@@ -74,13 +87,19 @@ export default function ChatHistoryScreen() {
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<HistoryItem | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ChatStatusFilter>("active");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const sessionsQuery = useQuery({
     ...aiChatSessionsQueryOptions(mobileApiClient, { limit: 100 }),
     enabled: isFocused && hasMemberCardAccess
   });
-  const archiveMutation = useMutation(archiveAiChatSessionMutationOptions(mobileApiClient, queryClient));
+  const archiveMutation = useMutation(
+    archiveAiChatSessionMutationOptions(mobileApiClient, queryClient, user?.id)
+  );
+  const restoreMutation = useMutation(restoreAiChatSessionMutationOptions(mobileApiClient, queryClient));
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -95,7 +114,7 @@ export default function ChatHistoryScreen() {
       iconBg: colors.brand + "22",
       onPress: () => router.push({ pathname: "/(tabs)/chatbot", params: { sessionId: "new", from: "chathistory" } })
     },
-    {
+    ...(statusFilter === "deleted" ? [] : [{
       label: "Delete Conversation",
       icon: Trash2,
       iconColor: colors.danger,
@@ -105,8 +124,8 @@ export default function ChatHistoryScreen() {
         setSelectedIds(new Set());
         setFabOpen(false);
       }
-    }
-  ], [colors.brand, colors.danger, colors.surfaceRaised, router, setFabOpen]);
+    } satisfies FABMenuItem])
+  ], [colors.brand, colors.danger, colors.surfaceRaised, router, setFabOpen, statusFilter]);
 
   useFocusEffect(useCallback(() => {
     registerFAB({ screenIcon: Bot, menuItems, scrollY, visible: !deleteMode && !isMemberLocked });
@@ -128,6 +147,8 @@ export default function ChatHistoryScreen() {
   };
 
   const toggleSelect = (id: string) => {
+    const target = filteredSessions.find((session) => session.id === id);
+    if (target && !target.isActive) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -148,13 +169,29 @@ export default function ChatHistoryScreen() {
     setIsDeleting(true);
     try {
       await Promise.all(ids.map((sessionId) => archiveMutation.mutateAsync({ sessionId })));
-      showMessage(ids.length === 1 ? "Conversation archived." : "Conversations archived.");
+      showMessage(ids.length === 1 ? "Conversation moved to Deleted Chats." : "Conversations moved to Deleted Chats.");
       exitDeleteMode();
       setConfirmDeleteVisible(false);
     } catch (error) {
-      showMessage(error instanceof Error ? error.message : "Unable to archive conversations.");
+      showMessage(error instanceof Error ? error.message : "Unable to delete conversations.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleRestoreSelected = async () => {
+    if (!restoreTarget) return;
+
+    setIsRestoring(true);
+    try {
+      await restoreMutation.mutateAsync({ sessionId: restoreTarget.id });
+      showMessage("Conversation restored.");
+      setRestoreTarget(null);
+      setStatusFilter("all");
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Unable to restore conversation.");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -167,11 +204,14 @@ export default function ChatHistoryScreen() {
       contextLabel: getAiContextLabel(session.context_type),
       date: session.last_activity_at.slice(0, 10),
       id: session.id,
+      isActive: session.is_active,
       lastActivityAt: session.last_activity_at,
       title: getAiSessionDisplayTitle(session)
     }));
 
     let result = sourceSessions;
+    if (statusFilter === "active") result = result.filter((session) => session.isActive);
+    if (statusFilter === "deleted") result = result.filter((session) => !session.isActive);
     if (debouncedSearchQuery.trim()) {
       const normalizedQuery = debouncedSearchQuery.toLowerCase();
       result = result.filter((session) =>
@@ -182,19 +222,20 @@ export default function ChatHistoryScreen() {
     if (startDate) result = result.filter((session) => session.date >= startDate);
     if (endDate) result = result.filter((session) => session.date <= endDate);
     return result;
-  }, [debouncedSearchQuery, endDate, sessionsQuery.data, startDate]);
+  }, [debouncedSearchQuery, endDate, sessionsQuery.data, startDate, statusFilter]);
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
     setStartDate("");
     setEndDate("");
     setIsFilterOpen(false);
+    setStatusFilter("active");
   }, []);
 
   const grouped = groupItemsByDate(filteredSessions, "desc");
   const isEmpty = filteredSessions.length === 0;
   const hasAnySessions = (sessionsQuery.data?.data ?? []).length > 0;
-  const hasFiltersApplied = !!debouncedSearchQuery.trim() || !!startDate || !!endDate;
+  const hasFiltersApplied = !!debouncedSearchQuery.trim() || !!startDate || !!endDate || statusFilter !== "active";
   const emptyTitle = hasFiltersApplied && hasAnySessions
     ? "No conversations match the current filters"
     : "No conversations yet";
@@ -241,6 +282,25 @@ export default function ChatHistoryScreen() {
           onStartDateReset={() => setStartDate("")}
           onEndDateReset={() => setEndDate("")}
         />
+        <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 18, paddingBottom: 12 }}>
+          {CHAT_STATUS_FILTERS.map((filter) => {
+            const isActive = statusFilter === filter.value;
+            return (
+              <FitButton
+                key={filter.value}
+                label={filter.label}
+                variant={isActive ? "primary" : "ghost"}
+                onPress={() => {
+                  setStatusFilter(filter.value);
+                  setDeleteMode(false);
+                  setSelectedIds(new Set());
+                }}
+                style={{ flex: 1, paddingVertical: 9 }}
+                textStyle={{ fontSize: 13 }}
+              />
+            );
+          })}
+        </View>
       </Animated.View>
       <Animated.ScrollView
         style={[base.content, screenStyle]}
@@ -313,7 +373,7 @@ export default function ChatHistoryScreen() {
                     const isSelected = selectedIds.has(session.id);
                     return (
                       <View key={session.id} style={s.cardRow}>
-                        {deleteMode ? (
+                        {deleteMode && session.isActive ? (
                           <Pressable
                             style={[s.checkbox, isSelected && s.checkboxSelected]}
                             onPress={() => toggleSelect(session.id)}
@@ -325,7 +385,9 @@ export default function ChatHistoryScreen() {
                           <FitCard
                             icon={Bot}
                             label={session.title}
-                            subtitle={`${session.contextLabel} | Last active ${timeAgo(session.lastActivityAt)}`}
+                            subtitle={`${session.contextLabel} | Last active ${timeAgo(session.lastActivityAt)}${session.isActive ? "" : " | Deleted"}`}
+                            trailingLabel={session.isActive ? undefined : "DELETED"}
+                            trailingLabelColor={colors.danger}
                             hasBorder={index < sessions.length - 1}
                             noChevron={deleteMode}
                             onPress={deleteMode
@@ -334,6 +396,17 @@ export default function ChatHistoryScreen() {
                             }
                           />
                         </View>
+                        {!deleteMode && !session.isActive ? (
+                          <FitButton
+                            label="Restore"
+                            icon={RotateCcw}
+                            iconSize={15}
+                            variant="ghost"
+                            onPress={() => setRestoreTarget(session)}
+                            style={{ marginLeft: 8, minWidth: 96, paddingVertical: 10 }}
+                            textStyle={{ fontSize: 13 }}
+                          />
+                        ) : null}
                       </View>
                     );
                   })}
@@ -360,7 +433,7 @@ export default function ChatHistoryScreen() {
       <ConfirmModal
         isVisible={confirmDeleteVisible}
         title="Delete Conversations?"
-        message={`Delete ${selectedCount} conversation${selectedCount !== 1 ? "s" : ""}? This cannot be undone.`}
+        message={`Move ${selectedCount} conversation${selectedCount !== 1 ? "s" : ""} to Deleted Chats? You can restore them later.`}
         yesLabel="Delete"
         noLabel="Keep"
         yesIcon={Trash2}
@@ -370,6 +443,19 @@ export default function ChatHistoryScreen() {
         loadingLabel="Deleting"
         onNo={() => { if (!isDeleting) setConfirmDeleteVisible(false); }}
         onYes={handleDeleteSelected}
+      />
+      <ConfirmModal
+        isVisible={restoreTarget !== null}
+        title="Restore Conversation?"
+        message={restoreTarget ? `Restore "${restoreTarget.title}" to active chats?` : "Restore this conversation?"}
+        yesLabel="Restore"
+        noLabel="Cancel"
+        yesIcon={RotateCcw}
+        isLoading={isRestoring}
+        loadingTitle="Restoring conversation..."
+        loadingLabel="Restoring"
+        onNo={() => { if (!isRestoring) setRestoreTarget(null); }}
+        onYes={handleRestoreSelected}
       />
       <CalendarModal
         isVisible={isStartCalOpen}
