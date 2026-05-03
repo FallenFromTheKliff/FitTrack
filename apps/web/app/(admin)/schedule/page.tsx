@@ -7,15 +7,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MotionStyle } from "framer-motion";
 import { toast } from "sonner";
 import type {
+  RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanInput,
   RecurringCoachingPlanPreviewResult,
   StaffAppointmentRecord,
@@ -26,8 +23,15 @@ import {
   cancelStaffAppointmentMutationOptions,
   cancelRecurringCoachingPlanMutationOptions,
   completeStaffAppointmentMutationOptions,
+  createStaffAppointmentMutationOptions,
+  createStaffBookingMutationOptions,
+  createStaffCoachMutationOptions,
+  payAppointmentDownpaymentMutationOptions,
   createRecurringCoachingPlanMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
+  processAppointmentBalanceMutationOptions,
+  processBookingBalanceMutationOptions,
+  payRecurringCoachingBillingCycleMutationOptions,
   recurringCoachingPlanSessionsQueryOptions,
   replaceStaffCoachAvailabilityMutationOptions,
   respondToStaffAppointmentMutationOptions,
@@ -36,12 +40,17 @@ import {
   staffUsersQueryOptions,
   updateRecurringCoachingSessionMutationOptions,
   updateStaffCoachProfileMutationOptions,
+  venuesQueryOptions,
+  verifyMembershipPaymentMutationOptions,
 } from "@fittrack/query";
 import { coachProfileSchema } from "@fittrack/validators";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSchedule, type VenueBookingRecord } from "@/contexts/ScheduleContext";
+import {
+  useSchedule,
+  type VenueBookingRecord,
+} from "@/contexts/ScheduleContext";
 import { webApiClient } from "@/lib/api-client";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce } from "@fittrack/hooks";
@@ -62,12 +71,16 @@ import type { FitTableColumn } from "@/components/fit/FitTable";
 import {
   BlockDetailModal,
   CalendarModal,
+  ConfirmModal,
   DetailsModal,
   StaffDetailsModal,
 } from "@/components/modals";
 import {
   GymOperationsAvailabilityDrawer,
   GymOperationsCoachAppointmentModal,
+  GymOperationsCreateCoachBookingModal,
+  GymOperationsCreateCoachModal,
+  GymOperationsCreateVenueBookingModal,
   GymOperationsVenueBookingModal,
 } from "@/components/schedule/GymOperationsOverlays";
 import type { FieldConfig } from "@/components/modals";
@@ -85,7 +98,43 @@ import {
 
 type GymOperationsTab = "schedule" | "coaches";
 type ScheduleSurfaceTab = "coach-schedule" | "venue-bookings";
+type CoachVisibilityScope = "all" | "hidden" | "visible";
 type RecurringPlanActionMode = "single" | "future" | "cancel";
+type PaymentCollectionProvider = "cash" | "paymongo";
+type PaymentConfirmState =
+  | {
+      kind: "coachInitial";
+      appointment: StaffAppointmentRecord;
+      provider: PaymentCollectionProvider;
+      paymentStage: "downpayment" | "full";
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "coachBalance";
+      appointment: StaffAppointmentRecord;
+      provider: PaymentCollectionProvider;
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "recurringCycle";
+      cycle: RecurringCoachingBillingCycleRecord;
+      provider: PaymentCollectionProvider;
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "venueBalance";
+      booking: VenueBookingRecord;
+      provider: PaymentCollectionProvider;
+      title: string;
+      message: string;
+      confirmLabel: string;
+    };
 
 type RecurringPlanFormState = {
   coachId: string;
@@ -111,7 +160,7 @@ const EMPTY_APPOINTMENT_RESULT = {
 const STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
   { label: "Pending coach", value: "pending_coach" },
-  { label: "Pending payment", value: "pending_payment" },
+  { label: "Pending full payment", value: "pending_full_payment" },
   { label: "Confirmed", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
@@ -134,9 +183,17 @@ const SCHEDULE_SURFACE_TABS: Array<{
 const VENUE_STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
   { label: "Pending", value: "pending" },
+  { label: "Pending full payment", value: "balance_pending" },
   { label: "Confirmed", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
+  { label: "No show", value: "no_show" },
+];
+
+const COACH_VISIBILITY_SCOPE_OPTIONS = [
+  { label: "All profiles", value: "all" },
+  { label: "Visible", value: "visible" },
+  { label: "Hidden", value: "hidden" },
 ];
 
 const WEEKDAY_OPTIONS = [
@@ -213,14 +270,33 @@ function normalizeOperationsTab(
   return "schedule";
 }
 
-function normalizeScheduleSurfaceTab(
-  value: string | null,
-): ScheduleSurfaceTab {
+function normalizeScheduleSurfaceTab(value: string | null): ScheduleSurfaceTab {
   if (value === "venues") return "venue-bookings";
   return "coach-schedule";
 }
 
 const COACH_PROFILE_FIELDS: FieldConfig[] = [
+  {
+    name: "displayName",
+    label: "Coach Name",
+    type: "text",
+    required: true,
+    placeholder: "Coach Profile Alpha",
+    hint: "Standalone coach profile name. This is not a user account.",
+  },
+  {
+    name: "contactEmail",
+    label: "Contact Email",
+    type: "text",
+    placeholder: "coach.profile@fittrack.local",
+    hint: "Optional profile contact email. Account emails are not used for coach profiles.",
+  },
+  {
+    name: "contactPhone",
+    label: "Contact Phone",
+    type: "text",
+    placeholder: "+639171234567",
+  },
   {
     name: "bio",
     label: "Bio",
@@ -283,7 +359,9 @@ function getAppointmentStatusColor(
   switch (status) {
     case "pending_coach":
       return colors.warning;
+    case "pending_downpayment":
     case "pending_payment":
+    case "pending_full_payment":
       return colors.brand;
     case "confirmed":
       return colors.success;
@@ -314,6 +392,52 @@ function getPersonDisplayName(
   return fullName || email || fallback;
 }
 
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isLegacySeedIdentityName(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(
+    normalized &&
+    (normalized.startsWith("seed.member") ||
+      normalized.startsWith("seed.staff") ||
+      normalized.startsWith("seed.admin")),
+  );
+}
+
+function getCoachDisplayName(
+  coach:
+    | {
+        contactEmail?: string | null;
+        displayName?: string | null;
+        email?: string | null;
+        profile?: {
+          firstName?: string | null;
+          lastName?: string | null;
+        } | null;
+        user?: {
+          email?: string | null;
+          profile?: {
+            firstName?: string | null;
+            lastName?: string | null;
+          } | null;
+        } | null;
+      }
+    | null
+    | undefined,
+  fallback = "Coach",
+) {
+  const standaloneName = coach?.displayName?.trim();
+  if (
+    standaloneName &&
+    !EMAIL_LIKE_PATTERN.test(standaloneName) &&
+    !isLegacySeedIdentityName(standaloneName)
+  ) {
+    return standaloneName;
+  }
+
+  return fallback;
+}
+
 function formatAppointmentWindow(appointment: StaffAppointmentRecord) {
   const start = new Date(appointment.scheduledAt);
   const end = new Date(start.getTime() + appointment.duration * 60 * 1000);
@@ -334,6 +458,33 @@ function formatAppointmentWindow(appointment: StaffAppointmentRecord) {
   };
 }
 
+function isPendingFullCoachPayment(appointment: StaffAppointmentRecord) {
+  return (
+    appointment.status === "confirmed" &&
+    (appointment.remainingBalance ?? 0) > 0 &&
+    !appointment.balancePaidAt
+  );
+}
+
+function getCoachAppointmentPaymentStatus(appointment: StaffAppointmentRecord) {
+  if (isPendingFullCoachPayment(appointment)) {
+    return "pending_full_payment";
+  }
+  if (
+    appointment.status === "pending_payment" &&
+    appointment.activePaymentStage === "full"
+  ) {
+    return "pending_full_payment";
+  }
+  if (
+    appointment.status === "pending_payment" &&
+    appointment.activePaymentStage === "downpayment"
+  ) {
+    return "pending_downpayment";
+  }
+  return appointment.status;
+}
+
 function mapAppointmentToTimelineBooking(
   appointment: StaffAppointmentRecord,
   colors: ReturnType<typeof useTheme>["colors"],
@@ -344,38 +495,38 @@ function mapAppointmentToTimelineBooking(
     appointment.user.email,
     "Member",
   );
-  const coachName = getPersonDisplayName(
-    appointment.coach.profile,
-    null,
-    "Coach",
-  );
+  const coachName = getCoachDisplayName(appointment.coach, "Coach Profile");
 
   return {
     id: appointment.id,
     title: appointment.recurringPlanId
-      ? `${memberName} recurring coaching`
-      : `${memberName} coaching session`,
+      ? `${coachName} recurring coaching`
+      : `${coachName} coaching session`,
     resourceId: appointment.coachId,
-    resourceName: memberName,
+    resourceName: coachName,
     startHour: start.getHours(),
     startMinute: start.getMinutes(),
     durationMin: appointment.duration,
-    color: getAppointmentStatusColor(appointment.status, colors),
-    status: appointment.status ?? "pending_coach",
+    color: getAppointmentStatusColor(
+      getCoachAppointmentPaymentStatus(appointment),
+      colors,
+    ),
+    status: getCoachAppointmentPaymentStatus(appointment) ?? "pending_coach",
     source: "api",
     date: toYmd(start),
-    venueLabel: coachName,
+    venueLabel: memberName,
   };
 }
 
 function getAppointmentActionLabel(status?: string) {
   switch (status) {
     case "pending_coach":
+    case "pending_downpayment":
+    case "pending_payment":
+    case "pending_full_payment":
       return "Review";
     case "confirmed":
       return "Open";
-    case "pending_payment":
-      return "Follow up";
     case "completed":
       return "Archive";
     case "cancelled":
@@ -389,6 +540,10 @@ function getAppointmentActionLabel(status?: string) {
 function getVenueBookingActionLabel(status?: string) {
   switch (status) {
     case "pending":
+    case "pending_downpayment":
+    case "pending_payment":
+    case "pending_full_payment":
+    case "balance_pending":
       return "Review";
     case "confirmed":
       return "Open";
@@ -399,6 +554,50 @@ function getVenueBookingActionLabel(status?: string) {
     default:
       return "Open";
   }
+}
+
+function getVenueBookingPaymentStatus(booking: VenueBookingRecord) {
+  const normalized = (booking.status ?? "pending").toLowerCase();
+  const remainingBalance = Number(booking.remainingBalance ?? 0);
+  const hasOutstandingBalance = remainingBalance > 0 && !booking.balancePaidAt;
+
+  if (normalized === "cancelled" || normalized === "completed") {
+    return normalized;
+  }
+  if (normalized === "balance_pending") {
+    return "pending_full_payment";
+  }
+  if (normalized === "confirmed" && hasOutstandingBalance) {
+    return "pending_full_payment";
+  }
+  if (normalized === "pending") {
+    if (booking.paymentPlan === "downpayment" || hasOutstandingBalance) {
+      return "pending_downpayment";
+    }
+    if (booking.paymentPlan === "full" || Number(booking.totalAmount ?? 0) > 0) {
+      return "pending_full_payment";
+    }
+  }
+
+  return normalized;
+}
+
+function getVenueBookingStatusColor(
+  booking: VenueBookingRecord,
+  colors: ReturnType<typeof useTheme>["colors"],
+) {
+  const paymentStatus = getVenueBookingPaymentStatus(booking);
+  if (
+    paymentStatus === "pending" ||
+    paymentStatus === "pending_downpayment" ||
+    paymentStatus === "pending_payment" ||
+    paymentStatus === "pending_full_payment"
+  ) {
+    return colors.warning;
+  }
+  if (paymentStatus === "confirmed") return colors.success;
+  if (paymentStatus === "completed") return colors.textMuted;
+  return colors.danger;
 }
 
 function getDisplayInitials(label: string) {
@@ -509,7 +708,10 @@ function CoachAppointmentsTable({
           alignItems: "center",
         }}
       >
-        <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText
+          excludeGlobalScale
+          style={{ fontSize: 14, color: colors.textMuted }}
+        >
           No coach appointments match the current filters.
         </FitText>
       </div>
@@ -560,11 +762,7 @@ function CoachAppointmentsTable({
           appointment.user.email,
           "Member",
         );
-        const coachName = getPersonDisplayName(
-          appointment.coach.profile,
-          null,
-          "Coach",
-        );
+        const coachName = getCoachDisplayName(appointment.coach, "Coach");
         const { dateLabel, timeLabel } = formatAppointmentWindow(appointment);
 
         return (
@@ -595,22 +793,32 @@ function CoachAppointmentsTable({
               event.currentTarget.style.transform = "none";
               event.currentTarget.style.borderColor = colors.border;
             }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                minWidth: 0,
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 999,
-                    backgroundColor: `${colors.brand}18`,
-                    border: `1px solid ${colors.brand}24`,
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 999,
+                  backgroundColor: `${colors.brand}18`,
+                  border: `1px solid ${colors.brand}24`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   flexShrink: 0,
                 }}
               >
-                <FitText excludeGlobalScale style={{ fontSize: 10, fontWeight: 700, color: colors.brand }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{ fontSize: 10, fontWeight: 700, color: colors.brand }}
+                >
                   {getDisplayInitials(memberName)}
                 </FitText>
               </div>
@@ -642,7 +850,7 @@ function CoachAppointmentsTable({
                 >
                   {appointment.recurringPlanId
                     ? "Recurring coaching plan"
-                    : appointment.user.email ?? "No email recorded"}
+                    : (appointment.user.email ?? "No email recorded")}
                 </FitText>
               </div>
             </div>
@@ -661,7 +869,10 @@ function CoachAppointmentsTable({
               >
                 {coachName}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 10.5, color: colors.textMuted }}
+              >
                 {appointment.coach.hourlyRate != null
                   ? `PHP ${appointment.coach.hourlyRate.toLocaleString("en-PH")}/hr`
                   : "Rate not set"}
@@ -669,18 +880,33 @@ function CoachAppointmentsTable({
             </div>
 
             <div style={{ minWidth: 0 }}>
-              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                }}
+              >
                 {dateLabel}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 10.5, color: colors.textMuted }}
+              >
                 {timeLabel} - {appointment.duration} mins
               </FitText>
             </div>
 
             <FitPill
               mode="status"
-              label={getReadableStatus(appointment.status).toUpperCase()}
-              color={getAppointmentStatusColor(appointment.status, colors)}
+              label={getReadableStatus(
+                getCoachAppointmentPaymentStatus(appointment),
+              ).toUpperCase()}
+              color={getAppointmentStatusColor(
+                getCoachAppointmentPaymentStatus(appointment),
+                colors,
+              )}
               fontSize={10}
               fontWeight={700}
               borderOpacity="35"
@@ -688,8 +914,12 @@ function CoachAppointmentsTable({
             />
 
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              {appointment.status === "cancelled" || appointment.status === "no_show" ? (
-                <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+              {appointment.status === "cancelled" ||
+              appointment.status === "no_show" ? (
+                <FitText
+                  excludeGlobalScale
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Closed
                 </FitText>
               ) : (
@@ -697,9 +927,15 @@ function CoachAppointmentsTable({
                   variant={
                     appointment.status === "pending_coach" ? "primary" : "ghost"
                   }
-                  label={getAppointmentActionLabel(appointment.status).toUpperCase()}
+                  label={getAppointmentActionLabel(
+                    getCoachAppointmentPaymentStatus(appointment),
+                  ).toUpperCase()}
                   onClick={() => onOpenReview(appointment)}
-                  style={{ minHeight: 30, padding: "6px 14px", borderRadius: 15 }}
+                  style={{
+                    minHeight: 30,
+                    padding: "6px 14px",
+                    borderRadius: 15,
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 700 }}
                 />
               )}
@@ -714,10 +950,12 @@ function CoachAppointmentsTable({
 function VenueBookingsTable({
   bookings,
   colors,
+  emptyMessage = "No venue bookings match the current filters.",
   onOpenReview,
 }: {
   bookings: VenueBookingRecord[];
   colors: ReturnType<typeof useTheme>["colors"];
+  emptyMessage?: string;
   onOpenReview: (booking: VenueBookingRecord) => void;
 }) {
   const { settings } = useTheme();
@@ -737,8 +975,11 @@ function VenueBookingsTable({
           alignItems: "center",
         }}
       >
-        <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
-          No venue bookings match the current filters.
+        <FitText
+          excludeGlobalScale
+          style={{ fontSize: 14, color: colors.textMuted }}
+        >
+          {emptyMessage}
         </FitText>
       </div>
     );
@@ -820,30 +1061,60 @@ function VenueBookingsTable({
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                }}
+              >
                 {memberName}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 10.5, color: colors.textMuted }}
+              >
                 {booking.user?.email ?? "No email recorded"}
               </FitText>
             </div>
             <div style={{ minWidth: 0 }}>
-              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                }}
+              >
                 {booking.venue?.name ?? `Venue ${booking.venueId}`}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 10.5, color: colors.textMuted }}
+              >
                 {booking.purpose?.trim() || "General venue use"}
               </FitText>
             </div>
             <div style={{ minWidth: 0 }}>
-              <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                }}
+              >
                 {start.toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",
                 })}
               </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 10.5, color: colors.textMuted }}
+              >
                 {start.toLocaleTimeString([], {
                   hour: "numeric",
                   minute: "2-digit",
@@ -857,16 +1128,10 @@ function VenueBookingsTable({
             </div>
             <FitPill
               mode="status"
-              label={(booking.status ?? "pending").toUpperCase()}
-              color={
-                booking.status === "pending"
-                  ? colors.warning
-                  : booking.status === "confirmed"
-                    ? colors.success
-                    : booking.status === "completed"
-                      ? colors.textMuted
-                      : colors.danger
-              }
+              label={getReadableStatus(
+                getVenueBookingPaymentStatus(booking),
+              ).toUpperCase()}
+              color={getVenueBookingStatusColor(booking, colors)}
               fontSize={10}
               fontWeight={700}
               borderOpacity="35"
@@ -874,15 +1139,30 @@ function VenueBookingsTable({
             />
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               {booking.status === "cancelled" ? (
-                <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Closed
                 </FitText>
               ) : (
                 <FitButton
-                  variant={booking.status === "pending" ? "primary" : "ghost"}
-                  label={getVenueBookingActionLabel(booking.status).toUpperCase()}
+                  variant={
+                    getVenueBookingActionLabel(
+                      getVenueBookingPaymentStatus(booking),
+                    ) === "Review"
+                      ? "primary"
+                      : "ghost"
+                  }
+                  label={getVenueBookingActionLabel(
+                    getVenueBookingPaymentStatus(booking),
+                  ).toUpperCase()}
                   onClick={() => onOpenReview(booking)}
-                  style={{ minHeight: 30, padding: "6px 14px", borderRadius: 15 }}
+                  style={{
+                    minHeight: 30,
+                    padding: "6px 14px",
+                    borderRadius: 15,
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 700 }}
                 />
               )}
@@ -904,7 +1184,10 @@ export default function GymOperationsPage() {
   const isAdmin = user?.role === "ADMIN";
   const canManageCoaching = isAdmin || user?.role === "STAFF";
   const {
+    cancelBooking,
+    completeBooking,
     confirmBooking,
+    noShowBooking,
     rejectBooking,
     rawBookings,
     isLoading: scheduleLoading,
@@ -912,12 +1195,29 @@ export default function GymOperationsPage() {
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
 
-  const showFeedback = (nextMessage: string, tone: "danger" | "success" = "success") => {
+  const showFeedback = (
+    nextMessage: string,
+    tone: "danger" | "success" = "success",
+  ) => {
     if (tone === "danger") {
       toast.error(nextMessage);
       return;
     }
     toast.success(nextMessage);
+  };
+
+  const refreshGymOperationsData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["staff", "appointments"] }),
+      queryClient.invalidateQueries({ queryKey: ["staff", "bookings"] }),
+      queryClient.invalidateQueries({ queryKey: ["staff", "coaches"] }),
+      queryClient.invalidateQueries({ queryKey: ["recurring-coaching-plans"] }),
+      queryClient.invalidateQueries({ queryKey: ["venues"] }),
+      queryClient.invalidateQueries({ queryKey: ["coaches"] }),
+      queryClient.invalidateQueries({ queryKey: ["bookings"] }),
+      queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+    ]);
+    showFeedback("Gym Operations data refreshed.");
   };
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -953,7 +1253,8 @@ export default function GymOperationsPage() {
 
   const [coachQuery, setCoachQuery] = useState("");
   const debouncedQuery = useDebounce(coachQuery, 250);
-  const [coachVisibilityScope, setCoachVisibilityScope] = useState<"all" | "visible">("all");
+  const [coachVisibilityScope, setCoachVisibilityScope] =
+    useState<CoachVisibilityScope>("all");
   const [manualBookings, setManualBookings] = useState<Booking[]>([]);
   const [bookingOverrides, setBookingOverrides] = useState<
     Record<string, Pick<Booking, "date" | "startHour" | "startMinute">>
@@ -961,18 +1262,22 @@ export default function GymOperationsPage() {
   const [draggingCoach, setDraggingCoach] = useState<Resource | null>(null);
   const [draggingBooking, setDraggingBooking] = useState<Booking | null>(null);
   const [coachFilterId, setCoachFilterId] = useState<string | null>(null);
-  const [appointmentStatusFilter, setAppointmentStatusFilter] =
-    useState("all");
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState("all");
   const [venueFilterId, setVenueFilterId] = useState("all");
   const [venueStatusFilter, setVenueStatusFilter] = useState("all");
-  const [availabilityEditorCoachId, setAvailabilityEditorCoachId] =
-    useState<string | null>(null);
-  const [profileEditorCoachId, setProfileEditorCoachId] =
-    useState<string | null>(null);
+  const [availabilityEditorCoachId, setAvailabilityEditorCoachId] = useState<
+    string | null
+  >(null);
+  const [profileEditorCoachId, setProfileEditorCoachId] = useState<
+    string | null
+  >(null);
   const [appointmentReviewTarget, setAppointmentReviewTarget] =
     useState<StaffAppointmentRecord | null>(null);
   const [venueReviewTarget, setVenueReviewTarget] =
     useState<VenueBookingRecord | null>(null);
+  const [createVenueBookingOpen, setCreateVenueBookingOpen] = useState(false);
+  const [createCoachBookingOpen, setCreateCoachBookingOpen] = useState(false);
+  const [createCoachOpen, setCreateCoachOpen] = useState(false);
   const [recurringPlanOpen, setRecurringPlanOpen] = useState(false);
   const [recurringPlanForm, setRecurringPlanForm] =
     useState<RecurringPlanFormState>(() => createDefaultRecurringPlanForm());
@@ -985,6 +1290,8 @@ export default function GymOperationsPage() {
   const [recurringActionCoachId, setRecurringActionCoachId] = useState("");
   const [recurringActionDays, setRecurringActionDays] = useState<number[]>([]);
   const [recurringActionReason, setRecurringActionReason] = useState("");
+  const [paymentConfirm, setPaymentConfirm] =
+    useState<PaymentConfirmState | null>(null);
 
   const { data: coachProfiles = [] } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
@@ -996,6 +1303,11 @@ export default function GymOperationsPage() {
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
+  const { data: venues = [] } = useQuery({
+    ...venuesQueryOptions(webApiClient),
+    enabled: canManageCoaching,
+    staleTime: 60_000,
+  });
 
   const appointmentFilters = useMemo(
     () => ({
@@ -1004,11 +1316,22 @@ export default function GymOperationsPage() {
       startDate: toYmd(weekDays[0] ?? weekStart),
       endDate: toYmd(weekDays[weekDays.length - 1] ?? weekStart),
       ...(coachFilterId ? { coachId: coachFilterId } : {}),
-      ...(appointmentStatusFilter !== "all"
+      ...(appointmentStatusFilter !== "all" &&
+      appointmentStatusFilter !== "pending_full_payment"
         ? { status: appointmentStatusFilter }
         : {}),
     }),
     [appointmentStatusFilter, coachFilterId, weekDays, weekStart],
+  );
+
+  const rosterAppointmentFilters = useMemo(
+    () => ({
+      limit: 100,
+      page: 1,
+      startDate: toYmd(weekDays[0] ?? weekStart),
+      endDate: toYmd(weekDays[weekDays.length - 1] ?? weekStart),
+    }),
+    [weekDays, weekStart],
   );
 
   const {
@@ -1022,6 +1345,16 @@ export default function GymOperationsPage() {
     enabled: canManageCoaching,
     staleTime: 30_000,
   });
+  const { data: rosterAppointmentResult = EMPTY_APPOINTMENT_RESULT } = useQuery(
+    {
+      ...staffAppointmentsQueryOptions<StaffAppointmentRecord>(
+        webApiClient,
+        rosterAppointmentFilters,
+      ),
+      enabled: canManageCoaching,
+      staleTime: 30_000,
+    },
+  );
 
   const replaceAvailabilityMutation = useMutation(
     replaceStaffCoachAvailabilityMutationOptions(webApiClient, queryClient),
@@ -1037,6 +1370,15 @@ export default function GymOperationsPage() {
   );
   const updateCoachProfileMutation = useMutation(
     updateStaffCoachProfileMutationOptions(webApiClient, queryClient),
+  );
+  const createVenueBookingMutation = useMutation(
+    createStaffBookingMutationOptions(webApiClient, queryClient),
+  );
+  const createCoachBookingMutation = useMutation(
+    createStaffAppointmentMutationOptions(webApiClient, queryClient),
+  );
+  const createCoachMutation = useMutation(
+    createStaffCoachMutationOptions(webApiClient, queryClient),
   );
   const previewRecurringPlanMutation = useMutation(
     previewRecurringCoachingPlanMutationOptions(webApiClient),
@@ -1056,6 +1398,21 @@ export default function GymOperationsPage() {
   const cancelRecurringPlanMutation = useMutation(
     cancelRecurringCoachingPlanMutationOptions(webApiClient, queryClient),
   );
+  const processAppointmentBalanceMutation = useMutation(
+    processAppointmentBalanceMutationOptions(webApiClient, queryClient),
+  );
+  const processBookingBalanceMutation = useMutation(
+    processBookingBalanceMutationOptions(webApiClient, queryClient),
+  );
+  const payRecurringCycleMutation = useMutation(
+    payRecurringCoachingBillingCycleMutationOptions(webApiClient, queryClient),
+  );
+  const payAppointmentInitialMutation = useMutation(
+    payAppointmentDownpaymentMutationOptions(webApiClient, queryClient),
+  );
+  const verifyPaymentMutation = useMutation(
+    verifyMembershipPaymentMutationOptions(webApiClient, queryClient),
+  );
 
   const coachRoster = useMemo(
     () => mapCoachesToRoster(coachProfiles),
@@ -1064,10 +1421,13 @@ export default function GymOperationsPage() {
 
   const coachOptions = useMemo(
     () =>
-      coachRoster.map((coach) => ({
-        label: coach.name,
-        value: coach.id,
-      })),
+      coachRoster
+        .filter((coach) => coach.isActive)
+        .map((coach) => ({
+          hourlyRate: coach.hourlyRate ?? 0,
+          label: coach.name,
+          value: coach.id,
+        })),
     [coachRoster],
   );
   const memberOptions = useMemo(
@@ -1075,7 +1435,9 @@ export default function GymOperationsPage() {
       (staffUsers as MemberRecord[])
         .filter((member) => {
           const roleName = member.role?.name?.toUpperCase();
-          const status = (member as MemberRecord & { status?: string | null }).status?.toLowerCase();
+          const status = (
+            member as MemberRecord & { status?: string | null }
+          ).status?.toLowerCase();
           const isActive = !status || status === "active";
           return (
             (roleName === "USER" || roleName === "MEMBER") &&
@@ -1093,9 +1455,17 @@ export default function GymOperationsPage() {
         }),
     [staffUsers],
   );
-  const coachAppointments = appointmentResult.data;
+  const coachAppointments = useMemo(
+    () =>
+      appointmentStatusFilter === "pending_full_payment"
+        ? appointmentResult.data.filter(isPendingFullCoachPayment)
+        : appointmentResult.data,
+    [appointmentResult.data, appointmentStatusFilter],
+  );
   const activeRecurringPlanId =
-    recurringPlanAction?.appointment.recurringPlanId ?? null;
+    recurringPlanAction?.appointment.recurringPlanId ??
+    appointmentReviewTarget?.recurringPlanId ??
+    null;
   const { data: recurringPlanSessions } = useQuery({
     ...recurringCoachingPlanSessionsQueryOptions(
       webApiClient,
@@ -1124,6 +1494,12 @@ export default function GymOperationsPage() {
     updateRecurringSessionMutation.isPending ||
     bulkUpdateRecurringSessionsMutation.isPending ||
     cancelRecurringPlanMutation.isPending;
+  const paymentConfirmLoading =
+    payAppointmentInitialMutation.isPending ||
+    processAppointmentBalanceMutation.isPending ||
+    payRecurringCycleMutation.isPending ||
+    processBookingBalanceMutation.isPending ||
+    verifyPaymentMutation.isPending;
   const recurringPlanInputInvalid =
     !recurringPlanForm.memberId ||
     !recurringPlanForm.coachId ||
@@ -1165,6 +1541,14 @@ export default function GymOperationsPage() {
     [coachAppointments, colors],
   );
 
+  const rosterAppointmentBookings = useMemo<Booking[]>(
+    () =>
+      rosterAppointmentResult.data.map((appointment) =>
+        mapAppointmentToTimelineBooking(appointment, colors),
+      ),
+    [colors, rosterAppointmentResult.data],
+  );
+
   const allBookings = useMemo(
     () =>
       [...appointmentBookings, ...manualBookings].map((booking) => {
@@ -1174,13 +1558,22 @@ export default function GymOperationsPage() {
     [appointmentBookings, bookingOverrides, manualBookings],
   );
 
+  const rosterBookings = useMemo(
+    () =>
+      [...rosterAppointmentBookings, ...manualBookings].map((booking) => {
+        const override = bookingOverrides[booking.id];
+        return override ? { ...booking, ...override } : booking;
+      }),
+    [bookingOverrides, manualBookings, rosterAppointmentBookings],
+  );
+
   const filteredStaff = useMemo(
     () =>
       coachRoster.filter((coach) => {
-        if (
-          coachVisibilityScope === "visible" &&
-          !coach.isActive
-        ) {
+        if (coachVisibilityScope === "visible" && !coach.isActive) {
+          return false;
+        }
+        if (coachVisibilityScope === "hidden" && coach.isActive) {
           return false;
         }
         return coach.name.toLowerCase().includes(debouncedQuery.toLowerCase());
@@ -1207,17 +1600,21 @@ export default function GymOperationsPage() {
   );
   const availabilityEditorCoach = useMemo(
     () =>
-      coachProfiles.find((coach) => coach.id === availabilityEditorCoachId) ?? null,
+      coachProfiles.find((coach) => coach.id === availabilityEditorCoachId) ??
+      null,
     [availabilityEditorCoachId, coachProfiles],
   );
   const profileEditorCoach = useMemo(
-    () => coachProfiles.find((coach) => coach.id === profileEditorCoachId) ?? null,
+    () =>
+      coachProfiles.find((coach) => coach.id === profileEditorCoachId) ?? null,
     [coachProfiles, profileEditorCoachId],
   );
   const reviewCoachProfile = useMemo(
     () =>
       appointmentReviewTarget
-        ? coachProfiles.find((coach) => coach.id === appointmentReviewTarget.coachId) ?? null
+        ? (coachProfiles.find(
+            (coach) => coach.id === appointmentReviewTarget.coachId,
+          ) ?? null)
         : null,
     [appointmentReviewTarget, coachProfiles],
   );
@@ -1235,7 +1632,9 @@ export default function GymOperationsPage() {
           ).length,
       ),
       trustLabel:
-        (reviewCoachProfile?.certifications?.length ?? 0) > 0 ? "clear" : "review",
+        (reviewCoachProfile?.certifications?.length ?? 0) > 0
+          ? "clear"
+          : "review",
     }),
     [appointmentReviewTarget?.coachId, coachAppointments, reviewCoachProfile],
   );
@@ -1259,7 +1658,9 @@ export default function GymOperationsPage() {
   useEffect(() => {
     setRecurringPlanForm((current) => ({
       ...current,
-      coachId: current.coachId || coachOptions[0]?.value || "",
+      coachId: coachOptions.some((coach) => coach.value === current.coachId)
+        ? current.coachId
+        : coachOptions[0]?.value || "",
       memberId: current.memberId || memberOptions[0]?.value || "",
     }));
   }, [coachOptions, memberOptions]);
@@ -1273,10 +1674,16 @@ export default function GymOperationsPage() {
         start.getMinutes(),
       ).padStart(2, "0")}`,
     );
-    setRecurringActionCoachId(recurringPlanAction.appointment.coachId);
+    setRecurringActionCoachId(
+      coachOptions.some(
+        (coach) => coach.value === recurringPlanAction.appointment.coachId,
+      )
+        ? recurringPlanAction.appointment.coachId
+        : coachOptions[0]?.value || "",
+    );
     setRecurringActionDays([start.getDay()]);
     setRecurringActionReason("");
-  }, [recurringPlanAction]);
+  }, [coachOptions, recurringPlanAction]);
 
   const sensors = useFitSensors();
 
@@ -1287,13 +1694,17 @@ export default function GymOperationsPage() {
       | undefined;
 
     if (activeData?.kind === "coach" && activeData.coachId) {
-      const coach = coachRoster.find((resource) => resource.id === activeData.coachId);
+      const coach = coachRoster.find(
+        (resource) => resource.id === activeData.coachId,
+      );
       if (coach) setDraggingCoach(coach);
       return;
     }
 
     if (activeData?.kind === "booking" && activeData.bookingId) {
-      const booking = allBookings.find((item) => item.id === activeData.bookingId);
+      const booking = allBookings.find(
+        (item) => item.id === activeData.bookingId,
+      );
       if (booking) setDraggingBooking(booking);
     }
   };
@@ -1301,7 +1712,7 @@ export default function GymOperationsPage() {
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingCoach(null);
     setDraggingBooking(null);
-    if (!event.over || !isAdmin) return;
+    if (!event.over || !canManageCoaching) return;
     const [dayIndexValue, hourValue] = String(event.over.id).split(":");
     const dayIndex = Number(dayIndexValue);
     const hour = Number(hourValue);
@@ -1312,20 +1723,32 @@ export default function GymOperationsPage() {
     if (Number.isNaN(dayIndex) || Number.isNaN(hour)) return;
 
     if (activeData?.kind === "coach" && activeData.coachId) {
-      const coach = coachRoster.find((resource) => resource.id === activeData.coachId);
+      const coach = coachRoster.find(
+        (resource) => resource.id === activeData.coachId,
+      );
       if (!coach) return;
-      const booking = buildManualBooking(coach, weekDays[dayIndex], hour, colors.brand);
+      const booking = buildManualBooking(
+        coach,
+        weekDays[dayIndex],
+        hour,
+        colors.brand,
+      );
       setManualBookings((previous) => [...previous, booking]);
       showFeedback(
-        `${coach.name} assigned to ${weekDays[dayIndex].toLocaleDateString("en-US", {
-          weekday: "short",
-        })} ${hour}:00`,
+        `${coach.name} assigned to ${weekDays[dayIndex].toLocaleDateString(
+          "en-US",
+          {
+            weekday: "short",
+          },
+        )} ${hour}:00`,
       );
       return;
     }
 
     if (activeData?.kind === "booking" && activeData.bookingId) {
-      const booking = allBookings.find((item) => item.id === activeData.bookingId);
+      const booking = allBookings.find(
+        (item) => item.id === activeData.bookingId,
+      );
       if (!booking) return;
       const nextDate = toYmd(weekDays[dayIndex]);
       if (booking.date === nextDate && booking.startHour === hour) return;
@@ -1338,7 +1761,9 @@ export default function GymOperationsPage() {
         },
       }));
       showFeedback(
-        `${booking.resourceName} moved to ${weekDays[dayIndex].toLocaleDateString("en-US", {
+        `${booking.resourceName} moved to ${weekDays[
+          dayIndex
+        ].toLocaleDateString("en-US", {
           weekday: "short",
         })} ${hour}:00`,
       );
@@ -1379,7 +1804,9 @@ export default function GymOperationsPage() {
 
   const handleBlockSave = (updated: Booking) => {
     setManualBookings((previous) =>
-      previous.map((booking) => (booking.id === updated.id ? updated : booking)),
+      previous.map((booking) =>
+        booking.id === updated.id ? updated : booking,
+      ),
     );
     setBlockDetailOpen(false);
     setActiveBlock(null);
@@ -1427,12 +1854,6 @@ export default function GymOperationsPage() {
     if (coachRoster.some((coach) => coach.id === coachFilterId)) return;
     setCoachFilterId(null);
   }, [coachFilterId, coachRoster]);
-
-  useEffect(() => {
-    if (venueFilterId === "all") return;
-    if (rawBookings.some((booking) => String(booking.venueId) === venueFilterId)) return;
-    setVenueFilterId("all");
-  }, [venueFilterId, rawBookings]);
 
   useEffect(() => {
     const recalc = () => {
@@ -1484,13 +1905,15 @@ export default function GymOperationsPage() {
         const firstName = booking.user?.profile?.firstName?.trim() ?? "";
         const lastName = booking.user?.profile?.lastName?.trim() ?? "";
         const label =
-          `${firstName} ${lastName}`.trim() ||
-          booking.user?.email ||
-          "Member";
+          `${firstName} ${lastName}`.trim() || booking.user?.email || "Member";
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <FitText
-              style={{ fontSize: 14, fontWeight: 700, color: palette.textPrimary }}
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: palette.textPrimary,
+              }}
             >
               {label}
             </FitText>
@@ -1547,13 +1970,13 @@ export default function GymOperationsPage() {
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <FitText
-              style={{ fontSize: 14, fontWeight: 700, color: palette.textPrimary }}
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: palette.textPrimary,
+              }}
             >
-              {getPersonDisplayName(
-                booking.coach.user?.profile,
-                booking.coach.user?.email ?? null,
-                "Coach",
-              )}
+              {getCoachDisplayName(booking.coach, "Coach")}
             </FitText>
             <FitText style={{ fontSize: 12, color: palette.textMuted }}>
               {booking.coach.hourlyRate != null
@@ -1603,28 +2026,72 @@ export default function GymOperationsPage() {
   const venueOptions = useMemo(
     () =>
       Array.from(
-        new Map(
-          rawBookings.map((booking) => [
-            String(booking.venueId),
-            {
-              label: booking.venue?.name ?? `Venue ${booking.venueId}`,
-              value: String(booking.venueId),
-            },
-          ]),
-        ).values(),
+        new Map([
+          ...venues
+            .filter(
+              (venue) =>
+                venue.isActive !== false && venue.isReservable !== false,
+            )
+            .map(
+              (venue) =>
+                [
+                  String(venue.id),
+                  {
+                    label: venue.name,
+                    value: String(venue.id),
+                    hourlyRate: venue.hourlyRate ?? 0,
+                  },
+                ] as const,
+            ),
+          ...rawBookings.map(
+            (booking) =>
+              [
+                String(booking.venueId),
+                {
+                  label: booking.venue?.name ?? `Venue ${booking.venueId}`,
+                  value: String(booking.venueId),
+                  hourlyRate: booking.venue?.hourlyRate ?? null,
+                },
+              ] as const,
+          ),
+        ]).values(),
       ),
-    [rawBookings],
+    [rawBookings, venues],
+  );
+
+  const bookableVenueOptions = useMemo(
+    () =>
+      venues
+        .filter(
+          (venue) =>
+            venue.isActive !== false && venue.isReservable !== false,
+        )
+        .map((venue) => ({
+          label: venue.name,
+          value: String(venue.id),
+          hourlyRate: venue.hourlyRate ?? 0,
+        })),
+    [venues],
   );
 
   const venueFilterOptions = useMemo(
     () => [{ label: "All venues", value: "all" }, ...venueOptions],
     [venueOptions],
   );
+  const selectedVenueFilterLabel = useMemo(
+    () =>
+      venueFilterOptions.find((option) => option.value === venueFilterId)
+        ?.label ?? "this venue",
+    [venueFilterId, venueFilterOptions],
+  );
 
   const filteredVenueBookings = useMemo(
     () =>
       rawBookings.filter((booking) => {
-        if (venueFilterId !== "all" && String(booking.venueId) !== venueFilterId) {
+        if (
+          venueFilterId !== "all" &&
+          String(booking.venueId) !== venueFilterId
+        ) {
           return false;
         }
         if (
@@ -1647,8 +2114,9 @@ export default function GymOperationsPage() {
       confirmed: filteredVenueBookings.filter(
         (booking) => booking.status === "confirmed",
       ).length,
-      activeVenues: new Set(filteredVenueBookings.map((booking) => booking.venueId))
-        .size,
+      activeVenues: new Set(
+        filteredVenueBookings.map((booking) => booking.venueId),
+      ).size,
     }),
     [filteredVenueBookings],
   );
@@ -1692,17 +2160,12 @@ export default function GymOperationsPage() {
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
       scroll: false,
     });
-  }, [
-    activeOperationsTab,
-    canManageCoaching,
-    pathname,
-    router,
-    searchParams,
-  ]);
+  }, [activeOperationsTab, canManageCoaching, pathname, router, searchParams]);
 
   useEffect(() => {
     const currentSurfaceParam = searchParams.get("schedule_view");
-    const normalizedSurfaceParam = normalizeScheduleSurfaceTab(currentSurfaceParam);
+    const normalizedSurfaceParam =
+      normalizeScheduleSurfaceTab(currentSurfaceParam);
 
     if (activeScheduleSurfaceTab === normalizedSurfaceParam) return;
 
@@ -1717,12 +2180,7 @@ export default function GymOperationsPage() {
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
       scroll: false,
     });
-  }, [
-    activeScheduleSurfaceTab,
-    pathname,
-    router,
-    searchParams,
-  ]);
+  }, [activeScheduleSurfaceTab, pathname, router, searchParams]);
 
   const toggleRecurringPlanDay = (day: number) => {
     setRecurringPlanPreview(null);
@@ -1786,7 +2244,10 @@ export default function GymOperationsPage() {
       return;
     }
     if (!recurringPlanPreview) {
-      showFeedback("Preview the schedule before confirming the plan.", "danger");
+      showFeedback(
+        "Preview the schedule before confirming the plan.",
+        "danger",
+      );
       return;
     }
     if (recurringPlanPreview.conflictCount > 0 && !skipConflicts) {
@@ -1828,7 +2289,10 @@ export default function GymOperationsPage() {
         input: {
           action: "reschedule",
           coachId: recurringActionCoachId || appointment.coachId,
-          newScheduledAt: buildLocalIso(recurringActionDate, recurringActionTime),
+          newScheduledAt: buildLocalIso(
+            recurringActionDate,
+            recurringActionTime,
+          ),
           reason: recurringActionReason || undefined,
         },
         planId,
@@ -1945,7 +2409,10 @@ export default function GymOperationsPage() {
     }
   };
 
-  const handleRejectAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
+  const handleRejectAppointment = async (
+    appointment: StaffAppointmentRecord,
+    value: string,
+  ) => {
     try {
       await respondAppointmentMutation.mutateAsync({
         accepted: false,
@@ -1963,7 +2430,10 @@ export default function GymOperationsPage() {
     }
   };
 
-  const handleCancelAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
+  const handleCancelAppointment = async (
+    appointment: StaffAppointmentRecord,
+    value: string,
+  ) => {
     try {
       await cancelAppointmentMutation.mutateAsync({
         appointmentId: appointment.id,
@@ -1980,7 +2450,10 @@ export default function GymOperationsPage() {
     }
   };
 
-  const handleCompleteAppointment = async (appointment: StaffAppointmentRecord, value: string) => {
+  const handleCompleteAppointment = async (
+    appointment: StaffAppointmentRecord,
+    value: string,
+  ) => {
     try {
       await completeAppointmentMutation.mutateAsync({
         appointmentId: appointment.id,
@@ -1995,6 +2468,230 @@ export default function GymOperationsPage() {
         "danger",
       );
     }
+  };
+
+  const executeCollectAppointmentInitialPayment = async (
+    appointment: StaffAppointmentRecord,
+    provider: PaymentCollectionProvider,
+    paymentStage: "downpayment" | "full",
+  ) => {
+    try {
+      const result = await payAppointmentInitialMutation.mutateAsync({
+        appointmentId: appointment.id,
+        paymentStage,
+        provider,
+        userId: appointment.userId,
+      });
+
+      if (provider === "cash" && result.paymentId) {
+        await verifyPaymentMutation.mutateAsync({
+          affectedUserId: appointment.userId,
+          paymentId: result.paymentId,
+          payload: { action: "approve" },
+        });
+        showFeedback(
+          paymentStage === "full"
+            ? "Coach full cash payment accepted."
+            : "Coach cash downpayment accepted.",
+        );
+        setAppointmentReviewTarget(null);
+        return;
+      }
+
+      if (result.checkoutUrl) {
+        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+        showFeedback("PayMongo coach checkout opened.");
+        return;
+      }
+
+      showFeedback("Coach payment request updated.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to collect coach payment."),
+        "danger",
+      );
+    }
+  };
+
+  const requestCollectAppointmentInitialPayment = (
+    appointment: StaffAppointmentRecord,
+    provider: PaymentCollectionProvider,
+    paymentStage: "downpayment" | "full",
+  ) => {
+    const stageLabel =
+      paymentStage === "full" ? "full payment" : "downpayment";
+    const providerLabel = provider === "cash" ? "cash" : "PayMongo";
+    setPaymentConfirm({
+      kind: "coachInitial",
+      appointment,
+      provider,
+      paymentStage,
+      title: "Confirm coach payment",
+      message: `Continue with ${providerLabel} ${stageLabel} for this coach appointment?`,
+      confirmLabel:
+        provider === "cash"
+          ? paymentStage === "full"
+            ? "ACCEPT CASH FULL"
+            : "ACCEPT CASH DOWNPAYMENT"
+          : "OPEN PAYMONGO",
+    });
+  };
+
+  const executeCollectAppointmentBalance = async (
+    appointment: StaffAppointmentRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    try {
+      const result = await processAppointmentBalanceMutation.mutateAsync({
+        appointmentId: appointment.id,
+        provider,
+        referenceNo:
+          provider === "cash" ? `COACH-BAL-${Date.now()}` : undefined,
+        userId: appointment.userId,
+      });
+
+      if (provider === "cash" && result.paymentId) {
+        await verifyPaymentMutation.mutateAsync({
+          affectedUserId: appointment.userId,
+          paymentId: result.paymentId,
+          payload: { action: "approve" },
+        });
+        showFeedback("Coach appointment balance accepted.");
+        setAppointmentReviewTarget(null);
+        return;
+      }
+
+      if (result.checkoutUrl) {
+        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+        showFeedback("PayMongo balance checkout opened.");
+        return;
+      }
+
+      showFeedback("Coach appointment balance request updated.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to collect coach balance."),
+        "danger",
+      );
+    }
+  };
+
+  const requestCollectAppointmentBalance = (
+    appointment: StaffAppointmentRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    const label =
+      provider === "cash"
+        ? "accept this cash balance"
+        : "open PayMongo balance checkout";
+    setPaymentConfirm({
+      kind: "coachBalance",
+      appointment,
+      provider,
+      title: "Confirm coach balance",
+      message: `Continue and ${label}?`,
+      confirmLabel:
+        provider === "cash" ? "ACCEPT CASH BALANCE" : "OPEN PAYMONGO",
+    });
+  };
+
+  const executeRecurringCyclePayment = async (
+    cycle: RecurringCoachingBillingCycleRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    const planId = cycle.recurringPlanId;
+    if (!planId) return;
+
+    if (
+      cycle.status === "awaiting_verification" &&
+      cycle.paymentId &&
+      provider === "cash"
+    ) {
+      try {
+        await verifyPaymentMutation.mutateAsync({
+          affectedUserId: appointmentReviewTarget?.userId,
+          paymentId: cycle.paymentId,
+          payload: { action: "approve" },
+        });
+        showFeedback("Recurring coach payment approved.");
+      } catch (error) {
+        showFeedback(
+          getErrorMessage(error, "Unable to approve recurring coach payment."),
+          "danger",
+        );
+      }
+      return;
+    }
+
+    try {
+      const result = await payRecurringCycleMutation.mutateAsync({
+        cycleId: cycle.id,
+        input: {
+          provider,
+          referenceNo:
+            provider === "cash" ? `RECUR-COACH-${Date.now()}` : undefined,
+        },
+        planId,
+      });
+
+      if (provider === "cash") {
+        await verifyPaymentMutation.mutateAsync({
+          affectedUserId: appointmentReviewTarget?.userId,
+          paymentId: result.paymentId,
+          payload: { action: "approve" },
+        });
+        showFeedback("Recurring coach cash payment accepted.");
+        return;
+      }
+
+      if (result.checkoutUrl) {
+        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+        showFeedback("PayMongo recurring coach checkout opened.");
+        return;
+      }
+
+      showFeedback("Recurring coach payment request updated.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to process recurring coach payment."),
+        "danger",
+      );
+    }
+  };
+
+  const requestRecurringCyclePayment = (
+    cycle: RecurringCoachingBillingCycleRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    if (
+      cycle.status === "awaiting_verification" &&
+      cycle.paymentId &&
+      provider === "cash"
+    ) {
+      setPaymentConfirm({
+        kind: "recurringCycle",
+        cycle,
+        provider,
+        title: "Approve recurring cash payment",
+        message: "Approve this recurring coach cash payment now?",
+        confirmLabel: "APPROVE CASH PAYMENT",
+      });
+      return;
+    }
+
+    const label =
+      provider === "cash"
+        ? "accept this recurring coach cash payment"
+        : "open PayMongo for this recurring coach cycle";
+    setPaymentConfirm({
+      kind: "recurringCycle",
+      cycle,
+      provider,
+      title: "Confirm recurring coach payment",
+      message: `Continue and ${label}?`,
+      confirmLabel:
+        provider === "cash" ? "ACCEPT CASH CYCLE" : "OPEN PAYMONGO",
+    });
   };
 
   const handleSaveAvailability = async (
@@ -2036,6 +2733,12 @@ export default function GymOperationsPage() {
       return;
     }
 
+    const displayName = data.displayName?.trim() ?? "";
+    if (!displayName) {
+      showFeedback("Coach name is required.", "danger");
+      return;
+    }
+
     try {
       await updateCoachProfileMutation.mutateAsync({
         coachId: profileEditorCoach.id,
@@ -2043,6 +2746,9 @@ export default function GymOperationsPage() {
           bio: parsed.data.bio || undefined,
           specialties: parsed.data.specialties,
           certifications: parsed.data.certifications,
+          contactEmail: data.contactEmail?.trim() || null,
+          contactPhone: data.contactPhone?.trim() || null,
+          displayName,
           hourlyRate: parsed.data.hourlyRate,
           isAvailableForBooking:
             (data.isAvailableForBooking ?? "active") === "active",
@@ -2058,7 +2764,10 @@ export default function GymOperationsPage() {
     }
   };
 
-  const handleHideCoachFromBooking = async (coachId: string) => {
+  const handleSetCoachBookingVisibility = async (
+    coachId: string,
+    isVisibleForBooking: boolean,
+  ) => {
     const coach = coachProfiles.find((item) => item.id === coachId);
     if (!coach) return;
 
@@ -2069,14 +2778,23 @@ export default function GymOperationsPage() {
           bio: coach.bio ?? undefined,
           certifications: coach.certifications ?? [],
           hourlyRate: coach.hourlyRate ?? undefined,
-          isAvailableForBooking: false,
+          isAvailableForBooking: isVisibleForBooking,
           specialties: coach.specialties ?? [],
         },
       });
-      showFeedback("Coach hidden from booking.");
+      showFeedback(
+        isVisibleForBooking
+          ? "Coach restored to booking visibility."
+          : "Coach hidden from booking.",
+      );
     } catch (error) {
       showFeedback(
-        getErrorMessage(error, "Unable to hide coach from booking."),
+        getErrorMessage(
+          error,
+          isVisibleForBooking
+            ? "Unable to restore coach visibility."
+            : "Unable to hide coach from booking.",
+        ),
         "danger",
       );
     }
@@ -2087,12 +2805,114 @@ export default function GymOperationsPage() {
 
     const result = await confirmBooking(venueReviewTarget.id);
     if (!result.success) {
-      showFeedback(result.error ?? "Unable to approve venue booking.", "danger");
+      showFeedback(
+        result.error ?? "Unable to approve venue booking.",
+        "danger",
+      );
       return;
     }
 
-    showFeedback(note ? "Venue booking approved and note captured." : "Venue booking approved.");
+    showFeedback(
+      note
+        ? "Venue booking approved and note captured."
+        : "Venue booking approved.",
+    );
     setVenueReviewTarget(null);
+  };
+
+  const executeCollectVenueBalance = async (
+    booking: VenueBookingRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    try {
+      const result = await processBookingBalanceMutation.mutateAsync({
+        bookingId: booking.id,
+        provider,
+        referenceNo:
+          provider === "cash" ? `VENUE-BAL-${Date.now()}` : undefined,
+      });
+
+      if (provider === "cash" && result.paymentId) {
+        await verifyPaymentMutation.mutateAsync({
+          affectedUserId: booking.userId,
+          paymentId: result.paymentId,
+          payload: { action: "approve" },
+        });
+        showFeedback("Venue booking balance accepted.");
+        setVenueReviewTarget(null);
+        return;
+      }
+
+      if (result.checkoutUrl) {
+        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+        showFeedback("PayMongo balance checkout opened.");
+        return;
+      }
+
+      showFeedback("Venue booking balance request updated.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to collect venue balance."),
+        "danger",
+      );
+    }
+  };
+
+  const requestCollectVenueBalance = (
+    booking: VenueBookingRecord,
+    provider: PaymentCollectionProvider,
+  ) => {
+    const label =
+      provider === "cash"
+        ? "accept this cash balance"
+        : "open PayMongo balance checkout";
+    setPaymentConfirm({
+      kind: "venueBalance",
+      booking,
+      provider,
+      title: "Confirm venue balance",
+      message: `Continue and ${label}?`,
+      confirmLabel:
+        provider === "cash" ? "ACCEPT CASH BALANCE" : "OPEN PAYMONGO",
+    });
+  };
+
+  const handleConfirmPaymentAction = async () => {
+    if (!paymentConfirm) return;
+
+    try {
+      switch (paymentConfirm.kind) {
+        case "coachInitial":
+          await executeCollectAppointmentInitialPayment(
+            paymentConfirm.appointment,
+            paymentConfirm.provider,
+            paymentConfirm.paymentStage,
+          );
+          break;
+        case "coachBalance":
+          await executeCollectAppointmentBalance(
+            paymentConfirm.appointment,
+            paymentConfirm.provider,
+          );
+          break;
+        case "recurringCycle":
+          await executeRecurringCyclePayment(
+            paymentConfirm.cycle,
+            paymentConfirm.provider,
+          );
+          break;
+        case "venueBalance":
+          await executeCollectVenueBalance(
+            paymentConfirm.booking,
+            paymentConfirm.provider,
+          );
+          break;
+        default:
+          break;
+      }
+    } finally {
+      setPaymentConfirm(null);
+    }
   };
 
   const handleRejectVenueBooking = async (note: string) => {
@@ -2108,14 +2928,106 @@ export default function GymOperationsPage() {
     setVenueReviewTarget(null);
   };
 
-  const handleRequestVenueReschedule = (note: string) => {
+  const handleCompleteVenueBooking = async () => {
     if (!venueReviewTarget) return;
-    showFeedback(
-      note
-        ? "Requested a new venue slot and saved the staff note."
-        : "Requested a new venue slot.",
-    );
+
+    const result = await completeBooking(venueReviewTarget.id);
+    if (!result.success) {
+      showFeedback(
+        result.error ?? "Unable to mark venue booking complete.",
+        "danger",
+      );
+      return;
+    }
+
+    showFeedback("Venue booking marked complete.");
     setVenueReviewTarget(null);
+  };
+
+  const handleCancelVenueBooking = async (note: string) => {
+    if (!venueReviewTarget) return;
+
+    const result = await cancelBooking(venueReviewTarget.id, note || undefined);
+    if (!result.success) {
+      showFeedback(result.error ?? "Unable to cancel venue booking.", "danger");
+      return;
+    }
+
+    showFeedback("Venue booking cancelled.");
+    setVenueReviewTarget(null);
+  };
+
+  const handleNoShowVenueBooking = async () => {
+    if (!venueReviewTarget) return;
+
+    const result = await noShowBooking(venueReviewTarget.id);
+    if (!result.success) {
+      showFeedback(result.error ?? "Unable to mark venue booking no-show.", "danger");
+      return;
+    }
+
+    showFeedback("Venue booking marked no-show.");
+    setVenueReviewTarget(null);
+  };
+
+  const handleCreateVenueBooking = async (payload: {
+    amenityId: string;
+    coachId?: string;
+    endsAt: string;
+    memberId: string;
+    notes?: string;
+    paymentStage?: "downpayment" | "full";
+    startsAt: string;
+  }) => {
+    try {
+      await createVenueBookingMutation.mutateAsync(payload);
+      showFeedback("Venue booking created.");
+      setCreateVenueBookingOpen(false);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to create venue booking."),
+        "danger",
+      );
+    }
+  };
+
+  const handleCreateCoachBooking = async (payload: {
+    coachId: string;
+    durationMinutes: number;
+    memberId: string;
+    memberNotes?: string;
+    paymentStage?: "downpayment" | "full";
+    scheduledAt: string;
+  }) => {
+    try {
+      await createCoachBookingMutation.mutateAsync(payload);
+      showFeedback("Coach booking created.");
+      setCreateCoachBookingOpen(false);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to create coach booking."),
+        "danger",
+      );
+    }
+  };
+
+  const handleCreateCoach = async (payload: {
+    bio?: string;
+    certifications?: string[];
+    contactEmail?: string;
+    contactPhone?: string;
+    displayName: string;
+    hourlyRate?: number;
+    isAvailableForBooking?: boolean;
+    specialties?: string[];
+  }) => {
+    try {
+      await createCoachMutation.mutateAsync(payload);
+      showFeedback("Coach created.");
+      setCreateCoachOpen(false);
+    } catch (error) {
+      showFeedback(getErrorMessage(error, "Unable to create coach."), "danger");
+    }
   };
 
   return (
@@ -2160,13 +3072,23 @@ export default function GymOperationsPage() {
             <div style={{ display: "grid", gap: 6, maxWidth: 720 }}>
               <FitText
                 excludeGlobalScale
-                style={{ fontSize: 34, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.08 }}
+                style={{
+                  fontSize: 34,
+                  fontWeight: 800,
+                  color: colors.textPrimary,
+                  lineHeight: 1.08,
+                }}
               >
                 Gym Operations
               </FitText>
               <FitText
                 excludeGlobalScale
-                style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: colors.brand,
+                  letterSpacing: "0.08em",
+                }}
               >
                 dispatch console / schedule control / coach operations
               </FitText>
@@ -2209,38 +3131,63 @@ export default function GymOperationsPage() {
                   ? "Search coaches, review appointment pressure, or shift the active week"
                   : "Search coach records, fix booking visibility, and repair readiness details"}
               </FitText>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
                 {activeOperationsTab === "schedule" ? (
                   <>
                     <FitButton
                       variant="ghost"
-                      label={coachFilterId ? "COACH FILTERED" : "COACH FILTER"}
+                      label="REFRESH DATA"
+                      icon={RefreshCw}
+                      iconSize={15}
                       onClick={() => {
-                        if (coachFilterId) setCoachFilterId(null);
+                        void refreshGymOperationsData();
                       }}
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      style={{
+                        minHeight: 36,
+                        borderRadius: 18,
+                        padding: "8px 14px",
+                      }}
                       textStyle={{ fontSize: 13, fontWeight: 700 }}
                     />
                     <FitButton
                       variant="ghost"
                       label="OPEN CALENDAR"
                       onClick={() => setCalendarOpen(true)}
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      style={{
+                        minHeight: 36,
+                        borderRadius: 18,
+                        padding: "8px 14px",
+                      }}
                       textStyle={{ fontSize: 13, fontWeight: 700 }}
                     />
                   </>
                 ) : (
                   <>
-                    <FitButton
-                      variant="ghost"
-                      label={coachVisibilityScope === "visible" ? "VISIBLE ONLY" : "BOOKING VISIBLE"}
-                      onClick={() =>
-                        setCoachVisibilityScope((current) =>
-                          current === "visible" ? "all" : "visible",
+                    <FitSelect
+                      compact
+                      value={coachVisibilityScope}
+                      onChange={(event) =>
+                        setCoachVisibilityScope(
+                          event.target.value as CoachVisibilityScope,
                         )
                       }
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
-                      textStyle={{ fontSize: 13, fontWeight: 700 }}
+                      options={COACH_VISIBILITY_SCOPE_OPTIONS}
+                      style={{
+                        minHeight: 36,
+                        borderRadius: 18,
+                        padding: "8px 14px",
+                        minWidth: 156,
+                        textTransform: "uppercase",
+                        fontSize: 13,
+                        fontWeight: 700,
+                      }}
                     />
                     <FitButton
                       variant="ghost"
@@ -2250,7 +3197,11 @@ export default function GymOperationsPage() {
                         setProfileEditorCoachId(selectedCoachProfile.id);
                       }}
                       disabled={!selectedCoachProfile}
-                      style={{ minHeight: 36, borderRadius: 18, padding: "8px 14px" }}
+                      style={{
+                        minHeight: 36,
+                        borderRadius: 18,
+                        padding: "8px 14px",
+                      }}
                       textStyle={{ fontSize: 13, fontWeight: 700 }}
                     />
                   </>
@@ -2277,8 +3228,14 @@ export default function GymOperationsPage() {
                     setRecurringPlanPreview(null);
                     setRecurringPlanOpen(true);
                   }}
-                  disabled={memberOptions.length === 0 || coachOptions.length === 0}
-                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  disabled={
+                    memberOptions.length === 0 || coachOptions.length === 0
+                  }
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 16,
+                    padding: "8px 14px",
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 800 }}
                 />
               ) : null}
@@ -2303,9 +3260,9 @@ export default function GymOperationsPage() {
                   staffQuery={coachQuery}
                   onStaffQueryChange={setCoachQuery}
                   filteredStaff={filteredStaff}
-                  bookings={allBookings}
+                  bookings={rosterBookings}
                   canDrag={false}
-                  canSelect={isAdmin}
+                  canSelect={canManageCoaching}
                   selectedStaffId={focusedCoachId}
                   onStaffClick={handleStaffClick}
                   resourceLabelPlural="Coaches"
@@ -2350,8 +3307,9 @@ export default function GymOperationsPage() {
                         lineHeight: 1.15,
                       }}
                     >
-                      Review appointment pressure, shift the active week, and inspect
-                      live coaching sessions without leaving Gym Operations.
+                      Review appointment pressure, shift the active week, and
+                      inspect live coaching sessions without leaving Gym
+                      Operations.
                     </FitText>
                   </div>
                   <div
@@ -2370,6 +3328,11 @@ export default function GymOperationsPage() {
                           alignItems: "center",
                           gap: 8,
                           marginBottom: 10,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 4,
+                          padding: "8px 0 10px",
+                          backgroundColor: colors.surface,
                         }}
                       >
                         <FitButton
@@ -2393,8 +3356,19 @@ export default function GymOperationsPage() {
                           }}
                           aria-label="Pick week"
                         >
-                          <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
-                          <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.brand }}>
+                          <CalendarDays
+                            size={16}
+                            color={colors.brand}
+                            strokeWidth={2}
+                          />
+                          <FitText
+                            excludeGlobalScale
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: colors.brand,
+                            }}
+                          >
                             {formatWeekRange(weekStart)}
                           </FitText>
                         </FitButton>
@@ -2468,14 +3442,34 @@ export default function GymOperationsPage() {
                         without leaving the main Gym Operations route.
                       </FitText>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <FitButton
+                        variant="primary"
+                        label="CREATE VENUE BOOKING"
+                        onClick={() => setCreateVenueBookingOpen(true)}
+                        style={{
+                          minHeight: 42,
+                          borderRadius: 16,
+                          padding: "0 16px",
+                        }}
+                        textStyle={{ fontSize: 12, fontWeight: 700 }}
+                      />
                       <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
                         <FitText excludeGlobalScale style={controlLabelStyle}>
                           Venue Filter
                         </FitText>
                         <FitSelect
                           value={venueFilterId}
-                          onChange={(event) => setVenueFilterId(event.target.value || "all")}
+                          onChange={(event) =>
+                            setVenueFilterId(event.target.value || "all")
+                          }
                           options={venueFilterOptions}
                           compact
                           fullWidth
@@ -2487,7 +3481,9 @@ export default function GymOperationsPage() {
                         </FitText>
                         <FitSelect
                           value={venueStatusFilter}
-                          onChange={(event) => setVenueStatusFilter(event.target.value || "all")}
+                          onChange={(event) =>
+                            setVenueStatusFilter(event.target.value || "all")
+                          }
                           options={VENUE_STATUS_OPTIONS}
                           compact
                           fullWidth
@@ -2539,7 +3535,10 @@ export default function GymOperationsPage() {
                         alignItems: "center",
                       }}
                     >
-                      <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+                      <FitText
+                        excludeGlobalScale
+                        style={{ fontSize: 14, color: colors.textMuted }}
+                      >
                         Loading venue bookings...
                       </FitText>
                     </div>
@@ -2547,6 +3546,11 @@ export default function GymOperationsPage() {
                     <VenueBookingsTable
                       bookings={filteredVenueBookings}
                       colors={colors}
+                      emptyMessage={
+                        venueFilterId === "all"
+                          ? "No venue bookings match the current filters."
+                          : `No bookings made in ${selectedVenueFilterLabel}.`
+                      }
                       onOpenReview={setVenueReviewTarget}
                     />
                   )}
@@ -2583,25 +3587,58 @@ export default function GymOperationsPage() {
                 <div style={{ display: "grid", gap: 6 }}>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: colors.brand,
+                      letterSpacing: "0.08em",
+                    }}
                   >
                     COACH APPOINTMENTS
                   </FitText>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 18, fontWeight: 700, color: colors.textPrimary, lineHeight: 1.2 }}
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                      lineHeight: 1.2,
+                    }}
                   >
                     Appointment control
                   </FitText>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.45, letterSpacing: 0 }}
+                    style={{
+                      fontSize: 12,
+                      color: colors.textMuted,
+                      lineHeight: 1.45,
+                      letterSpacing: 0,
+                    }}
                   >
-                    Review pending coach decisions, payment-held sessions, and completions without leaving the main
-                    operations tab.
+                    Review pending coach decisions, payment-held sessions, and
+                    completions without leaving the main operations tab.
                   </FitText>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <FitButton
+                    variant="primary"
+                    label="CREATE COACH BOOKING"
+                    onClick={() => setCreateCoachBookingOpen(true)}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 16,
+                      padding: "0 16px",
+                    }}
+                    textStyle={{ fontSize: 12, fontWeight: 700 }}
+                  />
                   <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
                     <FitText excludeGlobalScale style={controlLabelStyle}>
                       Coach Filter
@@ -2660,10 +3697,14 @@ export default function GymOperationsPage() {
                 />
                 <OperationsMetricCard
                   colors={colors}
-                  label={coachFilterId ? "Selected Coach Slots" : "Preview Coach Slots"}
+                  label={
+                    coachFilterId
+                      ? "Selected Coach Slots"
+                      : "Preview Coach Slots"
+                  }
                   value={
                     selectedCoachProfile
-                      ? selectedCoachProfile.availability?.length ?? 0
+                      ? (selectedCoachProfile.availability?.length ?? 0)
                       : coachProfiles.filter((coach) => coach.isActive).length
                   }
                 />
@@ -2682,7 +3723,10 @@ export default function GymOperationsPage() {
                     alignItems: "center",
                   }}
                 >
-                  <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 14, color: colors.textMuted }}
+                  >
                     Loading coach appointments...
                   </FitText>
                 </div>
@@ -2721,17 +3765,35 @@ export default function GymOperationsPage() {
                 <div style={{ display: "grid", gap: 6 }}>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: colors.brand,
+                      letterSpacing: "0.08em",
+                    }}
                   >
                     COACH DATA MANAGEMENT
                   </FitText>
                   <FitText
                     excludeGlobalScale
-                    style={{ fontSize: 18, color: colors.textPrimary, lineHeight: 1.3, fontWeight: 700 }}
+                    style={{
+                      fontSize: 18,
+                      color: colors.textPrimary,
+                      lineHeight: 1.3,
+                      fontWeight: 700,
+                    }}
                   >
-                    Maintain coach-facing booking trust, weekly availability, and member-visible profile quality from one contained tab.
+                    Maintain coach-facing booking trust, weekly availability,
+                    and member-visible profile quality from one contained tab.
                   </FitText>
                 </div>
+                <FitButton
+                  variant="primary"
+                  label="CREATE COACH"
+                  onClick={() => setCreateCoachOpen(true)}
+                  style={{ minHeight: 42, borderRadius: 16, padding: "0 16px" }}
+                  textStyle={{ fontSize: 12, fontWeight: 700 }}
+                />
               </div>
               <div
                 style={{
@@ -2747,14 +3809,14 @@ export default function GymOperationsPage() {
                   staffQuery={coachQuery}
                   onStaffQueryChange={setCoachQuery}
                   filteredStaff={filteredStaff}
-                  bookings={allBookings}
+                  bookings={rosterBookings}
                   canDrag={false}
                   canSelect={canManageCoaching}
                   selectedStaffId={focusedCoachId}
-                    onStaffClick={handleCoachFocus}
-                    resourceLabelPlural="Coaches"
-                    resourceLabelSingular="coach"
-                    searchPlaceholder="Search coaches..."
+                  onStaffClick={handleCoachFocus}
+                  resourceLabelPlural="Coaches"
+                  resourceLabelSingular="coach"
+                  searchPlaceholder="Search coaches..."
                 />
                 <div
                   style={{
@@ -2771,8 +3833,11 @@ export default function GymOperationsPage() {
                   }}
                   onMouseEnter={(event) => {
                     if (!canAnimate) return;
-                    event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
-                    event.currentTarget.style.boxShadow = "0 12px 26px rgba(0,0,0,0.14)";
+                    event.currentTarget.style.transform = fullMotion
+                      ? "translateY(-1px)"
+                      : "translateY(-0.5px)";
+                    event.currentTarget.style.boxShadow =
+                      "0 12px 26px rgba(0,0,0,0.14)";
                     event.currentTarget.style.borderColor = `${colors.brand}24`;
                   }}
                   onMouseLeave={(event) => {
@@ -2781,23 +3846,47 @@ export default function GymOperationsPage() {
                     event.currentTarget.style.borderColor = colors.border;
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <div style={{ display: "grid", gap: 4 }}>
                       <FitText
                         excludeGlobalScale
-                        style={{ fontSize: 11, fontWeight: 700, color: colors.brand, letterSpacing: "0.08em" }}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: colors.brand,
+                          letterSpacing: "0.08em",
+                        }}
                       >
                         COACH DATA MANAGEMENT
                       </FitText>
                       <FitText
                         excludeGlobalScale
-                        style={{ fontSize: 30, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.02 }}
+                        style={{
+                          fontSize: 30,
+                          fontWeight: 800,
+                          color: colors.textPrimary,
+                          lineHeight: 1.02,
+                        }}
                       >
-                        {selectedCoachRoster?.name ?? "Choose a coach from the roster"}
+                        {selectedCoachRoster?.name ??
+                          "Choose a coach from the roster"}
                       </FitText>
-                      <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted }}>
-                        {selectedCoachRoster?.email ??
-                          "Select a coach to repair visibility, availability, and member-facing booking trust."}
+                      <FitText
+                        excludeGlobalScale
+                        style={{ fontSize: 10, color: colors.textMuted }}
+                      >
+                        {selectedCoachRoster
+                          ? selectedCoachRoster.email ||
+                            "No coach-profile contact email yet. Edit profile to add one."
+                          : "Select a coach to repair visibility, availability, and member-facing booking trust."}
                       </FitText>
                     </div>
                     <FitPill
@@ -2843,7 +3932,11 @@ export default function GymOperationsPage() {
                           ? `PHP ${selectedCoachRoster.hourlyRate.toLocaleString("en-PH")}`
                           : "Unset"
                       }
-                      tone={selectedCoachRoster?.hourlyRate != null ? colors.brand : colors.textPrimary}
+                      tone={
+                        selectedCoachRoster?.hourlyRate != null
+                          ? colors.brand
+                          : colors.textPrimary
+                      }
                     />
                     <OperationsMetricCard
                       colors={colors}
@@ -2874,21 +3967,45 @@ export default function GymOperationsPage() {
                         gap: 8,
                       }}
                     >
-                      <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                      <FitText
+                        excludeGlobalScale
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: colors.textPrimary,
+                        }}
+                      >
                         Availability snapshot
                       </FitText>
                       {(selectedCoachProfile?.availability?.length ?? 0) > 0 ? (
-                        selectedCoachProfile?.availability?.slice(0, 4).map((slot) => (
-                          <FitText
-                            key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}`}
-                            excludeGlobalScale
-                            style={{ fontSize: 12, color: colors.textSecondary }}
-                          >
-                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][slot.dayOfWeek] ?? `Day ${slot.dayOfWeek}`} / {slot.startTime} - {slot.endTime}
-                          </FitText>
-                        ))
+                        selectedCoachProfile?.availability
+                          ?.slice(0, 4)
+                          .map((slot) => (
+                            <FitText
+                              key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}`}
+                              excludeGlobalScale
+                              style={{
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              }}
+                            >
+                              {[
+                                "Sun",
+                                "Mon",
+                                "Tue",
+                                "Wed",
+                                "Thu",
+                                "Fri",
+                                "Sat",
+                              ][slot.dayOfWeek] ?? `Day ${slot.dayOfWeek}`}{" "}
+                              / {slot.startTime} - {slot.endTime}
+                            </FitText>
+                          ))
                       ) : (
-                        <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted }}>
+                        <FitText
+                          excludeGlobalScale
+                          style={{ fontSize: 12, color: colors.textMuted }}
+                        >
                           No availability recorded yet.
                         </FitText>
                       )}
@@ -2903,25 +4020,41 @@ export default function GymOperationsPage() {
                         gap: 10,
                       }}
                     >
-                      <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                      <FitText
+                        excludeGlobalScale
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: colors.textPrimary,
+                        }}
+                      >
                         Specialties
                       </FitText>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      <div
+                        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                      >
                         {(selectedCoachRoster?.specialties ?? []).length > 0 ? (
-                          selectedCoachRoster?.specialties.map((specialty, index) => (
-                            <FitPill
-                              key={specialty}
-                              mode="status"
-                              label={specialty.toUpperCase()}
-                              color={index === 0 ? colors.brand : colors.textMuted}
-                              fontSize={9}
-                              fontWeight={700}
-                              borderOpacity="28"
-                              bgOpacity="12"
-                            />
-                          ))
+                          selectedCoachRoster?.specialties.map(
+                            (specialty, index) => (
+                              <FitPill
+                                key={specialty}
+                                mode="status"
+                                label={specialty.toUpperCase()}
+                                color={
+                                  index === 0 ? colors.brand : colors.textMuted
+                                }
+                                fontSize={9}
+                                fontWeight={700}
+                                borderOpacity="28"
+                                bgOpacity="12"
+                              />
+                            ),
+                          )
                         ) : (
-                          <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted }}>
+                          <FitText
+                            excludeGlobalScale
+                            style={{ fontSize: 12, color: colors.textMuted }}
+                          >
                             No specialties recorded for the current selection.
                           </FitText>
                         )}
@@ -2939,7 +4072,14 @@ export default function GymOperationsPage() {
                       gap: 8,
                     }}
                   >
-                    <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                      }}
+                    >
                       Booking bio
                     </FitText>
                     <FitText
@@ -2965,44 +4105,63 @@ export default function GymOperationsPage() {
                       gap: 10,
                     }}
                   >
-                    <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                      }}
+                    >
                       Profile actions
                     </FitText>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <FitButton
-                      variant="primary"
-                      label="MANAGE AVAILABILITY"
-                      onClick={() => {
-                        if (!selectedCoachProfile) return;
-                        setAvailabilityEditorCoachId(selectedCoachProfile.id);
-                      }}
-                      disabled={!selectedCoachProfile}
-                      style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
-                      textStyle={{ fontSize: 11, fontWeight: 700 }}
-                    />
-                    <FitButton
-                      variant="ghost"
-                      label="VIEW PROFILE"
-                      onClick={() => {
-                        if (!selectedCoachRoster) return;
-                        setActiveCoachId(selectedCoachRoster.id);
-                        setCoachDetailsOpen(true);
-                      }}
-                      disabled={!selectedCoachRoster}
-                      style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
-                      textStyle={{ fontSize: 11, fontWeight: 700 }}
-                    />
-                    <FitButton
-                      variant="ghost"
-                      label="OPEN IN SCHEDULE"
-                      onClick={() => {
-                        setActiveOperationsTab("schedule");
-                        setActiveScheduleSurfaceTab("coach-schedule");
-                      }}
-                      disabled={!selectedCoachProfile}
-                      style={{ minHeight: 36, padding: "8px 12px", borderRadius: 10 }}
-                      textStyle={{ fontSize: 11, fontWeight: 700 }}
-                    />
+                      <FitButton
+                        variant="primary"
+                        label="MANAGE AVAILABILITY"
+                        onClick={() => {
+                          if (!selectedCoachProfile) return;
+                          setAvailabilityEditorCoachId(selectedCoachProfile.id);
+                        }}
+                        disabled={!selectedCoachProfile}
+                        style={{
+                          minHeight: 36,
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                        }}
+                        textStyle={{ fontSize: 11, fontWeight: 700 }}
+                      />
+                      <FitButton
+                        variant="ghost"
+                        label="VIEW PROFILE"
+                        onClick={() => {
+                          if (!selectedCoachRoster) return;
+                          setActiveCoachId(selectedCoachRoster.id);
+                          setCoachDetailsOpen(true);
+                        }}
+                        disabled={!selectedCoachRoster}
+                        style={{
+                          minHeight: 36,
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                        }}
+                        textStyle={{ fontSize: 11, fontWeight: 700 }}
+                      />
+                      <FitButton
+                        variant="ghost"
+                        label="OPEN IN SCHEDULE"
+                        onClick={() => {
+                          setActiveOperationsTab("schedule");
+                          setActiveScheduleSurfaceTab("coach-schedule");
+                        }}
+                        disabled={!selectedCoachProfile}
+                        style={{
+                          minHeight: 36,
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                        }}
+                        textStyle={{ fontSize: 11, fontWeight: 700 }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -3022,8 +4181,11 @@ export default function GymOperationsPage() {
                   }}
                   onMouseEnter={(event) => {
                     if (!canAnimate) return;
-                    event.currentTarget.style.transform = fullMotion ? "translateY(-1px)" : "translateY(-0.5px)";
-                    event.currentTarget.style.boxShadow = "0 12px 26px rgba(0,0,0,0.14)";
+                    event.currentTarget.style.transform = fullMotion
+                      ? "translateY(-1px)"
+                      : "translateY(-0.5px)";
+                    event.currentTarget.style.boxShadow =
+                      "0 12px 26px rgba(0,0,0,0.14)";
                     event.currentTarget.style.borderColor = `${colors.brand}24`;
                   }}
                   onMouseLeave={(event) => {
@@ -3032,18 +4194,39 @@ export default function GymOperationsPage() {
                     event.currentTarget.style.borderColor = colors.border;
                   }}
                 >
-                  <FitText excludeGlobalScale style={{ fontSize: 16, fontWeight: 700, color: colors.textPrimary }}>
+                  <FitText
+                    excludeGlobalScale
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                    }}
+                  >
                     Readiness + trust
                   </FitText>
-                  <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.brand, fontWeight: 700, letterSpacing: "0.08em" }}>
+                  <FitText
+                    excludeGlobalScale
+                    style={{
+                      fontSize: 11,
+                      color: colors.brand,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                    }}
+                  >
                     VISIBILITY / CREDENTIALS / AVAILABILITY GAPS
                   </FitText>
 
                   <OperationsMetricCard
                     colors={colors}
                     label="Booking Visibility"
-                    value={selectedCoachProfile?.isActive ? "Visible" : "Hidden"}
-                    tone={selectedCoachProfile?.isActive ? colors.success : colors.warning}
+                    value={
+                      selectedCoachProfile?.isActive ? "Visible" : "Hidden"
+                    }
+                    tone={
+                      selectedCoachProfile?.isActive
+                        ? colors.success
+                        : colors.warning
+                    }
                   />
                   <OperationsMetricCard
                     colors={colors}
@@ -3057,7 +4240,8 @@ export default function GymOperationsPage() {
                     value={
                       coachAppointments.filter(
                         (appointment) =>
-                          !focusedCoachId || appointment.coachId === focusedCoachId,
+                          !focusedCoachId ||
+                          appointment.coachId === focusedCoachId,
                       ).length
                     }
                   />
@@ -3072,17 +4256,36 @@ export default function GymOperationsPage() {
                       gap: 6,
                     }}
                   >
-                    <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                      }}
+                    >
                       Credential notes
                     </FitText>
                     {(selectedCoachRoster?.certifications ?? []).length > 0 ? (
-                      selectedCoachRoster?.certifications.map((certification) => (
-                        <FitText key={certification} excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary }}>
-                          {certification}
-                        </FitText>
-                      ))
+                      selectedCoachRoster?.certifications.map(
+                        (certification) => (
+                          <FitText
+                            key={certification}
+                            excludeGlobalScale
+                            style={{
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            }}
+                          >
+                            {certification}
+                          </FitText>
+                        ),
+                      )
                     ) : (
-                      <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted }}>
+                      <FitText
+                        excludeGlobalScale
+                        style={{ fontSize: 12, color: colors.textMuted }}
+                      >
                         No certifications recorded yet.
                       </FitText>
                     )}
@@ -3098,10 +4301,24 @@ export default function GymOperationsPage() {
                       gap: 6,
                     }}
                   >
-                    <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                      }}
+                    >
                       Operational note
                     </FitText>
-                    <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.45 }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        lineHeight: 1.45,
+                      }}
+                    >
                       {selectedCoachProfile?.isActive
                         ? "Use this rail to spot trust issues before bookings become front-desk problems."
                         : "This coach is hidden from booking. Repair visibility only after profile trust details are ready."}
@@ -3122,7 +4339,9 @@ export default function GymOperationsPage() {
           coachHourlyRate={activeCoach?.hourlyRate ?? null}
           coachSpecialties={activeCoach?.specialties ?? []}
           coachAvailability={activeCoach?.availabilityPreview ?? []}
-          bookings={allBookings.filter((booking) => booking.resourceId === activeCoachId)}
+          bookings={allBookings.filter(
+            (booking) => booking.resourceId === activeCoachId,
+          )}
           colors={colors}
           onClose={() => {
             setCoachDetailsOpen(false);
@@ -3470,7 +4689,9 @@ export default function GymOperationsPage() {
                           alignItems: "center",
                           borderRadius: 14,
                           border: `1px solid ${
-                            session.conflict ? `${colors.danger}55` : colors.border
+                            session.conflict
+                              ? `${colors.danger}55`
+                              : colors.border
                           }`,
                           backgroundColor: session.conflict
                             ? `${colors.danger}12`
@@ -3501,7 +4722,9 @@ export default function GymOperationsPage() {
                         <FitPill
                           mode="status"
                           label={session.conflict ? "CONFLICT" : "CLEAR"}
-                          color={session.conflict ? colors.danger : colors.success}
+                          color={
+                            session.conflict ? colors.danger : colors.success
+                          }
                           fontSize={9}
                           fontWeight={800}
                           borderOpacity="28"
@@ -3546,15 +4769,25 @@ export default function GymOperationsPage() {
                   label="CLOSE"
                   onClick={() => setRecurringPlanOpen(false)}
                   disabled={recurringCreateBusy}
-                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 16,
+                    padding: "8px 14px",
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 800 }}
                 />
                 <FitButton
                   variant="ghost"
-                  label={recurringCreateBusy ? "PREVIEWING..." : "PREVIEW SCHEDULE"}
+                  label={
+                    recurringCreateBusy ? "PREVIEWING..." : "PREVIEW SCHEDULE"
+                  }
                   onClick={() => void handlePreviewRecurringPlan()}
                   disabled={recurringCreateBusy || recurringPlanInputInvalid}
-                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 16,
+                    padding: "8px 14px",
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 800 }}
                 />
                 {recurringPlanPreview?.conflictCount ? (
@@ -3577,14 +4810,22 @@ export default function GymOperationsPage() {
                 ) : null}
                 <FitButton
                   variant="primary"
-                  label={createRecurringPlanMutation.isPending ? "CREATING..." : "CONFIRM PLAN"}
+                  label={
+                    createRecurringPlanMutation.isPending
+                      ? "CREATING..."
+                      : "CONFIRM PLAN"
+                  }
                   onClick={() => void handleConfirmRecurringPlan(false)}
                   disabled={
                     recurringCreateBusy ||
                     !recurringPlanPreview ||
                     recurringPlanPreview.conflictCount > 0
                   }
-                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 16,
+                    padding: "8px 14px",
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 800 }}
                 />
               </div>
@@ -3593,12 +4834,17 @@ export default function GymOperationsPage() {
         ) : null}
         <GymOperationsCoachAppointmentModal
           appointment={appointmentReviewTarget}
+          billingCycles={recurringPlanSessions?.plan.billingCycles ?? []}
           coachReadiness={appointmentReviewReadiness}
           isOpen={!!appointmentReviewTarget}
           isSubmitting={
             respondAppointmentMutation.isPending ||
             completeAppointmentMutation.isPending ||
-            cancelAppointmentMutation.isPending
+            cancelAppointmentMutation.isPending ||
+            payAppointmentInitialMutation.isPending ||
+            processAppointmentBalanceMutation.isPending ||
+            payRecurringCycleMutation.isPending ||
+            verifyPaymentMutation.isPending
           }
           onClose={() => setAppointmentReviewTarget(null)}
           onConfirm={() => void handleConfirmAppointment()}
@@ -3616,25 +4862,49 @@ export default function GymOperationsPage() {
           }}
           onEditRecurringSession={() => {
             if (!appointmentReviewTarget?.recurringPlanId) return;
+            const currentAppointment = appointmentReviewTarget;
+            setAppointmentReviewTarget(null);
             setRecurringPlanAction({
-              appointment: appointmentReviewTarget,
+              appointment: currentAppointment,
               mode: "single",
             });
           }}
           onEditRecurringFuture={() => {
             if (!appointmentReviewTarget?.recurringPlanId) return;
+            const currentAppointment = appointmentReviewTarget;
+            setAppointmentReviewTarget(null);
             setRecurringPlanAction({
-              appointment: appointmentReviewTarget,
+              appointment: currentAppointment,
               mode: "future",
             });
           }}
           onCancelRecurringPlan={() => {
             if (!appointmentReviewTarget?.recurringPlanId) return;
+            const currentAppointment = appointmentReviewTarget;
+            setAppointmentReviewTarget(null);
             setRecurringPlanAction({
-              appointment: appointmentReviewTarget,
+              appointment: currentAppointment,
               mode: "cancel",
             });
           }}
+          onCollectBalance={(provider) => {
+            if (!appointmentReviewTarget) return;
+            requestCollectAppointmentBalance(
+              appointmentReviewTarget,
+              provider,
+            );
+          }}
+          onCollectInitialPayment={(provider, paymentStage) => {
+            if (!appointmentReviewTarget) return;
+            requestCollectAppointmentInitialPayment(
+              appointmentReviewTarget,
+              provider,
+              paymentStage,
+            );
+          }}
+          onPayRecurringCycle={(cycle, provider) =>
+            requestRecurringCyclePayment(cycle, provider)
+          }
         />
         {recurringPlanAction ? (
           <div
@@ -3697,7 +4967,11 @@ export default function GymOperationsPage() {
                 </FitText>
                 <FitText
                   excludeGlobalScale
-                  style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.45 }}
+                  style={{
+                    fontSize: 13,
+                    color: colors.textMuted,
+                    lineHeight: 1.45,
+                  }}
                 >
                   Current session:{" "}
                   {formatRecurringDateTime(
@@ -3741,8 +5015,8 @@ export default function GymOperationsPage() {
                     excludeGlobalScale
                     style={{ fontSize: 12, color: colors.textMuted }}
                   >
-                    Cancelling preserves completed sessions and cancels only future
-                    non-completed sessions.
+                    Cancelling preserves completed sessions and cancels only
+                    future non-completed sessions.
                   </FitText>
                 </div>
               ) : (
@@ -3750,9 +5024,7 @@ export default function GymOperationsPage() {
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      recurringPlanAction.mode === "single"
-                        ? "1fr 1fr"
-                        : "1fr",
+                      recurringPlanAction.mode === "single" ? "1fr 1fr" : "1fr",
                     gap: 12,
                   }}
                 >
@@ -3803,15 +5075,21 @@ export default function GymOperationsPage() {
                       <FitText excludeGlobalScale style={controlLabelStyle}>
                         Future Weekdays
                       </FitText>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div
+                        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                      >
                         {WEEKDAY_OPTIONS.map((day) => {
-                          const active = recurringActionDays.includes(day.value);
+                          const active = recurringActionDays.includes(
+                            day.value,
+                          );
                           return (
                             <FitButton
                               key={day.value}
                               variant={active ? "primary" : "ghost"}
                               label={day.label}
-                              onClick={() => toggleRecurringActionDay(day.value)}
+                              onClick={() =>
+                                toggleRecurringActionDay(day.value)
+                              }
                               style={{
                                 minHeight: 34,
                                 minWidth: 48,
@@ -3827,8 +5105,9 @@ export default function GymOperationsPage() {
                         excludeGlobalScale
                         style={{ fontSize: 12, color: colors.textMuted }}
                       >
-                        Affects {recurringRemainingCount || "the remaining"} future
-                        session(s), starting from the selected appointment.
+                        Affects {recurringRemainingCount || "the remaining"}{" "}
+                        future session(s), starting from the selected
+                        appointment.
                       </FitText>
                     </div>
                   ) : null}
@@ -3841,7 +5120,9 @@ export default function GymOperationsPage() {
                 </FitText>
                 <textarea
                   value={recurringActionReason}
-                  onChange={(event) => setRecurringActionReason(event.target.value)}
+                  onChange={(event) =>
+                    setRecurringActionReason(event.target.value)
+                  }
                   placeholder="Optional audit note..."
                   rows={3}
                   style={{
@@ -3865,14 +5146,22 @@ export default function GymOperationsPage() {
                   label="CLOSE"
                   onClick={() => setRecurringPlanAction(null)}
                   disabled={recurringActionBusy}
-                  style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 16,
+                    padding: "8px 14px",
+                  }}
                   textStyle={{ fontSize: 11, fontWeight: 800 }}
                 />
                 {recurringPlanAction.mode === "single" ? (
                   <>
                     <FitButton
                       variant="ghost"
-                      label={updateRecurringSessionMutation.isPending ? "SKIPPING..." : "SKIP SESSION"}
+                      label={
+                        updateRecurringSessionMutation.isPending
+                          ? "SKIPPING..."
+                          : "SKIP SESSION"
+                      }
                       onClick={() => void handleRecurringSessionSkip()}
                       disabled={recurringActionBusy}
                       style={{
@@ -3888,7 +5177,11 @@ export default function GymOperationsPage() {
                     />
                     <FitButton
                       variant="primary"
-                      label={updateRecurringSessionMutation.isPending ? "SAVING..." : "RESCHEDULE SESSION"}
+                      label={
+                        updateRecurringSessionMutation.isPending
+                          ? "SAVING..."
+                          : "RESCHEDULE SESSION"
+                      }
                       onClick={() => void handleRecurringSessionReschedule()}
                       disabled={
                         recurringActionBusy ||
@@ -3906,20 +5199,32 @@ export default function GymOperationsPage() {
                 ) : recurringPlanAction.mode === "future" ? (
                   <FitButton
                     variant="primary"
-                    label={bulkUpdateRecurringSessionsMutation.isPending ? "UPDATING..." : "UPDATE FUTURE SESSIONS"}
+                    label={
+                      bulkUpdateRecurringSessionsMutation.isPending
+                        ? "UPDATING..."
+                        : "UPDATE FUTURE SESSIONS"
+                    }
                     onClick={() => void handleRecurringFutureUpdate()}
                     disabled={
                       recurringActionBusy ||
                       !recurringActionTime ||
                       recurringActionDays.length === 0
                     }
-                    style={{ minHeight: 38, borderRadius: 16, padding: "8px 14px" }}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 16,
+                      padding: "8px 14px",
+                    }}
                     textStyle={{ fontSize: 11, fontWeight: 800 }}
                   />
                 ) : (
                   <FitButton
                     variant="ghost"
-                    label={cancelRecurringPlanMutation.isPending ? "CANCELLING..." : "CANCEL PLAN"}
+                    label={
+                      cancelRecurringPlanMutation.isPending
+                        ? "CANCELLING..."
+                        : "CANCEL PLAN"
+                    }
                     onClick={() => void handleRecurringPlanCancel()}
                     disabled={recurringActionBusy}
                     style={{
@@ -3939,15 +5244,34 @@ export default function GymOperationsPage() {
             </div>
           </div>
         ) : null}
+        <GymOperationsCreateVenueBookingModal
+          isOpen={createVenueBookingOpen}
+          isSubmitting={createVenueBookingMutation.isPending}
+          onClose={() => setCreateVenueBookingOpen(false)}
+          onCreate={(payload) => void handleCreateVenueBooking(payload)}
+          memberOptions={memberOptions}
+          coachOptions={coachOptions}
+          venueOptions={bookableVenueOptions}
+        />
+        <GymOperationsCreateCoachBookingModal
+          isOpen={createCoachBookingOpen}
+          isSubmitting={createCoachBookingMutation.isPending}
+          onClose={() => setCreateCoachBookingOpen(false)}
+          onCreate={(payload) => void handleCreateCoachBooking(payload)}
+          memberOptions={memberOptions}
+          coachOptions={coachOptions}
+        />
+        <GymOperationsCreateCoachModal
+          isOpen={createCoachOpen}
+          isSubmitting={createCoachMutation.isPending}
+          onClose={() => setCreateCoachOpen(false)}
+          onCreate={(payload) => void handleCreateCoach(payload)}
+        />
         <GymOperationsAvailabilityDrawer
           isOpen={!!availabilityEditorCoach}
           coachName={
             availabilityEditorCoach
-              ? getPersonDisplayName(
-                  availabilityEditorCoach.user?.profile,
-                  availabilityEditorCoach.user?.email,
-                  "Coach",
-                )
+              ? getCoachDisplayName(availabilityEditorCoach, "Coach")
               : "Coach"
           }
           isVisibleInBooking={availabilityEditorCoach?.isActive ?? false}
@@ -3964,29 +5288,56 @@ export default function GymOperationsPage() {
           }
           onClose={() => setAvailabilityEditorCoachId(null)}
           onSave={(slots) => void handleSaveAvailability(slots)}
-          onHideFromBooking={() => {
+          onSetBookingVisibility={(isVisible) => {
             if (!availabilityEditorCoach) return;
-            void handleHideCoachFromBooking(availabilityEditorCoach.id);
+            void handleSetCoachBookingVisibility(
+              availabilityEditorCoach.id,
+              isVisible,
+            );
           }}
         />
         <GymOperationsVenueBookingModal
           booking={venueReviewTarget}
           isOpen={!!venueReviewTarget}
-          isSubmitting={scheduleLoading}
+          isSubmitting={
+            scheduleLoading ||
+            processBookingBalanceMutation.isPending ||
+            verifyPaymentMutation.isPending
+          }
           onClose={() => setVenueReviewTarget(null)}
           onApprove={(note) => void handleApproveVenueBooking(note)}
+          onCancel={(note) => void handleCancelVenueBooking(note)}
+          onCollectBalance={(provider) => {
+            if (!venueReviewTarget) return;
+            requestCollectVenueBalance(venueReviewTarget, provider);
+          }}
+          onComplete={() => void handleCompleteVenueBooking()}
+          onNoShow={() => void handleNoShowVenueBooking()}
           onReject={(note) => void handleRejectVenueBooking(note)}
-          onRequestNewSlot={(note) => handleRequestVenueReschedule(note)}
+          onVenueDetails={() => {
+            window.location.assign("/facilities");
+          }}
+        />
+        <ConfirmModal
+          isOpen={!!paymentConfirm}
+          title={paymentConfirm?.title ?? "Confirm payment action"}
+          message={
+            paymentConfirm?.message ??
+            "Review this payment action before continuing."
+          }
+          confirmLabel={paymentConfirm?.confirmLabel ?? "CONFIRM"}
+          loadingLabel={paymentConfirm?.confirmLabel ?? "CONFIRM"}
+          isLoading={paymentConfirmLoading}
+          onConfirm={() => {
+            void handleConfirmPaymentAction();
+          }}
+          onCancel={() => setPaymentConfirm(null)}
         />
         <DetailsModal
           isOpen={!!profileEditorCoach}
           title={
             profileEditorCoach
-              ? `${getPersonDisplayName(
-                  profileEditorCoach.user?.profile,
-                  profileEditorCoach.user?.email,
-                  "Coach",
-                )} Profile`
+              ? `${getCoachDisplayName(profileEditorCoach, "Coach")} Profile`
               : "Coach Profile"
           }
           subtitle="Keep this member-facing profile trustworthy before new bookings."
@@ -3995,8 +5346,15 @@ export default function GymOperationsPage() {
             profileEditorCoach
               ? {
                   bio: profileEditorCoach.bio ?? "",
-                  specialties: (profileEditorCoach.specialties ?? []).join(", "),
-                  certifications: (profileEditorCoach.certifications ?? []).join(", "),
+                  contactEmail: profileEditorCoach.contactEmail ?? "",
+                  contactPhone: profileEditorCoach.contactPhone ?? "",
+                  displayName: profileEditorCoach.displayName ?? "",
+                  specialties: (profileEditorCoach.specialties ?? []).join(
+                    ", ",
+                  ),
+                  certifications: (
+                    profileEditorCoach.certifications ?? []
+                  ).join(", "),
                   hourlyRate:
                     profileEditorCoach.hourlyRate != null
                       ? String(profileEditorCoach.hourlyRate)
@@ -4018,9 +5376,9 @@ export default function GymOperationsPage() {
           onSubmit={(data) => void handleSaveCoachProfile(data)}
         >
           <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-            Years of experience is still outside the live coach-profile contract,
-            so this management pass focuses on the fields members can already
-            see during booking review.
+            Years of experience is still outside the live coach-profile
+            contract, so this management pass focuses on the fields members can
+            already see during booking review.
           </FitText>
         </DetailsModal>
       </FitSection>

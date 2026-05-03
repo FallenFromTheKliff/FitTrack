@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  GoneException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -95,7 +96,7 @@ export class CoachController {
 
   @Get('coaches/me')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get the authenticated coach profile.' })
   @ApiResponse({
@@ -103,8 +104,10 @@ export class CoachController {
     description: 'Coach profile returned.',
     schema: apiEnvelopeSchema(getSchemaPath(CoachSelfDetailResponseDTO)),
   })
-  getMyProfile(@CurrentUser() user: JwtPayload) {
-    return this.coachService.getMyProfile(user.sub);
+  getMyProfile() {
+    throw new GoneException(
+      'Coach user accounts are no longer supported. Use staff-managed coach profiles.',
+    );
   }
 
   @Get('coaches/:id')
@@ -123,7 +126,7 @@ export class CoachController {
 
   @Patch('coaches/me')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update the authenticated coach profile.' })
   @ApiBody({ type: CoachSelfUpdateProfileDTO })
@@ -132,11 +135,10 @@ export class CoachController {
     description: 'Coach profile updated.',
     schema: apiEnvelopeSchema(getSchemaPath(CoachDetailResponseDTO)),
   })
-  updateMyProfile(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: UpdateCoachProfileDTO,
-  ) {
-    return this.coachService.updateMyProfile(user.sub, dto);
+  updateMyProfile() {
+    throw new GoneException(
+      'Coach user accounts are no longer supported. Use staff-managed coach profiles.',
+    );
   }
 
   @Patch('coaches/:id')

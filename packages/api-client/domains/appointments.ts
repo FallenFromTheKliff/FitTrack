@@ -2,6 +2,8 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
 
 export type AppointmentCoachSummary = {
+  contactEmail?: string | null;
+  displayName?: string | null;
   hourlyRate?: number | null;
   user?: {
     email?: string | null;
@@ -13,15 +15,19 @@ export type AppointmentCoachSummary = {
 };
 
 export type AppointmentRecord = {
+  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   amountDueNow?: number | null;
+  balancePaidAt?: string | null;
   coach?: AppointmentCoachSummary | null;
   coachId?: string;
+  downpaymentPaidAt?: string | null;
   duration: number;
   id: string;
   nextPaymentDate?: string | null;
   notes?: string | null;
   paymentPlan?: "downpayment" | "free" | "full";
   remainingBalance?: number | null;
+  recurringPlanId?: string | null;
   scheduledAt: string;
   sessionType?: string | null;
   status?: string;
@@ -55,13 +61,17 @@ export type CreateAppointmentPayload = {
 export type AppointmentCheckoutResponse = {
   appointmentId: string;
   checkoutUrl: string | null;
+  paymentId?: string | null;
   status: string;
 };
 
 export type AppointmentPaymentProvider = "cash" | "paymongo";
+export type AppointmentPaymentStage = "downpayment" | "full";
 
 type AppointmentApiRecord = {
+  active_payment_stage?: "balance" | "downpayment" | "full" | null;
   balance_amount?: number | string | null;
+  balance_paid_at?: string | null;
   coach?: AppointmentCoachSummary | null;
   coach_id?: string;
   downpayment_amount?: number | string | null;
@@ -70,6 +80,7 @@ type AppointmentApiRecord = {
   id: string;
   member_notes?: string | null;
   notes?: string | null;
+  recurring_plan_id?: string | null;
   scheduled_at?: string;
   scheduledAt?: string;
   sessionType?: string | null;
@@ -80,19 +91,26 @@ type AppointmentApiRecord = {
 type AppointmentCheckoutApiRecord = {
   appointment_id: string;
   checkout_url?: string | null;
+  payment_id?: string | null;
   status: string;
 };
 
 function createIdempotencyKey() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
-    const random = Math.floor(Math.random() * 16);
-    const value = character === "x" ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
-  });
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+    /[xy]/g,
+    (character) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = character === "x" ? random : (random & 0x3) | 0x8;
+      return value.toString(16);
+    },
+  );
 }
 
 function toAmountNumber(value: number | string | null | undefined) {
@@ -101,29 +119,99 @@ function toAmountNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeCoachDisplayName(value?: string | null) {
+  const displayName = value?.trim();
+  if (displayName && !displayName.includes("@")) {
+    return displayName;
+  }
+
+  return null;
+}
+
+function isLegacySeedIdentityEmail(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(
+    normalized &&
+    (normalized.startsWith("seed.member") ||
+      normalized.startsWith("seed.staff") ||
+      normalized.startsWith("seed.admin")),
+  );
+}
+
+function mapAppointmentCoach(
+  coach?: AppointmentCoachSummary | null,
+): AppointmentCoachSummary | null {
+  if (!coach) return null;
+  const rawCoach = coach as AppointmentCoachSummary & {
+    contact_email?: string | null;
+    display_name?: string | null;
+  };
+
+  return {
+    ...coach,
+    contactEmail: isLegacySeedIdentityEmail(
+      rawCoach.contactEmail ?? rawCoach.contact_email,
+    )
+      ? null
+      : (rawCoach.contactEmail ?? rawCoach.contact_email ?? null),
+    displayName: normalizeCoachDisplayName(
+      rawCoach.displayName ?? rawCoach.display_name,
+    ),
+    user: null,
+  };
+}
+
 function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
   const totalAmount = toAmountNumber(record.total_amount);
   const downpaymentAmount = toAmountNumber(record.downpayment_amount);
   const remainingBalance = toAmountNumber(record.balance_amount);
   const status = record.status;
   const scheduledAt = record.scheduled_at ?? record.scheduledAt ?? "";
-  const requiresPaymentSummary =
-    status === "pending_payment" && totalAmount > 0 && downpaymentAmount > 0;
+  const activePaymentStage = record.active_payment_stage ?? null;
+  const isPaidInFull = Boolean(record.downpayment_paid_at && record.balance_paid_at);
+  const isFullPaymentFlow =
+    activePaymentStage === "full" || isPaidInFull;
+  const hasSplitPayment = totalAmount > 0 && remainingBalance > 0 && !isPaidInFull;
+  const hasPaymentSummary = totalAmount > 0 && downpaymentAmount > 0;
 
   return {
-    amountDueNow: requiresPaymentSummary ? downpaymentAmount : undefined,
-    coach: record.coach ?? null,
+    activePaymentStage,
+    amountDueNow: hasPaymentSummary
+      ? isFullPaymentFlow
+        ? totalAmount
+        : status === "pending_payment"
+        ? downpaymentAmount
+        : remainingBalance > 0 && !record.balance_paid_at
+          ? remainingBalance
+          : downpaymentAmount
+      : undefined,
+    balancePaidAt: record.balance_paid_at ?? null,
+    coach: mapAppointmentCoach(record.coach),
     coachId: record.coach_id,
+    downpaymentPaidAt: record.downpayment_paid_at ?? null,
     duration: record.duration_minutes ?? 0,
     id: record.id,
-    nextPaymentDate: requiresPaymentSummary && remainingBalance > 0 ? scheduledAt : undefined,
+    nextPaymentDate:
+      hasSplitPayment && !record.balance_paid_at ? scheduledAt : undefined,
     notes: record.member_notes ?? record.notes ?? null,
-    paymentPlan: totalAmount <= 0 ? "free" : requiresPaymentSummary ? "downpayment" : undefined,
-    remainingBalance: requiresPaymentSummary ? remainingBalance : undefined,
+    paymentPlan:
+      totalAmount <= 0
+        ? "free"
+        : isFullPaymentFlow || remainingBalance <= 0
+          ? "full"
+          : hasSplitPayment
+          ? "downpayment"
+          : undefined,
+    remainingBalance: hasPaymentSummary
+      ? isFullPaymentFlow
+        ? 0
+        : remainingBalance
+      : undefined,
+    recurringPlanId: record.recurring_plan_id ?? null,
     scheduledAt,
     sessionType: record.sessionType ?? null,
     status,
-    totalAmount: totalAmount > 0 ? totalAmount : undefined
+    totalAmount: totalAmount > 0 ? totalAmount : undefined,
   };
 }
 
@@ -133,6 +221,7 @@ function mapAppointmentCheckoutResponse(
   return {
     appointmentId: record.appointment_id,
     checkoutUrl: record.checkout_url ?? null,
+    paymentId: record.payment_id ?? null,
     status: record.status,
   };
 }
@@ -142,8 +231,11 @@ export function createAppointmentsApi(transport: ApiTransport) {
     listMine<T>() {
       return unwrapResponse<AppointmentApiRecord[]>(
         transport.get("/coaching/appointments/my"),
-        "Unable to load appointments."
-      ).then((records) => records.map((record) => mapAppointmentRecord(record)) as T[]);
+        "Unable to load appointments.",
+      ).then(
+        (records) =>
+          records.map((record) => mapAppointmentRecord(record)) as T[],
+      );
     },
     create<T = AppointmentRecord>(payload: CreateAppointmentPayload) {
       return unwrapResponse<AppointmentApiRecord>(
@@ -151,32 +243,35 @@ export function createAppointmentsApi(transport: ApiTransport) {
           coach_id: payload.coachId,
           duration_minutes: payload.duration,
           ...(payload.notes ? { member_notes: payload.notes } : {}),
-          scheduled_at: payload.scheduledAt
+          scheduled_at: payload.scheduledAt,
         }),
-        "Unable to create appointment."
+        "Unable to create appointment.",
       ).then((record) => mapAppointmentRecord(record) as T);
     },
     cancel(appointmentId: string, cancelReason: string) {
       return unwrapVoidResponse(
-        transport.patch(`/coaching/appointments/${appointmentId}/cancel`, { reason: cancelReason }),
-        "Unable to cancel appointment."
+        transport.patch(`/coaching/appointments/${appointmentId}/cancel`, {
+          reason: cancelReason,
+        }),
+        "Unable to cancel appointment.",
       );
     },
     initiateDownpayment(
       appointmentId: string,
       provider: AppointmentPaymentProvider = "paymongo",
+      paymentStage: AppointmentPaymentStage = "downpayment",
     ) {
       return unwrapResponse<AppointmentCheckoutApiRecord>(
         transport.post(
           `/coaching/appointments/${appointmentId}/pay`,
-          { provider },
+          { provider, payment_stage: paymentStage },
           {
             headers: {
               "Idempotency-Key": createIdempotencyKey(),
             },
           },
         ),
-        "Unable to start appointment payment."
+        "Unable to start appointment payment.",
       ).then((record) => mapAppointmentCheckoutResponse(record));
     },
     processBalance(
@@ -191,31 +286,35 @@ export function createAppointmentsApi(transport: ApiTransport) {
         transport.post(`/coaching/appointments/${appointmentId}/balance`, {
           provider: payload.provider,
           ...(payload.referenceNo ? { reference_no: payload.referenceNo } : {}),
-          ...(payload.screenshotUrl ? { screenshot_url: payload.screenshotUrl } : {}),
+          ...(payload.screenshotUrl
+            ? { screenshot_url: payload.screenshotUrl }
+            : {}),
         }),
-        "Unable to collect appointment balance."
+        "Unable to collect appointment balance.",
       ).then((record) => mapAppointmentCheckoutResponse(record));
     },
     confirmAsCoach(appointmentId: string) {
       return unwrapVoidResponse(
-        transport.patch(`/coaching/appointments/${appointmentId}/respond`, { accepted: true }),
-        "Unable to confirm appointment."
+        transport.patch(`/coaching/appointments/${appointmentId}/respond`, {
+          accepted: true,
+        }),
+        "Unable to confirm appointment.",
       );
     },
     declineAsCoach(appointmentId: string, reason: string) {
       return unwrapVoidResponse(
         transport.patch(`/coaching/appointments/${appointmentId}/respond`, {
           accepted: false,
-          rejection_reason: reason
+          rejection_reason: reason,
         }),
-        "Unable to decline appointment."
+        "Unable to decline appointment.",
       );
     },
     completeAsCoach(appointmentId: string) {
       return unwrapVoidResponse(
         transport.patch(`/coaching/appointments/${appointmentId}/complete`, {}),
-        "Unable to complete appointment."
+        "Unable to complete appointment.",
       );
-    }
+    },
   };
 }

@@ -39,19 +39,25 @@ export const TIME_SLOTS: TimeSlot[] = [
 
 export const STATUS_COLORS: Record<string, string> = {
   pending: "#3B82F6",
+  pending_downpayment: "#F59E0B",
+  pending_payment: "#F59E0B",
+  pending_full_payment: "#F59E0B",
   confirmed: "#22C55E",
   completed: "#64748B",
   declined: "#F97316",
   waitlisted: "#F59E0B",
+  no_show: "#EF4444",
   cancelled: "#EF4444"
 };
 
-export type StatusFilter = "all" | "pending" | "confirmed" | "cancelled";
+export type StatusFilter = "all" | "pending" | "confirmed" | "completed" | "no_show" | "cancelled";
 
 export const FILTER_OPTIONS: { label: string; value: StatusFilter }[] = [
   { label: "All", value: "all" },
   { label: "Pending", value: "pending" },
   { label: "Active", value: "confirmed" },
+  { label: "Completed", value: "completed" },
+  { label: "No Show", value: "no_show" },
   { label: "Cancelled", value: "cancelled" }
 ];
 

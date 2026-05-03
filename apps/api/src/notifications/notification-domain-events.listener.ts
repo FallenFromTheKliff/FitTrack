@@ -156,6 +156,7 @@ export class NotificationDomainEventsListener {
               actor_id: event.actorId,
               target_user_id: event.targetUserId,
               target_email: event.targetEmail ?? null,
+              target_name: event.targetName ?? null,
               target_role: event.targetRole ?? null,
               occurred_at: event.occurredAt,
               ...(event.details ?? {}),
@@ -210,6 +211,8 @@ export class NotificationDomainEventsListener {
         return `Member card granted: ${target}`;
       case 'membership_card_revoked':
         return `Member card revoked: ${target}`;
+      case 'payment_approved':
+        return `Payment approved: ${target}`;
       case 'termination_approved':
         return `Termination approved: ${target}`;
       case 'termination_rejected':
@@ -240,6 +243,8 @@ export class NotificationDomainEventsListener {
         return `${target}${role} received active membership-card access.`;
       case 'membership_card_revoked':
         return `${target}${role} had membership-card access revoked.`;
+      case 'payment_approved':
+        return `${target}${role} had a payment approved from the payments review flow.`;
       case 'termination_approved':
         return `${target}${role} had a termination request approved and was soft-deleted.`;
       case 'termination_rejected':
@@ -250,7 +255,11 @@ export class NotificationDomainEventsListener {
   }
 
   private formatAccountTarget(event: AccountActivityEvent): string {
-    return event.targetEmail?.trim() || event.targetUserId;
+    return (
+      event.targetName?.trim() ||
+      event.targetEmail?.trim() ||
+      event.targetUserId
+    );
   }
 
   private wrapEmailHtml(title: string, body: string): string {

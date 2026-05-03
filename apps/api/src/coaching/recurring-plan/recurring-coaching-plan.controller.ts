@@ -23,7 +23,9 @@ import {
   BulkUpdateRecurringPlanSessionsDTO,
   CancelRecurringCoachingPlanDTO,
   CreateRecurringCoachingPlanDTO,
+  InitiateRecurringBillingCyclePaymentDTO,
   PreviewRecurringCoachingPlanDTO,
+  RecurringBillingCycleCheckoutResponseDTO,
   UpdateRecurringPlanSessionDTO,
 } from './dto/recurring-coaching-plan.dto';
 import { RecurringCoachingPlanService } from './recurring-coaching-plan.service';
@@ -71,6 +73,32 @@ export class RecurringCoachingPlanController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.recurringPlanService.getPlanSessions(user, id);
+  }
+
+  @Post(':id/billing-cycles/:cycleId/pay')
+  @ApiOperation({
+    summary:
+      'Start cash verification or PayMongo checkout for a recurring coaching monthly billing cycle.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({ name: 'cycleId', format: 'uuid' })
+  @ApiResponse({
+    status: 201,
+    description: 'Recurring coaching billing cycle payment initialized.',
+    type: RecurringBillingCycleCheckoutResponseDTO,
+  })
+  initiateBillingCyclePayment(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('cycleId', ParseUUIDPipe) cycleId: string,
+    @Body() dto: InitiateRecurringBillingCyclePaymentDTO,
+  ) {
+    return this.recurringPlanService.initiateBillingCyclePayment(
+      user,
+      id,
+      cycleId,
+      dto,
+    );
   }
 
   @Patch(':id/sessions/bulk')

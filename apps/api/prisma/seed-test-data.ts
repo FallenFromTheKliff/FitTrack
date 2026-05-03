@@ -57,28 +57,14 @@ const TEST_MANUAL_PATHS = [
     credentialKey: 'staff',
     route: '/schedule',
     expected:
-      'Review Gym Operations with seeded coach schedule, appointment control, and venue booking data from the staff side.',
+      'Confirm Gym Operations starts from a clean slate, then create coach profiles, availability, appointments, and venue bookings manually.',
   },
   {
-    area: 'mobile-mastery',
+    area: 'mobile-profile',
     credentialKey: 'member-active',
-    route: '/(tabs)/mastery',
-    expected:
-      'Verify the standalone Muscle Mastery surface shows seeded progress and leaderboard data for an active member-card account.',
-  },
-  {
-    area: 'mobile-mastery-locked',
-    credentialKey: 'member-pending',
-    route: '/(tabs)/mastery',
-    expected:
-      'Verify the lock state appears for a member account without an active membership card.',
-  },
-  {
-    area: 'mobile-profile-frozen',
-    credentialKey: 'member-frozen',
     route: '/(tabs)/profile',
     expected:
-      'Confirm the frozen-account restrictions appear alongside the pending account deletion request.',
+      'Verify the clean active member baseline, membership-card access, QR readiness, and empty payment/activity history.',
   },
 ] as const;
 
@@ -92,6 +78,14 @@ const LEGACY_COACH_SEED_ACCOUNTS = [
     key: 'coach-noah',
   },
 ] as const;
+
+const BASELINE_TEST_ACCOUNT_KEYS = new Set(['admin', 'staff']);
+const BASELINE_TEST_ACCOUNTS = TEST_ACCOUNTS.filter((account) =>
+  BASELINE_TEST_ACCOUNT_KEYS.has(account.key),
+);
+const BASELINE_TEST_MANUAL_PATHS = TEST_MANUAL_PATHS.filter((path) =>
+  BASELINE_TEST_ACCOUNT_KEYS.has(path.credentialKey),
+);
 
 type EnsuredAccount = {
   account: TestAccount;
@@ -482,14 +476,296 @@ async function cleanupDeprecatedCoachSeeds() {
   }
 }
 
+async function cleanupGymOperationsData() {
+  await prisma.payment.deleteMany({
+    where: {
+      payable_type: {
+        in: [PayableType.booking, PayableType.coaching],
+      },
+    },
+  });
+  await prisma.coachReview.deleteMany({});
+  await prisma.coachAppointment.deleteMany({});
+  await prisma.recurringCoachingPlan.deleteMany({});
+  await prisma.coachClientRelationship.deleteMany({});
+  await prisma.coachAvailabilitySlot.deleteMany({});
+  await prisma.amenityBooking.deleteMany({});
+  await prisma.coachProfile.deleteMany({});
+}
+
+async function cleanupPreviousSeedAnalyticsData() {
+  await prisma.saleTransactionItem.deleteMany({});
+  await prisma.saleTransaction.deleteMany({});
+  await prisma.payment.deleteMany({});
+  await prisma.attendanceLog.deleteMany({});
+  await prisma.accountDeletionRequest.deleteMany({});
+  await prisma.subscription.deleteMany({});
+  await prisma.membershipCard.deleteMany({});
+
+  const allSeedEmails = TEST_ACCOUNTS.map((account) => account.email);
+  const staleSeedEmails = TEST_ACCOUNTS.filter(
+    (account) => !BASELINE_TEST_ACCOUNT_KEYS.has(account.key),
+  ).map((account) => account.email);
+
+  const identityRows = await prisma.authIdentity.findMany({
+    where: {
+      provider: AuthProvider.email,
+      identifier: { in: allSeedEmails },
+    },
+    select: { identifier: true, user_id: true },
+  });
+
+  const allSeedUserIds = Array.from(
+    new Set([
+      ...TEST_ACCOUNTS.map((account) => seedId(`user:${account.key}`)),
+      ...identityRows.map((row) => row.user_id),
+    ]),
+  );
+  const staleSeedUserIds = Array.from(
+    new Set([
+      ...TEST_ACCOUNTS.filter(
+        (account) => !BASELINE_TEST_ACCOUNT_KEYS.has(account.key),
+      ).map((account) => seedId(`user:${account.key}`)),
+      ...identityRows
+        .filter((row) => staleSeedEmails.includes(row.identifier))
+        .map((row) => row.user_id),
+    ]),
+  );
+
+  const seedPayments = await prisma.payment.findMany({
+    where: {
+      OR: [
+        { user_id: { in: allSeedUserIds } },
+        { provider_ref: { startsWith: 'seed-' } },
+        { gateway_event_id: { startsWith: 'event-' } },
+        { idempotency_key: { startsWith: 'idempotency-' } },
+      ],
+    },
+    select: { id: true },
+  });
+  const seedPaymentIds = seedPayments.map((payment) => payment.id);
+  const seedSales = await prisma.saleTransaction.findMany({
+    where: {
+      OR: [
+        { customer_user_id: { in: allSeedUserIds } },
+        ...(seedPaymentIds.length
+          ? [{ payment_id: { in: seedPaymentIds } }]
+          : []),
+      ],
+    },
+    select: { id: true },
+  });
+  const seedSaleIds = seedSales.map((sale) => sale.id);
+
+  if (seedSaleIds.length) {
+    await prisma.saleTransactionItem.deleteMany({
+      where: { transaction_id: { in: seedSaleIds } },
+    });
+    await prisma.saleTransaction.deleteMany({
+      where: { id: { in: seedSaleIds } },
+    });
+  }
+
+  await prisma.payment.deleteMany({
+    where: {
+      OR: [
+        { user_id: { in: allSeedUserIds } },
+        { provider_ref: { startsWith: 'seed-' } },
+        { gateway_event_id: { startsWith: 'event-' } },
+        { idempotency_key: { startsWith: 'idempotency-' } },
+      ],
+    },
+  });
+  await prisma.attendanceLog.deleteMany({
+    where: {
+      OR: [
+        { user_id: { in: allSeedUserIds } },
+        { scanned_by: { in: allSeedUserIds } },
+      ],
+    },
+  });
+  await prisma.coachReview.deleteMany({
+    where: { reviewer_id: { in: allSeedUserIds } },
+  });
+  await prisma.recurringCoachingPlan.deleteMany({
+    where: { member_id: { in: allSeedUserIds } },
+  });
+  await prisma.coachAppointment.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.amenityBooking.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.accountDeletionRequest.deleteMany({
+    where: { userId: { in: allSeedUserIds } },
+  });
+  await prisma.subscription.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.membershipCard.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.poseSession.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.exerciseLog.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.workoutSession.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.trainingPlan.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.muscleMasteryProgress.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.nutritionLog.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.macroTarget.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.tdeeProfile.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+  await prisma.progressMetric.deleteMany({
+    where: { user_id: { in: allSeedUserIds } },
+  });
+
+  if (staleSeedUserIds.length) {
+    await prisma.authIdentity.deleteMany({
+      where: {
+        OR: [
+          { user_id: { in: staleSeedUserIds } },
+          { identifier: { in: staleSeedEmails } },
+        ],
+      },
+    });
+    await prisma.notificationPreference.deleteMany({
+      where: { user_id: { in: staleSeedUserIds } },
+    });
+    await prisma.userProfile.deleteMany({
+      where: { user_id: { in: staleSeedUserIds } },
+    });
+
+    try {
+      await prisma.user.deleteMany({
+        where: { id: { in: staleSeedUserIds } },
+      });
+    } catch {
+      await prisma.user.updateMany({
+        where: { id: { in: staleSeedUserIds } },
+        data: {
+          deletedAt: new Date(),
+          qr_code_token: null,
+          status: UserStatus.suspended,
+        },
+      });
+    }
+  }
+}
+
+async function cleanupUsersOutsideBaseline(
+  ensuredAccounts: readonly EnsuredAccount[],
+) {
+  const baselineUserIds = ensuredAccounts.map(({ userId }) => userId);
+  const nonBaselineUsers = await prisma.user.findMany({
+    where: {
+      id: {
+        notIn: baselineUserIds,
+      },
+    },
+    select: { id: true },
+  });
+  const nonBaselineUserIds = nonBaselineUsers.map((user) => user.id);
+
+  if (!nonBaselineUserIds.length) {
+    return;
+  }
+
+  await prisma.businessInsightRun.deleteMany({});
+  await prisma.gymChatInteractionLog.deleteMany({});
+  await prisma.gymChatMessage.deleteMany({});
+  await prisma.gymChatSession.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.aiInteractionLog.deleteMany({});
+  await prisma.aiChatMessage.deleteMany({});
+  await prisma.aiChatSession.deleteMany({});
+  await prisma.equipmentWriteOff.deleteMany({});
+  await prisma.saleTransactionItem.deleteMany({});
+  await prisma.saleTransaction.deleteMany({});
+  await prisma.nutritionLog.deleteMany({});
+  await prisma.macroTarget.deleteMany({});
+  await prisma.tdeeProfile.deleteMany({});
+  await prisma.moderationActionRecord.deleteMany({});
+  await prisma.integrityEvent.deleteMany({});
+  await prisma.integrityCase.deleteMany({});
+  await prisma.integrityProfile.deleteMany({});
+  await prisma.rankingProfile.deleteMany({});
+  await prisma.userMilestoneProgress.deleteMany({});
+  await prisma.seasonalStanding.deleteMany({});
+  await prisma.progressionGrantLedger.deleteMany({});
+  await prisma.progressionSourceEvent.deleteMany({});
+  await prisma.userProgressionProfile.deleteMany({});
+  await prisma.muscleMasteryProgress.deleteMany({});
+  await prisma.exerciseReviewSubmission.deleteMany({});
+  await prisma.poseSession.deleteMany({});
+  await prisma.exerciseLog.deleteMany({});
+  await prisma.workoutSession.deleteMany({});
+  await prisma.planExercise.deleteMany({});
+  await prisma.trainingScheduleDay.deleteMany({});
+  await prisma.trainingPlan.deleteMany({});
+  await prisma.coachReview.deleteMany({});
+  await prisma.recurringCoachingBillingCycle.deleteMany({});
+  await prisma.coachAppointment.deleteMany({});
+  await prisma.recurringCoachingPlan.deleteMany({});
+  await prisma.coachClientRelationship.deleteMany({});
+  await prisma.coachAvailabilitySlot.deleteMany({});
+  await prisma.amenityBooking.deleteMany({});
+  await prisma.coachProfile.deleteMany({});
+  await prisma.payment.deleteMany({});
+  await prisma.membershipCard.deleteMany({});
+  await prisma.subscription.deleteMany({});
+  await prisma.attendanceLog.deleteMany({});
+  await prisma.progressMetric.deleteMany({});
+  await prisma.accountDeletionRequest.deleteMany({});
+  await prisma.otpVerification.deleteMany({
+    where: { user_id: { in: nonBaselineUserIds } },
+  });
+  await prisma.refreshToken.deleteMany({
+    where: { user_id: { in: nonBaselineUserIds } },
+  });
+  await prisma.authIdentity.deleteMany({
+    where: { user_id: { in: nonBaselineUserIds } },
+  });
+  await prisma.notificationPreference.deleteMany({
+    where: { user_id: { in: nonBaselineUserIds } },
+  });
+  await prisma.userProfile.deleteMany({
+    where: { user_id: { in: nonBaselineUserIds } },
+  });
+  await prisma.user.deleteMany({
+    where: { id: { in: nonBaselineUserIds } },
+  });
+}
+
+// Legacy gym-operations fixture builders are intentionally disabled. The seed now
+// clears coach/bookings data and keeps only reservable venue records.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
+  await ensureReservableAmenities();
   const coachProfiles: Record<string, string> = {};
 
   const coachSeeds = [
     {
       accountKey: 'staff',
+      contactEmail: 'coach.profile.alpha@fittrack.local',
+      contactPhone: '+639170000101',
+      displayName: 'Coach Profile Alpha',
       averageRating: new Prisma.Decimal('4.90'),
-      bio: 'Floor-first coaching profile used to review bookings, readiness, and weekly availability from the staff console.',
+      bio: 'Standalone coach profile used to review bookings, readiness, and weekly availability from the staff console.',
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('850'),
       isAvailableForBooking: true,
@@ -498,8 +774,11 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
     },
     {
       accountKey: 'member-nomembership',
+      contactEmail: 'coach.profile.bravo@fittrack.local',
+      contactPhone: '+639170000102',
+      displayName: 'Coach Profile Bravo',
       averageRating: new Prisma.Decimal('4.72'),
-      bio: 'Conditioning and boxing-focused coach profile used for gym-operations staffing checks and venue-linked sessions.',
+      bio: 'Standalone coach profile used for gym-operations staffing checks and venue-linked sessions.',
       certification: 'ACE-CPT',
       hourlyRate: new Prisma.Decimal('900'),
       isAvailableForBooking: true,
@@ -508,8 +787,11 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
     },
     {
       accountKey: 'member-expired',
+      contactEmail: 'coach.profile.charlie@fittrack.local',
+      contactPhone: '+639170000103',
+      displayName: 'Coach Profile Charlie',
       averageRating: new Prisma.Decimal('4.81'),
-      bio: 'Recovery-led coaching profile for yoga and lower-intensity mobility blocks that still need booking visibility checks.',
+      bio: 'Standalone coach profile for recovery and lower-intensity mobility blocks that still need booking visibility checks.',
       certification: 'Yoga Alliance',
       hourlyRate: new Prisma.Decimal('780'),
       isAvailableForBooking: true,
@@ -533,6 +815,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         specialization: seed.specialization,
         bio: seed.bio,
         certification: seed.certification,
+        contact_email: seed.contactEmail,
+        contact_phone: seed.contactPhone,
+        display_name: seed.displayName,
         hourly_rate: seed.hourlyRate,
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: seed.averageRating,
@@ -545,6 +830,9 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         specialization: seed.specialization,
         bio: seed.bio,
         certification: seed.certification,
+        contact_email: seed.contactEmail,
+        contact_phone: seed.contactPhone,
+        display_name: seed.displayName,
         hourly_rate: seed.hourlyRate,
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: seed.averageRating,
@@ -806,6 +1094,67 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
   return coachProfiles;
 }
 
+async function ensureReservableAmenities() {
+  const amenitySeeds = [
+    {
+      key: 'venue-booking:basketball-court',
+      name: 'Basketball Court',
+      type: AmenityType.basketball_court,
+      capacity: 10,
+      hourlyRate: new Prisma.Decimal('1500'),
+      floorId: 'court-a',
+    },
+    {
+      key: 'venue-booking:boxing-ring',
+      name: 'Boxing Ring',
+      type: AmenityType.boxing_ring,
+      capacity: 4,
+      hourlyRate: new Prisma.Decimal('1200'),
+      floorId: 'ring-a',
+    },
+    {
+      key: 'venue-booking:yoga-room',
+      name: 'Yoga Room',
+      type: AmenityType.other,
+      capacity: 18,
+      hourlyRate: new Prisma.Decimal('900'),
+      floorId: 'studio-y',
+    },
+  ] as const;
+
+  for (const amenity of amenitySeeds) {
+    const existing = await prisma.amenity.findFirst({
+      where: { name: amenity.name },
+      select: { id: true },
+    });
+    const amenityId = existing?.id ?? seedId(`amenity:${amenity.key}`);
+
+    await prisma.amenity.upsert({
+      where: { id: amenityId },
+      update: {
+        capacity: amenity.capacity,
+        floor_id: amenity.floorId,
+        hourly_rate: amenity.hourlyRate,
+        is_active: true,
+        is_reservable: true,
+        name: amenity.name,
+        type: amenity.type,
+      },
+      create: {
+        id: amenityId,
+        capacity: amenity.capacity,
+        floor_id: amenity.floorId,
+        hourly_rate: amenity.hourlyRate,
+        is_active: true,
+        is_reservable: true,
+        name: amenity.name,
+        type: amenity.type,
+      },
+    });
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureGymOperationsVenueBookings(
   ensuredAccounts: readonly EnsuredAccount[],
   coachProfiles: Record<string, string>,
@@ -822,7 +1171,7 @@ async function ensureGymOperationsVenueBookings(
 
   const amenitySeeds = [
     {
-      key: 'gym-ops:basketball-court',
+      key: 'venue-booking:basketball-court',
       name: 'Basketball Court',
       type: AmenityType.basketball_court,
       capacity: 10,
@@ -830,7 +1179,7 @@ async function ensureGymOperationsVenueBookings(
       floorId: 'court-a',
     },
     {
-      key: 'gym-ops:boxing-ring',
+      key: 'venue-booking:boxing-ring',
       name: 'Boxing Ring',
       type: AmenityType.boxing_ring,
       capacity: 4,
@@ -838,7 +1187,7 @@ async function ensureGymOperationsVenueBookings(
       floorId: 'ring-a',
     },
     {
-      key: 'gym-ops:yoga-room',
+      key: 'venue-booking:yoga-room',
       name: 'Yoga Room',
       type: AmenityType.other,
       capacity: 18,
@@ -900,11 +1249,11 @@ async function ensureGymOperationsVenueBookings(
     notes?: string;
   }> = [];
 
-  if (memberActiveId && amenityIds.get('gym-ops:basketball-court')) {
+  if (memberActiveId && amenityIds.get('venue-booking:basketball-court')) {
     bookingSeeds.push({
       id: seedId('amenity-booking:member-active:basketball'),
       userId: memberActiveId,
-      amenityId: amenityIds.get('gym-ops:basketball-court')!,
+      amenityId: amenityIds.get('venue-booking:basketball-court')!,
       coachId: coachProfiles['staff'] ?? null,
       status: BookingStatus.pending,
       startsAt: upcomingAt(0, 7),
@@ -916,11 +1265,11 @@ async function ensureGymOperationsVenueBookings(
     });
   }
 
-  if (memberPremiumId && amenityIds.get('gym-ops:boxing-ring')) {
+  if (memberPremiumId && amenityIds.get('venue-booking:boxing-ring')) {
     bookingSeeds.push({
       id: seedId('amenity-booking:member-premium:boxing-ring'),
       userId: memberPremiumId,
-      amenityId: amenityIds.get('gym-ops:boxing-ring')!,
+      amenityId: amenityIds.get('venue-booking:boxing-ring')!,
       coachId: coachProfiles['member-nomembership'] ?? null,
       status: BookingStatus.confirmed,
       startsAt: upcomingAt(1, 10),
@@ -933,11 +1282,11 @@ async function ensureGymOperationsVenueBookings(
     });
   }
 
-  if (memberActiveId && amenityIds.get('gym-ops:yoga-room')) {
+  if (memberActiveId && amenityIds.get('venue-booking:yoga-room')) {
     bookingSeeds.push({
       id: seedId('amenity-booking:member-active:yoga-room'),
       userId: memberActiveId,
-      amenityId: amenityIds.get('gym-ops:yoga-room')!,
+      amenityId: amenityIds.get('venue-booking:yoga-room')!,
       coachId: coachProfiles['member-expired'] ?? null,
       status: BookingStatus.completed,
       startsAt: upcomingAt(-1, 6),
@@ -952,11 +1301,11 @@ async function ensureGymOperationsVenueBookings(
     });
   }
 
-  if (memberPendingId && amenityIds.get('gym-ops:basketball-court')) {
+  if (memberPendingId && amenityIds.get('venue-booking:basketball-court')) {
     bookingSeeds.push({
       id: seedId('amenity-booking:member-pending:basketball'),
       userId: memberPendingId,
-      amenityId: amenityIds.get('gym-ops:basketball-court')!,
+      amenityId: amenityIds.get('venue-booking:basketball-court')!,
       coachId: null,
       status: BookingStatus.cancelled,
       startsAt: upcomingAt(2, 12),
@@ -1633,6 +1982,8 @@ async function ensureAnalyticsFixtures(
     });
   }
 
+  // Disabled fixture source retained for reference only; validBookingSeeds stays empty.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const bookingSeeds: Array<{
     id: string;
     userId: string | null;
@@ -1745,28 +2096,24 @@ async function ensureAnalyticsFixtures(
     },
   ];
 
-  const validBookingSeeds = bookingSeeds.filter(
-    (
-      entry,
-    ): entry is {
-      id: string;
-      userId: string;
-      amenityId: string;
-      coachId: string | null;
-      status: BookingStatus;
-      startsAt: Date;
-      endsAt: Date;
-      totalAmount: Prisma.Decimal;
-      downpaymentAmount: Prisma.Decimal;
-      balanceAmount: Prisma.Decimal;
-      downpaymentPaidAt: Date | null;
-      balancePaidAt: Date | null;
-      completedAt: Date | null;
-      cancelledAt: Date | null;
-      createdAt: Date;
-      notes: string;
-    } => Boolean(entry.userId && entry.amenityId),
-  );
+  const validBookingSeeds: Array<{
+    id: string;
+    userId: string;
+    amenityId: string;
+    coachId: string | null;
+    status: BookingStatus;
+    startsAt: Date;
+    endsAt: Date;
+    totalAmount: Prisma.Decimal;
+    downpaymentAmount: Prisma.Decimal;
+    balanceAmount: Prisma.Decimal;
+    downpaymentPaidAt: Date | null;
+    balancePaidAt: Date | null;
+    completedAt: Date | null;
+    cancelledAt: Date | null;
+    createdAt: Date;
+    notes: string;
+  }> = [];
 
   for (const booking of validBookingSeeds) {
     await prisma.amenityBooking.upsert({
@@ -1809,6 +2156,8 @@ async function ensureAnalyticsFixtures(
     });
   }
 
+  // Disabled fixture source retained for reference only; validAppointmentSeeds stays empty.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const appointmentSeeds: Array<{
     id: string;
     userId: string | null;
@@ -1934,29 +2283,25 @@ async function ensureAnalyticsFixtures(
     },
   ];
 
-  const validAppointmentSeeds = appointmentSeeds.filter(
-    (
-      entry,
-    ): entry is {
-      id: string;
-      userId: string;
-      coachId: string;
-      status: AppointmentStatus;
-      scheduledAt: Date;
-      durationMinutes: number;
-      totalAmount: Prisma.Decimal;
-      downpaymentAmount: Prisma.Decimal;
-      balanceAmount: Prisma.Decimal;
-      gymRevenue: Prisma.Decimal;
-      coachEarnings: Prisma.Decimal;
-      downpaymentPaidAt: Date | null;
-      balancePaidAt: Date | null;
-      completedAt: Date | null;
-      createdAt: Date;
-      memberNotes: string | null;
-      sessionNotes: string | null;
-    } => Boolean(entry.userId && entry.coachId),
-  );
+  const validAppointmentSeeds: Array<{
+    id: string;
+    userId: string;
+    coachId: string;
+    status: AppointmentStatus;
+    scheduledAt: Date;
+    durationMinutes: number;
+    totalAmount: Prisma.Decimal;
+    downpaymentAmount: Prisma.Decimal;
+    balanceAmount: Prisma.Decimal;
+    gymRevenue: Prisma.Decimal;
+    coachEarnings: Prisma.Decimal;
+    downpaymentPaidAt: Date | null;
+    balancePaidAt: Date | null;
+    completedAt: Date | null;
+    createdAt: Date;
+    memberNotes: string | null;
+    sessionNotes: string | null;
+  }> = [];
 
   for (const appointment of validAppointmentSeeds) {
     await prisma.coachAppointment.upsert({
@@ -2399,7 +2744,10 @@ async function ensureAnalyticsFixtures(
       provider: PaymentProvider;
       status: PaymentStatus;
       createdAt: Date;
-    } => Boolean(entry.userId),
+    } =>
+      Boolean(entry.userId) &&
+      entry.payableType !== PayableType.booking &&
+      entry.payableType !== PayableType.coaching,
   );
 
   for (const payment of validPaymentSeeds) {
@@ -3347,18 +3695,16 @@ async function main() {
   const bootstrapSummary = await bootstrapDefaults(prisma);
   await ensureMembershipPlans();
   await cleanupDeprecatedCoachSeeds();
+  await cleanupGymOperationsData();
+  await cleanupPreviousSeedAnalyticsData();
 
   const ensuredAccounts: EnsuredAccount[] = [];
-  for (const account of TEST_ACCOUNTS) {
+  for (const account of BASELINE_TEST_ACCOUNTS) {
     ensuredAccounts.push(await ensureTestAccount(account));
   }
 
-  const coachProfiles = await ensureCoachProfiles(ensuredAccounts);
-  await ensureGymOperationsVenueBookings(ensuredAccounts, coachProfiles);
+  await cleanupUsersOutsideBaseline(ensuredAccounts);
   await ensureMemberStates(ensuredAccounts);
-  await ensureMasteryProgress(ensuredAccounts);
-  await ensureWorkoutFixtures(ensuredAccounts);
-  await ensureAnalyticsFixtures(ensuredAccounts, coachProfiles);
 
   const counts = await buildCounts();
   const notableIds = {
@@ -3380,11 +3726,11 @@ async function main() {
 
   const manifest = await writeTestDataManifest({
     counts,
-    credentials: toManifestCredentials(TEST_ACCOUNTS),
+    credentials: toManifestCredentials(BASELINE_TEST_ACCOUNTS),
     mode,
     notableIds,
     runAt: new Date().toISOString(),
-    suggestedManualTestPaths: [...TEST_MANUAL_PATHS],
+    suggestedManualTestPaths: [...BASELINE_TEST_MANUAL_PATHS],
   });
 
   console.log(`[test-data] mode=${mode}`);

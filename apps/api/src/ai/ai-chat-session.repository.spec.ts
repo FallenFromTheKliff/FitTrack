@@ -13,6 +13,10 @@ describe('AiChatSessionRepository', () => {
 
   const prisma = {
     aiChatSession,
+    $transaction: jest.fn(
+      (callback: (tx: { aiChatSession: typeof aiChatSession }) => unknown) =>
+        Promise.resolve(callback({ aiChatSession })),
+    ),
   };
 
   let repo: AiChatSessionRepository;
@@ -124,6 +128,39 @@ describe('AiChatSessionRepository', () => {
       data: { is_active: false },
       include: undefined,
     });
+  });
+
+  it('restores an owned session without archiving other active sessions', async () => {
+    aiChatSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    aiChatSession.update.mockResolvedValue({
+      id: 'session-1',
+      is_active: true,
+    });
+
+    await repo.restoreOwnedSessionByIdOrThrow('user-1', 'session-1');
+
+    expect(aiChatSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'session-1',
+        user_id: 'user-1',
+      },
+    });
+    const updateCalls = aiChatSession.update.mock.calls as [
+      [
+        {
+          data: {
+            is_active: boolean;
+            last_activity_at: Date;
+          };
+          where: { id: string };
+        },
+      ],
+    ];
+    const [updateArgs] = updateCalls[0];
+    expect(updateArgs.where).toEqual({ id: 'session-1' });
+    expect(updateArgs.data.is_active).toBe(true);
+    expect(updateArgs.data.last_activity_at).toBeInstanceOf(Date);
+    expect('updateMany' in aiChatSession).toBe(false);
   });
 
   it('updates chat-session metadata by id', async () => {

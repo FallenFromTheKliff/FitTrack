@@ -15,14 +15,15 @@ import { FitText } from "@/components/fit/FitText";
 import FitInputField from "@/components/fit/FitInputField";
 import BufferPage from "@/components/loading/BufferPage";
 import { ForgotPasswordModal, OTPModal } from "@/components/modals";
-import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { LOGIN_BACKGROUND_IMAGE_URL, LOGIN_HERO_STATS } from "@/data/auth/auth";
+import {
+  type LoginHeroStat,
+  LOGIN_BACKGROUND_IMAGE_URL,
+} from "@/data/auth/auth";
 import { useAuthEntrance } from "@/hooks/animations/useAuthEntrance";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { authStyles } from "@/styles/authStyles";
-import { sleep } from "@/utils/sleep";
 
 const PAGE_COPY = {
   badge: "Admin & Staff Portal",
@@ -31,6 +32,12 @@ const PAGE_COPY = {
     "Full gym management. Members, schedules, inventory, and more - all in one place.",
   emailPlaceholder: "sertfitadmin@gmail.com",
 };
+
+function getPortalLandingPath(role?: string) {
+  if (role === "STAFF") return "/schedule";
+  if (role === "ADMIN") return "/analytics";
+  return "/dashboard";
+}
 
 function getLoginItemTransition(shouldAnimate: boolean, index: number) {
   if (!shouldAnimate) {
@@ -44,7 +51,11 @@ function getLoginItemTransition(shouldAnimate: boolean, index: number) {
   };
 }
 
-export function AdminLoginPage() {
+type AdminLoginPageProps = {
+  heroStats: LoginHeroStat[];
+};
+
+export function AdminLoginPage({ heroStats }: AdminLoginPageProps) {
   const { commitLogin, login } = useAuth();
   const { colors, onBrandTextColor, settings } = useTheme();
   const router = useRouter();
@@ -56,6 +67,7 @@ export function AdminLoginPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [landingPath, setLandingPath] = useState("/dashboard");
   const [mounted, setMounted] = useState(false);
   const [showBuffer, setShowBuffer] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
@@ -87,7 +99,6 @@ export function AdminLoginPage() {
 
     setLoading(true);
     setErrorMsg("");
-    await sleep(FEEDBACK_DURATION_MS.standard);
 
     const result = await login(data.email, data.password);
     setLoading(false);
@@ -107,6 +118,7 @@ export function AdminLoginPage() {
       return;
     }
 
+    setLandingPath(getPortalLandingPath(result.user?.role));
     setShowBuffer(true);
   };
 
@@ -120,7 +132,7 @@ export function AdminLoginPage() {
         onCommit={commitLogin}
         onDone={() => {
           setShowBuffer(false);
-          router.replace("/dashboard");
+          router.replace(landingPath);
         }}
       />
     );
@@ -147,10 +159,13 @@ export function AdminLoginPage() {
               {PAGE_COPY.subtitle}
             </FitText>
             <div style={styles.heroStatsRow}>
-              {LOGIN_HERO_STATS.map((stat) => (
-                <div key={stat} style={styles.heroStatItem}>
-                  <FitText as="span" style={styles.heroStatItem}>
-                    {stat}
+              {heroStats.map((stat) => (
+                <div key={stat.label} style={styles.heroStatItem}>
+                  <FitText as="span" style={styles.heroStatValue}>
+                    {stat.value}
+                  </FitText>
+                  <FitText as="span" style={styles.heroStatLabel}>
+                    {stat.label}
                   </FitText>
                 </div>
               ))}

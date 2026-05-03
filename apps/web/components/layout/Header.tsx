@@ -34,6 +34,7 @@ export default function Header({
     removeAllNotifications,
     removeNotification
   } = useHeaderNotifications();
+  const unreadBadgeLabel = unreadCount > 99 ? "99+" : String(unreadCount);
 
   return (
     <>
@@ -53,18 +54,29 @@ export default function Header({
         <HeaderMessage pageKey={pageKey} />
       </div>
       <div style={s.rightSection}>
-        <FitButton
-          variant="iconClear"
-          iconOnly
-          icon={Bell}
-          iconSize={23}
-          onClick={() => setNotifOpen((value) => !value)}
-          onMouseEnter={() => setIsNotifHovered(true)}
-          onMouseLeave={() => setIsNotifHovered(false)}
-          style={{ ...s.notificationButton, color: isNotifHovered ? colors.brand : colors.textPrimary }}
-          aria-label="Toggle notifications panel"
-        />
-        {unreadCount > 0 ? <span style={s.unreadBadge}>{unreadCount}</span> : null}
+        <div style={s.notificationButtonWrap}>
+          <FitButton
+            variant="iconClear"
+            iconOnly
+            icon={Bell}
+            iconSize={23}
+            onClick={() => setNotifOpen((value) => !value)}
+            onMouseEnter={() => setIsNotifHovered(true)}
+            onMouseLeave={() => setIsNotifHovered(false)}
+            style={{ ...s.notificationButton, color: isNotifHovered ? colors.brand : colors.textPrimary }}
+            aria-label="Toggle notifications panel"
+            title={
+              unreadCount > 0
+                ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+                : "No unread notifications"
+            }
+          />
+          {unreadCount > 0 ? (
+            <span style={s.unreadBadge} aria-label={`${unreadCount} unread notifications`}>
+              {unreadBadgeLabel}
+            </span>
+          ) : null}
+        </div>
       </div>
     </header>
     <NotificationsPanel

@@ -15,6 +15,7 @@ import { PAYMENT_COMPLETED_EVENT } from '../../membership/payment/events/payment
 import type { PaymentCompletedEvent } from '../../membership/payment/events/payment-completed.event';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
+import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
 import { AppointmentRepository } from './appointment.repository';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 import {
@@ -59,6 +60,10 @@ describe('Appointment payment integration', () => {
     dispatch: jest.fn(),
   };
 
+  const recurringPlanService = {
+    refreshPlanProgress: jest.fn(),
+  };
+
   const lifecycleQueue = {
     add: jest.fn(),
   };
@@ -78,6 +83,10 @@ describe('Appointment payment integration', () => {
           provide: PaymongoCheckoutService,
           useValue: paymongoCheckoutService,
         },
+        {
+          provide: RecurringCoachingPlanService,
+          useValue: recurringPlanService,
+        },
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: getQueueToken(COACHING_LIFECYCLE_QUEUE),
@@ -92,7 +101,7 @@ describe('Appointment payment integration', () => {
   });
 
   afterEach(async () => {
-    await moduleRef.close();
+    await moduleRef?.close();
   });
 
   it('advances pending coaching appointments when the shared payment completion event arrives', async () => {

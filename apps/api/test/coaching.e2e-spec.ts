@@ -92,7 +92,7 @@ const USERS: Record<string, JwtPayload> = {
   },
   coach: {
     sub: '44444444-4444-4444-8444-444444444444',
-    role: UserRole.coach,
+    role: UserRole.staff,
     status: UserStatus.active,
     jti: 'coach-jti',
     iat: 1,

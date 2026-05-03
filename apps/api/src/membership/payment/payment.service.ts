@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
+import { ACCOUNT_ACTIVITY_EVENT } from '../../user/events/account-activity.event';
 import {
   ManualPaymentDTO,
   PaymentFilterDTO,
@@ -42,6 +43,13 @@ type PaymentDetails = Awaited<
   ReturnType<PaymentRepository['findPaymentByIdForStaffOrThrow']>
 >;
 
+function getPaymentUserDisplayName(payment: PaymentDetails) {
+  return [payment.user?.profile?.first_name, payment.user?.profile?.last_name]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' ')
+    .trim();
+}
+
 @Injectable()
 export class PaymentService {
   constructor(
@@ -50,10 +58,11 @@ export class PaymentService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  getMyPayments(
+  async getMyPayments(
     userId: string,
     dto: PaymentHistoryDTO,
   ): Promise<PaginatedResult<Payment>> {
+    await this.repo.completeOpenMembershipCardPaymentsForActiveCards(userId);
     return this.repo.getMyPayments(userId, dto);
   }
 
@@ -104,7 +113,7 @@ export class PaymentService {
   ): Promise<void> {
     this.assertRejectionReason(dto);
 
-    const payment = await this.repo.findPaymentByIdOrThrow(paymentId);
+    const payment = await this.repo.findPaymentByIdForStaffOrThrow(paymentId);
     this.assertAwaitingVerification(payment);
 
     const nextStatus = dto.action === 'approve' ? 'completed' : 'failed';
@@ -136,6 +145,20 @@ export class PaymentService {
         payableId: payment.payable_id,
         amount: payment.amount.toString(),
         verifiedBy: adminId,
+      });
+      this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+        action: 'payment_approved',
+        actorId: adminId,
+        details: {
+          amount: payment.amount.toString(),
+          payable_id: payment.payable_id,
+          payable_type: payment.payable_type,
+          payment_id: paymentId,
+        },
+        occurredAt: verifiedAt.toISOString(),
+        targetName: getPaymentUserDisplayName(payment),
+        targetRole: UserRole.member,
+        targetUserId: payment.user_id,
       });
       return;
     }
@@ -223,6 +246,14 @@ export class PaymentService {
         dto.payable_id,
       );
       return appointment.user_id;
+    }
+
+    if (dto.payable_type === PayableType.recurring_coaching) {
+      const cycle =
+        await this.repo.findRecurringCoachingPaymentContextOrThrow(
+          dto.payable_id,
+        );
+      return cycle.user_id;
     }
 
     throw new HttpException(

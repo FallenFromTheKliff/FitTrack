@@ -18,6 +18,7 @@ import { FitButton, FitText } from "@/components/fit";
 
 export type DetailBooking = {
   amountDueNow?: number;
+  bookingType?: "recurring" | "single";
   id: string;
   nextPaymentDate?: string;
   paymentPlan?: "downpayment" | "free" | "full";
@@ -64,13 +65,33 @@ function parseTimeToMinutes(value: string): number | null {
   let hour = Number(match[1]);
   const minute = Number(match[2]);
   const period = match[3].toUpperCase();
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 1 ||
+    hour > 12 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
   if (period === "AM" && hour === 12) hour = 0;
   if (period === "PM" && hour !== 12) hour += 12;
   return hour * 60 + minute;
 }
 
 function formatStatusLabel(status: string) {
+  const explicitLabels: Record<string, string> = {
+    pending_downpayment: "Pending Downpayment",
+    pending_payment: "Pending Payment",
+    pending_full_payment: "Pending Full Payment",
+    balance_pending: "Pending Full Payment",
+  };
+
+  if (explicitLabels[status]) {
+    return explicitLabels[status];
+  }
+
   return status
     .split("_")
     .filter(Boolean)
@@ -78,41 +99,67 @@ function formatStatusLabel(status: string) {
     .join(" ");
 }
 
-export default function BookingDetailModal({ isVisible, booking, venue = null, onClose, actions = [] }: Props) {
+function formatCurrency(value: number) {
+  return `PHP ${value.toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export default function BookingDetailModal({
+  isVisible,
+  booking,
+  venue = null,
+  onClose,
+  actions = [],
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeBookingDetailModalStyles(colors), [colors]);
 
-  const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
+  const backdropStyle = useAnimatedStyle(() => ({
+    backgroundColor: ic.value.overlay,
+  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
     backgroundColor: ic.value.surface,
-    borderColor: ic.value.border
+    borderColor: ic.value.border,
   }));
-  const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
+  const headerBorderStyle = useAnimatedStyle(() => ({
+    borderBottomColor: ic.value.border,
+  }));
   const headerIconStyle = useAnimatedStyle(() => ({
     backgroundColor: ic.value.surfaceRaised,
-    borderColor: ic.value.border
+    borderColor: ic.value.border,
   }));
-  const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
+  const footerBorderStyle = useAnimatedStyle(() => ({
+    borderTopColor: ic.value.border,
+  }));
 
   if (!booking) return null;
 
   const venuePresentation = venue ? getVenuePresentation(venue) : null;
-  const timeValue = booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time;
+  const timeValue =
+    booking.startTime && booking.endTime
+      ? `${booking.startTime} - ${booking.endTime}`
+      : booking.time;
   const statusColor = STATUS_COLORS[booking.status] ?? colors.textMuted;
   const statusValue = formatStatusLabel(booking.status);
-  const participantName = booking.participantName ?? booking.trainerName ?? "No linked person";
+  const participantName =
+    booking.participantName ?? booking.trainerName ?? "No linked person";
   const participantLabel = booking.participantLabel ?? "Coach";
-  const participantInitials = participantName
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "-";
-  const VenueIcon = venuePresentation ? getVenueIcon(venuePresentation.iconKey) : null;
+  const participantInitials =
+    participantName
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "-";
+  const VenueIcon = venuePresentation
+    ? getVenueIcon(venuePresentation.iconKey)
+    : null;
 
   const pricing = (() => {
     const venueRate = venue?.hourlyRate ?? venuePresentation?.price ?? 0;
@@ -121,7 +168,7 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
         parsed: false,
         hours: 1,
         venueTotal: venueRate,
-        finalPrice: booking.price ?? venueRate
+        finalPrice: booking.price ?? venueRate,
       };
     }
     const startTotal = parseTimeToMinutes(booking.startTime);
@@ -131,7 +178,7 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
         parsed: false,
         hours: 1,
         venueTotal: venueRate,
-        finalPrice: booking.price ?? venueRate
+        finalPrice: booking.price ?? venueRate,
       };
     }
     const hours = Math.max(1, Math.round((endTotal - startTotal) / 60));
@@ -140,13 +187,23 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
       parsed: true,
       hours,
       venueTotal,
-      finalPrice: booking.price || venueTotal
+      finalPrice: booking.price || venueTotal,
     };
   })();
+
   const totalPrice = booking.totalAmount ?? pricing.finalPrice;
-  const showPaymentPlan = booking.paymentPlan === "downpayment" || booking.paymentPlan === "full";
+  const showPaymentPlan =
+    booking.paymentPlan === "downpayment" || booking.paymentPlan === "full";
   const amountDueNow = booking.amountDueNow ?? totalPrice;
   const remainingBalance = booking.remainingBalance ?? 0;
+  const bookingTypeLabel =
+    booking.bookingType === "recurring"
+      ? "Recurring booking"
+      : "Single booking";
+  const bookingSummaryLabel =
+    booking.bookingType === "recurring"
+      ? "Part of a recurring coach plan."
+      : "One-time booking only.";
   const paymentPlanLabel =
     booking.paymentPlan === "full"
       ? "Full payment"
@@ -170,30 +227,51 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
               <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
             </Animated.View>
             <View style={s.headerText}>
-              <FitText style={s.headerTitle}>{booking.detailTitle ?? "Booking Details"}</FitText>
-              <FitText style={s.headerSubtitle}>{booking.detailSubtitle ?? booking.resourceName}</FitText>
+              <FitText style={s.headerTitle}>
+                {booking.detailTitle ?? "Booking Details"}
+              </FitText>
+              <FitText style={s.headerSubtitle}>
+                {booking.detailSubtitle ?? booking.resourceName}
+              </FitText>
             </View>
           </Animated.View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.body}
+          >
             <View style={[s.resourceCard, localStyles.resourceIconCard]}>
               <View
                 style={[
                   localStyles.venueIconWrap,
-                  { backgroundColor: colors.brand + "18", borderColor: colors.brand + "44" }
+                  {
+                    backgroundColor: `${colors.brand}18`,
+                    borderColor: `${colors.brand}44`,
+                  },
                 ]}
               >
                 {VenueIcon ? (
-                  <VenueIcon size={40} color={colors.brand} strokeWidth={1.8} />
+                  <VenueIcon
+                    size={40}
+                    color={colors.brand}
+                    strokeWidth={1.8}
+                  />
                 ) : (
-                  <CalendarDays size={40} color={colors.brand} strokeWidth={1.8} />
+                  <CalendarDays
+                    size={40}
+                    color={colors.brand}
+                    strokeWidth={1.8}
+                  />
                 )}
               </View>
               <FitText style={s.resourceName}>{booking.resourceName}</FitText>
             </View>
+
             <View style={s.dateTimeRow}>
               <View style={s.dateTimeCell}>
                 <FitText style={s.detailLabel}>DATE</FitText>
-                <FitText style={s.detailValue}>{formatBookingDate(booking.date)}</FitText>
+                <FitText style={s.detailValue}>
+                  {formatBookingDate(booking.date)}
+                </FitText>
               </View>
               <View style={s.dateTimeDivider} />
               <View style={s.dateTimeCell}>
@@ -201,9 +279,24 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
                 <FitText style={s.detailValue}>{timeValue}</FitText>
               </View>
             </View>
+
             <View style={s.coachCard}>
-              <View style={[s.coachAvatar, participantName !== "No linked person" && { backgroundColor: colors.brand }]}>
-                <FitText style={[s.coachAvatarText, participantName !== "No linked person" && { color: colors.onBrand }]}>
+              <View
+                style={[
+                  s.coachAvatar,
+                  participantName !== "No linked person" && {
+                    backgroundColor: colors.brand,
+                  },
+                ]}
+              >
+                <FitText
+                  style={[
+                    s.coachAvatarText,
+                    participantName !== "No linked person" && {
+                      color: colors.onBrand,
+                    },
+                  ]}
+                >
                   {participantInitials}
                 </FitText>
               </View>
@@ -212,53 +305,88 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
                 <FitText style={s.coachSub}>{participantLabel}</FitText>
               </View>
             </View>
-            <View style={[s.statusBadge, { borderColor: statusColor + "44", backgroundColor: statusColor + "12" }]}>
+
+            <View
+              style={[
+                s.statusBadge,
+                {
+                  borderColor: `${statusColor}44`,
+                  backgroundColor: `${statusColor}12`,
+                },
+              ]}
+            >
               <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-              <FitText style={[s.statusText, { color: statusColor }]}>{statusValue}</FitText>
+              <FitText style={[s.statusText, { color: statusColor }]}>
+                {statusValue}
+              </FitText>
             </View>
+
+            <View style={s.priceCard}>
+              <FitText style={s.detailLabel}>TYPE</FitText>
+              <FitText style={s.detailValue}>{bookingTypeLabel}</FitText>
+              <FitText style={s.priceSub}>{bookingSummaryLabel}</FitText>
+            </View>
+
             {booking.description ? (
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>NOTES</FitText>
                 <FitText style={s.detailValue}>{booking.description}</FitText>
               </View>
             ) : null}
+
             {showPaymentPlan ? (
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>PAYMENT PLAN</FitText>
                 <FitText style={s.detailValue}>{paymentPlanLabel}</FitText>
                 <FitText style={s.priceSub}>
-                  Pay now: ₱{amountDueNow.toLocaleString()}
+                  Pay now: {formatCurrency(amountDueNow)}
                 </FitText>
                 <FitText style={s.priceSub}>
                   {remainingBalance > 0
-                    ? `Remaining balance: ₱${remainingBalance.toLocaleString()} on or after ${formatBookingDate(booking.nextPaymentDate ?? booking.date)}`
+                    ? `Remaining balance: ${formatCurrency(remainingBalance)} on or after ${formatBookingDate(
+                        booking.nextPaymentDate ?? booking.date,
+                      )}`
                     : "No remaining balance after the first payment is confirmed."}
                 </FitText>
               </View>
             ) : null}
+
             <View style={s.priceCard}>
               <FitText style={s.detailLabel}>PRICE</FitText>
-              <FitText style={s.priceValue}>₱{totalPrice.toLocaleString()}</FitText>
+              <FitText style={s.priceValue}>
+                {formatCurrency(totalPrice)}
+              </FitText>
               <FitText style={s.priceSub}>
-                {pricing.parsed && venuePresentation ? `₱${venuePresentation.price}/${venuePresentation.unit} x ${pricing.hours}hr` : ""}
+                {pricing.parsed && venuePresentation
+                  ? `${formatCurrency(venuePresentation.price)}/${venuePresentation.unit} x ${pricing.hours}hr`
+                  : ""}
               </FitText>
             </View>
           </ScrollView>
+
           <Animated.View style={[s.footer, footerBorderStyle]}>
             {actions.map((action) => (
+              <View key={action.key} style={s.footerActionWrap}>
+                <FitButton
+                  label={action.label}
+                  variant={action.variant}
+                  icon={action.icon}
+                  onPress={() => action.onPress(booking)}
+                  disabled={action.disabled}
+                  loading={action.loading}
+                  loadingLabel={action.loadingLabel}
+                  flex={1}
+                />
+              </View>
+            ))}
+            <View style={s.footerActionWrap}>
               <FitButton
-                key={action.key}
-                label={action.label}
-                variant={action.variant}
-                icon={action.icon}
-                onPress={() => action.onPress(booking)}
-                disabled={action.disabled}
-                loading={action.loading}
-                loadingLabel={action.loadingLabel}
+                label="Close"
+                variant="ghost"
+                onPress={onClose}
                 flex={1}
               />
-            ))}
-            <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
+            </View>
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -269,7 +397,7 @@ export default function BookingDetailModal({ isVisible, booking, venue = null, o
 const localStyles = StyleSheet.create({
   resourceIconCard: {
     alignItems: "center",
-    gap: 10
+    gap: 10,
   },
   venueIconWrap: {
     width: 80,
@@ -277,6 +405,6 @@ const localStyles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     alignItems: "center",
-    justifyContent: "center"
-  }
+    justifyContent: "center",
+  },
 });

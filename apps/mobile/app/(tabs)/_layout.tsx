@@ -79,7 +79,7 @@ function TabsLayoutInner() {
       router.replace("/(auth)/login");
       return;
     }
-    if (user?.role !== "USER" && user?.role !== "COACH") {
+    if (user?.role !== "USER") {
       router.replace("/(auth)/login");
     }
   }, [isAuthenticated, isLoading, router, user?.role]);

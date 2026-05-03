@@ -36,7 +36,7 @@ export class AdminUsersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary: 'Archive a user directory record by soft deleting the account.',
   })
@@ -44,11 +44,11 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.adminUsersService.softDeleteUser(id, user.sub);
+    return this.adminUsersService.softDeleteUser(id, user.sub, user.role);
   }
 
   @Patch(':id/restore')
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary: 'Restore an archived user directory record to active status.',
   })
@@ -56,7 +56,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.adminUsersService.restoreUser(id, user.sub);
+    return this.adminUsersService.restoreUser(id, user.sub, user.role);
   }
 
   @Post('upgrade-to-coach')
@@ -73,7 +73,7 @@ export class AdminUsersController {
   }
 
   @Patch(':id/membership-card')
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary:
       'Grant or revoke membership-card access for a member directory record.',

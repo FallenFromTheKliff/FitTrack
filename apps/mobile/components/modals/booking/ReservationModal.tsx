@@ -1,10 +1,24 @@
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, CheckCircle, Clock, Plus, Users, XCircle } from "lucide-react-native";
+import {
+  CalendarDays,
+  CheckCircle,
+  Clock,
+  Plus,
+  Users,
+  XCircle,
+} from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PAYMONGO_AVAILABILITY, WEEKDAY_NAMES, isPaymongoCheckoutEnabled } from "@fittrack/app-config";
-import type { CoachAvailabilityResponse, VenueAvailabilityRecord } from "@fittrack/api-client";
+import {
+  PAYMONGO_AVAILABILITY,
+  WEEKDAY_NAMES,
+  isPaymongoCheckoutEnabled,
+} from "@fittrack/app-config";
+import type {
+  CoachAvailabilityResponse,
+  VenueAvailabilityRecord,
+} from "@fittrack/api-client";
 import type { CoachProfileRecord } from "@fittrack/types";
 
 import {
@@ -12,7 +26,7 @@ import {
   coachAvailabilityQueryOptions,
   createBookingMutationOptions,
   venueAvailabilityQueryOptions,
-  venuesQueryOptions
+  venuesQueryOptions,
 } from "@fittrack/query";
 import { TIME_SLOTS, getTodayString } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
@@ -26,8 +40,11 @@ import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
 
 import { FitButton, FitText, FitTextInput } from "@/components/fit";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
+import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import NoticeModal from "@/components/modals/shared/NoticeModal";
-import TimeSlotModal, { type TimeSlot } from "@/components/modals/shared/TimeSlotModal";
+import TimeSlotModal, {
+  type TimeSlot,
+} from "@/components/modals/shared/TimeSlotModal";
 
 type Props = {
   isVisible: boolean;
@@ -35,7 +52,15 @@ type Props = {
   onSuccess?: () => void;
 };
 
-type BookingPaymentOption = "cash_downpayment" | "cash_full" | "paymongo_downpayment";
+type BookingPaymentOption =
+  | "cash_downpayment"
+  | "cash_full"
+  | "paymongo_downpayment";
+type ReservationConfirmationState = {
+  message: string;
+  title: string;
+  yesLabel: string;
+};
 
 function timeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -59,22 +84,103 @@ function matchesDay(selectedDate: string, dayValue: number | string) {
   if (typeof dayValue === "number") {
     return dayValue === dayIndex;
   }
-  return WEEKDAY_NAMES[dayIndex] === dayValue.toLowerCase();
+  const normalized = String(dayValue).trim().toLowerCase();
+  const numericDay = Number(normalized);
+  if (Number.isInteger(numericDay)) {
+    return numericDay === dayIndex;
+  }
+  return WEEKDAY_NAMES[dayIndex] === normalized;
+}
+
+function getUpcomingAvailableDates(coaches: CoachProfileRecord[]) {
+  const availableDays = new Set<number>();
+  coaches.forEach((coach) => {
+    coach.availability?.forEach((slot) => {
+      if (!slot.isAvailable) return;
+      if (typeof slot.dayOfWeek === "number") {
+        availableDays.add(slot.dayOfWeek);
+        return;
+      }
+      const normalizedDay = String(slot.dayOfWeek).trim().toLowerCase();
+      const numericDay = Number(normalizedDay);
+      if (Number.isInteger(numericDay)) {
+        availableDays.add(numericDay);
+        return;
+      }
+      const weekdayIndex = WEEKDAY_NAMES.findIndex((day) => day === normalizedDay);
+      if (weekdayIndex >= 0) availableDays.add(weekdayIndex);
+    });
+  });
+
+  if (availableDays.size === 0) return [];
+
+  const dates: string[] = [];
+  const cursor = new Date(`${getTodayString()}T00:00:00`);
+  for (let offset = 0; offset < 90; offset += 1) {
+    const nextDate = new Date(cursor);
+    nextDate.setDate(cursor.getDate() + offset);
+    const year = nextDate.getFullYear();
+    const month = String(nextDate.getMonth() + 1).padStart(2, "0");
+    const day = String(nextDate.getDate()).padStart(2, "0");
+    const dateKey = `${year}-${month}-${day}`;
+    const hasOpenCoach = coaches.some(
+      (coach) =>
+        !(coach.bookedDates ?? []).includes(dateKey) &&
+        coach.availability?.some(
+          (slot) =>
+            slot.isAvailable && matchesDay(dateKey, slot.dayOfWeek),
+        ),
+    );
+    if (availableDays.has(nextDate.getDay()) && hasOpenCoach) {
+      dates.push(dateKey);
+    }
+  }
+
+  return dates;
+}
+
+function coachCoversReservationWindow(
+  coach: CoachProfileRecord,
+  selectedDate: string,
+  selectedStartTime: string,
+  selectedEndTime: string,
+) {
+  const slots = coach.availability ?? [];
+  if (!slots.length) return false;
+  if (coach.bookedDates?.includes(selectedDate)) return false;
+
+  if (!selectedStartTime || !selectedEndTime) {
+    return slots.some(
+      (slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek),
+    );
+  }
+
+  const startMinutes = timeToMinutes(selectedStartTime);
+  const endMinutes = timeToMinutes(selectedEndTime);
+  return slots.some(
+    (slot) =>
+      slot.isAvailable &&
+      matchesDay(selectedDate, slot.dayOfWeek) &&
+      timeValueToMinutes(slot.startTime) <= startMinutes &&
+      timeValueToMinutes(slot.endTime) >= endMinutes,
+  );
 }
 
 function getCoachName(coach: CoachProfileRecord) {
-  const firstName = coach.user?.profile?.firstName?.trim() ?? "";
-  const lastName = coach.user?.profile?.lastName?.trim() ?? "";
-  return `${firstName} ${lastName}`.trim() || coach.user?.email || "Coach";
+  const standaloneName = coach.displayName?.trim();
+  if (standaloneName && !standaloneName.includes("@")) return standaloneName;
+  return "Coach Profile";
 }
 
 function getCoachInitials(coach: CoachProfileRecord) {
-  return getCoachName(coach)
-    .split(" ")
-    .filter((part) => part.length > 0)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "C";
+  return (
+    getCoachName(coach)
+      .split(" ")
+      .filter((part) => part.length > 0)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "C"
+  );
 }
 
 function getCoachPriceLabel(coach: CoachProfileRecord) {
@@ -89,20 +195,37 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function toGymWallClockIso(date: string, minutes: number) {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const [year, month, day] = date.split("-").map(Number);
+  const gymOffsetMinutes = 8 * 60;
+  return new Date(
+    Date.UTC(year, month - 1, day, hour, minute) -
+      gymOffsetMinutes * 60 * 1000,
+  ).toISOString();
+}
+
 function formatCurrency(value: number) {
   return `₱${value.toLocaleString("en-PH", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
-export default function ReservationModal({ isVisible, onClose, onSuccess }: Props) {
+export default function ReservationModal({
+  isVisible,
+  onClose,
+  onSuccess,
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeReservationModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
-  const createBookingMutation = useMutation(createBookingMutationOptions(mobileApiClient, queryClient));
+  const createBookingMutation = useMutation(
+    createBookingMutationOptions(mobileApiClient, queryClient),
+  );
   const canUsePaymongo = isPaymongoCheckoutEnabled();
   const defaultPaymentOption: BookingPaymentOption = canUsePaymongo
     ? "paymongo_downpayment"
@@ -112,13 +235,19 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
-  const [paymentOption, setPaymentOption] = useState<BookingPaymentOption>(defaultPaymentOption);
+  const [paymentOption, setPaymentOption] =
+    useState<BookingPaymentOption>(defaultPaymentOption);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedVenue, setSelectedVenue] = useState<VenueRecord | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [isPaymongoNoticeOpen, setIsPaymongoNoticeOpen] = useState(false);
-  const [successNotice, setSuccessNotice] = useState<{ message: string; title: string } | null>(null);
+  const [reservationConfirmation, setReservationConfirmation] =
+    useState<ReservationConfirmationState | null>(null);
+  const [successNotice, setSuccessNotice] = useState<{
+    message: string;
+    title: string;
+  } | null>(null);
   const [timeTarget, setTimeTarget] = useState<"start" | "end">("start");
   const isSubmitting = createBookingMutation.isPending;
   const [apiError, setApiError] = useState("");
@@ -126,80 +255,131 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
 
   const { data: venues = [] } = useQuery({
     ...venuesQueryOptions(mobileApiClient),
-    enabled: isVisible
+    enabled: isVisible,
   });
   const {
     data: coaches = [],
     isLoading: coachesLoading,
-    error: coachesError
+    error: coachesError,
   } = useQuery({
     ...activeCoachesQueryOptions<CoachProfileRecord>(mobileApiClient),
-    enabled: isVisible
+    enabled: isVisible,
   });
 
   const bookableVenues = useMemo(
-    () => venues
-      .filter((venue) => venue.isReservable !== false)
-      .map((venue) => ({ venue, presentation: getVenuePresentation(venue) })),
-    [venues]
+    () =>
+      venues
+        .filter((venue) => venue.isReservable !== false)
+        .map((venue) => ({ venue, presentation: getVenuePresentation(venue) })),
+    [venues],
   );
   const selectedVenuePresentation = useMemo(
     () => (selectedVenue ? getVenuePresentation(selectedVenue) : null),
-    [selectedVenue]
+    [selectedVenue],
   );
   const selectedCoach = useMemo(
     () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
-    [coaches, selectedCoachId]
+    [coaches, selectedCoachId],
+  );
+  const availableCoachAddOns = useMemo(
+    () =>
+      coaches.filter((coach) =>
+        coachCoversReservationWindow(coach, date, startTime, endTime),
+      ),
+    [coaches, date, endTime, startTime],
+  );
+  const highlightedCoachDates = useMemo(
+    () => getUpcomingAvailableDates(coaches),
+    [coaches],
   );
 
   const { data: availability = [] } = useQuery({
-    ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(mobileApiClient, selectedVenue?.id, date),
-    enabled: isVisible && !!selectedVenue && !!date
+    ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
+      mobileApiClient,
+      selectedVenue?.id,
+      date,
+    ),
+    enabled: isVisible && !!selectedVenue && !!date,
   });
   const {
     data: coachAvailability,
     isLoading: coachAvailabilityLoading,
-    error: coachAvailabilityError
+    error: coachAvailabilityError,
   } = useQuery({
     ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(
       mobileApiClient,
-      selectedCoach ? String(selectedCoach.id) : undefined
+      selectedCoach ? String(selectedCoach.id) : undefined,
     ),
-    enabled: isVisible && !!selectedCoach
+    enabled: isVisible && !!selectedCoach,
   });
 
-  const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
+  const backdropStyle = useAnimatedStyle(() => ({
+    backgroundColor: ic.value.overlay,
+  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
     backgroundColor: ic.value.surface,
-    borderColor: ic.value.border
+    borderColor: ic.value.border,
   }));
-  const headerBorderStyle = useAnimatedStyle(() => ({ borderBottomColor: ic.value.border }));
-  const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
+  const headerBorderStyle = useAnimatedStyle(() => ({
+    borderBottomColor: ic.value.border,
+  }));
+  const footerBorderStyle = useAnimatedStyle(() => ({
+    borderTopColor: ic.value.border,
+  }));
 
-  const basePrice = useMemo(() => selectedVenuePresentation?.price ?? 0, [selectedVenuePresentation]);
+  useEffect(() => {
+    if (
+      selectedCoachId &&
+      !availableCoachAddOns.some((coach) => String(coach.id) === selectedCoachId)
+    ) {
+      setSelectedCoachId(null);
+    }
+  }, [availableCoachAddOns, selectedCoachId]);
+
+  const basePrice = useMemo(
+    () => selectedVenuePresentation?.price ?? 0,
+    [selectedVenuePresentation],
+  );
+  const coachHourlyRate = useMemo(() => {
+    if (!selectedCoach || selectedCoach.hourlyRate == null) return 0;
+    return Number.isFinite(selectedCoach.hourlyRate)
+      ? selectedCoach.hourlyRate
+      : 0;
+  }, [selectedCoach]);
   const reservationHours = useMemo(() => {
     if (!startTime || !endTime) return 0;
     const totalHours = (timeToMinutes(endTime) - timeToMinutes(startTime)) / 60;
     return totalHours > 0 ? totalHours : 0;
   }, [endTime, startTime]);
-  const totalAmount = useMemo(
+  const venueTotalAmount = useMemo(
     () => roundCurrency(basePrice * reservationHours),
-    [basePrice, reservationHours]
+    [basePrice, reservationHours],
+  );
+  const coachAddOnAmount = useMemo(
+    () => roundCurrency(coachHourlyRate * reservationHours),
+    [coachHourlyRate, reservationHours],
+  );
+  const totalAmount = useMemo(
+    () => roundCurrency(venueTotalAmount + coachAddOnAmount),
+    [coachAddOnAmount, venueTotalAmount],
   );
   const isFreeReservation = totalAmount <= 0;
   const splitAmountDueNow = useMemo(
     () => roundCurrency(totalAmount * 0.3),
-    [totalAmount]
+    [totalAmount],
   );
   const splitRemainingBalance = useMemo(
     () => roundCurrency(Math.max(0, totalAmount - splitAmountDueNow)),
-    [splitAmountDueNow, totalAmount]
+    [splitAmountDueNow, totalAmount],
   );
-  const amountDueNow = paymentOption === "cash_full" ? totalAmount : splitAmountDueNow;
-  const remainingBalance = paymentOption === "cash_full" ? 0 : splitRemainingBalance;
-  const paymentProvider = paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
+  const amountDueNow =
+    paymentOption === "cash_full" ? totalAmount : splitAmountDueNow;
+  const remainingBalance =
+    paymentOption === "cash_full" ? 0 : splitRemainingBalance;
+  const paymentProvider =
+    paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
   const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
   const confirmButtonLabel = isFreeReservation
     ? "Confirm Reservation"
@@ -213,7 +393,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
       return {
         body: "This reservation currently prices at PHP 0, so no upfront payment is required.",
         eyebrow: "Free access",
-        title: "No checkout required"
+        title: "No checkout required",
       };
     }
 
@@ -221,7 +401,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
       return {
         body: `Staff will verify your full cash payment of ${formatCurrency(totalAmount)} before the reservation is treated as fully paid.`,
         eyebrow: "Cash",
-        title: "Full payment"
+        title: "Full payment",
       };
     }
 
@@ -229,16 +409,23 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
       return {
         body: `Submit a cash downpayment now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
         eyebrow: "Cash",
-        title: "Split payment"
+        title: "Split payment",
       };
     }
 
     return {
       body: `Start PayMongo checkout for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
       eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
-      title: "Online downpayment"
+      title: "Online downpayment",
     };
-  }, [canUsePaymongo, isFreeReservation, paymentOption, splitAmountDueNow, splitRemainingBalance, totalAmount]);
+  }, [
+    canUsePaymongo,
+    isFreeReservation,
+    paymentOption,
+    splitAmountDueNow,
+    splitRemainingBalance,
+    totalAmount,
+  ]);
 
   const endSlots = useMemo((): TimeSlot[] => {
     if (!startTime) return [];
@@ -257,11 +444,14 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     const selStart = timeToMinutes(startTime);
     const selEnd = timeToMinutes(endTime);
     return availability.some((booking) => {
-      if (booking.status !== "confirmed" && booking.status !== "pending") return false;
+      if (booking.status !== "confirmed" && booking.status !== "pending")
+        return false;
       const bookingStart = new Date(booking.startTime);
       const bookingEnd = new Date(booking.endTime);
-      const bookingStartMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
-      const bookingEndMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
+      const bookingStartMinutes =
+        bookingStart.getHours() * 60 + bookingStart.getMinutes();
+      const bookingEndMinutes =
+        bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
       return selStart < bookingEndMinutes && selEnd > bookingStartMinutes;
     });
   }, [availability, date, endTime, selectedVenue, startTime]);
@@ -272,13 +462,20 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     if (!coachAvailability?.availability) return false;
     const startMinutes = timeToMinutes(startTime);
     const endMinutes = timeToMinutes(endTime);
-    return coachAvailability.availability.some((slot) =>
-      slot.isAvailable &&
-      matchesDay(date, slot.dayOfWeek) &&
-      timeValueToMinutes(slot.startTime) <= startMinutes &&
-      timeValueToMinutes(slot.endTime) >= endMinutes
+    return coachAvailability.availability.some(
+      (slot) =>
+        slot.isAvailable &&
+        matchesDay(date, slot.dayOfWeek) &&
+        timeValueToMinutes(slot.startTime) <= startMinutes &&
+        timeValueToMinutes(slot.endTime) >= endMinutes,
     );
-  }, [coachAvailability?.availability, date, endTime, selectedCoach, startTime]);
+  }, [
+    coachAvailability?.availability,
+    date,
+    endTime,
+    selectedCoach,
+    startTime,
+  ]);
 
   const coachStatusMessage = useMemo(() => {
     if (!selectedCoach) {
@@ -299,7 +496,14 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
       return "This coach does not currently cover the selected reservation window.";
     }
     return `${getCoachName(selectedCoach)} is available for the selected reservation window.`;
-  }, [coachAvailabilityError, coachAvailabilityLoading, coachMatchesWindow, endTime, selectedCoach, startTime]);
+  }, [
+    coachAvailabilityError,
+    coachAvailabilityLoading,
+    coachMatchesWindow,
+    endTime,
+    selectedCoach,
+    startTime,
+  ]);
 
   const canConfirm =
     !!date &&
@@ -322,6 +526,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     setIsTimeOpen(false);
     setApiError("");
     setSuccessNotice(null);
+    setReservationConfirmation(null);
   };
 
   const handleClose = () => {
@@ -341,21 +546,25 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
     setIsTimeOpen(false);
   };
 
-  const handleConfirm = async () => {
+  const submitReservation = async () => {
     if (!canConfirm || !selectedVenue) return;
     setApiError("");
-    if (!isFreeReservation && paymentProvider === "paymongo" && !canUsePaymongo) {
+    if (
+      !isFreeReservation &&
+      paymentProvider === "paymongo" &&
+      !canUsePaymongo
+    ) {
       setIsPaymongoNoticeOpen(true);
       return;
     }
     const startMinutes = timeToMinutes(startTime);
-    const endMinutes = timeToMinutes(endTime);
-    const startHour24 = Math.floor(startMinutes / 60);
-    const startMinute = startMinutes % 60;
-    const isoStart = `${date}T${String(startHour24).padStart(2, "0")}:${String(startMinute).padStart(2, "0")}:00`;
-    const purpose = notes.filter((note) => note.trim() !== "").join("\n") || undefined;
+    const isoStart = toGymWallClockIso(date, startMinutes);
+    const purpose =
+      notes.filter((note) => note.trim() !== "").join("\n") || undefined;
     if (selectedCoach && !coachMatchesWindow) {
-      setApiError("Selected coach does not currently cover this reservation window.");
+      setApiError(
+        "Selected coach does not currently cover this reservation window.",
+      );
       return;
     }
     try {
@@ -368,12 +577,12 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
             venueId: selectedVenue.id,
             startTime: isoStart,
             durationHours: reservationHours,
-            purpose
+            purpose,
           },
           venueId: selectedVenue.id,
-          date
+          date,
         }),
-        new Promise((resolve) => setTimeout(resolve, 2000))
+        new Promise((resolve) => setTimeout(resolve, 2000)),
       ]).then(([response]) => response);
       if (result?.checkout_url) {
         handleReset();
@@ -398,17 +607,73 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
       onSuccess?.();
       setSuccessNotice({
         title: successTitle,
-        message: successMessage
+        message: successMessage,
       });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : "Reservation failed. Please try again.");
+      setApiError(
+        err instanceof Error
+          ? err.message
+          : "Reservation failed. Please try again.",
+      );
     }
   };
 
+  const handleConfirm = () => {
+    if (!canConfirm || !selectedVenue) return;
+
+    const venueName = selectedVenuePresentation?.name ?? "your venue";
+    const scheduleLabel = `${formatBookingDate(date)} at ${startTime} - ${endTime}`;
+
+    if (isFreeReservation) {
+      setReservationConfirmation({
+        title: "Confirm reservation?",
+        message: `Reserve ${venueName} for ${scheduleLabel}. No upfront payment will be collected for this booking.`,
+        yesLabel: "Confirm Reservation",
+      });
+      return;
+    }
+
+    if (paymentOption === "paymongo_downpayment") {
+      setReservationConfirmation({
+        title: "Continue to PayMongo?",
+        message: `You are about to start PayMongo checkout for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.`,
+        yesLabel: "Continue to PayMongo",
+      });
+      return;
+    }
+
+    if (paymentOption === "cash_full") {
+      setReservationConfirmation({
+        title: "Submit full cash payment?",
+        message: `Submit a full cash payment request for ${formatCurrency(totalAmount)} for ${venueName} on ${scheduleLabel}. Staff will still verify the payment before it is treated as fully paid.`,
+        yesLabel: "Submit Full Payment",
+      });
+      return;
+    }
+
+    setReservationConfirmation({
+      title: "Submit cash downpayment?",
+      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} will stay due on or after the booking date.`,
+      yesLabel: "Submit Downpayment",
+    });
+  };
+
   return (
-    <Modal visible={isVisible} transparent animationType="none" onRequestClose={undefined} statusBarTranslucent>
-      <Animated.View style={[s.backdrop, backdropStyle]}>
-        <Animated.View style={[s.card, cardStyle]}>
+    <Fragment>
+      <Modal
+        visible={
+          isVisible &&
+          reservationConfirmation == null &&
+          successNotice == null &&
+          !isPaymongoNoticeOpen
+        }
+        transparent
+        animationType="none"
+        onRequestClose={handleClose}
+        statusBarTranslucent
+      >
+        <Animated.View style={[s.backdrop, backdropStyle]}>
+          <Animated.View style={[s.card, cardStyle]}>
           <Animated.View style={[s.header, headerBorderStyle]}>
             <View style={s.headerIcon}>
               <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
@@ -422,28 +687,57 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
               </FitText>
             </View>
           </Animated.View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.body}
+          >
             <FitText style={s.sectionLabel}>DATE</FitText>
             <Pressable
-              style={[s.fieldBtn, { borderColor: date ? colors.brand : colors.fieldBorder }]}
+              style={[
+                s.fieldBtn,
+                { borderColor: date ? colors.brand : colors.fieldBorder },
+              ]}
               onPress={() => setIsCalOpen(true)}
             >
-              <CalendarDays size={16} color={date ? colors.brand : colors.textMuted} strokeWidth={2} />
-              <FitText style={[s.fieldBtnText, date && { color: colors.textPrimary }]}>
+              <CalendarDays
+                size={16}
+                color={date ? colors.brand : colors.textMuted}
+                strokeWidth={2}
+              />
+              <FitText
+                style={[s.fieldBtnText, date && { color: colors.textPrimary }]}
+              >
                 {date ? formatBookingDate(date) : "Select a date"}
               </FitText>
             </Pressable>
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>TIME RANGE</FitText>
+            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+              TIME RANGE
+            </FitText>
             <View style={s.twoFieldRow}>
               <Pressable
-                style={[s.fieldBtn, s.fieldBtnFlex, { borderColor: startTime ? colors.brand : colors.fieldBorder }]}
+                style={[
+                  s.fieldBtn,
+                  s.fieldBtnFlex,
+                  {
+                    borderColor: startTime ? colors.brand : colors.fieldBorder,
+                  },
+                ]}
                 onPress={() => {
                   setTimeTarget("start");
                   setIsTimeOpen(true);
                 }}
               >
-                <Clock size={16} color={startTime ? colors.brand : colors.textMuted} strokeWidth={2} />
-                <FitText style={[s.fieldBtnText, startTime && { color: colors.textPrimary }]}>
+                <Clock
+                  size={16}
+                  color={startTime ? colors.brand : colors.textMuted}
+                  strokeWidth={2}
+                />
+                <FitText
+                  style={[
+                    s.fieldBtnText,
+                    startTime && { color: colors.textPrimary },
+                  ]}
+                >
                   {startTime || "Start Time"}
                 </FitText>
               </Pressable>
@@ -451,7 +745,10 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                 style={[
                   s.fieldBtn,
                   s.fieldBtnFlex,
-                  { borderColor: endTime ? colors.brand : colors.fieldBorder, opacity: !startTime ? 0.45 : 1 }
+                  {
+                    borderColor: endTime ? colors.brand : colors.fieldBorder,
+                    opacity: !startTime ? 0.45 : 1,
+                  },
                 ]}
                 onPress={() => {
                   if (!startTime) return;
@@ -460,15 +757,34 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                 }}
                 disabled={!startTime}
               >
-                <Clock size={16} color={endTime ? colors.brand : colors.textMuted} strokeWidth={2} />
-                <FitText style={[s.fieldBtnText, endTime && { color: colors.textPrimary }]}>
+                <Clock
+                  size={16}
+                  color={endTime ? colors.brand : colors.textMuted}
+                  strokeWidth={2}
+                />
+                <FitText
+                  style={[
+                    s.fieldBtnText,
+                    endTime && { color: colors.textPrimary },
+                  ]}
+                >
                   {endTime || "End Time"}
                 </FitText>
               </Pressable>
             </View>
-            {startTime === "" || endTime === "" ? <FitText style={s.validationHint}>Start and end time are required</FitText> : null}
-            {hasConflict ? <FitText style={s.unavailableText}>The selected time overlaps an active booking.</FitText> : null}
-            {apiError !== "" ? <FitText style={s.unavailableText}>{apiError}</FitText> : null}
+            {startTime === "" || endTime === "" ? (
+              <FitText style={s.validationHint}>
+                Start and end time are required
+              </FitText>
+            ) : null}
+            {hasConflict ? (
+              <FitText style={s.unavailableText}>
+                The selected time overlaps an active booking.
+              </FitText>
+            ) : null}
+            {apiError !== "" ? (
+              <FitText style={s.unavailableText}>{apiError}</FitText>
+            ) : null}
             <FitText style={[s.sectionLabel, { marginTop: 16 }]}>VENUE</FitText>
             <View style={s.amenityGrid}>
               {bookableVenues.map(({ venue, presentation }) => {
@@ -476,19 +792,42 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                 return (
                   <Pressable
                     key={venue.id}
-                    style={[s.amenityCard, isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "12" }]}
+                    style={[
+                      s.amenityCard,
+                      isActive && {
+                        borderColor: colors.brand,
+                        backgroundColor: colors.brand + "12",
+                      },
+                    ]}
                     onPress={() => setSelectedVenue(isActive ? null : venue)}
                   >
-                    <FitText style={s.amenityEmoji}>{presentation.name.slice(0, 1)}</FitText>
-                    <FitText style={[s.amenityName, isActive && { color: colors.brand, fontWeight: "600" }]} numberOfLines={2}>
+                    <FitText style={s.amenityEmoji}>
+                      {presentation.name.slice(0, 1)}
+                    </FitText>
+                    <FitText
+                      style={[
+                        s.amenityName,
+                        isActive && { color: colors.brand, fontWeight: "600" },
+                      ]}
+                      numberOfLines={2}
+                    >
                       {presentation.name}
                     </FitText>
-                    <FitText style={[s.amenityPrice, isActive && { color: colors.brand }]}>
+                    <FitText
+                      style={[
+                        s.amenityPrice,
+                        isActive && { color: colors.brand },
+                      ]}
+                    >
                       ₱{presentation.price}/{presentation.unit}
                     </FitText>
                     {isActive ? (
                       <View style={s.amenityCheck}>
-                        <CheckCircle size={14} color={colors.brand} strokeWidth={2} />
+                        <CheckCircle
+                          size={14}
+                          color={colors.brand}
+                          strokeWidth={2}
+                        />
                       </View>
                     ) : null}
                   </Pressable>
@@ -496,23 +835,34 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
               })}
             </View>
             <View style={s.notesSectionHeader}>
-              <FitText style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}>COACH ADD-ON</FitText>
+              <FitText
+                style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
+              >
+                COACH ADD-ON
+              </FitText>
               <FitText style={s.optionalLabel}>Optional</FitText>
             </View>
             <FitText style={s.validationHint}>
-              Review a coach profile here if you want to attach one to this venue reservation.
+              Review a coach profile here if you want to attach one to this
+              venue reservation.
             </FitText>
             {coachesLoading ? (
-              <FitText style={s.validationHint}>Loading coach profiles...</FitText>
+              <FitText style={s.validationHint}>
+                Loading coach profiles...
+              </FitText>
             ) : coachesError ? (
               <FitText style={s.unavailableText}>
-                {coachesError instanceof Error ? coachesError.message : "Unable to load coach profiles."}
+                {coachesError instanceof Error
+                  ? coachesError.message
+                  : "Unable to load coach profiles."}
               </FitText>
-            ) : coaches.length === 0 ? (
-              <FitText style={s.validationHint}>No bookable coaches are available right now.</FitText>
+            ) : coaches.length === 0 || availableCoachAddOns.length === 0 ? (
+              <FitText style={s.validationHint}>
+                No coach add-ons are available for the selected date and time.
+              </FitText>
             ) : (
               <View style={s.trainerList}>
-                {coaches.map((coach) => {
+                {availableCoachAddOns.map((coach) => {
                   const isActive = selectedCoach?.id === coach.id;
                   return (
                     <Pressable
@@ -521,26 +871,40 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                         s.trainerRow,
                         isActive && {
                           borderColor: colors.brand,
-                          backgroundColor: colors.brand + "12"
-                        }
+                          backgroundColor: colors.brand + "12",
+                        },
                       ]}
                       onPress={() => {
                         setApiError("");
                         setSelectedCoachId(isActive ? null : String(coach.id));
                       }}
                     >
-                      <View style={[s.trainerAvatar, isActive && { backgroundColor: colors.brand }]}>
-                        <FitText style={[s.trainerAvatarText, isActive && { color: colors.surface }]}>
+                      <View
+                        style={[
+                          s.trainerAvatar,
+                          isActive && { backgroundColor: colors.brand },
+                        ]}
+                      >
+                        <FitText
+                          style={[
+                            s.trainerAvatarText,
+                            isActive && { color: colors.surface },
+                          ]}
+                        >
                           {getCoachInitials(coach)}
                         </FitText>
                       </View>
                       <View style={s.trainerInfo}>
-                        <FitText style={s.trainerName}>{getCoachName(coach)}</FitText>
+                        <FitText style={s.trainerName}>
+                          {getCoachName(coach)}
+                        </FitText>
                         <FitText style={s.trainerSpecialty}>
-                          {(coach.specialties?.[0] ?? "General Coaching")} {" - "} {getCoachPriceLabel(coach)}
+                          {coach.specialties?.[0] ?? "General Coaching"} {" - "}{" "}
+                          {getCoachPriceLabel(coach)}
                         </FitText>
                         <FitText style={s.validationHint}>
-                          {coach.bio?.trim() || "Staff has not added a coach bio yet."}
+                          {coach.bio?.trim() ||
+                            "Staff has not added a coach bio yet."}
                         </FitText>
                       </View>
                       {isActive ? (
@@ -551,23 +915,37 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                 })}
               </View>
             )}
-            <FitText style={coachMatchesWindow ? s.validationHint : s.unavailableText}>
+            <FitText
+              style={coachMatchesWindow ? s.validationHint : s.unavailableText}
+            >
               {coachStatusMessage}
             </FitText>
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>VENUE RATE</FitText>
+            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+              VENUE RATE
+            </FitText>
             <View style={[s.inputFieldWrap, { opacity: 0.6 }]}>
               <FitText style={s.inputPrefix}>₱</FitText>
-              <FitText style={s.inputField}>{basePrice > 0 ? String(basePrice) : "—"}</FitText>
+              <FitText style={s.inputField}>
+                {basePrice > 0 ? String(basePrice) : "—"}
+              </FitText>
             </View>
             {startTime && endTime ? (
               <>
-                <FitText style={[s.sectionLabel, { marginTop: 16 }]}>PAYMENT OPTIONS</FitText>
+                <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+                  PAYMENT OPTIONS
+                </FitText>
                 {isFreeReservation ? (
                   <View style={s.paymentSummaryCard}>
-                    <FitText style={s.paymentSummaryEyebrow}>Free access</FitText>
-                    <FitText style={s.paymentSummaryTitle}>No upfront payment required</FitText>
+                    <FitText style={s.paymentSummaryEyebrow}>
+                      Free access
+                    </FitText>
+                    <FitText style={s.paymentSummaryTitle}>
+                      No upfront payment required
+                    </FitText>
                     <FitText style={s.paymentSummaryBody}>
-                      This reservation currently prices at {formatCurrency(totalAmount)} for {reservationHours} hour{reservationHours === 1 ? "" : "s"}.
+                      This reservation currently prices at{" "}
+                      {formatCurrency(totalAmount)} for {reservationHours} hour
+                      {reservationHours === 1 ? "" : "s"}.
                     </FitText>
                   </View>
                 ) : (
@@ -581,22 +959,22 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                           body: canUsePaymongo
                             ? `Leave ${formatCurrency(splitRemainingBalance)} for later.`
                             : "Temporarily unavailable on this local stack.",
-                          disabled: !canUsePaymongo
+                          disabled: !canUsePaymongo,
                         },
                         {
                           key: "cash_downpayment" as const,
                           label: "Cash Downpayment",
                           meta: `Pay now ${formatCurrency(splitAmountDueNow)}`,
                           body: `Settle ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
-                          disabled: false
+                          disabled: false,
                         },
                         {
                           key: "cash_full" as const,
                           label: "Cash Full Payment",
                           meta: `Pay now ${formatCurrency(totalAmount)}`,
                           body: "No remaining balance after staff verifies the payment.",
-                          disabled: false
-                        }
+                          disabled: false,
+                        },
                       ].map((option) => {
                         const isActive = paymentOption === option.key;
                         return (
@@ -606,9 +984,9 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                               s.paymentOptionCard,
                               isActive && {
                                 borderColor: colors.brand,
-                                backgroundColor: colors.brand + "12"
+                                backgroundColor: colors.brand + "12",
                               },
-                              option.disabled && s.paymentOptionCardDisabled
+                              option.disabled && s.paymentOptionCardDisabled,
                             ]}
                             onPress={() => {
                               if (option.disabled) {
@@ -619,32 +997,81 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                             }}
                           >
                             <View style={s.paymentOptionText}>
-                              <FitText style={[s.paymentOptionLabel, isActive && { color: colors.brand }]}>
+                              <FitText
+                                style={[
+                                  s.paymentOptionLabel,
+                                  isActive && { color: colors.brand },
+                                ]}
+                              >
                                 {option.label}
                               </FitText>
-                              <FitText style={s.paymentOptionMeta}>{option.meta}</FitText>
-                              <FitText style={s.paymentOptionBody}>{option.body}</FitText>
+                              <FitText style={s.paymentOptionMeta}>
+                                {option.meta}
+                              </FitText>
+                              <FitText style={s.paymentOptionBody}>
+                                {option.body}
+                              </FitText>
                             </View>
-                            {isActive ? <CheckCircle size={18} color={colors.brand} strokeWidth={2} /> : null}
+                            {isActive ? (
+                              <CheckCircle
+                                size={18}
+                                color={colors.brand}
+                                strokeWidth={2}
+                              />
+                            ) : null}
                           </Pressable>
                         );
                       })}
                     </View>
                     <View style={s.paymentSummaryCard}>
-                      <FitText style={s.paymentSummaryEyebrow}>{paymentOptionSummary.eyebrow}</FitText>
-                      <FitText style={s.paymentSummaryTitle}>{paymentOptionSummary.title}</FitText>
-                      <FitText style={s.paymentSummaryBody}>{paymentOptionSummary.body}</FitText>
+                      <FitText style={s.paymentSummaryEyebrow}>
+                        {paymentOptionSummary.eyebrow}
+                      </FitText>
+                      <FitText style={s.paymentSummaryTitle}>
+                        {paymentOptionSummary.title}
+                      </FitText>
+                      <FitText style={s.paymentSummaryBody}>
+                        {paymentOptionSummary.body}
+                      </FitText>
                       <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>Reservation total</FitText>
-                        <FitText style={s.paymentSummaryValue}>{formatCurrency(totalAmount)}</FitText>
+                        <FitText style={s.paymentSummaryLabel}>
+                          Venue subtotal
+                        </FitText>
+                        <FitText style={s.paymentSummaryValue}>
+                          {formatCurrency(venueTotalAmount)}
+                        </FitText>
+                      </View>
+                      {selectedCoach ? (
+                        <View style={s.paymentSummaryRow}>
+                          <FitText style={s.paymentSummaryLabel}>
+                            Coach add-on
+                          </FitText>
+                          <FitText style={s.paymentSummaryValue}>
+                            {formatCurrency(coachAddOnAmount)}
+                          </FitText>
+                        </View>
+                      ) : null}
+                      <View style={s.paymentSummaryRow}>
+                        <FitText style={s.paymentSummaryLabel}>
+                          Reservation total
+                        </FitText>
+                        <FitText style={s.paymentSummaryValue}>
+                          {formatCurrency(totalAmount)}
+                        </FitText>
                       </View>
                       <View style={s.paymentSummaryRow}>
                         <FitText style={s.paymentSummaryLabel}>Pay now</FitText>
-                        <FitText style={s.paymentSummaryValue}>{formatCurrency(amountDueNow)}</FitText>
+                        <FitText style={s.paymentSummaryValue}>
+                          {formatCurrency(amountDueNow)}
+                        </FitText>
                       </View>
                       <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>Remaining later</FitText>
-                        <FitText style={s.paymentSummaryValue}>{formatCurrency(remainingBalance)}</FitText>
+                        <FitText style={s.paymentSummaryLabel}>
+                          Remaining later
+                        </FitText>
+                        <FitText style={s.paymentSummaryValue}>
+                          {formatCurrency(remainingBalance)}
+                        </FitText>
                       </View>
                       <FitText style={s.paymentSummaryDeadline}>
                         {remainingBalance > 0
@@ -657,7 +1084,11 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
               </>
             ) : null}
             <View style={s.notesSectionHeader}>
-              <FitText style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}>NOTES</FitText>
+              <FitText
+                style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
+              >
+                NOTES
+              </FitText>
               <FitButton
                 variant="link"
                 icon={Plus}
@@ -669,11 +1100,12 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
             </View>
             {notes.map((note, idx) => {
               const atLimit = note.length >= 50;
-              const counterColor = note.length === 50
-                ? colors.danger
-                : note.length >= 40
-                  ? colors.warning
-                  : colors.textMuted;
+              const counterColor =
+                note.length === 50
+                  ? colors.danger
+                  : note.length >= 40
+                    ? colors.warning
+                    : colors.textMuted;
               return (
                 <View key={idx} style={s.noteRow}>
                   <View style={s.noteContent}>
@@ -683,29 +1115,54 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
                         value={note}
                         onChangeText={(text) => {
                           if (text.length > 50) return;
-                          setNotes((prev) => prev.map((currentNote, noteIndex) => (noteIndex === idx ? text : currentNote)));
+                          setNotes((prev) =>
+                            prev.map((currentNote, noteIndex) =>
+                              noteIndex === idx ? text : currentNote,
+                            ),
+                          );
                         }}
                         placeholder="Add a note..."
                         multiline
-                        style={[s.noteInput, atLimit && { color: colors.warning }]}
+                        style={[
+                          s.noteInput,
+                          atLimit && { color: colors.warning },
+                        ]}
                       />
                     </View>
-                    <FitText style={[s.noteCounter, { color: counterColor }]}>{note.length}/50</FitText>
+                    <FitText style={[s.noteCounter, { color: counterColor }]}>
+                      {note.length}/50
+                    </FitText>
                   </View>
                   <Pressable
-                    onPress={() => setNotes((prev) => prev.filter((_, noteIndex) => noteIndex !== idx))}
+                    onPress={() =>
+                      setNotes((prev) =>
+                        prev.filter((_, noteIndex) => noteIndex !== idx),
+                      )
+                    }
                     hitSlop={8}
                     style={s.noteRemoveBtn}
                   >
-                    <XCircle size={16} color={colors.textMuted} strokeWidth={2} />
+                    <XCircle
+                      size={16}
+                      color={colors.textMuted}
+                      strokeWidth={2}
+                    />
                   </Pressable>
                 </View>
               );
             })}
-            {notes.length === 0 ? <FitText style={s.notesEmptyHint}>Tap + to add a note</FitText> : null}
+            {notes.length === 0 ? (
+              <FitText style={s.notesEmptyHint}>Tap + to add a note</FitText>
+            ) : null}
           </ScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
-            <FitButton label="Cancel" variant="ghost" onPress={handleClose} disabled={isSubmitting} flex={1} />
+            <FitButton
+              label="Cancel"
+              variant="ghost"
+              onPress={handleClose}
+              disabled={isSubmitting}
+              flex={1}
+            />
             <FitButton
               label={isSubmitting ? reservingText : confirmButtonLabel}
               variant="primary"
@@ -717,6 +1174,7 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
           </Animated.View>
         </Animated.View>
       </Animated.View>
+      </Modal>
       <NoticeModal
         isVisible={isPaymongoNoticeOpen}
         title={PAYMONGO_AVAILABILITY.modalTitle}
@@ -732,12 +1190,30 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
           onClose();
         }}
       />
+      <ConfirmModal
+        isVisible={reservationConfirmation != null}
+        title={reservationConfirmation?.title ?? "Confirm action"}
+        message={reservationConfirmation?.message ?? ""}
+        yesLabel={reservationConfirmation?.yesLabel ?? "Confirm"}
+        noLabel="Cancel"
+        isLoading={isSubmitting}
+        loadingLabel={confirmButtonLabel.toUpperCase()}
+        loadingTitle="Submitting reservation"
+        onNo={() => {
+          if (isSubmitting) return;
+          setReservationConfirmation(null);
+        }}
+        onYes={() => {
+          void submitReservation();
+        }}
+      />
       <CalendarModal
         isVisible={isCalOpen}
         selectedDate={date}
         blockPast
         defaultYear={new Date().getFullYear()}
         defaultMonth={new Date().getMonth() + 1}
+        highlightedDates={highlightedCoachDates}
         onSelect={(selectedDate) => {
           setDate(selectedDate);
           setIsCalOpen(false);
@@ -751,6 +1227,6 @@ export default function ReservationModal({ isVisible, onClose, onSuccess }: Prop
         onSelect={handleTimePick}
         onClose={() => setIsTimeOpen(false)}
       />
-    </Modal>
+    </Fragment>
   );
 }

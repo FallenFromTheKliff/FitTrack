@@ -22,6 +22,7 @@ export {
   bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelRecurringCoachingPlanMutationOptions,
   createRecurringCoachingPlanMutationOptions,
+  payRecurringCoachingBillingCycleMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
   recurringCoachingPlanSessionsQueryOptions,
   updateRecurringCoachingSessionMutationOptions,
@@ -74,6 +75,7 @@ export {
   createAppointmentMutationOptions,
   declineCoachAppointmentMutationOptions,
   payAppointmentDownpaymentMutationOptions,
+  processAppointmentBalanceMutationOptions,
 } from "./appointments";
 export {
   adminBookingsQueryOptions,
@@ -81,10 +83,13 @@ export {
   adminGamificationOverviewQueryOptions,
   adminMembersQueryOptions,
   approveDeletionRequestMutationOptions,
+  cancelAdminBookingMutationOptions,
+  completeAdminBookingMutationOptions,
   confirmAdminBookingMutationOptions,
   createUserMutationOptions,
   deleteUserMutationOptions,
   manualAttendanceCheckInMutationOptions,
+  noShowAdminBookingMutationOptions,
   rejectAdminBookingMutationOptions,
   rejectDeletionRequestMutationOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
@@ -101,6 +106,7 @@ export {
   bookingsQueryOptions,
   cancelBookingMutationOptions,
   createBookingMutationOptions,
+  processBookingBalanceMutationOptions,
 } from "./bookings";
 export {
   analyzePoseSessionMutationOptions,
@@ -139,7 +145,9 @@ export {
   inventoryEquipmentQueryOptions,
   inventoryProductDetailQueryOptions,
   inventoryProductsQueryOptions,
+  inventorySalesAnalyticsQueryOptions,
   inventorySaleDetailQueryOptions,
+  inventorySalesSummaryQueryOptions,
   inventorySalesQueryOptions,
   restockInventoryProductMutationOptions,
   updateInventoryEquipmentMutationOptions,
@@ -213,8 +221,14 @@ export {
 } from "./cache";
 export {
   cancelStaffAppointmentMutationOptions,
+  cancelStaffBookingMutationOptions,
   completeStaffAppointmentMutationOptions,
+  completeStaffBookingMutationOptions,
+  createStaffAppointmentMutationOptions,
+  createStaffBookingMutationOptions,
+  createStaffCoachMutationOptions,
   confirmStaffBookingMutationOptions,
+  noShowStaffBookingMutationOptions,
   replaceStaffCoachAvailabilityMutationOptions,
   respondToStaffAppointmentMutationOptions,
   rejectStaffBookingMutationOptions,

@@ -64,11 +64,15 @@ export interface CoachUserSummary {
 export interface CoachProfileRecord {
   id: string;
   bio?: string | null;
+  displayName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   specialties?: string[];
   certifications?: string[];
   yearsExperience?: number | null;
   hourlyRate?: number | null;
   isActive?: boolean;
   availability?: CoachAvailabilityRecord[];
+  bookedDates?: string[];
   user?: CoachUserSummary | null;
 }

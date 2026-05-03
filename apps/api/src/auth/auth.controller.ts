@@ -46,6 +46,7 @@ import {
   ChangePasswordDTO,
   AdminCreateUserDTO,
   ResendOtpDTO,
+  AuthPortalSummaryDTO,
 } from './dto/auth.dto';
 
 // =============================================================================
@@ -159,6 +160,20 @@ export class AuthController {
     const result = await this.authService.login(dto, deviceInfo, ip);
     setRefreshCookie(res, result._refresh_token);
     return stripRefreshToken(result);
+  }
+
+  @Get('portal-summary')
+  @ApiOperation({
+    summary:
+      'Get the public login portal summary grounded in the live database.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Active members, sessions today, and all-time revenue.',
+    type: AuthPortalSummaryDTO,
+  })
+  getPortalSummary() {
+    return this.authService.getPortalSummary();
   }
 
   @Get('google')

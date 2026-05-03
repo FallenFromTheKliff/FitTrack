@@ -4,10 +4,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { VenueBookingRecord as ApiVenueBookingRecord } from "@fittrack/api-client";
 import {
   adminBookingsQueryOptions,
+  cancelAdminBookingMutationOptions,
+  cancelStaffBookingMutationOptions,
   clearScheduleBookingsQuery,
+  completeAdminBookingMutationOptions,
+  completeStaffBookingMutationOptions,
   confirmAdminBookingMutationOptions,
   confirmStaffBookingMutationOptions,
   invalidateScheduleBookingsQuery,
+  noShowAdminBookingMutationOptions,
+  noShowStaffBookingMutationOptions,
   rejectAdminBookingMutationOptions,
   rejectStaffBookingMutationOptions,
   staffBookingsQueryOptions
@@ -19,7 +25,16 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 
 export type VenueBookingRecord = ApiVenueBookingRecord & {
-  status: "pending" | "confirmed" | "cancelled" | "completed";
+  status:
+    | "pending"
+    | "pending_downpayment"
+    | "pending_payment"
+    | "pending_full_payment"
+    | "confirmed"
+    | "balance_pending"
+    | "cancelled"
+    | "completed"
+    | "no_show";
 };
 
 export type ScheduleBooking = {
@@ -43,7 +58,10 @@ export interface IScheduleContext {
   removeBooking: (bookingId: string) => void;
   updateBooking: (bookingId: string, updates: Partial<Booking>) => void;
   clearBookings: () => void;
+  cancelBooking: (bookingId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  completeBooking: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
   confirmBooking: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
+  noShowBooking: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
   rejectBooking: (bookingId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -58,9 +76,14 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const isStaff = user?.role === "STAFF";
   const statusColors: Record<VenueBookingRecord["status"], string> = {
     pending: colors.warning,
+    pending_downpayment: colors.warning,
+    pending_payment: colors.warning,
+    pending_full_payment: colors.warning,
     confirmed: colors.success,
+    balance_pending: colors.warning,
     cancelled: colors.danger,
-    completed: colors.textMuted
+    completed: colors.textMuted,
+    no_show: colors.danger
   };
 
   const staffBookingsQuery = useQuery({
@@ -100,6 +123,12 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   });
   const confirmAdminMutation = useMutation(confirmAdminBookingMutationOptions(webApiClient, queryClient));
   const confirmStaffMutation = useMutation(confirmStaffBookingMutationOptions(webApiClient, queryClient));
+  const completeAdminMutation = useMutation(completeAdminBookingMutationOptions(webApiClient, queryClient));
+  const completeStaffMutation = useMutation(completeStaffBookingMutationOptions(webApiClient, queryClient));
+  const cancelAdminMutation = useMutation(cancelAdminBookingMutationOptions(webApiClient, queryClient));
+  const cancelStaffMutation = useMutation(cancelStaffBookingMutationOptions(webApiClient, queryClient));
+  const noShowAdminMutation = useMutation(noShowAdminBookingMutationOptions(webApiClient, queryClient));
+  const noShowStaffMutation = useMutation(noShowStaffBookingMutationOptions(webApiClient, queryClient));
   const rejectAdminMutation = useMutation(rejectAdminBookingMutationOptions(webApiClient, queryClient));
   const rejectStaffMutation = useMutation(rejectStaffBookingMutationOptions(webApiClient, queryClient));
   const scheduleMode = isStaff ? "staff" : isAdmin ? "admin" : null;
@@ -150,6 +179,45 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
     }, "Failed to reject booking.");
   }, [controller, isStaff, rejectAdminMutation, rejectStaffMutation, scheduleMode]);
 
+  const completeBooking = useCallback(async (bookingId: string) => {
+    if (!scheduleMode) {
+      return { success: false as const, error: "Schedule actions aren't available for this role." };
+    }
+    return controller.runAction(async () => {
+      if (isStaff) {
+        await completeStaffMutation.mutateAsync(bookingId);
+        return;
+      }
+      await completeAdminMutation.mutateAsync(bookingId);
+    }, "Failed to mark booking complete.");
+  }, [completeAdminMutation, completeStaffMutation, controller, isStaff, scheduleMode]);
+
+  const cancelBooking = useCallback(async (bookingId: string, reason?: string) => {
+    if (!scheduleMode) {
+      return { success: false as const, error: "Schedule actions aren't available for this role." };
+    }
+    return controller.runAction(async () => {
+      if (isStaff) {
+        await cancelStaffMutation.mutateAsync({ bookingId, reason });
+        return;
+      }
+      await cancelAdminMutation.mutateAsync({ bookingId, reason });
+    }, "Failed to cancel booking.");
+  }, [cancelAdminMutation, cancelStaffMutation, controller, isStaff, scheduleMode]);
+
+  const noShowBooking = useCallback(async (bookingId: string) => {
+    if (!scheduleMode) {
+      return { success: false as const, error: "Schedule actions aren't available for this role." };
+    }
+    return controller.runAction(async () => {
+      if (isStaff) {
+        await noShowStaffMutation.mutateAsync(bookingId);
+        return;
+      }
+      await noShowAdminMutation.mutateAsync(bookingId);
+    }, "Failed to mark booking no-show.");
+  }, [controller, isStaff, noShowAdminMutation, noShowStaffMutation, scheduleMode]);
+
   return (
     <ScheduleContext.Provider value={{
       bookings,
@@ -159,7 +227,10 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
       removeBooking,
       updateBooking,
       clearBookings,
+      cancelBooking,
+      completeBooking,
       confirmBooking,
+      noShowBooking,
       rejectBooking
     }}>
       {children}

@@ -1,25 +1,18 @@
 import {
+  GoneException,
   Controller,
   Get,
   Post,
   Patch,
   Delete,
   Param,
-  Body,
   Query,
   UseGuards,
-  Request,
 } from '@nestjs/common';
 import { CoachService } from './coach.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/roles.guard/roles.guard';
 import { Roles } from 'src/auth/roles.decorator/roles.decorator';
-import {
-  UpdateCoachProfileDto,
-  SetCoachAvailabilityDto,
-  UpdateCoachAvailabilityDto,
-} from './dto/coach.dto';
-import { ConfirmAppointmentDto } from '../appointment/dto/appointment.dto';
 
 @Controller('coaches')
 export class CoachController {
@@ -27,88 +20,82 @@ export class CoachController {
 
   // ===== PUBLIC ENDPOINTS =====
   @Get()
-  async getAllCoaches(@Query('active') active?: string) {
+  async getAllCoaches(@Query('active') active?: string): Promise<unknown> {
     const isActive =
       active === 'true' ? true : active === 'false' ? false : undefined;
-    return this.coachService.getAllCoaches(isActive);
+    return (await this.coachService.getAllCoaches(isActive)) as unknown;
   }
 
   @Get(':id')
-  async getCoachProfile(@Param('id') id: string) {
-    return this.coachService.getCoachProfile(id);
+  async getCoachProfile(@Param('id') id: string): Promise<unknown> {
+    return (await this.coachService.getCoachProfile(id)) as unknown;
   }
 
   @Get(':id/availability')
-  async getCoachAvailability(@Param('id') id: string) {
-    return this.coachService.getCoachAvailability(id);
+  async getCoachAvailability(@Param('id') id: string): Promise<unknown> {
+    return (await this.coachService.getCoachAvailability(id)) as unknown;
   }
 
-  // ===== COACH-ONLY ENDPOINTS =====
+  private unsupportedCoachUserEndpoint() {
+    throw new GoneException(
+      'Coach user accounts are no longer supported. Use Gym Operations staff-managed coach profiles instead.',
+    );
+  }
+
+  // ===== LEGACY SELF-SERVICE ENDPOINTS =====
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Patch('profile')
-  async updateProfile(@Request() req, @Body() dto: UpdateCoachProfileDto) {
-    return this.coachService.updateCoachProfile(req.user.id, dto);
+  updateProfile() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Post('availability')
-  async setAvailability(@Request() req, @Body() dto: SetCoachAvailabilityDto) {
-    return this.coachService.setAvailability(req.user.id, dto);
+  setAvailability() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Patch('availability/:id')
-  async updateAvailability(
-    @Request() req,
-    @Param('id') id: string,
-    @Body() dto: UpdateCoachAvailabilityDto,
-  ) {
-    return this.coachService.updateAvailability(req.user.id, id, dto);
+  updateAvailability() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Delete('availability/:id')
-  async deleteAvailability(@Request() req, @Param('id') id: string) {
-    return this.coachService.deleteAvailability(req.user.id, id);
+  deleteAvailability() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Get('appointments/schedule')
-  async getCoachSchedule(@Request() req) {
-    return this.coachService.getCoachSchedule(req.user.id);
+  getCoachSchedule() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Patch('appointments/:id/confirm')
-  async confirmAppointment(
-    @Request() req,
-    @Param('id') id: string,
-    @Body() dto: ConfirmAppointmentDto,
-  ) {
-    return this.coachService.confirmAppointment(req.user.id, id, dto.notes);
+  confirmAppointment() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Patch('appointments/:id/decline')
-  async declineAppointment(
-    @Request() req,
-    @Param('id') id: string,
-    @Body('reason') reason?: string,
-  ) {
-    return this.coachService.declineAppointment(req.user.id, id, reason);
+  declineAppointment() {
+    return this.unsupportedCoachUserEndpoint();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('COACH')
+  @Roles('ADMIN', 'STAFF')
   @Patch('appointments/:id/complete')
-  async completeAppointment(@Request() req, @Param('id') id: string) {
-    return this.coachService.completeAppointment(req.user.id, id);
+  completeAppointment() {
+    return this.unsupportedCoachUserEndpoint();
   }
 }

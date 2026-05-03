@@ -47,8 +47,6 @@ function toFrontendRole(role: UserRole) {
       return 'ADMIN' as const;
     case UserRole.staff:
       return 'STAFF' as const;
-    case UserRole.coach:
-      return 'COACH' as const;
     case UserRole.member:
     default:
       return 'USER' as const;
@@ -101,48 +99,10 @@ export class AdminService {
     };
   }
 
-  async upgradeUserToCoach(dto: UpgradeToCoachDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-      include: { coach: true, role: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.coach) {
-      throw new ConflictException('User is already a coach');
-    }
-
-    const coachRole = await this.prisma.role.findUnique({
-      where: { name: 'COACH' },
-    });
-
-    if (!coachRole) {
-      throw new NotFoundException('COACH role not found');
-    }
-
-    await this.prisma.user.update({
-      where: { id: dto.userId },
-      data: { roleId: coachRole.id },
-    });
-
-    const coach = await this.prisma.coach.create({
-      data: {
-        userId: dto.userId,
-        specialties: dto.specialties,
-        bio: dto.bio,
-        certifications: dto.certifications || [],
-        yearsExperience: dto.yearsExperience,
-        hourlyRate: dto.hourlyRate,
-      },
-    });
-
-    return {
-      message: 'User upgraded to coach successfully',
-      coach,
-    };
+  upgradeUserToCoach(dto: UpgradeToCoachDto) {
+    throw new BadRequestException(
+      `Coach user accounts are no longer supported for user ${dto.userId}. Create standalone coach profiles from Gym Operations instead.`,
+    );
   }
 
   async softDeleteUser(userId: string) {

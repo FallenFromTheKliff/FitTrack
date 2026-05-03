@@ -74,47 +74,32 @@ describe('RelationshipController', () => {
     expect(getGuardMetadata('getMyRelationships')).toEqual([JwtAuthGuard]);
   });
 
-  it('locks coach client list reads to coach accounts', async () => {
-    relationshipService.getMyClients.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
-    });
-
-    await controller.getMyClients({ sub: 'coach-user-1' } as never, {
-      page: 1,
-      limit: 20,
-    });
-
-    expect(relationshipService.getMyClients).toHaveBeenCalledWith(
-      'coach-user-1',
-      { page: 1, limit: 20 },
+  it('marks coach-user client list reads as gone', () => {
+    expect(() => controller.getMyClients()).toThrow(
+      'Coach user relationship endpoints are no longer supported.',
     );
     expect(getGuardMetadata('getMyClients')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('getMyClients')).toEqual([UserRole.coach]);
+    expect(getRolesMetadata('getMyClients')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
-  it('locks relationship updates to the owning coach role', async () => {
-    relationshipService.updateRelationship.mockResolvedValue({ id: 'rel-1' });
-
-    await controller.updateRelationship(
-      'rel-1',
-      { sub: 'coach-user-1' } as never,
-      { status: 'active' },
-    );
-
-    expect(relationshipService.updateRelationship).toHaveBeenCalledWith(
-      'coach-user-1',
-      'rel-1',
-      { status: 'active' },
+  it('marks coach-user relationship updates as gone', () => {
+    expect(() => controller.updateRelationship('rel-1')).toThrow(
+      'Coach user relationship updates are no longer supported',
     );
     expect(getGuardMetadata('updateRelationship')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('updateRelationship')).toEqual([UserRole.coach]);
+    expect(getRolesMetadata('updateRelationship')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
   it('submits reviews through the service for authenticated users', async () => {

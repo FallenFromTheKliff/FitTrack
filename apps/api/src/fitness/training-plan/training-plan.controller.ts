@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  GoneException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -27,7 +28,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
-  AssignTrainingPlanDTO,
   CreateTrainingPlanDTO,
   TrainingPlanDetailResponseDTO,
   TrainingPlanExerciseResponseDTO,
@@ -153,7 +153,7 @@ export class TrainingPlanController {
 
   @Post('plans/:id/assign')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Copy a coach-owned training plan to an actively related member.',
@@ -165,11 +165,9 @@ export class TrainingPlanController {
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @ApiResponse({ status: 404, description: 'Training plan not found.' })
-  assignPlan(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
-    @Query() dto: AssignTrainingPlanDTO,
-  ) {
-    return this.trainingPlanService.assignPlan(user.sub, id, dto.member_id);
+  assignPlan(@Param('id', ParseUUIDPipe) id: string) {
+    throw new GoneException(
+      `Coach-user training plan assignment is no longer supported for plan ${id}.`,
+    );
   }
 }

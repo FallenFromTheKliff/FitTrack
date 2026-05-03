@@ -57,6 +57,7 @@ export interface MemberRecord {
   qrCodeReady?: boolean;
   attendanceQrReady?: boolean;
   deletedAt?: string | null;
+  restoredAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
   profile?: MemberProfile | null;
@@ -113,6 +114,7 @@ export interface RestoreUserResult {
   user: {
     id: string;
     deletedAt: string | null;
+    restoredAt?: string | null;
   };
 }
 

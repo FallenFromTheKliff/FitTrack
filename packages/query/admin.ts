@@ -22,6 +22,7 @@ import {
   invalidateAdminDeletionRequestsQuery,
   invalidateAdminGamificationOverviewQuery,
   invalidateAdminMembersQuery,
+  invalidateAnalyticsQueries,
   invalidateNotificationQueries,
   invalidateStaffBookingQueries,
 } from "./cache";
@@ -154,6 +155,7 @@ export function confirmAdminBookingMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminBookingsQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
         invalidateStaffBookingQueries(queryClient),
       ]);
     },
@@ -175,6 +177,61 @@ export function rejectAdminBookingMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminBookingsQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateStaffBookingQueries(queryClient),
+      ]);
+    },
+  });
+}
+
+export function completeAdminBookingMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (bookingId: string) => client.admin.completeBooking(bookingId),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminBookingsQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateStaffBookingQueries(queryClient),
+      ]);
+    },
+  });
+}
+
+export function cancelAdminBookingMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      bookingId,
+      reason,
+    }: {
+      bookingId: string;
+      reason?: string;
+    }) => client.admin.cancelBooking(bookingId, reason),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminBookingsQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+        invalidateStaffBookingQueries(queryClient),
+      ]);
+    },
+  });
+}
+
+export function noShowAdminBookingMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (bookingId: string) => client.admin.noShowBooking(bookingId),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminBookingsQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
         invalidateStaffBookingQueries(queryClient),
       ]);
     },
@@ -191,6 +248,7 @@ export function createUserMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
         invalidateNotificationQueries(queryClient),
       ]);
     },
@@ -235,6 +293,7 @@ export function updateAdminMembershipCardMutationOptions(
     onSuccess: async () => {
       await Promise.all([
         invalidateAdminMembersQuery(queryClient),
+        invalidateAnalyticsQueries(queryClient),
         invalidateNotificationQueries(queryClient),
       ]);
     },

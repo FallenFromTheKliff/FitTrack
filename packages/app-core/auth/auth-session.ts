@@ -43,8 +43,6 @@ function normalizeRole(role: string | null | undefined): Role | undefined {
       return "ADMIN";
     case "staff":
       return "STAFF";
-    case "coach":
-      return "COACH";
     case "member":
     case "user":
       return "USER";
@@ -87,7 +85,27 @@ function buildAvatarInitials(name?: string, email?: string) {
 }
 
 function resolveMembershipCard(payload: ApiMembershipShape): AuthUser["membershipCard"] {
-  return payload.membershipCard ?? payload.membership_card ?? null;
+  const card = payload.membershipCard ?? payload.membership_card ?? null;
+  if (!card) return null;
+  const rawCard = card as AuthUser["membershipCard"] & {
+    activated_at?: string | null;
+    purchased_at?: string | null;
+    revoke_reason?: string | null;
+    revoked_at?: string | null;
+    updated_at?: string | null;
+    verified_at?: string | null;
+  };
+
+  return {
+    activatedAt: rawCard.activatedAt ?? rawCard.activated_at ?? null,
+    purchasedAt: rawCard.purchasedAt ?? rawCard.purchased_at ?? null,
+    revokeReason: rawCard.revokeReason ?? rawCard.revoke_reason ?? null,
+    revokedAt: rawCard.revokedAt ?? rawCard.revoked_at ?? null,
+    source: rawCard.source ?? null,
+    status: rawCard.status,
+    updatedAt: rawCard.updatedAt ?? rawCard.updated_at ?? null,
+    verifiedAt: rawCard.verifiedAt ?? rawCard.verified_at ?? null,
+  };
 }
 
 function resolveQrCodeToken(payload: ApiMembershipShape) {
@@ -113,6 +131,16 @@ function resolveAttendanceQrReady(payload: ApiMembershipShape, qrCodeToken: stri
 
 function resolveMembershipAccess(membershipCard: AuthUser["membershipCard"]): AuthUser["membershipAccess"] {
   return membershipCard?.status === "active" ? "member" : "non-member";
+}
+
+function resolveMemberSince(membershipCard: AuthUser["membershipCard"]) {
+  if (membershipCard?.status !== "active") return undefined;
+  return (
+    membershipCard.activatedAt ??
+    membershipCard.verifiedAt ??
+    membershipCard.purchasedAt ??
+    undefined
+  );
 }
 
 export function getRoleGateDeniedMessage(roleGate?: RoleGateConfig) {
@@ -151,6 +179,7 @@ export function mapProfileToAuthUser(profile: UserProfileResponse, status?: Auth
     heightCm: normalizedProfile?.heightCm ?? undefined,
     membershipAccess: resolveMembershipAccess(membershipCard),
     membershipCard,
+    memberSince: resolveMemberSince(membershipCard),
     profile: normalizedProfile,
     qrCodeReady: resolveQrCodeReady(profile, qrCodeToken),
     attendanceQrReady: resolveAttendanceQrReady(profile, qrCodeToken),
@@ -189,6 +218,7 @@ export function mapLoginSuccessUser(
     heightCm: normalizedProfile?.heightCm ?? undefined,
     membershipAccess: resolveMembershipAccess(membershipCard),
     membershipCard,
+    memberSince: resolveMemberSince(membershipCard),
     profile: normalizedProfile,
     qrCodeReady: resolveQrCodeReady(payload.user, qrCodeToken),
     attendanceQrReady: resolveAttendanceQrReady(payload.user, qrCodeToken),

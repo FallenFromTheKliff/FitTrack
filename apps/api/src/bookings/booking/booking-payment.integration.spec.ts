@@ -5,10 +5,13 @@ import {
   PaymentStage,
   PaymentStatus,
   PaymentProvider,
+  Prisma,
 } from '@prisma/client';
 
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
+import { CoachService } from '../../coaching/coach/coach.service';
+import { MembershipCardService } from '../../membership/card/card.service';
 import {
   PAYMENT_COMPLETED_EVENT,
   PaymentCompletedEvent,
@@ -54,6 +57,14 @@ describe('Booking payment integration', () => {
     hasSubscriptionAccess: jest.fn(),
   };
 
+  const membershipCardService = {
+    hasActiveCard: jest.fn(),
+  };
+
+  const coachService = {
+    validateCoachForBooking: jest.fn(),
+  };
+
   const redis = {
     set: jest.fn(),
     del: jest.fn(),
@@ -75,7 +86,9 @@ describe('Booking payment integration', () => {
           provide: PaymongoCheckoutService,
           useValue: paymongoCheckoutService,
         },
+        { provide: MembershipCardService, useValue: membershipCardService },
         { provide: SubscriptionService, useValue: subscriptionService },
+        { provide: CoachService, useValue: coachService },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
     }).compile();
@@ -85,10 +98,10 @@ describe('Booking payment integration', () => {
   });
 
   afterEach(async () => {
-    await moduleRef.close();
+    await moduleRef?.close();
   });
 
-  it('confirms pending bookings when the shared payment.completed event carries a downpayment', async () => {
+  it('moves pending bookings into balance pending when the shared payment.completed event carries a downpayment', async () => {
     const bookingConfirmedListener = jest.fn();
     eventEmitter.on(BOOKING_CONFIRMED_EVENT, bookingConfirmedListener);
 
@@ -109,7 +122,7 @@ describe('Booking payment integration', () => {
     });
     bookingRepository.confirmBookingDownpayment.mockResolvedValue({
       id: 'booking-1',
-      status: 'confirmed',
+      status: 'balance_pending',
     });
 
     eventEmitter.emit(
@@ -129,16 +142,10 @@ describe('Booking payment integration', () => {
       'booking-1',
       expect.any(Date),
     );
-    expect(bookingConfirmedListener).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bookingId: 'booking-1',
-        userId: 'member-1',
-        amenityId: 'amenity-1',
-      }),
-    );
+    expect(bookingConfirmedListener).not.toHaveBeenCalled();
   });
 
-  it('completes balance_pending bookings when the shared payment.completed event carries a balance payment', async () => {
+  it('settles balance_pending bookings when the shared payment.completed event carries a balance payment', async () => {
     paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
       id: 'payment-2',
       payment_stage: PaymentStage.balance,
@@ -149,10 +156,11 @@ describe('Booking payment integration', () => {
       id: 'booking-2',
       status: 'balance_pending',
       balance_paid_at: null,
+      balance_amount: new Prisma.Decimal('560.00'),
     });
     bookingRepository.completeBookingBalance.mockResolvedValue({
       id: 'booking-2',
-      status: 'completed',
+      status: 'confirmed',
     });
 
     eventEmitter.emit(

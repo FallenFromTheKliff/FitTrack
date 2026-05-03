@@ -526,7 +526,11 @@ export function InventoryMainPanel({
             chartStyle={{ height: 260 }}
           >
             <BarChart data={inventory.salesRevenueSeries}>
-              <XAxis dataKey="label" stroke={colors.textMuted} tick={{ fontSize: 12 }} />
+              <XAxis
+                dataKey="bucketLabel"
+                stroke={colors.textMuted}
+                tick={{ fontSize: 12 }}
+              />
               <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
               <Tooltip
                 contentStyle={{
@@ -549,6 +553,11 @@ export function InventoryMainPanel({
           />
           <FitChartContainer
             heading={`Top Retail Items ${inventory.topRetailMetric}`}
+            subtitle={
+              inventory.topRetailMetric === "By Stocks Sold"
+                ? "All-time ranking from completed inventory sales."
+                : "Live ranking from current retail stock value."
+            }
             chartStyle={{ height: 240 }}
           >
             <BarChart data={inventory.topProducts} margin={{ bottom: 40 }}>

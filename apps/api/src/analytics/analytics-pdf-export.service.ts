@@ -189,10 +189,10 @@ export class AnalyticsPdfExportService {
     insight: BusinessAnalyticsInsightResponse | null,
   ): AnalyticsPdfInsightBlock {
     const local: AnalyticsPdfInsightBlock = {
-      summary: `Current KPIs show ${this.formatMoney(snapshot.performance_kpis.total_revenue)} in revenue, ${snapshot.performance_kpis.total_venue_bookings} venue bookings, and ${snapshot.performance_kpis.total_coaching_appointments} coaching appointments across the active month window.`,
+      summary: `All-time KPIs show ${this.formatMoney(snapshot.performance_kpis.total_revenue)} in revenue, ${snapshot.performance_kpis.total_venue_bookings} venue bookings, and ${snapshot.performance_kpis.total_coaching_appointments} coaching appointments across recorded FitTrack activity.`,
       highlights: [
         `${snapshot.performance_kpis.check_ins} check-ins generated the operating traffic behind ${snapshot.performance_kpis.coaching_sessions} completed coaching sessions.`,
-        `${snapshot.performance_kpis.new_members} new members were added during the same KPI window.`,
+        `${snapshot.performance_kpis.new_members} members have been added across the tracked platform history.`,
         `Revenue is currently led by ${revenue.top_revenue_sources[0]?.source_label ?? 'the strongest active source'} within the live mix.`,
       ],
       recommendedActions: [
@@ -454,27 +454,10 @@ export class AnalyticsPdfExportService {
       ]),
     };
 
-    const aiActions = this.mergeUniqueStrings([
-      ...(args.overviewInsight?.recommended_actions ?? []),
-      ...(args.revenueInsight?.recommended_actions ?? []),
-      ...(args.attendanceInsight?.recommended_actions ?? []),
-      ...(args.inventoryInsight?.recommended_actions ?? []),
-    ]);
-
     return {
-      summary: this.isPrimaryInsight(args.overviewInsight)
-        ? args.overviewInsight!.summary.trim()
-        : local.summary,
-      highlights: this.mergeUniqueStrings([
-        ...(this.isPrimaryInsight(args.overviewInsight)
-          ? (args.overviewInsight?.highlights ?? [])
-          : []),
-        ...local.highlights,
-      ]).slice(0, 4),
-      recommendedActions: this.mergeUniqueStrings([
-        ...(this.isPrimaryInsight(args.overviewInsight) ? aiActions : []),
-        ...local.recommendedActions,
-      ]).slice(0, 5),
+      summary: local.summary,
+      highlights: local.highlights.slice(0, 4),
+      recommendedActions: local.recommendedActions.slice(0, 5),
     };
   }
 
@@ -482,30 +465,11 @@ export class AnalyticsPdfExportService {
     insight: BusinessAnalyticsInsightResponse | null,
     local: AnalyticsPdfInsightBlock,
   ): AnalyticsPdfInsightBlock {
-    if (this.isPrimaryInsight(insight)) {
-      return {
-        summary: insight!.summary.trim(),
-        highlights: this.mergeUniqueStrings([
-          ...(insight?.highlights ?? []),
-          ...local.highlights,
-        ]).slice(0, 3),
-        recommendedActions: this.mergeUniqueStrings([
-          ...(insight?.recommended_actions ?? []),
-          ...local.recommendedActions,
-        ]).slice(0, 3),
-      };
-    }
-
+    void insight;
     return {
       summary: local.summary,
-      highlights: this.mergeUniqueStrings([
-        ...(insight?.highlights ?? []),
-        ...local.highlights,
-      ]).slice(0, 3),
-      recommendedActions: this.mergeUniqueStrings([
-        ...(insight?.recommended_actions ?? []),
-        ...local.recommendedActions,
-      ]).slice(0, 3),
+      highlights: local.highlights.slice(0, 3),
+      recommendedActions: local.recommendedActions.slice(0, 3),
     };
   }
 

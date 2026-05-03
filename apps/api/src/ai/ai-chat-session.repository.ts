@@ -130,20 +130,6 @@ export class AiChatSessionRepository extends BaseRepository {
         });
       }
 
-      await tx.aiChatSession.updateMany({
-        where: {
-          user_id: userId,
-          context_type: session.context_type,
-          is_active: true,
-          NOT: {
-            id: sessionId,
-          },
-        },
-        data: {
-          is_active: false,
-        },
-      });
-
       return tx.aiChatSession.update({
         where: {
           id: sessionId,

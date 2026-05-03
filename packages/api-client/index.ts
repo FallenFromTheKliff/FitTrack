@@ -90,10 +90,12 @@ export type {
   AppointmentCheckoutResponse,
   AppointmentRecord,
   AppointmentPaymentProvider,
+  AppointmentPaymentStage,
   CoachScheduleRecord,
   CreateAppointmentPayload,
 } from "./domains/appointments";
 export type {
+  BookingBalancePaymentProvider,
   CreateBookingPayload,
   VenueBookingRecord,
 } from "./domains/bookings";
@@ -161,15 +163,18 @@ export type {
   InventoryEquipmentUpdateInput,
   InventoryEquipmentWriteOffInput,
   InventoryEquipmentWriteOffRecord,
+  InventoryAnalyticsPeriod,
   InventoryPaginatedResult,
   InventoryProductCategory,
   InventoryProductListParams,
   InventoryProductMutationInput,
   InventoryProductRecord,
   InventoryRestockInput,
+  InventorySalesAnalyticsRecord,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
   InventorySaleSource,
+  InventorySalesSummaryRecord,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord,
 } from "./domains/inventory";
@@ -202,6 +207,10 @@ export type {
 } from "./domains/notifications";
 export type {
   BulkUpdateRecurringCoachingSessionsInput,
+  RecurringCoachingBillingCyclePaymentInput,
+  RecurringCoachingBillingCyclePaymentResult,
+  RecurringCoachingBillingCycleRecord,
+  RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
   RecurringCoachingPlanInput,
   RecurringCoachingPlanMutationResult,
@@ -228,6 +237,9 @@ export type {
   GymLayoutEquipmentRecord,
 } from "./domains/gym-layout";
 export type {
+  CreateStaffCoachBookingPayload,
+  CreateStaffCoachPayload,
+  CreateStaffVenueBookingPayload,
   StaffAppointmentListParams,
   StaffAppointmentRecord,
   StaffCoachAvailabilityPayload,

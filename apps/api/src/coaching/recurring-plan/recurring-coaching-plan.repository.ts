@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
   AppointmentStatus,
+  Payment,
   Prisma,
+  RecurringCoachingBillingCycleStatus,
   RecurringCoachingPlanStatus,
   RecurringCoachingSessionState,
   UserRole,
@@ -34,6 +36,9 @@ export type RecurringPlanWithSessions = Prisma.RecurringCoachingPlanGetPayload<{
     appointments: {
       orderBy: { scheduled_at: 'asc' };
     };
+    billing_cycles: {
+      orderBy: { cycle_start_date: 'asc' };
+    };
   };
 }>;
 
@@ -63,7 +68,6 @@ export class RecurringCoachingPlanRepository {
     return this.prisma.coachProfile.findFirst({
       where: {
         id: coachId,
-        user: { status: UserStatus.active, deletedAt: null },
       },
       include: {
         availability_slots: {
@@ -125,6 +129,10 @@ export class RecurringCoachingPlanRepository {
       Prisma.CoachAppointmentCreateManyInput,
       'recurring_plan_id'
     >[];
+    billingCycles: Omit<
+      Prisma.RecurringCoachingBillingCycleCreateManyInput,
+      'recurring_plan_id'
+    >[];
     plan: Prisma.RecurringCoachingPlanCreateInput;
   }): Promise<RecurringPlanWithSessions> {
     return this.prisma.$transaction(async (tx) => {
@@ -141,11 +149,23 @@ export class RecurringCoachingPlanRepository {
         });
       }
 
+      if (input.billingCycles.length > 0) {
+        await tx.recurringCoachingBillingCycle.createMany({
+          data: input.billingCycles.map((cycle) => ({
+            ...cycle,
+            recurring_plan_id: plan.id,
+          })),
+        });
+      }
+
       return tx.recurringCoachingPlan.findUniqueOrThrow({
         where: { id: plan.id },
         include: {
           appointments: {
             orderBy: { scheduled_at: 'asc' },
+          },
+          billing_cycles: {
+            orderBy: { cycle_start_date: 'asc' },
           },
         },
       });
@@ -161,8 +181,136 @@ export class RecurringCoachingPlanRepository {
         appointments: {
           orderBy: { scheduled_at: 'asc' },
         },
+        billing_cycles: {
+          orderBy: { cycle_start_date: 'asc' },
+        },
       },
     });
+  }
+
+  findBillingCycleForPlan(input: { cycleId: string; planId: string }) {
+    return this.prisma.recurringCoachingBillingCycle.findFirst({
+      where: {
+        id: input.cycleId,
+        recurring_plan_id: input.planId,
+      },
+      include: {
+        recurring_plan: true,
+      },
+    });
+  }
+
+  findBillingCycleByPaymentId(paymentId: string) {
+    return this.prisma.recurringCoachingBillingCycle.findUnique({
+      where: { payment_id: paymentId },
+      include: {
+        recurring_plan: true,
+      },
+    });
+  }
+
+  async createBillingCyclePayment(input: {
+    cycleId: string;
+    data: Prisma.PaymentCreateInput;
+    processingStatus: RecurringCoachingBillingCycleStatus;
+  }): Promise<{ cycle: Prisma.RecurringCoachingBillingCycleGetPayload<{}>; payment: Payment }> {
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({ data: input.data });
+      const cycle = await tx.recurringCoachingBillingCycle.update({
+        where: { id: input.cycleId },
+        data: {
+          payment_id: payment.id,
+          status: input.processingStatus,
+        },
+      });
+
+      return { cycle, payment };
+    });
+  }
+
+  updateBillingCycle(
+    cycleId: string,
+    data: Prisma.RecurringCoachingBillingCycleUpdateInput,
+  ) {
+    return this.prisma.recurringCoachingBillingCycle.update({
+      where: { id: cycleId },
+      data,
+    });
+  }
+
+  async completeBillingCycle(input: {
+    cycleId: string;
+    paidAt: Date;
+    paymentId: string;
+  }): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const cycle = await tx.recurringCoachingBillingCycle.update({
+        where: { id: input.cycleId },
+        data: {
+          status: RecurringCoachingBillingCycleStatus.paid,
+          paid_at: input.paidAt,
+          payment_id: input.paymentId,
+        },
+      });
+
+      await tx.coachAppointment.updateMany({
+        where: {
+          recurring_plan_id: cycle.recurring_plan_id,
+          status: AppointmentStatus.pending_payment,
+          scheduled_at: {
+            gte: cycle.cycle_start_date,
+            lt: new Date(
+              cycle.cycle_end_date.getTime() + 24 * 60 * 60 * 1000,
+            ),
+          },
+        },
+        data: {
+          status: AppointmentStatus.confirmed,
+          downpayment_paid_at: input.paidAt,
+        },
+      });
+    });
+  }
+
+  async cancelOverdueBillingCycles(now: Date): Promise<number> {
+    const overdueCycles =
+      await this.prisma.recurringCoachingBillingCycle.findMany({
+        where: {
+          status: {
+            in: [
+              RecurringCoachingBillingCycleStatus.due,
+              RecurringCoachingBillingCycleStatus.processing,
+              RecurringCoachingBillingCycleStatus.awaiting_verification,
+            ],
+          },
+          grace_period_ends_at: { lt: now },
+          recurring_plan: {
+            status: {
+              in: [
+                RecurringCoachingPlanStatus.active,
+                RecurringCoachingPlanStatus.paused,
+              ],
+            },
+          },
+        },
+        select: {
+          id: true,
+          recurring_plan_id: true,
+        },
+      });
+
+    for (const cycle of overdueCycles) {
+      await this.cancelPlan({
+        cancelledAt: now,
+        planId: cycle.recurring_plan_id,
+        reason: 'Recurring coach plan cancelled after unpaid monthly billing cycle exceeded the 7-day grace period.',
+      });
+      await this.updateBillingCycle(cycle.id, {
+        status: RecurringCoachingBillingCycleStatus.overdue,
+      });
+    }
+
+    return overdueCycles.length;
   }
 
   findSessionForPlan(input: {
@@ -225,6 +373,9 @@ export class RecurringCoachingPlanRepository {
           appointments: {
             orderBy: { scheduled_at: 'asc' },
           },
+          billing_cycles: {
+            orderBy: { cycle_start_date: 'asc' },
+          },
         },
       });
     });
@@ -266,6 +417,9 @@ export class RecurringCoachingPlanRepository {
         include: {
           appointments: {
             orderBy: { scheduled_at: 'asc' },
+          },
+          billing_cycles: {
+            orderBy: { cycle_start_date: 'asc' },
           },
         },
       });

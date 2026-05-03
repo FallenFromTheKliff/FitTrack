@@ -252,22 +252,40 @@ export class AnalyticsRepository extends BaseRepository {
     const rows = await this.queryRaw<ActiveMembersCountRow[]>`
       SELECT COUNT(DISTINCT users.id) AS active_members
       FROM users
-      JOIN membership_cards ON membership_cards.user_id = users.id
+      LEFT JOIN membership_cards
+        ON membership_cards.user_id = users.id
+       AND membership_cards.status = 'active'
+       AND COALESCE(
+         membership_cards.activated_at,
+         membership_cards.verified_at,
+         membership_cards.purchased_at
+       ) <= ${referenceDate}
+       AND (
+         membership_cards.revoked_at IS NULL
+         OR membership_cards.revoked_at > ${referenceDate}
+       )
+      LEFT JOIN subscriptions
+        ON subscriptions.user_id = users.id
+       AND (
+         subscriptions.status IN ('active', 'past_due')
+         OR (
+           subscriptions.status = 'cancelled'
+           AND subscriptions.expires_at > ${referenceDate}
+         )
+       )
+       AND COALESCE(
+         subscriptions.starts_at,
+         subscriptions.created_at
+       ) <= ${referenceDate}
       LEFT JOIN account_deletion_requests pending_requests
         ON pending_requests.user_id = users.id
        AND pending_requests.status = 'pending'
       WHERE users.role = 'member'
         AND users."deletedAt" IS NULL
         AND pending_requests.id IS NULL
-        AND membership_cards.status = 'active'
-        AND COALESCE(
-          membership_cards.activated_at,
-          membership_cards.verified_at,
-          membership_cards.purchased_at
-        ) <= ${referenceDate}
         AND (
-          membership_cards.revoked_at IS NULL
-          OR membership_cards.revoked_at > ${referenceDate}
+          membership_cards.id IS NOT NULL
+          OR subscriptions.id IS NOT NULL
         )
     `;
 
@@ -292,7 +310,11 @@ export class AnalyticsRepository extends BaseRepository {
           SELECT
             buckets.bucket_start,
             COUNT(DISTINCT CASE
-              WHEN pending_requests.id IS NULL AND membership_cards.id IS NOT NULL
+              WHEN pending_requests.id IS NULL
+               AND (
+                 membership_cards.id IS NOT NULL
+                 OR subscriptions.id IS NOT NULL
+               )
               THEN users.id
             END) AS active_members
           FROM buckets
@@ -314,6 +336,19 @@ export class AnalyticsRepository extends BaseRepository {
              membership_cards.revoked_at IS NULL
              OR membership_cards.revoked_at > buckets.bucket_start
            )
+          LEFT JOIN subscriptions
+            ON subscriptions.user_id = users.id
+           AND (
+             subscriptions.status IN ('active', 'past_due')
+             OR (
+               subscriptions.status = 'cancelled'
+               AND subscriptions.expires_at > buckets.bucket_start
+             )
+           )
+           AND COALESCE(
+             subscriptions.starts_at,
+             subscriptions.created_at
+           ) <= buckets.bucket_start
           GROUP BY buckets.bucket_start
           ORDER BY buckets.bucket_start
         `;
@@ -329,7 +364,11 @@ export class AnalyticsRepository extends BaseRepository {
           SELECT
             buckets.bucket_start,
             COUNT(DISTINCT CASE
-              WHEN pending_requests.id IS NULL AND membership_cards.id IS NOT NULL
+              WHEN pending_requests.id IS NULL
+               AND (
+                 membership_cards.id IS NOT NULL
+                 OR subscriptions.id IS NOT NULL
+               )
               THEN users.id
             END) AS active_members
           FROM buckets
@@ -351,6 +390,19 @@ export class AnalyticsRepository extends BaseRepository {
              membership_cards.revoked_at IS NULL
              OR membership_cards.revoked_at > buckets.bucket_start
            )
+          LEFT JOIN subscriptions
+            ON subscriptions.user_id = users.id
+           AND (
+             subscriptions.status IN ('active', 'past_due')
+             OR (
+               subscriptions.status = 'cancelled'
+               AND subscriptions.expires_at > buckets.bucket_start
+             )
+           )
+           AND COALESCE(
+             subscriptions.starts_at,
+             subscriptions.created_at
+           ) <= buckets.bucket_start
           GROUP BY buckets.bucket_start
           ORDER BY buckets.bucket_start
         `;
@@ -366,7 +418,11 @@ export class AnalyticsRepository extends BaseRepository {
           SELECT
             buckets.bucket_start,
             COUNT(DISTINCT CASE
-              WHEN pending_requests.id IS NULL AND membership_cards.id IS NOT NULL
+              WHEN pending_requests.id IS NULL
+               AND (
+                 membership_cards.id IS NOT NULL
+                 OR subscriptions.id IS NOT NULL
+               )
               THEN users.id
             END) AS active_members
           FROM buckets
@@ -388,6 +444,19 @@ export class AnalyticsRepository extends BaseRepository {
              membership_cards.revoked_at IS NULL
              OR membership_cards.revoked_at > buckets.bucket_start
            )
+          LEFT JOIN subscriptions
+            ON subscriptions.user_id = users.id
+           AND (
+             subscriptions.status IN ('active', 'past_due')
+             OR (
+               subscriptions.status = 'cancelled'
+               AND subscriptions.expires_at > buckets.bucket_start
+             )
+           )
+           AND COALESCE(
+             subscriptions.starts_at,
+             subscriptions.created_at
+           ) <= buckets.bucket_start
           GROUP BY buckets.bucket_start
           ORDER BY buckets.bucket_start
         `;
@@ -403,7 +472,11 @@ export class AnalyticsRepository extends BaseRepository {
           SELECT
             buckets.bucket_start,
             COUNT(DISTINCT CASE
-              WHEN pending_requests.id IS NULL AND membership_cards.id IS NOT NULL
+              WHEN pending_requests.id IS NULL
+               AND (
+                 membership_cards.id IS NOT NULL
+                 OR subscriptions.id IS NOT NULL
+               )
               THEN users.id
             END) AS active_members
           FROM buckets
@@ -425,6 +498,19 @@ export class AnalyticsRepository extends BaseRepository {
              membership_cards.revoked_at IS NULL
              OR membership_cards.revoked_at > buckets.bucket_start
            )
+          LEFT JOIN subscriptions
+            ON subscriptions.user_id = users.id
+           AND (
+             subscriptions.status IN ('active', 'past_due')
+             OR (
+               subscriptions.status = 'cancelled'
+               AND subscriptions.expires_at > buckets.bucket_start
+             )
+           )
+           AND COALESCE(
+             subscriptions.starts_at,
+             subscriptions.created_at
+           ) <= buckets.bucket_start
           GROUP BY buckets.bucket_start
           ORDER BY buckets.bucket_start
         `;
@@ -441,7 +527,11 @@ export class AnalyticsRepository extends BaseRepository {
           SELECT
             buckets.bucket_start,
             COUNT(DISTINCT CASE
-              WHEN pending_requests.id IS NULL AND membership_cards.id IS NOT NULL
+              WHEN pending_requests.id IS NULL
+               AND (
+                 membership_cards.id IS NOT NULL
+                 OR subscriptions.id IS NOT NULL
+               )
               THEN users.id
             END) AS active_members
           FROM buckets
@@ -463,6 +553,19 @@ export class AnalyticsRepository extends BaseRepository {
              membership_cards.revoked_at IS NULL
              OR membership_cards.revoked_at > buckets.bucket_start
            )
+          LEFT JOIN subscriptions
+            ON subscriptions.user_id = users.id
+           AND (
+             subscriptions.status IN ('active', 'past_due')
+             OR (
+               subscriptions.status = 'cancelled'
+               AND subscriptions.expires_at > buckets.bucket_start
+             )
+           )
+           AND COALESCE(
+             subscriptions.starts_at,
+             subscriptions.created_at
+           ) <= buckets.bucket_start
           GROUP BY buckets.bucket_start
           ORDER BY buckets.bucket_start
         `;
@@ -648,16 +751,7 @@ export class AnalyticsRepository extends BaseRepository {
           include: {
             coach: {
               select: {
-                user: {
-                  select: {
-                    profile: {
-                      select: {
-                        first_name: true,
-                        last_name: true,
-                      },
-                    },
-                  },
-                },
+                display_name: true,
               },
             },
             user: {
@@ -747,7 +841,7 @@ export class AnalyticsRepository extends BaseRepository {
       }),
       ...coachAppointments.map((entry) => {
         const actorName = toDisplayName(entry.user.profile);
-        const coachName = toDisplayName(entry.coach.user.profile);
+        const coachName = entry.coach.display_name?.trim() || 'Coach profile';
         const occurredAt =
           entry.completed_at ??
           entry.cancelled_at ??
@@ -837,18 +931,37 @@ export class AnalyticsRepository extends BaseRepository {
     limit = 5,
   ): Promise<TopMembershipPlanRows> {
     return this.queryRaw<TopMembershipPlanRow[]>`
+      WITH membership_sources AS (
+        SELECT
+          membership_plans.name,
+          subscriptions.id AS source_id,
+          payments.amount
+        FROM payments
+        JOIN subscriptions ON subscriptions.id = payments.payable_id
+        JOIN membership_plans ON membership_plans.id = subscriptions.plan_id
+        WHERE payments.payable_type = 'subscription'
+          AND payments.status = 'completed'
+          AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+
+        UNION ALL
+
+        SELECT
+          'Membership Card Access' AS name,
+          membership_cards.id AS source_id,
+          payments.amount
+        FROM payments
+        JOIN membership_cards ON membership_cards.id = payments.payable_id
+        WHERE payments.payable_type = 'membership_card'
+          AND payments.status = 'completed'
+          AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+      )
       SELECT
-        membership_plans.name,
-        COUNT(DISTINCT subscriptions.id) AS subscriber_count,
-        COALESCE(SUM(payments.amount), 0) AS revenue
-      FROM payments
-      JOIN subscriptions ON subscriptions.id = payments.payable_id
-      JOIN membership_plans ON membership_plans.id = subscriptions.plan_id
-      WHERE payments.payable_type = 'subscription'
-        AND payments.status = 'completed'
-        AND payments.created_at BETWEEN ${start} AND ${end}
-      GROUP BY membership_plans.id, membership_plans.name
-      ORDER BY revenue DESC, subscriber_count DESC, membership_plans.name ASC
+        name,
+        COUNT(DISTINCT source_id) AS subscriber_count,
+        COALESCE(SUM(amount), 0) AS revenue
+      FROM membership_sources
+      GROUP BY name
+      ORDER BY revenue DESC, subscriber_count DESC, name ASC
       LIMIT ${limit}
     `;
   }
@@ -900,13 +1013,18 @@ export class AnalyticsRepository extends BaseRepository {
   ): Promise<PaymentRevenueTotalsRow> {
     const rows = await this.queryRaw<PaymentRevenueTotalsRow[]>`
       SELECT
-        COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
+        COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
         COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-        COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-        COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+        (
+          SELECT COALESCE(SUM(total_amount), 0)
+          FROM sale_transactions
+          WHERE status = 'completed'
+            AND created_at BETWEEN ${start} AND ${end}
+        ) AS product_revenue,
+        COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
       FROM payments
       WHERE status = 'completed'
-        AND created_at BETWEEN ${start} AND ${end}
+        AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
     `;
 
     return (
@@ -924,12 +1042,37 @@ export class AnalyticsRepository extends BaseRepository {
     end: Date,
   ): Promise<CoachingRevenueSummaryRow> {
     const rows = await this.queryRaw<CoachingRevenueSummaryRow[]>`
+      WITH coaching_payment_rows AS (
+        SELECT COALESCE(
+          SUM(payments.amount),
+          0
+        ) AS coaching_gym_revenue
+        FROM payments
+        LEFT JOIN coach_appointments
+          ON payments.payable_type = 'coaching'
+         AND coach_appointments.id = payments.payable_id
+        LEFT JOIN recurring_coaching_billing_cycles
+          ON payments.payable_type = 'recurring_coaching'
+         AND recurring_coaching_billing_cycles.id = payments.payable_id
+        LEFT JOIN recurring_coaching_plans
+          ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+        JOIN coach_profiles
+          ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+        WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+          AND payments.status = 'completed'
+          AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+      ),
+      completed_session_rows AS (
+        SELECT COUNT(*) AS completed_coaching_sessions
+        FROM coach_appointments
+        WHERE status = 'completed'
+          AND completed_at BETWEEN ${start} AND ${end}
+      )
       SELECT
-        COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue,
-        COUNT(*) AS completed_coaching_sessions
-      FROM coach_appointments
-      WHERE status = 'completed'
-        AND completed_at BETWEEN ${start} AND ${end}
+        coaching_payment_rows.coaching_gym_revenue,
+        completed_session_rows.completed_coaching_sessions
+      FROM coaching_payment_rows
+      CROSS JOIN completed_session_rows
     `;
 
     return (
@@ -966,9 +1109,20 @@ export class AnalyticsRepository extends BaseRepository {
   ): Promise<NewMembersSummaryRow> {
     const rows = await this.queryRaw<NewMembersSummaryRow[]>`
       SELECT COUNT(*) AS new_members
-      FROM users
-      WHERE role = 'member'
-        AND created_at BETWEEN ${start} AND ${end}
+      FROM membership_cards
+      JOIN users ON users.id = membership_cards.user_id
+      LEFT JOIN account_deletion_requests pending_requests
+        ON pending_requests.user_id = users.id
+       AND pending_requests.status = 'pending'
+      WHERE users.role = 'member'
+        AND users."deletedAt" IS NULL
+        AND pending_requests.id IS NULL
+        AND membership_cards.status = 'active'
+        AND COALESCE(
+          membership_cards.activated_at,
+          membership_cards.verified_at,
+          membership_cards.purchased_at
+        ) BETWEEN ${start} AND ${end}
     `;
 
     return rows[0] ?? { new_members: 0 };
@@ -981,9 +1135,20 @@ export class AnalyticsRepository extends BaseRepository {
     const [rows, activeMembers] = await Promise.all([
       this.queryRaw<NewMembersSummaryRow[]>`
         SELECT COUNT(*) AS new_members
-        FROM users
-        WHERE role = 'member'
-          AND created_at BETWEEN ${start} AND ${end}
+        FROM membership_cards
+        JOIN users ON users.id = membership_cards.user_id
+        LEFT JOIN account_deletion_requests pending_requests
+          ON pending_requests.user_id = users.id
+         AND pending_requests.status = 'pending'
+        WHERE users.role = 'member'
+          AND users."deletedAt" IS NULL
+          AND pending_requests.id IS NULL
+          AND membership_cards.status = 'active'
+          AND COALESCE(
+            membership_cards.activated_at,
+            membership_cards.verified_at,
+            membership_cards.purchased_at
+          ) BETWEEN ${start} AND ${end}
       `,
       this.getCurrentActiveMembers(end),
     ]);
@@ -1051,73 +1216,168 @@ export class AnalyticsRepository extends BaseRepository {
     switch (this.normalizeSeriesPeriod(period)) {
       case 'hourly':
         return this.queryRaw<PaymentRevenueSeriesRow[]>`
+          WITH payment_rows AS (
+            SELECT
+              date_trunc('hour', COALESCE(verified_at, created_at)) AS bucket_start,
+              COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
+              COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
+              COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+            FROM payments
+            WHERE status = 'completed'
+              AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          ),
+          sale_rows AS (
+            SELECT
+              date_trunc('hour', created_at) AS bucket_start,
+              COALESCE(SUM(total_amount), 0) AS product_revenue
+            FROM sale_transactions
+            WHERE status = 'completed'
+              AND created_at BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          )
           SELECT
-            date_trunc('hour', created_at) AS bucket_start,
-            COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
-          FROM payments
-          WHERE status = 'completed'
-            AND created_at BETWEEN ${start} AND ${end}
-          GROUP BY 1
+            COALESCE(payment_rows.bucket_start, sale_rows.bucket_start) AS bucket_start,
+            COALESCE(payment_rows.membership_revenue, 0) AS membership_revenue,
+            COALESCE(payment_rows.booking_revenue, 0) AS booking_revenue,
+            COALESCE(sale_rows.product_revenue, 0) AS product_revenue,
+            COALESCE(payment_rows.coaching_payments_collected, 0) AS coaching_payments_collected
+          FROM payment_rows
+          FULL OUTER JOIN sale_rows
+            ON sale_rows.bucket_start = payment_rows.bucket_start
           ORDER BY 1
         `;
       case 'daily':
         return this.queryRaw<PaymentRevenueSeriesRow[]>`
+          WITH payment_rows AS (
+            SELECT
+              date_trunc('day', COALESCE(verified_at, created_at)) AS bucket_start,
+              COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
+              COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
+              COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+            FROM payments
+            WHERE status = 'completed'
+              AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          ),
+          sale_rows AS (
+            SELECT
+              date_trunc('day', created_at) AS bucket_start,
+              COALESCE(SUM(total_amount), 0) AS product_revenue
+            FROM sale_transactions
+            WHERE status = 'completed'
+              AND created_at BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          )
           SELECT
-            date_trunc('day', created_at) AS bucket_start,
-            COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
-          FROM payments
-          WHERE status = 'completed'
-            AND created_at BETWEEN ${start} AND ${end}
-          GROUP BY 1
+            COALESCE(payment_rows.bucket_start, sale_rows.bucket_start) AS bucket_start,
+            COALESCE(payment_rows.membership_revenue, 0) AS membership_revenue,
+            COALESCE(payment_rows.booking_revenue, 0) AS booking_revenue,
+            COALESCE(sale_rows.product_revenue, 0) AS product_revenue,
+            COALESCE(payment_rows.coaching_payments_collected, 0) AS coaching_payments_collected
+          FROM payment_rows
+          FULL OUTER JOIN sale_rows
+            ON sale_rows.bucket_start = payment_rows.bucket_start
           ORDER BY 1
         `;
       case 'weekly':
         return this.queryRaw<PaymentRevenueSeriesRow[]>`
+          WITH payment_rows AS (
+            SELECT
+              date_trunc('week', COALESCE(verified_at, created_at)) AS bucket_start,
+              COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
+              COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
+              COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+            FROM payments
+            WHERE status = 'completed'
+              AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          ),
+          sale_rows AS (
+            SELECT
+              date_trunc('week', created_at) AS bucket_start,
+              COALESCE(SUM(total_amount), 0) AS product_revenue
+            FROM sale_transactions
+            WHERE status = 'completed'
+              AND created_at BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          )
           SELECT
-            date_trunc('week', created_at) AS bucket_start,
-            COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
-          FROM payments
-          WHERE status = 'completed'
-            AND created_at BETWEEN ${start} AND ${end}
-          GROUP BY 1
+            COALESCE(payment_rows.bucket_start, sale_rows.bucket_start) AS bucket_start,
+            COALESCE(payment_rows.membership_revenue, 0) AS membership_revenue,
+            COALESCE(payment_rows.booking_revenue, 0) AS booking_revenue,
+            COALESCE(sale_rows.product_revenue, 0) AS product_revenue,
+            COALESCE(payment_rows.coaching_payments_collected, 0) AS coaching_payments_collected
+          FROM payment_rows
+          FULL OUTER JOIN sale_rows
+            ON sale_rows.bucket_start = payment_rows.bucket_start
           ORDER BY 1
         `;
       case 'yearly':
         return this.queryRaw<PaymentRevenueSeriesRow[]>`
+          WITH payment_rows AS (
+            SELECT
+              date_trunc('year', COALESCE(verified_at, created_at)) AS bucket_start,
+              COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
+              COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
+              COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+            FROM payments
+            WHERE status = 'completed'
+              AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          ),
+          sale_rows AS (
+            SELECT
+              date_trunc('year', created_at) AS bucket_start,
+              COALESCE(SUM(total_amount), 0) AS product_revenue
+            FROM sale_transactions
+            WHERE status = 'completed'
+              AND created_at BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          )
           SELECT
-            date_trunc('year', created_at) AS bucket_start,
-            COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
-          FROM payments
-          WHERE status = 'completed'
-            AND created_at BETWEEN ${start} AND ${end}
-          GROUP BY 1
+            COALESCE(payment_rows.bucket_start, sale_rows.bucket_start) AS bucket_start,
+            COALESCE(payment_rows.membership_revenue, 0) AS membership_revenue,
+            COALESCE(payment_rows.booking_revenue, 0) AS booking_revenue,
+            COALESCE(sale_rows.product_revenue, 0) AS product_revenue,
+            COALESCE(payment_rows.coaching_payments_collected, 0) AS coaching_payments_collected
+          FROM payment_rows
+          FULL OUTER JOIN sale_rows
+            ON sale_rows.bucket_start = payment_rows.bucket_start
           ORDER BY 1
         `;
       case 'monthly':
       default:
         return this.queryRaw<PaymentRevenueSeriesRow[]>`
+          WITH payment_rows AS (
+            SELECT
+              date_trunc('month', COALESCE(verified_at, created_at)) AS bucket_start,
+              COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0) AS membership_revenue,
+              COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
+              COALESCE(SUM(CASE WHEN payable_type IN ('coaching', 'recurring_coaching') THEN amount ELSE 0 END), 0) AS coaching_payments_collected
+            FROM payments
+            WHERE status = 'completed'
+              AND COALESCE(verified_at, created_at) BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          ),
+          sale_rows AS (
+            SELECT
+              date_trunc('month', created_at) AS bucket_start,
+              COALESCE(SUM(total_amount), 0) AS product_revenue
+            FROM sale_transactions
+            WHERE status = 'completed'
+              AND created_at BETWEEN ${start} AND ${end}
+            GROUP BY 1
+          )
           SELECT
-            date_trunc('month', created_at) AS bucket_start,
-            COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0) AS membership_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS booking_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'product' THEN amount ELSE 0 END), 0) AS product_revenue,
-            COALESCE(SUM(CASE WHEN payable_type = 'coaching' THEN amount ELSE 0 END), 0) AS coaching_payments_collected
-          FROM payments
-          WHERE status = 'completed'
-            AND created_at BETWEEN ${start} AND ${end}
-          GROUP BY 1
+            COALESCE(payment_rows.bucket_start, sale_rows.bucket_start) AS bucket_start,
+            COALESCE(payment_rows.membership_revenue, 0) AS membership_revenue,
+            COALESCE(payment_rows.booking_revenue, 0) AS booking_revenue,
+            COALESCE(sale_rows.product_revenue, 0) AS product_revenue,
+            COALESCE(payment_rows.coaching_payments_collected, 0) AS coaching_payments_collected
+          FROM payment_rows
+          FULL OUTER JOIN sale_rows
+            ON sale_rows.bucket_start = payment_rows.bucket_start
           ORDER BY 1
         `;
     }
@@ -1132,44 +1392,88 @@ export class AnalyticsRepository extends BaseRepository {
       case 'hourly':
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
-            date_trunc('hour', completed_at) AS bucket_start,
-            COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue
-          FROM coach_appointments
-          WHERE status = 'completed'
-            AND completed_at BETWEEN ${start} AND ${end}
+            date_trunc('hour', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
+            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+          FROM payments
+          LEFT JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          LEFT JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          LEFT JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+          WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+            AND payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
           GROUP BY 1
           ORDER BY 1
         `;
       case 'daily':
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
-            date_trunc('day', completed_at) AS bucket_start,
-            COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue
-          FROM coach_appointments
-          WHERE status = 'completed'
-            AND completed_at BETWEEN ${start} AND ${end}
+            date_trunc('day', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
+            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+          FROM payments
+          LEFT JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          LEFT JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          LEFT JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+          WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+            AND payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
           GROUP BY 1
           ORDER BY 1
         `;
       case 'weekly':
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
-            date_trunc('week', completed_at) AS bucket_start,
-            COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue
-          FROM coach_appointments
-          WHERE status = 'completed'
-            AND completed_at BETWEEN ${start} AND ${end}
+            date_trunc('week', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
+            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+          FROM payments
+          LEFT JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          LEFT JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          LEFT JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+          WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+            AND payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
           GROUP BY 1
           ORDER BY 1
         `;
       case 'yearly':
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
-            date_trunc('year', completed_at) AS bucket_start,
-            COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue
-          FROM coach_appointments
-          WHERE status = 'completed'
-            AND completed_at BETWEEN ${start} AND ${end}
+            date_trunc('year', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
+            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+          FROM payments
+          LEFT JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          LEFT JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          LEFT JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+          WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+            AND payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
           GROUP BY 1
           ORDER BY 1
         `;
@@ -1177,11 +1481,22 @@ export class AnalyticsRepository extends BaseRepository {
       default:
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
-            date_trunc('month', completed_at) AS bucket_start,
-            COALESCE(SUM(gym_revenue), 0) AS coaching_gym_revenue
-          FROM coach_appointments
-          WHERE status = 'completed'
-            AND completed_at BETWEEN ${start} AND ${end}
+            date_trunc('month', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
+            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+          FROM payments
+          LEFT JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          LEFT JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          LEFT JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
+          WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
+            AND payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
           GROUP BY 1
           ORDER BY 1
         `;
@@ -1293,7 +1608,7 @@ export class AnalyticsRepository extends BaseRepository {
         user_profiles.first_name,
         user_profiles.last_name,
         COALESCE(SUM(coach_appointments.total_amount), 0) AS total_billed,
-        COALESCE(SUM(coach_appointments.gym_revenue), 0) AS gym_cut,
+        COALESCE(SUM(coach_appointments.total_amount), 0) AS gym_cut,
         COALESCE(SUM(coach_appointments.coach_earnings), 0) AS coach_payout,
         COUNT(*) AS completed_sessions
       FROM coach_appointments

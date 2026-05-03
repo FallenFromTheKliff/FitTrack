@@ -179,10 +179,13 @@ export function makeBookingDetailModalStyles(colors: ThemeColors) {
       color: colors.textMuted
     },
     footer: {
-      flexDirection: "row",
+      flexDirection: "column",
       gap: 10,
       padding: 16,
       borderTopWidth: 1
+    },
+    footerActionWrap: {
+      width: "100%"
     }
   });
 }

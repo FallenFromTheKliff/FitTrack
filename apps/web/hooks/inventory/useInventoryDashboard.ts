@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useDebounce, useTimedMessage } from "@fittrack/hooks";
 import {
@@ -14,7 +14,8 @@ import {
   inventoryEquipmentQueryOptions,
   inventoryProductDetailQueryOptions,
   inventoryProductsQueryOptions,
-  inventorySaleDetailQueryOptions,
+  inventorySalesAnalyticsQueryOptions,
+  inventorySalesSummaryQueryOptions,
   inventorySalesQueryOptions,
   restockInventoryProductMutationOptions,
   uploadImageMutationOptions,
@@ -30,12 +31,12 @@ import type {
   InventoryEquipmentWriteOffInput,
   InventoryProductCategory,
   InventoryProductMutationInput,
-  InventoryProductRecord,
-  InventorySaleTransactionDetailRecord
+  InventoryProductRecord
 } from "@fittrack/types";
 import type {
   EquipmentAvailabilityStatus,
   InventoryAnalyticsPeriod,
+  InventoryRevenueWindowFilter,
   InventoryTopRetailMetric,
   InventoryTab,
   RetailStockStatus
@@ -43,13 +44,10 @@ import type {
 import { webApiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  buildSalesRevenueSeries,
   filterEquipmentItems,
   filterRetailProducts,
   getEquipmentAvailabilityStatus,
   getRetailInventoryStatus,
-  getTopProductsByInventoryValue,
-  getTopProductsByStocksSold
 } from "@/app/(admin)/inventory/helpers";
 
 const INVENTORY_LIST_PARAMS = { limit: 100, page: 1 } as const;
@@ -62,6 +60,47 @@ const EQUIPMENT_PRESET_NAMES: Record<string, string> = {
   "squat-rack": "Squat Rack",
   treadmill: "Treadmill"
 };
+
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function resolveSalesRevenueSummaryWindow(filter: InventoryRevenueWindowFilter) {
+  if (filter === "all") return undefined;
+
+  const end = new Date();
+
+  if (filter === "today") {
+    const start = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 0, 0, 0, 0)
+    );
+
+    return {
+      endDate: toDateOnly(end),
+      startDate: toDateOnly(start)
+    };
+  }
+
+  if (filter === "1m") {
+    const start = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1, 0, 0, 0, 0)
+    );
+
+    return {
+      endDate: toDateOnly(end),
+      startDate: toDateOnly(start)
+    };
+  }
+
+  const start = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 5, 1, 0, 0, 0, 0)
+  );
+
+  return {
+    endDate: toDateOnly(end),
+    startDate: toDateOnly(start)
+  };
+}
 
 export type InventoryRetailTableRow = InventoryProductRecord & {
   status: RetailStockStatus;
@@ -172,6 +211,8 @@ export function useInventoryDashboard() {
   const [tab, setTab] = useState<InventoryTab>("retail");
   const [salesRevenuePeriod, setSalesRevenuePeriod] =
     useState<InventoryAnalyticsPeriod>("Monthly");
+  const [salesRevenueWindowFilter, setSalesRevenueWindowFilter] =
+    useState<InventoryRevenueWindowFilter>("all");
   const [topRetailMetric, setTopRetailMetric] =
     useState<InventoryTopRetailMetric>("By Inventory Value");
   const [retailStockFilter, setRetailStockFilter] = useState<"All" | RetailStockStatus>("All");
@@ -230,12 +271,19 @@ export function useInventoryDashboard() {
     staleTime: 60_000,
     gcTime: 300_000
   });
-
-  const saleDetailQueries = useQueries({
-    queries: salesResponse.data.map((sale) => ({
-      ...inventorySaleDetailQueryOptions(webApiClient, sale.id),
-      enabled: tab === "analytics" && topRetailMetric === "By Stocks Sold"
-    }))
+  const salesRevenueSummaryWindow = useMemo(
+    () => resolveSalesRevenueSummaryWindow(salesRevenueWindowFilter),
+    [salesRevenueWindowFilter]
+  );
+  const { data: salesSummary } = useQuery({
+    ...inventorySalesSummaryQueryOptions(webApiClient, salesRevenueSummaryWindow),
+    staleTime: 60_000,
+    gcTime: 300_000
+  });
+  const { data: salesAnalytics, isLoading: salesAnalyticsLoading } = useQuery({
+    ...inventorySalesAnalyticsQueryOptions(webApiClient, salesRevenuePeriod),
+    staleTime: 60_000,
+    gcTime: 300_000
   });
 
   const productDetailQuery = useQuery({
@@ -312,24 +360,16 @@ export function useInventoryDashboard() {
       filterEquipmentItems(equipmentItems, debouncedQ, equipmentStatusFilter),
     [equipmentItems, debouncedQ, equipmentStatusFilter]
   );
-  const saleDetails = useMemo(
-    () =>
-      saleDetailQueries.flatMap((query) =>
-        query.data ? [query.data as InventorySaleTransactionDetailRecord] : []
-      ),
-    [saleDetailQueries]
-  );
   const topProducts = useMemo(
     () =>
-      (topRetailMetric === "By Stocks Sold"
-        ? getTopProductsByStocksSold(saleDetails)
-        : getTopProductsByInventoryValue(retailProducts)
-      ).slice(0, 6),
-    [topRetailMetric, retailProducts, saleDetails]
+      topRetailMetric === "By Stocks Sold"
+        ? (salesAnalytics?.topProductsByStocksSold ?? [])
+        : (salesAnalytics?.topProductsByInventoryValue ?? []),
+    [salesAnalytics, topRetailMetric]
   );
   const salesRevenueSeries = useMemo(
-    () => buildSalesRevenueSeries(salesResponse.data, salesRevenuePeriod),
-    [salesResponse.data, salesRevenuePeriod]
+    () => salesAnalytics?.revenueSeries ?? [],
+    [salesAnalytics]
   );
   const retailTotalValue = useMemo(
     () => retailProducts.reduce((acc, product) => acc + product.totalValue, 0),
@@ -337,11 +377,12 @@ export function useInventoryDashboard() {
   );
   const totalRevenue = useMemo(
     () =>
+      salesSummary?.totalRevenue ??
       salesResponse.data.reduce(
         (acc, sale) => (sale.status === "completed" ? acc + sale.totalAmount : acc),
         0
       ),
-    [salesResponse.data]
+    [salesResponse.data, salesSummary?.totalRevenue]
   );
   const retailLowStockCount = retailProducts.filter(
     (product) => product.status === "Low Stock"
@@ -460,8 +501,7 @@ export function useInventoryDashboard() {
   const isAnalyticsLoading =
     productsLoading ||
     salesLoading ||
-    (topRetailMetric === "By Stocks Sold" &&
-      saleDetailQueries.some((query) => query.isLoading || query.isFetching));
+    salesAnalyticsLoading;
   const retailRestockLoading = Boolean(restockRetailId) &&
     !restockRetailTarget &&
     restockProductDetailQuery.isFetching;
@@ -1045,6 +1085,7 @@ export function useInventoryDashboard() {
     isRetailLoading,
     message,
     salesRevenuePeriod,
+    salesRevenueWindowFilter,
     salesRevenueSeries,
     openCreateEquipment: () => setCreateEquipmentOpen(true),
     openCreateRetail: () => setCreateRetailOpen(true),
@@ -1088,6 +1129,7 @@ export function useInventoryDashboard() {
     setRetailCategoryFilter,
     setRetailStockFilter,
     setSalesRevenuePeriod,
+    setSalesRevenueWindowFilter,
     setShowFilters,
     setTab,
     setTopRetailMetric,

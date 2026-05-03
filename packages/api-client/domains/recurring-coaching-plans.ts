@@ -7,6 +7,13 @@ export type RecurringCoachingPlanStatus =
   | "paused"
   | "cancelled"
   | "completed";
+export type RecurringCoachingBillingCycleStatus =
+  | "due"
+  | "processing"
+  | "awaiting_verification"
+  | "paid"
+  | "overdue"
+  | "cancelled";
 export type RecurringCoachingSessionState =
   | "generated"
   | "skipped"
@@ -51,6 +58,25 @@ export type BulkUpdateRecurringCoachingSessionsInput = {
   preferredTime?: string;
 };
 
+export type RecurringCoachingBillingCyclePaymentInput = {
+  provider: "paymongo" | "cash";
+  referenceNo?: string;
+  screenshotUrl?: string;
+};
+
+export type RecurringCoachingBillingCycleRecord = {
+  amount: string;
+  cycleEndDate: string;
+  cycleStartDate: string;
+  dueDate: string;
+  gracePeriodEndsAt: string;
+  id: string;
+  paidAt: string | null;
+  paymentId: string | null;
+  recurringPlanId: string;
+  status: RecurringCoachingBillingCycleStatus;
+};
+
 export type RecurringCoachingPreviewSession = {
   coachId: string;
   conflict: boolean;
@@ -64,6 +90,7 @@ export type RecurringCoachingPreviewSession = {
 };
 
 export type RecurringCoachingPlanRecord = {
+  billingCycles?: RecurringCoachingBillingCycleRecord[];
   coachId: string;
   completedSessions: number;
   endDate: string;
@@ -103,6 +130,12 @@ export type RecurringCoachingPlanMutationResult = {
   sessions: RecurringCoachingPlanSessionRecord[];
 };
 
+export type RecurringCoachingBillingCyclePaymentResult = {
+  billingCycle: RecurringCoachingBillingCycleRecord;
+  checkoutUrl: string | null;
+  paymentId: string;
+};
+
 type PreviewSessionApiRecord = {
   coach_id: string;
   conflict: boolean;
@@ -125,6 +158,7 @@ type PreviewApiRecord = {
 };
 
 type PlanApiRecord = {
+  billing_cycles?: BillingCycleApiRecord[];
   coach_id: string;
   completed_sessions: number;
   end_date: string;
@@ -136,6 +170,19 @@ type PlanApiRecord = {
   start_date: string;
   status: RecurringCoachingPlanStatus;
   total_sessions: number;
+};
+
+type BillingCycleApiRecord = {
+  amount: string;
+  cycle_end_date: string;
+  cycle_start_date: string;
+  due_date: string;
+  grace_period_ends_at: string;
+  id: string;
+  paid_at: string | null;
+  payment_id: string | null;
+  recurring_plan_id: string;
+  status: RecurringCoachingBillingCycleStatus;
 };
 
 type PlanSessionApiRecord = {
@@ -153,6 +200,12 @@ type PlanSessionApiRecord = {
 type PlanMutationApiRecord = {
   plan: PlanApiRecord;
   sessions: PlanSessionApiRecord[];
+};
+
+type BillingCyclePaymentApiRecord = {
+  billing_cycle: BillingCycleApiRecord;
+  checkout_url: string | null;
+  payment_id: string;
 };
 
 function toPlanPayload(input: RecurringCoachingPlanInput) {
@@ -228,6 +281,7 @@ function mapPreview(
 
 function mapPlan(record: PlanApiRecord): RecurringCoachingPlanRecord {
   return {
+    billingCycles: record.billing_cycles?.map(mapBillingCycle),
     coachId: record.coach_id,
     completedSessions: record.completed_sessions,
     endDate: record.end_date,
@@ -239,6 +293,23 @@ function mapPlan(record: PlanApiRecord): RecurringCoachingPlanRecord {
     startDate: record.start_date,
     status: record.status,
     totalSessions: record.total_sessions,
+  };
+}
+
+function mapBillingCycle(
+  record: BillingCycleApiRecord,
+): RecurringCoachingBillingCycleRecord {
+  return {
+    amount: record.amount,
+    cycleEndDate: record.cycle_end_date,
+    cycleStartDate: record.cycle_start_date,
+    dueDate: record.due_date,
+    gracePeriodEndsAt: record.grace_period_ends_at,
+    id: record.id,
+    paidAt: record.paid_at,
+    paymentId: record.payment_id,
+    recurringPlanId: record.recurring_plan_id,
+    status: record.status,
   };
 }
 
@@ -267,6 +338,16 @@ function mapMutationResult(
   };
 }
 
+function mapBillingCyclePaymentResult(
+  record: BillingCyclePaymentApiRecord,
+): RecurringCoachingBillingCyclePaymentResult {
+  return {
+    billingCycle: mapBillingCycle(record.billing_cycle),
+    checkoutUrl: record.checkout_url,
+    paymentId: record.payment_id,
+  };
+}
+
 export function createRecurringCoachingPlansApi(transport: ApiTransport) {
   return {
     async preview(input: RecurringCoachingPlanInput) {
@@ -289,6 +370,24 @@ export function createRecurringCoachingPlansApi(transport: ApiTransport) {
         "Unable to load recurring coaching plan sessions.",
       );
       return mapMutationResult(result);
+    },
+    async payBillingCycle(
+      planId: string,
+      cycleId: string,
+      input: RecurringCoachingBillingCyclePaymentInput,
+    ) {
+      const result = await unwrapResponse<BillingCyclePaymentApiRecord>(
+        transport.post(
+          `/bookings/recurring-coaching-plans/${planId}/billing-cycles/${cycleId}/pay`,
+          {
+            provider: input.provider,
+            ...(input.referenceNo ? { reference_no: input.referenceNo } : {}),
+            ...(input.screenshotUrl ? { screenshot_url: input.screenshotUrl } : {}),
+          },
+        ),
+        "Unable to start recurring coaching billing payment.",
+      );
+      return mapBillingCyclePaymentResult(result);
     },
     async updateSession(
       planId: string,

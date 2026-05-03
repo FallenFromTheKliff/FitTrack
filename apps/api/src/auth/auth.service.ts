@@ -3,7 +3,6 @@ import {
   ConflictException,
   UnauthorizedException,
   ForbiddenException,
-  GoneException,
   NotFoundException,
   HttpException,
   HttpStatus,
@@ -493,6 +492,39 @@ export class AuthService {
     );
   }
 
+  async getPortalSummary(): Promise<{
+    active_members: number;
+    sessions_today: number;
+    total_revenue: string;
+  }> {
+    const now = new Date();
+    const todayStartUtc = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
+    );
+    const tomorrowStartUtc = new Date(todayStartUtc.getTime());
+    tomorrowStartUtc.setUTCDate(tomorrowStartUtc.getUTCDate() + 1);
+
+    const summary = await this.repo.getPortalSummary(
+      now,
+      todayStartUtc,
+      tomorrowStartUtc,
+    );
+
+    return {
+      active_members: Number(summary.active_members ?? 0),
+      sessions_today: Number(summary.sessions_today ?? 0),
+      total_revenue: (summary.total_revenue ?? 0).toString(),
+    };
+  }
+
   async adminCreateUser(
     dto: AdminCreateUserDTO,
     actorId: string,
@@ -657,12 +689,11 @@ export class AuthService {
     }
 
     if (user.deletedAt) {
-      throw new GoneException({
-        type: 'ACCOUNT_ARCHIVED',
-        title: 'Account Archived',
-        status: 410,
-        detail:
-          'This account has been archived and can no longer access FitTrack.',
+      throw new UnauthorizedException({
+        type: 'INVALID_CREDENTIALS',
+        title: 'Invalid Credentials',
+        status: 401,
+        detail: 'Incorrect email or password.',
       });
     }
 

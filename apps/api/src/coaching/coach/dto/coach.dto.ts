@@ -14,6 +14,110 @@ import { TrimString } from '../../../common/validators';
 import { PaginationDTO } from '../../../user/dto/user-dto';
 
 export class UpdateCoachProfileDTO {
+  @ApiPropertyOptional({ example: 'Coach Mara Santos' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'display_name must be a string' })
+  @MaxLength(160, {
+    message: 'display_name must not exceed 160 characters',
+  })
+  display_name?: string;
+
+  @ApiPropertyOptional({ example: 'coach.mara@fittrack.com' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_email must be a string' })
+  @MaxLength(255, {
+    message: 'contact_email must not exceed 255 characters',
+  })
+  contact_email?: string | null;
+
+  @ApiPropertyOptional({ example: '+639171234567' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_phone must be a string' })
+  @MaxLength(40, {
+    message: 'contact_phone must not exceed 40 characters',
+  })
+  contact_phone?: string | null;
+
+  @ApiPropertyOptional({ example: 'Strength and conditioning' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'specialization must be a string' })
+  @MaxLength(255, {
+    message: 'specialization must not exceed 255 characters',
+  })
+  specialization?: string;
+
+  @ApiPropertyOptional({
+    example: 'NASM-certified coach focused on athletic performance.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'bio must be a string' })
+  @MaxLength(2000, { message: 'bio must not exceed 2000 characters' })
+  bio?: string;
+
+  @ApiPropertyOptional({ example: 'NASM-CPT' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'certification must be a string' })
+  @MaxLength(255, {
+    message: 'certification must not exceed 255 characters',
+  })
+  certification?: string;
+
+  @ApiPropertyOptional({ example: 1200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'hourly_rate must be a number' })
+  @Min(0, { message: 'hourly_rate must be at least 0' })
+  hourly_rate?: number;
+
+  @ApiPropertyOptional({ example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'gym_commission_pct must be a number' })
+  @Min(0, { message: 'gym_commission_pct must be at least 0' })
+  @Max(100, { message: 'gym_commission_pct must not exceed 100' })
+  gym_commission_pct?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({
+    message: 'is_available_for_booking must be a boolean value',
+  })
+  is_available_for_booking?: boolean;
+}
+
+export class CreateStandaloneCoachDTO {
+  @ApiProperty({ example: 'Coach Mara Santos' })
+  @TrimString()
+  @IsString({ message: 'display_name must be a string' })
+  @MaxLength(160, {
+    message: 'display_name must not exceed 160 characters',
+  })
+  display_name: string;
+
+  @ApiPropertyOptional({ example: 'coach.mara@fittrack.com' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_email must be a string' })
+  @MaxLength(255, {
+    message: 'contact_email must not exceed 255 characters',
+  })
+  contact_email?: string;
+
+  @ApiPropertyOptional({ example: '+639171234567' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_phone must be a string' })
+  @MaxLength(40, {
+    message: 'contact_phone must not exceed 40 characters',
+  })
+  contact_phone?: string;
+
   @ApiPropertyOptional({ example: 'Strength and conditioning' })
   @IsOptional()
   @TrimString()
@@ -149,6 +253,15 @@ export class CoachListItemResponseDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   id: string;
 
+  @ApiPropertyOptional({ example: 'Coach Mara Santos', nullable: true })
+  display_name: string | null;
+
+  @ApiPropertyOptional({ example: 'coach.mara@fittrack.com', nullable: true })
+  contact_email: string | null;
+
+  @ApiPropertyOptional({ example: '+639171234567', nullable: true })
+  contact_phone: string | null;
+
   @ApiPropertyOptional({ example: 'Strength and conditioning', nullable: true })
   specialization: string | null;
 
@@ -175,15 +288,24 @@ export class CoachListItemResponseDTO {
 
   @ApiProperty({ type: CoachUserProfileResponseDTO })
   profile: CoachUserProfileResponseDTO;
-}
 
-export class CoachDetailResponseDTO extends CoachListItemResponseDTO {
   @ApiProperty({
     type: CoachAvailabilitySlotResponseDTO,
     isArray: true,
   })
   availability_slots: CoachAvailabilitySlotResponseDTO[];
+
+  @ApiProperty({
+    description:
+      'Gym-local date keys where this coach already has an active booking or appointment.',
+    example: ['2026-05-04'],
+    isArray: true,
+    type: String,
+  })
+  booked_dates: string[];
 }
+
+export class CoachDetailResponseDTO extends CoachListItemResponseDTO {}
 
 export class CoachSelfDetailResponseDTO extends CoachDetailResponseDTO {
   @ApiProperty({ type: CoachSelfUserResponseDTO })

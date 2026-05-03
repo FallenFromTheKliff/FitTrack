@@ -1,6 +1,7 @@
 import {
   MembershipCardSource,
   MembershipCardStatus,
+  NotificationType,
   PaymentProvider,
   PaymentStage,
   PayableType,
@@ -15,6 +16,7 @@ describe('MembershipCardService', () => {
     activateMembershipCard: jest.fn(),
     createOrRefreshPendingPurchase: jest.fn(),
     findMembershipCardByIdOrThrow: jest.fn(),
+    findMembershipCardWithUserProfileByIdOrThrow: jest.fn(),
     findMembershipCardByUserId: jest.fn(),
     findMembershipOwnerByIdOrThrow: jest.fn(),
     revokeMembershipCard: jest.fn(),
@@ -30,6 +32,14 @@ describe('MembershipCardService', () => {
     createCheckoutSession: jest.fn(),
   };
 
+  const notificationsService = {
+    dispatch: jest.fn(),
+  };
+
+  const eventEmitter = {
+    emitAsync: jest.fn(),
+  };
+
   let service: MembershipCardService;
 
   beforeEach(() => {
@@ -38,6 +48,8 @@ describe('MembershipCardService', () => {
       repo as never,
       paymentRepo as never,
       paymongoCheckoutService as never,
+      notificationsService as never,
+      eventEmitter as never,
     );
   });
 
@@ -121,7 +133,10 @@ describe('MembershipCardService', () => {
   it('activates pending membership cards when a matching payment completes', async () => {
     const membershipCard = createPendingMembershipCard();
 
-    repo.findMembershipCardByIdOrThrow.mockResolvedValue(membershipCard);
+    repo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue({
+      ...membershipCard,
+      user: { profile: { first_name: 'Khristiane', last_name: 'Alistair' } },
+    });
     repo.activateMembershipCard.mockResolvedValue({
       ...membershipCard,
       status: MembershipCardStatus.active,
@@ -136,12 +151,75 @@ describe('MembershipCardService', () => {
       verifiedBy: null,
     });
 
-    expect(repo.activateMembershipCard).toHaveBeenCalledWith(
-      membershipCard.id,
+    const [activatedCardId, activationInput] = repo.activateMembershipCard.mock
+      .calls[0] as [
+      string,
+      {
+        activatedAt: Date;
+        verifiedAt: Date;
+        verifiedBy: string | null;
+      },
+    ];
+    expect(activatedCardId).toBe(membershipCard.id);
+    expect(activationInput.activatedAt).toBeInstanceOf(Date);
+    expect(activationInput.verifiedAt).toBeInstanceOf(Date);
+    expect(activationInput.verifiedBy).toBeNull();
+
+    const [notificationUserId, notificationType, notificationPayload] =
+      notificationsService.dispatch.mock.calls[0] as [
+        string,
+        NotificationType,
+        {
+          data: {
+            kind: string;
+            membership_card_id: string;
+            payment_id: string;
+          };
+          title: string;
+        },
+      ];
+    expect(notificationUserId).toBe('member-1');
+    expect(notificationType).toBe(NotificationType.payment_confirmed);
+    expect(notificationPayload.title).toBe('Payment confirmed');
+    expect(notificationPayload.data).toEqual(
       expect.objectContaining({
-        activatedAt: expect.any(Date),
-        verifiedAt: expect.any(Date),
-        verifiedBy: null,
+        kind: 'membership_card_payment_confirmed',
+        membership_card_id: membershipCard.id,
+        payment_id: 'payment-card-1',
+      }),
+    );
+    expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('emits a management activity notification when a staff review approves the card payment', async () => {
+    const membershipCard = createPendingMembershipCard();
+
+    repo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue({
+      ...membershipCard,
+      user: { profile: { first_name: 'Khristiane', last_name: 'Alistair' } },
+    });
+    repo.activateMembershipCard.mockResolvedValue({
+      ...membershipCard,
+      status: MembershipCardStatus.active,
+    });
+
+    await service.handlePaymentCompleted({
+      paymentId: 'payment-card-2',
+      userId: 'member-1',
+      payableType: PayableType.membership_card,
+      payableId: membershipCard.id,
+      amount: '400',
+      verifiedBy: 'staff-1',
+    });
+
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      'account.activity',
+      expect.objectContaining({
+        action: 'membership_card_granted',
+        actorId: 'staff-1',
+        targetName: 'Khristiane Alistair',
+        targetRole: UserRole.member,
+        targetUserId: 'member-1',
       }),
     );
   });

@@ -31,15 +31,21 @@ import {
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import {
   CreateSaleDTO,
+  InventoryAnalyticsPeriodEnum,
+  SalesAnalyticsResponseDTO,
+  SalesAnalyticsQueryDTO,
   SaleCheckoutResponseDTO,
   SaleFilterDTO,
+  SalesSummaryResponseDTO,
   SaleTransactionDetailResponseDTO,
   SaleTransactionItemResponseDTO,
   SaleTransactionSummaryResponseDTO,
 } from './dto/sales.dto';
 import {
   SaleDetailRecord,
+  SalesAnalyticsRecord,
   SalesRepository,
+  SalesSummaryRecord,
   SaleSummaryRecord,
 } from './sales.repository';
 import {
@@ -149,6 +155,20 @@ export class SalesService {
       data: result.data.map((sale) => this.toSummaryResponse(sale)),
       meta: result.meta,
     };
+  }
+
+  async getSalesSummary(dto: SaleFilterDTO): Promise<SalesSummaryResponseDTO> {
+    return this.toSalesSummaryResponse(await this.repo.getSalesSummary(dto));
+  }
+
+  async getSalesAnalytics(
+    dto: SalesAnalyticsQueryDTO,
+  ): Promise<SalesAnalyticsResponseDTO> {
+    return this.toSalesAnalyticsResponse(
+      await this.repo.getSalesAnalytics(
+        dto.period ?? InventoryAnalyticsPeriodEnum.Monthly,
+      ),
+    );
   }
 
   async getSaleById(id: string): Promise<SaleTransactionDetailResponseDTO> {
@@ -508,6 +528,38 @@ export class SalesService {
                 image_url: item.product.image_url ?? null,
               }
             : null,
+        }),
+      ),
+    };
+  }
+
+  private toSalesSummaryResponse(
+    summary: SalesSummaryRecord,
+  ): SalesSummaryResponseDTO {
+    return {
+      completed_sales_count: summary.completed_sales_count,
+      total_revenue: summary.total_revenue.toDecimalPlaces(2).toFixed(2),
+    };
+  }
+
+  private toSalesAnalyticsResponse(
+    analytics: SalesAnalyticsRecord,
+  ): SalesAnalyticsResponseDTO {
+    return {
+      period: analytics.period,
+      revenue_series: analytics.revenue_series.map((point) => ({
+        bucket_label: point.bucket_label,
+        revenue: point.revenue.toDecimalPlaces(2).toFixed(2),
+      })),
+      top_products_by_inventory_value:
+        analytics.top_products_by_inventory_value.map((item) => ({
+          name: item.name,
+          value: item.value.toDecimalPlaces(2).toFixed(2),
+        })),
+      top_products_by_stocks_sold: analytics.top_products_by_stocks_sold.map(
+        (item) => ({
+          name: item.name,
+          value: item.value.toDecimalPlaces(2).toFixed(2),
         }),
       ),
     };

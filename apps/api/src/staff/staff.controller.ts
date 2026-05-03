@@ -1,4 +1,5 @@
 import {
+  Post,
   Body,
   Controller,
   Get,
@@ -24,9 +25,16 @@ import {
   SetAvailabilityDTO,
   StaffAppointmentFilterDTO,
 } from '../coaching/appointment/dto/appointment.dto';
-import { UpdateCoachProfileDTO } from '../coaching/coach/dto/coach.dto';
+import {
+  CreateStandaloneCoachDTO,
+  UpdateCoachProfileDTO,
+} from '../coaching/coach/dto/coach.dto';
 import { CoachService } from '../coaching/coach/coach.service';
 import { DateRangeDTO } from '../user/dto/user-dto';
+import {
+  CreateStaffCoachBookingDTO,
+  CreateStaffVenueBookingDTO,
+} from './dto/staff-schedule.dto';
 import { StaffService } from './staff.service';
 
 @ApiTags('Staff')
@@ -64,6 +72,14 @@ export class StaffController {
   })
   getAllCoaches() {
     return this.staffService.getAllCoaches();
+  }
+
+  @Post('coaches')
+  @ApiOperation({
+    summary: 'Create a standalone coach profile for Gym Operations.',
+  })
+  createCoach(@Body() dto: CreateStandaloneCoachDTO) {
+    return this.coachService.createStandaloneCoach(dto);
   }
 
   @Get('appointments')
@@ -106,6 +122,21 @@ export class StaffController {
     return this.bookingService.getAllBookings(dto);
   }
 
+  @Post('bookings')
+  @ApiOperation({
+    summary: 'Create a manual venue booking from Gym Operations.',
+  })
+  createManualBooking(
+    @Body() dto: CreateStaffVenueBookingDTO,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.bookingService.createStaffManualBooking(
+      dto.member_id,
+      dto,
+      user.sub,
+    );
+  }
+
   @Patch('bookings/:id/confirm')
   @ApiOperation({
     summary: 'Confirm a pending booking from the staff schedule surface.',
@@ -127,6 +158,58 @@ export class StaffController {
     @Body('reason') reason?: string,
   ) {
     return this.bookingService.rejectPendingBooking(id, user.sub, reason);
+  }
+
+  @Patch('bookings/:id/complete')
+  @ApiOperation({
+    summary: 'Mark a confirmed venue booking complete from the staff schedule surface.',
+  })
+  async completeBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.completeConfirmedBooking(id, user.sub);
+    return null;
+  }
+
+  @Patch('bookings/:id/cancel')
+  @ApiOperation({
+    summary: 'Cancel a venue booking from the staff schedule surface.',
+  })
+  async cancelBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('reason') reason?: string,
+  ) {
+    await this.bookingService.cancelBookingAsStaff(id, user.sub, reason);
+    return null;
+  }
+
+  @Patch('bookings/:id/no-show')
+  @ApiOperation({
+    summary: 'Mark a confirmed venue booking as no-show from the staff schedule surface.',
+  })
+  async markBookingNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.markBookingNoShowAsStaff(id, user.sub);
+    return null;
+  }
+
+  @Post('appointments')
+  @ApiOperation({
+    summary: 'Create a confirmed manual coach booking from Gym Operations.',
+  })
+  createManualAppointment(
+    @Body() dto: CreateStaffCoachBookingDTO,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.appointmentService.createStaffManualAppointment(
+      dto.member_id,
+      dto,
+      user.sub,
+    );
   }
 
   @Patch('appointments/:id/respond')

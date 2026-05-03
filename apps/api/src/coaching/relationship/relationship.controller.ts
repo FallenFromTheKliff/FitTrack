@@ -1,12 +1,12 @@
 import {
   Body,
   Controller,
+  GoneException,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,7 +25,6 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
-  CoachClientFilterDTO,
   CoachingReviewResponseDTO,
   CreateReviewDTO,
   RelationshipCoachSummaryResponseDTO,
@@ -33,7 +32,6 @@ import {
   RelationshipResponseDTO,
   RelationshipUserProfileResponseDTO,
   RequestRelationshipDTO,
-  UpdateRelationshipDTO,
 } from './dto/relationship.dto';
 import { RelationshipService } from './relationship.service';
 
@@ -120,42 +118,38 @@ export class RelationshipController {
 
   @Get('clients')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Get the authenticated coach client relationships.',
+    summary: 'Deprecated coach-user client relationship endpoint.',
   })
   @ApiResponse({
     status: 200,
     description: 'Coach client relationships returned.',
     schema: paginatedEnvelopeSchema(getSchemaPath(RelationshipResponseDTO)),
   })
-  getMyClients(
-    @CurrentUser() user: JwtPayload,
-    @Query() dto: CoachClientFilterDTO,
-  ) {
-    return this.relationshipService.getMyClients(user.sub, dto);
+  getMyClients() {
+    throw new GoneException(
+      'Coach user relationship endpoints are no longer supported.',
+    );
   }
 
   @Patch('relationships/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary:
-      'Activate, pause, or terminate a coaching relationship as the owning coach.',
+    summary: 'Deprecated coach-user relationship update endpoint.',
   })
   @ApiResponse({
     status: 200,
     description: 'Relationship updated.',
     schema: apiEnvelopeSchema(getSchemaPath(RelationshipResponseDTO)),
   })
-  updateRelationship(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: UpdateRelationshipDTO,
-  ) {
-    return this.relationshipService.updateRelationship(user.sub, id, dto);
+  updateRelationship(@Param('id', ParseUUIDPipe) id: string) {
+    throw new GoneException(
+      `Coach user relationship updates are no longer supported for relationship ${id}.`,
+    );
   }
 
   @Post('coaches/:id/reviews')

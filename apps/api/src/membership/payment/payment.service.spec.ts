@@ -192,7 +192,7 @@ describe('PaymentService', () => {
   });
 
   it('verifies an awaiting payment and emits audit plus completion events on approval', async () => {
-    repo.findPaymentByIdOrThrow.mockResolvedValue({
+    repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({
       id: 'payment-1',
       user_id: 'member-1',
       payable_type: PayableType.subscription,
@@ -227,10 +227,19 @@ describe('PaymentService', () => {
         payableType: PayableType.subscription,
       }),
     );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'account.activity',
+      expect.objectContaining({
+        action: 'payment_approved',
+        actorId: 'admin-1',
+        targetRole: UserRole.member,
+        targetUserId: 'member-1',
+      }),
+    );
   });
 
   it('emits payment.failed when an awaiting payment is rejected', async () => {
-    repo.findPaymentByIdOrThrow.mockResolvedValue({
+    repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({
       id: 'payment-1',
       user_id: 'member-1',
       payable_type: PayableType.subscription,
@@ -262,7 +271,7 @@ describe('PaymentService', () => {
   });
 
   it('rejects verification attempts for payments not awaiting review', async () => {
-    repo.findPaymentByIdOrThrow.mockResolvedValue({
+    repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({
       id: 'payment-1',
       status: 'pending',
       amount: 1499,

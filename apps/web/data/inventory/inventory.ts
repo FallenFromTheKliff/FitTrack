@@ -13,6 +13,7 @@ export type InventoryAnalyticsPeriod =
   | "Quarterly"
   | "Yearly";
 export type InventoryTopRetailMetric = "By Inventory Value" | "By Stocks Sold";
+export type InventoryRevenueWindowFilter = "today" | "1m" | "6m" | "all";
 
 export const INVENTORY_TABS = [
   { key: "retail", label: "Retail" },
@@ -92,6 +93,16 @@ export const INVENTORY_TOP_RETAIL_FILTER_OPTIONS: Array<{
 }> = [
   { label: "By Inventory Value", value: "By Inventory Value" },
   { label: "By Stocks Sold", value: "By Stocks Sold" }
+];
+
+export const INVENTORY_REVENUE_WINDOW_OPTIONS: Array<{
+  label: string;
+  value: InventoryRevenueWindowFilter;
+}> = [
+  { label: "Today", value: "today" },
+  { label: "1 Month", value: "1m" },
+  { label: "6 Months", value: "6m" },
+  { label: "All Time", value: "all" }
 ];
 
 export const INVENTORY_EQUIPMENT_PRESET_OPTIONS: Array<{

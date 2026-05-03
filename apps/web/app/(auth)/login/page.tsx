@@ -1,7 +1,51 @@
+import { resolveApiBaseUrl } from "@fittrack/api-client";
+
 import { AdminLoginPage } from "@/components/auth/AdminLoginPage";
+import { buildLoginHeroStats } from "@/data/auth/auth";
 
 export const dynamic = "force-dynamic";
 
-export default function Page() {
-  return <AdminLoginPage />;
+type PortalSummaryResponse = {
+  active_members: number;
+  sessions_today: number;
+  total_revenue: string;
+};
+
+type PortalSummaryEnvelope = {
+  data?: PortalSummaryResponse;
+};
+
+async function getPortalSummary(): Promise<PortalSummaryResponse | null> {
+  const baseUrl = resolveApiBaseUrl(
+    process.env.NEXT_PUBLIC_API_URL,
+    "http://127.0.0.1:3001/v1"
+  );
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/portal-summary`, {
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as
+      | PortalSummaryResponse
+      | PortalSummaryEnvelope;
+
+    if ("data" in payload && payload.data) {
+      return payload.data;
+    }
+
+    return payload as PortalSummaryResponse;
+  } catch {
+    return null;
+  }
+}
+
+export default async function Page() {
+  const summary = await getPortalSummary();
+
+  return <AdminLoginPage heroStats={buildLoginHeroStats(summary)} />;
 }

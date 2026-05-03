@@ -14,11 +14,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 
 function getIdentityIdentifier(
-  identities: Array<{
-    provider: AuthProvider;
-    identifier: string;
-    verified_at: Date | null;
-  }> | null | undefined,
+  identities:
+    | Array<{
+        provider: AuthProvider;
+        identifier: string;
+        verified_at: Date | null;
+      }>
+    | null
+    | undefined,
   provider: AuthProvider,
 ) {
   if (!identities?.length) {
@@ -37,8 +40,6 @@ function toFrontendRole(role: UserRole) {
       return 'ADMIN' as const;
     case UserRole.staff:
       return 'STAFF' as const;
-    case UserRole.coach:
-      return 'COACH' as const;
     case UserRole.member:
     default:
       return 'USER' as const;
@@ -270,7 +271,7 @@ export class AdminDeletionRequestsService {
     action: 'termination_approved' | 'termination_rejected';
     actorId: string;
     targetEmail?: string | null;
-    targetRole?: UserRole | string | null;
+    targetRole?: UserRole | null;
     targetUserId: string;
   }) {
     await this.eventEmitter?.emitAsync(ACCOUNT_ACTIVITY_EVENT, {

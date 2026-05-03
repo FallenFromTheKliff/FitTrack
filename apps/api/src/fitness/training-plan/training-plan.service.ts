@@ -72,7 +72,7 @@ export class TrainingPlanService {
 
     const created = await this.repo.createPlan({
       userId,
-      coachUserId: userRole === UserRole.coach ? userId : null,
+      coachUserId: null,
       source: PlanSource.self_created,
       title: dto.title,
       goal: dto.goal,

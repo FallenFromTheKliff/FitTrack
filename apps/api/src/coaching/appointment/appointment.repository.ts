@@ -8,8 +8,10 @@ import {
   AppointmentStatus,
   CoachAppointment,
   CoachProfile,
+  PaymentProvider,
+  PaymentStage,
+  PaymentStatus,
   Prisma,
-  UserStatus,
 } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
@@ -23,7 +25,7 @@ const ACTIVE_APPOINTMENT_STATUSES = [
   AppointmentStatus.confirmed,
 ] as const;
 
-const MAX_DURATION_LOOKBACK_MINUTES = 180;
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 type CoachIdLookup = { id: string };
 
@@ -204,10 +206,7 @@ export class AppointmentRepository extends BaseRepository {
   findCoachScheduleContextOrThrow(coachId: string): Promise<CoachProfile> {
     return this.findOneOrThrow<CoachProfile>(
       this.prisma.coachProfile,
-      {
-        id: coachId,
-        user: { status: UserStatus.active },
-      },
+      { id: coachId },
       'CoachProfile',
     );
   }
@@ -280,17 +279,12 @@ export class AppointmentRepository extends BaseRepository {
         throw this.buildNoAvailableSlotError();
       }
 
+      const gymDayRange = getGymDayUtcRange(input.scheduledAt);
       const candidates = await tx.coachAppointment.findMany({
         where: {
           coach_id: input.coachId,
           status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
-          scheduled_at: {
-            gte: new Date(
-              input.scheduledAt.getTime() -
-                MAX_DURATION_LOOKBACK_MINUTES * 60 * 1000,
-            ),
-            lt: input.appointmentEndsAt,
-          },
+          scheduled_at: gymDayRange,
         },
         select: {
           id: true,
@@ -306,8 +300,9 @@ export class AppointmentRepository extends BaseRepository {
         );
 
         return (
-          existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
-          existingEndsAt.getTime() > input.scheduledAt.getTime()
+          toGymDateKey(existingStartsAt) === toGymDateKey(input.scheduledAt) ||
+          (existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
+            existingEndsAt.getTime() > input.scheduledAt.getTime())
         );
       });
 
@@ -331,6 +326,122 @@ export class AppointmentRepository extends BaseRepository {
           member_notes: input.memberNotes ?? null,
         },
       });
+    });
+  }
+
+  async createConfirmedManualAppointment(input: {
+    userId: string;
+    coachId: string;
+    scheduledAt: Date;
+    appointmentEndsAt: Date;
+    dayOfWeek: number;
+    slotStart: Date;
+    slotEnd: Date;
+    durationMinutes: number;
+    memberNotes?: string;
+    totalAmount: Prisma.Decimal;
+    downpaymentAmount: Prisma.Decimal;
+    balanceAmount: Prisma.Decimal;
+    gymRevenue: Prisma.Decimal;
+    coachEarnings: Prisma.Decimal;
+    idempotencyKey: string;
+    paymentAmount?: Prisma.Decimal;
+    paymentStage?: Extract<
+      PaymentStage,
+      typeof PaymentStage.downpayment | typeof PaymentStage.full
+    >;
+    verifiedBy: string;
+  }): Promise<CoachAppointment> {
+    return this.transaction(async (tx) => {
+      const availableSlot = await tx.coachAvailabilitySlot.findFirst({
+        where: {
+          coach_id: input.coachId,
+          is_active: true,
+          day_of_week: input.dayOfWeek,
+          start_time: { lte: input.slotStart },
+          end_time: { gte: input.slotEnd },
+        },
+        select: { id: true },
+      });
+
+      if (!availableSlot) {
+        throw this.buildNoAvailableSlotError();
+      }
+
+      const gymDayRange = getGymDayUtcRange(input.scheduledAt);
+      const candidates = await tx.coachAppointment.findMany({
+        where: {
+          coach_id: input.coachId,
+          status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
+          scheduled_at: gymDayRange,
+        },
+        select: {
+          id: true,
+          scheduled_at: true,
+          duration_minutes: true,
+        },
+      });
+
+      const hasConflict = candidates.some((appointment) => {
+        const existingStartsAt = appointment.scheduled_at;
+        const existingEndsAt = new Date(
+          existingStartsAt.getTime() + appointment.duration_minutes * 60 * 1000,
+        );
+
+        return (
+          toGymDateKey(existingStartsAt) === toGymDateKey(input.scheduledAt) ||
+          (existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
+            existingEndsAt.getTime() > input.scheduledAt.getTime())
+        );
+      });
+
+      if (hasConflict) {
+        throw this.buildScheduleConflict();
+      }
+
+      const paidAt = new Date();
+      const paymentStage = input.paymentStage ?? PaymentStage.full;
+      const isFreeSession = input.totalAmount.equals(0);
+
+      const appointment = await tx.coachAppointment.create({
+        data: {
+          user: { connect: { id: input.userId } },
+          coach: { connect: { id: input.coachId } },
+          status: isFreeSession
+            ? AppointmentStatus.confirmed
+            : AppointmentStatus.pending_payment,
+          is_free_session: isFreeSession,
+          scheduled_at: input.scheduledAt,
+          duration_minutes: input.durationMinutes,
+          total_amount: input.totalAmount,
+          downpayment_amount: input.downpaymentAmount,
+          balance_amount: input.balanceAmount,
+          gym_revenue: input.gymRevenue,
+          coach_earnings: input.coachEarnings,
+          downpayment_paid_at: isFreeSession ? paidAt : null,
+          balance_paid_at: isFreeSession ? paidAt : null,
+          member_notes: input.memberNotes ?? null,
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          user: { connect: { id: input.userId } },
+          verifier: { connect: { id: input.verifiedBy } },
+          payable_type: 'coaching',
+          payable_id: appointment.id,
+          payment_stage: paymentStage,
+          amount: input.paymentAmount ?? input.totalAmount,
+          provider: PaymentProvider.cash,
+          idempotency_key: input.idempotencyKey,
+          status: isFreeSession
+            ? PaymentStatus.completed
+            : PaymentStatus.awaiting_verification,
+          verified_at: isFreeSession ? paidAt : null,
+        },
+      });
+
+      return appointment;
     });
   }
 
@@ -506,7 +617,30 @@ export class AppointmentRepository extends BaseRepository {
       title: 'Schedule Conflict',
       status: 409,
       detail:
-        'The requested appointment overlaps with another active appointment.',
+        'The requested coach already has an active appointment on this gym day.',
     });
   }
+}
+
+function toGymWallClockDate(value: Date): Date {
+  return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
+}
+
+function toGymDateKey(value: Date): string {
+  return toGymWallClockDate(value).toISOString().slice(0, 10);
+}
+
+function getGymDayUtcRange(value: Date): { gte: Date; lt: Date } {
+  const gymDate = toGymWallClockDate(value);
+  const year = gymDate.getUTCFullYear();
+  const month = gymDate.getUTCMonth();
+  const day = gymDate.getUTCDate();
+  const dayStartUtc = new Date(
+    Date.UTC(year, month, day) - GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+
+  return {
+    gte: dayStartUtc,
+    lt: new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000),
+  };
 }

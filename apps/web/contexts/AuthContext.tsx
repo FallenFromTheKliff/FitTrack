@@ -77,7 +77,11 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
             reason: data.reason,
           };
         }
-        return { success: true as const, otpRequired: data.otpRequired };
+        return {
+          success: true as const,
+          otpRequired: data.otpRequired,
+          user: data.user,
+        };
       } catch (error: unknown) {
         return {
           success: false as const,
@@ -241,9 +245,12 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     }
     try {
       const hydratedUser = await controller.loadCurrentUser();
-      setUser(hydratedUser ?? authUser);
+      const nextUser = hydratedUser ?? authUser;
+      setUser(nextUser);
+      return nextUser;
     } catch {
       setUser(authUser);
+      return authUser;
     }
   }, [controller, setUser]);
 

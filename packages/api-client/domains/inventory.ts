@@ -13,10 +13,13 @@ import type {
   InventoryProductListParams,
   InventoryProductMutationInput,
   InventoryProductRecord,
+  InventorySalesAnalyticsRecord,
+  InventoryAnalyticsPeriod,
   InventoryRestockInput,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
   InventorySaleSource,
+  InventorySalesSummaryRecord,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord
 } from "@fittrack/types";
@@ -38,10 +41,13 @@ export type {
   InventoryProductListParams,
   InventoryProductMutationInput,
   InventoryProductRecord,
+  InventorySalesAnalyticsRecord,
+  InventoryAnalyticsPeriod,
   InventoryRestockInput,
   InventorySaleCheckoutRecord,
   InventorySaleListParams,
   InventorySaleSource,
+  InventorySalesSummaryRecord,
   InventorySaleTransactionDetailRecord,
   InventorySaleTransactionSummaryRecord
 } from "@fittrack/types";
@@ -151,6 +157,28 @@ type InventorySaleCheckoutApiRecord = {
     | "processing";
   sale_id: string;
   status: "cancelled" | "completed" | "pending";
+};
+
+type InventorySalesSummaryApiRecord = {
+  completed_sales_count: number;
+  total_revenue: string | number;
+};
+
+type InventorySalesAnalyticsPointApiRecord = {
+  bucket_label: string;
+  revenue: string | number;
+};
+
+type InventorySalesAnalyticsTopProductApiRecord = {
+  name: string;
+  value: string | number;
+};
+
+type InventorySalesAnalyticsApiRecord = {
+  period: InventoryAnalyticsPeriod;
+  revenue_series: InventorySalesAnalyticsPointApiRecord[];
+  top_products_by_inventory_value: InventorySalesAnalyticsTopProductApiRecord[];
+  top_products_by_stocks_sold: InventorySalesAnalyticsTopProductApiRecord[];
 };
 
 function toNumber(value: string | number | null | undefined) {
@@ -282,6 +310,35 @@ function mapSaleCheckout(
     paymentStatus: record.payment_status,
     saleId: record.sale_id,
     status: record.status
+  };
+}
+
+function mapSalesSummary(
+  record: InventorySalesSummaryApiRecord
+): InventorySalesSummaryRecord {
+  return {
+    completedSalesCount: record.completed_sales_count,
+    totalRevenue: toNumber(record.total_revenue)
+  };
+}
+
+function mapSalesAnalytics(
+  record: InventorySalesAnalyticsApiRecord
+): InventorySalesAnalyticsRecord {
+  return {
+    period: record.period,
+    revenueSeries: record.revenue_series.map((point) => ({
+      bucketLabel: point.bucket_label,
+      revenue: toNumber(point.revenue)
+    })),
+    topProductsByInventoryValue: record.top_products_by_inventory_value.map((item) => ({
+      name: item.name,
+      value: toNumber(item.value)
+    })),
+    topProductsByStocksSold: record.top_products_by_stocks_sold.map((item) => ({
+      name: item.name,
+      value: toNumber(item.value)
+    }))
   };
 }
 
@@ -513,6 +570,26 @@ export function createInventoryApi(transport: ApiTransport) {
         ...result,
         data: result.data.map(mapSaleSummary)
       };
+    },
+    async getSalesSummary(params?: InventorySaleListParams) {
+      return mapSalesSummary(
+        await unwrapResponse<InventorySalesSummaryApiRecord>(
+          transport.get("/inventory/sales/summary", {
+            params: toSaleListParams(params)
+          }),
+          "Unable to load inventory sales summary."
+        )
+      );
+    },
+    async getSalesAnalytics(period: InventoryAnalyticsPeriod) {
+      return mapSalesAnalytics(
+        await unwrapResponse<InventorySalesAnalyticsApiRecord>(
+          transport.get("/inventory/sales/analytics", {
+            params: { period }
+          }),
+          "Unable to load inventory sales analytics."
+        )
+      );
     },
     async getSaleById(saleId: string) {
       return mapSaleDetail(

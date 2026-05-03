@@ -123,67 +123,68 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (!isWebPortalRole(user?.role) || !canAccessWebPage(user.role, pageKey))
     return null;
 
-  return (
-    <MemberProvider>
-      <ScheduleProvider>
-        <div className={themeTransition} style={s.root}>
-          {!isHalfScreenOrLess ? (
-            <div
-              style={{
-                ...s.desktopSidebarWrap,
-                width: isDesktopSidebarCollapsed ? 96 : 300,
-                transition: "width 220ms ease",
-              }}
-            >
-              <Sidebar
-                collapsed={isDesktopSidebarCollapsed}
-                onCollapseToggle={() =>
-                  setIsDesktopSidebarCollapsed((value) => !value)
-                }
-              />
-            </div>
-          ) : null}
-          <div style={s.main}>
-            <Header
-              onMenuToggle={() => setIsMobileOpen((v) => !v)}
-              showMenuButton={isHalfScreenOrLess}
-              pageKey={pageKey}
-            />
-            <main style={s.content}>{children}</main>
-          </div>
-          {isHalfScreenOrLess ? (
-            <>
-              <div
-                className="fixed inset-0"
-                style={{
-                  ...s.mobileSidebarBackdrop,
-                  opacity: isMobileOpen ? 1 : 0,
-                  pointerEvents: isMobileOpen ? "auto" : "none",
-                  transition: "opacity 200ms ease",
-                }}
-                onClick={() => setIsMobileOpen(false)}
-              />
-              <div
-                className="fixed top-0 left-0 h-full"
-                style={{
-                  ...s.mobileSidebarPanel,
-                  transform: isMobileOpen
-                    ? "translateX(0)"
-                    : "translateX(-100%)",
-                  transition: "transform 250ms ease",
-                }}
-                onClick={(event) => event.stopPropagation()}
-                ref={mobileSidebarRef}
-              >
-                <Sidebar
-                  isMobileOverlay
-                  onClose={() => setIsMobileOpen(false)}
-                />
-              </div>
-            </>
-          ) : null}
+  let content = (
+    <div className={themeTransition} style={s.root}>
+      {!isHalfScreenOrLess ? (
+        <div
+          style={{
+            ...s.desktopSidebarWrap,
+            width: isDesktopSidebarCollapsed ? 96 : 300,
+            transition: "width 220ms ease",
+          }}
+        >
+          <Sidebar
+            collapsed={isDesktopSidebarCollapsed}
+            onCollapseToggle={() =>
+              setIsDesktopSidebarCollapsed((value) => !value)
+            }
+          />
         </div>
-      </ScheduleProvider>
-    </MemberProvider>
+      ) : null}
+      <div style={s.main}>
+        <Header
+          onMenuToggle={() => setIsMobileOpen((v) => !v)}
+          showMenuButton={isHalfScreenOrLess}
+          pageKey={pageKey}
+        />
+        <main style={s.content}>{children}</main>
+      </div>
+      {isHalfScreenOrLess ? (
+        <>
+          <div
+            className="fixed inset-0"
+            style={{
+              ...s.mobileSidebarBackdrop,
+              opacity: isMobileOpen ? 1 : 0,
+              pointerEvents: isMobileOpen ? "auto" : "none",
+              transition: "opacity 200ms ease",
+            }}
+            onClick={() => setIsMobileOpen(false)}
+          />
+          <div
+            className="fixed top-0 left-0 h-full"
+            style={{
+              ...s.mobileSidebarPanel,
+              transform: isMobileOpen ? "translateX(0)" : "translateX(-100%)",
+              transition: "transform 250ms ease",
+            }}
+            onClick={(event) => event.stopPropagation()}
+            ref={mobileSidebarRef}
+          >
+            <Sidebar isMobileOverlay onClose={() => setIsMobileOpen(false)} />
+          </div>
+        </>
+      ) : null}
+    </div>
   );
+
+  if (pageKey === "schedule") {
+    content = <ScheduleProvider>{content}</ScheduleProvider>;
+  }
+
+  if (pageKey === "members") {
+    content = <MemberProvider>{content}</MemberProvider>;
+  }
+
+  return content;
 }

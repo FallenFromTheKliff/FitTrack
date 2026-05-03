@@ -183,6 +183,7 @@ export async function invalidateStaffBookingQueries(queryClient: QueryClient) {
     queryClient.invalidateQueries({
       queryKey: queryKeys.staffBookings("pending"),
     }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.adminBookings() }),
   ]);
 }
 
@@ -269,6 +270,12 @@ export async function invalidateInventoryQueries(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: queryKeys.inventoryProducts() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.inventoryEquipment() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.inventorySales() }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.inventorySalesSummary(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.inventorySalesAnalytics(),
+    }),
   ]);
 }
 

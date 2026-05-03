@@ -26,6 +26,15 @@ type MembershipCardPurchaseRecord = {
   payment: Payment;
 };
 
+type MembershipCardWithUserProfile = MembershipCard & {
+  user: {
+    profile: {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+  };
+};
+
 const MEMBERSHIP_CARD_PRICE = new Prisma.Decimal(400);
 const MEMBERSHIP_CARD_PAYABLE_TYPE =
   'membership_card' as unknown as Payment['payable_type'];
@@ -57,6 +66,28 @@ export class MembershipCardRepository extends BaseRepository {
       this.prisma.membershipCard,
       id,
       'MembershipCard',
+    );
+  }
+
+  findMembershipCardWithUserProfileByIdOrThrow(
+    id: string,
+  ): Promise<MembershipCardWithUserProfile> {
+    return this.findByIdOrThrow<MembershipCardWithUserProfile>(
+      this.prisma.membershipCard,
+      id,
+      'MembershipCard',
+      {
+        user: {
+          select: {
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
     );
   }
 
@@ -159,7 +190,10 @@ export class MembershipCardRepository extends BaseRepository {
         },
       });
 
-      if (owner && (owner.status === UserStatus.pending || !owner.qr_code_token)) {
+      if (
+        owner &&
+        (owner.status === UserStatus.pending || !owner.qr_code_token)
+      ) {
         await tx.user.update({
           where: { id: owner.id },
           data: {

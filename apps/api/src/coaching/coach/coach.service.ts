@@ -12,6 +12,7 @@ import { AuditAction, AuditEvent } from '../../audit/audit.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import {
   AdminCoachDetailResponseDTO,
+  CreateStandaloneCoachDTO,
   CoachAvailabilitySlotResponseDTO,
   CoachDetailResponseDTO,
   CoachFilterDTO,
@@ -27,6 +28,9 @@ import {
 } from './coach.repository';
 
 const COACH_SELF_UPDATE_FIELDS = [
+  'display_name',
+  'contact_email',
+  'contact_phone',
   'specialization',
   'bio',
   'certification',
@@ -38,6 +42,8 @@ const COACH_ADMIN_UPDATE_FIELDS = [
   ...COACH_SELF_UPDATE_FIELDS,
   'gym_commission_pct',
 ] as const;
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 function pickDefined<T extends object, K extends keyof T>(
   source: T,
@@ -55,6 +61,15 @@ function pickDefined<T extends object, K extends keyof T>(
   return result;
 }
 
+function normalizeStandaloneDisplayName(value?: string | null) {
+  const displayName = value?.trim();
+  if (displayName && !EMAIL_LIKE_PATTERN.test(displayName)) {
+    return displayName;
+  }
+
+  return null;
+}
+
 @Injectable()
 export class CoachService {
   constructor(
@@ -66,15 +81,36 @@ export class CoachService {
     dto: CoachFilterDTO,
   ): Promise<PaginatedResult<CoachListItemResponseDTO>> {
     const result = await this.repo.listAvailableCoaches(dto);
+    const bookedDatesByCoachId = new Map(
+      await Promise.all(
+        result.data.map(async (coach) => {
+          const bookedDates = await this.repo.listActiveBookingDateKeys(
+            coach.id,
+            new Date(),
+            120,
+          );
+          return [coach.id, bookedDates] as const;
+        }),
+      ),
+    );
 
     return {
-      data: result.data.map((coach) => this.toCoachListItem(coach)),
+      data: result.data.map((coach) =>
+        this.toCoachListItem(coach, bookedDatesByCoachId.get(coach.id) ?? []),
+      ),
       meta: result.meta,
     };
   }
 
   async getCoachById(id: string): Promise<CoachDetailResponseDTO> {
-    return this.toCoachDetail(await this.repo.findCoachByIdOrThrow(id));
+    const coach = await this.repo.findCoachByIdOrThrow(id);
+    const bookedDates = await this.repo.listActiveBookingDateKeys(
+      id,
+      new Date(),
+      120,
+    );
+
+    return this.toCoachDetail(coach, bookedDates);
   }
 
   async getMyProfile(userId: string): Promise<CoachSelfDetailResponseDTO> {
@@ -140,33 +176,51 @@ export class CoachService {
     );
   }
 
+  async createStandaloneCoach(
+    dto: CreateStandaloneCoachDTO,
+  ): Promise<CoachDetailResponseDTO> {
+    return this.toCoachDetail(
+      await this.repo.createStandaloneCoach({
+        display_name: dto.display_name,
+        contact_email: dto.contact_email ?? null,
+        contact_phone: dto.contact_phone ?? null,
+        specialization: dto.specialization ?? null,
+        bio: dto.bio ?? null,
+        certification: dto.certification ?? null,
+        hourly_rate: dto.hourly_rate ?? 0,
+        gym_commission_pct: dto.gym_commission_pct ?? 20,
+        is_available_for_booking: dto.is_available_for_booking ?? true,
+      }),
+    );
+  }
+
   async assertCoachReservableForBookingWindow(
     coachId: string,
     startsAt: Date,
     endsAt: Date,
-  ): Promise<void> {
+  ): Promise<CoachDetailRecord> {
     const coach = await this.repo.findCoachByIdOrThrow(coachId);
 
     if (!coach.is_available_for_booking) {
       throw this.buildCoachUnavailableError();
     }
 
-    if (this.toUtcCalendarDay(startsAt) !== this.toUtcCalendarDay(endsAt)) {
+    if (this.toGymDateKey(startsAt) !== this.toGymDateKey(endsAt)) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Invalid Coach Reservation Window',
           status: 422,
           detail:
-            'Coach-linked venue reservations must begin and end on the same UTC calendar day.',
+            'Coach-linked venue reservations must begin and end on the same gym calendar day.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const dayOfWeek = startsAt.getUTCDay();
-    const slotStart = this.toTimeValue(startsAt);
-    const slotEnd = this.toTimeValue(endsAt);
+    const dayOfWeek = this.toGymDayOfWeek(startsAt);
+    const slotStart = this.toTimeValue(this.toGymTimeString(startsAt));
+    const slotEnd = this.toTimeValue(this.toGymTimeString(endsAt));
     const hasAvailability = coach.availability_slots.some(
       (slot) =>
         slot.day_of_week === dayOfWeek &&
@@ -192,6 +246,8 @@ export class CoachService {
     if (hasLinkedBookingConflict) {
       throw this.buildCoachConflictError();
     }
+
+    return coach;
   }
 
   private assertCoachOwnedFields(dto: UpdateCoachProfileDTO): void {
@@ -221,9 +277,15 @@ export class CoachService {
     };
   }
 
-  private toCoachListItem(coach: CoachListRecord): CoachListItemResponseDTO {
+  private toCoachListItem(
+    coach: CoachListRecord,
+    bookedDates: string[] = [],
+  ): CoachListItemResponseDTO {
     return {
       id: coach.id,
+      display_name: normalizeStandaloneDisplayName(coach.display_name),
+      contact_email: coach.contact_email,
+      contact_phone: coach.contact_phone,
       specialization: coach.specialization,
       bio: coach.bio,
       certification: coach.certification,
@@ -231,16 +293,20 @@ export class CoachService {
       average_rating: coach.average_rating?.toString() ?? null,
       rating_count: coach.rating_count,
       is_available_for_booking: coach.is_available_for_booking,
-      profile: this.toCoachUserProfile(coach),
-    };
-  }
-
-  private toCoachDetail(coach: CoachDetailRecord): CoachDetailResponseDTO {
-    return {
-      ...this.toCoachListItem(coach),
+      profile: this.toCoachUserProfile(),
       availability_slots: coach.availability_slots.map((slot) =>
         this.toAvailabilitySlot(slot),
       ),
+      booked_dates: bookedDates,
+    };
+  }
+
+  private toCoachDetail(
+    coach: CoachDetailRecord,
+    bookedDates: string[] = [],
+  ): CoachDetailResponseDTO {
+    return {
+      ...this.toCoachListItem(coach, bookedDates),
     };
   }
 
@@ -256,22 +322,29 @@ export class CoachService {
   private toCoachSelfDetail(
     coach: CoachDetailRecord,
   ): CoachSelfDetailResponseDTO {
+    if (!coach.user) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Coach Self Profile Unavailable',
+        status: 403,
+        detail: 'Standalone coaches do not own a self-service profile.',
+      });
+    }
+
     return {
       ...this.toCoachDetail(coach),
       user: {
         id: coach.user.id,
-        profile: this.toCoachUserProfile(coach),
+        profile: this.toCoachUserProfile(),
       },
     };
   }
 
-  private toCoachUserProfile(
-    coach: CoachListRecord,
-  ): CoachUserProfileResponseDTO {
+  private toCoachUserProfile(): CoachUserProfileResponseDTO {
     return {
-      first_name: coach.user.profile?.first_name ?? null,
-      last_name: coach.user.profile?.last_name ?? null,
-      avatar_url: coach.user.profile?.avatar_url ?? null,
+      first_name: null,
+      last_name: null,
+      avatar_url: null,
     };
   }
 
@@ -292,14 +365,25 @@ export class CoachService {
     return `${hours}:${minutes}`;
   }
 
-  private toTimeValue(value: Date): Date {
-    return new Date(
-      Date.UTC(1970, 0, 1, value.getUTCHours(), value.getUTCMinutes(), 0, 0),
-    );
+  private toTimeValue(value: string): Date {
+    const [hours = 0, minutes = 0] = value.split(':').map(Number);
+    return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0, 0));
   }
 
-  private toUtcCalendarDay(value: Date): string {
-    return value.toISOString().slice(0, 10);
+  private toGymWallClockDate(value: Date): Date {
+    return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
+  }
+
+  private toGymDateKey(value: Date): string {
+    return this.toGymWallClockDate(value).toISOString().slice(0, 10);
+  }
+
+  private toGymDayOfWeek(value: Date): number {
+    return this.toGymWallClockDate(value).getUTCDay();
+  }
+
+  private toGymTimeString(value: Date): string {
+    return this.toTimeString(this.toGymWallClockDate(value));
   }
 
   private buildCoachUnavailableError(): HttpException {

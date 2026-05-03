@@ -1,6 +1,11 @@
 import {
   AccountDeletionRequestStatus,
   AuthProvider,
+  PayableType,
+  PaymentProvider,
+  PaymentStage,
+  PaymentStatus,
+  Prisma,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -22,10 +27,16 @@ describe('AdminUsersService', () => {
       upsert: jest.fn(),
       update: jest.fn(),
     },
+    payment: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
     coachProfile: {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   };
 
@@ -33,6 +44,7 @@ describe('AdminUsersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.$queryRaw.mockResolvedValue([]);
     service = new AdminUsersService(prisma as never);
   });
 
@@ -121,6 +133,7 @@ describe('AdminUsersService', () => {
         emailVerified: true,
         phoneVerified: false,
         deletedAt: null,
+        restoredAt: null,
         createdAt: '2026-03-01T00:00:00.000Z',
         lastCheckInAt: null,
         membershipCard: null,
@@ -149,6 +162,7 @@ describe('AdminUsersService', () => {
         emailVerified: false,
         phoneVerified: false,
         deletedAt: null,
+        restoredAt: null,
         createdAt: '2026-03-03T00:00:00.000Z',
         lastCheckInAt: null,
         membershipCard: {
@@ -239,6 +253,42 @@ describe('AdminUsersService', () => {
     ]);
   });
 
+  it('maps the latest restore timestamp from account activity notifications', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'member-1',
+        role: UserRole.member,
+        status: UserStatus.active,
+        qr_code_token: null,
+        email_verified_at: null,
+        deletedAt: null,
+        created_at: new Date('2026-04-01T00:00:00.000Z'),
+        updated_at: new Date('2026-04-02T00:00:00.000Z'),
+        auth_identities: [],
+        attendance_logs: [],
+        membership_card: null,
+        profile: null,
+      },
+    ]);
+    const restoredActivityRows: Array<{
+      occurredAt: Date;
+      targetUserId: string;
+    }> = [
+      {
+        occurredAt: new Date('2026-04-30T08:15:00.000Z'),
+        targetUserId: 'member-1',
+      },
+    ];
+    prisma.$queryRaw.mockResolvedValue(restoredActivityRows);
+
+    await expect(service.getAll()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'member-1',
+        restoredAt: '2026-04-30T08:15:00.000Z',
+      }),
+    ]);
+  });
+
   it('promotes pending member accounts when granting membership-card access', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'member-1',
@@ -261,12 +311,22 @@ describe('AdminUsersService', () => {
           membershipCard: {
             upsert: typeof prisma.membershipCard.upsert;
           };
+          payment: {
+            create: typeof prisma.payment.create;
+            findFirst: typeof prisma.payment.findFirst;
+            update: typeof prisma.payment.update;
+          };
           user: { update: typeof prisma.user.update };
         }) => unknown,
       ) =>
         callback({
           membershipCard: {
             upsert: prisma.membershipCard.upsert,
+          },
+          payment: {
+            create: prisma.payment.create,
+            findFirst: prisma.payment.findFirst,
+            update: prisma.payment.update,
           },
           user: {
             update: prisma.user.update,
@@ -283,6 +343,18 @@ describe('AdminUsersService', () => {
       updated_at: new Date('2026-04-28T10:00:00.000Z'),
       verified_at: new Date('2026-04-28T10:00:00.000Z'),
     });
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.payment.create.mockResolvedValue({
+      amount: new Prisma.Decimal(400),
+      id: 'payment-1',
+      payable_id: 'card-1',
+      payable_type: PayableType.membership_card,
+      payment_stage: PaymentStage.full,
+      provider: PaymentProvider.cash,
+      status: PaymentStatus.completed,
+      verified_at: new Date('2026-04-28T10:00:00.000Z'),
+      verified_by: 'admin-1',
+    });
     prisma.user.update.mockResolvedValue({
       id: 'member-1',
       status: UserStatus.active,
@@ -296,11 +368,36 @@ describe('AdminUsersService', () => {
     );
 
     expect(prisma.membershipCard.upsert).toHaveBeenCalled();
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'member-1' },
+    const updateCalls = (
+      prisma.user.update as unknown as {
+        mock: {
+          calls: Array<
+            [
+              {
+                data: {
+                  qr_code_token: string;
+                  status: UserStatus;
+                };
+                where: { id: string };
+              },
+            ]
+          >;
+        };
+      }
+    ).mock.calls;
+    const updateArgs = updateCalls[0]?.[0];
+    expect(updateArgs?.where).toEqual({ id: 'member-1' });
+    expect(updateArgs?.data.status).toBe(UserStatus.active);
+    expect(updateArgs?.data.qr_code_token).toEqual(expect.any(String));
+    expect(prisma.payment.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        status: UserStatus.active,
-        qr_code_token: expect.any(String),
+        amount: new Prisma.Decimal(400),
+        payable_type: PayableType.membership_card,
+        payment_stage: PaymentStage.full,
+        provider: PaymentProvider.cash,
+        status: PaymentStatus.completed,
+        user: { connect: { id: 'member-1' } },
+        verifier: { connect: { id: 'admin-1' } },
       }),
     });
     expect(result).toEqual({
@@ -330,7 +427,7 @@ describe('AdminUsersService', () => {
     });
 
     await expect(
-      service.softDeleteUser('member-1', 'admin-1'),
+      service.softDeleteUser('member-1', 'admin-1', UserRole.admin),
     ).resolves.toEqual({
       message: 'User archived successfully',
       user: {
@@ -347,15 +444,33 @@ describe('AdminUsersService', () => {
       deletedAt: null,
     });
 
-    await expect(service.softDeleteUser('admin-1', 'admin-1')).rejects.toThrow(
+    await expect(
+      service.softDeleteUser('admin-1', 'admin-1', UserRole.admin),
+    ).rejects.toThrow(
       'You cannot archive your own account from the members directory',
     );
+  });
+
+  it('blocks staff from archiving staff accounts', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'staff-2',
+      role: UserRole.staff,
+      deletedAt: null,
+    });
+
+    await expect(
+      service.softDeleteUser('staff-2', 'staff-1', UserRole.staff),
+    ).rejects.toThrow('Staff accounts can archive member accounts only');
   });
 
   it('restores archived users and cancels any pending deletion request', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'member-1',
+      role: UserRole.member,
       deletedAt: new Date('2026-04-10T00:00:00.000Z'),
+      membership_card: null,
+      auth_identities: [],
+      profile: null,
     });
     prisma.accountDeletionRequest.findFirst.mockResolvedValue({
       id: 'request-1',
@@ -366,12 +481,16 @@ describe('AdminUsersService', () => {
           accountDeletionRequest: {
             update: typeof prisma.accountDeletionRequest.update;
           };
+          membershipCard: { update: typeof prisma.membershipCard.update };
           user: { update: typeof prisma.user.update };
         }) => unknown,
       ) =>
         callback({
           accountDeletionRequest: {
             update: prisma.accountDeletionRequest.update,
+          },
+          membershipCard: {
+            update: prisma.membershipCard.update,
           },
           user: {
             update: prisma.user.update,
@@ -387,12 +506,32 @@ describe('AdminUsersService', () => {
       deletedAt: null,
     });
 
-    await expect(service.restoreUser('member-1', 'admin-1')).resolves.toEqual({
-      message: 'User restored successfully',
-      user: {
-        id: 'member-1',
-        deletedAt: null,
-      },
+    const result = await service.restoreUser(
+      'member-1',
+      'admin-1',
+      UserRole.admin,
+    );
+
+    expect(result.message).toBe('User restored successfully');
+    expect(result.user.id).toBe('member-1');
+    expect(result.user.deletedAt).toBeNull();
+    expect(typeof result.user.restoredAt).toBe('string');
+  });
+
+  it('blocks staff from restoring staff accounts', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'staff-2',
+      role: UserRole.staff,
+      deletedAt: new Date('2026-04-10T00:00:00.000Z'),
+      membership_card: null,
+      auth_identities: [],
+      profile: null,
     });
+
+    await expect(
+      service.restoreUser('staff-2', 'staff-1', UserRole.staff),
+    ).rejects.toThrow(
+      'Staff accounts can restore member and non-member accounts only',
+    );
   });
 });

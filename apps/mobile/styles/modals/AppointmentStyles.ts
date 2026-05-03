@@ -190,6 +190,68 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
       color: colors.textMuted,
       lineHeight: 18,
     },
+    paymentHeaderRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    paymentOptionList: {
+      gap: 10,
+    },
+    paymentOptionCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: 12,
+    },
+    paymentOptionCardDisabled: {
+      opacity: 0.5,
+    },
+    paymentOptionTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    paymentOptionTitleDisabled: {
+      color: colors.textMuted,
+    },
+    paymentOptionBody: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted,
+    },
+    paymentOptionBodyDisabled: {
+      color: colors.textMuted,
+    },
+    paymentSummaryCard: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: 12,
+      gap: 8,
+    },
+    paymentBreakdownRow: {
+      flexDirection: "row",
+      gap: 10,
+      flexWrap: "wrap",
+      marginTop: 2,
+    },
+    paymentBreakdownColumn: {
+      flex: 1,
+      minWidth: 92,
+      gap: 4,
+    },
+    paymentBreakdownValue: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
     errorText: {
       fontSize: 12,
       marginTop: 6,

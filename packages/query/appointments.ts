@@ -1,6 +1,12 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ApiClient, CreateAppointmentPayload } from "@fittrack/api-client";
+import type {
+  ApiClient,
+  AppointmentPaymentProvider,
+  AppointmentPaymentStage,
+  CreateAppointmentPayload,
+} from "@fittrack/api-client";
 import {
+  invalidateAnalyticsQueries,
   invalidateAppointmentQueries,
   invalidateCoachScheduleQueries
 } from "./cache";
@@ -31,16 +37,57 @@ export function payAppointmentDownpaymentMutationOptions(
     mutationFn: ({
       appointmentId,
       provider = "paymongo",
+      paymentStage = "downpayment",
       userId,
     }: {
       appointmentId: string;
-      provider?: "cash" | "paymongo";
+      provider?: AppointmentPaymentProvider;
+      paymentStage?: AppointmentPaymentStage;
       userId?: string;
-    }) => client.appointments.initiateDownpayment(appointmentId, provider),
+    }) =>
+      client.appointments.initiateDownpayment(
+        appointmentId,
+        provider,
+        paymentStage,
+      ),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateAppointmentQueries(queryClient, variables.userId),
         invalidateCoachScheduleQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+      ]);
+    },
+  });
+}
+
+export function processAppointmentBalanceMutationOptions(
+  client: Pick<ApiClient, "appointments">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      appointmentId,
+      provider = "cash",
+      referenceNo,
+      screenshotUrl,
+      userId,
+    }: {
+      appointmentId: string;
+      provider?: AppointmentPaymentProvider;
+      referenceNo?: string;
+      screenshotUrl?: string;
+      userId?: string;
+    }) =>
+      client.appointments.processBalance(appointmentId, {
+        provider,
+        referenceNo,
+        screenshotUrl,
+      }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        invalidateAppointmentQueries(queryClient, variables.userId),
+        invalidateCoachScheduleQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
       ]);
     },
   });

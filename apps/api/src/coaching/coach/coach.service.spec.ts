@@ -22,6 +22,7 @@ describe('CoachService', () => {
     hasActiveLinkedBookingConflict: jest.fn(),
     findCoachByIdOrThrow: jest.fn(),
     findCoachByUserIdOrThrow: jest.fn(),
+    listActiveBookingDateKeys: jest.fn(),
     updateCoachByUserId: jest.fn(),
     updateCoachById: jest.fn(),
   };
@@ -69,6 +70,7 @@ describe('CoachService', () => {
 
     service = module.get<CoachService>(CoachService);
     jest.clearAllMocks();
+    repo.listActiveBookingDateKeys.mockResolvedValue([]);
   });
 
   it('maps paginated coach browse results to response DTOs', async () => {
@@ -83,10 +85,19 @@ describe('CoachService', () => {
           id: 'coach-1',
           hourly_rate: '1200',
           average_rating: '4.75',
+          availability_slots: [
+            {
+              id: 'slot-1',
+              day_of_week: 1,
+              start_time: '08:00',
+              end_time: '10:00',
+            },
+          ],
+          booked_dates: [],
           profile: {
-            first_name: 'Maria',
-            last_name: 'Santos',
-            avatar_url: 'https://cdn.fittrack.test/avatars/maria.png',
+            first_name: null,
+            last_name: null,
+            avatar_url: null,
           },
         }),
       ],
@@ -120,9 +131,9 @@ describe('CoachService', () => {
         user: {
           id: 'user-1',
           profile: {
-            first_name: 'Maria',
-            last_name: 'Santos',
-            avatar_url: 'https://cdn.fittrack.test/avatars/maria.png',
+            first_name: null,
+            last_name: null,
+            avatar_url: null,
           },
         },
       }),
@@ -227,14 +238,14 @@ describe('CoachService', () => {
   });
 
   it('accepts coach-linked reservation windows that fit active availability with no conflicts', async () => {
-    const startsAt = new Date('2099-03-23T08:30:00.000Z');
-    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    const startsAt = new Date('2099-03-23T00:30:00.000Z');
+    const endsAt = new Date('2099-03-23T01:30:00.000Z');
     repo.findCoachByIdOrThrow.mockResolvedValue(
       makeCoach({
         availability_slots: [
           {
             id: 'slot-1',
-            day_of_week: startsAt.getUTCDay(),
+            day_of_week: 1,
             start_time: START_TIME,
             end_time: END_TIME,
           },
@@ -250,7 +261,7 @@ describe('CoachService', () => {
         startsAt,
         endsAt,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ id: 'coach-1' });
 
     expect(repo.hasActiveAppointmentConflict).toHaveBeenCalledWith(
       'coach-1',
@@ -265,14 +276,14 @@ describe('CoachService', () => {
   });
 
   it('rejects coach-linked reservation windows outside active availability', async () => {
-    const startsAt = new Date('2099-03-23T11:00:00.000Z');
-    const endsAt = new Date('2099-03-23T12:00:00.000Z');
+    const startsAt = new Date('2099-03-23T03:00:00.000Z');
+    const endsAt = new Date('2099-03-23T04:00:00.000Z');
     repo.findCoachByIdOrThrow.mockResolvedValue(
       makeCoach({
         availability_slots: [
           {
             id: 'slot-1',
-            day_of_week: startsAt.getUTCDay(),
+            day_of_week: 1,
             start_time: START_TIME,
             end_time: END_TIME,
           },
@@ -293,14 +304,14 @@ describe('CoachService', () => {
   });
 
   it('rejects coach-linked reservation windows when another coach appointment overlaps', async () => {
-    const startsAt = new Date('2099-03-23T08:30:00.000Z');
-    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    const startsAt = new Date('2099-03-23T00:30:00.000Z');
+    const endsAt = new Date('2099-03-23T01:30:00.000Z');
     repo.findCoachByIdOrThrow.mockResolvedValue(
       makeCoach({
         availability_slots: [
           {
             id: 'slot-1',
-            day_of_week: startsAt.getUTCDay(),
+            day_of_week: 1,
             start_time: START_TIME,
             end_time: END_TIME,
           },

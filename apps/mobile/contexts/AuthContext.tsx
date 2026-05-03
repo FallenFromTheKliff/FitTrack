@@ -44,7 +44,10 @@ type AuthContextType = {
   deleteUser: () => Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => Promise<void>;
   sendOTP: (destination: string) => Promise<{ success: boolean }>;
-  verifyOTP: (code: string) => Promise<{ success: boolean; error?: string }>;
+  verifyOTP: (
+    code: string,
+    options?: { persistSession?: boolean },
+  ) => Promise<{ success: boolean; error?: string }>;
   verifyCurrentPassword: (password: string) => Promise<boolean>;
   changePassword: (
     currentPassword: string,
@@ -60,7 +63,7 @@ type Props = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const MOBILE_ROLE_GATE = {
-  allowedRoles: ["USER", "COACH"] as const,
+  allowedRoles: ["USER"] as const,
   deniedMessage: "This account can't access the mobile app.",
 };
 
@@ -247,9 +250,9 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   );
 
   const verifyOTP = useCallback(
-    async (code: string) => {
+    async (code: string, options?: { persistSession?: boolean }) => {
       try {
-        const result = await controller.verifyOTP(code);
+        const result = await controller.verifyOTP(code, options);
         if (!result.success && result.error === "No pending session.") {
           return { success: false as const, error: "No pending email." };
         }

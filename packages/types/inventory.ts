@@ -27,6 +27,35 @@ export type InventorySaleListParams = {
   startDate?: string;
 };
 
+export type InventorySalesSummaryRecord = {
+  completedSalesCount: number;
+  totalRevenue: number;
+};
+
+export type InventoryAnalyticsPeriod =
+  | "Daily"
+  | "Weekly"
+  | "Monthly"
+  | "Quarterly"
+  | "Yearly";
+
+export type InventoryAnalyticsRevenuePointRecord = {
+  bucketLabel: string;
+  revenue: number;
+};
+
+export type InventoryAnalyticsTopProductRecord = {
+  name: string;
+  value: number;
+};
+
+export type InventorySalesAnalyticsRecord = {
+  period: InventoryAnalyticsPeriod;
+  revenueSeries: InventoryAnalyticsRevenuePointRecord[];
+  topProductsByInventoryValue: InventoryAnalyticsTopProductRecord[];
+  topProductsByStocksSold: InventoryAnalyticsTopProductRecord[];
+};
+
 export type InventoryProductRecord = {
   category: InventoryProductCategory;
   cost: number;

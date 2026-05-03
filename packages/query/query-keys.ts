@@ -249,6 +249,17 @@ const inventoryKeys = {
     saleId
       ? (["inventory", "sales", saleId] as const)
       : (["inventory", "sales", "detail"] as const),
+  salesSummary: (params?: {
+    endDate?: string;
+    startDate?: string;
+  }) =>
+    params
+      ? (["inventory", "sales", "summary", params] as const)
+      : (["inventory", "sales", "summary"] as const),
+  salesAnalytics: (period?: string) =>
+    period
+      ? (["inventory", "sales", "analytics", period] as const)
+      : (["inventory", "sales", "analytics"] as const),
 };
 
 const analyticsKeys = {
@@ -488,6 +499,8 @@ export const queryKeys = {
   inventoryEquipment: inventoryKeys.equipment,
   inventoryEquipmentDetail: inventoryKeys.equipmentDetail,
   inventorySales: inventoryKeys.sales,
+  inventorySalesSummary: inventoryKeys.salesSummary,
+  inventorySalesAnalytics: inventoryKeys.salesAnalytics,
   inventorySaleDetail: inventoryKeys.saleDetail,
   analyticsSnapshot: analyticsKeys.snapshot,
   analyticsOverview: analyticsKeys.overview,

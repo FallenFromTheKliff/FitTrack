@@ -455,6 +455,27 @@ export function createAdminApi(transport: ApiTransport) {
         "Unable to reject booking.",
       );
     },
+    completeBooking(bookingId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/admin/bookings/${bookingId}/complete`, {}),
+        "Unable to mark booking complete.",
+      );
+    },
+    cancelBooking(bookingId: string, reason?: string) {
+      return unwrapVoidResponse(
+        transport.patch(
+          `/admin/bookings/${bookingId}/cancel`,
+          reason ? { reason } : {},
+        ),
+        "Unable to cancel booking.",
+      );
+    },
+    noShowBooking(bookingId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/admin/bookings/${bookingId}/no-show`, {}),
+        "Unable to mark booking no-show.",
+      );
+    },
     scanAttendanceQr(payload: ScanAttendanceQrInput) {
       return unwrapResponse<AttendanceCheckInRecord>(
         transport.post("/attendance/scan", {

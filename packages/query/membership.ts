@@ -11,6 +11,7 @@ import type {
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
 import {
+  invalidateAnalyticsQueries,
   invalidateAdminMembershipPaymentQueries,
   invalidateMembershipQueries
 } from "./cache";
@@ -140,6 +141,7 @@ export function verifyMembershipPaymentMutationOptions(
     }) => client.membership.verifyPayment(paymentId, payload),
     onSuccess: async (_data, variables) => {
       await Promise.all([
+        invalidateAnalyticsQueries(queryClient),
         invalidateAdminMembershipPaymentQueries(queryClient),
         invalidateMembershipQueries(queryClient, variables.affectedUserId)
       ]);

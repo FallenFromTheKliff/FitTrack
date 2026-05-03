@@ -125,6 +125,25 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
       fontSize: 15,
       color: colors.textPrimary
     },
+    genderOptionRow: {
+      flexDirection: "row",
+      gap: 8
+    },
+    genderOption: {
+      flex: 1,
+      minHeight: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.fieldBg,
+      borderWidth: 1,
+      borderColor: colors.fieldBorder,
+      borderRadius: R.md,
+      paddingHorizontal: 10
+    },
+    genderOptionText: {
+      fontSize: 13,
+      fontWeight: "700"
+    },
     bmiCard: {
       backgroundColor: colors.surfaceRaised,
       borderRadius: R.md,

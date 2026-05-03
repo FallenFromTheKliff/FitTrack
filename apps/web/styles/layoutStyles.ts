@@ -268,23 +268,33 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             padding: 0,
             color: colors.textPrimary
         } as CSSProperties,
+        notificationButtonWrap: {
+            position: "relative",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0
+        } as CSSProperties,
         unreadBadge: {
             position: "absolute",
-            top: 4,
-            right: -8,
-            minWidth: 18,
-            height: 18,
-            borderRadius: 10,
+            top: -4,
+            right: -6,
+            minWidth: 22,
+            height: 22,
+            borderRadius: 999,
             backgroundColor: colors.danger,
             border: `2px solid ${colors.surface}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 10,
-            fontWeight: 700,
+            fontSize: 11,
+            fontWeight: 800,
             color: onDanger,
             lineHeight: 1,
-            padding: "0 3px"
+            padding: "0 6px",
+            boxShadow: `0 8px 18px ${colors.overlay}`,
+            zIndex: 2,
+            pointerEvents: "none"
         } as CSSProperties
     };
 }

@@ -4,7 +4,10 @@ import { DndContext } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
-import { SCHEDULE_EMOJI_OPTIONS, type ScheduleResource } from "@/data/facilities/resources";
+import {
+  SCHEDULE_EMOJI_OPTIONS,
+  type ScheduleResource,
+} from "@/data/facilities/resources";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
@@ -12,7 +15,11 @@ import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
 import { ConfirmModal, FitModal, VenueDetailsModal } from "@/components/modals";
 
-import { CompactFloorLayout, EditVenueModal, VenueManagementTable } from "@/components/map";
+import {
+  CompactFloorLayout,
+  EditVenueModal,
+  VenueManagementTable,
+} from "@/components/map";
 import { FacilitiesArchiveModal } from "@/components/map/FacilitiesArchiveModal";
 import type { FacilitiesPageController } from "@/components/map/useFacilitiesPageController";
 
@@ -22,18 +29,54 @@ type Props = {
 
 export default function FacilitiesMapPageView({ controller }: Props) {
   return (
-    <FitSection as="section" heading="" hideHeading bare noPadding className={controller.themeTransition} style={controller.fadeIn}>
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={controller.themeTransition}
+      style={controller.fadeIn}
+    >
       <div style={{ ...controller.fs.mapCard, marginBottom: 12 }}>
-        {controller.activeTab === "venues" ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-            <FitButton variant="ghost" label="< FACILITIES MAP" onClick={controller.handleOpenMap} />
+        {controller.activeTab === "venues" ||
+        controller.activeTab === "equipment" ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <FitButton
+              variant="ghost"
+              label="< FACILITIES MAP"
+              onClick={controller.handleOpenMap}
+            />
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {controller.isVenueEditorOpen ? (
-                <FitButton variant="ghost" label="BACK TO VENUES" onClick={controller.handleCloseVenueEditor} />
+              {controller.activeTab === "venues" &&
+              controller.isVenueEditorOpen ? (
+                <FitButton
+                  variant="ghost"
+                  label="BACK TO VENUES"
+                  onClick={controller.handleCloseVenueEditor}
+                />
               ) : null}
-              <FitButton variant="ghost" label="MANAGE RESOURCES" onClick={() => controller.setResourceModalOpen(true)} />
-              <FitButton variant="ghost" label="MANAGE ARCHIVE" onClick={() => controller.setArchiveModalOpen(true)} />
-              <FitButton variant="primary" label="ADD VENUE" onClick={() => controller.handleOpenVenueEditor("create")} />
+              <FitButton
+                variant="ghost"
+                label="MANAGE ARCHIVE"
+                onClick={() => controller.setArchiveModalOpen(true)}
+              />
+              {controller.activeTab === "venues" ? (
+                <FitButton
+                  variant="primary"
+                  label="ADD VENUE"
+                  onClick={() => controller.handleOpenVenueEditor("create")}
+                />
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -44,14 +87,26 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 isVisible={controller.isVenueEditorOpen}
                 editTarget={controller.venueEditTarget}
                 initialValues={controller.venueInitialValues}
-                submitLabel={controller.isVenueSubmitting ? controller.venueSavingLabel : "SAVE VENUE"}
+                submitLabel={
+                  controller.isVenueSubmitting
+                    ? controller.venueSavingLabel
+                    : "SAVE VENUE"
+                }
                 isLoading={controller.isVenueSubmitting}
                 onUploadImage={controller.handleUploadVenueImage}
-                onSubmit={(data) => controller.handleVenueSubmit(data, controller.venueEditTarget, controller.handleCloseVenueEditor)}
+                onSubmit={(data) =>
+                  controller.handleVenueSubmit(
+                    data,
+                    controller.venueEditTarget,
+                    controller.handleCloseVenueEditor,
+                  )
+                }
                 onDelete={() => {
                   if (!controller.venueEditTarget) return;
                   controller.handleCloseVenueEditor();
-                  controller.handleDeleteVenueRequest(controller.venueEditTarget);
+                  controller.handleDeleteVenueRequest(
+                    controller.venueEditTarget,
+                  );
                 }}
               />
             ) : (
@@ -59,19 +114,34 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 colors={controller.colors}
                 venues={controller.venues}
                 isLoading={controller.venuesLoading}
-                onEditVenue={(venue) => controller.handleOpenVenueEditor("edit", venue)}
+                onEditVenue={(venue) =>
+                  controller.handleOpenVenueEditor("edit", venue)
+                }
               />
             )
+          ) : controller.activeTab === "equipment" ? (
+            controller.equipmentManagementNode
           ) : (
-            <DndContext sensors={controller.sensors} onDragStart={controller.handleDragStart} onDragEnd={controller.handleDragEnd}>
+            <DndContext
+              sensors={controller.sensors}
+              onDragStart={controller.handleDragStart}
+              onDragEnd={controller.handleDragEnd}
+            >
               {controller.isCompact ? (
                 <CompactFloorLayout
                   colors={controller.colors}
                   isDrawerOpen={controller.isDrawerOpen}
                   drawerButtonWidth={controller.drawerButtonWidth}
-                  onToggleDrawer={() => controller.setIsDrawerOpen((prev) => !prev)}
+                  onToggleDrawer={() =>
+                    controller.setIsDrawerOpen((prev) => !prev)
+                  }
                   floorPlanNode={controller.floorPlanNode}
-                  drawerNode={<>{controller.equipmentPanelNode}{controller.layoutStatusNode}</>}
+                  drawerNode={
+                    <>
+                      {controller.equipmentPanelNode}
+                      {controller.layoutStatusNode}
+                    </>
+                  }
                   quickRegionNode={controller.quickRegionNode}
                   editorNode={controller.editorNode}
                 />
@@ -81,7 +151,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                     display: "grid",
                     gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 360px)",
                     gap: 12,
-                    alignItems: "start"
+                    alignItems: "start",
                   }}
                 >
                   <div
@@ -105,7 +175,13 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       </div>
 
       {controller.combinedMessage && (
-        <FitText style={{ fontSize: 15, color: controller.colors.success, fontWeight: 500 }}>
+        <FitText
+          style={{
+            fontSize: 15,
+            color: controller.colors.success,
+            fontWeight: 500,
+          }}
+        >
           {controller.combinedMessage}
         </FitText>
       )}
@@ -126,7 +202,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         isRestoringVenue={controller.restoreVenueMutation.isPending}
         onClose={() => controller.setArchiveModalOpen(false)}
         onFilterChange={controller.setArchiveFilter}
-        onRestoreEquipment={(equipment) => controller.handleRestoreEquipment(equipment)}
+        onRestoreEquipment={(equipment) =>
+          controller.handleRestoreEquipment(equipment)
+        }
         onRestoreVenue={(venue) => controller.handleRestoreVenue(venue)}
       />
       <FitModal
@@ -139,7 +217,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         footer={
           <FitButton
             variant="primary"
-            label={controller.resourceLoading ? controller.resourceLoadingLabel : "ADD RESOURCE"}
+            label={
+              controller.resourceLoading
+                ? controller.resourceLoadingLabel
+                : "ADD RESOURCE"
+            }
             loading={controller.resourceLoading}
             onClick={controller.handleAddResource}
             style={{ flex: 1 }}
@@ -150,13 +232,27 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: controller.colors.textPrimary, marginBottom: 4, display: "block" }}
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: controller.colors.textPrimary,
+                marginBottom: 4,
+                display: "block",
+              }}
             >
-              Resource Name <FitText as="span" style={{ color: controller.colors.danger }}>*</FitText>
+              Resource Name{" "}
+              <FitText as="span" style={{ color: controller.colors.danger }}>
+                *
+              </FitText>
             </FitText>
             <FitTextInput
               value={controller.resourceDraft.name}
-              onChange={(e) => controller.setResourceDraft((p) => ({ ...p, name: e.target.value }))}
+              onChange={(e) =>
+                controller.setResourceDraft((p) => ({
+                  ...p,
+                  name: e.target.value,
+                }))
+              }
               placeholder="e.g., James Wilson"
               style={{
                 width: "100%",
@@ -164,33 +260,56 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 borderRadius: 8,
                 border: `1px solid ${controller.colors.fieldBorder}`,
                 backgroundColor: controller.colors.fieldBg,
-                fontSize: 15
+                fontSize: 15,
               }}
             />
           </div>
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: controller.colors.textPrimary, marginBottom: 4, display: "block" }}
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: controller.colors.textPrimary,
+                marginBottom: 4,
+                display: "block",
+              }}
             >
-              Type <FitText as="span" style={{ color: controller.colors.danger }}>*</FitText>
+              Type{" "}
+              <FitText as="span" style={{ color: controller.colors.danger }}>
+                *
+              </FitText>
             </FitText>
             <FitSelect
               fullWidth
               value={controller.resourceDraft.type}
-              onChange={(e) => controller.setResourceDraft((p) => ({ ...p, type: e.target.value as ScheduleResource["type"] | "" }))}
+              onChange={(e) =>
+                controller.setResourceDraft((p) => ({
+                  ...p,
+                  type: e.target.value as ScheduleResource["type"] | "",
+                }))
+              }
               placeholder="Select Type"
               options={[
                 { label: "Trainer / Staff", value: "trainer" },
-                { label: "Facility / Venue", value: "facility" }
+                { label: "Facility / Venue", value: "facility" },
               ]}
-              style={{ borderColor: controller.colors.fieldBorder, backgroundColor: controller.colors.fieldBg }}
+              style={{
+                borderColor: controller.colors.fieldBorder,
+                backgroundColor: controller.colors.fieldBg,
+              }}
             />
           </div>
           <div>
             <FitText
               as="label"
-              style={{ fontSize: 14, fontWeight: 600, color: controller.colors.textPrimary, marginBottom: 4, display: "block" }}
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: controller.colors.textPrimary,
+                marginBottom: 4,
+                display: "block",
+              }}
             >
               Icon
             </FitText>
@@ -199,7 +318,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 <FitButton
                   key={emoji}
                   variant="ghost"
-                  onClick={() => controller.setResourceDraft((p) => ({ ...p, icon: emoji }))}
+                  onClick={() =>
+                    controller.setResourceDraft((p) => ({ ...p, icon: emoji }))
+                  }
                   style={{
                     width: 42,
                     height: 42,
@@ -210,7 +331,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                     backgroundColor:
                       controller.resourceDraft.icon === emoji
                         ? `${controller.colors.brand}20`
-                        : controller.colors.surfaceRaised
+                        : controller.colors.surfaceRaised,
                   }}
                 >
                   <FitText as="span">{emoji}</FitText>
@@ -228,7 +349,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   marginBottom: 4,
-                  display: "block"
+                  display: "block",
                 }}
               >
                 Added Resources
@@ -244,12 +365,22 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                       padding: "9px 12px",
                       borderRadius: 9,
                       backgroundColor: controller.colors.surfaceRaised,
-                      border: `1px solid ${controller.colors.border}`
+                      border: `1px solid ${controller.colors.border}`,
                     }}
                   >
-                    <FitText as="span" style={{ fontSize: 18 }}>{resource.icon}</FitText>
-                    <FitText style={{ fontSize: 14, flex: 1 }}>{resource.name}</FitText>
-                    <FitText style={{ fontSize: 12, color: controller.colors.textMuted, textTransform: "capitalize" }}>
+                    <FitText as="span" style={{ fontSize: 18 }}>
+                      {resource.icon}
+                    </FitText>
+                    <FitText style={{ fontSize: 14, flex: 1 }}>
+                      {resource.name}
+                    </FitText>
+                    <FitText
+                      style={{
+                        fontSize: 12,
+                        color: controller.colors.textMuted,
+                        textTransform: "capitalize",
+                      }}
+                    >
                       {resource.type}
                     </FitText>
                   </div>
@@ -290,7 +421,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         title="Unsaved Changes"
         message="You have unsaved placed equipment. Save changes before leaving Edit Mode?"
         confirmLabel={CONFIRM_COPY.saveAndExit.confirmLabel}
-        onConfirm={() => controller.handleSaveAndExit(() => controller.showVenueMessage("Layout saved."))}
+        onConfirm={() =>
+          controller.handleSaveAndExit(() =>
+            controller.showVenueMessage("Layout saved."),
+          )
+        }
         onCancel={() => controller.setShowUnsavedConfirm(false)}
       />
       <ConfirmModal

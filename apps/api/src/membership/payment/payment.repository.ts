@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { PayableType, Payment, PaymentStage, Prisma } from '@prisma/client';
+import {
+  PayableType,
+  Payment,
+  PaymentStage,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 
 import {
   BaseRepository,
@@ -30,6 +36,11 @@ type CoachingPaymentContext = {
   user_id: string;
 };
 
+type RecurringCoachingPaymentContext = {
+  id: string;
+  user_id: string;
+};
+
 @Injectable()
 export class PaymentRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -56,6 +67,32 @@ export class PaymentRepository extends BaseRepository {
       { orderBy: { created_at: 'desc' } },
       { page: dto.page, limit: dto.limit },
     );
+  }
+
+  async completeOpenMembershipCardPaymentsForActiveCards(
+    userId: string,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE payments AS payment
+      SET
+        status = 'completed',
+        verified_at = COALESCE(
+          payment.verified_at,
+          membership_card.verified_at,
+          membership_card.activated_at,
+          NOW()
+        ),
+        verified_by = COALESCE(payment.verified_by, membership_card.verified_by),
+        rejection_reason = NULL,
+        updated_at = NOW()
+      FROM membership_cards AS membership_card
+      WHERE
+        payment.payable_type = 'membership_card'
+        AND payment.payable_id = membership_card.id
+        AND payment.user_id = ${userId}
+        AND payment.status IN ('pending', 'processing', 'awaiting_verification')
+        AND membership_card.status = 'active'
+    `;
   }
 
   findPaymentByIdForOwnerOrThrow(
@@ -142,6 +179,26 @@ export class PaymentRepository extends BaseRepository {
     });
   }
 
+  findLatestPaymentsForPayableIds(
+    payableType: PayableType,
+    payableIds: string[],
+  ): Promise<Payment[]> {
+    if (payableIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.prisma.payment.findMany({
+      where: {
+        payable_type: payableType,
+        payable_id: { in: payableIds },
+        status: {
+          not: PaymentStatus.failed,
+        },
+      },
+      orderBy: [{ created_at: 'desc' }],
+    });
+  }
+
   updatePayment(id: string, data: Prisma.PaymentUpdateInput): Promise<Payment> {
     return this.updateById<Payment>(this.prisma.payment, id, data);
   }
@@ -178,5 +235,27 @@ export class PaymentRepository extends BaseRepository {
       undefined,
       { id: true, user_id: true },
     );
+  }
+
+  async findRecurringCoachingPaymentContextOrThrow(
+    id: string,
+  ): Promise<RecurringCoachingPaymentContext> {
+    const cycle =
+      await this.prisma.recurringCoachingBillingCycle.findUniqueOrThrow({
+        where: { id },
+        select: {
+          id: true,
+          recurring_plan: {
+            select: {
+              member_id: true,
+            },
+          },
+        },
+      });
+
+    return {
+      id: cycle.id,
+      user_id: cycle.recurring_plan.member_id,
+    };
   }
 }

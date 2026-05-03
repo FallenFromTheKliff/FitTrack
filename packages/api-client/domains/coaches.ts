@@ -5,6 +5,9 @@ import { unwrapResponse, unwrapVoidResponse } from "../request";
 export type UpdateCoachProfilePayload = {
   bio?: string;
   certifications?: string[];
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  displayName?: string;
   hourlyRate?: number;
   isAvailableForBooking?: boolean;
   specialties?: string[];
@@ -27,6 +30,7 @@ export type CoachAvailabilitySlot = {
 
 export type CoachAvailabilityResponse = {
   availability: CoachAvailabilitySlot[];
+  bookedDates: string[];
   coachId: string;
 };
 
@@ -52,8 +56,12 @@ type CoachUserApiRecord = {
 
 type CoachApiRecord = {
   availability_slots?: CoachAvailabilitySlotApiRecord[];
+  booked_dates?: string[];
   bio?: string | null;
   certification?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  display_name?: string | null;
   hourly_rate?: number | string | null;
   id: string;
   is_available_for_booking?: boolean;
@@ -79,6 +87,8 @@ type CoachAvailabilityDraft = {
   startTime: string;
 };
 
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function splitMultiValue(value?: string | null) {
   if (!value) return [];
   return value
@@ -93,21 +103,44 @@ function toNullableNumber(value?: number | string | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mapAvailabilityDraft(slot: CoachAvailabilitySlotApiRecord): CoachAvailabilityDraft {
+function normalizeCoachDisplayName(value?: string | null) {
+  const displayName = value?.trim();
+  if (displayName && !EMAIL_LIKE_PATTERN.test(displayName)) {
+    return displayName;
+  }
+
+  return null;
+}
+
+function isLegacySeedIdentityEmail(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(
+    normalized &&
+    (normalized.startsWith("seed.member") ||
+      normalized.startsWith("seed.staff") ||
+      normalized.startsWith("seed.admin")),
+  );
+}
+
+function mapAvailabilityDraft(
+  slot: CoachAvailabilitySlotApiRecord,
+): CoachAvailabilityDraft {
   return {
     dayOfWeek: slot.day_of_week,
     endTime: slot.end_time,
     id: slot.id,
-    startTime: slot.start_time
+    startTime: slot.start_time,
   };
 }
 
-function mapAvailabilitySlot(slot: CoachAvailabilitySlotApiRecord): CoachAvailabilitySlot {
+function mapAvailabilitySlot(
+  slot: CoachAvailabilitySlotApiRecord,
+): CoachAvailabilitySlot {
   return {
     dayOfWeek: slot.day_of_week,
     endTime: slot.end_time,
     isAvailable: true,
-    startTime: slot.start_time
+    startTime: slot.start_time,
   };
 }
 
@@ -116,12 +149,14 @@ function mapUserProfile(profile?: CoachUserProfileApiRecord | null) {
   return {
     avatarUri: profile.avatar_url ?? null,
     firstName: profile.first_name ?? null,
-    lastName: profile.last_name ?? null
+    lastName: profile.last_name ?? null,
   };
 }
 
 function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
-  const profile = mapUserProfile(record.user?.profile ?? record.profile ?? null);
+  const profile = mapUserProfile(
+    record.user?.profile ?? record.profile ?? null,
+  );
 
   return {
     availability: (record.availability_slots ?? []).map((slot) => ({
@@ -129,28 +164,32 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
       endTime: slot.end_time,
       id: slot.id,
       isAvailable: true,
-      startTime: slot.start_time
+      startTime: slot.start_time,
     })),
     bio: record.bio ?? null,
+    bookedDates: record.booked_dates ?? [],
     certifications: splitMultiValue(record.certification),
+    contactEmail: isLegacySeedIdentityEmail(record.contact_email)
+      ? null
+      : (record.contact_email ?? null),
+    contactPhone: record.contact_phone ?? null,
+    displayName: normalizeCoachDisplayName(record.display_name),
     hourlyRate: toNullableNumber(record.hourly_rate),
     id: record.id,
     isActive: record.is_available_for_booking ?? true,
     specialties: splitMultiValue(record.specialization),
-    user: {
-      email: record.user?.email ?? undefined,
-      id: record.user?.id ?? record.id,
-      phone_no: record.user?.phone_no ?? null,
-      profile
-    },
-    yearsExperience: null
+    user: null,
+    yearsExperience: null,
   };
 }
 
-function mapCoachAvailability(record: CoachApiRecord): CoachAvailabilityResponse {
+function mapCoachAvailability(
+  record: CoachApiRecord,
+): CoachAvailabilityResponse {
   return {
     availability: (record.availability_slots ?? []).map(mapAvailabilitySlot),
-    coachId: record.id
+    bookedDates: record.booked_dates ?? [],
+    coachId: record.id,
   };
 }
 
@@ -165,9 +204,9 @@ function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
     user: record.user
       ? {
           email: record.user.email ?? null,
-          profile: mapUserProfile(record.user.profile ?? null)
+          profile: mapUserProfile(record.user.profile ?? null),
         }
-      : null
+      : null,
   };
 }
 
@@ -175,32 +214,40 @@ export function createCoachesApi(transport: ApiTransport) {
   async function getCurrentCoach() {
     return unwrapResponse<CoachApiRecord>(
       transport.get("/coaching/coaches/me"),
-      "Unable to load coach profile."
+      "Unable to load coach profile.",
     );
   }
 
   async function replaceAvailability(
-    slots: Array<Pick<CoachAvailabilityDraft, "dayOfWeek" | "endTime" | "startTime">>,
-    fallback: string
+    slots: Array<
+      Pick<CoachAvailabilityDraft, "dayOfWeek" | "endTime" | "startTime">
+    >,
+    fallback: string,
   ) {
     return unwrapVoidResponse(
       transport.post("/coaching/coaches/availability", {
         slots: slots.map((slot) => ({
           day_of_week: slot.dayOfWeek,
           end_time: slot.endTime,
-          start_time: slot.startTime
-        }))
+          start_time: slot.startTime,
+        })),
       }),
-      fallback
+      fallback,
     );
   }
 
   async function mutateAvailability(
     fallback: string,
-    mutator: (slots: CoachAvailabilityDraft[]) => Array<Pick<CoachAvailabilityDraft, "dayOfWeek" | "endTime" | "startTime">>
+    mutator: (
+      slots: CoachAvailabilityDraft[],
+    ) => Array<
+      Pick<CoachAvailabilityDraft, "dayOfWeek" | "endTime" | "startTime">
+    >,
   ) {
     const coach = await getCurrentCoach();
-    const currentSlots = (coach.availability_slots ?? []).map(mapAvailabilityDraft);
+    const currentSlots = (coach.availability_slots ?? []).map(
+      mapAvailabilityDraft,
+    );
     const nextSlots = mutator(currentSlots);
     return replaceAvailability(nextSlots, fallback);
   }
@@ -209,14 +256,18 @@ export function createCoachesApi(transport: ApiTransport) {
     listActive<T>() {
       return unwrapResponse<CoachApiRecord[]>(
         transport.get("/coaching/coaches?limit=100"),
-        "Unable to load coaches."
-      ).then((records) => records.map((record) => mapCoachRecord(record)) as T[]);
+        "Unable to load coaches.",
+      ).then(
+        (records) => records.map((record) => mapCoachRecord(record)) as T[],
+      );
     },
     listAll<T>() {
       return unwrapResponse<CoachApiRecord[]>(
         transport.get("/coaching/coaches?limit=100"),
-        "Unable to load coaches."
-      ).then((records) => records.map((record) => mapCoachRecord(record)) as T[]);
+        "Unable to load coaches.",
+      ).then(
+        (records) => records.map((record) => mapCoachRecord(record)) as T[],
+      );
     },
     getMine<T>() {
       return getCurrentCoach().then((record) => mapCoachRecord(record) as T);
@@ -224,14 +275,17 @@ export function createCoachesApi(transport: ApiTransport) {
     getAvailability<T>(coachId: string) {
       return unwrapResponse<CoachApiRecord>(
         transport.get(`/coaching/coaches/${coachId}`),
-        "Unable to load coach availability."
+        "Unable to load coach availability.",
       ).then((record) => mapCoachAvailability(record) as T);
     },
     listAppointmentSchedule<T>() {
       return unwrapResponse<CoachScheduleApiRecord[]>(
         transport.get("/coaching/appointments/coach?limit=100"),
-        "Unable to load coach schedule."
-      ).then((records) => records.map((record) => mapCoachScheduleRecord(record)) as T[]);
+        "Unable to load coach schedule.",
+      ).then(
+        (records) =>
+          records.map((record) => mapCoachScheduleRecord(record)) as T[],
+      );
     },
     updateProfile(payload: UpdateCoachProfilePayload) {
       return unwrapVoidResponse(
@@ -240,84 +294,99 @@ export function createCoachesApi(transport: ApiTransport) {
           ...(payload.certifications !== undefined
             ? { certification: payload.certifications.join(", ") }
             : {}),
-          ...(payload.hourlyRate !== undefined ? { hourly_rate: payload.hourlyRate } : {}),
+          ...(payload.hourlyRate !== undefined
+            ? { hourly_rate: payload.hourlyRate }
+            : {}),
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
             : {}),
           ...(payload.specialties !== undefined
             ? { specialization: payload.specialties.join(", ") }
-            : {})
+            : {}),
         }),
-        "Unable to update coach profile."
+        "Unable to update coach profile.",
       );
     },
     createAvailability(payload: UpsertCoachAvailabilityPayload) {
-      return mutateAvailability("Unable to create coach availability.", (slots) => {
-        if (payload.dayOfWeek === undefined) {
-          throw new Error("Coach availability day is required.");
-        }
-
-        return [
-          ...slots.map(({ dayOfWeek, endTime, startTime }) => ({
-            dayOfWeek,
-            endTime,
-            startTime
-          })),
-          {
-            dayOfWeek: payload.dayOfWeek,
-            endTime: payload.endTime,
-            startTime: payload.startTime
+      return mutateAvailability(
+        "Unable to create coach availability.",
+        (slots) => {
+          if (payload.dayOfWeek === undefined) {
+            throw new Error("Coach availability day is required.");
           }
-        ];
-      });
+
+          return [
+            ...slots.map(({ dayOfWeek, endTime, startTime }) => ({
+              dayOfWeek,
+              endTime,
+              startTime,
+            })),
+            {
+              dayOfWeek: payload.dayOfWeek,
+              endTime: payload.endTime,
+              startTime: payload.startTime,
+            },
+          ];
+        },
+      );
     },
     updateAvailability(id: string, payload: UpsertCoachAvailabilityPayload) {
-      return mutateAvailability("Unable to update coach availability.", (slots) => {
-        let found = false;
-        const nextSlots = slots.flatMap((slot) => {
-          if (slot.id !== id) {
-            return [{
-              dayOfWeek: slot.dayOfWeek,
-              endTime: slot.endTime,
-              startTime: slot.startTime
-            }];
+      return mutateAvailability(
+        "Unable to update coach availability.",
+        (slots) => {
+          let found = false;
+          const nextSlots = slots.flatMap((slot) => {
+            if (slot.id !== id) {
+              return [
+                {
+                  dayOfWeek: slot.dayOfWeek,
+                  endTime: slot.endTime,
+                  startTime: slot.startTime,
+                },
+              ];
+            }
+
+            found = true;
+            if (payload.isAvailable === false) {
+              return [];
+            }
+
+            return [
+              {
+                dayOfWeek: payload.dayOfWeek ?? slot.dayOfWeek,
+                endTime: payload.endTime,
+                startTime: payload.startTime,
+              },
+            ];
+          });
+
+          if (!found) {
+            throw new Error("Coach availability slot not found.");
           }
 
-          found = true;
-          if (payload.isAvailable === false) {
-            return [];
-          }
-
-          return [{
-            dayOfWeek: payload.dayOfWeek ?? slot.dayOfWeek,
-            endTime: payload.endTime,
-            startTime: payload.startTime
-          }];
-        });
-
-        if (!found) {
-          throw new Error("Coach availability slot not found.");
-        }
-
-        return nextSlots;
-      });
+          return nextSlots;
+        },
+      );
     },
     deleteAvailability(id: string) {
-      return mutateAvailability("Unable to delete coach availability.", (slots) => {
-        const nextSlots = slots
-          .filter((slot) => slot.id !== id)
-          .map(({ dayOfWeek, endTime, startTime }) => ({
-            dayOfWeek,
-            endTime,
-            startTime
-          }));
+      return mutateAvailability(
+        "Unable to delete coach availability.",
+        (slots) => {
+          const nextSlots = slots
+            .filter((slot) => slot.id !== id)
+            .map(({ dayOfWeek, endTime, startTime }) => ({
+              dayOfWeek,
+              endTime,
+              startTime,
+            }));
 
-        if (nextSlots.length === slots.length) {
-          throw new Error("Coach availability slot not found.");
-        }
+          if (nextSlots.length === slots.length) {
+            throw new Error("Coach availability slot not found.");
+          }
 
-        return nextSlots;
-      });
-    }
+          return nextSlots;
+        },
+      );
+    },
   };
 }

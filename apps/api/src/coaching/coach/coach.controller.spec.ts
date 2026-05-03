@@ -63,17 +63,18 @@ describe('CoachController', () => {
     },
   );
 
-  it('loads the authenticated coach profile through the service', async () => {
-    coachService.getMyProfile.mockResolvedValue({ id: 'coach-1' });
-
-    await controller.getMyProfile({ sub: 'coach-user-1' } as never);
-
-    expect(coachService.getMyProfile).toHaveBeenCalledWith('coach-user-1');
+  it('marks authenticated coach self-profile reads as gone', () => {
+    expect(() => controller.getMyProfile()).toThrow(
+      'Coach user accounts are no longer supported.',
+    );
     expect(getGuardMetadata('getMyProfile')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('getMyProfile')).toEqual([UserRole.coach]);
+    expect(getRolesMetadata('getMyProfile')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
   it('loads a single coach profile through the service', async () => {
@@ -84,21 +85,18 @@ describe('CoachController', () => {
     expect(coachService.getCoachById).toHaveBeenCalledWith('coach-1');
   });
 
-  it('updates the authenticated coach profile through the service', async () => {
-    coachService.updateMyProfile.mockResolvedValue({ id: 'coach-1' });
-
-    await controller.updateMyProfile({ sub: 'user-1' } as never, {
-      bio: 'Updated',
-    });
-
-    expect(coachService.updateMyProfile).toHaveBeenCalledWith('user-1', {
-      bio: 'Updated',
-    });
+  it('marks authenticated coach self-profile updates as gone', () => {
+    expect(() => controller.updateMyProfile()).toThrow(
+      'Coach user accounts are no longer supported.',
+    );
     expect(getGuardMetadata('updateMyProfile')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('updateMyProfile')).toEqual([UserRole.coach]);
+    expect(getRolesMetadata('updateMyProfile')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
   it('locks admin coach updates to admin users', async () => {

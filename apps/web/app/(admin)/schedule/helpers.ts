@@ -16,6 +16,7 @@ export type CoachRosterResource = Resource & {
 export const DEFAULT_COACH_ICON = "CO";
 export const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 06:00-21:00
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function getWeekStart(date: Date): Date {
   const nextDate = new Date(date);
@@ -32,10 +33,27 @@ export function addDays(date: Date, days: number): Date {
 
 export { formatWeekRange, toYmd };
 
-function getCoachDisplayName(coach: CoachProfileRecord): string {
-  const first = coach.user?.profile?.firstName?.trim() ?? "";
-  const last = coach.user?.profile?.lastName?.trim() ?? "";
-  return `${first} ${last}`.trim() || coach.user?.email || "Coach";
+function isLegacySeedIdentityEmail(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(
+    normalized &&
+    (normalized.startsWith("seed.member") ||
+      normalized.startsWith("seed.staff") ||
+      normalized.startsWith("seed.admin")),
+  );
+}
+
+function getCoachDisplayName(coach: CoachProfileRecord, index: number): string {
+  const standaloneName = coach.displayName?.trim();
+  if (
+    standaloneName &&
+    !EMAIL_LIKE_PATTERN.test(standaloneName) &&
+    !isLegacySeedIdentityEmail(standaloneName)
+  ) {
+    return standaloneName;
+  }
+
+  return `Coach Profile ${index + 1}`;
 }
 
 function formatAvailabilityPreview(coach: CoachProfileRecord): string[] {
@@ -46,18 +64,30 @@ function formatAvailabilityPreview(coach: CoachProfileRecord): string[] {
 }
 
 export function getCoachInitials(coach: CoachProfileRecord): string {
-  const first = coach.user?.profile?.firstName?.trim().charAt(0) ?? "";
-  const last = coach.user?.profile?.lastName?.trim().charAt(0) ?? "";
-  if (first || last) return `${first}${last}`.toUpperCase();
-  return (coach.user?.email ?? "CO").slice(0, 2).toUpperCase();
+  const standaloneName = coach.displayName?.trim();
+  if (
+    standaloneName &&
+    !EMAIL_LIKE_PATTERN.test(standaloneName) &&
+    !isLegacySeedIdentityEmail(standaloneName)
+  ) {
+    return (
+      standaloneName
+        .split(" ")
+        .filter((part) => part.length > 0)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? "")
+        .join("") || DEFAULT_COACH_ICON
+    );
+  }
+  return DEFAULT_COACH_ICON;
 }
 
 export function mapCoachesToRoster(
   coaches: CoachProfileRecord[],
 ): CoachRosterResource[] {
-  return coaches.map((coach) => ({
+  return coaches.map((coach, index) => ({
     id: coach.id,
-    name: getCoachDisplayName(coach),
+    name: getCoachDisplayName(coach, index),
     type: "trainer" as const,
     icon: DEFAULT_COACH_ICON,
     initials: getCoachInitials(coach),
@@ -66,7 +96,9 @@ export function mapCoachesToRoster(
     specialties: coach.specialties ?? [],
     hourlyRate: coach.hourlyRate ?? null,
     isActive: coach.isActive ?? false,
-    email: coach.user?.email ?? "",
+    email: isLegacySeedIdentityEmail(coach.contactEmail)
+      ? ""
+      : (coach.contactEmail ?? ""),
     availabilityCount: coach.availability?.length ?? 0,
     availabilityPreview: formatAvailabilityPreview(coach),
   }));

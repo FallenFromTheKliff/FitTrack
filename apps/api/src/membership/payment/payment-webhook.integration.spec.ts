@@ -9,6 +9,7 @@ import {
 
 import { MembershipCardRepository } from '../card/card.repository';
 import { MembershipCardService } from '../card/card.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { PaymongoCheckoutService } from './paymongo-checkout.service';
 import {
   PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
@@ -53,6 +54,7 @@ describe('Payment webhook integration', () => {
   };
   const membershipCardRepo = {
     findMembershipCardByIdOrThrow: jest.fn(),
+    findMembershipCardWithUserProfileByIdOrThrow: jest.fn(),
     activateMembershipCard: jest.fn(),
     revokeMembershipCard: jest.fn(),
   };
@@ -63,6 +65,9 @@ describe('Payment webhook integration', () => {
 
   const paymongoCheckoutService = {
     createCheckoutSession: jest.fn(),
+  };
+  const notificationsService = {
+    dispatch: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -77,6 +82,7 @@ describe('Payment webhook integration', () => {
         { provide: PaymentRepository, useValue: paymentRepo },
         { provide: SubscriptionRepository, useValue: subscriptionRepo },
         { provide: MembershipCardRepository, useValue: membershipCardRepo },
+        { provide: NotificationsService, useValue: notificationsService },
         { provide: PaymongoWebhookService, useValue: paymongoWebhookService },
         { provide: PaymongoCheckoutService, useValue: paymongoCheckoutService },
       ],
@@ -180,7 +186,7 @@ describe('Payment webhook integration', () => {
       status: 'completed',
       gateway_event_id: event.data.id,
     });
-    membershipCardRepo.findMembershipCardByIdOrThrow.mockResolvedValue(
+    membershipCardRepo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue(
       createPendingMembershipCard(),
     );
     membershipCardRepo.activateMembershipCard.mockResolvedValue({

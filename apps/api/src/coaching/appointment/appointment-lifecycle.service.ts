@@ -24,7 +24,9 @@ import {
   COACHING_LIFECYCLE_TIMEZONE,
   COACHING_NO_SHOW_GRACE_MINUTES,
   COACHING_NO_SHOW_JOB,
+  COACHING_RECURRING_BILLING_OVERDUE_JOB,
 } from './appointment.constants';
+import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
 
 type AppointmentNotificationTarget = Awaited<
   ReturnType<
@@ -41,6 +43,7 @@ export class AppointmentLifecycleService implements OnModuleInit {
   constructor(
     private readonly repo: AppointmentRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly recurringCoachingPlanService: RecurringCoachingPlanService,
     @InjectQueue(COACHING_LIFECYCLE_QUEUE)
     private readonly lifecycleQueue: Queue,
   ) {}
@@ -91,18 +94,25 @@ export class AppointmentLifecycleService implements OnModuleInit {
         event.appointmentId,
       );
 
-    await Promise.all([
+    const notificationJobs: Array<Promise<void>> = [
       this.notifyUserOfCancellation(
         appointment.user.id,
         this.buildAppointmentCancelledHtml(appointment, 'member'),
         this.buildAppointmentCancelledBody(appointment, 'member'),
       ),
-      this.notifyUserOfCancellation(
-        appointment.coach.user.id,
-        this.buildAppointmentCancelledHtml(appointment, 'coach'),
-        this.buildAppointmentCancelledBody(appointment, 'coach'),
-      ),
-    ]);
+    ];
+
+    if (appointment.coach.user) {
+      notificationJobs.push(
+        this.notifyUserOfCancellation(
+          appointment.coach.user.id,
+          this.buildAppointmentCancelledHtml(appointment, 'coach'),
+          this.buildAppointmentCancelledBody(appointment, 'coach'),
+        ),
+      );
+    }
+
+    await Promise.all(notificationJobs);
   }
 
   @OnEvent(APPOINTMENT_COMPLETED_EVENT, { async: true })
@@ -174,6 +184,10 @@ export class AppointmentLifecycleService implements OnModuleInit {
     }
   }
 
+  async runRecurringBillingOverdueCron(): Promise<void> {
+    await this.recurringCoachingPlanService.runBillingOverdueCron();
+  }
+
   private async ensureLifecycleJobs(): Promise<void> {
     await this.lifecycleQueue.add(
       COACHING_COMPLETION_JOB,
@@ -183,6 +197,19 @@ export class AppointmentLifecycleService implements OnModuleInit {
         removeOnComplete: true,
         repeat: {
           cron: '0 * * * *',
+          tz: COACHING_LIFECYCLE_TIMEZONE,
+        },
+      },
+    );
+
+    await this.lifecycleQueue.add(
+      COACHING_RECURRING_BILLING_OVERDUE_JOB,
+      {},
+      {
+        jobId: COACHING_RECURRING_BILLING_OVERDUE_JOB,
+        removeOnComplete: true,
+        repeat: {
+          cron: '15 * * * *',
           tz: COACHING_LIFECYCLE_TIMEZONE,
         },
       },
@@ -340,13 +367,19 @@ export class AppointmentLifecycleService implements OnModuleInit {
       appointment_id: appointment.id,
       scheduled_at: new Date(appointment.scheduled_at).toISOString(),
       duration_minutes: appointment.duration_minutes,
-      coach_name: this.getDisplayName(appointment.coach.user),
+      coach_name: this.getCoachDisplayName(appointment.coach),
     };
   }
 
-  private getDisplayName(user: AppointmentNotificationUser): string {
-    const firstName = user.profile?.first_name ?? 'member';
-    const lastName = user.profile?.last_name ?? '';
+  private getCoachDisplayName(
+    coach: AppointmentNotificationTarget['coach'],
+  ): string {
+    return coach.display_name?.trim() || 'Coach profile';
+  }
+
+  private getDisplayName(user: AppointmentNotificationUser | null): string {
+    const firstName = user?.profile?.first_name ?? 'member';
+    const lastName = user?.profile?.last_name ?? '';
     return `${firstName} ${lastName}`.trim();
   }
 

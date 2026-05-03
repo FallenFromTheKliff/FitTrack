@@ -468,6 +468,7 @@ enum PayableType {
   subscription
   booking
   coaching
+  recurring_coaching
   product
   membership_card
 }
@@ -570,9 +571,9 @@ model AmenityBooking {
 
 enum BookingStatus {
   pending // downpayment not yet received
-  confirmed // downpayment received; awaiting the day
+  confirmed // payment settled; booking is active
   balance_pending // on arrival; balance not yet collected
-  completed // balance collected
+  completed // session/booking has been marked done
   cancelled // cancelled (downpayment forfeited)
   no_show // did not arrive
 }
@@ -583,7 +584,10 @@ enum BookingStatus {
 
 model CoachProfile {
   id                       String   @id @default(uuid()) @db.Uuid
-  user_id                  String   @unique @db.Uuid
+  user_id                  String?  @unique @db.Uuid
+  display_name             String?  @db.VarChar(160)
+  contact_email            String?  @db.VarChar(255)
+  contact_phone            String?  @db.VarChar(40)
   specialization           String?  @db.VarChar(255)
   bio                      String?
   certification            String?  @db.VarChar(255)
@@ -595,7 +599,7 @@ model CoachProfile {
   created_at               DateTime @default(now()) @db.Timestamptz(6)
   updated_at               DateTime @updatedAt @db.Timestamptz(6)
 
-  user                 User                      @relation(fields: [user_id], references: [id])
+  user                 User?                     @relation(fields: [user_id], references: [id])
   appointments         CoachAppointment[]
   recurring_plans      RecurringCoachingPlan[]
   amenity_bookings     AmenityBooking[]
@@ -677,11 +681,34 @@ model RecurringCoachingPlan {
   member       User               @relation("recurring_plan_member", fields: [member_id], references: [id])
   coach        CoachProfile       @relation(fields: [coach_id], references: [id])
   appointments CoachAppointment[]
+  billing_cycles RecurringCoachingBillingCycle[]
 
   @@index([member_id, status])
   @@index([coach_id, status])
   @@index([status, start_date, end_date])
   @@map("recurring_coaching_plans")
+}
+
+model RecurringCoachingBillingCycle {
+  id                   String                              @id @default(uuid()) @db.Uuid
+  recurring_plan_id    String                              @db.Uuid
+  cycle_start_date     DateTime                            @db.Date
+  cycle_end_date       DateTime                            @db.Date
+  due_date             DateTime                            @db.Date
+  grace_period_ends_at DateTime                            @db.Timestamptz(6)
+  amount               Decimal                             @db.Decimal(10, 2)
+  status               RecurringCoachingBillingCycleStatus @default(due)
+  payment_id           String?                             @unique @db.Uuid
+  paid_at              DateTime?                           @db.Timestamptz(6)
+  created_at           DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                            @updatedAt @db.Timestamptz(6)
+
+  recurring_plan RecurringCoachingPlan @relation(fields: [recurring_plan_id], references: [id], onDelete: Cascade)
+
+  @@unique([recurring_plan_id, cycle_start_date])
+  @@index([status, due_date])
+  @@index([payment_id])
+  @@map("recurring_coaching_billing_cycles")
 }
 
 enum RecurringCoachingFrequency {
@@ -694,6 +721,15 @@ enum RecurringCoachingPlanStatus {
   paused
   cancelled
   completed
+}
+
+enum RecurringCoachingBillingCycleStatus {
+  due
+  processing
+  awaiting_verification
+  paid
+  overdue
+  cancelled
 }
 
 enum RecurringCoachingSessionState {

@@ -22,8 +22,10 @@ import { webApiClient } from "@/lib/api-client";
 import type { DeletionRequest } from "@/data/members/members";
 import {
   ANALYTICS_DEFAULT_ATTENDANCE_FILTER,
+  type AnalyticsRevenueWindowFilter,
   deriveAttendanceDrilldownWindow,
   formatDateTime,
+  ANALYTICS_REVENUE_WINDOW_OPTIONS,
   toAttendanceChartSeries,
   toAttendanceWindow,
   toRevenueChartSeries,
@@ -36,13 +38,13 @@ type AttendanceDrilldownSelection = {
   label: string;
 };
 
-function isPrimaryBusinessInsight(
+function isFallbackBusinessInsight(
   insight: BusinessInsightRunDetailRecord | null | undefined,
-): insight is BusinessInsightRunDetailRecord {
+): boolean {
   return Boolean(
     insight &&
-      insight.modelUsed !== "grounded-fallback" &&
-      !insight.summary.startsWith("Fallback insight:"),
+      (insight.modelUsed === "grounded-fallback" ||
+        insight.summary.startsWith("Fallback insight:")),
   );
 }
 
@@ -68,11 +70,16 @@ export function useAnalyticsDashboard() {
     useState<AnalyticsAttendanceFilter>(ANALYTICS_DEFAULT_ATTENDANCE_FILTER);
   const [selectedDrilldown, setSelectedDrilldown] =
     useState<AttendanceDrilldownSelection | null>(null);
+  const [revenueWindowFilter, setRevenueWindowFilter] =
+    useState<AnalyticsRevenueWindowFilter>("6m");
   const [generatedInsight, setGeneratedInsight] =
     useState<BusinessInsightRunDetailRecord | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-  const revenueWindow = useMemo(() => toRevenueWindow(), []);
+  const revenueWindow = useMemo(
+    () => toRevenueWindow(revenueWindowFilter),
+    [revenueWindowFilter],
+  );
   const attendanceWindow = useMemo(
     () => toAttendanceWindow(attendanceFilter),
     [attendanceFilter],
@@ -90,27 +97,32 @@ export function useAnalyticsDashboard() {
 
   const snapshotQuery = useQuery({
     ...analyticsSnapshotQueryOptions(webApiClient),
+    refetchOnMount: "always",
     staleTime: 60_000,
     gcTime: 300_000,
   });
   const directoryMembersQuery = useQuery({
     queryKey: ["analytics", "directory-members"],
     queryFn: () => webApiClient.admin.listMembers(),
+    refetchOnMount: "always",
     staleTime: 60_000,
     gcTime: 300_000,
   });
   const deletionRequestsQuery = useQuery({
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
+    refetchOnMount: "always",
     staleTime: 30_000,
     gcTime: 300_000,
   });
   const revenueQuery = useQuery({
     ...analyticsRevenueQueryOptions(webApiClient, revenueWindow),
+    refetchOnMount: "always",
     staleTime: 60_000,
     gcTime: 300_000,
   });
   const attendanceQuery = useQuery({
     ...analyticsAttendanceQueryOptions(webApiClient, attendanceWindow),
+    refetchOnMount: "always",
     staleTime: 30_000,
     gcTime: 300_000,
   });
@@ -145,10 +157,8 @@ export function useAnalyticsDashboard() {
   const snapshot = snapshotQuery.data;
   const revenue = revenueQuery.data;
   const attendance = attendanceQuery.data;
-  const latestInsightCandidate = generatedInsight ?? latestInsightQuery.data ?? null;
-  const latestInsight = isPrimaryBusinessInsight(latestInsightCandidate)
-    ? latestInsightCandidate
-    : null;
+  const latestInsight = generatedInsight ?? latestInsightQuery.data ?? null;
+  const latestInsightIsFallback = isFallbackBusinessInsight(latestInsight);
   const revenueSeries = useMemo(() => toRevenueChartSeries(revenue), [revenue]);
   const attendanceSeries = useMemo(
     () => toAttendanceChartSeries(attendance, attendanceFilter),
@@ -266,15 +276,20 @@ export function useAnalyticsDashboard() {
     isExportingPdf,
     isGeneratingInsight: generateInsightMutation.isPending,
     latestInsight,
+    latestInsightIsFallback,
     latestInsightLoading:
       insightHistoryQuery.isLoading || latestInsightQuery.isLoading,
     message,
+    revenueWindowFilter,
+    revenueWindowFilterOptions: ANALYTICS_REVENUE_WINDOW_OPTIONS,
     visibleActiveMemberCount,
     revenue,
     revenueLoading: revenueQuery.isLoading,
     revenueSeries,
+    revenueWindow,
     selectedDrilldown,
     setAttendanceFilter,
+    setRevenueWindowFilter,
     snapshot,
     snapshotLoading: snapshotQuery.isLoading,
   };

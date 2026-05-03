@@ -22,6 +22,8 @@ export type BookingUserSummary = {
 export type BookingCoachSummary = {
   bio?: string | null;
   certifications?: string[];
+  contactEmail?: string | null;
+  displayName?: string | null;
   hourlyRate?: number | null;
   id: string;
   isAvailableForBooking?: boolean;
@@ -34,11 +36,13 @@ export type BookingPaymentPlan = "downpayment" | "free" | "full";
 
 export type VenueBookingRecord = {
   amountDueNow?: number | null;
+  balancePaidAt?: string | null;
   cancelReason?: string | null;
   cancelledAt?: string | null;
   coach?: BookingCoachSummary | null;
   coachId?: string | null;
   createdAt?: string;
+  downpaymentPaidAt?: string | null;
   durationHours: number;
   endTime: string;
   id: string;
@@ -67,6 +71,8 @@ type AmenityBookingApiRecord = {
   coach?: {
     bio?: string | null;
     certification?: string | null;
+    contact_email?: string | null;
+    display_name?: string | null;
     hourly_rate?: number | string | null;
     id?: string;
     is_available_for_booking?: boolean | null;
@@ -85,7 +91,9 @@ type AmenityBookingApiRecord = {
   coach_id?: string | null;
   created_at?: string;
   downpayment_amount?: number | string | null;
+  downpayment_paid_at?: string | null;
   balance_amount?: number | string | null;
+  balance_paid_at?: string | null;
   ends_at: string;
   id: string;
   notes?: string | null;
@@ -118,6 +126,15 @@ export type CreateBookingPayload = {
 type BookingCheckoutResponse = {
   booking_id: string;
   checkout_url?: string | null;
+  payment_id?: string | null;
+  status: string;
+};
+
+export type BookingBalancePaymentProvider = "cash" | "paymongo";
+export type BookingBalanceCheckoutResponse = {
+  bookingId: string;
+  checkoutUrl: string | null;
+  paymentId?: string | null;
   status: string;
 };
 
@@ -135,13 +152,15 @@ function legacyVenueIdFromAmenityName(name?: string | null) {
 function toLegacyVenueStatus(status?: string) {
   switch ((status ?? "").toLowerCase()) {
     case "confirmed":
-    case "balance_pending":
       return "confirmed" as const;
+    case "balance_pending":
+      return "balance_pending" as const;
     case "completed":
       return "completed" as const;
     case "cancelled":
-    case "no_show":
       return "cancelled" as const;
+    case "no_show":
+      return "no_show" as const;
     case "pending":
     default:
       return "pending" as const;
@@ -167,7 +186,10 @@ function toAmountNumber(value?: number | string | null) {
 }
 
 function createIdempotencyKey() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -185,30 +207,48 @@ function splitMultiValue(value?: string | null) {
     .filter((part) => part.length > 0);
 }
 
+function normalizeCoachDisplayName(value?: string | null) {
+  const displayName = value?.trim();
+  if (displayName && !displayName.includes("@")) {
+    return displayName;
+  }
+
+  return null;
+}
+
+function isLegacySeedIdentityEmail(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(
+    normalized &&
+    (normalized.startsWith("seed.member") ||
+      normalized.startsWith("seed.staff") ||
+      normalized.startsWith("seed.admin")),
+  );
+}
+
 function mapProfileSummary(
-  profile?:
-    | {
-        firstName?: string | null;
-        first_name?: string | null;
-        lastName?: string | null;
-        last_name?: string | null;
-      }
-    | null
+  profile?: {
+    firstName?: string | null;
+    first_name?: string | null;
+    lastName?: string | null;
+    last_name?: string | null;
+  } | null,
 ) {
   return {
     firstName: profile?.firstName ?? profile?.first_name ?? null,
-    lastName: profile?.lastName ?? profile?.last_name ?? null
+    lastName: profile?.lastName ?? profile?.last_name ?? null,
   };
 }
 
 export function mapAmenityBookingToVenueBookingRecord(
-  record: AmenityBookingApiRecord
+  record: AmenityBookingApiRecord,
 ): VenueBookingRecord {
   const startTime = new Date(record.starts_at);
   const endTime = new Date(record.ends_at);
   const durationHours = Math.max(
     0,
-    Math.round(((endTime.getTime() - startTime.getTime()) / 3_600_000) * 100) / 100
+    Math.round(((endTime.getTime() - startTime.getTime()) / 3_600_000) * 100) /
+      100,
   );
   const venueName = record.amenity?.name?.trim() || "Amenity";
   const venueId =
@@ -216,18 +256,29 @@ export function mapAmenityBookingToVenueBookingRecord(
     record.amenity_id ??
     legacyVenueIdFromAmenityName(venueName);
   const totalAmount = toAmountNumber(record.total_amount);
-  const amountDueNow = toAmountNumber(record.downpayment_amount);
-  const remainingBalance = toAmountNumber(record.balance_amount);
+  const downpaymentAmount = toAmountNumber(record.downpayment_amount);
+  const balanceAmount = toAmountNumber(record.balance_amount);
+  const balancePaidAt = record.balance_paid_at ?? null;
+  const downpaymentPaidAt = record.downpayment_paid_at ?? null;
+  const remainingBalance = balancePaidAt ? 0 : balanceAmount;
+  const amountDueNow =
+    record.status === "pending"
+      ? downpaymentAmount
+      : remainingBalance && remainingBalance > 0
+        ? remainingBalance
+        : 0;
   const paymentPlan: BookingPaymentPlan =
     totalAmount == null || totalAmount <= 0
       ? "free"
-      : remainingBalance && remainingBalance > 0
+      : balanceAmount && balanceAmount > 0
         ? "downpayment"
         : "full";
 
   return {
     totalAmount,
     amountDueNow,
+    balancePaidAt,
+    downpaymentPaidAt,
     remainingBalance,
     nextPaymentDate:
       remainingBalance && remainingBalance > 0 ? record.starts_at : null,
@@ -246,7 +297,7 @@ export function mapAmenityBookingToVenueBookingRecord(
     user: {
       id: record.user?.id ?? record.user_id ?? "",
       email: record.user?.email ?? null,
-      profile: mapProfileSummary(record.user?.profile)
+      profile: mapProfileSummary(record.user?.profile),
     },
     coach:
       record.coach?.id != null
@@ -254,23 +305,23 @@ export function mapAmenityBookingToVenueBookingRecord(
             id: record.coach.id,
             bio: record.coach.bio ?? null,
             certifications: splitMultiValue(record.coach.certification),
+            contactEmail: isLegacySeedIdentityEmail(record.coach.contact_email)
+              ? null
+              : (record.coach.contact_email ?? null),
+            displayName: normalizeCoachDisplayName(record.coach.display_name),
             hourlyRate: toHourlyRate(record.coach.hourly_rate),
             isAvailableForBooking:
               record.coach.is_available_for_booking ?? false,
             specialties: splitMultiValue(record.coach.specialization),
-            user: {
-              id: record.coach.user?.id ?? "",
-              email: record.coach.user?.email ?? null,
-              profile: mapProfileSummary(record.coach.user?.profile)
-            }
+            user: null,
           }
         : null,
     venue: {
       id: venueId,
       name: venueName,
       capacity: record.amenity?.capacity ?? null,
-      hourlyRate: toHourlyRate(record.amenity?.hourly_rate)
-    }
+      hourlyRate: toHourlyRate(record.amenity?.hourly_rate),
+    },
   };
 }
 
@@ -279,19 +330,26 @@ export function createBookingsApi(transport: ApiTransport) {
     listMine<T>() {
       return unwrapResponse<AmenityBookingApiRecord[]>(
         transport.get("/bookings/amenity/my"),
-        "Unable to load bookings."
-      ).then((data) =>
-        data.map((record) => mapAmenityBookingToVenueBookingRecord(record)) as T[]
+        "Unable to load bookings.",
+      ).then(
+        (data) =>
+          data.map((record) =>
+            mapAmenityBookingToVenueBookingRecord(record),
+          ) as T[],
       );
     },
     create(payload: CreateBookingPayload) {
       const amenityId = resolveAmenityId(payload.venueId);
       if (!amenityId) {
-        throw new Error("This facility is not connected to a live reservation backend yet.");
+        throw new Error(
+          "This facility is not connected to a live reservation backend yet.",
+        );
       }
 
       const startsAt = new Date(payload.startTime);
-      const endsAt = new Date(startsAt.getTime() + payload.durationHours * 3_600_000);
+      const endsAt = new Date(
+        startsAt.getTime() + payload.durationHours * 3_600_000,
+      );
 
       return unwrapResponse<BookingCheckoutResponse>(
         transport.post(
@@ -303,24 +361,50 @@ export function createBookingsApi(transport: ApiTransport) {
             notes: payload.purpose,
             payment_stage: payload.paymentStage ?? "downpayment",
             provider: payload.provider ?? "paymongo",
-            starts_at: startsAt.toISOString()
+            starts_at: startsAt.toISOString(),
           },
           {
             headers: {
-              "Idempotency-Key": createIdempotencyKey()
-            }
-          }
+              "Idempotency-Key": createIdempotencyKey(),
+            },
+          },
         ),
-        "Unable to create booking."
+        "Unable to create booking.",
       );
     },
     cancel(bookingId: string, cancelReason: string) {
       return unwrapVoidResponse(
         transport.patch(`/bookings/amenity/${bookingId}/cancel`, {
-          cancelReason
+          cancelReason,
         }),
-        "Unable to cancel booking."
+        "Unable to cancel booking.",
       );
-    }
+    },
+    processBalance(
+      bookingId: string,
+      payload: {
+        provider: BookingBalancePaymentProvider;
+        referenceNo?: string;
+        screenshotUrl?: string;
+      },
+    ) {
+      return unwrapResponse<BookingCheckoutResponse>(
+        transport.post(`/bookings/amenity/${bookingId}/balance`, {
+          provider: payload.provider,
+          ...(payload.referenceNo ? { reference_no: payload.referenceNo } : {}),
+          ...(payload.screenshotUrl
+            ? { screenshot_url: payload.screenshotUrl }
+            : {}),
+        }),
+        "Unable to collect booking balance.",
+      ).then(
+        (record): BookingBalanceCheckoutResponse => ({
+          bookingId: record.booking_id,
+          checkoutUrl: record.checkout_url ?? null,
+          paymentId: record.payment_id ?? null,
+          status: record.status,
+        }),
+      );
+    },
   };
 }

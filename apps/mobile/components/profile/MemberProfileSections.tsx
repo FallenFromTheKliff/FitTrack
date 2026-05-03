@@ -23,7 +23,7 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
   const membershipCardActionSubtitle = controller.memberAccessLabel === "Pending verification"
     ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
     : controller.memberAccessLabel === "Revoked"
-      ? "Your membership card access is revoked right now. Buy a new card or ask the front desk to repair the account if this looks incorrect."
+      ? "Your membership access is revoked. Ask the front desk to restore it; the one-time card payment stays on record and does not need to be paid again."
       : "Permanent PHP 400 membership card. Buy once, then load weekly, monthly, or multi-month plans whenever you need them.";
   const gamificationMessage = controller.memberAccessLabel === "Pending verification"
     ? "Your membership card is waiting for verification. Fitness progress, badges, and achievement history unlock as soon as the card becomes active."
@@ -174,7 +174,9 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
               </View>
             ) : (
               <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 12 }}>
-                Member-card purchase actions stay paused while this account is already waiting for verification.
+                {controller.memberAccessLabel === "Revoked"
+                  ? "This card was already purchased. Staff can restore membership access from the Account Module; no new payment is required."
+                  : "Member-card purchase actions stay paused while this account is already waiting for verification."}
               </FitText>
             )}
           </>
@@ -195,11 +197,27 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
           icon={CreditCard}
           label="Payment History"
           subtitle={controller.paymentHistorySubtitle}
-          trailingLabel={controller.latestMembershipPayment ? formatMembershipStatus(controller.latestMembershipPayment.status) : undefined}
+          trailingLabel={
+            controller.latestMembershipPayment
+              ? formatMembershipStatus(controller.latestMembershipPayment.status)
+              : controller.membershipCard && controller.membershipCard.status !== "none"
+                ? controller.membershipCard.status === "pending_verification"
+                  ? "Pending"
+                  : controller.membershipCard.status === "revoked"
+                    ? "Revoked"
+                    : "Completed"
+                : undefined
+          }
           trailingLabelColor={
             controller.latestMembershipPayment
               ? controller.membershipStatusColors[controller.latestMembershipPayment.status]
-              : undefined
+              : controller.membershipCard?.status === "revoked"
+                ? controller.memberAccessColor
+                : controller.membershipCard?.status === "pending_verification"
+                  ? controller.memberAccessColor
+                  : controller.membershipCard?.status === "active"
+                    ? controller.membershipStatusColors.completed
+                    : undefined
           }
           noChevron
         />

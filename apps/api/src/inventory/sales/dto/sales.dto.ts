@@ -98,6 +98,90 @@ export class CreateSaleDTO {
 
 export class SaleFilterDTO extends DateRangeDTO {}
 
+export class SalesSummaryResponseDTO {
+  @ApiProperty({ example: 42 })
+  completed_sales_count: number;
+
+  @ApiProperty({ example: '25043.00' })
+  total_revenue: string;
+}
+
+export enum InventoryAnalyticsPeriodEnum {
+  Daily = 'Daily',
+  Weekly = 'Weekly',
+  Monthly = 'Monthly',
+  Quarterly = 'Quarterly',
+  Yearly = 'Yearly',
+}
+
+export const INVENTORY_ANALYTICS_PERIODS = [
+  InventoryAnalyticsPeriodEnum.Daily,
+  InventoryAnalyticsPeriodEnum.Weekly,
+  InventoryAnalyticsPeriodEnum.Monthly,
+  InventoryAnalyticsPeriodEnum.Quarterly,
+  InventoryAnalyticsPeriodEnum.Yearly,
+] as const;
+const INVENTORY_ANALYTICS_PERIOD_MESSAGE =
+  'period must be one of: Daily, Weekly, Monthly, Quarterly, Yearly';
+
+export type InventoryAnalyticsPeriod =
+  (typeof INVENTORY_ANALYTICS_PERIODS)[number];
+
+export class SalesAnalyticsQueryDTO {
+  @ApiPropertyOptional({
+    enum: InventoryAnalyticsPeriodEnum,
+    default: InventoryAnalyticsPeriodEnum.Monthly,
+    example: InventoryAnalyticsPeriodEnum.Monthly,
+  })
+  @IsOptional()
+  @IsEnum(InventoryAnalyticsPeriodEnum, {
+    message: INVENTORY_ANALYTICS_PERIOD_MESSAGE,
+  })
+  period?: InventoryAnalyticsPeriod = InventoryAnalyticsPeriodEnum.Monthly;
+}
+
+export class SalesAnalyticsRevenuePointResponseDTO {
+  @ApiProperty({ example: 'Apr 26' })
+  bucket_label: string;
+
+  @ApiProperty({ example: '25043.00' })
+  revenue: string;
+}
+
+export class SalesAnalyticsTopProductResponseDTO {
+  @ApiProperty({ example: 'Creatine Monohydrate' })
+  name: string;
+
+  @ApiProperty({ example: '42.00' })
+  value: string;
+}
+
+export class SalesAnalyticsResponseDTO {
+  @ApiProperty({
+    enum: InventoryAnalyticsPeriodEnum,
+    example: InventoryAnalyticsPeriodEnum.Monthly,
+  })
+  period: InventoryAnalyticsPeriod;
+
+  @ApiProperty({
+    type: SalesAnalyticsRevenuePointResponseDTO,
+    isArray: true,
+  })
+  revenue_series: SalesAnalyticsRevenuePointResponseDTO[];
+
+  @ApiProperty({
+    type: SalesAnalyticsTopProductResponseDTO,
+    isArray: true,
+  })
+  top_products_by_inventory_value: SalesAnalyticsTopProductResponseDTO[];
+
+  @ApiProperty({
+    type: SalesAnalyticsTopProductResponseDTO,
+    isArray: true,
+  })
+  top_products_by_stocks_sold: SalesAnalyticsTopProductResponseDTO[];
+}
+
 export class SaleStaffSummaryResponseDTO {
   @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
   id: string;

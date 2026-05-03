@@ -66,6 +66,31 @@ export type AttendanceQrCodeResponse = AttendanceQrCodeRecord;
 
 type RawUserProfile = NonNullable<UserProfileResponse["profile"]>;
 
+function normalizeMembershipCard(
+  card: MembershipCardRecord | null | undefined
+): MembershipCardRecord | null {
+  if (!card) return null;
+  const rawCard = card as MembershipCardRecord & {
+    activated_at?: string | null;
+    purchased_at?: string | null;
+    revoke_reason?: string | null;
+    revoked_at?: string | null;
+    updated_at?: string | null;
+    verified_at?: string | null;
+  };
+
+  return {
+    activatedAt: rawCard.activatedAt ?? rawCard.activated_at ?? null,
+    purchasedAt: rawCard.purchasedAt ?? rawCard.purchased_at ?? null,
+    revokeReason: rawCard.revokeReason ?? rawCard.revoke_reason ?? null,
+    revokedAt: rawCard.revokedAt ?? rawCard.revoked_at ?? null,
+    source: rawCard.source ?? null,
+    status: rawCard.status,
+    updatedAt: rawCard.updatedAt ?? rawCard.updated_at ?? null,
+    verifiedAt: rawCard.verifiedAt ?? rawCard.verified_at ?? null
+  };
+}
+
 function hasVerifiedTimestamp(value?: string | null) {
   return typeof value === "string" && value.trim() !== "";
 }
@@ -80,8 +105,6 @@ function normalizeRole(value: Role | string | null | undefined): Role | undefine
       return "ADMIN";
     case "staff":
       return "STAFF";
-    case "coach":
-      return "COACH";
     case "member":
     case "user":
       return "USER";
@@ -117,7 +140,9 @@ function normalizeUserProfileResponse(profile: UserProfileResponse): UserProfile
             ...(profile.role.name ? { name: normalizeRole(profile.role.name) ?? profile.role.name } : {})
           }
         : profile.role;
-  const membershipCard = profile.membershipCard ?? profile.membership_card ?? null;
+  const membershipCard = normalizeMembershipCard(
+    profile.membershipCard ?? profile.membership_card ?? null
+  );
   const qrCodeToken = profile.qrCodeToken ?? profile.qr_code_token ?? null;
 
   return {

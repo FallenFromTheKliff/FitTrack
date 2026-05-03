@@ -20,11 +20,13 @@ type Props = {
   minDate?: string;
   defaultYear?: number;
   defaultMonth?: number;
+  blockedDates?: string[];
+  highlightedDates?: string[];
   onSelect: (date: string) => void;
   onClose: () => void;
 };
 
-export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, defaultYear, defaultMonth, onSelect, onClose }: Props) {
+export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, defaultYear, defaultMonth, blockedDates = [], highlightedDates = [], onSelect, onClose }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -62,6 +64,11 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
   const monthDays = getDaysInMonth(year, viewMonth);
   const offset = getFirstDayOfWeek(year, viewMonth);
   const selectedYmd = selectedDate ?? "";
+  const highlightedDateSet = useMemo(
+    () => new Set(highlightedDates),
+    [highlightedDates],
+  );
+  const blockedDateSet = useMemo(() => new Set(blockedDates), [blockedDates]);
   const yearRangeStart = year - 7;
   const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
   const dayCells = Array.from({ length: 42 }, (_, index) => {
@@ -154,6 +161,8 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
                     }
                     const isSelected = cell.ymd === selectedYmd;
                     const isToday = cell.ymd === todayStr;
+                    const isHighlighted = highlightedDateSet.has(cell.ymd);
+                    const isBlocked = blockedDateSet.has(cell.ymd);
                     const isBeforeMin = minSelectable ? cell.ymd < minSelectable : false;
                     const isPast = blockPast && cell.ymd < todayStr;
                     const isDisabled = isPast || isBeforeMin;
@@ -166,7 +175,13 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
                           disabled={isDisabled}
                           style={[
                             s.dayButton,
-                            !isSelected && isToday ? { borderColor: colors.brand } : undefined
+                            !isSelected && isToday ? { borderColor: colors.brand } : undefined,
+                            !isSelected && isHighlighted
+                              ? { borderColor: colors.success, borderWidth: 1 }
+                              : undefined,
+                            !isSelected && isBlocked
+                              ? { borderColor: colors.danger, borderWidth: 1 }
+                              : undefined
                           ]}
                           textStyle={[
                             s.dayText,

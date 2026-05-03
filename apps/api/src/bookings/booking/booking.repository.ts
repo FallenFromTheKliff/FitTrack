@@ -301,6 +301,70 @@ export class BookingRepository extends BaseRepository {
     });
   }
 
+  async createConfirmedManualBooking(input: {
+    userId: string;
+    amenityId: string;
+    coachId?: string;
+    startsAt: Date;
+    endsAt: Date;
+    notes?: string;
+    totalAmount: Prisma.Decimal;
+    downpaymentAmount: Prisma.Decimal;
+    balanceAmount: Prisma.Decimal;
+    idempotencyKey: string;
+    paymentAmount: Prisma.Decimal;
+    paymentStage: InitialBookingPaymentStage;
+    verifiedBy: string;
+  }): Promise<AmenityBooking> {
+    return this.transaction(async (tx) => {
+      await this.assertCapacityAvailable(
+        tx,
+        input.amenityId,
+        input.startsAt,
+        input.endsAt,
+      );
+
+      const paidAt = new Date();
+      const isFullPayment = input.paymentStage === PaymentStage.full;
+
+      const booking = await tx.amenityBooking.create({
+        data: {
+          user: { connect: { id: input.userId } },
+          amenity: { connect: { id: input.amenityId } },
+          ...(input.coachId
+            ? { coach: { connect: { id: input.coachId } } }
+            : {}),
+          status: BookingStatus.confirmed,
+          starts_at: input.startsAt,
+          ends_at: input.endsAt,
+          total_amount: input.totalAmount,
+          downpayment_amount: input.downpaymentAmount,
+          balance_amount: input.balanceAmount,
+          downpayment_paid_at: paidAt,
+          balance_paid_at: isFullPayment ? paidAt : null,
+          notes: input.notes ?? null,
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          user: { connect: { id: input.userId } },
+          verifier: { connect: { id: input.verifiedBy } },
+          payable_type: 'booking',
+          payable_id: booking.id,
+          payment_stage: input.paymentStage,
+          amount: input.paymentAmount,
+          provider: PaymentProvider.cash,
+          idempotency_key: input.idempotencyKey,
+          status: PaymentStatus.completed,
+          verified_at: paidAt,
+        },
+      });
+
+      return booking;
+    });
+  }
+
   async createPendingBookingWithPayment(input: {
     userId: string;
     amenityId: string;
@@ -367,7 +431,7 @@ export class BookingRepository extends BaseRepository {
       this.prisma.amenityBooking,
       bookingId,
       {
-        status: BookingStatus.confirmed,
+        status: BookingStatus.balance_pending,
         downpayment_paid_at: confirmedAt,
       },
     );
@@ -439,9 +503,22 @@ export class BookingRepository extends BaseRepository {
       this.prisma.amenityBooking,
       bookingId,
       {
-        status: BookingStatus.completed,
+        status: BookingStatus.confirmed,
         balance_paid_at: paidAt,
-        completed_at: paidAt,
+      },
+    );
+  }
+
+  markBookingCompleted(
+    bookingId: string,
+    completedAt: Date,
+  ): Promise<AmenityBooking> {
+    return this.updateById<AmenityBooking>(
+      this.prisma.amenityBooking,
+      bookingId,
+      {
+        status: BookingStatus.completed,
+        completed_at: completedAt,
       },
     );
   }
@@ -492,6 +569,24 @@ export class BookingRepository extends BaseRepository {
         id: bookingId,
         status: BookingStatus.confirmed,
         starts_at: { lte: eligibleStartsAt },
+      },
+      data: {
+        status: BookingStatus.no_show,
+      },
+    });
+
+    return result.count > 0;
+  }
+
+  async markConfirmedBookingNoShow(
+    bookingId: string,
+    noShowAt: Date,
+  ): Promise<boolean> {
+    const result = await this.prisma.amenityBooking.updateMany({
+      where: {
+        id: bookingId,
+        status: BookingStatus.confirmed,
+        starts_at: { lte: noShowAt },
       },
       data: {
         status: BookingStatus.no_show,

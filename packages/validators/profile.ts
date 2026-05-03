@@ -75,7 +75,8 @@ export const editProfilePersonalSchema = z.object({
   phone: z.string().trim().refine((value) => isSupportedPhilippineMobileNumber(value), {
     message: "Enter a valid PH mobile number"
   }),
-  dateOfBirth: z.string().optional()
+  dateOfBirth: z.string().optional(),
+  gender: z.enum(["male", "female", "other"]).optional()
 });
 
 export const editProfileFitnessSchema = z.object({

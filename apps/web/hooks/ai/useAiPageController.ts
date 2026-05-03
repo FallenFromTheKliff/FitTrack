@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ApiClientError } from "@fittrack/api-client";
 import {
   WEB_GREETING_MESSAGE,
-  getAiChatErrorMessage
+  getAiChatErrorMessage,
 } from "@fittrack/app-config";
 import {
   aiChatMessagesQueryOptions,
@@ -14,7 +14,7 @@ import {
   aiChatSessionQueryOptions,
   aiChatSessionsQueryOptions,
   archiveAiChatSessionMutationOptions,
-  restoreAiChatSessionMutationOptions
+  restoreAiChatSessionMutationOptions,
 } from "@fittrack/query";
 import { useTimedMessage } from "@fittrack/hooks";
 import { aiChatSchema } from "@fittrack/validators";
@@ -46,59 +46,90 @@ export function useAiPageController() {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const autoPromptRef = useRef<string | null>(null);
 
-  const sessionsQuery = useQuery(aiChatSessionsQueryOptions(webApiClient, { limit: 50 }));
+  const sessionsQuery = useQuery(
+    aiChatSessionsQueryOptions(webApiClient, { limit: 50 }),
+  );
   const sessions = sessionsQuery.data?.data ?? [];
-  const firstActiveSessionId = sessions.find((session) => session.is_active)?.id ?? null;
+  const firstActiveSessionId =
+    sessions.find((session) => session.is_active)?.id ?? null;
 
   useEffect(() => {
     if (sessionParam !== null) return;
-    router.replace(firstActiveSessionId ? `/ai?sessionId=${firstActiveSessionId}` : "/ai?sessionId=new");
+    router.replace(
+      firstActiveSessionId
+        ? `/ai?sessionId=${firstActiveSessionId}`
+        : "/ai?sessionId=new",
+    );
   }, [firstActiveSessionId, router, sessionParam]);
 
   useEffect(() => {
-    if (!isExplicitNewSession || !promptParam || pendingMessage || input.trim()) return;
+    if (!isExplicitNewSession || !promptParam || pendingMessage || input.trim())
+      return;
     setInput(promptParam);
     setLastError("");
   }, [input, isExplicitNewSession, pendingMessage, promptParam]);
 
-  const activeSessionId = requestedSessionId ?? (!isExplicitNewSession ? firstActiveSessionId : null);
+  const activeSessionId =
+    requestedSessionId ?? (!isExplicitNewSession ? firstActiveSessionId : null);
 
   const sessionQuery = useQuery({
     ...aiChatSessionQueryOptions(webApiClient, activeSessionId ?? ""),
-    enabled: !!activeSessionId && !sessions.some((session) => session.id === activeSessionId)
+    enabled:
+      !!activeSessionId &&
+      !sessions.some((session) => session.id === activeSessionId),
   });
 
   const messagesQuery = useQuery({
-    ...aiChatMessagesQueryOptions(webApiClient, activeSessionId ?? "", { limit: 100 }),
-    enabled: !!activeSessionId
+    ...aiChatMessagesQueryOptions(webApiClient, activeSessionId ?? "", {
+      limit: 100,
+    }),
+    enabled: !!activeSessionId,
   });
 
-  const sendMutation = useMutation(aiChatMutationOptions(webApiClient, queryClient, user?.id));
-  const archiveMutation = useMutation(archiveAiChatSessionMutationOptions(webApiClient, queryClient, user?.id));
-  const restoreMutation = useMutation(restoreAiChatSessionMutationOptions(webApiClient, queryClient));
-  const selectedSession = sessions.find((session) => session.id === activeSessionId) ?? sessionQuery.data ?? null;
+  const sendMutation = useMutation(
+    aiChatMutationOptions(webApiClient, queryClient, user?.id),
+  );
+  const archiveMutation = useMutation(
+    archiveAiChatSessionMutationOptions(webApiClient, queryClient, user?.id),
+  );
+  const restoreMutation = useMutation(
+    restoreAiChatSessionMutationOptions(webApiClient, queryClient),
+  );
+  const selectedSession =
+    sessions.find((session) => session.id === activeSessionId) ??
+    sessionQuery.data ??
+    null;
 
   const messages = useMemo<ChatPanelMessage[]>(() => {
-    const records = (messagesQuery.data?.data ?? []).map<ChatPanelMessage>((record) => ({
-      from: record.role === "assistant" ? "ai" : "user",
-      id: record.id,
-      text: record.content
-    }));
+    const records = (messagesQuery.data?.data ?? []).map<ChatPanelMessage>(
+      (record) => ({
+        from: record.role === "assistant" ? "ai" : "user",
+        id: record.id,
+        text: record.content,
+      }),
+    );
 
     if (records.length === 0) {
       records.push({ from: "ai", id: "greeting", text: WEB_GREETING_MESSAGE });
     }
 
     if (pendingMessage) {
-      records.push({ from: "user", id: "pending-user-message", text: pendingMessage });
+      records.push({
+        from: "user",
+        id: "pending-user-message",
+        text: pendingMessage,
+      });
     }
 
     return records;
   }, [messagesQuery.data, pendingMessage]);
 
-  const handleSelectSession = useCallback((sessionId: string) => {
-    router.replace(`/ai?sessionId=${sessionId}`);
-  }, [router]);
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      router.replace(`/ai?sessionId=${sessionId}`);
+    },
+    [router],
+  );
 
   const handleStartFresh = useCallback(() => {
     setInput("");
@@ -108,42 +139,50 @@ export function useAiPageController() {
     router.replace("/ai?sessionId=new");
   }, [router]);
 
-  const sendMessage = useCallback(async (messageText: string) => {
-    const trimmedInput = messageText.trim();
-    const parsed = aiChatSchema.safeParse({
-      context_type: "general",
-      message: trimmedInput,
-      ...(activeSessionId ? { session_id: activeSessionId } : {}),
-      ...(!activeSessionId && isExplicitNewSession ? { start_new_session: true } : {})
-    });
+  const sendMessage = useCallback(
+    async (messageText: string) => {
+      const trimmedInput = messageText.trim();
+      const parsed = aiChatSchema.safeParse({
+        context_type: "general",
+        message: trimmedInput,
+        ...(activeSessionId ? { session_id: activeSessionId } : {}),
+        ...(!activeSessionId && isExplicitNewSession
+          ? { start_new_session: true }
+          : {}),
+      });
 
-    if (!parsed.success) {
-      setLastError(parsed.error.issues[0]?.message ?? "Message is required.");
-      return;
-    }
+      if (!parsed.success) {
+        setLastError(parsed.error.issues[0]?.message ?? "Message is required.");
+        return;
+      }
 
-    setLastError("");
-    setInput("");
-    setPendingMessage(trimmedInput);
-
-    try {
-      const result = await sendMutation.mutateAsync(parsed.data);
       setLastError("");
-      if (result.session_id !== activeSessionId) {
-        router.replace(`/ai?sessionId=${result.session_id}`);
+      setInput("");
+      setPendingMessage(trimmedInput);
+
+      try {
+        const result = await sendMutation.mutateAsync(parsed.data);
+        setLastError("");
+        if (result.session_id !== activeSessionId) {
+          router.replace(`/ai?sessionId=${result.session_id}`);
+        }
+      } catch (error) {
+        const errorMessage = getAiChatErrorMessage(
+          error,
+          "Unable to send AI message.",
+        );
+        setInput(trimmedInput);
+        if (error instanceof ApiClientError && error.status === 410) {
+          router.replace("/ai?sessionId=new");
+        }
+        setLastError(errorMessage);
+        showMessage(errorMessage);
+      } finally {
+        setPendingMessage(null);
       }
-    } catch (error) {
-      const errorMessage = getAiChatErrorMessage(error, "Unable to send AI message.");
-      setInput(trimmedInput);
-      if (error instanceof ApiClientError && error.status === 410) {
-        router.replace("/ai?sessionId=new");
-      }
-      setLastError(errorMessage);
-      showMessage(errorMessage);
-    } finally {
-      setPendingMessage(null);
-    }
-  }, [activeSessionId, isExplicitNewSession, router, sendMutation, showMessage]);
+    },
+    [activeSessionId, isExplicitNewSession, router, sendMutation, showMessage],
+  );
 
   const handleSend = useCallback(async () => {
     await sendMessage(input);
@@ -162,7 +201,7 @@ export function useAiPageController() {
     promptParam,
     sendMessage,
     sendMutation.isPending,
-    shouldAutoStartPrompt
+    shouldAutoStartPrompt,
   ]);
 
   const handleDelete = useCallback(async () => {
@@ -170,11 +209,12 @@ export function useAiPageController() {
     try {
       await archiveMutation.mutateAsync({ sessionId: activeSessionId });
       setLastError("");
-      showMessage("Chat deleted.");
+      showMessage("Chat archived.");
       router.replace("/ai?sessionId=new");
       return activeSessionId;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unable to delete chat.";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unable to archive chat.";
       setLastError(errorMessage);
       showMessage(errorMessage);
       return null;
@@ -190,11 +230,12 @@ export function useAiPageController() {
       router.replace(`/ai?sessionId=${selectedSession.id}`);
       return selectedSession.id;
     } catch (error) {
-      const errorMessage = error instanceof ApiClientError && error.status === 404
-        ? "Restore is unavailable until the API reloads. Restart the current stack, then try again."
-        : error instanceof Error
-          ? error.message
-          : "Unable to restore chat.";
+      const errorMessage =
+        error instanceof ApiClientError && error.status === 404
+          ? "Restore is unavailable until the API reloads. Restart the current stack, then try again."
+          : error instanceof Error
+            ? error.message
+            : "Unable to restore chat.";
       setLastError(errorMessage);
       showMessage(errorMessage);
       return null;
@@ -210,7 +251,9 @@ export function useAiPageController() {
     handleSend,
     handleStartFresh,
     input,
-    isSelectedSessionDeleted: selectedSession ? !selectedSession.is_active : false,
+    isSelectedSessionDeleted: selectedSession
+      ? !selectedSession.is_active
+      : false,
     lastError,
     message,
     messages,
@@ -218,6 +261,6 @@ export function useAiPageController() {
     sendMutation,
     selectedSession,
     sessions,
-    setInput
+    setInput,
   };
 }

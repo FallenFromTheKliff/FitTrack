@@ -22,6 +22,10 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import { CreateSaleItemDTO } from './dto/sales.dto';
+import {
+  InventoryAnalyticsPeriodEnum,
+  type InventoryAnalyticsPeriod,
+} from './dto/sales.dto';
 
 type ProductSnapshot = Pick<
   RetailProduct,
@@ -82,6 +86,28 @@ export type PendingPaymongoSaleResult = {
   sale: SaleDetailRecord;
 };
 
+export type SalesSummaryRecord = {
+  completed_sales_count: number;
+  total_revenue: Prisma.Decimal;
+};
+
+export type SalesAnalyticsPointRecord = {
+  bucket_label: string;
+  revenue: Prisma.Decimal;
+};
+
+export type SalesAnalyticsTopProductRecord = {
+  name: string;
+  value: Prisma.Decimal;
+};
+
+export type SalesAnalyticsRecord = {
+  period: InventoryAnalyticsPeriod;
+  revenue_series: SalesAnalyticsPointRecord[];
+  top_products_by_inventory_value: SalesAnalyticsTopProductRecord[];
+  top_products_by_stocks_sold: SalesAnalyticsTopProductRecord[];
+};
+
 @Injectable()
 export class SalesRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -105,6 +131,57 @@ export class SalesRepository extends BaseRepository {
     );
   }
 
+  async getSalesSummary(dto: DateRangeDTO): Promise<SalesSummaryRecord> {
+    const where: Prisma.SaleTransactionWhereInput = {
+      status: 'completed',
+    };
+
+    if (dto.start_date || dto.end_date) {
+      where.created_at = {
+        ...(dto.start_date
+          ? { gte: new Date(`${dto.start_date}T00:00:00.000Z`) }
+          : {}),
+        ...(dto.end_date
+          ? { lte: new Date(`${dto.end_date}T23:59:59.999Z`) }
+          : {}),
+      };
+    }
+
+    const [completedSalesCount, aggregate] = await Promise.all([
+      this.prisma.saleTransaction.count({ where }),
+      this.prisma.saleTransaction.aggregate({
+        where,
+        _sum: {
+          total_amount: true,
+        },
+      }),
+    ]);
+
+    return {
+      completed_sales_count: completedSalesCount,
+      total_revenue: aggregate._sum.total_amount ?? new Prisma.Decimal(0),
+    };
+  }
+
+  async getSalesAnalytics(
+    period: InventoryAnalyticsPeriod,
+  ): Promise<SalesAnalyticsRecord> {
+    const normalizedPeriod = period as InventoryAnalyticsPeriodEnum;
+    const revenueSeries = await this.buildRevenueSeries(normalizedPeriod);
+    const [topProductsByInventoryValue, topProductsByStocksSold] =
+      await Promise.all([
+        this.buildTopProductsByInventoryValue(),
+        this.buildTopProductsByStocksSold(),
+      ]);
+
+    return {
+      period: normalizedPeriod,
+      revenue_series: revenueSeries,
+      top_products_by_inventory_value: topProductsByInventoryValue,
+      top_products_by_stocks_sold: topProductsByStocksSold,
+    };
+  }
+
   findSaleByIdOrThrow(id: string): Promise<SaleDetailRecord> {
     return this.findByIdOrThrow<SaleDetailRecord>(
       this.prisma.saleTransaction,
@@ -112,6 +189,259 @@ export class SalesRepository extends BaseRepository {
       'SaleTransaction',
       saleDetailInclude,
     );
+  }
+
+  private async buildRevenueSeries(
+    period: InventoryAnalyticsPeriodEnum,
+  ): Promise<SalesAnalyticsPointRecord[]> {
+    const now = new Date();
+    const buckets = this.createAnalyticsBuckets(period, now);
+    const firstBucketStart = buckets[0]?.start;
+
+    const sales = await this.prisma.saleTransaction.findMany({
+      where: {
+        status: 'completed',
+        ...(firstBucketStart
+          ? {
+              created_at: {
+                gte: firstBucketStart,
+                lte: now,
+              },
+            }
+          : {}),
+      },
+      select: {
+        created_at: true,
+        total_amount: true,
+      },
+    });
+
+    const bucketsByKey = new Map(
+      buckets.map((bucket) => [
+        bucket.key,
+        {
+          bucket_label: bucket.label,
+          revenue: new Prisma.Decimal(0),
+        },
+      ]),
+    );
+
+    for (const sale of sales) {
+      const bucketKey = this.resolveAnalyticsBucketKey(period, sale.created_at);
+      const bucket = bucketsByKey.get(bucketKey);
+      if (!bucket) continue;
+      bucket.revenue = bucket.revenue.plus(sale.total_amount);
+    }
+
+    return buckets.map((bucket) => bucketsByKey.get(bucket.key)!);
+  }
+
+  private async buildTopProductsByInventoryValue(): Promise<
+    SalesAnalyticsTopProductRecord[]
+  > {
+    const products = await this.prisma.retailProduct.findMany({
+      where: {
+        is_active: true,
+      },
+      select: {
+        name: true,
+        price: true,
+        stock_quantity: true,
+      },
+    });
+
+    return products
+      .map((product) => ({
+        name: product.name,
+        value: product.price.mul(product.stock_quantity),
+      }))
+      .sort((left, right) => right.value.minus(left.value).toNumber())
+      .slice(0, 6);
+  }
+
+  private async buildTopProductsByStocksSold(): Promise<
+    SalesAnalyticsTopProductRecord[]
+  > {
+    const rows = await this.prisma.saleTransactionItem.groupBy({
+      by: ['product_id'],
+      where: {
+        transaction: {
+          status: 'completed',
+        },
+      },
+      _sum: {
+        quantity: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc',
+        },
+      },
+      take: 6,
+    });
+
+    const productIds = rows.map((row) => row.product_id);
+    const products = productIds.length
+      ? await this.prisma.retailProduct.findMany({
+          where: {
+            id: {
+              in: productIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        })
+      : [];
+    const productNames = new Map(
+      products.map((product) => [product.id, product.name]),
+    );
+
+    return rows.map((row) => ({
+      name:
+        productNames.get(row.product_id) ??
+        row.product_id.slice(0, 8).toUpperCase(),
+      value: new Prisma.Decimal(row._sum.quantity ?? 0),
+    }));
+  }
+
+  private createAnalyticsBuckets(
+    period: InventoryAnalyticsPeriodEnum,
+    now: Date,
+  ) {
+    const bucketCount =
+      period === InventoryAnalyticsPeriodEnum.Daily
+        ? 7
+        : period === InventoryAnalyticsPeriodEnum.Weekly
+          ? 8
+          : period === InventoryAnalyticsPeriodEnum.Monthly
+            ? 6
+            : period === InventoryAnalyticsPeriodEnum.Quarterly
+              ? 4
+              : 5;
+    const firstBucketDate =
+      period === InventoryAnalyticsPeriodEnum.Daily
+        ? this.startOfDay(this.addDays(now, -(bucketCount - 1)))
+        : period === InventoryAnalyticsPeriodEnum.Weekly
+          ? this.startOfWeek(this.addDays(now, -7 * (bucketCount - 1)))
+          : period === InventoryAnalyticsPeriodEnum.Monthly
+            ? this.startOfMonth(this.addMonths(now, -(bucketCount - 1)))
+            : period === InventoryAnalyticsPeriodEnum.Quarterly
+              ? this.startOfQuarter(this.addMonths(now, -3 * (bucketCount - 1)))
+              : this.startOfYear(this.addYears(now, -(bucketCount - 1)));
+
+    return Array.from({ length: bucketCount }, (_, index) => {
+      const start =
+        period === InventoryAnalyticsPeriodEnum.Daily
+          ? this.startOfDay(this.addDays(firstBucketDate, index))
+          : period === InventoryAnalyticsPeriodEnum.Weekly
+            ? this.startOfWeek(this.addDays(firstBucketDate, index * 7))
+            : period === InventoryAnalyticsPeriodEnum.Monthly
+              ? this.startOfMonth(this.addMonths(firstBucketDate, index))
+              : period === InventoryAnalyticsPeriodEnum.Quarterly
+                ? this.startOfQuarter(
+                    this.addMonths(firstBucketDate, index * 3),
+                  )
+                : this.startOfYear(this.addYears(firstBucketDate, index));
+
+      return {
+        key: this.resolveAnalyticsBucketKey(period, start),
+        label: this.formatAnalyticsBucketLabel(period, start),
+        start,
+      };
+    });
+  }
+
+  private resolveAnalyticsBucketKey(
+    period: InventoryAnalyticsPeriodEnum,
+    date: Date,
+  ): string {
+    if (period === InventoryAnalyticsPeriodEnum.Daily) {
+      return this.startOfDay(date).toISOString();
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Weekly) {
+      return this.startOfWeek(date).toISOString();
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Monthly) {
+      return this.startOfMonth(date).toISOString();
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Quarterly) {
+      return this.startOfQuarter(date).toISOString();
+    }
+
+    return this.startOfYear(date).toISOString();
+  }
+
+  private formatAnalyticsBucketLabel(
+    period: InventoryAnalyticsPeriodEnum,
+    date: Date,
+  ): string {
+    if (period === InventoryAnalyticsPeriodEnum.Daily) {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Weekly) {
+      return `Week of ${date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })}`;
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Monthly) {
+      return date.toLocaleDateString('en-US', { month: 'short' });
+    }
+
+    if (period === InventoryAnalyticsPeriodEnum.Quarterly) {
+      return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`;
+    }
+
+    return date.getFullYear().toString();
+  }
+
+  private startOfDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  private startOfWeek(date: Date): Date {
+    const current = this.startOfDay(date);
+    const day = current.getDay();
+    const diff = (day + 6) % 7;
+    current.setDate(current.getDate() - diff);
+    return current;
+  }
+
+  private startOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  private startOfQuarter(date: Date): Date {
+    const quarterMonth = Math.floor(date.getMonth() / 3) * 3;
+    return new Date(date.getFullYear(), quarterMonth, 1);
+  }
+
+  private startOfYear(date: Date): Date {
+    return new Date(date.getFullYear(), 0, 1);
+  }
+
+  private addDays(date: Date, days: number): Date {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  private addMonths(date: Date, months: number): Date {
+    return new Date(date.getFullYear(), date.getMonth() + months, 1);
+  }
+
+  private addYears(date: Date, years: number): Date {
+    return new Date(date.getFullYear() + years, 0, 1);
   }
 
   createCashSale(input: {

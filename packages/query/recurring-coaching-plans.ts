@@ -2,6 +2,7 @@ import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react
 import type {
   ApiClient,
   BulkUpdateRecurringCoachingSessionsInput,
+  RecurringCoachingBillingCyclePaymentInput,
   RecurringCoachingPlanInput,
   UpdateRecurringCoachingSessionInput,
 } from "@fittrack/api-client";
@@ -37,6 +38,31 @@ export function createRecurringCoachingPlanMutationOptions(
       client.recurringCoachingPlans.create(input),
     onSuccess: async (_data, variables) => {
       await invalidateStaffCoachManagementQueries(queryClient, variables.coachId);
+    },
+  });
+}
+
+export function payRecurringCoachingBillingCycleMutationOptions(
+  client: Pick<ApiClient, "recurringCoachingPlans">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      cycleId,
+      input,
+      planId,
+    }: {
+      cycleId: string;
+      input: RecurringCoachingBillingCyclePaymentInput;
+      planId: string;
+    }) => client.recurringCoachingPlans.payBillingCycle(planId, cycleId, input),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.recurringCoachingPlanSessions({
+          planId: variables.planId,
+        }),
+      });
+      await invalidateStaffCoachManagementQueries(queryClient);
     },
   });
 }

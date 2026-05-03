@@ -352,7 +352,7 @@ export class RelationshipService {
       id: relationship.coach.id,
       specialization: relationship.coach.specialization,
       is_available_for_booking: relationship.coach.is_available_for_booking,
-      profile: this.toUserProfile(relationship.coach.user.profile),
+      profile: this.toUserProfile(null),
     };
   }
 

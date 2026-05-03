@@ -48,6 +48,7 @@ export interface IAuthContext {
     otpRequired?: boolean;
     error?: string;
     reason?: LoginFailureReason;
+    user?: AuthUser;
   }>;
   register: (data: {
     firstName: string;
@@ -66,5 +67,5 @@ export interface IAuthContext {
     currentPassword: string,
     nextPassword: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  commitLogin: () => Promise<void>;
+  commitLogin: () => Promise<AuthUser | null | undefined>;
 }

@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  PaymentProvider,
+  RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
   RecurringCoachingPlanStatus,
   RecurringCoachingSessionState,
@@ -12,8 +14,10 @@ import {
   IsEnum,
   IsISO8601,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Matches,
   Max,
@@ -234,6 +238,87 @@ export class CancelRecurringCoachingPlanDTO {
   reason?: string;
 }
 
+export class InitiateRecurringBillingCyclePaymentDTO {
+  @ApiProperty({
+    enum: PaymentProvider,
+    example: PaymentProvider.paymongo,
+  })
+  @IsEnum(PaymentProvider, {
+    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  })
+  provider: PaymentProvider;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/receipts/recurring-cycle.png',
+  })
+  @ValidateIf(
+    (dto: InitiateRecurringBillingCyclePaymentDTO) =>
+      dto.provider === PaymentProvider.cash &&
+      typeof dto.screenshot_url === 'string' &&
+      dto.screenshot_url.trim().length > 0,
+  )
+  @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
+  screenshot_url?: string;
+
+  @ApiPropertyOptional({ example: 'OR-RCP-2026-001' })
+  @ValidateIf(
+    (dto: InitiateRecurringBillingCyclePaymentDTO) =>
+      dto.provider === PaymentProvider.cash,
+  )
+  @TrimString()
+  @IsString({ message: 'reference_no must be a string' })
+  @IsNotEmpty({ message: 'reference_no is required for cash payments' })
+  @MaxLength(100, { message: 'reference_no must not exceed 100 characters' })
+  reference_no?: string;
+}
+
+export class RecurringCoachingBillingCycleResponseDTO {
+  @ApiProperty({ example: '66666666-6666-4666-8666-666666666666' })
+  id: string;
+
+  @ApiProperty({ example: '55555555-5555-4555-8555-555555555555' })
+  recurring_plan_id: string;
+
+  @ApiProperty({ example: '2026-05-01' })
+  cycle_start_date: string;
+
+  @ApiProperty({ example: '2026-05-31' })
+  cycle_end_date: string;
+
+  @ApiProperty({ example: '2026-05-01' })
+  due_date: string;
+
+  @ApiProperty({ example: '2026-05-08T00:00:00.000Z' })
+  grace_period_ends_at: string;
+
+  @ApiProperty({ example: '2400.00' })
+  amount: string;
+
+  @ApiProperty({ enum: RecurringCoachingBillingCycleStatus })
+  status: RecurringCoachingBillingCycleStatus;
+
+  @ApiPropertyOptional({ example: '77777777-7777-4777-8777-777777777777' })
+  payment_id: string | null;
+
+  @ApiPropertyOptional({ example: '2026-05-01T09:00:00.000Z' })
+  paid_at: string | null;
+}
+
+export class RecurringBillingCycleCheckoutResponseDTO {
+  @ApiProperty({
+    type: RecurringCoachingBillingCycleResponseDTO,
+  })
+  billing_cycle: RecurringCoachingBillingCycleResponseDTO;
+
+  @ApiPropertyOptional({
+    example: 'https://checkout.paymongo.com/cs_test_123',
+  })
+  checkout_url: string | null;
+
+  @ApiProperty({ example: '88888888-8888-4888-8888-888888888888' })
+  payment_id: string;
+}
+
 export class RecurringCoachingPlanSessionResponseDTO {
   @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
   id: string;
@@ -296,4 +381,10 @@ export class RecurringCoachingPlanResponseDTO {
 
   @ApiProperty({ example: 3 })
   completed_sessions: number;
+
+  @ApiPropertyOptional({
+    type: RecurringCoachingBillingCycleResponseDTO,
+    isArray: true,
+  })
+  billing_cycles?: RecurringCoachingBillingCycleResponseDTO[];
 }

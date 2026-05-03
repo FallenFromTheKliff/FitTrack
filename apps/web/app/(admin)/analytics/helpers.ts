@@ -29,9 +29,14 @@ export type AnalyticsAttendanceChartPoint = {
 
 export type AnalyticsRevenueChartPoint = {
   bucket: string;
-  gymShare: number;
+  bookingRevenue: number;
+  coachingGymRevenue: number;
+  membershipRevenue: number;
+  productRevenue: number;
   totalRevenue: number;
 };
+
+export type AnalyticsRevenueWindowFilter = "today" | "1m" | "6m" | "all";
 
 export type AnalyticsExportInsights = {
   attendance?: string;
@@ -42,7 +47,15 @@ export type AnalyticsExportInsights = {
 };
 
 export const ANALYTICS_DEFAULT_ATTENDANCE_FILTER: AnalyticsAttendanceFilter = "daily";
-export const ANALYTICS_REVENUE_PERIOD_LABEL = "Last 6 months";
+export const ANALYTICS_REVENUE_WINDOW_OPTIONS: Array<{
+  label: string;
+  value: AnalyticsRevenueWindowFilter;
+}> = [
+  { label: "Today", value: "today" },
+  { label: "1 Month", value: "1m" },
+  { label: "6 Months", value: "6m" },
+  { label: "All Time", value: "all" }
+];
 
 export const ANALYTICS_ATTENDANCE_FILTER_OPTIONS: Array<{
   label: string;
@@ -151,13 +164,51 @@ export function buildAnalyticsQuickAnalysisPrompt(
   return promptParts.join("\n");
 }
 
-export function toRevenueWindow(): AnalyticsDateWindow {
+export function toRevenueWindow(
+  filter: AnalyticsRevenueWindowFilter
+): AnalyticsDateWindow {
   const end = new Date();
-  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 5, 1, 0, 0, 0, 0));
+
+  if (filter === "today") {
+    const start = startOfUtcDay(end);
+
+    return {
+      endDate: toDateOnly(endOfUtcDay(end)),
+      label: "Today",
+      period: "daily",
+      startDate: toDateOnly(start)
+    };
+  }
+
+  if (filter === "1m") {
+    const start = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1, 0, 0, 0, 0)
+    );
+
+    return {
+      endDate: toDateOnly(end),
+      label: "Last 1 month",
+      period: "daily",
+      startDate: toDateOnly(start)
+    };
+  }
+
+  if (filter === "all") {
+    return {
+      endDate: toDateOnly(end),
+      label: "All time",
+      period: "yearly",
+      startDate: "1970-01-01"
+    };
+  }
+
+  const start = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 5, 1, 0, 0, 0, 0)
+  );
 
   return {
     endDate: toDateOnly(end),
-    label: ANALYTICS_REVENUE_PERIOD_LABEL,
+    label: "Last 6 months",
     period: "monthly",
     startDate: toDateOnly(start)
   };
@@ -249,10 +300,25 @@ export function deriveAttendanceDrilldownWindow(
   };
 }
 
-function formatRevenueBucket(bucketStart: string) {
-  return new Date(bucketStart).toLocaleDateString("en-PH", {
+function formatRevenueBucket(bucketStart: string, period: AnalyticsPeriod) {
+  const date = new Date(bucketStart);
+
+  if (period === "daily") {
+    return date.toLocaleDateString("en-PH", {
+      day: "numeric",
+      month: "short"
+    });
+  }
+
+  if (period === "yearly") {
+    return date.toLocaleDateString("en-PH", {
+      year: "numeric"
+    });
+  }
+
+  return date.toLocaleDateString("en-PH", {
     month: "short",
-    year: "2-digit"
+    year: "numeric"
   });
 }
 
@@ -275,7 +341,7 @@ function formatAttendanceBucket(bucketStart: string, filter: AnalyticsAttendance
   if (filter === "monthly") {
     return date.toLocaleDateString("en-PH", {
       month: "short",
-      year: "2-digit"
+      year: "numeric"
     });
   }
 
@@ -288,9 +354,12 @@ export function toRevenueChartSeries(
   revenue: AnalyticsRevenueRecord | undefined
 ): AnalyticsRevenueChartPoint[] {
   return revenue?.series.map((point) => ({
-    bucket: formatRevenueBucket(point.bucketStart),
+    bookingRevenue: point.bookingRevenue,
+    bucket: formatRevenueBucket(point.bucketStart, revenue.period),
+    coachingGymRevenue: point.coachingGymRevenue,
+    membershipRevenue: point.membershipRevenue,
+    productRevenue: point.productRevenue,
     totalRevenue: point.totalRevenue,
-    gymShare: point.coachingGymRevenue
   })) ?? [];
 }
 
@@ -310,7 +379,7 @@ function escapeHtml(value: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
 
@@ -427,7 +496,7 @@ export function buildAnalyticsPdfBody(args: {
     }),
     renderTableSection({
       title: "Revenue",
-      subtitle: ANALYTICS_REVENUE_PERIOD_LABEL,
+      subtitle: "Selected revenue window",
       insight: args.exportInsights.revenue,
       columns: ["Revenue Source", "Amount"],
       rows: revenue

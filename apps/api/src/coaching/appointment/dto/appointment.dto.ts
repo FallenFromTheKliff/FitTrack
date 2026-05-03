@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AppointmentStatus,
   PaymentProvider,
+  PaymentStage,
   RecurringCoachingSessionState,
 } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -11,6 +12,7 @@ import {
   IsArray,
   IsEnum,
   IsISO8601,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -126,6 +128,19 @@ export class InitiateAppointmentPaymentDTO {
     message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
   })
   provider: PaymentProvider;
+
+  @ApiPropertyOptional({
+    enum: [PaymentStage.downpayment, PaymentStage.full],
+    example: PaymentStage.downpayment,
+  })
+  @IsOptional()
+  @IsIn([PaymentStage.downpayment, PaymentStage.full], {
+    message: 'payment_stage must be either downpayment or full',
+  })
+  payment_stage?: Extract<
+    PaymentStage,
+    typeof PaymentStage.downpayment | typeof PaymentStage.full
+  >;
 }
 
 export class AppointmentBalanceDTO {
@@ -142,7 +157,10 @@ export class AppointmentBalanceDTO {
     example: 'https://cdn.fittrack.test/receipts/or-2026-03-23.png',
   })
   @ValidateIf(
-    (dto: AppointmentBalanceDTO) => dto.provider === PaymentProvider.cash,
+    (dto: AppointmentBalanceDTO) =>
+      dto.provider === PaymentProvider.cash &&
+      typeof dto.screenshot_url === 'string' &&
+      dto.screenshot_url.trim().length > 0,
   )
   @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
   screenshot_url?: string;
@@ -184,6 +202,12 @@ export class AppointmentCheckoutResponseDTO {
     nullable: true,
   })
   checkout_url?: string | null;
+
+  @ApiPropertyOptional({
+    example: '44444444-4444-4444-8444-444444444444',
+    nullable: true,
+  })
+  payment_id?: string | null;
 }
 
 export class AppointmentResponseDTO {
@@ -252,6 +276,14 @@ export class AppointmentResponseDTO {
 
   @ApiPropertyOptional({ example: '2026-04-01T08:50:00.000Z', nullable: true })
   balance_paid_at: string | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentStage,
+    nullable: true,
+    description:
+      'Latest non-failed payment stage requested for this appointment. Used by clients to reflect whether the member selected a full-payment or downpayment flow before verification completes.',
+  })
+  active_payment_stage?: PaymentStage | null;
 
   @ApiPropertyOptional({
     example: 'Completed a full lower-body strength session.',
@@ -325,6 +357,21 @@ export class CoachScheduleAppointmentResponseDTO {
   @ApiProperty({ example: 60 })
   duration_minutes: number;
 
+  @ApiPropertyOptional({ example: '900.00', nullable: true })
+  total_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '270.00', nullable: true })
+  downpayment_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '630.00', nullable: true })
+  balance_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
+  downpayment_paid_at?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
+  balance_paid_at?: string | null;
+
   @ApiPropertyOptional({
     example: 'Focus on mobility and shoulder stability.',
     nullable: true,
@@ -388,6 +435,12 @@ export class StaffAppointmentCoachResponseDTO {
   @ApiPropertyOptional({ example: '900.00', nullable: true })
   hourly_rate: string | null;
 
+  @ApiPropertyOptional({ example: 'Coach Mara Santos', nullable: true })
+  display_name: string | null;
+
+  @ApiPropertyOptional({ example: 'coach.mara@fittrack.com', nullable: true })
+  contact_email: string | null;
+
   @ApiProperty({ type: StaffAppointmentProfileResponseDTO })
   profile: StaffAppointmentProfileResponseDTO;
 }
@@ -413,6 +466,29 @@ export class StaffAppointmentResponseDTO {
 
   @ApiProperty({ example: 60 })
   duration_minutes: number;
+
+  @ApiPropertyOptional({ example: '900.00', nullable: true })
+  total_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '270.00', nullable: true })
+  downpayment_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '630.00', nullable: true })
+  balance_amount?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
+  downpayment_paid_at?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
+  balance_paid_at?: string | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentStage,
+    nullable: true,
+    description:
+      'Latest non-failed payment stage requested for this appointment. Used by staff surfaces to reflect whether the current appointment is in a full-payment or downpayment flow before verification completes.',
+  })
+  active_payment_stage?: PaymentStage | null;
 
   @ApiPropertyOptional({
     example: 'Focus on mobility and shoulder stability.',

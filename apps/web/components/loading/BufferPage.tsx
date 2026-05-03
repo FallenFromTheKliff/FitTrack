@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 
 type Props = {
-  onCommit: () => Promise<void>;
-  onDone: () => void;
+  onCommit: () => Promise<unknown>;
+  onDone: (result: unknown) => void;
 };
 
 export default function BufferPage({ onCommit, onDone }: Props) {
@@ -12,17 +12,25 @@ export default function BufferPage({ onCommit, onDone }: Props) {
   const [opacity, setOpacity] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     const fadeIn = requestAnimationFrame(() => setOpacity(1));
-    const commitTimer = setTimeout(async () => {
-      await onCommit();
-    }, 400);
-    const doneTimer = setTimeout(() => {
-      onDone();
-    }, 900);
+
+    const run = async () => {
+      const [commitResult] = await Promise.all([
+        onCommit(),
+        new Promise((resolve) => setTimeout(resolve, 260)),
+      ]);
+
+      if (!cancelled) {
+        onDone(commitResult);
+      }
+    };
+
+    void run();
+
     return () => {
+      cancelled = true;
       cancelAnimationFrame(fadeIn);
-      clearTimeout(commitTimer);
-      clearTimeout(doneTimer);
     };
   }, [onCommit, onDone]);
 
@@ -34,7 +42,7 @@ export default function BufferPage({ onCommit, onDone }: Props) {
         backgroundColor: colors.base,
         zIndex: 9999,
         opacity,
-        transition: "opacity 180ms ease"
+        transition: "opacity 180ms ease",
       }}
     />
   );

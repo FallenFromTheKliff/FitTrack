@@ -5,9 +5,10 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import {
   MembershipCard,
+  NotificationType,
   Payment,
   PaymentProvider,
   PaymentStage,
@@ -16,6 +17,8 @@ import {
 } from '@prisma/client';
 import { isUUID } from 'class-validator';
 
+import { NotificationsService } from '../../notifications/notifications.service';
+import { ACCOUNT_ACTIVITY_EVENT } from '../../user/events/account-activity.event';
 import { PaymentRepository } from '../payment/payment.repository';
 import {
   PAYMENT_COMPLETED_EVENT,
@@ -46,12 +49,26 @@ const MEMBERSHIP_CARD_RETURN_QUERY = {
   surface: 'profile',
 } as const;
 
+function getProfileDisplayName(
+  profile?: {
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null,
+) {
+  return [profile?.first_name, profile?.last_name]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' ')
+    .trim();
+}
+
 @Injectable()
 export class MembershipCardService {
   constructor(
     private readonly repo: MembershipCardRepository,
     private readonly paymentRepo: PaymentRepository,
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
+    private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async purchase(
@@ -117,9 +134,10 @@ export class MembershipCardService {
       return;
     }
 
-    const membershipCard = await this.repo.findMembershipCardByIdOrThrow(
-      event.payableId,
-    );
+    const membershipCard =
+      await this.repo.findMembershipCardWithUserProfileByIdOrThrow(
+        event.payableId,
+      );
 
     if (membershipCard.status === 'active') {
       return;
@@ -131,6 +149,36 @@ export class MembershipCardService {
       verifiedAt: completedAt,
       verifiedBy: event.verifiedBy ?? null,
     });
+
+    await this.notificationsService.dispatch(
+      membershipCard.user_id,
+      NotificationType.payment_confirmed,
+      {
+        title: 'Payment confirmed',
+        body: this.buildPaymentConfirmedBody(event.amount),
+        data: {
+          amount: event.amount,
+          kind: 'membership_card_payment_confirmed',
+          membership_card_id: membershipCard.id,
+          payment_id: event.paymentId,
+        },
+        email: {
+          subject: 'Payment confirmed for your membership card',
+          html: this.buildPaymentConfirmedHtml(event.amount),
+        },
+      },
+    );
+
+    if (event.verifiedBy) {
+      await this.eventEmitter.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
+        action: 'membership_card_granted',
+        actorId: event.verifiedBy,
+        occurredAt: completedAt.toISOString(),
+        targetName: getProfileDisplayName(membershipCard.user.profile),
+        targetRole: UserRole.member,
+        targetUserId: membershipCard.user_id,
+      });
+    }
   }
 
   @OnEvent(PAYMENT_FAILED_EVENT, { async: true })
@@ -354,6 +402,23 @@ export class MembershipCardService {
     }
 
     return null;
+  }
+
+  private buildPaymentConfirmedBody(amount: string): string {
+    return `We confirmed your membership-card payment. Amount received: PHP ${amount}. Your gym access is now active.`;
+  }
+
+  private buildPaymentConfirmedHtml(amount: string): string {
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#1a1a1a">Payment confirmed</h2>
+        <p style="color:#555">We confirmed your membership-card payment.</p>
+        <p style="color:#555">Amount received: <strong>PHP ${amount}</strong>.</p>
+        <p style="color:#555">Your gym access is now active.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin-top:24px"/>
+        <p style="color:#aaa;font-size:12px;text-align:center">FitTrack</p>
+      </div>
+    `;
   }
 
   private toMinorAmount(amount: Prisma.Decimal): number {

@@ -89,7 +89,7 @@ export class RelationshipLifecycleService {
       | RelationshipNotificationTarget['coach']['user']
       | RelationshipNotificationTarget['member'],
   ): string | undefined {
-    return user.auth_identities.find((identity) =>
+    return user?.auth_identities.find((identity) =>
       ['email', 'google'].includes(identity.provider),
     )?.identifier;
   }
@@ -145,8 +145,8 @@ export class RelationshipLifecycleService {
       | RelationshipNotificationTarget['coach']['user']
       | RelationshipNotificationTarget['member'],
   ): string {
-    const firstName = user.profile?.first_name ?? 'member';
-    const lastName = user.profile?.last_name ?? '';
+    const firstName = user?.profile?.first_name ?? 'member';
+    const lastName = user?.profile?.last_name ?? '';
     return `${firstName} ${lastName}`.trim();
   }
 }

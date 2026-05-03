@@ -11,7 +11,7 @@ import {
   rejectDeletionRequestMutationOptions,
   scanAttendanceQrMutationOptions,
   updateAdminMembershipCardMutationOptions,
-  verifyMembershipPaymentMutationOptions
+  verifyMembershipPaymentMutationOptions,
 } from "@fittrack/query";
 import { themes } from "@fittrack/ui/theme";
 import type { AdminCreateUserData } from "@fittrack/validators";
@@ -23,7 +23,11 @@ import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { buildRenderableAssetUrl, fullName, getReadableTextColor } from "@fittrack/utils";
+import {
+  buildRenderableAssetUrl,
+  fullName,
+  getReadableTextColor,
+} from "@fittrack/utils";
 import {
   EDIT_MEMBER_FIELDS,
   MEMBER_FILTER_OPTIONS,
@@ -31,23 +35,39 @@ import {
   MEMBERSHIP_CARD_STATUS_COLORS,
   STATUS_COLORS,
   type DeletionRequest,
-  type MemberStatusTab
+  type MemberStatusTab,
 } from "@/data/members/members";
-import type { AttendanceCheckInRecord, MemberRecord, MembershipCardRecord } from "@fittrack/types";
+import type {
+  AttendanceCheckInRecord,
+  MemberRecord,
+  MembershipCardRecord,
+} from "@fittrack/types";
 
-import { FitButton, FitInlineFilterChips, FitPill, FitSearch, FitSection, FitText } from "@/components/fit";
+import {
+  FitButton,
+  FitInlineFilterChips,
+  FitPill,
+  FitSearch,
+  FitSection,
+  FitText,
+} from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import { ConfirmModal, DetailsModal, FitModal } from "@/components/modals";
 import {
   filterMembers,
   getDirectoryMemberStatus,
   getPendingRequestsByUserId,
-  MIN_ACTION_DELAY_MS
+  MIN_ACTION_DELAY_MS,
 } from "./helpers";
-import AttendanceScanModal, { type AttendanceScanFeedback } from "./AttendanceScanModal";
+import AttendanceScanModal, {
+  type AttendanceScanFeedback,
+} from "./AttendanceScanModal";
 import AddUserPanel from "./AddUserPanel";
 import MembersDirectoryPanel from "./MembersDirectoryPanel";
-import MembersRouteShell, { type MembersRouteShellChip, type MembersRouteShellMetric } from "./MembersRouteShell";
+import MembersRouteShell, {
+  type MembersRouteShellChip,
+  type MembersRouteShellMetric,
+} from "./MembersRouteShell";
 
 type ContentMode = "directory" | "create";
 
@@ -89,14 +109,19 @@ function validateEditDraft(data: Record<string, string>) {
   const heightCm = normalizeDraftValue(data.heightCm);
 
   if (!firstName) errors.firstName = "First name is required";
-  else if (firstName.length < 2) errors.firstName = "First name must be at least 2 characters";
+  else if (firstName.length < 2)
+    errors.firstName = "First name must be at least 2 characters";
 
   if (!lastName) errors.lastName = "Last name is required";
-  else if (lastName.length < 2) errors.lastName = "Last name must be at least 2 characters";
+  else if (lastName.length < 2)
+    errors.lastName = "Last name must be at least 2 characters";
 
   if (dateOfBirth) {
     const date = new Date(`${dateOfBirth}T00:00:00`);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || Number.isNaN(date.getTime())) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
+      Number.isNaN(date.getTime())
+    ) {
       errors.dateOfBirth = "Date of birth must use YYYY-MM-DD";
     } else if (date > new Date()) {
       errors.dateOfBirth = "Date of birth cannot be in the future";
@@ -151,7 +176,9 @@ function getMembershipPaymentReviewLabel(value?: string) {
     : "membership payment";
 }
 
-function formatMembershipAccess(value: ReturnType<typeof getMembershipFieldValue>) {
+function formatMembershipAccess(
+  value: ReturnType<typeof getMembershipFieldValue>,
+) {
   switch (value) {
     case "active":
       return "Member";
@@ -176,8 +203,6 @@ function getDirectoryRoleLabel(roleName?: string | null) {
       return "Admin";
     case "STAFF":
       return "Staff";
-    case "COACH":
-      return "Coach";
     case "USER":
       return "Member";
     default:
@@ -201,7 +226,7 @@ function formatLastCheckIn(value?: string | null) {
     month: "short",
     day: "numeric",
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -215,6 +240,21 @@ function formatDisplayDate(value?: string | null) {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function formatDisplayDateTime(value?: string | null) {
+  if (!value) return "Not provided";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Not provided";
+
+  return parsed.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -241,9 +281,12 @@ function getMemberInitials(member: MemberRecord) {
 
 function getDirectoryAccessLabel(
   member: MemberRecord,
-  pendingRequestsByUserId: Map<string, DeletionRequest>
+  pendingRequestsByUserId: Map<string, DeletionRequest>,
 ) {
-  const directoryStatus = getDirectoryMemberStatus(member, pendingRequestsByUserId);
+  const directoryStatus = getDirectoryMemberStatus(
+    member,
+    pendingRequestsByUserId,
+  );
   const accessLabel = getMembershipAccessLabel(member);
   const roleLabel = getDirectoryRoleLabel(member.role?.name);
 
@@ -255,7 +298,7 @@ function getDirectoryAccessLabel(
 
 function getDirectoryStatusLabel(
   member: MemberRecord,
-  pendingRequestsByUserId: Map<string, DeletionRequest>
+  pendingRequestsByUserId: Map<string, DeletionRequest>,
 ) {
   const status = getDirectoryMemberStatus(member, pendingRequestsByUserId);
   const accessLabel = getMembershipAccessLabel(member);
@@ -265,7 +308,12 @@ function getDirectoryStatusLabel(
   if (member.status === "pending") return "Pending";
   if (member.status === "suspended") return "Suspended";
   if (member.status === "banned") return "Banned";
-  if (accessLabel === "Pending verification" || accessLabel === "Non-member" || accessLabel === "Revoked") return "Pending";
+  if (
+    accessLabel === "Pending verification" ||
+    accessLabel === "Non-member" ||
+    accessLabel === "Revoked"
+  )
+    return "Pending";
 
   return "Active";
 }
@@ -273,16 +321,19 @@ function getDirectoryStatusLabel(
 function getDirectoryStatusColor(
   member: MemberRecord,
   pendingRequestsByUserId: Map<string, DeletionRequest>,
-  warningColor: string
+  warningColor: string,
 ) {
   const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
-  if (statusLabel === "Termination request") return STATUS_COLORS["Termination request"] ?? warningColor;
+  if (statusLabel === "Termination request")
+    return STATUS_COLORS["Termination request"] ?? warningColor;
   if (statusLabel === "Archived") return STATUS_COLORS.Archived ?? warningColor;
   if (statusLabel === "Pending") return PENDING_STATE_COLOR;
   return STATUS_COLORS.Active ?? warningColor;
 }
 
-function getEditDraftValues(member: MemberRecord | null): Record<string, string> {
+function getEditDraftValues(
+  member: MemberRecord | null,
+): Record<string, string> {
   return {
     firstName: member?.profile?.firstName ?? "",
     lastName: member?.profile?.lastName ?? "",
@@ -292,9 +343,13 @@ function getEditDraftValues(member: MemberRecord | null): Record<string, string>
     gender: member?.profile?.gender ?? "",
     activityLevel: member?.profile?.activityLevel ?? "",
     fitnessGoal: member?.profile?.fitnessGoal ?? "",
-    currentWeightKg: member?.profile?.currentWeightKg != null ? String(member.profile.currentWeightKg) : "",
-    heightCm: member?.profile?.heightCm != null ? String(member.profile.heightCm) : "",
-    membershipAccess: getMembershipFieldValue(member)
+    currentWeightKg:
+      member?.profile?.currentWeightKg != null
+        ? String(member.profile.currentWeightKg)
+        : "",
+    heightCm:
+      member?.profile?.heightCm != null ? String(member.profile.heightCm) : "",
+    membershipAccess: getMembershipFieldValue(member),
   };
 }
 
@@ -346,7 +401,16 @@ function notifyActionError(title: string, error: unknown, fallback: string) {
 export default function MembersDashboard() {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { members, isLoading, error: membersError, fetchMembers, createUser, updateMember, deleteUser, restoreUser } = useMembers();
+  const {
+    members,
+    isLoading,
+    error: membersError,
+    fetchMembers,
+    createUser,
+    updateMember,
+    deleteUser,
+    restoreUser,
+  } = useMembers();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "ADMIN";
   const isStaff = user?.role === "STAFF";
@@ -363,34 +427,48 @@ export default function MembersDashboard() {
   const addLoadingLabel = useLoadingText("ADDING USER", addLoading);
 
   const [editTarget, setEditTarget] = useState<MemberRecord | null>(null);
-  const [editDraft, setEditDraft] = useState<Record<string, string>>(getEditDraftValues(null));
+  const [editDraft, setEditDraft] = useState<Record<string, string>>(
+    getEditDraftValues(null),
+  );
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
-  const [pendingEditSubmission, setPendingEditSubmission] = useState<Record<string, string> | null>(null);
+  const [pendingEditSubmission, setPendingEditSubmission] = useState<Record<
+    string,
+    string
+  > | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MemberRecord | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<MemberRecord | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<MemberRecord | null>(null);
-  const [grantCardTarget, setGrantCardTarget] = useState<MemberRecord | null>(null);
-  const [revokeCardTarget, setRevokeCardTarget] = useState<MemberRecord | null>(null);
+  const [grantCardTarget, setGrantCardTarget] = useState<MemberRecord | null>(
+    null,
+  );
+  const [revokeCardTarget, setRevokeCardTarget] = useState<MemberRecord | null>(
+    null,
+  );
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
-  const [scanFeedback, setScanFeedback] = useState<AttendanceScanFeedback | null>(null);
-  const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
-    ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
-    enabled: canInspectAccounts
-  });
+  const [scanFeedback, setScanFeedback] =
+    useState<AttendanceScanFeedback | null>(null);
+  const { data: deletionRequests = [], error: deletionRequestsError } =
+    useQuery({
+      ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
+      enabled: canInspectAccounts,
+    });
   const {
-    data: pendingMembershipPayments = { data: [], meta: { page: 1, limit: 0, total: 0, total_pages: 0 } },
-    error: pendingMembershipPaymentsError
+    data: pendingMembershipPayments = {
+      data: [],
+      meta: { page: 1, limit: 0, total: 0, total_pages: 0 },
+    },
+    error: pendingMembershipPaymentsError,
   } = useQuery({
     ...reviewMembershipPaymentsQueryOptions(webApiClient, {
       limit: 50,
       page: 1,
-      status: "awaiting_verification"
+      status: "awaiting_verification",
     }),
-    enabled: isAdmin
+    enabled: isAdmin,
   });
 
   useEffect(() => {
@@ -407,7 +485,7 @@ export default function MembersDashboard() {
     notifyActionError(
       "Termination requests could not be loaded",
       deletionRequestsError,
-      "Failed to load pending termination requests."
+      "Failed to load pending termination requests.",
     );
   }, [canInspectAccounts, deletionRequestsError]);
 
@@ -416,35 +494,44 @@ export default function MembersDashboard() {
     notifyActionError(
       "Payment reviews could not be loaded",
       pendingMembershipPaymentsError,
-      "Failed to load pending membership payment reviews."
+      "Failed to load pending membership payment reviews.",
     );
   }, [isAdmin, pendingMembershipPaymentsError]);
 
   const roleScopedMembers = useMemo(() => {
     return members.filter((member) => {
       if (isStaff) {
-        return member.role?.name === "USER";
+        return member.role?.name !== "ADMIN";
       }
 
-      return member.role?.name !== "COACH";
+      return true;
     });
   }, [isStaff, members]);
 
   const pendingRequestsByUserId = useMemo(
-    () => canInspectAccounts ? getPendingRequestsByUserId(deletionRequests) : new Map<string, DeletionRequest>(),
-    [canInspectAccounts, deletionRequests]
+    () =>
+      canInspectAccounts
+        ? getPendingRequestsByUserId(deletionRequests)
+        : new Map<string, DeletionRequest>(),
+    [canInspectAccounts, deletionRequests],
   );
   const membershipReviewPayments = useMemo(
-    () => pendingMembershipPayments.data.filter((payment) =>
-      payment.payable_type === "subscription" || payment.payable_type === "membership_card"
-    ),
-    [pendingMembershipPayments.data]
+    () =>
+      pendingMembershipPayments.data.filter(
+        (payment) =>
+          payment.payable_type === "subscription" ||
+          payment.payable_type === "membership_card",
+      ),
+    [pendingMembershipPayments.data],
   );
   const pendingMembershipPayment = useMemo(
-    () => editTarget
-      ? membershipReviewPayments.find((payment) => payment.user_id === editTarget.id)
-      : undefined,
-    [editTarget, membershipReviewPayments]
+    () =>
+      editTarget
+        ? membershipReviewPayments.find(
+            (payment) => payment.user_id === editTarget.id,
+          )
+        : undefined,
+    [editTarget, membershipReviewPayments],
   );
   const [contentMode, setContentMode] = useState<ContentMode>("directory");
   useEffect(() => {
@@ -458,13 +545,26 @@ export default function MembersDashboard() {
   const primaryCommandTextColor = getReadableTextColor(
     colors.brandLight,
     themes.sunlight.textPrimary,
-    colors.textPrimary
+    colors.textPrimary,
   );
   const [page, setPage] = useState(1);
 
   const filtered = useMemo(
-    () => filterMembers(roleScopedMembers, debouncedQ, activeChip, activeStatus, pendingRequestsByUserId),
-    [roleScopedMembers, debouncedQ, activeChip, activeStatus, pendingRequestsByUserId]
+    () =>
+      filterMembers(
+        roleScopedMembers,
+        debouncedQ,
+        activeChip,
+        activeStatus,
+        pendingRequestsByUserId,
+      ),
+    [
+      roleScopedMembers,
+      debouncedQ,
+      activeChip,
+      activeStatus,
+      pendingRequestsByUserId,
+    ],
   );
 
   useEffect(() => setPage(1), [debouncedQ, activeChip, activeStatus]);
@@ -476,8 +576,16 @@ export default function MembersDashboard() {
   }, [activeChip, isTerminationRequestsView]);
 
   useEffect(() => {
+    if (isStaff && activeChip === "Admin") {
+      setActiveChip("all");
+    }
+  }, [activeChip, isStaff]);
+
+  useEffect(() => {
     if (contentMode !== "directory" || !editTarget) return;
-    const matchedMember = filtered.find((member) => member.id === editTarget.id);
+    const matchedMember = filtered.find(
+      (member) => member.id === editTarget.id,
+    );
     if (!matchedMember) {
       setEditTarget(null);
       setEditModalOpen(false);
@@ -503,15 +611,27 @@ export default function MembersDashboard() {
     return filtered.slice(start, start + ROWS_PER_PAGE);
   }, [filtered, page]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  const editInitialValues = useMemo(() => getEditDraftValues(editTarget), [editTarget]);
-  const archiveLoadingLabel = useLoadingText("ARCHIVING ACCOUNT", archiveLoading);
+  const editInitialValues = useMemo(
+    () => getEditDraftValues(editTarget),
+    [editTarget],
+  );
+  const archiveLoadingLabel = useLoadingText(
+    "ARCHIVING ACCOUNT",
+    archiveLoading,
+  );
 
   useEffect(() => {
     setEditDraft(editInitialValues);
   }, [editInitialValues]);
 
   useEffect(() => {
-    if (contentMode !== "directory" || !editTarget || editModalOpen || editConfirmOpen) return;
+    if (
+      contentMode !== "directory" ||
+      !editTarget ||
+      editModalOpen ||
+      editConfirmOpen
+    )
+      return;
     if (paginatedRows.some((member) => member.id === editTarget.id)) return;
     setEditTarget(null);
   }, [contentMode, editConfirmOpen, editModalOpen, editTarget, paginatedRows]);
@@ -523,37 +643,59 @@ export default function MembersDashboard() {
     setPendingEditSubmission(null);
   }, [editTarget]);
 
-  const editPendingRequest = editTarget ? pendingRequestsByUserId.get(editTarget.id) : undefined;
+  const editPendingRequest = editTarget
+    ? pendingRequestsByUserId.get(editTarget.id)
+    : undefined;
   const isEditTargetArchived = editTarget
-    ? getDirectoryMemberStatus(editTarget, pendingRequestsByUserId) === "Archived"
+    ? getDirectoryMemberStatus(editTarget, pendingRequestsByUserId) ===
+      "Archived"
     : false;
   const isSelfEdit = editTarget?.id === user?.id;
   const hasEditChanges = useMemo(() => {
     if (!editTarget) return false;
     const initialValues = getEditDraftValues(editTarget);
-    return EDIT_MEMBER_EDITABLE_KEYS.some((key) => normalizeDraftValue(editDraft[key]) !== normalizeDraftValue(initialValues[key]));
+    return EDIT_MEMBER_EDITABLE_KEYS.some(
+      (key) =>
+        normalizeDraftValue(editDraft[key]) !==
+        normalizeDraftValue(initialValues[key]),
+    );
   }, [editDraft, editTarget]);
   const canArchiveEditTarget = Boolean(
-    isAdmin &&
-      editTarget &&
-      !isSelfEdit &&
-      editTarget.role?.name !== "ADMIN" &&
-      !editPendingRequest &&
-      !isEditTargetArchived
+    (isAdmin || (isStaff && editTarget?.role?.name === "USER")) &&
+    editTarget &&
+    !isSelfEdit &&
+    editTarget.role?.name !== "ADMIN" &&
+    !editPendingRequest &&
+    !isEditTargetArchived,
   );
-  const canTerminateEditTarget = Boolean(isAdmin && !isSelfEdit && editPendingRequest);
-  const canRestoreEditTarget = Boolean(isAdmin && editTarget && !isSelfEdit && isEditTargetArchived);
-  const canEditTargetDetails = Boolean(canInspectAccounts && editTarget && !isSelfEdit);
+  const canTerminateEditTarget = Boolean(
+    isAdmin && !isSelfEdit && editPendingRequest,
+  );
+  const canRestoreEditTarget = Boolean(
+    editTarget &&
+      !isSelfEdit &&
+      isEditTargetArchived &&
+      editTarget.role?.name !== "ADMIN" &&
+      (isAdmin || (isStaff && editTarget.role?.name === "USER")),
+  );
+  const canEditTargetDetails = Boolean(
+    canInspectAccounts && editTarget && !isSelfEdit,
+  );
   const canManualCheckInTarget = Boolean(
     canInspectAccounts &&
-      editTarget &&
-      !isSelfEdit &&
-      editTarget.role?.name === "USER" &&
-      editTarget.status === "active" &&
-      !editPendingRequest &&
-      !isEditTargetArchived
+    editTarget &&
+    !isSelfEdit &&
+    editTarget.role?.name === "USER" &&
+    editTarget.status === "active" &&
+    !editPendingRequest &&
+    !isEditTargetArchived,
   );
-  const canManageMemberCard = Boolean(isAdmin && editTarget && !isSelfEdit && editTarget.role?.name === "USER");
+  const canManageMemberCard = Boolean(
+    canInspectAccounts &&
+    editTarget &&
+    !isSelfEdit &&
+    editTarget.role?.name === "USER",
+  );
 
   const handleAdd = async (data: AdminCreateUserData) => {
     setAddLoading(true);
@@ -565,60 +707,82 @@ export default function MembersDashboard() {
       firstName: data.firstName,
       lastName: data.lastName,
       role,
-      phone_no: data.phone_no
+      phone_no: data.phone_no,
     });
     setAddLoading(false);
     if (result.success) {
       setContentMode("directory");
       if (role === "member") {
-        notify("success", "Account created", "Verification OTP sent to the member's email.");
+        notify(
+          "success",
+          "Account created",
+          "Verification OTP sent to the member's email.",
+        );
       } else {
         notify(
           "success",
           `${role === "admin" ? "Admin" : "Staff"} account created`,
-          "The account can sign in immediately."
+          "The account can sign in immediately.",
         );
       }
       return;
     }
-    notify("error", "Could not create account", result.error ?? "Check the form details and try again.");
+    notify(
+      "error",
+      "Could not create account",
+      result.error ?? "Check the form details and try again.",
+    );
   };
 
   const approveDeletionMutation = useMutation(
-    approveDeletionRequestMutationOptions(
-      webApiClient,
-      queryClient,
-      { reviewNotes: "Approved via account module." }
-    )
+    approveDeletionRequestMutationOptions(webApiClient, queryClient, {
+      reviewNotes: "Approved via account module.",
+    }),
   );
 
   const rejectDeletionMutation = useMutation(
-    rejectDeletionRequestMutationOptions(
-      webApiClient,
-      queryClient,
-      { reviewNotes: "Rejected via account module." }
-    )
+    rejectDeletionRequestMutationOptions(webApiClient, queryClient, {
+      reviewNotes: "Rejected via account module.",
+    }),
   );
   const membershipCardMutation = useMutation(
-    updateAdminMembershipCardMutationOptions(webApiClient, queryClient)
+    updateAdminMembershipCardMutationOptions(webApiClient, queryClient),
   );
   const scanAttendanceMutation = useMutation(
-    scanAttendanceQrMutationOptions(webApiClient, queryClient)
+    scanAttendanceQrMutationOptions(webApiClient, queryClient),
   );
   const manualAttendanceMutation = useMutation(
-    manualAttendanceCheckInMutationOptions(webApiClient, queryClient)
+    manualAttendanceCheckInMutationOptions(webApiClient, queryClient),
   );
   const membershipPaymentReviewMutation = useMutation(
-    verifyMembershipPaymentMutationOptions(webApiClient, queryClient)
+    verifyMembershipPaymentMutationOptions(webApiClient, queryClient),
   );
 
-  const rejectLoadingLabel = useLoadingText("REJECTING REQUEST", rejectDeletionMutation.isPending);
-  const approveRequestLoadingLabel = useLoadingText("APPROVING REQUEST", approveDeletionMutation.isPending);
-  const membershipCardLoadingLabel = useLoadingText("UPDATING CARD", membershipCardMutation.isPending);
-  const manualCheckInLoadingLabel = useLoadingText("CHECKING IN", manualAttendanceMutation.isPending);
-  const paymentReviewLoadingLabel = useLoadingText("UPDATING PAYMENT", membershipPaymentReviewMutation.isPending);
+  const rejectLoadingLabel = useLoadingText(
+    "REJECTING REQUEST",
+    rejectDeletionMutation.isPending,
+  );
+  const approveRequestLoadingLabel = useLoadingText(
+    "APPROVING REQUEST",
+    approveDeletionMutation.isPending,
+  );
+  const membershipCardLoadingLabel = useLoadingText(
+    "UPDATING MEMBERSHIP",
+    membershipCardMutation.isPending,
+  );
+  const manualCheckInLoadingLabel = useLoadingText(
+    "CHECKING IN",
+    manualAttendanceMutation.isPending,
+  );
+  const paymentReviewLoadingLabel = useLoadingText(
+    "UPDATING PAYMENT",
+    membershipPaymentReviewMutation.isPending,
+  );
   const editLoadingLabel = useLoadingText("UPDATING MEMBER", editLoading);
-  const restoreLoadingLabel = useLoadingText("RESTORING ACCOUNT", restoreLoading);
+  const restoreLoadingLabel = useLoadingText(
+    "RESTORING ACCOUNT",
+    restoreLoading,
+  );
   const pageLoading = isLoading;
 
   const openInspector = (member: MemberRecord) => {
@@ -645,18 +809,20 @@ export default function MembersDashboard() {
   };
 
   const patchOpenMember = (memberId: string, patch: Partial<MemberRecord>) => {
-    setEditTarget((current) => (
-      current?.id === memberId
-        ? { ...current, ...patch }
-        : current
-    ));
+    setEditTarget((current) =>
+      current?.id === memberId ? { ...current, ...patch } : current,
+    );
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     const request = pendingRequestsByUserId.get(deleteTarget.id);
     if (!request) {
-      notify("warning", "Termination request missing", "Refresh the page if this request was already handled elsewhere.");
+      notify(
+        "warning",
+        "Termination request missing",
+        "Refresh the page if this request was already handled elsewhere.",
+      );
       setDeleteTarget(null);
       return;
     }
@@ -665,9 +831,17 @@ export default function MembersDashboard() {
       await approveDeletionMutation.mutateAsync(request.id);
       setDeleteTarget(null);
       closeInspector();
-      notify("success", "Termination request approved", "The account was soft-deleted and moved to Archived.");
+      notify(
+        "success",
+        "Termination request approved",
+        "The account was soft-deleted and moved to Archived.",
+      );
     } catch {
-      notify("error", "Could not approve the request", "Try again after the latest request state has loaded.");
+      notify(
+        "error",
+        "Could not approve the request",
+        "Try again after the latest request state has loaded.",
+      );
     }
   };
 
@@ -675,15 +849,27 @@ export default function MembersDashboard() {
     if (!editTarget) return;
     const request = pendingRequestsByUserId.get(editTarget.id);
     if (!request) {
-      notify("warning", "Termination request missing", "Refresh the page if this request was already handled elsewhere.");
+      notify(
+        "warning",
+        "Termination request missing",
+        "Refresh the page if this request was already handled elsewhere.",
+      );
       return;
     }
     try {
       await rejectDeletionMutation.mutateAsync(request.id);
       closeInspector();
-      notify("success", "Termination request denied", "The account stays active in the directory.");
+      notify(
+        "success",
+        "Termination request denied",
+        "The account stays active in the directory.",
+      );
     } catch {
-      notify("error", "Could not deny the request", "Try again after the latest request state has loaded.");
+      notify(
+        "error",
+        "Could not deny the request",
+        "Try again after the latest request state has loaded.",
+      );
     }
   };
 
@@ -697,10 +883,18 @@ export default function MembersDashboard() {
     if (result.success) {
       setArchiveTarget(null);
       closeInspector();
-      notify("success", `${memberName} archived`, "The account has been moved out of the active directory.");
+      notify(
+        "success",
+        `${memberName} archived`,
+        "The account has been moved out of the active directory.",
+      );
       return;
     }
-    notify("error", "Could not archive this person", result.error ?? "Try again after the directory refreshes.");
+    notify(
+      "error",
+      "Could not archive this person",
+      result.error ?? "Try again after the directory refreshes.",
+    );
   };
 
   const handleRestoreMember = async () => {
@@ -713,32 +907,46 @@ export default function MembersDashboard() {
     if (result.success) {
       setRestoreTarget(null);
       closeInspector();
-      notify("success", `${memberName} restored`, "The account is back in the active directory.");
+      notify(
+        "success",
+        `${memberName} restored`,
+        "The account is back in the active directory.",
+      );
       return;
     }
-    notify("error", "Could not restore this person", result.error ?? "Try again after the directory refreshes.");
+    notify(
+      "error",
+      "Could not restore this person",
+      result.error ?? "Try again after the directory refreshes.",
+    );
   };
 
   const handleGrantMembershipCard = async () => {
     const target = grantCardTarget ?? editTarget;
     if (!target || target.role?.name !== "USER") return;
+    const cardStatus = getMembershipFieldValue(target);
 
     try {
       const result = await membershipCardMutation.mutateAsync({
         id: target.id,
         payload: {
           action: "grant",
-          source: target.membershipCard ? "admin_repair" : "admin_grant"
-        }
+          source: cardStatus === "revoked" ? "admin_repair" : "admin_grant",
+        },
       });
 
       patchOpenMember(target.id, {
-        membershipCard: (result.membershipCard ?? null) as MembershipCardRecord | null
+        membershipCard: (result.membershipCard ??
+          null) as MembershipCardRecord | null,
       });
       setGrantCardTarget(null);
       notify("success", "Member access updated", result.message);
     } catch (error) {
-      notifyActionError("Could not update member access", error, "Failed to update membership-card access.");
+      notifyActionError(
+        "Could not update member access",
+        error,
+        "Failed to update membership-card access.",
+      );
     }
   };
 
@@ -751,27 +959,42 @@ export default function MembersDashboard() {
         payload: {
           action: "revoke",
           reason: "Revoked via account module.",
-          source: "admin_repair"
-        }
+          source: "admin_repair",
+        },
       });
 
       patchOpenMember(revokeCardTarget.id, {
-        membershipCard: (result.membershipCard ?? null) as MembershipCardRecord | null
+        membershipCard: (result.membershipCard ??
+          null) as MembershipCardRecord | null,
       });
       setRevokeCardTarget(null);
       notify("success", "Member access updated", result.message);
     } catch (error) {
-      notifyActionError("Could not update member access", error, "Failed to revoke membership-card access.");
+      notifyActionError(
+        "Could not update member access",
+        error,
+        "Failed to revoke membership-card access.",
+      );
     }
   };
 
   const handleManualCheckIn = async (member: MemberRecord) => {
     try {
-      const result = await manualAttendanceMutation.mutateAsync({ userId: member.id });
+      const result = await manualAttendanceMutation.mutateAsync({
+        userId: member.id,
+      });
       patchOpenMember(member.id, { lastCheckInAt: result.check_in_at });
-      notify("success", `${result.member_name} checked in`, `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`);
+      notify(
+        "success",
+        `${result.member_name} checked in`,
+        `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
+      );
     } catch (error) {
-      notifyActionError("Could not check in this account", error, "Failed to manually check in this account.");
+      notifyActionError(
+        "Could not check in this account",
+        error,
+        "Failed to manually check in this account.",
+      );
     }
   };
 
@@ -781,42 +1004,71 @@ export default function MembersDashboard() {
       setScanFeedback({
         tone: "error",
         title: "Scan failed",
-        detail: "A QR code value is required before attendance can be logged."
+        detail: "A QR code value is required before attendance can be logged.",
       });
-      notify("error", "QR code required", "Add or scan a QR value before logging attendance.");
+      notify(
+        "error",
+        "QR code required",
+        "Add or scan a QR value before logging attendance.",
+      );
       return;
     }
 
     try {
-      const result: AttendanceCheckInRecord = await scanAttendanceMutation.mutateAsync({
-        qrValue: trimmedQrValue
-      });
+      const result: AttendanceCheckInRecord =
+        await scanAttendanceMutation.mutateAsync({
+          qrValue: trimmedQrValue,
+        });
       setScanFeedback({
         tone: "success",
         title: `Checked in ${result.member_name}`,
-        detail: `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`
+        detail: `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
       });
-      notify("success", `Checked in ${result.member_name}`, `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`);
+      notify(
+        "success",
+        `Checked in ${result.member_name}`,
+        `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
+      );
     } catch (error) {
-      const detail = getActionErrorMessage(error, "Unable to scan this QR code.");
-      const tone = /already|open attendance/i.test(detail) ? "warning" : "error";
+      const detail = getActionErrorMessage(
+        error,
+        "Unable to scan this QR code.",
+      );
+      const tone = /already|open attendance/i.test(detail)
+        ? "warning"
+        : "error";
       setScanFeedback({
         tone,
         title: tone === "warning" ? "Already checked in" : "Scan failed",
-        detail
+        detail,
       });
-      notify(tone, tone === "warning" ? "Attendance already logged" : "Scan failed", detail);
+      notify(
+        tone,
+        tone === "warning" ? "Attendance already logged" : "Scan failed",
+        detail,
+      );
     }
   };
 
   const handleApproveMembershipPayment = async () => {
     if (!pendingMembershipPayment) return;
-    const reviewLabel = getMembershipPaymentReviewLabel(pendingMembershipPayment.payable_type);
+    const shouldContinue = window.confirm(
+      `Approve this ${formatReviewPayableLabel(pendingMembershipPayment.payable_type).toLowerCase()} for PHP ${Number(
+        pendingMembershipPayment.amount,
+      ).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}?`,
+    );
+    if (!shouldContinue) return;
+    const reviewLabel = getMembershipPaymentReviewLabel(
+      pendingMembershipPayment.payable_type,
+    );
     try {
       await membershipPaymentReviewMutation.mutateAsync({
         paymentId: pendingMembershipPayment.id,
         payload: { action: "approve" },
-        affectedUserId: pendingMembershipPayment.user_id
+        affectedUserId: pendingMembershipPayment.user_id,
       });
       if (pendingMembershipPayment.payable_type === "membership_card") {
         patchOpenMember(pendingMembershipPayment.user_id, {
@@ -827,28 +1079,42 @@ export default function MembersDashboard() {
             revokedAt: null,
             source: pendingMembershipPayment.provider,
             status: "active",
-            verifiedAt: new Date().toISOString()
-          } as MembershipCardRecord
+            verifiedAt: new Date().toISOString(),
+          } as MembershipCardRecord,
         });
         await fetchMembers();
       }
-      notify("success", "Payment review approved", `${formatReviewPayableLabel(pendingMembershipPayment.payable_type)} has been marked as approved.`);
+      notify(
+        "success",
+        "Payment review approved",
+        `${formatReviewPayableLabel(pendingMembershipPayment.payable_type)} has been marked as approved.`,
+      );
     } catch {
-      notify("error", "Could not approve the payment review", `Try again while the ${reviewLabel} request is still pending.`);
+      notify(
+        "error",
+        "Could not approve the payment review",
+        `Try again while the ${reviewLabel} request is still pending.`,
+      );
     }
   };
 
   const handleRejectMembershipPayment = async () => {
     if (!pendingMembershipPayment) return;
-    const reviewLabel = getMembershipPaymentReviewLabel(pendingMembershipPayment.payable_type);
+    const shouldContinue = window.confirm(
+      `Reject this ${formatReviewPayableLabel(pendingMembershipPayment.payable_type).toLowerCase()} review? The payment will remain blocked until the member submits a new valid proof.`,
+    );
+    if (!shouldContinue) return;
+    const reviewLabel = getMembershipPaymentReviewLabel(
+      pendingMembershipPayment.payable_type,
+    );
     try {
       await membershipPaymentReviewMutation.mutateAsync({
         paymentId: pendingMembershipPayment.id,
         payload: {
           action: "reject",
-          rejectionReason: "Rejected via account module."
+          rejectionReason: "Rejected via account module.",
         },
-        affectedUserId: pendingMembershipPayment.user_id
+        affectedUserId: pendingMembershipPayment.user_id,
       });
       if (pendingMembershipPayment.payable_type === "membership_card") {
         patchOpenMember(pendingMembershipPayment.user_id, {
@@ -856,14 +1122,22 @@ export default function MembersDashboard() {
             ...(editTarget?.membershipCard ?? { status: "revoked" }),
             revokeReason: "Rejected via account module.",
             revokedAt: new Date().toISOString(),
-            status: "revoked"
-          } as MembershipCardRecord
+            status: "revoked",
+          } as MembershipCardRecord,
         });
         await fetchMembers();
       }
-      notify("success", "Payment review declined", `${formatReviewPayableLabel(pendingMembershipPayment.payable_type)} remains blocked for now.`);
+      notify(
+        "success",
+        "Payment review declined",
+        `${formatReviewPayableLabel(pendingMembershipPayment.payable_type)} remains blocked for now.`,
+      );
     } catch {
-      notify("error", "Could not decline the payment review", `Try again while the ${reviewLabel} request is still pending.`);
+      notify(
+        "error",
+        "Could not decline the payment review",
+        `Try again while the ${reviewLabel} request is still pending.`,
+      );
     }
   };
 
@@ -911,29 +1185,45 @@ export default function MembersDashboard() {
           ...editTarget.profile,
           firstName: nextFirstName || editTarget.profile?.firstName || "",
           lastName: nextLastName || editTarget.profile?.lastName || "",
-          dateOfBirth: nextDateOfBirth || editTarget.profile?.dateOfBirth || null,
+          dateOfBirth:
+            nextDateOfBirth || editTarget.profile?.dateOfBirth || null,
           gender: nextGender || editTarget.profile?.gender || null,
-          activityLevel: nextActivityLevel || editTarget.profile?.activityLevel || null,
-          fitnessGoal: nextFitnessGoal || editTarget.profile?.fitnessGoal || null,
-          currentWeightKg: nextWeight ?? editTarget.profile?.currentWeightKg ?? null,
+          activityLevel:
+            nextActivityLevel || editTarget.profile?.activityLevel || null,
+          fitnessGoal:
+            nextFitnessGoal || editTarget.profile?.fitnessGoal || null,
+          currentWeightKg:
+            nextWeight ?? editTarget.profile?.currentWeightKg ?? null,
           heightCm: nextHeight ?? editTarget.profile?.heightCm ?? null,
-        }
+        },
       });
       setEditModalOpen(false);
       setEditConfirmOpen(false);
       setPendingEditSubmission(null);
-      notify("success", "Account details updated", "The account modal now reflects the saved changes.");
+      notify(
+        "success",
+        "Account details updated",
+        "The account modal now reflects the saved changes.",
+      );
       return;
     }
     setEditConfirmOpen(false);
     setPendingEditSubmission(null);
     setEditModalOpen(true);
-    notify("error", "Could not update account details", result.error ?? "Review the highlighted values and try again.");
+    notify(
+      "error",
+      "Could not update account details",
+      result.error ?? "Review the highlighted values and try again.",
+    );
   };
 
   const handleMessageMember = (member: MemberRecord) => {
     if (!member.email.trim()) {
-      notify("info", "No email available", "This account cannot be contacted by email yet.");
+      notify(
+        "info",
+        "No email available",
+        "This account cannot be contacted by email yet.",
+      );
       return;
     }
 
@@ -951,7 +1241,15 @@ export default function MembersDashboard() {
         const initials = getMemberInitials(member);
 
         return (
-          <div className="members-directory-panel__identity" style={{ display: "flex", gap: 9, alignItems: "center", minWidth: 0 }}>
+          <div
+            className="members-directory-panel__identity"
+            style={{
+              display: "flex",
+              gap: 9,
+              alignItems: "center",
+              minWidth: 0,
+            }}
+          >
             <div
               className="members-directory-panel__identity-avatar"
               style={{
@@ -964,10 +1262,17 @@ export default function MembersDashboard() {
                 alignItems: "center",
                 justifyContent: "center",
                 overflow: "hidden",
-                position: "relative"
+                position: "relative",
               }}
             >
-              <FitText style={{ fontSize: 11, fontWeight: 800, color: c.surfaceRaised, letterSpacing: "0.04em" }}>
+              <FitText
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: c.surfaceRaised,
+                  letterSpacing: "0.04em",
+                }}
+              >
                 {initials}
               </FitText>
               {avatarUrl ? (
@@ -982,14 +1287,32 @@ export default function MembersDashboard() {
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover"
+                    objectFit: "cover",
                   }}
                 />
               ) : null}
             </div>
-            <div className="members-directory-panel__identity-copy" style={{ display: "grid", gap: 3, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
-                <FitText className="members-directory-panel__primary-text" style={{ fontSize: 13.5, fontWeight: 700, color: c.textPrimary }}>
+            <div
+              className="members-directory-panel__identity-copy"
+              style={{ display: "grid", gap: 3, minWidth: 0 }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  minWidth: 0,
+                }}
+              >
+                <FitText
+                  className="members-directory-panel__primary-text"
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    color: c.textPrimary,
+                  }}
+                >
                   {fullName(member) || "Unnamed account"}
                 </FitText>
                 {showRoleLabel ? (
@@ -1003,24 +1326,36 @@ export default function MembersDashboard() {
                   />
                 ) : null}
               </div>
-              <FitText className="members-directory-panel__secondary-text" style={{ fontSize: 11.5, color: c.textSecondary, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <FitText
+                className="members-directory-panel__secondary-text"
+                style={{
+                  fontSize: 11.5,
+                  color: c.textSecondary,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
                 {member.email}
               </FitText>
             </div>
           </div>
         );
-      }
+      },
     },
     {
       key: "access",
       heading: "Access",
       render: (member, c) => {
         return (
-          <FitText className="members-directory-panel__emphasis-text" style={{ fontSize: 12.5, fontWeight: 600, color: c.textPrimary }}>
+          <FitText
+            className="members-directory-panel__emphasis-text"
+            style={{ fontSize: 12.5, fontWeight: 600, color: c.textPrimary }}
+          >
             {getDirectoryAccessLabel(member, pendingRequestsByUserId)}
           </FitText>
         );
-      }
+      },
     },
     {
       key: "activity",
@@ -1031,19 +1366,26 @@ export default function MembersDashboard() {
           style={{
             fontSize: 12,
             fontWeight: 600,
-            color: member.lastCheckInAt ? c.textPrimary : c.textSecondary
+            color: member.lastCheckInAt ? c.textPrimary : c.textSecondary,
           }}
         >
           {formatLastCheckIn(member.lastCheckInAt)}
         </FitText>
-      )
+      ),
     },
     {
       key: "status",
       heading: "Status",
       render: (member, c) => {
-        const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
-        const profileTone = getDirectoryStatusColor(member, pendingRequestsByUserId, c.warning);
+        const statusLabel = getDirectoryStatusLabel(
+          member,
+          pendingRequestsByUserId,
+        );
+        const profileTone = getDirectoryStatusColor(
+          member,
+          pendingRequestsByUserId,
+          c.warning,
+        );
 
         return (
           <FitPill
@@ -1053,16 +1395,22 @@ export default function MembersDashboard() {
             fontSize={9.5}
           />
         );
-      }
-    }
+      },
+    },
   ];
 
   const renderMobileCard = (member: MemberRecord) => {
     const avatarUrl = getMemberAvatarUrl(member);
-    const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
+    const statusLabel = getDirectoryStatusLabel(
+      member,
+      pendingRequestsByUserId,
+    );
     const roleLabel = getDirectoryRoleLabel(member.role?.name);
     const showRoleLabel = member.role?.name !== "USER";
-    const accessLabel = getDirectoryAccessLabel(member, pendingRequestsByUserId);
+    const accessLabel = getDirectoryAccessLabel(
+      member,
+      pendingRequestsByUserId,
+    );
     const initials = getMemberInitials(member);
 
     return (
@@ -1075,7 +1423,7 @@ export default function MembersDashboard() {
           borderRadius: 20,
           border: `1px solid ${colors.border}`,
           background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-          boxShadow: "0 12px 24px rgba(0,0,0,0.12)"
+          boxShadow: "0 12px 24px rgba(0,0,0,0.12)",
         }}
       >
         <div
@@ -1084,10 +1432,18 @@ export default function MembersDashboard() {
             alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 12,
-            flexWrap: "wrap"
+            flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: "1 1 240px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minWidth: 0,
+              flex: "1 1 240px",
+            }}
+          >
             <div
               style={{
                 width: 40,
@@ -1100,10 +1456,17 @@ export default function MembersDashboard() {
                 justifyContent: "center",
                 overflow: "hidden",
                 position: "relative",
-                flexShrink: 0
+                flexShrink: 0,
               }}
             >
-              <FitText style={{ fontSize: 13, fontWeight: 800, color: colors.surfaceRaised, letterSpacing: "0.04em" }}>
+              <FitText
+                style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: colors.surfaceRaised,
+                  letterSpacing: "0.04em",
+                }}
+              >
                 {initials}
               </FitText>
               {avatarUrl ? (
@@ -1118,13 +1481,20 @@ export default function MembersDashboard() {
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover"
+                    objectFit: "cover",
                   }}
                 />
               ) : null}
             </div>
             <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 {showRoleLabel ? (
                   <FitPill
                     mode="status"
@@ -1138,11 +1508,21 @@ export default function MembersDashboard() {
                 <FitPill
                   mode="status"
                   label={statusLabel}
-                  color={getDirectoryStatusColor(member, pendingRequestsByUserId, colors.warning)}
+                  color={getDirectoryStatusColor(
+                    member,
+                    pendingRequestsByUserId,
+                    colors.warning,
+                  )}
                   fontSize={10}
                 />
               </div>
-              <FitText style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                }}
+              >
                 {fullName(member) || "Unnamed account"}
               </FitText>
               <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>
@@ -1153,7 +1533,9 @@ export default function MembersDashboard() {
           <FitPill
             mode="status"
             label={accessLabel}
-            color={MEMBERSHIP_CARD_STATUS_COLORS[accessLabel] ?? colors.textMuted}
+            color={
+              MEMBERSHIP_CARD_STATUS_COLORS[accessLabel] ?? colors.textMuted
+            }
             fontSize={11}
           />
         </div>
@@ -1162,11 +1544,18 @@ export default function MembersDashboard() {
           style={{
             display: "grid",
             gap: 10,
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
           }}
         >
           <div style={{ display: "grid", gap: 4 }}>
-            <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
+            <FitText
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: colors.textMuted,
+                letterSpacing: "0.08em",
+              }}
+            >
               LAST ACTIVITY
             </FitText>
             <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>
@@ -1174,40 +1563,81 @@ export default function MembersDashboard() {
             </FitText>
           </div>
           <div style={{ display: "grid", gap: 4 }}>
-            <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
+            <FitText
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: colors.textMuted,
+                letterSpacing: "0.08em",
+              }}
+            >
               ACCESS
             </FitText>
-            <FitText style={{ fontSize: 12.5, fontWeight: 600, color: colors.textSecondary }}>
+            <FitText
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: colors.textSecondary,
+              }}
+            >
               {accessLabel}
             </FitText>
           </div>
           <div style={{ display: "grid", gap: 4 }}>
-            <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
+            <FitText
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: colors.textMuted,
+                letterSpacing: "0.08em",
+              }}
+            >
               ACCOUNT
             </FitText>
             <FitPill
               mode="status"
               label={statusLabel}
-              color={getDirectoryStatusColor(member, pendingRequestsByUserId, colors.warning)}
+              color={getDirectoryStatusColor(
+                member,
+                pendingRequestsByUserId,
+                colors.warning,
+              )}
               fontSize={12}
             />
           </div>
           <div style={{ display: "grid", gap: 4 }}>
-            <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
+            <FitText
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: colors.textMuted,
+                letterSpacing: "0.08em",
+              }}
+            >
               SCAN
             </FitText>
             <FitText
               style={{
                 fontSize: 12.5,
                 fontWeight: 600,
-                color: member.attendanceQrReady ? colors.brand : colors.textSecondary
+                color: member.attendanceQrReady
+                  ? colors.brand
+                  : colors.textSecondary,
               }}
             >
               {getScanReadinessLabel(member)}
             </FitText>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           <FitButton
             variant="ghost"
             label="View details"
@@ -1215,7 +1645,7 @@ export default function MembersDashboard() {
             style={{
               border: `1px solid ${colors.brand}22`,
               backgroundColor: `${colors.brand}12`,
-              color: colors.brand
+              color: colors.brand,
             }}
           />
         </div>
@@ -1227,20 +1657,27 @@ export default function MembersDashboard() {
   const isCreateMode = contentMode === "create";
   const routeEyebrow = "Account directory";
   const routeTitle = "Account Module";
-  const routeSubtitle = "Find accounts, review access, and take action from one page.";
+  const routeSubtitle =
+    "Find accounts, review access, and take action from one page.";
   const routeHeroChips: MembersRouteShellChip[] = [];
   const routeSummaryItems: MembersRouteShellMetric[] = [];
   const directoryMotionKey = `${page}-${activeStatus}-${activeChip}-${paginatedRows.map((member) => member.id).join(":")}`;
-  const directoryFilterOptions = isTerminationRequestsView
-    ? MEMBER_FILTER_OPTIONS.map((option) => (
-      option.value === "Member" ? option : { ...option, disabled: true }
-    ))
+  const roleVisibleFilterOptions = isStaff
+    ? MEMBER_FILTER_OPTIONS.filter((option) => option.value !== "Admin")
     : MEMBER_FILTER_OPTIONS;
+  const directoryFilterOptions = isTerminationRequestsView
+    ? roleVisibleFilterOptions.map((option) =>
+        option.value === "Member" ? option : { ...option, disabled: true },
+      )
+    : roleVisibleFilterOptions;
   const directoryEmptyMessage = isTerminationRequestsView
     ? "No termination requests match your current filters."
     : "No accounts match your current filters.";
   const directoryCommandSurface = (
-    <div className="members-route-command-grid" style={{ display: "grid", gap: 10 }}>
+    <div
+      className="members-route-command-grid"
+      style={{ display: "grid", gap: 10 }}
+    >
       <div
         className="members-route-command-row"
         style={{
@@ -1251,7 +1688,9 @@ export default function MembersDashboard() {
         }}
       >
         <div style={{ flex: "0 0 auto" }}>
-          <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+          <FitText
+            style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}
+          >
             Directory
           </FitText>
         </div>
@@ -1262,7 +1701,7 @@ export default function MembersDashboard() {
             gap: 8,
             flexWrap: "wrap",
             alignItems: "center",
-            marginLeft: "auto"
+            marginLeft: "auto",
           }}
         >
           {isAdmin ? (
@@ -1275,7 +1714,7 @@ export default function MembersDashboard() {
                 minHeight: 38,
                 borderRadius: 14,
                 border: `1px solid ${colors.border}`,
-                backgroundColor: `${colors.surfaceRaised}cc`
+                backgroundColor: `${colors.surfaceRaised}cc`,
               }}
               onClick={() => {
                 setScanFeedback(null);
@@ -1295,7 +1734,7 @@ export default function MembersDashboard() {
                 border: `1px solid ${colors.brand}2f`,
                 boxShadow: `0 14px 28px -24px ${colors.brand}`,
                 minHeight: 38,
-                borderRadius: 14
+                borderRadius: 14,
               }}
               onClick={() => {
                 setContentMode("create");
@@ -1311,7 +1750,7 @@ export default function MembersDashboard() {
           display: "flex",
           gap: 10,
           alignItems: "center",
-          flexWrap: "wrap"
+          flexWrap: "wrap",
         }}
       >
         <div
@@ -1326,7 +1765,7 @@ export default function MembersDashboard() {
             padding: "8px 10px",
             borderRadius: 16,
             border: `1px solid ${colors.border}`,
-            backgroundColor: `${colors.surfaceRaised}d8`
+            backgroundColor: `${colors.surfaceRaised}d8`,
           }}
         >
           <div style={{ flex: "1 1 280px", minWidth: 220, maxWidth: 420 }}>
@@ -1388,39 +1827,158 @@ export default function MembersDashboard() {
     borderRadius: 14,
     minHeight: 40,
   };
-  const accountDetailsAvatarUrl = editTarget ? getMemberAvatarUrl(editTarget) : null;
-  const accountDetailsTitle = editTarget ? fullName(editTarget) || "Unnamed account" : "Account details";
-  const accountActionLabel = canRestoreEditTarget ? "Restore Account" : "Archive Account";
-  const memberCardActionLabel = editTarget?.membershipCard ? "Restore member card" : "Grant member card";
-  const accountOverviewItems = editTarget ? [
-    { label: "Access", value: getDirectoryAccessLabel(editTarget, pendingRequestsByUserId) },
-    { label: "Account status", value: getDirectoryStatusLabel(editTarget, pendingRequestsByUserId) },
-    { label: "Scan status", value: getScanReadinessLabel(editTarget) },
-    { label: "Last activity", value: formatLastCheckIn(editTarget.lastCheckInAt) },
-  ] : [];
-  const accountProfileItems = editTarget ? [
-    { label: "Role", value: getDirectoryRoleLabel(editTarget.role?.name) },
-    { label: "Email", value: editTarget.email },
-    { label: "Phone", value: formatDetailValue(editTarget.phone_no) },
-    { label: "Date of birth", value: formatDisplayDate(editTarget.profile?.dateOfBirth) },
-    { label: "Gender", value: formatDetailValue(editTarget.profile?.gender) },
-    { label: "Activity level", value: formatDetailValue(editTarget.profile?.activityLevel) },
-    { label: "Fitness goal", value: formatDetailValue(editTarget.profile?.fitnessGoal) },
-    { label: "Weight", value: editTarget.profile?.currentWeightKg != null ? `${editTarget.profile.currentWeightKg} kg` : "Not provided" },
-    { label: "Height", value: editTarget.profile?.heightCm != null ? `${editTarget.profile.heightCm} cm` : "Not provided" },
-    { label: "Created", value: formatDisplayDate(editTarget.createdAt) },
-  ] : [];
+  const accountDetailsAvatarUrl = editTarget
+    ? getMemberAvatarUrl(editTarget)
+    : null;
+  const accountDetailsTitle = editTarget
+    ? fullName(editTarget) || "Unnamed account"
+    : "Account details";
+  const accountActionLabel = canRestoreEditTarget
+    ? "Restore Account"
+    : "Archive Account";
+  const accountStatusLabel = editTarget
+    ? getDirectoryStatusLabel(editTarget, pendingRequestsByUserId)
+    : "";
+  const editTargetMembershipStatus = editTarget
+    ? getMembershipFieldValue(editTarget)
+    : "none";
+  const memberCardActionLabel =
+    editTargetMembershipStatus === "revoked"
+      ? "Restore Membership"
+      : "Grant Membership";
+  const memberCardGrantedAt =
+    editTarget?.membershipCard?.activatedAt ??
+    editTarget?.membershipCard?.verifiedAt ??
+    editTarget?.membershipCard?.purchasedAt ??
+    null;
+  const memberCardVerifiedAt = editTarget?.membershipCard?.verifiedAt ?? null;
+  const memberCardActivatedAt = editTarget?.membershipCard?.activatedAt ?? null;
+  const memberCardWasRestored =
+    editTarget?.membershipCard?.status === "active" &&
+    !!memberCardVerifiedAt &&
+    (editTarget.membershipCard.source === "admin_repair" ||
+      (!!memberCardActivatedAt &&
+        Math.abs(
+          new Date(memberCardVerifiedAt).getTime() -
+            new Date(memberCardActivatedAt).getTime(),
+        ) > 1000));
+  const memberCardTimestampItems =
+    editTarget?.role?.name === "USER" && editTarget.membershipCard
+      ? [
+          memberCardGrantedAt
+            ? {
+                label: "Date & Time Granted",
+                value: formatDisplayDateTime(memberCardGrantedAt),
+              }
+            : null,
+          editTarget.membershipCard.status === "revoked" &&
+          editTarget.membershipCard.revokedAt
+            ? {
+                label: "Date & Time Revoked",
+                value: formatDisplayDateTime(
+                  editTarget.membershipCard.revokedAt,
+                ),
+              }
+            : null,
+          memberCardWasRestored && memberCardVerifiedAt
+            ? {
+                label: "Date & Time Restored",
+                value: formatDisplayDateTime(memberCardVerifiedAt),
+              }
+            : null,
+        ].filter(
+          (item): item is { label: string; value: string } => item !== null,
+        )
+      : [];
+  const accountOverviewItems = editTarget
+    ? [
+        {
+          label: "Access",
+          value: getDirectoryAccessLabel(editTarget, pendingRequestsByUserId),
+        },
+        { label: "Account status", value: accountStatusLabel },
+        { label: "Scan status", value: getScanReadinessLabel(editTarget) },
+        {
+          label: "Last activity",
+          value: formatLastCheckIn(editTarget.lastCheckInAt),
+        },
+      ]
+    : [];
+  const accountProfileItems = editTarget
+    ? [
+        { label: "Role", value: getDirectoryRoleLabel(editTarget.role?.name) },
+        { label: "Email", value: editTarget.email },
+        { label: "Phone", value: formatDetailValue(editTarget.phone_no) },
+        {
+          label: "Date of birth",
+          value: formatDisplayDate(editTarget.profile?.dateOfBirth),
+        },
+        {
+          label: "Gender",
+          value: formatDetailValue(editTarget.profile?.gender),
+        },
+        {
+          label: "Activity level",
+          value: formatDetailValue(editTarget.profile?.activityLevel),
+        },
+        {
+          label: "Fitness goal",
+          value: formatDetailValue(editTarget.profile?.fitnessGoal),
+        },
+        {
+          label: "Weight",
+          value:
+            editTarget.profile?.currentWeightKg != null
+              ? `${editTarget.profile.currentWeightKg} kg`
+              : "Not provided",
+        },
+        {
+          label: "Height",
+          value:
+            editTarget.profile?.heightCm != null
+              ? `${editTarget.profile.heightCm} cm`
+              : "Not provided",
+        },
+        { label: "Created", value: formatDisplayDate(editTarget.createdAt) },
+        ...(editTarget.deletedAt
+          ? [
+              {
+                label: "Date & Time Archived",
+                value: formatDisplayDateTime(editTarget.deletedAt),
+              },
+            ]
+          : editTarget.restoredAt && accountStatusLabel === "Active"
+            ? [
+                {
+                  label: "Date & Time Unarchived",
+                  value: formatDisplayDateTime(editTarget.restoredAt),
+                },
+              ]
+            : []),
+        ...memberCardTimestampItems,
+      ]
+    : [];
 
   return (
-    <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={themeTransition}
+      style={fadeIn}
+    >
       <div
-        className={isCreateMode ? "members-shell members-shell-create" : "members-shell"}
+        className={
+          isCreateMode ? "members-shell members-shell-create" : "members-shell"
+        }
         style={{
           display: "grid",
           gap: isCreateMode ? 0 : 18,
           maxWidth: 1240,
           margin: "0 auto",
-          width: "100%"
+          width: "100%",
         }}
       >
         {isCreateMode ? (
@@ -1451,7 +2009,10 @@ export default function MembersDashboard() {
             commandSurface={directoryCommandSurface}
           >
             <div key={contentMode} style={{ display: "grid", gap: 16 }}>
-              <div className="members-directory-stage" style={{ display: "grid", gap: 16 }}>
+              <div
+                className="members-directory-stage"
+                style={{ display: "grid", gap: 16 }}
+              >
                 <MembersDirectoryPanel
                   activeRowId={editTarget?.id}
                   emptyMessage={directoryEmptyMessage}
@@ -1586,7 +2147,13 @@ export default function MembersDashboard() {
                     flexShrink: 0,
                   }}
                 >
-                  <FitText style={{ fontSize: 28, fontWeight: 800, letterSpacing: "0.04em" }}>
+                  <FitText
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                    }}
+                  >
                     {getMemberInitials(editTarget)}
                   </FitText>
                   {accountDetailsAvatarUrl ? (
@@ -1606,18 +2173,49 @@ export default function MembersDashboard() {
                     />
                   ) : null}
                 </div>
-                <div style={{ display: "grid", gap: 8, minWidth: 0, flex: "1 1 240px" }}>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                    minWidth: 0,
+                    flex: "1 1 240px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
                     <FitPill
                       mode="status"
-                      label={getDirectoryStatusLabel(editTarget, pendingRequestsByUserId)}
-                      color={getDirectoryStatusColor(editTarget, pendingRequestsByUserId, colors.warning)}
+                      label={getDirectoryStatusLabel(
+                        editTarget,
+                        pendingRequestsByUserId,
+                      )}
+                      color={getDirectoryStatusColor(
+                        editTarget,
+                        pendingRequestsByUserId,
+                        colors.warning,
+                      )}
                       fontSize={11}
                     />
                     <FitPill
                       mode="status"
-                      label={getDirectoryAccessLabel(editTarget, pendingRequestsByUserId)}
-                      color={MEMBERSHIP_CARD_STATUS_COLORS[getDirectoryAccessLabel(editTarget, pendingRequestsByUserId)] ?? colors.textMuted}
+                      label={getDirectoryAccessLabel(
+                        editTarget,
+                        pendingRequestsByUserId,
+                      )}
+                      color={
+                        MEMBERSHIP_CARD_STATUS_COLORS[
+                          getDirectoryAccessLabel(
+                            editTarget,
+                            pendingRequestsByUserId,
+                          )
+                        ] ?? colors.textMuted
+                      }
                       fontSize={11}
                     />
                   </div>
@@ -1633,10 +2231,24 @@ export default function MembersDashboard() {
               >
                 {accountOverviewItems.map((item) => (
                   <div key={item.label} style={detailsCardStyle}>
-                    <FitText style={{ fontSize: 10.5, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                    <FitText
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: colors.textMuted,
+                        letterSpacing: "0.05em",
+                      }}
+                    >
                       {item.label}
                     </FitText>
-                    <FitText style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, lineHeight: 1.35 }}>
+                    <FitText
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                        lineHeight: 1.35,
+                      }}
+                    >
                       {item.value}
                     </FitText>
                   </div>
@@ -1644,7 +2256,13 @@ export default function MembersDashboard() {
               </div>
 
               <div style={{ display: "grid", gap: 10 }}>
-                <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                <FitText
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: colors.textPrimary,
+                  }}
+                >
                   Profile details
                 </FitText>
                 <div
@@ -1656,10 +2274,24 @@ export default function MembersDashboard() {
                 >
                   {accountProfileItems.map((item) => (
                     <div key={item.label} style={detailsCardStyle}>
-                      <FitText style={{ fontSize: 10.5, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                      <FitText
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: colors.textMuted,
+                          letterSpacing: "0.05em",
+                        }}
+                      >
                         {item.label}
                       </FitText>
-                      <FitText style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, lineHeight: 1.35 }}>
+                      <FitText
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: colors.textPrimary,
+                          lineHeight: 1.35,
+                        }}
+                      >
                         {item.value}
                       </FitText>
                     </div>
@@ -1676,19 +2308,54 @@ export default function MembersDashboard() {
                     backgroundColor: `${colors.brand}08`,
                   }}
                 >
-                  <FitText style={{ fontSize: 10.5, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                  <FitText
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: colors.textMuted,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
                     Payment review
                   </FitText>
-                  <FitText style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>
-                    PHP {Number(pendingMembershipPayment.amount).toLocaleString("en-PH")}
+                  <FitText
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    PHP{" "}
+                    {Number(pendingMembershipPayment.amount).toLocaleString(
+                      "en-PH",
+                    )}
                   </FitText>
-                  <FitText style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.45 }}>
-                    {formatReviewPayableLabel(pendingMembershipPayment.payable_type)} - {formatMembershipStatus(pendingMembershipPayment.status)}
+                  <FitText
+                    style={{
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {formatReviewPayableLabel(
+                      pendingMembershipPayment.payable_type,
+                    )}{" "}
+                    - {formatMembershipStatus(pendingMembershipPayment.status)}
                   </FitText>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 10,
+                    }}
+                  >
                     <FitButton
                       variant="primary"
-                      label={membershipPaymentReviewMutation.isPending ? paymentReviewLoadingLabel : "Approve"}
+                      label={
+                        membershipPaymentReviewMutation.isPending
+                          ? paymentReviewLoadingLabel
+                          : "Approve"
+                      }
                       onClick={handleApproveMembershipPayment}
                       disabled={membershipPaymentReviewMutation.isPending}
                       style={{ ...primaryActionStyle, minHeight: 36 }}
@@ -1705,111 +2372,147 @@ export default function MembersDashboard() {
                 </div>
               ) : null}
 
-              <div style={{ display: "grid", gap: 10 }}>
-                <FitText style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
-                  Account actions
-                </FitText>
+              {!isSelfEdit ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <FitText
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    Account actions
+                  </FitText>
 
-                {canEditTargetDetails ? (
-                  <div style={{ display: "grid", gridTemplateColumns: canManualCheckInTarget ? "repeat(2, minmax(0, 1fr))" : "1fr", gap: 10 }}>
-                    <FitButton
-                      variant="primary"
-                      label="Edit details"
-                      onClick={openEditModal}
-                      style={primaryActionStyle}
-                      textStyle={{ color: primaryCommandTextColor }}
-                    />
-                    {canManualCheckInTarget ? (
+                  {canEditTargetDetails ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: canManualCheckInTarget
+                          ? "repeat(2, minmax(0, 1fr))"
+                          : "1fr",
+                        gap: 10,
+                      }}
+                    >
                       <FitButton
-                        variant="ghost"
-                        label={manualAttendanceMutation.isPending ? manualCheckInLoadingLabel : "Check in"}
-                        disabled={manualAttendanceMutation.isPending}
-                        onClick={() => {
-                          void handleManualCheckIn(editTarget);
-                        }}
-                        style={secondaryActionStyle}
+                        variant="primary"
+                        label="Edit details"
+                        onClick={openEditModal}
+                        style={primaryActionStyle}
+                        textStyle={{ color: primaryCommandTextColor }}
                       />
-                    ) : null}
-                  </div>
-                ) : null}
+                      {canManualCheckInTarget ? (
+                        <FitButton
+                          variant="ghost"
+                          label={
+                            manualAttendanceMutation.isPending
+                              ? manualCheckInLoadingLabel
+                              : "Check in"
+                          }
+                          disabled={manualAttendanceMutation.isPending}
+                          onClick={() => {
+                            void handleManualCheckIn(editTarget);
+                          }}
+                          style={secondaryActionStyle}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
 
-                {isAdmin ? (
-                  <FitButton
-                    variant="ghost"
-                    label="Message"
-                    onClick={() => handleMessageMember(editTarget)}
-                    style={secondaryActionStyle}
-                  />
-                ) : null}
-
-                {canManageMemberCard && getMembershipFieldValue(editTarget) !== "active" ? (
-                  <FitButton
-                    variant="ghost"
-                    label={membershipCardMutation.isPending ? membershipCardLoadingLabel : memberCardActionLabel}
-                    disabled={membershipCardMutation.isPending}
-                    onClick={() => setGrantCardTarget(editTarget)}
-                    style={{
-                      ...secondaryActionStyle,
-                      border: `1px solid ${colors.brand}30`,
-                      backgroundColor: `${colors.brand}10`,
-                    }}
-                    textStyle={{ color: colors.brand }}
-                  />
-                ) : null}
-
-                {canManageMemberCard && getMembershipFieldValue(editTarget) === "active" ? (
-                  <FitButton
-                    variant="ghost"
-                    label="Revoke card"
-                    disabled={membershipCardMutation.isPending}
-                    onClick={() => setRevokeCardTarget(editTarget)}
-                    style={{
-                      ...secondaryActionStyle,
-                      border: `1px solid ${colors.danger}25`,
-                      backgroundColor: `${colors.danger}0d`,
-                    }}
-                    textStyle={{ color: colors.danger }}
-                  />
-                ) : null}
-
-                {canTerminateEditTarget ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                  {isAdmin ? (
                     <FitButton
                       variant="ghost"
-                      label={rejectDeletionMutation.isPending ? rejectLoadingLabel : "Deny request"}
-                      onClick={handleRejectDeleteRequest}
-                      disabled={rejectDeletionMutation.isPending}
+                      label="Message"
+                      onClick={() => handleMessageMember(editTarget)}
                       style={secondaryActionStyle}
                     />
+                  ) : null}
+
+                  {canManageMemberCard &&
+                  getMembershipFieldValue(editTarget) !== "active" ? (
                     <FitButton
-                      variant="danger"
-                      label="Approve request"
-                      onClick={() => setDeleteTarget(editTarget)}
-                      style={{ borderRadius: 14, minHeight: 40 }}
+                      variant="ghost"
+                      label={
+                        membershipCardMutation.isPending
+                          ? membershipCardLoadingLabel
+                          : memberCardActionLabel
+                      }
+                      disabled={membershipCardMutation.isPending}
+                      onClick={() => setGrantCardTarget(editTarget)}
+                      style={{
+                        ...secondaryActionStyle,
+                        border: `1px solid ${colors.brand}30`,
+                        backgroundColor: `${colors.brand}10`,
+                      }}
+                      textStyle={{ color: colors.brand }}
                     />
-                  </div>
-                ) : null}
+                  ) : null}
 
-                {canArchiveEditTarget ? (
-                  <FitButton
-                    variant="ghost"
-                    label={accountActionLabel}
-                    onClick={() => setArchiveTarget(editTarget)}
-                    style={warningActionStyle}
-                    textStyle={{ color: colors.warning, fontWeight: 700 }}
-                  />
-                ) : null}
+                  {canManageMemberCard &&
+                  getMembershipFieldValue(editTarget) === "active" ? (
+                    <FitButton
+                      variant="ghost"
+                      label="Revoke Membership"
+                      disabled={membershipCardMutation.isPending}
+                      onClick={() => setRevokeCardTarget(editTarget)}
+                      style={{
+                        ...secondaryActionStyle,
+                        border: `1px solid ${colors.danger}25`,
+                        backgroundColor: `${colors.danger}0d`,
+                      }}
+                      textStyle={{ color: colors.danger }}
+                    />
+                  ) : null}
 
-                {canRestoreEditTarget ? (
-                  <FitButton
-                    variant="ghost"
-                    label={accountActionLabel}
-                    onClick={() => setRestoreTarget(editTarget)}
-                    style={warningActionStyle}
-                    textStyle={{ color: colors.warning, fontWeight: 700 }}
-                  />
-                ) : null}
-              </div>
+                  {canTerminateEditTarget ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 10,
+                      }}
+                    >
+                      <FitButton
+                        variant="ghost"
+                        label={
+                          rejectDeletionMutation.isPending
+                            ? rejectLoadingLabel
+                            : "Deny request"
+                        }
+                        onClick={handleRejectDeleteRequest}
+                        disabled={rejectDeletionMutation.isPending}
+                        style={secondaryActionStyle}
+                      />
+                      <FitButton
+                        variant="danger"
+                        label="Approve request"
+                        onClick={() => setDeleteTarget(editTarget)}
+                        style={{ borderRadius: 14, minHeight: 40 }}
+                      />
+                    </div>
+                  ) : null}
+
+                  {canArchiveEditTarget ? (
+                    <FitButton
+                      variant="ghost"
+                      label={accountActionLabel}
+                      onClick={() => setArchiveTarget(editTarget)}
+                      style={warningActionStyle}
+                      textStyle={{ color: colors.warning, fontWeight: 700 }}
+                    />
+                  ) : null}
+
+                  {canRestoreEditTarget ? (
+                    <FitButton
+                      variant="ghost"
+                      label={accountActionLabel}
+                      onClick={() => setRestoreTarget(editTarget)}
+                      style={warningActionStyle}
+                      textStyle={{ color: colors.warning, fontWeight: 700 }}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </FitModal>
@@ -1818,7 +2521,11 @@ export default function MembersDashboard() {
         <DetailsModal
           isOpen={editModalOpen && !!editTarget}
           title="Edit account details"
-          subtitle={editTarget ? `${fullName(editTarget) || "Unnamed account"} - ${getDirectoryAccessLabel(editTarget, pendingRequestsByUserId)}` : ""}
+          subtitle={
+            editTarget
+              ? `${fullName(editTarget) || "Unnamed account"} - ${getDirectoryAccessLabel(editTarget, pendingRequestsByUserId)}`
+              : ""
+          }
           fields={EDIT_MEMBER_FIELDS}
           initialValues={editInitialValues}
           submitLabel="Review update"
@@ -1845,14 +2552,36 @@ export default function MembersDashboard() {
               }}
             >
               {[
-                { label: "Access", value: getDirectoryAccessLabel(editTarget, pendingRequestsByUserId) },
-                { label: "Scan status", value: getScanReadinessLabel(editTarget) },
+                {
+                  label: "Access",
+                  value: getDirectoryAccessLabel(
+                    editTarget,
+                    pendingRequestsByUserId,
+                  ),
+                },
+                {
+                  label: "Scan status",
+                  value: getScanReadinessLabel(editTarget),
+                },
               ].map((item) => (
                 <div key={item.label} style={{ display: "grid", gap: 3 }}>
-                  <FitText style={{ fontSize: 10.5, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                  <FitText
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: colors.textMuted,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
                     {item.label}
                   </FitText>
-                  <FitText style={{ fontSize: 13.5, fontWeight: 700, color: colors.textPrimary }}>
+                  <FitText
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                    }}
+                  >
                     {item.value}
                   </FitText>
                 </div>
@@ -1865,9 +2594,11 @@ export default function MembersDashboard() {
         <ConfirmModal
           isOpen={editConfirmOpen && !!editTarget && !!pendingEditSubmission}
           title="Confirm account update"
-          message={editTarget
-            ? `Save the updated profile details for ${fullName(editTarget) || editTarget.email}? Access controls stay unchanged, and the page will refresh with the new account information.`
-            : "Save these updated account details?"}
+          message={
+            editTarget
+              ? `Save the updated profile details for ${fullName(editTarget) || editTarget.email}? Access controls stay unchanged, and the page will refresh with the new account information.`
+              : "Save these updated account details?"
+          }
           confirmLabel="SAVE ACCOUNT DETAILS"
           loadingLabel={editLoadingLabel}
           isLoading={editLoading}
@@ -1895,16 +2626,27 @@ export default function MembersDashboard() {
           onSubmitToken={handleAttendanceScan}
         />
       ) : null}
-      {isAdmin ? (
+      {canManageMemberCard ? (
         <ConfirmModal
           isOpen={!!grantCardTarget}
-          title={grantCardTarget?.membershipCard ? "Restore Member Card" : "Grant Member Card"}
-          message={
-            grantCardTarget?.membershipCard
-              ? `Restore member-card access for ${grantCardTarget.email}? Scan access and member-only app access will return after confirmation.`
-              : `Grant member-card access to ${grantCardTarget?.email ?? "this account"}? This enables member-only access and prepares the card for future scans.`
+          title={
+            grantCardTarget &&
+            getMembershipFieldValue(grantCardTarget) === "revoked"
+              ? "Restore Membership"
+              : "Grant Membership"
           }
-          confirmLabel={grantCardTarget?.membershipCard ? "RESTORE MEMBER CARD" : "GRANT MEMBER CARD"}
+          message={
+            grantCardTarget &&
+            getMembershipFieldValue(grantCardTarget) === "revoked"
+              ? `Restore membership access for ${grantCardTarget.email}? This re-enables scan access and member-only app access without creating a new membership-card payment.`
+              : `Grant membership access to ${grantCardTarget?.email ?? "this account"} after one-time payment approval? This enables member-only access and prepares the card for future scans.`
+          }
+          confirmLabel={
+            grantCardTarget &&
+            getMembershipFieldValue(grantCardTarget) === "revoked"
+              ? "RESTORE MEMBERSHIP"
+              : "GRANT MEMBERSHIP"
+          }
           loadingLabel={membershipCardLoadingLabel}
           confirmIcon={BadgeCheck}
           isLoading={membershipCardMutation.isPending}
@@ -1912,12 +2654,12 @@ export default function MembersDashboard() {
           onCancel={() => setGrantCardTarget(null)}
         />
       ) : null}
-      {isAdmin ? (
+      {canManageMemberCard ? (
         <ConfirmModal
           isOpen={!!revokeCardTarget}
-          title="Revoke Member Card"
-          message={`Revoke member-card access for ${revokeCardTarget?.email ?? "this account"}? The account stays active, but scan access and member-only app access return to the non-member state.`}
-          confirmLabel="REVOKE CARD"
+          title="Revoke Membership"
+          message={`Revoke membership access for ${revokeCardTarget?.email ?? "this account"}? The account stays active, but scan access and member-only app access return to the non-member state. The original one-time payment record is preserved.`}
+          confirmLabel="REVOKE MEMBERSHIP"
           loadingLabel={membershipCardLoadingLabel}
           confirmIcon={Archive}
           isDanger
@@ -1940,7 +2682,7 @@ export default function MembersDashboard() {
           onCancel={() => setDeleteTarget(null)}
         />
       ) : null}
-      {isAdmin ? (
+      {archiveTarget ? (
         <ConfirmModal
           isOpen={!!archiveTarget}
           title="Archive Account"
@@ -1954,7 +2696,7 @@ export default function MembersDashboard() {
           onCancel={() => setArchiveTarget(null)}
         />
       ) : null}
-      {isAdmin ? (
+      {restoreTarget ? (
         <ConfirmModal
           isOpen={!!restoreTarget}
           title="Restore Account"
@@ -1977,4 +2719,3 @@ export default function MembersDashboard() {
     </FitSection>
   );
 }
-

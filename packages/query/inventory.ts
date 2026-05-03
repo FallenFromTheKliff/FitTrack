@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
+  InventoryAnalyticsPeriod,
   InventoryCreateSaleInput,
   InventoryEquipmentArchiveInput,
   InventoryEquipmentCreateInput,
@@ -110,6 +111,26 @@ export function inventorySaleDetailQueryOptions(
       if (!saleId) return null;
       return client.inventory.getSaleById(saleId);
     }
+  });
+}
+
+export function inventorySalesSummaryQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  params?: Pick<InventorySaleListParams, "endDate" | "startDate">
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventorySalesSummary(params),
+    queryFn: () => client.inventory.getSalesSummary(params)
+  });
+}
+
+export function inventorySalesAnalyticsQueryOptions(
+  client: Pick<ApiClient, "inventory">,
+  period: InventoryAnalyticsPeriod
+) {
+  return queryOptions({
+    queryKey: queryKeys.inventorySalesAnalytics(period),
+    queryFn: () => client.inventory.getSalesAnalytics(period)
   });
 }
 

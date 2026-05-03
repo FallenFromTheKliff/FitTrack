@@ -351,11 +351,11 @@ describe('BookingRepository', () => {
     });
   });
 
-  it('completes a booking balance by stamping payment timestamps', async () => {
+  it('settles a booking balance while keeping the booking confirmed', async () => {
     const paidAt = new Date('2026-03-24T12:00:00.000Z');
     amenityBooking.update.mockResolvedValue({
       id: 'booking-1',
-      status: 'completed',
+      status: 'confirmed',
     });
 
     await repository.completeBookingBalance('booking-1', paidAt);
@@ -363,9 +363,8 @@ describe('BookingRepository', () => {
     expect(amenityBooking.update).toHaveBeenCalledWith({
       where: { id: 'booking-1' },
       data: {
-        status: 'completed',
+        status: 'confirmed',
         balance_paid_at: paidAt,
-        completed_at: paidAt,
       },
       include: undefined,
     });

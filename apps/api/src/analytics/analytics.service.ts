@@ -200,7 +200,7 @@ export class AnalyticsService {
 
   async getSnapshot(): Promise<AnalyticsSnapshotResponseDTO> {
     const now = new Date();
-    const { start: monthStart, end: monthEnd } = this.resolveWindow({});
+    const allTimeStart = new Date(Date.UTC(1970, 0, 1, 0, 0, 0, 0));
     const todayStart = new Date(
       Date.UTC(
         now.getUTCFullYear(),
@@ -223,11 +223,11 @@ export class AnalyticsService {
       systemAlerts,
       recentActivities,
     ] = await Promise.all([
-      this.repo.getOverviewMetrics(monthStart, monthEnd),
+      this.repo.getOverviewMetrics(allTimeStart, now),
       this.repo.getCurrentActiveMembers(now),
       this.repo.getCheckInCount(todayStart, now),
-      this.repo.getVenueBookingCount(monthStart, monthEnd),
-      this.repo.getCoachingAppointmentCount(monthStart, monthEnd),
+      this.repo.getVenueBookingCount(allTimeStart, now),
+      this.repo.getCoachingAppointmentCount(allTimeStart, now),
       this.repo.getRecentActivityCountSince(recentSince),
       this.repo.listSystemAlerts(4),
       this.repo.listRecentActivities(8),

@@ -1,6 +1,15 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ApiClient, CreateBookingPayload } from "@fittrack/api-client";
-import { invalidateBookingQueries, invalidateVenueQueries } from "./cache";
+import type {
+  ApiClient,
+  BookingBalancePaymentProvider,
+  CreateBookingPayload,
+} from "@fittrack/api-client";
+import {
+  invalidateAnalyticsQueries,
+  invalidateBookingQueries,
+  invalidateStaffBookingQueries,
+  invalidateVenueQueries,
+} from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function bookingsQueryOptions<T>(client: Pick<ApiClient, "bookings">, userId?: string) {
@@ -34,5 +43,37 @@ export function cancelBookingMutationOptions(client: Pick<ApiClient, "bookings">
     onSuccess: async (_data, variables) => {
       await invalidateBookingQueries(queryClient, variables.userId);
     }
+  });
+}
+
+export function processBookingBalanceMutationOptions(
+  client: Pick<ApiClient, "bookings">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      bookingId,
+      provider = "cash",
+      referenceNo,
+      screenshotUrl,
+    }: {
+      bookingId: string;
+      provider?: BookingBalancePaymentProvider;
+      referenceNo?: string;
+      screenshotUrl?: string;
+    }) =>
+      client.bookings.processBalance(bookingId, {
+        provider,
+        referenceNo,
+        screenshotUrl,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateBookingQueries(queryClient),
+        invalidateStaffBookingQueries(queryClient),
+        invalidateVenueQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+      ]);
+    },
   });
 }

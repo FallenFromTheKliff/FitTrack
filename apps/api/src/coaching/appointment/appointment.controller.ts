@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  GoneException,
   Get,
   Headers,
   Param,
@@ -38,7 +39,6 @@ import {
   CreateAppointmentDTO,
   InitiateAppointmentPaymentDTO,
   RespondAppointmentDTO,
-  SetAvailabilityDTO,
 } from './dto/appointment.dto';
 
 function apiEnvelopeSchema(ref: string) {
@@ -115,7 +115,7 @@ export class AppointmentController {
 
   @Post('coaches/availability')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Replace the authenticated coach weekly availability.',
@@ -125,12 +125,10 @@ export class AppointmentController {
     description: 'Availability updated.',
     schema: nullableEnvelopeSchema(),
   })
-  async setAvailability(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: SetAvailabilityDTO,
-  ) {
-    await this.appointmentService.setAvailability(user.sub, dto);
-    return null;
+  setAvailability() {
+    throw new GoneException(
+      'Coach user availability endpoints are no longer supported. Use /staff/coaches/:id/availability.',
+    );
   }
 
   @Post('appointments')
@@ -169,7 +167,7 @@ export class AppointmentController {
 
   @Get('appointments/coach')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get the authenticated coach appointment schedule.',
@@ -181,20 +179,19 @@ export class AppointmentController {
       getSchemaPath(CoachScheduleAppointmentResponseDTO),
     ),
   })
-  getCoachAppointments(
-    @CurrentUser() user: JwtPayload,
-    @Query() dto: DateRangeDTO,
-  ) {
-    return this.appointmentService.getCoachAppointments(user.sub, dto);
+  getCoachAppointments() {
+    throw new GoneException(
+      'Coach user schedule endpoints are no longer supported. Use /staff/appointments.',
+    );
   }
 
   @Patch('appointments/:id/respond')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary:
-      'Accept or reject a pending appointment request as the owning coach.',
+      'Accept or reject a pending appointment request as staff or admin.',
   })
   @ApiResponse({
     status: 200,
@@ -206,7 +203,11 @@ export class AppointmentController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: RespondAppointmentDTO,
   ) {
-    return this.appointmentService.respondToAppointment(user.sub, id, dto);
+    return this.appointmentService.respondToAppointmentAsStaff(
+      user.sub,
+      id,
+      dto,
+    );
   }
 
   @Patch('appointments/:id/cancel')
@@ -262,6 +263,7 @@ export class AppointmentController {
   ) {
     return this.appointmentService.initiateDownpayment(
       user.sub,
+      user.role,
       id,
       dto,
       idempotencyKey,
@@ -290,10 +292,10 @@ export class AppointmentController {
 
   @Patch('appointments/:id/complete')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.coach)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Mark a confirmed coaching appointment complete as the coach.',
+    summary: 'Mark a confirmed coaching appointment complete as staff.',
   })
   @ApiResponse({
     status: 200,
@@ -305,6 +307,10 @@ export class AppointmentController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CompleteAppointmentDTO,
   ) {
-    return this.appointmentService.completeAppointment(user.sub, id, dto);
+    return this.appointmentService.completeAppointmentAsStaff(
+      user.sub,
+      id,
+      dto,
+    );
   }
 }

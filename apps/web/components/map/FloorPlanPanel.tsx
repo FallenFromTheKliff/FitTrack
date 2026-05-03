@@ -1,5 +1,12 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+} from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { Map } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -13,7 +20,10 @@ import FitButton from "@/components/fit/FitButton";
 import { FitModal } from "@/components/modals";
 import { getVenueIcon, COLS, ROWS } from "@/data/facilities/mapTypes";
 import type { VenueEquipmentAssignments } from "@/data/facilities/mapTypes";
-import type { FacilityFloorDefinition, FloorVenueRecord } from "@/data/facilities/floorPlans";
+import type {
+  FacilityFloorDefinition,
+  FloorVenueRecord,
+} from "@/data/facilities/floorPlans";
 import {
   VENUE_BOOKING_OPTIONS,
   VENUE_ICON_OPTIONS,
@@ -44,9 +54,7 @@ type Props = {
   floorPlanPadding: number;
   floorPlanMinHeight: number;
   floorImageUrl?: string | null;
-  isFloorImageUploading?: boolean;
   selectedVenueMapId?: string | null;
-  onUploadFloorImage?: (file: File) => void;
   onRequestDelete: (venueMapId: string, equipmentId: string) => void;
   selectedEquipmentId?: string | null;
   selectedEquipmentName?: string | null;
@@ -61,14 +69,21 @@ type Props = {
     template: QuickFloorRegionTemplate,
     placement: VenueCellPlacement,
   ) => void;
-  onNudgeVenue?: (venueMapId: string, delta: { column: number; row: number }) => void;
-  onResizeVenue?: (venueMapId: string, delta: { width: number; height: number }) => void;
+  onNudgeVenue?: (
+    venueMapId: string,
+    delta: { column: number; row: number },
+  ) => void;
+  onResizeVenue?: (
+    venueMapId: string,
+    delta: { width: number; height: number },
+  ) => void;
   isVenueSubmitting?: boolean;
   onSubmitVenueEdit?: (
     venueMapId: string,
     data: Record<string, string>,
   ) => Promise<boolean>;
   onRequestVenueDelete?: (venueMapId: string) => void;
+  onOpenEquipment: () => void;
   onSelectVenue: (venue: FloorVenueRecord) => void;
   onOpenVenues: () => void;
 };
@@ -93,8 +108,14 @@ type VenueCardProps = {
   onRequestDelete: (venueMapId: string, equipmentId: string) => void;
   onMoveDragStart: (venueMapId: string) => void;
   onMoveVenue?: (venueMapId: string, placement: VenueCellPlacement) => void;
-  onNudgeVenue?: (venueMapId: string, delta: { column: number; row: number }) => void;
-  onResizeVenue?: (venueMapId: string, delta: { width: number; height: number }) => void;
+  onNudgeVenue?: (
+    venueMapId: string,
+    delta: { column: number; row: number },
+  ) => void;
+  onResizeVenue?: (
+    venueMapId: string,
+    delta: { width: number; height: number },
+  ) => void;
   onOpenEditModal?: (venue: FloorVenueRecord) => void;
 };
 
@@ -167,8 +188,16 @@ function resolveCanvasDropCell(
     return null;
   }
 
-  const localX = clamp(("clientX" in event ? event.clientX : 0) - rect.left, 0, rect.width - 1);
-  const localY = clamp(("clientY" in event ? event.clientY : 0) - rect.top, 0, rect.height - 1);
+  const localX = clamp(
+    ("clientX" in event ? event.clientX : 0) - rect.left,
+    0,
+    rect.width - 1,
+  );
+  const localY = clamp(
+    ("clientY" in event ? event.clientY : 0) - rect.top,
+    0,
+    rect.height - 1,
+  );
 
   return {
     gridColumn: clamp(Math.floor((localX / rect.width) * COLS) + 1, 1, COLS),
@@ -196,10 +225,12 @@ function VenueCard({
 }: VenueCardProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `venue-${venue.mapId}`,
-    disabled: !isEditMode
+    disabled: !isEditMode,
   });
   const Icon = getVenueIcon(venue.iconKey);
-  const assignedEquipment = assignedIds.map((itemId) => equipmentById[itemId]).filter(Boolean);
+  const assignedEquipment = assignedIds
+    .map((itemId) => equipmentById[itemId])
+    .filter(Boolean);
   const iconSize = assignedEquipment.length >= 6 ? 12 : 14;
   const gridColumn = Math.max(1, venue.gridColumn ?? 1);
   const gridRow = Math.max(1, venue.gridRow ?? 1);
@@ -229,8 +260,9 @@ function VenueCard({
           position: "absolute",
           inset: 0,
           borderRadius: 9,
-          backgroundColor: isOver || isSelected ? colors.brand : markerBackground,
-          opacity: 0.5
+          backgroundColor:
+            isOver || isSelected ? colors.brand : markerBackground,
+          opacity: 0.5,
         }}
       />
       <div
@@ -242,70 +274,101 @@ function VenueCard({
           justifyItems: "center",
           gap: 4,
           width: "100%",
-          minWidth: 0
+          minWidth: 0,
         }}
       >
         <Icon size={16} color={colors.brand} strokeWidth={2} />
-        <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textPrimary, textAlign: "center" }}>
+        <FitText
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: colors.textPrimary,
+            textAlign: "center",
+          }}
+        >
           {venue.name}
         </FitText>
         <div style={{ display: "grid", gap: 4, width: "100%" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", minHeight: 22 }}>
-            {assignedEquipment.length > 0 ? assignedEquipment.map((item) => (
-              <div
-                key={`${venue.mapId}-${item.id}`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 4,
-                  minWidth: 22,
-                  height: 22,
-                  padding: "0 6px",
-                  borderRadius: 999,
-                  border: `1px solid ${item.color}`,
-                  backgroundColor: `${item.color}22`,
-                  color: item.color
-                }}
-                title={item.name}
-              >
-                <item.icon size={iconSize} color={item.color} strokeWidth={2} />
-                {isEditMode ? (
-                  <span
-                    aria-label={`Remove ${item.name} from ${venue.name}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onRequestDelete(venue.mapId, item.id);
-                    }}
-                    style={{
-                      minWidth: 12,
-                      height: 12,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "none",
-                      backgroundColor: "transparent",
-                      color: item.color,
-                      fontSize: 11,
-                      lineHeight: 1,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      userSelect: "none"
-                    }}
-                  >
-                    x
-                  </span>
-                ) : null}
-              </div>
-            )) : (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 4,
+              justifyContent: "center",
+              minHeight: 22,
+            }}
+          >
+            {assignedEquipment.length > 0 ? (
+              assignedEquipment.map((item) => (
+                <div
+                  key={`${venue.mapId}-${item.id}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
+                    minWidth: 22,
+                    height: 22,
+                    padding: "0 6px",
+                    borderRadius: 999,
+                    border: `1px solid ${item.color}`,
+                    backgroundColor: `${item.color}22`,
+                    color: item.color,
+                  }}
+                  title={item.name}
+                >
+                  <item.icon
+                    size={iconSize}
+                    color={item.color}
+                    strokeWidth={2}
+                  />
+                  {isEditMode ? (
+                    <span
+                      aria-label={`Remove ${item.name} from ${venue.name}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onRequestDelete(venue.mapId, item.id);
+                      }}
+                      style={{
+                        minWidth: 12,
+                        height: 12,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        border: "none",
+                        backgroundColor: "transparent",
+                        color: item.color,
+                        fontSize: 11,
+                        lineHeight: 1,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
+                    >
+                      x
+                    </span>
+                  ) : null}
+                </div>
+              ))
+            ) : (
               <FitText style={{ fontSize: 10, color: colors.textMuted }}>
-                {isEditMode ? "Drop equipment here" : venue.isReservable === false ? "Facility zone" : "Reservable"}
+                {isEditMode
+                  ? "Drop equipment here"
+                  : venue.isReservable === false
+                    ? "Facility zone"
+                    : "Reservable"}
               </FitText>
             )}
           </div>
           {assignedEquipment.length > 0 ? (
-            <FitText style={{ fontSize: 10, color: colors.textMuted, textAlign: "center" }}>
+            <FitText
+              style={{
+                fontSize: 10,
+                color: colors.textMuted,
+                textAlign: "center",
+              }}
+            >
               {venue.isReservable === false ? "Facility zone" : "Reservable"}
             </FitText>
           ) : null}
@@ -329,16 +392,24 @@ function VenueCard({
             return;
           }
           event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("application/x-fittrack-venue-map-id", venue.mapId);
+          event.dataTransfer.setData(
+            "application/x-fittrack-venue-map-id",
+            venue.mapId,
+          );
           onMoveDragStart(venue.mapId);
         }}
         onDragOver={(event) => {
-          if (event.dataTransfer.types.includes("application/x-fittrack-venue-map-id")) {
+          if (
+            event.dataTransfer.types.includes(
+              "application/x-fittrack-venue-map-id",
+            )
+          ) {
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
             return;
           }
-          const hasDraggedEquipment = event.dataTransfer.types.includes("text/plain");
+          const hasDraggedEquipment =
+            event.dataTransfer.types.includes("text/plain");
           if (!selectedEquipmentId && !hasDraggedEquipment) {
             return;
           }
@@ -346,9 +417,15 @@ function VenueCard({
           event.dataTransfer.dropEffect = "copy";
         }}
         onDrop={(event) => {
-          if (event.dataTransfer.types.includes("application/x-fittrack-venue-map-id")) {
+          if (
+            event.dataTransfer.types.includes(
+              "application/x-fittrack-venue-map-id",
+            )
+          ) {
             event.preventDefault();
-            const movedVenueMapId = event.dataTransfer.getData("application/x-fittrack-venue-map-id");
+            const movedVenueMapId = event.dataTransfer.getData(
+              "application/x-fittrack-venue-map-id",
+            );
             const preferredCell = resolveVenueDropCell(event, venue);
             if (movedVenueMapId && preferredCell && onMoveVenue) {
               onMoveVenue(movedVenueMapId, preferredCell);
@@ -372,12 +449,11 @@ function VenueCard({
         }}
         style={{
           ...sharedStyle,
-          cursor:
-            selectedEquipmentId
-              ? "copy"
-              : canDragVenue
-                ? "grab"
-                : "default",
+          cursor: selectedEquipmentId
+            ? "copy"
+            : canDragVenue
+              ? "grab"
+              : "default",
           touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
@@ -405,43 +481,163 @@ function VenueCard({
 
 function FloorPlanSvg({
   colors,
-  floor
+  floor,
 }: {
   colors: ThemeColors;
   floor: FacilityFloorDefinition;
 }) {
   if (floor.id === "floor-2") {
     return (
-      <svg viewBox="0 0 140 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }} aria-hidden>
-        <rect x="4" y="8" width="132" height="84" rx="18" fill={colors.brand} opacity={0.08} />
-        <path d="M10 14h44v30H10z" fill={colors.surface} opacity={0.55} stroke={colors.border} strokeWidth="1.5" />
-        <path d="M58 14h72v30H58z" fill={colors.surfaceRaised} opacity={0.7} stroke={colors.border} strokeWidth="1.5" />
-        <path d="M18 50h48v34H18z" fill={colors.surfaceRaised} opacity={0.72} stroke={colors.border} strokeWidth="1.5" />
-        <path d="M70 50h54v34H70z" fill={colors.surface} opacity={0.55} stroke={colors.border} strokeWidth="1.5" />
-        <path d="M44 38h52v24H44z" fill="none" stroke={colors.brand} strokeWidth="2" strokeDasharray="4 4" opacity={0.75} />
+      <svg
+        viewBox="0 0 140 100"
+        preserveAspectRatio="none"
+        style={{ width: "100%", height: "100%" }}
+        aria-hidden
+      >
+        <rect
+          x="4"
+          y="8"
+          width="132"
+          height="84"
+          rx="18"
+          fill={colors.brand}
+          opacity={0.08}
+        />
+        <path
+          d="M10 14h44v30H10z"
+          fill={colors.surface}
+          opacity={0.55}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M58 14h72v30H58z"
+          fill={colors.surfaceRaised}
+          opacity={0.7}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M18 50h48v34H18z"
+          fill={colors.surfaceRaised}
+          opacity={0.72}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M70 50h54v34H70z"
+          fill={colors.surface}
+          opacity={0.55}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M44 38h52v24H44z"
+          fill="none"
+          stroke={colors.brand}
+          strokeWidth="2"
+          strokeDasharray="4 4"
+          opacity={0.75}
+        />
       </svg>
     );
   }
 
   if (floor.id === "floor-3") {
     return (
-      <svg viewBox="0 0 140 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }} aria-hidden>
-        <rect x="6" y="10" width="128" height="80" rx="20" fill={colors.brand} opacity={0.08} />
-        <path d="M12 18h116v64H12z" fill={colors.surfaceRaised} opacity={0.68} stroke={colors.border} strokeWidth="1.5" />
-        <path d="M22 30h96v40H22z" fill={colors.surface} opacity={0.48} stroke={colors.border} strokeWidth="1.5" />
-        <circle cx="70" cy="50" r="18" fill="none" stroke={colors.brand} strokeWidth="2" opacity={0.4} />
+      <svg
+        viewBox="0 0 140 100"
+        preserveAspectRatio="none"
+        style={{ width: "100%", height: "100%" }}
+        aria-hidden
+      >
+        <rect
+          x="6"
+          y="10"
+          width="128"
+          height="80"
+          rx="20"
+          fill={colors.brand}
+          opacity={0.08}
+        />
+        <path
+          d="M12 18h116v64H12z"
+          fill={colors.surfaceRaised}
+          opacity={0.68}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M22 30h96v40H22z"
+          fill={colors.surface}
+          opacity={0.48}
+          stroke={colors.border}
+          strokeWidth="1.5"
+        />
+        <circle
+          cx="70"
+          cy="50"
+          r="18"
+          fill="none"
+          stroke={colors.brand}
+          strokeWidth="2"
+          opacity={0.4}
+        />
       </svg>
     );
   }
 
   return (
-    <svg viewBox="0 0 140 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }} aria-hidden>
-      <rect x="4" y="6" width="132" height="88" rx="18" fill={colors.brand} opacity={0.06} />
-      <path d="M8 12h44v38H8z" fill={colors.surface} opacity={0.55} stroke={colors.border} strokeWidth="1.5" />
-      <path d="M54 12h44v38H54z" fill={colors.surfaceRaised} opacity={0.7} stroke={colors.border} strokeWidth="1.5" />
-      <path d="M100 24h32v26h-32z" fill={colors.surface} opacity={0.5} stroke={colors.border} strokeWidth="1.5" />
-      <path d="M8 58h56v28H8z" fill={colors.surfaceRaised} opacity={0.72} stroke={colors.border} strokeWidth="1.5" />
-      <path d="M66 58h66v28H66z" fill={colors.surface} opacity={0.5} stroke={colors.border} strokeWidth="1.5" />
+    <svg
+      viewBox="0 0 140 100"
+      preserveAspectRatio="none"
+      style={{ width: "100%", height: "100%" }}
+      aria-hidden
+    >
+      <rect
+        x="4"
+        y="6"
+        width="132"
+        height="88"
+        rx="18"
+        fill={colors.brand}
+        opacity={0.06}
+      />
+      <path
+        d="M8 12h44v38H8z"
+        fill={colors.surface}
+        opacity={0.55}
+        stroke={colors.border}
+        strokeWidth="1.5"
+      />
+      <path
+        d="M54 12h44v38H54z"
+        fill={colors.surfaceRaised}
+        opacity={0.7}
+        stroke={colors.border}
+        strokeWidth="1.5"
+      />
+      <path
+        d="M100 24h32v26h-32z"
+        fill={colors.surface}
+        opacity={0.5}
+        stroke={colors.border}
+        strokeWidth="1.5"
+      />
+      <path
+        d="M8 58h56v28H8z"
+        fill={colors.surfaceRaised}
+        opacity={0.72}
+        stroke={colors.border}
+        strokeWidth="1.5"
+      />
+      <path
+        d="M66 58h66v28H66z"
+        fill={colors.surface}
+        opacity={0.5}
+        stroke={colors.border}
+        strokeWidth="1.5"
+      />
     </svg>
   );
 }
@@ -453,7 +649,7 @@ function hexToRgb(hex: string) {
   return {
     r: (value >> 16) & 255,
     g: (value >> 8) & 255,
-    b: value & 255
+    b: value & 255,
   };
 }
 
@@ -467,7 +663,9 @@ function darken(hex: string, amount: number) {
   const rgb = hexToRgb(hex);
   if (!rgb) return hex;
   const next = [rgb.r, rgb.g, rgb.b]
-    .map((value) => Math.max(0, Math.min(255, Math.round(value * (1 - amount)))))
+    .map((value) =>
+      Math.max(0, Math.min(255, Math.round(value * (1 - amount)))),
+    )
     .map((value) => value.toString(16).padStart(2, "0"))
     .join("");
   return `#${next}`;
@@ -484,9 +682,7 @@ export function FloorPlanPanel({
   floorPlanPadding,
   floorPlanMinHeight,
   floorImageUrl,
-  isFloorImageUploading = false,
   selectedVenueMapId,
-  onUploadFloorImage,
   onRequestDelete,
   selectedEquipmentId,
   selectedEquipmentName,
@@ -499,8 +695,9 @@ export function FloorPlanPanel({
   isVenueSubmitting = false,
   onSubmitVenueEdit,
   onRequestVenueDelete,
+  onOpenEquipment,
   onSelectVenue,
-  onOpenVenues
+  onOpenVenues,
 }: Props) {
   const gap = isCompact ? 1 : 2;
   const baseBrightness = brightness(colors.base);
@@ -512,16 +709,26 @@ export function FloorPlanPanel({
   const mapBackground = lowContrast ? darken(colors.base, 0.16) : colors.base;
   const markerBackground = lowContrast ? colors.surface : colors.surfaceRaised;
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const floorImageInputRef = useRef<HTMLInputElement | null>(null);
-  const panStartRef = useRef<{ pointerX: number; pointerY: number; panX: number; panY: number } | null>(null);
+  const panStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [hoverCell, setHoverCell] = useState<VenueCellPlacement | null>(null);
   const [isRegionDragOver, setIsRegionDragOver] = useState(false);
-  const [editingVenueMapId, setEditingVenueMapId] = useState<string | null>(null);
-  const [repositionVenueMapId, setRepositionVenueMapId] = useState<string | null>(null);
-  const [venueFormData, setVenueFormData] = useState<Record<string, string>>({});
+  const [editingVenueMapId, setEditingVenueMapId] = useState<string | null>(
+    null,
+  );
+  const [repositionVenueMapId, setRepositionVenueMapId] = useState<
+    string | null
+  >(null);
+  const [venueFormData, setVenueFormData] = useState<Record<string, string>>(
+    {},
+  );
 
   const canvasWidth = isCompact ? 940 : 1260;
   const canvasHeight = Math.round((canvasWidth * ROWS) / COLS);
@@ -584,10 +791,16 @@ export function FloorPlanPanel({
   }, [quickRegionTemplate, selectedEquipmentId]);
 
   useEffect(() => {
-    if (editingVenueMapId && !venues.some((venue) => venue.mapId === editingVenueMapId)) {
+    if (
+      editingVenueMapId &&
+      !venues.some((venue) => venue.mapId === editingVenueMapId)
+    ) {
       setEditingVenueMapId(null);
     }
-    if (repositionVenueMapId && !venues.some((venue) => venue.mapId === repositionVenueMapId)) {
+    if (
+      repositionVenueMapId &&
+      !venues.some((venue) => venue.mapId === repositionVenueMapId)
+    ) {
       setRepositionVenueMapId(null);
     }
   }, [editingVenueMapId, repositionVenueMapId, venues]);
@@ -636,8 +849,12 @@ export function FloorPlanPanel({
 
   const handleCanvasMouseMove = (event: MouseEvent<HTMLDivElement>) => {
     if (isPanning && panStartRef.current) {
-      const nextX = panStartRef.current.panX + (event.clientX - panStartRef.current.pointerX);
-      const nextY = panStartRef.current.panY + (event.clientY - panStartRef.current.pointerY);
+      const nextX =
+        panStartRef.current.panX +
+        (event.clientX - panStartRef.current.pointerX);
+      const nextY =
+        panStartRef.current.panY +
+        (event.clientY - panStartRef.current.pointerY);
       setPan({ x: nextX, y: nextY });
     }
 
@@ -680,7 +897,9 @@ export function FloorPlanPanel({
   };
 
   const handleCanvasDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!event.dataTransfer.types.includes("application/x-fittrack-venue-map-id")) {
+    if (
+      !event.dataTransfer.types.includes("application/x-fittrack-venue-map-id")
+    ) {
       return;
     }
 
@@ -690,7 +909,9 @@ export function FloorPlanPanel({
   };
 
   const handleCanvasDrop = (event: DragEvent<HTMLDivElement>) => {
-    const draggedVenueMapId = event.dataTransfer.getData("application/x-fittrack-venue-map-id");
+    const draggedVenueMapId = event.dataTransfer.getData(
+      "application/x-fittrack-venue-map-id",
+    );
     if (!draggedVenueMapId || !onMoveVenue) {
       return;
     }
@@ -731,41 +952,40 @@ export function FloorPlanPanel({
         minWidth: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 10, gap: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          marginBottom: 10,
+          gap: 10,
+        }}
+      >
         <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <FitText style={{ fontSize: 13, fontWeight: 700 }}>{floor.label} Floor Plan</FitText>
-            <FitButton variant="ghost" label="VENUES >" onClick={onOpenVenues} />
-            {onUploadFloorImage ? (
-              <>
-                <input
-                  ref={floorImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    onUploadFloorImage(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <FitButton
-                  variant="ghost"
-                  label={
-                    isFloorImageUploading
-                      ? "UPLOADING..."
-                      : renderableFloorImageUrl
-                        ? "EDIT IMAGE"
-                        : "ADD IMAGE"
-                  }
-                  onClick={() => floorImageInputRef.current?.click()}
-                  disabled={isFloorImageUploading}
-                />
-              </>
-            ) : null}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <FitText style={{ fontSize: 13, fontWeight: 700 }}>
+              {floor.label} Floor Plan
+            </FitText>
+            <FitButton
+              variant="ghost"
+              label="VENUES >"
+              onClick={onOpenVenues}
+            />
+            <FitButton
+              variant="ghost"
+              label="EQUIPMENT >"
+              onClick={onOpenEquipment}
+            />
           </div>
-          <FitText style={{ fontSize: 11, color: colors.textMuted }}>{floor.subtitle}</FitText>
+          <FitText style={{ fontSize: 11, color: colors.textMuted }}>
+            {floor.subtitle}
+          </FitText>
         </div>
       </div>
       <div
@@ -778,7 +998,7 @@ export function FloorPlanPanel({
           minHeight: floorPlanMinHeight,
           maxHeight: isCompact ? "none" : 640,
           flex: 1,
-          overflow: "hidden"
+          overflow: "hidden",
         }}
       >
         <div
@@ -795,17 +1015,32 @@ export function FloorPlanPanel({
           <FitButton
             variant="ghost"
             label="-"
-            onClick={() => setZoom((prev) => clamp(Number((prev - 0.1).toFixed(2)), 0.7, 2.4))}
+            onClick={() =>
+              setZoom((prev) =>
+                clamp(Number((prev - 0.1).toFixed(2)), 0.7, 2.4),
+              )
+            }
             disabled={zoom <= 0.7}
             style={{ minWidth: 30, padding: "4px 8px" }}
           />
-          <FitText style={{ fontSize: 11, minWidth: 44, textAlign: "center", color: colors.textMuted }}>
+          <FitText
+            style={{
+              fontSize: 11,
+              minWidth: 44,
+              textAlign: "center",
+              color: colors.textMuted,
+            }}
+          >
             {zoomLabel}
           </FitText>
           <FitButton
             variant="ghost"
             label="+"
-            onClick={() => setZoom((prev) => clamp(Number((prev + 0.1).toFixed(2)), 0.7, 2.4))}
+            onClick={() =>
+              setZoom((prev) =>
+                clamp(Number((prev + 0.1).toFixed(2)), 0.7, 2.4),
+              )
+            }
             disabled={zoom >= 2.4}
             style={{ minWidth: 30, padding: "4px 8px" }}
           />
@@ -863,7 +1098,14 @@ export function FloorPlanPanel({
             onDrop={handleCanvasDrop}
             onDragLeave={() => setIsRegionDragOver(false)}
           >
-            <div style={{ position: "absolute", inset: 0, borderRadius: 14, overflow: "hidden" }}>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 14,
+                overflow: "hidden",
+              }}
+            >
               {renderableFloorImageUrl ? (
                 <img
                   src={renderableFloorImageUrl}
@@ -887,7 +1129,7 @@ export function FloorPlanPanel({
                 display: "grid",
                 gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))`,
-                gap
+                gap,
               }}
             >
               {venues.map((venue) => {
@@ -904,7 +1146,12 @@ export function FloorPlanPanel({
                     markerBackground={markerBackground}
                     selectedEquipmentId={selectedEquipmentId}
                     onAssignEquipmentToVenue={onAssignEquipmentToVenue}
-                    canDragVenue={isEditMode && !venue.isSystem && !quickRegionTemplate && repositionVenueMapId === venue.mapId}
+                    canDragVenue={
+                      isEditMode &&
+                      !venue.isSystem &&
+                      !quickRegionTemplate &&
+                      repositionVenueMapId === venue.mapId
+                    }
                     onSelectVenue={onSelectVenue}
                     onRequestDelete={onRequestDelete}
                     onMoveDragStart={() => onSelectVenue(venue)}
@@ -966,14 +1213,26 @@ export function FloorPlanPanel({
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  pointerEvents: "none"
+                  pointerEvents: "none",
                 }}
               >
                 <Map size={32} color={colors.textMuted} strokeWidth={1.5} />
-                <FitText style={{ marginTop: 12, fontSize: 15, color: colors.textMuted }}>
+                <FitText
+                  style={{
+                    marginTop: 12,
+                    fontSize: 15,
+                    color: colors.textMuted,
+                  }}
+                >
                   {floor.emptyTitle}
                 </FitText>
-                <FitText style={{ marginTop: 4, fontSize: 13, color: colors.textMuted }}>
+                <FitText
+                  style={{
+                    marginTop: 4,
+                    fontSize: 13,
+                    color: colors.textMuted,
+                  }}
+                >
                   {floor.emptySubtitle}
                 </FitText>
               </div>
@@ -996,12 +1255,17 @@ export function FloorPlanPanel({
         {editingVenue ? (
           <div style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "grid", gap: 8 }}>
-              <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+              <FitText
+                as="label"
+                style={{ fontSize: 12, color: colors.textMuted }}
+              >
                 Name
               </FitText>
               <FitTextInput
                 value={venueFormData.name ?? ""}
-                onChange={(event) => updateVenueFormField("name", event.target.value)}
+                onChange={(event) =>
+                  updateVenueFormField("name", event.target.value)
+                }
                 disabled={editingVenue.isSystem || isVenueSubmitting}
                 style={{
                   width: "100%",
@@ -1017,13 +1281,18 @@ export function FloorPlanPanel({
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
-              <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+              <FitText
+                as="label"
+                style={{ fontSize: 12, color: colors.textMuted }}
+              >
                 Description
               </FitText>
               <FitTextArea
                 rows={3}
                 value={venueFormData.description ?? ""}
-                onChange={(event) => updateVenueFormField("description", event.target.value)}
+                onChange={(event) =>
+                  updateVenueFormField("description", event.target.value)
+                }
                 disabled={editingVenue.isSystem || isVenueSubmitting}
                 style={{
                   width: "100%",
@@ -1038,14 +1307,25 @@ export function FloorPlanPanel({
               />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 12, color: colors.textMuted }}
+                >
                   Capacity
                 </FitText>
                 <FitTextInput
                   value={venueFormData.capacity ?? ""}
-                  onChange={(event) => updateVenueFormField("capacity", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("capacity", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1060,12 +1340,17 @@ export function FloorPlanPanel({
                 />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 12, color: colors.textMuted }}
+                >
                   Hourly Rate
                 </FitText>
                 <FitTextInput
                   value={venueFormData.hourlyRate ?? ""}
-                  onChange={(event) => updateVenueFormField("hourlyRate", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("hourlyRate", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1081,16 +1366,27 @@ export function FloorPlanPanel({
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 12, color: colors.textMuted }}
+                >
                   Icon
                 </FitText>
                 <FitSelect
                   fullWidth
                   compact
                   value={venueFormData.iconKey ?? "gym-area"}
-                  onChange={(event) => updateVenueFormField("iconKey", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("iconKey", event.target.value)
+                  }
                   options={VENUE_ICON_OPTIONS}
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
@@ -1101,14 +1397,19 @@ export function FloorPlanPanel({
                 />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 12, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 12, color: colors.textMuted }}
+                >
                   User Booking
                 </FitText>
                 <FitSelect
                   fullWidth
                   compact
                   value={venueFormData.isReservable ?? "true"}
-                  onChange={(event) => updateVenueFormField("isReservable", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("isReservable", event.target.value)
+                  }
                   options={VENUE_BOOKING_OPTIONS}
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
@@ -1131,21 +1432,34 @@ export function FloorPlanPanel({
               }}
             >
               <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                Grid Position: C{editingVenue.gridColumn ?? 1} / R{editingVenue.gridRow ?? 1}
+                Grid Position: C{editingVenue.gridColumn ?? 1} / R
+                {editingVenue.gridRow ?? 1}
               </FitText>
               <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                Region Size: {editingVenue.gridWidth ?? 1} x {editingVenue.gridHeight ?? 1}
+                Region Size: {editingVenue.gridWidth ?? 1} x{" "}
+                {editingVenue.gridHeight ?? 1}
               </FitText>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 11, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Column
                 </FitText>
                 <FitTextInput
                   value={venueFormData.gridColumn ?? ""}
-                  onChange={(event) => updateVenueFormField("gridColumn", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("gridColumn", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1160,12 +1474,17 @@ export function FloorPlanPanel({
                 />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 11, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Row
                 </FitText>
                 <FitTextInput
                   value={venueFormData.gridRow ?? ""}
-                  onChange={(event) => updateVenueFormField("gridRow", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("gridRow", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1180,12 +1499,17 @@ export function FloorPlanPanel({
                 />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 11, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Width
                 </FitText>
                 <FitTextInput
                   value={venueFormData.gridWidth ?? ""}
-                  onChange={(event) => updateVenueFormField("gridWidth", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("gridWidth", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1200,12 +1524,17 @@ export function FloorPlanPanel({
                 />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <FitText as="label" style={{ fontSize: 11, color: colors.textMuted }}>
+                <FitText
+                  as="label"
+                  style={{ fontSize: 11, color: colors.textMuted }}
+                >
                   Height
                 </FitText>
                 <FitTextInput
                   value={venueFormData.gridHeight ?? ""}
-                  onChange={(event) => updateVenueFormField("gridHeight", event.target.value)}
+                  onChange={(event) =>
+                    updateVenueFormField("gridHeight", event.target.value)
+                  }
                   disabled={editingVenue.isSystem || isVenueSubmitting}
                   style={{
                     width: "100%",
@@ -1221,68 +1550,100 @@ export function FloorPlanPanel({
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
               <FitButton
                 variant="ghost"
                 label="MOVE LEFT"
-                onClick={() => onNudgeVenue?.(editingVenue.mapId, { column: -1, row: 0 })}
+                onClick={() =>
+                  onNudgeVenue?.(editingVenue.mapId, { column: -1, row: 0 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="MOVE RIGHT"
-                onClick={() => onNudgeVenue?.(editingVenue.mapId, { column: 1, row: 0 })}
+                onClick={() =>
+                  onNudgeVenue?.(editingVenue.mapId, { column: 1, row: 0 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="MOVE UP"
-                onClick={() => onNudgeVenue?.(editingVenue.mapId, { column: 0, row: -1 })}
+                onClick={() =>
+                  onNudgeVenue?.(editingVenue.mapId, { column: 0, row: -1 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="MOVE DOWN"
-                onClick={() => onNudgeVenue?.(editingVenue.mapId, { column: 0, row: 1 })}
+                onClick={() =>
+                  onNudgeVenue?.(editingVenue.mapId, { column: 0, row: 1 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="WIDER"
-                onClick={() => onResizeVenue?.(editingVenue.mapId, { width: 1, height: 0 })}
+                onClick={() =>
+                  onResizeVenue?.(editingVenue.mapId, { width: 1, height: 0 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="NARROWER"
-                onClick={() => onResizeVenue?.(editingVenue.mapId, { width: -1, height: 0 })}
+                onClick={() =>
+                  onResizeVenue?.(editingVenue.mapId, { width: -1, height: 0 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="TALLER"
-                onClick={() => onResizeVenue?.(editingVenue.mapId, { width: 0, height: 1 })}
+                onClick={() =>
+                  onResizeVenue?.(editingVenue.mapId, { width: 0, height: 1 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
               <FitButton
                 variant="ghost"
                 label="SHORTER"
-                onClick={() => onResizeVenue?.(editingVenue.mapId, { width: 0, height: -1 })}
+                onClick={() =>
+                  onResizeVenue?.(editingVenue.mapId, { width: 0, height: -1 })
+                }
                 disabled={!canEditSelectedVenue}
                 fullWidth
               />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
               <FitButton
-                variant={repositionVenueMapId === editingVenue.mapId ? "primary" : "ghost"}
+                variant={
+                  repositionVenueMapId === editingVenue.mapId
+                    ? "primary"
+                    : "ghost"
+                }
                 label="REPOSITION"
                 onClick={() => {
                   if (!canEditSelectedVenue) {
@@ -1302,7 +1663,11 @@ export function FloorPlanPanel({
                 onClick={() => {
                   void handleSubmitVenueEdit();
                 }}
-                disabled={editingVenue.isSystem || isVenueSubmitting || !onSubmitVenueEdit}
+                disabled={
+                  editingVenue.isSystem ||
+                  isVenueSubmitting ||
+                  !onSubmitVenueEdit
+                }
                 fullWidth
               />
             </div>
@@ -1327,7 +1692,7 @@ export function FloorPlanPanel({
           borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surfaceRaised,
-          padding: "10px 12px"
+          padding: "10px 12px",
         }}
       >
         <FitText style={{ fontSize: 12, color: colors.textMuted }}>
@@ -1341,4 +1706,3 @@ export function FloorPlanPanel({
     </div>
   );
 }
-

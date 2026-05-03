@@ -55,4 +55,41 @@ export class AdminBookingsController {
   ) {
     return this.bookingService.rejectPendingBooking(id, user.sub, reason);
   }
+
+  @Patch(':id/complete')
+  @ApiOperation({
+    summary: 'Mark a confirmed venue booking complete from the admin schedule surface.',
+  })
+  async completeBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.completeConfirmedBooking(id, user.sub);
+    return null;
+  }
+
+  @Patch(':id/cancel')
+  @ApiOperation({
+    summary: 'Cancel a venue booking from the admin schedule surface.',
+  })
+  async cancelBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('reason') reason?: string,
+  ) {
+    await this.bookingService.cancelBookingAsStaff(id, user.sub, reason);
+    return null;
+  }
+
+  @Patch(':id/no-show')
+  @ApiOperation({
+    summary: 'Mark a confirmed venue booking as no-show from the admin schedule surface.',
+  })
+  async markNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.markBookingNoShowAsStaff(id, user.sub);
+    return null;
+  }
 }

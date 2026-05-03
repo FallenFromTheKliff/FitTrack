@@ -158,7 +158,7 @@ function formatBucketLabel(
     default:
       return date.toLocaleDateString('en-PH', {
         month: 'short',
-        year: short ? '2-digit' : 'numeric',
+        year: 'numeric',
       });
   }
 }

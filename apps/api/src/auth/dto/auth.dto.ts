@@ -185,3 +185,26 @@ export class ResendOtpDTO {
   @IsUUID('4', { message: 'user_id must be a valid UUID' })
   user_id: string;
 }
+
+export class AuthPortalSummaryDTO {
+  @ApiProperty({
+    example: 4,
+    description:
+      'Current active member count based on non-revoked active membership cards.',
+  })
+  active_members: number;
+
+  @ApiProperty({
+    example: 0,
+    description:
+      'Member attendance check-ins recorded today in UTC from the live database.',
+  })
+  sessions_today: number;
+
+  @ApiProperty({
+    example: '52701.00',
+    description:
+      'All-time recorded business revenue using completed membership, booking, retail, and coaching gym-share records.',
+  })
+  total_revenue: string;
+}

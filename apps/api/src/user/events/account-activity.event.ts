@@ -1,5 +1,3 @@
-import type { UserRole } from '@prisma/client';
-
 export const ACCOUNT_ACTIVITY_EVENT = 'account.activity';
 
 export type AccountActivityAction =
@@ -11,6 +9,7 @@ export type AccountActivityAction =
   | 'attendance_check_in'
   | 'membership_card_granted'
   | 'membership_card_revoked'
+  | 'payment_approved'
   | 'termination_approved'
   | 'termination_rejected';
 
@@ -20,6 +19,7 @@ export type AccountActivityEvent = {
   details?: Record<string, boolean | number | string | null>;
   occurredAt: string;
   targetEmail?: string | null;
-  targetRole?: UserRole | string | null;
+  targetName?: string | null;
+  targetRole?: string | null;
   targetUserId: string;
 };

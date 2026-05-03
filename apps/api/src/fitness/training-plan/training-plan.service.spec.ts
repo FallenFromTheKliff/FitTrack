@@ -108,16 +108,16 @@ describe('TrainingPlanService', () => {
     });
   });
 
-  it('creates coach-authored plans with transactional schedule input', async () => {
+  it('creates self-authored plans with transactional schedule input', async () => {
     repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
     repo.createPlan.mockResolvedValue(
       makePlan({
-        user_id: 'coach-user-1',
-        coach_id: 'coach-user-1',
+        user_id: 'member-1',
+        coach_id: null,
       }),
     );
 
-    await service.createPlan('coach-user-1', UserRole.coach, {
+    await service.createPlan('member-1', UserRole.member, {
       title: 'Upper / Lower Strength Builder',
       goal: FitnessGoal.bulking,
       duration_weeks: 8,
@@ -139,8 +139,8 @@ describe('TrainingPlanService', () => {
     });
 
     expect(repo.createPlan).toHaveBeenCalledWith({
-      userId: 'coach-user-1',
-      coachUserId: 'coach-user-1',
+      userId: 'member-1',
+      coachUserId: null,
       source: PlanSource.self_created,
       title: 'Upper / Lower Strength Builder',
       goal: FitnessGoal.bulking,

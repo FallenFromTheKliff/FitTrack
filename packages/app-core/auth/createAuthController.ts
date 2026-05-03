@@ -174,7 +174,10 @@ export function createAuthController({
         userId: data.user_id,
       };
     },
-    async verifyOTP(code: string) {
+    async verifyOTP(
+      code: string,
+      options?: { persistSession?: boolean },
+    ) {
       const pendingUser = pending.getPendingUser();
       if (!pendingUser?.id) {
         return { success: false as const, error: "No pending session." };
@@ -195,6 +198,10 @@ export function createAuthController({
           success: false as const,
           error: getRoleGateDeniedMessage(roleGate),
         };
+      }
+      if (options?.persistSession === false) {
+        pending.clear();
+        return { success: true as const };
       }
       await sessionStore.setTokens({
         accessToken: verify.access_token,

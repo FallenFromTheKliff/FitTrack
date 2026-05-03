@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import {
   BadRequestException,
-  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +11,11 @@ import {
   AccountDeletionRequestStatus,
   AuthProvider,
   MembershipCardSource,
+  PayableType,
+  PaymentProvider,
+  PaymentStage,
+  PaymentStatus,
+  Prisma,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -19,14 +24,14 @@ import { PrismaService } from 'prisma/prisma.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 import { UpdateMembershipCardDto, UpgradeToCoachDto } from './dto/admin.dto';
 
+const MANUAL_MEMBERSHIP_GRANT_PRICE = new Prisma.Decimal(400);
+
 function toFrontendRole(role: UserRole) {
   switch (role) {
     case UserRole.admin:
       return { id: 1, name: 'ADMIN' as const };
     case UserRole.staff:
       return { id: 2, name: 'STAFF' as const };
-    case UserRole.coach:
-      return { id: 3, name: 'COACH' as const };
     case UserRole.member:
     default:
       return { id: 4, name: 'USER' as const };
@@ -90,6 +95,18 @@ function getPreferredAccountEmail(
   );
 }
 
+function getProfileDisplayName(
+  profile?: {
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null,
+) {
+  return [profile?.first_name, profile?.last_name]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' ')
+    .trim();
+}
+
 function isQrCodeReady(qrCodeToken: string | null) {
   return typeof qrCodeToken === 'string' && qrCodeToken.trim() !== '';
 }
@@ -140,6 +157,11 @@ export class AdminUsersService {
       },
       orderBy: { created_at: 'desc' },
     });
+    const restoredAtByUserId =
+      await this.getLatestAccountActivityTimestampsByUserId(
+        users.map((user) => user.id),
+        'account_restored',
+      );
 
     return users.map((user) => {
       const primaryEmail =
@@ -160,6 +182,9 @@ export class AdminUsersService {
         emailVerified: Boolean(user.email_verified_at),
         phoneVerified: false,
         deletedAt: user.deletedAt?.toISOString() ?? null,
+        restoredAt: user.deletedAt
+          ? null
+          : (restoredAtByUserId.get(user.id)?.toISOString() ?? null),
         createdAt: user.created_at.toISOString(),
         lastCheckInAt:
           user.attendance_logs[0]?.check_in_at?.toISOString() ?? null,
@@ -220,9 +245,18 @@ export class AdminUsersService {
         },
         membership_card: {
           select: {
+            activated_at: true,
             id: true,
+            purchased_at: true,
             source: true,
             status: true,
+            verified_at: true,
+          },
+        },
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
           },
         },
       },
@@ -246,59 +280,127 @@ export class AdminUsersService {
 
     if (dto.action === 'grant') {
       const now = new Date();
-      const source =
-        dto.source ??
-        (user.membership_card
-          ? MembershipCardSource.admin_repair
-          : MembershipCardSource.admin_grant);
+      const isRestore = user.membership_card?.status === 'revoked';
+      const isFirstManualGrant = !user.membership_card;
+      const source = isRestore
+        ? MembershipCardSource.admin_repair
+        : (user.membership_card?.source ??
+          dto.source ??
+          MembershipCardSource.admin_grant);
+      const activatedAt = user.membership_card?.activated_at ?? now;
 
-      const membershipCard = await this.prisma.$transaction(async (tx) => {
-        const updatedCard = await tx.membershipCard.upsert({
-          where: { user_id: userId },
-          create: {
-            user: { connect: { id: userId } },
-            status: 'active',
-            source,
-            verified_at: now,
-            verified_by: actingUserId,
-            activated_at: now,
-          },
-          update: {
-            status: 'active',
-            source,
-            verified_at: now,
-            verified_by: actingUserId,
-            activated_at: now,
-            revoked_at: null,
-            revoked_by: null,
-            revoke_reason: null,
-          },
-        });
-
-        if (user.status === UserStatus.pending || !user.qr_code_token) {
-          await tx.user.update({
-            where: { id: userId },
-            data: {
-              ...(user.status === UserStatus.pending
-                ? { status: UserStatus.active }
-                : {}),
-              ...(!user.qr_code_token
-                ? { qr_code_token: randomBytes(32).toString('hex') }
-                : {}),
+      const { completedPayment, membershipCard } =
+        await this.prisma.$transaction(async (tx) => {
+          const updatedCard = await tx.membershipCard.upsert({
+            where: { user_id: userId },
+            create: {
+              user: { connect: { id: userId } },
+              status: 'active',
+              source,
+              verified_at: now,
+              verified_by: actingUserId,
+              activated_at: now,
+            },
+            update: {
+              status: 'active',
+              source,
+              verified_at: now,
+              verified_by: actingUserId,
+              activated_at: activatedAt,
+              revoked_at: null,
+              revoked_by: null,
+              revoke_reason: null,
             },
           });
-        }
 
-        return updatedCard;
-      });
+          if (user.status === UserStatus.pending || !user.qr_code_token) {
+            await tx.user.update({
+              where: { id: userId },
+              data: {
+                ...(user.status === UserStatus.pending
+                  ? { status: UserStatus.active }
+                  : {}),
+                ...(!user.qr_code_token
+                  ? { qr_code_token: randomBytes(32).toString('hex') }
+                  : {}),
+              },
+            });
+          }
+
+          const latestOpenPayment = await tx.payment.findFirst({
+            where: {
+              payable_id: updatedCard.id,
+              payable_type: PayableType.membership_card,
+              status: {
+                in: [
+                  PaymentStatus.pending,
+                  PaymentStatus.processing,
+                  PaymentStatus.awaiting_verification,
+                ],
+              },
+            },
+            orderBy: { created_at: 'desc' },
+          });
+
+          const settledPayment = latestOpenPayment
+            ? await tx.payment.update({
+                where: { id: latestOpenPayment.id },
+                data: {
+                  rejection_reason: null,
+                  status: PaymentStatus.completed,
+                  verified_at: now,
+                  verified_by: actingUserId,
+                },
+              })
+            : isFirstManualGrant
+              ? await tx.payment.create({
+                  data: {
+                    amount: MANUAL_MEMBERSHIP_GRANT_PRICE,
+                    idempotency_key: `admin-grant:${updatedCard.id}`,
+                    payable_id: updatedCard.id,
+                    payable_type: PayableType.membership_card,
+                    payment_stage: PaymentStage.full,
+                    provider: PaymentProvider.cash,
+                    status: PaymentStatus.completed,
+                    user: { connect: { id: userId } },
+                    verifier: { connect: { id: actingUserId } },
+                    verified_at: now,
+                  },
+                })
+              : null;
+
+          return {
+            completedPayment: settledPayment,
+            membershipCard: updatedCard,
+          };
+        });
 
       await this.emitAccountActivity({
         action: 'membership_card_granted',
         actorId: actingUserId,
         targetEmail: getPreferredAccountEmail(user.auth_identities),
+        targetName: getProfileDisplayName(user.profile),
         targetRole: user.role,
         targetUserId: user.id,
       });
+
+      if (completedPayment) {
+        await this.emitAccountActivity({
+          action: 'payment_approved',
+          actorId: actingUserId,
+          details: {
+            amount: completedPayment.amount.toString(),
+            payable_id: completedPayment.payable_id,
+            payable_type: completedPayment.payable_type,
+            payment_id: completedPayment.id,
+          },
+          occurredAt: now.toISOString(),
+          targetEmail: getPreferredAccountEmail(user.auth_identities),
+          targetName: getProfileDisplayName(user.profile),
+          targetRole: user.role,
+          targetUserId: user.id,
+        });
+      }
 
       return {
         membershipCard: toFrontendMembershipCard(user.role, membershipCard),
@@ -327,6 +429,7 @@ export class AdminUsersService {
         reason: dto.reason?.trim() || null,
       },
       targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetName: getProfileDisplayName(user.profile),
       targetRole: user.role,
       targetUserId: user.id,
     });
@@ -337,18 +440,34 @@ export class AdminUsersService {
     };
   }
 
-  async softDeleteUser(userId: string, actingUserId: string) {
+  async softDeleteUser(
+    userId: string,
+    actingUserId: string,
+    actingRole: UserRole,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
         role: true,
         deletedAt: true,
+        membership_card: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
         auth_identities: {
           select: {
             provider: true,
             identifier: true,
             is_primary: true,
+          },
+        },
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
           },
         },
       },
@@ -374,24 +493,72 @@ export class AdminUsersService {
       );
     }
 
-    const deleted = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        deletedAt: new Date(),
-      },
-      select: {
-        id: true,
-        deletedAt: true,
-      },
+    if (actingRole === UserRole.staff && user.role !== UserRole.member) {
+      throw new ForbiddenException(
+        'Staff accounts can archive member accounts only',
+      );
+    }
+
+    const archivedAt = new Date();
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const archivedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          deletedAt: archivedAt,
+        },
+        select: {
+          id: true,
+          deletedAt: true,
+        },
+      });
+
+      if (
+        user.role === UserRole.member &&
+        user.membership_card &&
+        user.membership_card.status !== 'revoked'
+      ) {
+        await tx.membershipCard.update({
+          where: { user_id: userId },
+          data: {
+            status: 'revoked',
+            revoked_at: archivedAt,
+            revoked_by: actingUserId,
+            revoke_reason: 'Automatically revoked when account was archived.',
+          },
+        });
+      }
+
+      return archivedUser;
     });
 
     await this.emitAccountActivity({
       action: 'account_archived',
       actorId: actingUserId,
+      occurredAt: archivedAt.toISOString(),
       targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetName: getProfileDisplayName(user.profile),
       targetRole: user.role,
       targetUserId: user.id,
     });
+
+    if (
+      user.role === UserRole.member &&
+      user.membership_card &&
+      user.membership_card.status !== 'revoked'
+    ) {
+      await this.emitAccountActivity({
+        action: 'membership_card_revoked',
+        actorId: actingUserId,
+        details: {
+          reason: 'Automatically revoked when account was archived.',
+        },
+        occurredAt: archivedAt.toISOString(),
+        targetEmail: getPreferredAccountEmail(user.auth_identities),
+        targetName: getProfileDisplayName(user.profile),
+        targetRole: user.role,
+        targetUserId: user.id,
+      });
+    }
 
     return {
       message: 'User archived successfully',
@@ -399,18 +566,39 @@ export class AdminUsersService {
     };
   }
 
-  async restoreUser(userId: string, actingUserId: string) {
+  async restoreUser(
+    userId: string,
+    actingUserId: string,
+    actingRole: UserRole,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
         role: true,
         deletedAt: true,
+        membership_card: {
+          select: {
+            activated_at: true,
+            id: true,
+            purchased_at: true,
+            revoked_at: true,
+            revoke_reason: true,
+            status: true,
+            verified_at: true,
+          },
+        },
         auth_identities: {
           select: {
             provider: true,
             identifier: true,
             is_primary: true,
+          },
+        },
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
           },
         },
       },
@@ -423,6 +611,18 @@ export class AdminUsersService {
     if (user.id === actingUserId) {
       throw new BadRequestException(
         'You cannot restore your own account from the members directory',
+      );
+    }
+
+    if (user.role === UserRole.admin) {
+      throw new BadRequestException(
+        'Admin accounts cannot be restored from the members directory',
+      );
+    }
+
+    if (actingRole === UserRole.staff && user.role !== UserRole.member) {
+      throw new ForbiddenException(
+        'Staff accounts can restore member and non-member accounts only',
       );
     }
 
@@ -443,18 +643,30 @@ export class AdminUsersService {
       throw new BadRequestException('User is already active');
     }
 
+    const restoredAt = new Date();
+    const wasAutoRevokedByArchive =
+      user.role === UserRole.member &&
+      Boolean(user.deletedAt) &&
+      user.membership_card?.status === 'revoked' &&
+      user.membership_card.revoke_reason ===
+        'Automatically revoked when account was archived.' &&
+      Boolean(user.membership_card.revoked_at) &&
+      Math.abs(
+        user.membership_card.revoked_at!.getTime() - user.deletedAt!.getTime(),
+      ) <= 60_000;
+
     const restoredUser = await this.prisma.$transaction(async (tx) => {
       if (pendingRequest) {
         await tx.accountDeletionRequest.update({
           where: { id: pendingRequest.id },
           data: {
             status: AccountDeletionRequestStatus.cancelled,
-            reviewNotes: 'Cancelled by admin restore',
+            reviewNotes: 'Cancelled by account restore',
           },
         });
       }
 
-      return tx.user.update({
+      const updatedUser = await tx.user.update({
         where: { id: userId },
         data: {
           deletedAt: null,
@@ -464,100 +676,67 @@ export class AdminUsersService {
           deletedAt: true,
         },
       });
+
+      if (wasAutoRevokedByArchive && user.membership_card) {
+        await tx.membershipCard.update({
+          where: { id: user.membership_card.id },
+          data: {
+            status: 'active',
+            activated_at: user.membership_card.activated_at ?? restoredAt,
+            verified_at: restoredAt,
+            verified_by: actingUserId,
+            revoked_at: null,
+            revoked_by: null,
+            revoke_reason: null,
+          },
+        });
+      }
+
+      return updatedUser;
     });
 
     await this.emitAccountActivity({
       action: 'account_restored',
       actorId: actingUserId,
+      occurredAt: restoredAt.toISOString(),
       targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetName: getProfileDisplayName(user.profile),
       targetRole: user.role,
       targetUserId: user.id,
     });
+
+    if (wasAutoRevokedByArchive) {
+      await this.emitAccountActivity({
+        action: 'membership_card_granted',
+        actorId: actingUserId,
+        details: {
+          reason: 'Automatically restored when account was unarchived.',
+        },
+        occurredAt: restoredAt.toISOString(),
+        targetEmail: getPreferredAccountEmail(user.auth_identities),
+        targetName: getProfileDisplayName(user.profile),
+        targetRole: user.role,
+        targetUserId: user.id,
+      });
+    }
 
     return {
       message: 'User restored successfully',
       user: {
         id: restoredUser.id,
         deletedAt: restoredUser.deletedAt?.toISOString() ?? null,
+        restoredAt: restoredAt.toISOString(),
+        membershipCardRestored: wasAutoRevokedByArchive,
       },
     };
   }
 
-  async upgradeToCoach(dto: UpgradeToCoachDto, actingUserId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-      select: {
-        id: true,
-        role: true,
-        deletedAt: true,
-        auth_identities: {
-          select: {
-            provider: true,
-            identifier: true,
-            is_primary: true,
-          },
-        },
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.deletedAt) {
-      throw new BadRequestException('Deleted users cannot be upgraded');
-    }
-
-    if (user.role === UserRole.admin) {
-      throw new BadRequestException(
-        'Admin accounts cannot be upgraded to coach',
-      );
-    }
-
-    const existingCoachProfile = await this.prisma.coachProfile.findUnique({
-      where: { user_id: dto.userId },
-      select: { id: true },
-    });
-
-    if (user.role === UserRole.coach || existingCoachProfile) {
-      throw new ConflictException('User is already a coach');
-    }
-
-    const coachProfile = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: dto.userId },
-        data: { role: UserRole.coach },
-      });
-
-      return tx.coachProfile.create({
-        data: {
-          user_id: dto.userId,
-          specialization: dto.specialties.join(', '),
-          bio: dto.bio?.trim() || null,
-          certification:
-            dto.certifications && dto.certifications.length > 0
-              ? dto.certifications.join(', ')
-              : null,
-          hourly_rate: dto.hourlyRate,
-        },
-      });
-    });
-
-    await this.emitAccountActivity({
-      action: 'coach_upgraded',
-      actorId: actingUserId,
-      targetEmail: getPreferredAccountEmail(user.auth_identities),
-      targetRole: UserRole.coach,
-      targetUserId: dto.userId,
-    });
-
-    return {
-      message: 'User upgraded to coach successfully',
-      coach: {
-        id: coachProfile.id,
-        userId: dto.userId,
-      },
-    };
+  upgradeToCoach(dto: UpgradeToCoachDto, actingUserId: string) {
+    void dto;
+    void actingUserId;
+    throw new BadRequestException(
+      'Coach user accounts are no longer supported. Create standalone coach profiles from Gym Operations instead.',
+    );
   }
 
   private async emitAccountActivity(event: {
@@ -566,16 +745,57 @@ export class AdminUsersService {
       | 'account_restored'
       | 'coach_upgraded'
       | 'membership_card_granted'
-      | 'membership_card_revoked';
+      | 'membership_card_revoked'
+      | 'payment_approved';
     actorId: string;
     details?: Record<string, boolean | number | string | null>;
+    occurredAt?: string;
     targetEmail?: string | null;
-    targetRole?: UserRole | string | null;
+    targetName?: string | null;
+    targetRole?: UserRole | null;
     targetUserId: string;
   }) {
     await this.eventEmitter?.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       ...event,
-      occurredAt: new Date().toISOString(),
+      occurredAt: event.occurredAt ?? new Date().toISOString(),
     });
+  }
+
+  private async getLatestAccountActivityTimestampsByUserId(
+    userIds: string[],
+    action: 'account_archived' | 'account_restored',
+  ) {
+    if (userIds.length === 0) {
+      return new Map<string, Date>();
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ occurredAt: Date; targetUserId: string }>
+    >(Prisma.sql`
+      SELECT
+        (data->>'target_user_id') AS "targetUserId",
+        MAX(COALESCE((data->>'occurred_at')::timestamptz, created_at)) AS "occurredAt"
+      FROM notifications
+      WHERE
+        data->>'kind' = 'account_activity'
+        AND data->>'action' = ${action}
+        AND data->>'target_user_id' IN (${Prisma.join(
+          userIds.map((userId) => Prisma.sql`${userId}`),
+        )})
+      GROUP BY data->>'target_user_id'
+    `);
+
+    return new Map(
+      rows
+        .filter(
+          (
+            row,
+          ): row is {
+            occurredAt: Date;
+            targetUserId: string;
+          } => Boolean(row.targetUserId && row.occurredAt),
+        )
+        .map((row) => [row.targetUserId, new Date(row.occurredAt)]),
+    );
   }
 }

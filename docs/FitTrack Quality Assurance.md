@@ -807,7 +807,6 @@ Existing behavior to fix if still present:
 Deferred unless explicitly approved:
 - refund policy automation
 - automatic 24h/1h reminders
-- recurring payment/subscription billing
 - coach payroll impacts
 - complex custom recurrence rules beyond weekly/biweekly and simple selected days
 - venue conflict logic if coaching appointments do not currently reserve venues
@@ -824,6 +823,18 @@ QA requirements:
 - prove preview does not persist rows
 - prove confirm creates one parent plan and the correct number of child appointment rows
 - prove child sessions appear in the existing schedule endpoints
+
+Recurring payment-flow audit:
+- PayMongo is already integrated and should be reused, not rewired.
+- Existing PayMongo-backed flows include membership/subscription checkout, membership-card purchase, venue-booking checkout, coaching-appointment downpayment checkout, booking/appointment balance collection, inventory sale checkout, and the shared `/v1/payments/webhook` endpoint.
+- Cash/manual payment verification already exists through the shared payments module and Admin/Staff verification flow.
+- One-time venue bookings and one-time coach appointments create shared `payments` rows and complete through `payment.completed`.
+- Recurring coaching plans now create monthly billing-cycle rows in `recurring_coaching_billing_cycles` when a plan is confirmed.
+- Recurring-cycle payments use the shared `payments` table with `payable_type = recurring_coaching`.
+- Cash recurring-cycle payment starts as `awaiting_verification`; Admin/Staff approval through the existing payment verification flow marks the cycle paid and confirms that month’s generated sessions.
+- PayMongo recurring-cycle payment uses the existing checkout service and shared `/v1/payments/webhook`; completed webhook payment marks the cycle paid and confirms that month’s generated sessions.
+- A recurring-billing lifecycle job now cancels/deactivates recurring plans when an unpaid cycle exceeds its 7-day grace window.
+- The web recurring appointment review modal now displays billing-cycle amount, due date, paid date, and status for the current plan.
 - prove a single-session edit does not change future sessions
 - prove a future-series edit does not alter completed or past sessions
 - prove cancel preserves completed sessions and cancels only future non-completed sessions
@@ -883,6 +894,27 @@ Use this checklist after module work is done.
 - [x] Admin and Staff role access matches the current Staff-parity decision for Gym Operations.
 - [x] Mobile/member creation is explicitly deferred; backend member-owned contract exists, but mobile creation UI was not found in the verified mobile surface.
 
+### E3. Payments / PayMongo / Recurring Billing
+- [ ] PayMongo checkout can be started from mobile venue booking and redirects to the hosted checkout URL.
+- [ ] PayMongo checkout can be started from mobile coach appointment downpayment and redirects to the hosted checkout URL.
+- [ ] PayMongo webhook `/v1/payments/webhook` receives the tunnel callback and marks the linked payment `completed`.
+- [ ] Completed PayMongo venue-booking payment moves the booking out of pending state and records the paid timestamp.
+- [ ] Completed PayMongo coach-appointment downpayment moves the appointment from `pending_payment` to `confirmed` and records `downpayment_paid_at`.
+- [ ] Cash venue booking remains pending until Admin/Staff confirms or verifies the payment.
+- [ ] Cash coach appointment or balance payment remains pending/awaiting verification until Admin/Staff confirms or verifies it.
+- [ ] Admin/Staff payment approval emits the expected notification and updates member payment history from processing/pending to completed.
+- [ ] Analytics revenue increases only after a payment is completed/verified, not merely after a pending checkout is created.
+- [ ] Membership application/payment approval updates membership-card state and is reflected in member access/payment history.
+- [ ] Booking, membership, coach appointment, and PayMongo payment amounts match exactly: total amount, downpayment, balance, provider amount, and analytics amount.
+- [x] Recurring coach plans create monthly billing-cycle rows from persisted generated sessions.
+- [x] Recurring coach-plan modal displays billing-cycle amount, due date, paid date, and status.
+- [x] Recurring coaching billing cycles can start PayMongo checkout through the existing checkout integration.
+- [x] Recurring coaching billing cycles can start cash/manual verification through the shared payments module.
+- [x] Completed recurring-cycle payments confirm the matching month’s pending generated sessions through the shared `payment.completed` event.
+- [x] Recurring coaching revenue includes completed `recurring_coaching` payments in analytics coaching totals and gym-share revenue.
+- [x] 7-day overdue auto-cancellation/deactivation is wired through the coaching lifecycle queue.
+- [ ] Browser/API proof still needed for a full recurring-cycle PayMongo checkout, webhook completion, monthly session activation, analytics refresh, and 7-day overdue cancellation run.
+
 ### F. AI / Export / Reporting
 - [x] Analytics export PDF uses real section data.
 - [x] AI insight blocks are section-specific.
@@ -901,6 +933,7 @@ Use this checklist after module work is done.
 - [x] Swagger contract checked for touched inventory, notification, analytics, auth, and recurring-plan surfaces where runtime API was available.
 - [x] Prisma/DB truth checked for data-sensitive inventory, notification, analytics, and account-count flows.
 - [x] Tests/typecheck run where practical and blockers reported honestly.
+- [x] API build passed after recurring-coaching billing changes.
 - [x] Web typecheck passed in the latest QA pass.
 - [x] Mobile typecheck passed in the latest QA pass.
 - [ ] API lint is not clean yet; current blocker is existing CRLF/Prettier and unsafe-type errors across API files.

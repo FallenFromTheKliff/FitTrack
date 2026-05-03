@@ -739,39 +739,31 @@ export function useFloorLayout() {
       .filter((item) => item.isActive && item.quantityCurrent > 0)
       .map((item) => buildInventoryPaletteEquipment(item, displayEquipmentCatalogById));
 
-    if (activeInventoryEquipment.length > 0) {
-      const aggregatedByPlacementKey = new Map<string, FacilityPaletteEquipmentWithPlacement>();
+    const aggregatedByPlacementKey = new Map<string, FacilityPaletteEquipmentWithPlacement>();
 
-      activeInventoryEquipment.forEach((item) => {
-        const placementKey = resolvePalettePlacementKey(item);
-        const existing = aggregatedByPlacementKey.get(placementKey);
+    activeInventoryEquipment.forEach((item) => {
+      const placementKey = resolvePalettePlacementKey(item);
+      const existing = aggregatedByPlacementKey.get(placementKey);
 
-        if (existing) {
-          existing.quantityAvailable =
-            (existing.quantityAvailable ?? 0) + (item.quantityAvailable ?? 0);
-          return;
-        }
+      if (existing) {
+        existing.quantityAvailable =
+          (existing.quantityAvailable ?? 0) + (item.quantityAvailable ?? 0);
+        return;
+      }
 
-        aggregatedByPlacementKey.set(placementKey, {
-          ...item,
-          id: placementKey,
-          iconKey: item.iconKey ?? placementKey,
-          placementKey,
-          name: item.name,
-          quantityAvailable: item.quantityAvailable ?? 0,
-        });
+      aggregatedByPlacementKey.set(placementKey, {
+        ...item,
+        id: placementKey,
+        iconKey: item.iconKey ?? placementKey,
+        placementKey,
+        name: item.name,
+        quantityAvailable: item.quantityAvailable ?? 0,
       });
+    });
 
-      return Array.from(aggregatedByPlacementKey.values()).sort((left, right) =>
-        left.name.localeCompare(right.name),
-      );
-    }
-
-    return EQUIPMENT.map((item) => ({
-      ...item,
-      iconKey: item.iconKey ?? item.id,
-      placementKey: normalizeEquipmentKey(item.iconKey ?? item.id),
-    }));
+    return Array.from(aggregatedByPlacementKey.values()).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
   }, [displayEquipmentCatalogById, inventoryEquipment]);
   const equipmentPaletteById = useMemo(
     () =>

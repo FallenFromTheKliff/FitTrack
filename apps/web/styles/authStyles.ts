@@ -65,10 +65,26 @@ export function authStyles(colors: ThemeColors) {
       gap: 16
     } as CSSProperties,
     heroStatItem: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 4,
+      minWidth: 0,
       fontSize: 12,
       color: "rgba(255,255,255,0.4)",
       borderLeft: `2px solid ${colors.brand}`,
       paddingLeft: 10
+    } as CSSProperties,
+    heroStatValue: {
+      fontSize: 20,
+      fontWeight: 700,
+      lineHeight: 1.1,
+      color: colors.textPrimary
+    } as CSSProperties,
+    heroStatLabel: {
+      fontSize: 12,
+      color: "rgba(255,255,255,0.4)",
+      textTransform: "uppercase",
+      letterSpacing: 0.4
     } as CSSProperties,
     card: {
       backgroundColor: `${colors.surface}CC`,

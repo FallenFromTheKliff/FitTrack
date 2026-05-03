@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -34,6 +34,7 @@ import {
 } from "@/app/(admin)/facilities/helpers";
 import {
   EquipmentPanel,
+  EquipmentManagementTable,
   FloorPlanPanel,
   LayoutEditorPanel,
   LayoutStatusPanel,
@@ -58,7 +59,8 @@ const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
   {
     key: "general-floor",
     name: "General Floor",
-    description: "Flexible open training space for circuits, bodyweight work, and coach-led movement blocks.",
+    description:
+      "Flexible open training space for circuits, bodyweight work, and coach-led movement blocks.",
     iconKey: "gym-area",
     gridWidth: 4,
     gridHeight: 2,
@@ -67,7 +69,8 @@ const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
   {
     key: "dumbbell-area",
     name: "Dumbbell Area",
-    description: "Dedicated free-weight zone that pairs well with nearby strength equipment placements.",
+    description:
+      "Dedicated free-weight zone that pairs well with nearby strength equipment placements.",
     iconKey: "gym-area",
     gridWidth: 3,
     gridHeight: 2,
@@ -76,7 +79,8 @@ const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
   {
     key: "functional-zone",
     name: "Functional Zone",
-    description: "Multi-use room tile for stretching, recovery, or small-group functional training.",
+    description:
+      "Multi-use room tile for stretching, recovery, or small-group functional training.",
     iconKey: "yoga",
     gridWidth: 3,
     gridHeight: 2,
@@ -93,13 +97,27 @@ export function useFacilitiesPageController() {
   const fs = facilitiesMapStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const [activeTab, setActiveTab] = useState<"floor" | "venues">("floor");
+  const [activeTab, setActiveTab] = useState<"equipment" | "floor" | "venues">(
+    "floor",
+  );
   const [viewMotionKey, setViewMotionKey] = useState(0);
-  const [viewMotionDirection, setViewMotionDirection] = useState<"left" | "right">("right");
-  const { message, showMessage } = useTimedMessage(FEEDBACK_DURATION_MS.standard);
-  const { style: viewSlideStyle } = usePowerSlide(viewMotionKey, viewMotionDirection);
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
-  const [quickPlacementTemplateKey, setQuickPlacementTemplateKey] = useState<string | null>(null);
+  const [viewMotionDirection, setViewMotionDirection] = useState<
+    "left" | "right"
+  >("right");
+  const { message, showMessage } = useTimedMessage(
+    FEEDBACK_DURATION_MS.standard,
+  );
+  const { style: viewSlideStyle } = usePowerSlide(
+    viewMotionKey,
+    viewMotionDirection,
+  );
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(
+    null,
+  );
+  const [quickPlacementTemplateKey, setQuickPlacementTemplateKey] = useState<
+    string | null
+  >(null);
+  const equipmentPanelRef = useRef<HTMLDivElement | null>(null);
 
   const {
     venues,
@@ -146,7 +164,6 @@ export function useFacilitiesPageController() {
     assignedCount,
     deleteEquipmentMutation,
     restoreEquipmentMutation,
-    updateFloorPlanMediaMutation,
     message: layoutMessage,
     handleSaveLayout,
     handleToggleEditMode,
@@ -155,23 +172,35 @@ export function useFacilitiesPageController() {
     handleRequestClearFloor,
     handleClearFloor,
     handleRestoreEquipment,
-    handleUploadFloorPlanImage,
     assignEquipmentToVenue,
   } = useFloorLayout();
 
-  const [venueEditorMode, setVenueEditorMode] = useState<"create" | "edit" | null>(null);
-  const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(null);
-  const [venueDeleteTarget, setVenueDeleteTarget] = useState<VenueRecord | null>(null);
-  const [selectedFloorVenue, setSelectedFloorVenue] = useState<FloorVenueRecord | null>(null);
+  const [venueEditorMode, setVenueEditorMode] = useState<
+    "create" | "edit" | null
+  >(null);
+  const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(
+    null,
+  );
+  const [venueDeleteTarget, setVenueDeleteTarget] =
+    useState<VenueRecord | null>(null);
+  const [selectedFloorVenue, setSelectedFloorVenue] =
+    useState<FloorVenueRecord | null>(null);
   const [deleteHasReservations, setDeleteHasReservations] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
-  const [archiveFilter, setArchiveFilter] = useState<"all" | "venues" | "equipment">("all");
+  const [archiveFilter, setArchiveFilter] = useState<
+    "all" | "venues" | "equipment"
+  >("all");
 
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [resourceLoading, setResourceLoading] = useState(false);
-  const resourceLoadingLabel = useLoadingText("ADDING RESOURCE", resourceLoading);
+  const resourceLoadingLabel = useLoadingText(
+    "ADDING RESOURCE",
+    resourceLoading,
+  );
   const [resourceDraft, setResourceDraft] = useState(getDefaultResourceDraft);
-  const [scheduleResources, setScheduleResources] = useState<ScheduleResource[]>([]);
+  const [scheduleResources, setScheduleResources] = useState<
+    ScheduleResource[]
+  >([]);
 
   const handleAddResource = async () => {
     const trimmedName = resourceDraft.name.trim();
@@ -199,7 +228,8 @@ export function useFacilitiesPageController() {
 
   const { data: activeBookings = [] } = useQuery({
     ...adminBookingsQueryOptions<VenueBookingRecord>(webApiClient),
-    select: (bookings) => bookings.filter((booking) => booking.status === "confirmed"),
+    select: (bookings) =>
+      bookings.filter((booking) => booking.status === "confirmed"),
   });
 
   const [rawViewportWidth, setRawViewportWidth] = useState(0);
@@ -208,7 +238,8 @@ export function useFacilitiesPageController() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {
-    const evaluate = () => setRawViewportWidth(window.outerWidth || window.innerWidth);
+    const evaluate = () =>
+      setRawViewportWidth(window.outerWidth || window.innerWidth);
     evaluate();
     window.addEventListener("resize", evaluate);
     return () => window.removeEventListener("resize", evaluate);
@@ -222,7 +253,9 @@ export function useFacilitiesPageController() {
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
     useSensor(KeyboardSensor),
   );
 
@@ -230,18 +263,25 @@ export function useFacilitiesPageController() {
     if (!isEditMode) {
       return;
     }
-    const equipmentId = event.active.data.current?.equipmentId as string | undefined;
+    const equipmentId = event.active.data.current?.equipmentId as
+      | string
+      | undefined;
     const dropTargetId = event.over?.id as string | undefined;
     if (!equipmentId || !dropTargetId || !dropTargetId.startsWith("venue-")) {
       return;
     }
     setQuickPlacementTemplateKey(null);
     setSelectedEquipmentId(equipmentId);
-    void assignEquipmentToVenue(equipmentId, dropTargetId.replace("venue-", ""));
+    void assignEquipmentToVenue(
+      equipmentId,
+      dropTargetId.replace("venue-", ""),
+    );
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const equipmentId = event.active.data.current?.equipmentId as string | undefined;
+    const equipmentId = event.active.data.current?.equipmentId as
+      | string
+      | undefined;
     if (equipmentId) {
       setQuickPlacementTemplateKey(null);
       setSelectedEquipmentId(equipmentId);
@@ -250,14 +290,18 @@ export function useFacilitiesPageController() {
       return;
     }
     const activeId = String(event.active.id ?? "");
-    const sourceCellId = event.active.data.current?.sourceCellId as string | undefined;
+    const sourceCellId = event.active.data.current?.sourceCellId as
+      | string
+      | undefined;
     if (activeId.startsWith("equip-") && !sourceCellId) {
       setIsDrawerOpen(false);
     }
   };
 
   const handleDeleteVenueRequest = (venue: VenueRecord) => {
-    const hasActive = activeBookings.some((booking) => booking.venueId === venue.id);
+    const hasActive = activeBookings.some(
+      (booking) => booking.venueId === venue.id,
+    );
     setDeleteHasReservations(hasActive);
     setVenueDeleteTarget(venue);
   };
@@ -270,7 +314,9 @@ export function useFacilitiesPageController() {
     handleToggleEditMode();
   };
 
-  const deleteTargetEquipment = deleteTarget ? equipmentById[deleteTarget.equipmentId] : null;
+  const deleteTargetEquipment = deleteTarget
+    ? equipmentById[deleteTarget.equipmentId]
+    : null;
   const drawerButtonWidth = 44;
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
@@ -281,25 +327,35 @@ export function useFacilitiesPageController() {
   ).length;
 
   const quickPlacementTemplate = useMemo(
-    () => QUICK_FLOOR_REGION_TEMPLATES.find((template) => template.key === quickPlacementTemplateKey) ?? null,
+    () =>
+      QUICK_FLOOR_REGION_TEMPLATES.find(
+        (template) => template.key === quickPlacementTemplateKey,
+      ) ?? null,
     [quickPlacementTemplateKey],
   );
 
   const selectedEquipmentName =
-    availableEquipment.find((item) => item.id === selectedEquipmentId)?.name ?? null;
-
-  const handleMoveVenueFromCanvas = (venueMapId: string, placement: { gridColumn: number; gridRow: number }) => {
+    availableEquipment.find((item) => item.id === selectedEquipmentId)?.name ??
+    null;
+  const handleMoveVenueFromCanvas = (
+    venueMapId: string,
+    placement: { gridColumn: number; gridRow: number },
+  ) => {
     if (!isEditMode) {
       return;
     }
 
-    const movingVenue = activeFloorVenues.find((candidate) => candidate.mapId === venueMapId);
+    const movingVenue = activeFloorVenues.find(
+      (candidate) => candidate.mapId === venueMapId,
+    );
     if (!movingVenue) {
       return;
     }
 
     const liveVenueId = movingVenue.sourceVenueId ?? movingVenue.id;
-    const liveVenue = venues.find((candidate) => String(candidate.id) === String(liveVenueId));
+    const liveVenue = venues.find(
+      (candidate) => String(candidate.id) === String(liveVenueId),
+    );
     if (!liveVenue || liveVenue.isSystem) {
       return;
     }
@@ -316,24 +372,43 @@ export function useFacilitiesPageController() {
     venueMapId: string,
     delta: { column: number; row: number },
   ) => {
-    const targetVenue = activeFloorVenues.find((candidate) => candidate.mapId === venueMapId);
+    const targetVenue = activeFloorVenues.find(
+      (candidate) => candidate.mapId === venueMapId,
+    );
     if (!targetVenue) {
       return;
     }
 
     const liveVenueId = targetVenue.sourceVenueId ?? targetVenue.id;
-    const liveVenue = venues.find((candidate) => String(candidate.id) === String(liveVenueId));
+    const liveVenue = venues.find(
+      (candidate) => String(candidate.id) === String(liveVenueId),
+    );
     if (!liveVenue || liveVenue.isSystem) {
       return;
     }
 
-    const currentGridWidth = Math.max(1, targetVenue.gridWidth ?? liveVenue.gridWidth ?? 2);
-    const currentGridHeight = Math.max(1, targetVenue.gridHeight ?? liveVenue.gridHeight ?? 2);
-    const currentGridColumn = targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
+    const currentGridWidth = Math.max(
+      1,
+      targetVenue.gridWidth ?? liveVenue.gridWidth ?? 2,
+    );
+    const currentGridHeight = Math.max(
+      1,
+      targetVenue.gridHeight ?? liveVenue.gridHeight ?? 2,
+    );
+    const currentGridColumn =
+      targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
     const currentGridRow = targetVenue.gridRow ?? liveVenue.gridRow ?? 1;
 
-    const nextGridColumn = clamp(currentGridColumn + delta.column, 1, COLS - currentGridWidth + 1);
-    const nextGridRow = clamp(currentGridRow + delta.row, 1, ROWS - currentGridHeight + 1);
+    const nextGridColumn = clamp(
+      currentGridColumn + delta.column,
+      1,
+      COLS - currentGridWidth + 1,
+    );
+    const nextGridRow = clamp(
+      currentGridRow + delta.row,
+      1,
+      ROWS - currentGridHeight + 1,
+    );
 
     setSelectedFloorVenue(targetVenue);
     void handleUpdateVenueLayout(liveVenue, {
@@ -347,25 +422,40 @@ export function useFacilitiesPageController() {
     venueMapId: string,
     delta: { width: number; height: number },
   ) => {
-    const targetVenue = activeFloorVenues.find((candidate) => candidate.mapId === venueMapId);
+    const targetVenue = activeFloorVenues.find(
+      (candidate) => candidate.mapId === venueMapId,
+    );
     if (!targetVenue) {
       return;
     }
 
     const liveVenueId = targetVenue.sourceVenueId ?? targetVenue.id;
-    const liveVenue = venues.find((candidate) => String(candidate.id) === String(liveVenueId));
+    const liveVenue = venues.find(
+      (candidate) => String(candidate.id) === String(liveVenueId),
+    );
     if (!liveVenue || liveVenue.isSystem) {
       return;
     }
 
-    const currentGridWidth = Math.max(1, targetVenue.gridWidth ?? liveVenue.gridWidth ?? 2);
-    const currentGridHeight = Math.max(1, targetVenue.gridHeight ?? liveVenue.gridHeight ?? 2);
-    const currentGridColumn = targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
+    const currentGridWidth = Math.max(
+      1,
+      targetVenue.gridWidth ?? liveVenue.gridWidth ?? 2,
+    );
+    const currentGridHeight = Math.max(
+      1,
+      targetVenue.gridHeight ?? liveVenue.gridHeight ?? 2,
+    );
+    const currentGridColumn =
+      targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
     const currentGridRow = targetVenue.gridRow ?? liveVenue.gridRow ?? 1;
 
     const nextGridWidth = clamp(currentGridWidth + delta.width, 1, COLS);
     const nextGridHeight = clamp(currentGridHeight + delta.height, 1, ROWS);
-    const nextGridColumn = clamp(currentGridColumn, 1, COLS - nextGridWidth + 1);
+    const nextGridColumn = clamp(
+      currentGridColumn,
+      1,
+      COLS - nextGridWidth + 1,
+    );
     const nextGridRow = clamp(currentGridRow, 1, ROWS - nextGridHeight + 1);
 
     setSelectedFloorVenue(targetVenue);
@@ -388,8 +478,9 @@ export function useFacilitiesPageController() {
 
     const liveVenueId = floorVenue.sourceVenueId ?? floorVenue.id;
     return (
-      venues.find((candidate) => String(candidate.id) === String(liveVenueId)) ??
-      null
+      venues.find(
+        (candidate) => String(candidate.id) === String(liveVenueId),
+      ) ?? null
     );
   };
 
@@ -423,20 +514,59 @@ export function useFacilitiesPageController() {
   };
 
   const equipmentPanelNode = (
-    <EquipmentPanel
-      equipment={availableEquipment}
-      equipmentRemainingById={equipmentRemainingById}
-      colors={colors}
-      isEditMode={isEditMode}
-      panelPadding={isCompact ? 12 : 14}
-      equipmentCardPadding={isCompact ? "8px 9px" : "10px 10px"}
-      selectedEquipmentId={selectedEquipmentId}
-      onSelectEquipment={(equipmentId) => {
-        setQuickPlacementTemplateKey(null);
-        setSelectedEquipmentId(equipmentId);
-      }}
-    />
+    <div ref={equipmentPanelRef}>
+      <EquipmentPanel
+        equipment={availableEquipment}
+        equipmentRemainingById={equipmentRemainingById}
+        colors={colors}
+        isEditMode={isEditMode}
+        panelPadding={isCompact ? 12 : 14}
+        equipmentCardPadding={isCompact ? "8px 9px" : "10px 10px"}
+        selectedEquipmentId={selectedEquipmentId}
+        onSelectEquipment={(equipmentId) => {
+          setQuickPlacementTemplateKey(null);
+          setSelectedEquipmentId(equipmentId);
+        }}
+      />
+    </div>
   );
+
+  const handleOpenEquipmentPanel = () => {
+    setQuickPlacementTemplateKey(null);
+    if (isCompact) {
+      setIsDrawerOpen(true);
+      return;
+    }
+
+    equipmentPanelRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
+
+  const handleOpenEquipmentManager = () => {
+    setViewMotionDirection("right");
+    setViewMotionKey((prev) => prev + 1);
+    setActiveTab("equipment");
+    setVenueEditorMode(null);
+    setVenueEditTarget(null);
+  };
+
+  const handlePlaceEquipmentFromManager = (equipmentId: string) => {
+    setQuickPlacementTemplateKey(null);
+    setSelectedEquipmentId(equipmentId);
+    setSelectedFloorVenue(null);
+    setViewMotionDirection("left");
+    setViewMotionKey((prev) => prev + 1);
+    setActiveTab("floor");
+    if (!isEditMode) {
+      handleToggleEditMode();
+    }
+    showVenueMessage(
+      "Equipment selected. Drag it from Available Equipment onto a venue tile.",
+    );
+    window.setTimeout(handleOpenEquipmentPanel, 0);
+  };
 
   const layoutStatusNode = (
     <LayoutStatusPanel
@@ -459,10 +589,10 @@ export function useFacilitiesPageController() {
       floorPlanPadding={isCompact ? 10 : 14}
       floorPlanMinHeight={isCompact ? 360 : 500}
       floorImageUrl={activeFloorImageUrl}
-      isFloorImageUploading={updateFloorPlanMediaMutation.isPending}
       selectedVenueMapId={selectedFloorVenue?.mapId}
-      onUploadFloorImage={handleUploadFloorPlanImage}
-      onRequestDelete={(venueMapId, equipmentId) => setDeleteTarget({ venueMapId, equipmentId })}
+      onRequestDelete={(venueMapId, equipmentId) =>
+        setDeleteTarget({ venueMapId, equipmentId })
+      }
       selectedEquipmentId={selectedEquipmentId}
       selectedEquipmentName={selectedEquipmentName}
       onAssignEquipmentToVenue={(equipmentId, venueMapId, preferredCell) => {
@@ -480,6 +610,7 @@ export function useFacilitiesPageController() {
       isVenueSubmitting={isVenueSubmitting}
       onSubmitVenueEdit={handleSubmitVenueFromCanvas}
       onRequestVenueDelete={handleRequestVenueDeleteFromCanvas}
+      onOpenEquipment={handleOpenEquipmentManager}
       onSelectVenue={setSelectedFloorVenue}
       onOpenVenues={() => {
         setViewMotionDirection("right");
@@ -507,7 +638,9 @@ export function useFacilitiesPageController() {
           return;
         }
         setSelectedEquipmentId(null);
-        setQuickPlacementTemplateKey((current) => (current === template.key ? null : template.key));
+        setQuickPlacementTemplateKey((current) =>
+          current === template.key ? null : template.key,
+        );
       }}
       onOpenVenueManager={() => {
         setViewMotionDirection("right");
@@ -536,7 +669,9 @@ export function useFacilitiesPageController() {
           return;
         }
         setSelectedEquipmentId(null);
-        setQuickPlacementTemplateKey((current) => (current === template.key ? null : template.key));
+        setQuickPlacementTemplateKey((current) =>
+          current === template.key ? null : template.key,
+        );
       }}
       onOpenVenueManager={() => {
         setViewMotionDirection("right");
@@ -559,7 +694,8 @@ export function useFacilitiesPageController() {
       footerNode={
         quickPlacementTemplateKey ? (
           <FitText style={{ fontSize: 12, color: colors.brand }}>
-            Canvas placement is active. Click a floor tile to place the selected template.
+            Canvas placement is active. Click a floor tile to place the selected
+            template.
           </FitText>
         ) : null
       }
@@ -603,6 +739,14 @@ export function useFacilitiesPageController() {
   const venueInitialValues = buildVenueInitialValues(venueEditTarget);
   const combinedMessage = message || layoutMessage || venueMessage;
   const isVenueEditorOpen = activeTab === "venues" && venueEditorMode !== null;
+  const equipmentManagementNode = (
+    <EquipmentManagementTable
+      colors={colors}
+      equipment={availableEquipment}
+      equipmentRemainingById={equipmentRemainingById}
+      onPlaceEquipment={handlePlaceEquipmentFromManager}
+    />
+  );
 
   const handleCloseVenueEditor = () => {
     if (isVenueSubmitting) {
@@ -614,7 +758,10 @@ export function useFacilitiesPageController() {
     setVenueEditTarget(null);
   };
 
-  const handleOpenVenueEditor = (mode: "create" | "edit", venue: VenueRecord | null = null) => {
+  const handleOpenVenueEditor = (
+    mode: "create" | "edit",
+    venue: VenueRecord | null = null,
+  ) => {
     setViewMotionDirection("right");
     setViewMotionKey((prev) => prev + 1);
     setVenueEditTarget(venue);
@@ -650,6 +797,7 @@ export function useFacilitiesPageController() {
     drawerButtonWidth,
     editorNode,
     equipmentPanelNode,
+    equipmentManagementNode,
     fadeIn,
     floorPlanNode,
     fs,
@@ -716,4 +864,6 @@ export function useFacilitiesPageController() {
   } as const;
 }
 
-export type FacilitiesPageController = ReturnType<typeof useFacilitiesPageController>;
+export type FacilitiesPageController = ReturnType<
+  typeof useFacilitiesPageController
+>;

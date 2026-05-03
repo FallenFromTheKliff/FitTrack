@@ -50,9 +50,12 @@ describe('TrainingPlanController', () => {
     },
   );
 
-  it('locks plan assignment to coach users', () => {
+  it('locks deprecated plan assignment to staff and admin users', () => {
     expect(getGuardMetadata('assignPlan')).toEqual([JwtAuthGuard, RolesGuard]);
-    expect(getRolesMetadata('assignPlan')).toEqual([UserRole.coach]);
+    expect(getRolesMetadata('assignPlan')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
   it('lists plans through the service', async () => {
@@ -76,7 +79,7 @@ describe('TrainingPlanController', () => {
     trainingPlanService.createPlan.mockResolvedValue({ id: 'plan-1' });
 
     await controller.createPlan(
-      { sub: 'coach-user-1', role: UserRole.coach } as never,
+      { sub: 'member-1', role: UserRole.member } as never,
       {
         title: 'Upper / Lower Strength Builder',
         goal: FitnessGoal.bulking,
@@ -87,8 +90,8 @@ describe('TrainingPlanController', () => {
     );
 
     expect(trainingPlanService.createPlan).toHaveBeenCalledWith(
-      'coach-user-1',
-      UserRole.coach,
+      'member-1',
+      UserRole.member,
       expect.objectContaining({
         title: 'Upper / Lower Strength Builder',
       }),
@@ -107,17 +110,9 @@ describe('TrainingPlanController', () => {
     );
   });
 
-  it('assigns plans through the service', async () => {
-    trainingPlanService.assignPlan.mockResolvedValue({ id: 'plan-2' });
-
-    await controller.assignPlan('plan-1', { sub: 'coach-user-1' } as never, {
-      member_id: 'member-1',
-    });
-
-    expect(trainingPlanService.assignPlan).toHaveBeenCalledWith(
-      'coach-user-1',
-      'plan-1',
-      'member-1',
+  it('marks coach-user plan assignment as gone', () => {
+    expect(() => controller.assignPlan('plan-1')).toThrow(
+      'Coach-user training plan assignment is no longer supported',
     );
   });
 });

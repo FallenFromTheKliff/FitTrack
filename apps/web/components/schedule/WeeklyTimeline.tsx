@@ -26,7 +26,17 @@ type Props = {
   onBlockClick: (booking: Booking) => void;
 };
 
-function DropCell({ id, children, isToday, colors }: { id: string; children?: React.ReactNode; isToday: boolean; colors: ThemeColors }) {
+function DropCell({
+  id,
+  children,
+  isToday,
+  colors,
+}: {
+  id: string;
+  children?: React.ReactNode;
+  isToday: boolean;
+  colors: ThemeColors;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
@@ -42,7 +52,7 @@ function DropCell({ id, children, isToday, colors }: { id: string; children?: Re
             ? `${colors.brand}08`
             : "transparent",
         position: "relative",
-        transition: "background-color 0.12s ease"
+        transition: "background-color 0.12s ease",
       }}
     >
       {children}
@@ -68,14 +78,15 @@ function BookingNode({
   const { settings } = useTheme();
   const canAnimate = settings.animationLevel !== "none";
   const fullMotion = settings.animationLevel === "full";
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `booking:${booking.id}`,
-    data: {
-      kind: "booking",
-      bookingId: booking.id,
-    },
-    disabled: !allowDrag,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `booking:${booking.id}`,
+      data: {
+        kind: "booking",
+        bookingId: booking.id,
+      },
+      disabled: !allowDrag,
+    });
 
   return (
     <FitButton
@@ -112,7 +123,9 @@ function BookingNode({
       onMouseEnter={(event) => {
         if (!canAnimate || isDragging) return;
         event.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.22)";
-        event.currentTarget.style.filter = fullMotion ? "brightness(1.03)" : "brightness(1.02)";
+        event.currentTarget.style.filter = fullMotion
+          ? "brightness(1.03)"
+          : "brightness(1.02)";
       }}
       onMouseLeave={(event) => {
         event.currentTarget.style.boxShadow = isDragging
@@ -122,17 +135,21 @@ function BookingNode({
       }}
       onMouseDown={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.filter = fullMotion ? "brightness(0.98)" : "brightness(0.99)";
+        event.currentTarget.style.filter = fullMotion
+          ? "brightness(0.98)"
+          : "brightness(0.99)";
       }}
       onMouseUp={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.filter = fullMotion ? "brightness(1.03)" : "brightness(1.02)";
+        event.currentTarget.style.filter = fullMotion
+          ? "brightness(1.03)"
+          : "brightness(1.02)";
       }}
     >
       <FitText
         excludeGlobalScale
         style={{
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: 700,
           color: bookingTextColor,
           display: "block",
@@ -141,7 +158,7 @@ function BookingNode({
           textOverflow: "ellipsis",
         }}
       >
-        {booking.resourceName}
+        Coach: {booking.resourceName}
       </FitText>
       {booking.venueLabel && (
         <FitText
@@ -155,7 +172,7 @@ function BookingNode({
             whiteSpace: "nowrap",
           }}
         >
-          {booking.venueLabel}
+          Member: {booking.venueLabel}
         </FitText>
       )}
       <FitText
@@ -185,30 +202,63 @@ export default function WeeklyTimeline({
 
   return (
     <motion.div style={slideStyle}>
-      <div style={{
-        backgroundColor: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 12,
-        overflow: "hidden"
-      }}>
-        <div style={{ display: "grid", width: "100%", gridTemplateColumns: timelineColumns, borderBottom: `1px solid ${colors.border}` }}>
-          <div style={{ height: 40, borderRight: `1px solid ${colors.border}` }} />
+      <div
+        style={{
+          backgroundColor: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 12,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            width: "100%",
+            gridTemplateColumns: timelineColumns,
+            borderBottom: `1px solid ${colors.border}`,
+          }}
+        >
+          <div
+            style={{ height: 40, borderRight: `1px solid ${colors.border}` }}
+          />
           {weekDays.map((day, i) => {
             const ymd = toYmd(day);
             const isToday = ymd === today;
             return (
-              <div key={i} style={{
-                height: 40,
-                boxSizing: "border-box",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRight: i < 6 ? `1px solid ${colors.border}` : "none",
-                backgroundColor: isToday ? `${colors.brand}14` : "transparent"
-              }}>
-                <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{WEEK_DAYS_SHORT[day.getDay()]}</FitText>
-                <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? colors.brand : colors.textPrimary, lineHeight: 1.05 }}>
+              <div
+                key={i}
+                style={{
+                  height: 40,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRight: i < 6 ? `1px solid ${colors.border}` : "none",
+                  backgroundColor: isToday
+                    ? `${colors.brand}14`
+                    : "transparent",
+                }}
+              >
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    fontWeight: 600,
+                  }}
+                >
+                  {WEEK_DAYS_SHORT[day.getDay()]}
+                </FitText>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 13,
+                    fontWeight: isToday ? 700 : 500,
+                    color: isToday ? colors.brand : colors.textPrimary,
+                    lineHeight: 1.05,
+                  }}
+                >
                   {day.getDate()}
                 </FitText>
               </div>
@@ -217,23 +267,43 @@ export default function WeeklyTimeline({
         </div>
         {isLoading ? (
           <div style={{ padding: 32, textAlign: "center" as const }}>
-            <FitText style={{ fontSize: 14, color: colors.textMuted }}>Loading schedule...</FitText>
+            <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+              Loading schedule...
+            </FitText>
           </div>
         ) : (
           hours.map((hour) => (
-            <div key={hour} style={{ display: "grid", width: "100%", gridTemplateColumns: timelineColumns }}>
-              <div style={{
-                height: CELL_HEIGHT,
-                boxSizing: "border-box",
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "flex-end",
-                paddingRight: 8,
-                paddingTop: 5,
-                borderRight: `1px solid ${colors.border}`,
-                borderBottom: `1px solid ${colors.border}`
-              }}>
-                <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{hour}:00</FitText>
+            <div
+              key={hour}
+              style={{
+                display: "grid",
+                width: "100%",
+                gridTemplateColumns: timelineColumns,
+              }}
+            >
+              <div
+                style={{
+                  height: CELL_HEIGHT,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "flex-end",
+                  paddingRight: 8,
+                  paddingTop: 5,
+                  borderRight: `1px solid ${colors.border}`,
+                  borderBottom: `1px solid ${colors.border}`,
+                }}
+              >
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    fontWeight: 600,
+                  }}
+                >
+                  {hour}:00
+                </FitText>
               </div>
               {weekDays.map((day, dayIdx) => {
                 const ymd = toYmd(day);
@@ -243,7 +313,12 @@ export default function WeeklyTimeline({
                   return b.startHour === hour;
                 });
                 return (
-                  <DropCell key={dayIdx} id={`${dayIdx}:${hour}`} isToday={isToday} colors={colors}>
+                  <DropCell
+                    key={dayIdx}
+                    id={`${dayIdx}:${hour}`}
+                    isToday={isToday}
+                    colors={colors}
+                  >
                     {cellBookings.map((b) => (
                       <BookingNode
                         key={b.id}

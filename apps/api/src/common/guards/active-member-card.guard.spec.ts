@@ -29,7 +29,7 @@ describe('ActiveMemberCardGuard', () => {
   it('allows non-member roles without checking membership-card state', async () => {
     await expect(
       guard.canActivate(
-        createExecutionContext({ role: UserRole.coach, sub: 'coach-1' }),
+        createExecutionContext({ role: UserRole.staff, sub: 'staff-1' }),
       ),
     ).resolves.toBe(true);
 

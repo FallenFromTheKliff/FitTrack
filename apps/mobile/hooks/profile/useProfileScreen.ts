@@ -164,6 +164,18 @@ function formatShortCountdown(remainingMs: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function formatShortDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+}
+
 function getFutureRemainingMs(isoString?: string | null) {
   if (!isoString) return 0;
 
@@ -188,7 +200,7 @@ export function useProfileScreen() {
   const queryClient = useQueryClient();
   const isMounted = useRef(true);
   const { message: statusMessage, showMessage } = useTimedMessage(2400);
-  const isCoach = user?.role === "COACH";
+  const isCoach = false;
   const isMember = user?.role === "USER";
   const membershipCard = user?.membershipCard ?? null;
   const membershipCardStatus = membershipCard?.status ?? "none";
@@ -278,7 +290,7 @@ export function useProfileScreen() {
   const memberSince = user?.memberSince
     ? `Member since ${new Date(user.memberSince).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
     : "";
-  const canPurchaseMembershipCard = isMember && (membershipCardStatus === "none" || membershipCardStatus === "revoked");
+  const canPurchaseMembershipCard = isMember && membershipCardStatus === "none";
   const memberAccessLabel = membershipCardStatus === "pending_verification"
     ? "Pending verification"
     : membershipCardStatus === "revoked"
@@ -300,7 +312,7 @@ export function useProfileScreen() {
       case "pending_verification":
         return "Your membership card payment is waiting for verification. Member-only app features unlock as soon as staff confirms it.";
       case "revoked":
-        return "Your membership card access is currently revoked. Ask the front desk to repair it if this looks incorrect.";
+        return "Your membership card access is currently revoked. Ask the front desk to restore access; your one-time card payment stays on record.";
       default:
         return "No active membership card is linked to this account yet.";
     }
@@ -355,7 +367,26 @@ export function useProfileScreen() {
     suspended: colors.danger
   }), [colors.brand, colors.danger, colors.success, colors.textMuted, colors.warning]);
 
-  const latestMembershipPayment = membershipPayments.data[0];
+  const membershipScopedPayments = membershipPayments.data.filter(
+    (payment) =>
+      payment.payable_type === "membership_card" ||
+      payment.payable_type === "subscription"
+  );
+  const latestMembershipPayment = membershipScopedPayments[0];
+  const membershipCardPaidAt = formatShortDate(
+    membershipCard?.activatedAt ??
+      membershipCard?.verifiedAt ??
+      membershipCard?.purchasedAt
+  );
+  const membershipCardHistoryLabel = membershipCard
+    ? membershipCardStatus === "pending_verification"
+      ? "Pending verification"
+      : membershipCardStatus === "revoked"
+        ? "Revoked"
+        : membershipCardStatus === "active"
+          ? "Completed"
+          : null
+    : null;
   const membershipSubtitle = currentSubscription
     ? `${currentSubscription.plan.name} | ${formatMembershipStatus(currentSubscription.status)}`
     : hasMemberCardAccess
@@ -366,8 +397,10 @@ export function useProfileScreen() {
   const membershipStatusLabel = currentSubscription ? formatMembershipStatus(currentSubscription.status) : undefined;
   const paymentHistorySubtitle = latestMembershipPayment
     ? `Latest ${formatMembershipStatus(latestMembershipPayment.status)} | PHP ${Number(latestMembershipPayment.amount).toLocaleString("en-PH")}`
-    : membershipPayments.meta.total > 0
-      ? `${membershipPayments.meta.total} payment record${membershipPayments.meta.total === 1 ? "" : "s"}`
+    : membershipScopedPayments.length > 0
+      ? `${membershipScopedPayments.length} payment record${membershipScopedPayments.length === 1 ? "" : "s"}`
+      : membershipCardHistoryLabel
+        ? `Membership card ${membershipCardHistoryLabel.toLowerCase()} | PHP 400${membershipCardPaidAt ? ` | ${membershipCardPaidAt}` : ""}`
       : hasMemberCardAccess
         ? "No card or plan payments recorded yet"
         : "Card and plan payments will appear here once available";

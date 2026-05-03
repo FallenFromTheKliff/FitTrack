@@ -14,7 +14,9 @@ import { ConfirmModal } from "@/components/modals";
 export default function AiPage() {
   const { colors } = useTheme();
   const s = chatbotStyles(colors);
-  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "deleted">("active");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "all" | "archived"
+  >("active");
   const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const {
     activeSessionId,
@@ -33,14 +35,14 @@ export default function AiPage() {
     selectedSession,
     sendMutation,
     sessions,
-    setInput
+    setInput,
   } = useAiPageController();
 
   const filteredSessions = useMemo(() => {
     switch (statusFilter) {
       case "active":
         return sessions.filter((session) => session.is_active);
-      case "deleted":
+      case "archived":
         return sessions.filter((session) => !session.is_active);
       default:
         return sessions;
@@ -49,7 +51,10 @@ export default function AiPage() {
 
   useEffect(() => {
     if (!selectedSession || statusFilter === "all") return;
-    const matchesFilter = statusFilter === "active" ? selectedSession.is_active : !selectedSession.is_active;
+    const matchesFilter =
+      statusFilter === "active"
+        ? selectedSession.is_active
+        : !selectedSession.is_active;
     if (matchesFilter) return;
     const fallbackSessionId = filteredSessions[0]?.id;
     if (fallbackSessionId) {
@@ -57,18 +62,23 @@ export default function AiPage() {
       return;
     }
     handleStartFresh();
-  }, [filteredSessions, handleSelectSession, handleStartFresh, selectedSession, statusFilter]);
+  }, [
+    filteredSessions,
+    handleSelectSession,
+    handleStartFresh,
+    selectedSession,
+    statusFilter,
+  ]);
 
   const handleConfirmDelete = async () => {
-    const deletedSessionId = await handleDelete();
-    if (!deletedSessionId) return;
+    const archivedSessionId = await handleDelete();
+    if (!archivedSessionId) return;
     setDeleteConfirmOpen(false);
   };
 
   const handleRestoreSelectedSession = async () => {
     const restoredSessionId = await handleRestore();
     if (!restoredSessionId) return;
-    setStatusFilter("all");
   };
 
   return (
@@ -80,8 +90,19 @@ export default function AiPage() {
         mutedColor={colors.textMuted}
         onStartFresh={handleStartFresh}
       />
-      <div className="grid min-h-[70vh] flex-1 items-stretch gap-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
-        <div style={s.panel}>
+      <div
+        data-brodigy-grid="true"
+        style={{
+          alignItems: "stretch",
+          display: "grid",
+          flex: 1,
+          gap: 16,
+          gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
+          minHeight: "calc(100vh - 190px)",
+          minWidth: 0,
+        }}
+      >
+        <div style={{ ...s.panel, minHeight: 0 }}>
           <HistoryPanel
             activeId={activeSessionId}
             isDeleting={deleteMutation.isPending}
@@ -95,7 +116,7 @@ export default function AiPage() {
             statusFilter={statusFilter}
           />
         </div>
-        <div style={s.panel}>
+        <div style={{ ...s.panel, minHeight: 0 }}>
           <ChatPanel
             disabled={sendMutation.isPending || isSelectedSessionDeleted}
             input={input}
@@ -104,21 +125,31 @@ export default function AiPage() {
             messages={messages}
             onInputChange={setInput}
             onSend={handleSend}
-            placeholder={isSelectedSessionDeleted
-              ? "Restore this chat to continue the conversation."
-              : "Ask BrodigyAI about training, nutrition, or your next session..."}
+            placeholder={
+              isSelectedSessionDeleted
+                ? "Restore this chat to continue the conversation."
+                : "Ask BrodigyAI about training, nutrition, or your next session..."
+            }
           />
         </div>
       </div>
+      <style>{`
+        @media (max-width: 980px) {
+          [data-brodigy-grid="true"] {
+            grid-template-columns: 1fr !important;
+            min-height: auto !important;
+          }
+        }
+      `}</style>
       <ConfirmModal
         isOpen={isDeleteConfirmOpen}
-        title="Delete chat?"
-        message="This chat will move to Deleted Chats and can be restored later."
+        title="Archive chat?"
+        message="This chat will move to Archived Chats and can be restored later."
         onConfirm={() => void handleConfirmDelete()}
         onCancel={() => setDeleteConfirmOpen(false)}
-        confirmLabel="DELETE CHAT"
-        loadingLabel="Deleting chat"
-        loadingTitle="Deleting chat"
+        confirmLabel="ARCHIVE CHAT"
+        loadingLabel="Archiving chat"
+        loadingTitle="Archiving chat"
         confirmIcon={Trash2}
         isLoading={deleteMutation.isPending}
         isDanger

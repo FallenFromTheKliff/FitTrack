@@ -1,14 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import {
-  AuthProvider,
-  BookingStatus,
-  UserRole,
-  UserStatus,
-} from '@prisma/client';
+import { AuthProvider, BookingStatus, UserRole } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function splitDelimitedList(value: string | null) {
   if (!value) return [];
@@ -25,11 +21,9 @@ function toFrontendRole(role: UserRole) {
       return { id: 1, name: 'ADMIN' as const };
     case UserRole.staff:
       return { id: 2, name: 'STAFF' as const };
-    case UserRole.coach:
-      return { id: 3, name: 'COACH' as const };
     case UserRole.member:
     default:
-      return { id: 4, name: 'USER' as const };
+      return { id: 3, name: 'USER' as const };
   }
 }
 
@@ -53,6 +47,69 @@ function findIdentity(
     identities.find((identity) => providers.includes(identity.provider)) ??
     null
   );
+}
+
+function normalizeOptionalString(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+}
+
+function buildLinkedCoachIdentityValues(
+  user: {
+    auth_identities: Array<{ identifier: string }>;
+    profile?: {
+      first_name?: string | null;
+      last_name?: string | null;
+      phone?: string | null;
+    } | null;
+  } | null,
+) {
+  const values = new Set<string>();
+  if (!user) return values;
+
+  for (const identity of user.auth_identities) {
+    const identifier = normalizeOptionalString(identity.identifier);
+    if (identifier) values.add(identifier.toLowerCase());
+  }
+
+  const firstName = normalizeOptionalString(user.profile?.first_name);
+  const lastName = normalizeOptionalString(user.profile?.last_name);
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  if (fullName) values.add(fullName.toLowerCase());
+
+  const phone = normalizeOptionalString(user.profile?.phone);
+  if (phone) values.add(phone.toLowerCase());
+
+  return values;
+}
+
+function normalizeStandaloneCoachDisplayName(
+  value: string | null,
+  linkedIdentityValues: Set<string>,
+  index: number,
+) {
+  const displayName = normalizeOptionalString(value);
+  if (
+    displayName &&
+    !EMAIL_LIKE_PATTERN.test(displayName) &&
+    !linkedIdentityValues.has(displayName.toLowerCase())
+  ) {
+    return displayName;
+  }
+
+  return `Coach Profile ${index + 1}`;
+}
+
+function normalizeStandaloneCoachContact(
+  value: string | null,
+  linkedIdentityValues: Set<string>,
+) {
+  const contact = normalizeOptionalString(value);
+  if (!contact || linkedIdentityValues.has(contact.toLowerCase())) {
+    return null;
+  }
+
+  return contact;
 }
 
 @Injectable()
@@ -206,22 +263,30 @@ export class StaffService {
       orderBy: { created_at: 'desc' },
     });
 
-    return coaches.map((coach) => {
-      const primaryEmail = findIdentity(coach.user.auth_identities, [
-        AuthProvider.email,
-        AuthProvider.google,
-      ]);
+    return coaches.map((coach, index) => {
+      const linkedIdentityValues = buildLinkedCoachIdentityValues(coach.user);
 
       return {
         id: coach.id,
+        displayName: normalizeStandaloneCoachDisplayName(
+          coach.display_name,
+          linkedIdentityValues,
+          index,
+        ),
+        contactEmail: normalizeStandaloneCoachContact(
+          coach.contact_email,
+          linkedIdentityValues,
+        ),
+        contactPhone: normalizeStandaloneCoachContact(
+          coach.contact_phone,
+          linkedIdentityValues,
+        ),
         bio: coach.bio,
         specialties: splitDelimitedList(coach.specialization),
         certifications: splitDelimitedList(coach.certification),
         yearsExperience: null,
         hourlyRate: Number(coach.hourly_rate),
-        isActive:
-          coach.is_available_for_booking &&
-          coach.user.status === UserStatus.active,
+        isActive: coach.is_available_for_booking,
         availability: coach.availability_slots.map((slot) => ({
           id: slot.id,
           dayOfWeek: slot.day_of_week,
@@ -229,33 +294,7 @@ export class StaffService {
           endTime: this.toTimeString(slot.end_time),
           isAvailable: true,
         })),
-        user: {
-          id: coach.user.id,
-          email: primaryEmail?.identifier ?? '',
-          phone_no: coach.user.profile?.phone ?? null,
-          createdAt: coach.user.created_at.toISOString(),
-          profile: coach.user.profile
-            ? {
-                firstName: coach.user.profile.first_name,
-                lastName: coach.user.profile.last_name,
-                dateOfBirth:
-                  coach.user.profile.date_of_birth?.toISOString() ?? null,
-                gender: coach.user.profile.gender ?? null,
-                activityLevel: coach.user.profile.activity_level ?? null,
-                fitnessGoal: coach.user.profile.fitness_goal ?? null,
-                currentWeightKg:
-                  coach.user.profile.weight_kg !== null
-                    ? Number(coach.user.profile.weight_kg)
-                    : null,
-                heightCm:
-                  coach.user.profile.height_cm !== null
-                    ? Number(coach.user.profile.height_cm)
-                    : null,
-                avatarUrl: coach.user.profile.avatar_url ?? null,
-                membershipType: toFrontendMembershipType(UserRole.coach),
-              }
-            : null,
-        },
+        user: null,
       };
     });
   }

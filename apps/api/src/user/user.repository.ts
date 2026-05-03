@@ -247,7 +247,7 @@ export class UserRepository extends BaseRepository {
       where: {
         status: UserStatus.active,
         role: {
-          in: [UserRole.member, UserRole.coach],
+          in: [UserRole.member],
         },
       },
       select: {

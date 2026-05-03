@@ -19,6 +19,10 @@ const coachListInclude = {
       profile: true,
     },
   },
+  availability_slots: {
+    where: { is_active: true },
+    orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+  },
 } satisfies Prisma.CoachProfileInclude;
 
 const coachDetailInclude = {
@@ -53,7 +57,7 @@ const ACTIVE_COACH_LINKED_BOOKING_STATUSES = [
   BookingStatus.balance_pending,
 ] as const;
 
-const MAX_APPOINTMENT_LOOKBACK_MINUTES = 180;
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 @Injectable()
 export class CoachRepository extends BaseRepository {
@@ -66,7 +70,7 @@ export class CoachRepository extends BaseRepository {
   ): Promise<PaginatedResult<CoachListRecord>> {
     const where: Prisma.CoachProfileWhereInput = {
       is_available_for_booking: true,
-      user: { status: UserStatus.active },
+      OR: [{ user_id: null }, { user: { status: UserStatus.active } }],
     };
 
     if (dto.specialization) {
@@ -105,7 +109,7 @@ export class CoachRepository extends BaseRepository {
       this.prisma.coachProfile,
       {
         id,
-        user: { status: UserStatus.active },
+        OR: [{ user_id: null }, { user: { status: UserStatus.active } }],
       },
       'CoachProfile',
       coachDetailInclude,
@@ -133,6 +137,16 @@ export class CoachRepository extends BaseRepository {
     );
   }
 
+  createStandaloneCoach(
+    data: Prisma.CoachProfileCreateInput,
+  ): Promise<CoachDetailRecord> {
+    return this.create<CoachDetailRecord>(
+      this.prisma.coachProfile,
+      data,
+      coachDetailInclude,
+    );
+  }
+
   updateCoachByUserId(
     userId: string,
     data: Prisma.CoachProfileUpdateInput,
@@ -151,16 +165,12 @@ export class CoachRepository extends BaseRepository {
     startsAt: Date,
     endsAt: Date,
   ): Promise<boolean> {
+    const gymDayRange = getGymDayUtcRange(startsAt);
     const candidates = await this.prisma.coachAppointment.findMany({
       where: {
         coach_id: coachId,
         status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
-        scheduled_at: {
-          gte: new Date(
-            startsAt.getTime() - MAX_APPOINTMENT_LOOKBACK_MINUTES * 60 * 1000,
-          ),
-          lt: endsAt,
-        },
+        scheduled_at: gymDayRange,
       },
       select: {
         scheduled_at: true,
@@ -175,8 +185,9 @@ export class CoachRepository extends BaseRepository {
       );
 
       return (
-        existingStartsAt.getTime() < endsAt.getTime() &&
-        existingEndsAt.getTime() > startsAt.getTime()
+        toGymDateKey(existingStartsAt) === toGymDateKey(startsAt) ||
+        (existingStartsAt.getTime() < endsAt.getTime() &&
+          existingEndsAt.getTime() > startsAt.getTime())
       );
     });
   }
@@ -186,15 +197,74 @@ export class CoachRepository extends BaseRepository {
     startsAt: Date,
     endsAt: Date,
   ): Promise<boolean> {
+    const gymDayRange = getGymDayUtcRange(startsAt);
     const count = await this.prisma.amenityBooking.count({
       where: {
         coach_id: coachId,
         status: { in: [...ACTIVE_COACH_LINKED_BOOKING_STATUSES] },
-        starts_at: { lt: endsAt },
-        ends_at: { gt: startsAt },
+        starts_at: gymDayRange,
       },
     });
 
     return count > 0;
   }
+
+  async listActiveBookingDateKeys(
+    coachId: string,
+    from: Date,
+    days: number,
+  ): Promise<string[]> {
+    const fromStart = getGymDayUtcRange(from).gte;
+    const to = new Date(fromStart.getTime() + days * 24 * 60 * 60 * 1000);
+    const [appointments, linkedBookings] = await Promise.all([
+      this.prisma.coachAppointment.findMany({
+        where: {
+          coach_id: coachId,
+          status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
+          scheduled_at: { gte: fromStart, lt: to },
+        },
+        select: { scheduled_at: true },
+      }),
+      this.prisma.amenityBooking.findMany({
+        where: {
+          coach_id: coachId,
+          status: { in: [...ACTIVE_COACH_LINKED_BOOKING_STATUSES] },
+          starts_at: { gte: fromStart, lt: to },
+        },
+        select: { starts_at: true },
+      }),
+    ]);
+
+    return Array.from(
+      new Set([
+        ...appointments.map((appointment) =>
+          toGymDateKey(appointment.scheduled_at),
+        ),
+        ...linkedBookings.map((booking) => toGymDateKey(booking.starts_at)),
+      ]),
+    ).sort();
+  }
+}
+
+function toGymWallClockDate(value: Date): Date {
+  return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
+}
+
+function toGymDateKey(value: Date): string {
+  return toGymWallClockDate(value).toISOString().slice(0, 10);
+}
+
+function getGymDayUtcRange(value: Date): { gte: Date; lt: Date } {
+  const gymDate = toGymWallClockDate(value);
+  const year = gymDate.getUTCFullYear();
+  const month = gymDate.getUTCMonth();
+  const day = gymDate.getUTCDate();
+  const dayStartUtc = new Date(
+    Date.UTC(year, month, day) - GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+
+  return {
+    gte: dayStartUtc,
+    lt: new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000),
+  };
 }

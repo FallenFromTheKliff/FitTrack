@@ -13,6 +13,7 @@ import {
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
+import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
 import { AppointmentRepository } from './appointment.repository';
 import { AppointmentService } from './appointment.service';
 import { APPOINTMENT_CANCELLED_EVENT } from './events/appointment-cancelled.event';
@@ -47,10 +48,15 @@ describe('AppointmentService', () => {
     createPayment: jest.fn(),
     updatePayment: jest.fn(),
     findPaymentByIdOrThrow: jest.fn(),
+    findLatestPaymentsForPayableIds: jest.fn(),
   };
 
   const paymongoCheckoutService = {
     createCheckoutSession: jest.fn(),
+  };
+
+  const recurringCoachingPlanService = {
+    refreshPlanProgress: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -65,11 +71,16 @@ describe('AppointmentService', () => {
           useValue: paymongoCheckoutService,
         },
         { provide: EventEmitter2, useValue: eventEmitter },
+        {
+          provide: RecurringCoachingPlanService,
+          useValue: recurringCoachingPlanService,
+        },
       ],
     }).compile();
 
     service = module.get<AppointmentService>(AppointmentService);
     jest.clearAllMocks();
+    paymentRepository.findLatestPaymentsForPayableIds.mockResolvedValue([]);
   });
 
   it('rejects overlapping weekly availability windows for the same day', async () => {
@@ -291,7 +302,15 @@ describe('AppointmentService', () => {
           status: 'pending_coach',
           scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
           duration_minutes: 60,
+          total_amount: new Prisma.Decimal('900.00'),
+          downpayment_amount: new Prisma.Decimal('270.00'),
+          balance_amount: new Prisma.Decimal('630.00'),
+          downpayment_paid_at: null,
+          balance_paid_at: null,
           member_notes: 'Focus on shoulder stability.',
+          recurring_plan_id: null,
+          recurring_state: null,
+          original_scheduled_at: null,
           created_at: new Date('2099-03-25T10:00:00.000Z'),
           updated_at: new Date('2099-03-25T10:00:00.000Z'),
           user: {
@@ -308,6 +327,8 @@ describe('AppointmentService', () => {
           coach: {
             id: 'coach-1',
             hourly_rate: new Prisma.Decimal('900'),
+            display_name: 'Coach Profile Noah',
+            contact_email: 'coach-1@fittrack.com',
             user: {
               auth_identities: [
                 { identifier: 'coach-1@fittrack.com', is_primary: true },
@@ -335,21 +356,13 @@ describe('AppointmentService', () => {
       limit: 20,
       coach_id: 'coach-1',
     });
-    expect(result.data[0]).toEqual(
-      expect.objectContaining({
-        id: 'appt-1',
-        status: 'pending_coach',
-        user: expect.objectContaining({
-          email: 'member-1@fittrack.com',
-        }),
-        coach: expect.objectContaining({
-          hourly_rate: '900',
-          profile: expect.objectContaining({
-            first_name: 'Noah',
-          }),
-        }),
-      }),
-    );
+    const firstResult = result.data[0];
+    expect(firstResult).toBeDefined();
+    expect(firstResult?.id).toBe('appt-1');
+    expect(firstResult?.status).toBe('pending_coach');
+    expect(firstResult?.user.email).toBe('member-1@fittrack.com');
+    expect(firstResult?.coach.hourly_rate).toBe('900');
+    expect(firstResult?.coach.display_name).toBe('Coach Profile Noah');
   });
 
   it('confirms free appointments immediately when a coach accepts them', async () => {
@@ -576,14 +589,16 @@ describe('AppointmentService', () => {
     await service.cancelAppointment('member-1', UserRole.member, 'appt-1', {
       reason: 'Need to reschedule.',
     });
-    await service.cancelAppointment('coach-user-1', UserRole.coach, 'appt-1', {
-      reason: 'Running late for an event.',
-    });
+    await expect(
+      service.cancelAppointment('other-member-1', UserRole.member, 'appt-1', {
+        reason: 'Not my appointment.',
+      }),
+    ).rejects.toBeInstanceOf(HttpException);
     await service.cancelAppointment('staff-1', UserRole.staff, 'appt-1', {
       reason: 'Manual front desk cancellation.',
     });
 
-    expect(repo.updateAppointment).toHaveBeenCalledTimes(3);
+    expect(repo.updateAppointment).toHaveBeenCalledTimes(2);
     expect(eventEmitter.emit).toHaveBeenCalledWith(
       'audit.log',
       expect.objectContaining({
@@ -656,6 +671,7 @@ describe('AppointmentService', () => {
 
     const result = await service.initiateDownpayment(
       'member-1',
+      UserRole.member,
       'appt-1',
       { provider: PaymentProvider.paymongo },
       '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
@@ -682,6 +698,58 @@ describe('AppointmentService', () => {
       appointment_id: 'appt-1',
       status: 'pending_payment',
       checkout_url: 'https://checkout.paymongo.test/cs_1',
+      payment_id: 'payment-1',
+    });
+  });
+
+  it('lets staff collect a full cash payment for any member appointment using the actual total amount', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'pending_payment',
+      is_free_session: false,
+      total_amount: new Prisma.Decimal('1000.00'),
+      downpayment_amount: new Prisma.Decimal('300.00'),
+      balance_amount: new Prisma.Decimal('700.00'),
+      downpayment_paid_at: null,
+      balance_paid_at: null,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
+      duration_minutes: 120,
+      coach: { id: 'coach-1', user_id: null },
+    });
+    paymentRepository.findLatestPaymentForPayableStage.mockResolvedValue(null);
+    paymentRepository.createPayment.mockResolvedValue({
+      id: 'payment-full-1',
+    });
+
+    const result = await service.initiateDownpayment(
+      'staff-1',
+      UserRole.staff,
+      'appt-1',
+      {
+        provider: PaymentProvider.cash,
+        payment_stage: PaymentStage.full,
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b1',
+    );
+
+    expect(paymentRepository.createPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payable_type: PayableType.coaching,
+        payable_id: 'appt-1',
+        payment_stage: PaymentStage.full,
+        amount: new Prisma.Decimal('1000.00'),
+        provider: PaymentProvider.cash,
+        status: PaymentStatus.awaiting_verification,
+      }),
+    );
+    expect(result).toEqual({
+      appointment_id: 'appt-1',
+      status: 'pending_payment',
+      checkout_url: null,
+      payment_id: 'payment-full-1',
     });
   });
 
@@ -724,6 +792,7 @@ describe('AppointmentService', () => {
       appointment_id: 'appt-1',
       status: 'confirmed',
       checkout_url: null,
+      payment_id: 'payment-2',
     });
   });
 

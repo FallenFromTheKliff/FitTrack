@@ -32,6 +32,10 @@ import {
   PaymongoCheckoutService,
 } from '../../membership/payment/paymongo-checkout.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
+import {
+  CreateStaffCoachBookingDTO,
+  CreateStaffInitialPaymentStage,
+} from '../../staff/dto/staff-schedule.dto';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import {
   AppointmentBalanceDTO,
@@ -69,6 +73,8 @@ import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coachi
 
 const DOWNPAYMENT_RATE = new Prisma.Decimal('0.30');
 const ZERO_DECIMAL = new Prisma.Decimal('0');
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 type AppointmentAmounts = {
   totalAmount: Prisma.Decimal;
@@ -77,6 +83,12 @@ type AppointmentAmounts = {
   gymRevenue: Prisma.Decimal;
   coachEarnings: Prisma.Decimal;
 };
+
+type InitialAppointmentPaymentStage =
+  Extract<
+    PaymentStage,
+    typeof PaymentStage.downpayment | typeof PaymentStage.full
+  >;
 
 type NormalizedAvailabilitySlot = {
   dayOfWeek: number;
@@ -99,6 +111,15 @@ function findPrimaryIdentifier(
     identities?.[0]?.identifier ??
     null
   );
+}
+
+function normalizeStandaloneDisplayName(value?: string | null) {
+  const displayName = value?.trim();
+  if (displayName && !EMAIL_LIKE_PATTERN.test(displayName)) {
+    return displayName;
+  }
+
+  return null;
 }
 
 @Injectable()
@@ -156,21 +177,21 @@ export class AppointmentService {
       scheduledAt.getTime() + dto.duration_minutes * 60 * 1000,
     );
 
-    if (appointmentEndsAt.getUTCDate() !== scheduledAt.getUTCDate()) {
+    if (this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Invalid Appointment Window',
           status: 422,
           detail:
-            'Appointments must start and end on the same UTC calendar day.',
+            'Appointments must start and end on the same gym calendar day.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const slotStart = this.toTimeValue(this.toTimeString(scheduledAt));
-    const slotEnd = this.toTimeValue(this.toTimeString(appointmentEndsAt));
+    const slotStart = this.toTimeValue(this.toGymTimeString(scheduledAt));
+    const slotEnd = this.toTimeValue(this.toGymTimeString(appointmentEndsAt));
 
     if (!coach.is_available_for_booking) {
       throw this.buildUnavailableCoachError();
@@ -189,7 +210,7 @@ export class AppointmentService {
       coachId: coach.id,
       scheduledAt,
       appointmentEndsAt,
-      dayOfWeek: scheduledAt.getUTCDay(),
+      dayOfWeek: this.toGymDayOfWeek(scheduledAt),
       slotStart,
       slotEnd,
       durationMinutes: dto.duration_minutes,
@@ -201,15 +222,109 @@ export class AppointmentService {
     return this.toAppointmentResponse(appointment);
   }
 
+  async createStaffManualAppointment(
+    userId: string,
+    dto: CreateStaffCoachBookingDTO,
+    actorUserId: string,
+  ): Promise<AppointmentResponseDTO> {
+    const scheduledAt = this.parseScheduledAt(dto.scheduled_at);
+    const coach = await this.repo.findCoachScheduleContextOrThrow(dto.coach_id);
+    const appointmentEndsAt = new Date(
+      scheduledAt.getTime() + dto.duration_minutes * 60 * 1000,
+    );
+
+    if (this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Appointment Window',
+          status: 422,
+          detail:
+            'Appointments must start and end on the same gym calendar day.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const slotStart = this.toTimeValue(this.toGymTimeString(scheduledAt));
+    const slotEnd = this.toTimeValue(this.toGymTimeString(appointmentEndsAt));
+
+    if (!coach.is_available_for_booking) {
+      throw this.buildUnavailableCoachError();
+    }
+
+    const amounts = calculateAppointmentAmounts(
+      coach,
+      dto.duration_minutes,
+      false,
+    );
+    const paymentStage = resolveStaffAppointmentPaymentStage(
+      dto.payment_stage,
+    );
+    const paymentAmount =
+      paymentStage === PaymentStage.full
+        ? amounts.totalAmount
+        : amounts.downpaymentAmount;
+    const appointment = await this.repo.createConfirmedManualAppointment({
+      userId,
+      coachId: coach.id,
+      scheduledAt,
+      appointmentEndsAt,
+      dayOfWeek: this.toGymDayOfWeek(scheduledAt),
+      slotStart,
+      slotEnd,
+      durationMinutes: dto.duration_minutes,
+      memberNotes: dto.member_notes,
+      ...amounts,
+      idempotencyKey: randomUUID(),
+      paymentAmount,
+      paymentStage,
+      verifiedBy: actorUserId,
+    });
+
+    if (appointment.status === AppointmentStatus.confirmed && coach.user_id) {
+      this.emitAppointmentConfirmed({
+        appointmentId: appointment.id,
+        userId: appointment.user_id,
+        coachId: appointment.coach_id,
+        scheduledAt: appointment.scheduled_at.toISOString(),
+        durationMinutes: appointment.duration_minutes,
+      });
+    }
+
+    return this.toAppointmentResponse(appointment);
+  }
+
   async getMyAppointments(
     userId: string,
     dto: DateRangeDTO,
   ): Promise<PaginatedResult<AppointmentResponseDTO>> {
     const result = await this.repo.getMyAppointments(userId, dto);
+    const latestPayments =
+      await this.paymentRepository.findLatestPaymentsForPayableIds(
+        PayableType.coaching,
+        result.data.map((appointment) => appointment.id),
+      );
+    const latestPaymentStageByAppointmentId = new Map<
+      string,
+      PaymentStage
+    >();
+
+    for (const payment of latestPayments) {
+      if (!latestPaymentStageByAppointmentId.has(payment.payable_id)) {
+        latestPaymentStageByAppointmentId.set(
+          payment.payable_id,
+          payment.payment_stage,
+        );
+      }
+    }
 
     return {
       data: result.data.map((appointment) =>
-        this.toAppointmentResponse(appointment),
+        this.toAppointmentResponse(
+          appointment,
+          latestPaymentStageByAppointmentId.get(appointment.id) ?? null,
+        ),
       ),
       meta: result.meta,
     };
@@ -233,10 +348,28 @@ export class AppointmentService {
     dto: StaffAppointmentFilterDTO,
   ): Promise<PaginatedResult<StaffAppointmentResponseDTO>> {
     const result = await this.repo.getStaffAppointments(dto);
+    const latestPayments =
+      await this.paymentRepository.findLatestPaymentsForPayableIds(
+        PayableType.coaching,
+        result.data.map((appointment) => appointment.id),
+      );
+    const latestPaymentStageByAppointmentId = new Map<string, PaymentStage>();
+
+    for (const payment of latestPayments) {
+      if (!latestPaymentStageByAppointmentId.has(payment.payable_id)) {
+        latestPaymentStageByAppointmentId.set(
+          payment.payable_id,
+          payment.payment_stage,
+        );
+      }
+    }
 
     return {
       data: result.data.map((appointment) =>
-        this.toStaffAppointmentResponse(appointment),
+        this.toStaffAppointmentResponse(
+          appointment,
+          latestPaymentStageByAppointmentId.get(appointment.id) ?? null,
+        ),
       ),
       meta: result.meta,
     };
@@ -281,7 +414,7 @@ export class AppointmentService {
     const appointment =
       await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
 
-    await this.assertCancellationOwnership(appointment, requesterId, role);
+    this.assertCancellationOwnership(appointment, requesterId, role);
     this.assertCancellableStatus(appointment.status);
 
     const cancelledAt = new Date();
@@ -313,12 +446,14 @@ export class AppointmentService {
 
   async initiateDownpayment(
     userId: string,
+    userRole: UserRole,
     appointmentId: string,
     dto: InitiateAppointmentPaymentDTO,
     idempotencyKey: string | undefined,
   ): Promise<AppointmentCheckoutResponseDTO> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
+    const paymentStage = dto.payment_stage ?? PaymentStage.downpayment;
     this.assertSupportedDownpaymentProvider(dto.provider);
 
     const existingIdempotentPayment =
@@ -330,20 +465,24 @@ export class AppointmentService {
       return this.resumeExistingDownpaymentPayment(
         existingIdempotentPayment,
         userId,
+        userRole,
+        appointmentId,
+        dto.provider,
+        paymentStage,
       );
     }
 
     const appointment =
       await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
 
-    this.assertAppointmentOwnership(appointment, userId);
-    this.assertDownpaymentAllowed(appointment);
+    this.assertAppointmentPaymentAccess(appointment, userId, userRole);
+    this.assertInitialPaymentAllowed(appointment, paymentStage);
 
     const existingStagePayment =
       await this.paymentRepository.findLatestPaymentForPayableStage(
         PayableType.coaching,
         appointment.id,
-        PaymentStage.downpayment,
+        paymentStage,
       );
 
     if (
@@ -353,19 +492,40 @@ export class AppointmentService {
       return this.resumeExistingDownpaymentPayment(
         existingStagePayment,
         userId,
+        userRole,
+        appointmentId,
+        dto.provider,
+        paymentStage,
       );
     }
+
+    const amount =
+      paymentStage === PaymentStage.full
+        ? appointment.total_amount
+        : appointment.downpayment_amount;
 
     const payment = await this.paymentRepository.createPayment({
       user: { connect: { id: appointment.user_id } },
       payable_type: PayableType.coaching,
       payable_id: appointment.id,
-      payment_stage: PaymentStage.downpayment,
-      amount: appointment.downpayment_amount,
-      provider: PaymentProvider.paymongo,
+      payment_stage: paymentStage,
+      amount,
+      provider: dto.provider,
       idempotency_key: normalizedIdempotencyKey,
-      status: PaymentStatus.pending,
+      status:
+        dto.provider === PaymentProvider.cash
+          ? PaymentStatus.awaiting_verification
+          : PaymentStatus.pending,
     });
+
+    if (dto.provider === PaymentProvider.cash) {
+      return {
+        appointment_id: appointment.id,
+        status: appointment.status,
+        checkout_url: null,
+        payment_id: payment.id,
+      };
+    }
 
     return this.startCheckoutForPayment(
       payment,
@@ -412,7 +572,9 @@ export class AppointmentService {
       provider_ref:
         dto.provider === PaymentProvider.cash ? dto.reference_no : undefined,
       screenshot_url:
-        dto.provider === PaymentProvider.cash ? dto.screenshot_url : undefined,
+        dto.provider === PaymentProvider.cash
+          ? dto.screenshot_url?.trim() || undefined
+          : undefined,
       idempotency_key: randomUUID(),
       status:
         dto.provider === PaymentProvider.cash
@@ -425,6 +587,7 @@ export class AppointmentService {
         appointment_id: appointment.id,
         status: appointment.status,
         checkout_url: null,
+        payment_id: payment.id,
       };
     }
 
@@ -471,7 +634,9 @@ export class AppointmentService {
     if (dto.accepted) {
       const nextStatus = appointment.is_free_session
         ? AppointmentStatus.confirmed
-        : AppointmentStatus.pending_payment;
+        : appointment.downpayment_paid_at || appointment.balance_paid_at
+          ? AppointmentStatus.confirmed
+          : AppointmentStatus.pending_payment;
       const updated = await this.repo.updateAppointment(appointment.id, {
         status: nextStatus,
       });
@@ -575,25 +740,65 @@ export class AppointmentService {
       return;
     }
 
+    if (payment.payment_stage === PaymentStage.full) {
+      if (appointment.downpayment_paid_at && appointment.balance_paid_at) {
+        return;
+      }
+
+      if (
+        appointment.status !== AppointmentStatus.pending_payment &&
+        appointment.status !== AppointmentStatus.pending_coach
+      ) {
+        return;
+      }
+
+      const updated = await this.repo.updateAppointment(appointment.id, {
+        status:
+          appointment.status === AppointmentStatus.pending_payment
+            ? AppointmentStatus.confirmed
+            : appointment.status,
+        downpayment_paid_at: appointment.downpayment_paid_at ?? paidAt,
+        balance_paid_at: appointment.balance_paid_at ?? paidAt,
+      });
+      if (updated.status === AppointmentStatus.confirmed) {
+        this.emitAppointmentConfirmed({
+          appointmentId: updated.id,
+          userId: updated.user_id,
+          coachId: updated.coach_id,
+          scheduledAt: updated.scheduled_at.toISOString(),
+          durationMinutes: updated.duration_minutes,
+        });
+      }
+      return;
+    }
+
     if (appointment.downpayment_paid_at) {
       return;
     }
 
-    if (appointment.status !== AppointmentStatus.pending_payment) {
+    if (
+      appointment.status !== AppointmentStatus.pending_payment &&
+      appointment.status !== AppointmentStatus.pending_coach
+    ) {
       return;
     }
 
     const updated = await this.repo.updateAppointment(appointment.id, {
-      status: AppointmentStatus.confirmed,
+      status:
+        appointment.status === AppointmentStatus.pending_payment
+          ? AppointmentStatus.confirmed
+          : appointment.status,
       downpayment_paid_at: paidAt,
     });
-    this.emitAppointmentConfirmed({
-      appointmentId: updated.id,
-      userId: updated.user_id,
-      coachId: updated.coach_id,
-      scheduledAt: updated.scheduled_at.toISOString(),
-      durationMinutes: updated.duration_minutes,
-    });
+    if (updated.status === AppointmentStatus.confirmed) {
+      this.emitAppointmentConfirmed({
+        appointmentId: updated.id,
+        userId: updated.user_id,
+        coachId: updated.coach_id,
+        scheduledAt: updated.scheduled_at.toISOString(),
+        durationMinutes: updated.duration_minutes,
+      });
+    }
   }
 
   private normalizeAvailabilitySlots(
@@ -702,6 +907,7 @@ export class AppointmentService {
 
   private toAppointmentResponse(
     appointment: CoachAppointment,
+    activePaymentStage: PaymentStage | null = null,
   ): AppointmentResponseDTO {
     return {
       id: appointment.id,
@@ -724,6 +930,7 @@ export class AppointmentService {
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
+      active_payment_stage: activePaymentStage,
       session_notes: appointment.session_notes ?? null,
       completed_at: appointment.completed_at?.toISOString() ?? null,
       no_show_at: appointment.no_show_at?.toISOString() ?? null,
@@ -744,6 +951,12 @@ export class AppointmentService {
       status: appointment.status,
       scheduled_at: appointment.scheduled_at.toISOString(),
       duration_minutes: appointment.duration_minutes,
+      total_amount: appointment.total_amount.toString(),
+      downpayment_amount: appointment.downpayment_amount.toString(),
+      balance_amount: appointment.balance_amount.toString(),
+      downpayment_paid_at:
+        appointment.downpayment_paid_at?.toISOString() ?? null,
+      balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
       member_notes: appointment.member_notes ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
@@ -764,6 +977,7 @@ export class AppointmentService {
 
   private toStaffAppointmentResponse(
     appointment: StaffAppointmentRecord,
+    activePaymentStage: PaymentStage | null = null,
   ): StaffAppointmentResponseDTO {
     return {
       id: appointment.id,
@@ -772,6 +986,13 @@ export class AppointmentService {
       status: appointment.status,
       scheduled_at: appointment.scheduled_at.toISOString(),
       duration_minutes: appointment.duration_minutes,
+      total_amount: appointment.total_amount.toString(),
+      downpayment_amount: appointment.downpayment_amount.toString(),
+      balance_amount: appointment.balance_amount.toString(),
+      downpayment_paid_at:
+        appointment.downpayment_paid_at?.toISOString() ?? null,
+      balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
+      active_payment_stage: activePaymentStage,
       member_notes: appointment.member_notes ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
@@ -789,10 +1010,14 @@ export class AppointmentService {
       coach: {
         id: appointment.coach.id,
         hourly_rate: appointment.coach.hourly_rate?.toString() ?? null,
+        display_name: normalizeStandaloneDisplayName(
+          appointment.coach.display_name,
+        ),
+        contact_email: appointment.coach.contact_email ?? null,
         profile: {
-          first_name: appointment.coach.user.profile?.first_name ?? null,
-          last_name: appointment.coach.user.profile?.last_name ?? null,
-          avatar_url: appointment.coach.user.profile?.avatar_url ?? null,
+          first_name: null,
+          last_name: null,
+          avatar_url: null,
         },
       },
       created_at: appointment.created_at.toISOString(),
@@ -828,6 +1053,22 @@ export class AppointmentService {
     }
   }
 
+  private assertAppointmentPaymentAccess(
+    appointment: AppointmentLifecycleRecord,
+    userId: string,
+    role: UserRole,
+  ): void {
+    if (this.isStaffPaymentProcessor(role)) {
+      return;
+    }
+
+    this.assertAppointmentOwnership(appointment, userId);
+  }
+
+  private isStaffPaymentProcessor(role: UserRole): boolean {
+    return role === UserRole.admin || role === UserRole.staff;
+  }
+
   private assertPendingCoachStatus(status: AppointmentStatus): void {
     if (status !== AppointmentStatus.pending_coach) {
       throw new HttpException(
@@ -857,25 +1098,17 @@ export class AppointmentService {
     }
   }
 
-  private async assertCancellationOwnership(
+  private assertCancellationOwnership(
     appointment: AppointmentLifecycleRecord,
     requesterId: string,
     role: UserRole,
-  ): Promise<void> {
+  ): void {
     if (role === UserRole.admin || role === UserRole.staff) {
       return;
     }
 
     if (appointment.user_id === requesterId) {
       return;
-    }
-
-    if (role === UserRole.coach) {
-      const coach = await this.repo.findCoachByUserIdOrThrow(requesterId);
-
-      if (appointment.coach_id === coach.id) {
-        return;
-      }
     }
 
     throw new ForbiddenException({
@@ -933,14 +1166,17 @@ export class AppointmentService {
       });
     }
 
-    if (appointment.status !== AppointmentStatus.pending_payment) {
+    if (
+      appointment.status !== AppointmentStatus.pending_payment &&
+      appointment.status !== AppointmentStatus.pending_coach
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Downpayment Cannot Be Started',
           status: 422,
           detail:
-            'Only coach-accepted appointments awaiting payment can start a downpayment.',
+            'Only pending coach requests or coach-accepted appointments awaiting payment can start a downpayment.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1110,14 +1346,65 @@ export class AppointmentService {
   }
 
   private assertSupportedDownpaymentProvider(provider: PaymentProvider): void {
-    if (provider !== PaymentProvider.paymongo) {
+    if (
+      provider !== PaymentProvider.paymongo &&
+      provider !== PaymentProvider.cash
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Unsupported Coaching Downpayment Provider',
+          title: 'Unsupported Coaching Payment Provider',
           status: 422,
           detail:
-            'Only PayMongo checkout is supported for coaching downpayment initiation.',
+            'Only PayMongo checkout and cash verification are supported for coaching payments.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private assertInitialPaymentAllowed(
+    appointment: AppointmentLifecycleRecord,
+    paymentStage: InitialAppointmentPaymentStage,
+  ): void {
+    if (paymentStage === PaymentStage.downpayment) {
+      this.assertDownpaymentAllowed(appointment);
+      return;
+    }
+
+    if (appointment.is_free_session || appointment.total_amount.equals(0)) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'No Payment Required',
+          status: 422,
+          detail: 'This coaching appointment does not require a payment.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (appointment.downpayment_paid_at || appointment.balance_paid_at) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Payment Already Collected',
+        status: 409,
+        detail:
+          'This coaching appointment already has a recorded payment and cannot start a new full-payment request.',
+      });
+    }
+
+    if (
+      appointment.status !== AppointmentStatus.pending_payment &&
+      appointment.status !== AppointmentStatus.pending_coach
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Payment Cannot Be Started',
+          status: 422,
+          detail:
+            'Only pending coach requests or coach-accepted appointments awaiting payment can start a full payment.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1127,9 +1414,14 @@ export class AppointmentService {
   private async resumeExistingDownpaymentPayment(
     payment: Payment,
     userId: string,
+    userRole: UserRole,
+    expectedAppointmentId: string,
+    provider: PaymentProvider,
+    paymentStage: InitialAppointmentPaymentStage,
   ): Promise<AppointmentCheckoutResponseDTO> {
     if (
-      payment.user_id !== userId ||
+      (payment.user_id !== userId &&
+        !this.isStaffPaymentProcessor(userRole)) ||
       payment.payable_type !== PayableType.coaching
     ) {
       throw new ConflictException({
@@ -1141,13 +1433,23 @@ export class AppointmentService {
       });
     }
 
-    if (payment.provider !== PaymentProvider.paymongo) {
+    if (payment.provider !== provider) {
       throw new ConflictException({
         type: 'CONFLICT',
         title: 'Payment Provider Mismatch',
         status: 409,
         detail:
-          'This Idempotency-Key is already associated with a non-PayMongo payment.',
+          'This Idempotency-Key is already associated with another coaching payment provider.',
+      });
+    }
+
+    if (payment.payment_stage !== paymentStage) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Payment Stage Mismatch',
+        status: 409,
+        detail:
+          'This Idempotency-Key is already associated with another coaching payment stage.',
       });
     }
 
@@ -1156,7 +1458,11 @@ export class AppointmentService {
         payment.payable_id,
       );
 
-    if (appointment.user_id !== userId) {
+    if (
+      this.isStaffPaymentProcessor(userRole)
+        ? appointment.id !== expectedAppointmentId
+        : appointment.user_id !== userId
+    ) {
       throw new ConflictException({
         type: 'CONFLICT',
         title: 'Appointment Ownership Conflict',
@@ -1168,14 +1474,6 @@ export class AppointmentService {
 
     const checkoutUrl = this.extractCheckoutUrl(payment.gateway_metadata);
 
-    if (payment.status === PaymentStatus.completed || checkoutUrl) {
-      return {
-        appointment_id: appointment.id,
-        status: appointment.status,
-        checkout_url: checkoutUrl,
-      };
-    }
-
     if (payment.status === PaymentStatus.failed) {
       throw new ConflictException({
         type: 'CONFLICT',
@@ -1184,6 +1482,24 @@ export class AppointmentService {
         detail:
           'This Idempotency-Key belongs to a failed payment attempt. Start a new attempt with a new key.',
       });
+    }
+
+    if (payment.status === PaymentStatus.completed || checkoutUrl) {
+      return {
+        appointment_id: appointment.id,
+        status: appointment.status,
+        checkout_url: checkoutUrl,
+        payment_id: payment.id,
+      };
+    }
+
+    if (payment.provider === PaymentProvider.cash) {
+      return {
+        appointment_id: appointment.id,
+        status: appointment.status,
+        checkout_url: null,
+        payment_id: payment.id,
+      };
     }
 
     return this.startCheckoutForPayment(
@@ -1210,11 +1526,22 @@ export class AppointmentService {
 
     const checkoutUrl = this.extractCheckoutUrl(payment.gateway_metadata);
 
+    if (payment.status === PaymentStatus.failed) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Balance Payment Attempt Already Failed',
+        status: 409,
+        detail:
+          'This balance payment attempt has failed. Start a new balance collection.',
+      });
+    }
+
     if (payment.provider === PaymentProvider.cash) {
       return {
         appointment_id: appointment.id,
         status: appointment.status,
         checkout_url: null,
+        payment_id: payment.id,
       };
     }
 
@@ -1223,6 +1550,7 @@ export class AppointmentService {
         appointment_id: appointment.id,
         status: appointment.status,
         checkout_url: checkoutUrl,
+        payment_id: payment.id,
       };
     }
 
@@ -1241,6 +1569,8 @@ export class AppointmentService {
     const paymentLabel =
       payment.payment_stage === PaymentStage.balance
         ? 'balance'
+        : payment.payment_stage === PaymentStage.full
+          ? 'full payment'
         : 'downpayment';
     const checkout = await this.paymongoCheckoutService.createCheckoutSession({
       amount: this.toMinorAmount(payment.amount),
@@ -1261,6 +1591,7 @@ export class AppointmentService {
       appointment_id: appointmentId,
       status,
       checkout_url: checkout.checkoutUrl,
+      payment_id: payment.id,
     };
   }
 
@@ -1303,6 +1634,24 @@ export class AppointmentService {
   private toTimeValue(value: string): Date {
     const [hours, minutes] = value.split(':').map((part) => Number(part));
     return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0, 0));
+  }
+
+  private toGymWallClockDate(value: Date): Date {
+    return new Date(
+      value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+    );
+  }
+
+  private toGymDateKey(value: Date): string {
+    return this.toGymWallClockDate(value).toISOString().slice(0, 10);
+  }
+
+  private toGymDayOfWeek(value: Date): number {
+    return this.toGymWallClockDate(value).getUTCDay();
+  }
+
+  private toGymTimeString(value: Date): string {
+    return this.toTimeString(this.toGymWallClockDate(value));
   }
 
   private toTimeString(value: Date): string {
@@ -1348,4 +1697,12 @@ function calculateAppointmentAmounts(
     gymRevenue,
     coachEarnings,
   };
+}
+
+function resolveStaffAppointmentPaymentStage(
+  paymentStage?: CreateStaffInitialPaymentStage,
+): Extract<PaymentStage, typeof PaymentStage.downpayment | typeof PaymentStage.full> {
+  return paymentStage === CreateStaffInitialPaymentStage.downpayment
+    ? PaymentStage.downpayment
+    : PaymentStage.full;
 }

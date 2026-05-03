@@ -24,7 +24,6 @@ import {
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
-import BufferScreen from "@/components/loading/BufferScreen";
 import OTPModal from "@/components/modals/auth/OTPModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
 
@@ -37,14 +36,13 @@ const PHONE_PREFIX_OPTIONS = [
 type PhonePrefixMode = (typeof PHONE_PREFIX_OPTIONS)[number]["value"];
 
 export default function RegisterScreen() {
-  const { register, commitLogin, sendOTP } = useAuth();
+  const { register, sendOTP, verifyOTP } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
   const s = useMemo(() => makeAuthStyles(colors), [colors]);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [showBuffer, setShowBuffer] = useState(false);
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
@@ -123,8 +121,13 @@ export default function RegisterScreen() {
     blurActiveWebElement();
     setShowOTP(false);
     setPendingEmail("");
-    setShowBuffer(true);
+    setStatusTone("brand");
+    showStatus("Email verified. Please sign in with your credentials.");
+    router.replace("/(auth)/login");
   };
+
+  const handleRegistrationOTPVerify = (code: string) =>
+    verifyOTP(code, { persistSession: false });
 
   const handleOTPResend = async () => {
     if (!pendingEmail) return;
@@ -165,15 +168,6 @@ export default function RegisterScreen() {
         style: { display: "contents" as const }
       }
     : {};
-
-  if (showBuffer) {
-    return (
-      <BufferScreen
-        onCommit={commitLogin}
-        onDone={() => router.replace("/(tabs)/home")}
-      />
-    );
-  }
 
   return (
     <>
@@ -326,6 +320,7 @@ export default function RegisterScreen() {
       <OTPModal
         visible={showOTP}
         destination={pendingEmail}
+        onVerify={handleRegistrationOTPVerify}
         onResend={handleOTPResend}
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}

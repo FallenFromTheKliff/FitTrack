@@ -28,8 +28,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   CreateSaleDTO,
+  SalesAnalyticsQueryDTO,
+  SalesAnalyticsResponseDTO,
   SaleCheckoutResponseDTO,
   SaleFilterDTO,
+  SalesSummaryResponseDTO,
   SaleTransactionDetailResponseDTO,
   SaleTransactionSummaryResponseDTO,
 } from './dto/sales.dto';
@@ -70,6 +73,8 @@ function paginatedEnvelopeSchema(ref: string) {
   SaleTransactionSummaryResponseDTO,
   SaleTransactionDetailResponseDTO,
   SaleCheckoutResponseDTO,
+  SalesSummaryResponseDTO,
+  SalesAnalyticsResponseDTO,
 )
 @Controller('inventory')
 export class SalesController {
@@ -124,6 +129,40 @@ export class SalesController {
   })
   listSales(@Query() dto: SaleFilterDTO) {
     return this.salesService.listSales(dto);
+  }
+
+  @Get('sales/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Get aggregate sales revenue and completed sale counts for the selected date range. Admin and staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sales summary returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(SalesSummaryResponseDTO)),
+  })
+  getSalesSummary(@Query() dto: SaleFilterDTO) {
+    return this.salesService.getSalesSummary(dto);
+  }
+
+  @Get('sales/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Get aggregate inventory analytics for sales revenue and top retail items. Admin and staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Inventory sales analytics returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(SalesAnalyticsResponseDTO)),
+  })
+  getSalesAnalytics(@Query() dto: SalesAnalyticsQueryDTO) {
+    return this.salesService.getSalesAnalytics(dto);
   }
 
   @Get('sales/:id')

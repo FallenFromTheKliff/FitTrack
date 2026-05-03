@@ -19,6 +19,11 @@ type UserWithProfile = Prisma.UserGetPayload<{
   include: { profile: true; membership_card: true };
 }>;
 type UserWithRequiredProfile = UserWithProfile & { profile: UserProfile };
+type AuthPortalSummaryRow = {
+  active_members: bigint | number | null;
+  sessions_today: bigint | number | null;
+  total_revenue: Prisma.Decimal | null;
+};
 
 @Injectable()
 export class AuthRepository extends BaseRepository {
@@ -169,6 +174,84 @@ export class AuthRepository extends BaseRepository {
     return this.create<CoachProfile>(this.prisma.coachProfile, {
       user_id: userId,
     });
+  }
+
+  async getPortalSummary(
+    referenceDate: Date,
+    todayStartUtc: Date,
+    tomorrowStartUtc: Date,
+  ): Promise<AuthPortalSummaryRow> {
+    const rows = await this.queryRaw<AuthPortalSummaryRow[]>`
+      WITH active_members AS (
+        SELECT COUNT(DISTINCT users.id) AS active_members
+        FROM users
+        JOIN membership_cards ON membership_cards.user_id = users.id
+        LEFT JOIN account_deletion_requests pending_requests
+          ON pending_requests.user_id = users.id
+         AND pending_requests.status = 'pending'
+        WHERE users.role = 'member'
+          AND users."deletedAt" IS NULL
+          AND pending_requests.id IS NULL
+          AND membership_cards.status = 'active'
+          AND COALESCE(
+            membership_cards.activated_at,
+            membership_cards.verified_at,
+            membership_cards.purchased_at
+          ) <= ${referenceDate}
+          AND (
+            membership_cards.revoked_at IS NULL
+            OR membership_cards.revoked_at > ${referenceDate}
+          )
+      ),
+      sessions_today AS (
+        SELECT COUNT(*) AS sessions_today
+        FROM attendance_logs
+        JOIN users ON users.id = attendance_logs.user_id
+        LEFT JOIN account_deletion_requests pending_requests
+          ON pending_requests.user_id = users.id
+         AND pending_requests.status = 'pending'
+        WHERE check_in_at >= ${todayStartUtc}
+          AND check_in_at < ${tomorrowStartUtc}
+          AND users.role = 'member'
+          AND users."deletedAt" IS NULL
+          AND pending_requests.id IS NULL
+      ),
+      payment_revenue AS (
+        SELECT
+          COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0)
+          + COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS payment_revenue
+        FROM payments
+        WHERE status = 'completed'
+      ),
+      product_revenue AS (
+        SELECT COALESCE(SUM(total_amount), 0) AS product_revenue
+        FROM sale_transactions
+        WHERE status = 'completed'
+      ),
+      coaching_revenue AS (
+        SELECT COALESCE(SUM(amount), 0) AS coaching_gym_revenue
+        FROM payments
+        WHERE status = 'completed'
+          AND payable_type IN ('coaching', 'recurring_coaching')
+      )
+      SELECT
+        active_members.active_members,
+        sessions_today.sessions_today,
+        (
+          payment_revenue.payment_revenue
+          + product_revenue.product_revenue
+          + coaching_revenue.coaching_gym_revenue
+        ) AS total_revenue
+      FROM active_members, sessions_today, payment_revenue, product_revenue, coaching_revenue
+    `;
+
+    return (
+      rows[0] ?? {
+        active_members: 0,
+        sessions_today: 0,
+        total_revenue: new Prisma.Decimal(0),
+      }
+    );
   }
 
   // ── RefreshToken ──────────────────────────────────────────────────────────────

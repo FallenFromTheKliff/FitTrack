@@ -199,7 +199,6 @@ export default function HomeScreen() {
   const todayString = getTodayString();
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
   const hasMemberCardAccess = user?.membershipAccess === "member";
-  const isCoach = user?.role === "COACH";
   const memberAccessLabel = membershipCardStatus === "pending_verification"
     ? "Pending"
     : membershipCardStatus === "revoked"
@@ -309,14 +308,13 @@ export default function HomeScreen() {
 
     return [
       { icon: CalendarDays, label: "Today Bookings", value: String(todayBookings.length) },
-      { icon: User, label: "Portal Role", value: isCoach ? "Coach" : "User" },
+      { icon: User, label: "Portal Role", value: "Member" },
       { icon: ShieldCheck, label: "Member Access", value: memberAccessLabel },
       { icon: Sparkles, label: "AI Access", value: hasMemberCardAccess ? "Open" : "Locked" }
     ];
   }, [
     activeDaysLast7Days,
     hasMemberCardAccess,
-    isCoach,
     leaderboardEntry,
     memberAccessLabel,
     todayBookings.length,
@@ -405,25 +403,6 @@ export default function HomeScreen() {
   ]);
 
   const quickActions = useMemo<HomeQuickAction[]>(() => {
-    if (isCoach) {
-      return [
-        {
-          key: "view-schedule",
-          icon: CalendarDays,
-          label: "View Coach Schedule",
-          subtitle: "Open bookings to review the appointments assigned to you.",
-          onPress: () => router.push("/(tabs)/bookings")
-        },
-        {
-          key: "open-facilities",
-          icon: Dumbbell,
-          label: "Open Facilities",
-          subtitle: "Jump into the live venue and equipment view for floor awareness.",
-          onPress: () => router.push("/(tabs)/facilities")
-        }
-      ];
-    }
-
     if (!hasMemberCardAccess) {
       return [
         {
@@ -494,17 +473,9 @@ export default function HomeScreen() {
           )
       }
     ];
-  }, [completedSessionsLast7Days, hasMemberCardAccess, isCoach, router, targetCalories, todayBookings.length]);
+  }, [completedSessionsLast7Days, hasMemberCardAccess, router, targetCalories, todayBookings.length]);
 
   const pinnedGoalCard = useMemo(() => {
-    if (isCoach) {
-      return {
-        body: "Coach bookings, member appointments, and the shared booking truth are already wired into the mobile stack.",
-        icon: CalendarDays as LucideIcon,
-        title: "Pinned Goal: keep your coach schedule clean"
-      };
-    }
-
     if (!hasMemberCardAccess) {
       return {
         body: membershipCardStatus === "pending_verification"
@@ -571,7 +542,6 @@ export default function HomeScreen() {
     currentStreakDays,
     hasMemberCardAccess,
     highestRankEntry,
-    isCoach,
     memberSnapshotLoading,
     membershipCardStatus,
     targetCalories,
@@ -642,14 +612,12 @@ export default function HomeScreen() {
                 <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
                   <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
                   <FitText style={{ fontSize: 14, color: colors.textMuted }}>No bookings scheduled for today</FitText>
-                  {!isCoach ? (
-                    <View style={{ width: "100%", marginTop: 10 }}>
-                      <FitButton
-                        label="Book Now"
-                        onPress={() => router.push("/(tabs)/bookings?openReservation=true")}
-                      />
-                    </View>
-                  ) : null}
+                  <View style={{ width: "100%", marginTop: 10 }}>
+                    <FitButton
+                      label="Book Now"
+                      onPress={() => router.push("/(tabs)/bookings?openReservation=true")}
+                    />
+                  </View>
                 </View>
               ) : (
                 <ScrollView

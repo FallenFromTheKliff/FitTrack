@@ -17,7 +17,9 @@ import { AuditAction } from '../../audit/audit.service';
 import { CoachService } from '../../coaching/coach/coach.service';
 
 import { PaymentRepository } from '../../membership/payment/payment.repository';
+import { PAYMENT_COMPLETED_EVENT } from '../../membership/payment/events/payment-completed.event';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
+import { MembershipCardService } from '../../membership/card/card.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
 import { AmenityRepository } from '../amenity/amenity.repository';
 import { BookingRepository } from './booking.repository';
@@ -36,6 +38,7 @@ describe('BookingService', () => {
   const bookingRepository = {
     listActiveOverlappingBookings: jest.fn(),
     createConfirmedFreeBooking: jest.fn(),
+    createConfirmedManualBooking: jest.fn(),
     createPendingBookingWithPayment: jest.fn(),
     findBookingWithAmenityByIdOrThrow: jest.fn(),
     findBookingByIdAndAssertOwnership: jest.fn(),
@@ -67,6 +70,10 @@ describe('BookingService', () => {
     hasSubscriptionAccess: jest.fn(),
   };
 
+  const membershipCardService = {
+    hasActiveMembershipCardAccess: jest.fn(),
+  };
+
   const coachService = {
     assertCoachReservableForBookingWindow: jest.fn(),
   };
@@ -93,6 +100,7 @@ describe('BookingService', () => {
           provide: PaymongoCheckoutService,
           useValue: paymongoCheckoutService,
         },
+        { provide: MembershipCardService, useValue: membershipCardService },
         { provide: SubscriptionService, useValue: subscriptionService },
         { provide: CoachService, useValue: coachService },
         { provide: EventEmitter2, useValue: eventEmitter },
@@ -104,6 +112,9 @@ describe('BookingService', () => {
     jest.clearAllMocks();
     redis.set.mockResolvedValue('OK');
     redis.del.mockResolvedValue(1);
+    membershipCardService.hasActiveMembershipCardAccess.mockResolvedValue(
+      false,
+    );
   });
 
   it('validates optional coach add-ons and stores the linked coach on free bookings', async () => {
@@ -222,7 +233,7 @@ describe('BookingService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('denies subscription-required amenities to members without access', async () => {
+  it('denies member-required amenities to members without access', async () => {
     paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
       id: 'amenity-1',
@@ -231,6 +242,9 @@ describe('BookingService', () => {
       requires_subscription: true,
     });
     subscriptionService.hasSubscriptionAccess.mockResolvedValue(false);
+    membershipCardService.hasActiveMembershipCardAccess.mockResolvedValue(
+      false,
+    );
 
     await expect(
       service.createBooking(
@@ -244,6 +258,50 @@ describe('BookingService', () => {
         '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows member-required amenities when the member has an active membership card', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Main Court',
+      hourly_rate: new Prisma.Decimal('800'),
+      requires_subscription: true,
+    });
+    subscriptionService.hasSubscriptionAccess.mockResolvedValue(false);
+    membershipCardService.hasActiveMembershipCardAccess.mockResolvedValue(true);
+    bookingRepository.createPendingBookingWithPayment.mockResolvedValue({
+      booking: {
+        id: 'booking-1',
+        status: 'pending',
+      },
+      payment: {
+        id: 'payment-1',
+        amount: new Prisma.Decimal('240'),
+        provider_ref: null,
+        gateway_metadata: null,
+      },
+    });
+
+    const result = await service.createBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        provider: PaymentProvider.cash,
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b1',
+    );
+
+    expect(result).toMatchObject({
+      booking_id: 'booking-1',
+      payment_id: 'payment-1',
+      status: 'pending',
+    });
+    expect(
+      membershipCardService.hasActiveMembershipCardAccess,
+    ).toHaveBeenCalledWith('member-1');
   });
 
   it('loads member booking history through the repository', async () => {
@@ -279,19 +337,31 @@ describe('BookingService', () => {
     expect(result.meta.total).toBe(1);
   });
 
-  it('confirms pending bookings for admin and staff schedule flows', async () => {
+  it('accepts pending booking downpayments for admin and staff schedule flows', async () => {
     bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
       id: 'booking-1',
       user_id: 'member-1',
       amenity_id: 'amenity-1',
       status: 'pending',
       downpayment_paid_at: null,
+      balance_amount: new Prisma.Decimal('560.00'),
+      total_amount: new Prisma.Decimal('800.00'),
       starts_at: new Date('2099-03-24T10:00:00.000Z'),
       ends_at: new Date('2099-03-24T11:00:00.000Z'),
     });
+    paymentRepository.findLatestPaymentForPayableStage.mockResolvedValue({
+      id: 'payment-1',
+      amount: new Prisma.Decimal('240.00'),
+      status: PaymentStatus.awaiting_verification,
+    });
+    paymentRepository.updatePayment.mockResolvedValue({
+      id: 'payment-1',
+      amount: new Prisma.Decimal('240.00'),
+      status: PaymentStatus.completed,
+    });
     bookingRepository.confirmBookingDownpayment.mockResolvedValue({
       id: 'booking-1',
-      status: 'confirmed',
+      status: 'balance_pending',
     });
 
     const result = await service.confirmPendingBooking('booking-1', 'staff-1');
@@ -300,13 +370,34 @@ describe('BookingService', () => {
       'booking-1',
       expect.any(Date),
     );
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
-      BOOKING_CONFIRMED_EVENT,
+    expect(
+      paymentRepository.findLatestPaymentForPayableStage,
+    ).toHaveBeenCalledWith(
+      PayableType.booking,
+      'booking-1',
+      PaymentStage.downpayment,
+    );
+    expect(paymentRepository.updatePayment).toHaveBeenCalledWith(
+      'payment-1',
       expect.objectContaining({
-        bookingId: 'booking-1',
-        userId: 'member-1',
-        amenityId: 'amenity-1',
+        status: PaymentStatus.completed,
+        verifier: { connect: { id: 'staff-1' } },
       }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      PAYMENT_COMPLETED_EVENT,
+      expect.objectContaining({
+        amount: '240',
+        payableId: 'booking-1',
+        payableType: PayableType.booking,
+        paymentId: 'payment-1',
+        userId: 'member-1',
+        verifiedBy: 'staff-1',
+      }),
+    );
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+      BOOKING_CONFIRMED_EVENT,
+      expect.anything(),
     );
     expect(eventEmitter.emit).toHaveBeenCalledWith(
       'audit.log',
@@ -317,8 +408,8 @@ describe('BookingService', () => {
       }),
     );
     expect(result).toEqual({
-      booking: { id: 'booking-1', status: 'confirmed' },
-      message: 'Booking confirmed successfully',
+      booking: { id: 'booking-1', status: 'balance_pending' },
+      message: 'Booking downpayment accepted. Balance remains pending.',
     });
   });
 
@@ -541,7 +632,113 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'pending',
       checkout_url: 'https://checkout.paymongo.com/cs_test_123',
+      payment_id: 'payment-1',
     });
+  });
+
+  it('creates staff manual venue downpayments as pending cash payments', async () => {
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Main Court',
+      hourly_rate: new Prisma.Decimal('800'),
+      requires_subscription: false,
+    });
+    bookingRepository.createPendingBookingWithPayment.mockResolvedValue({
+      booking: { id: 'booking-1', status: 'pending' },
+      payment: { id: 'payment-1' },
+    });
+
+    const result = await service.createStaffManualBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        member_id: 'member-1',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        payment_stage: 'downpayment' as never,
+      },
+      'staff-1',
+    );
+
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'member-1',
+        amenityId: 'amenity-1',
+        paymentAmount: new Prisma.Decimal('240.00'),
+        paymentStage: PaymentStage.downpayment,
+        paymentStatus: PaymentStatus.awaiting_verification,
+        provider: PaymentProvider.cash,
+      }),
+    );
+    expect(bookingRepository.createConfirmedManualBooking).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+      BOOKING_CONFIRMED_EVENT,
+      expect.anything(),
+    );
+    expect(result).toEqual({
+      booking_id: 'booking-1',
+      status: 'pending',
+      checkout_url: null,
+      payment_id: 'payment-1',
+    });
+  });
+
+  it('forces PayMongo venue-booking initiation to stay on the downpayment path', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Basketball Court',
+      hourly_rate: new Prisma.Decimal('1200'),
+      requires_subscription: false,
+    });
+    bookingRepository.createPendingBookingWithPayment.mockResolvedValue({
+      booking: { id: 'booking-2', status: 'pending' },
+      payment: {
+        id: 'payment-2',
+        payment_stage: PaymentStage.downpayment,
+        idempotency_key: '9fdd9dc8-11b8-47d2-b4d9-f0c3cc2f38ab',
+        amount: new Prisma.Decimal('720'),
+      },
+    });
+    paymongoCheckoutService.createCheckoutSession.mockResolvedValue({
+      providerRef: 'cs_test_456',
+      checkoutUrl: 'https://checkout.paymongo.com/cs_test_456',
+      gatewayMetadata: {
+        checkout_url: 'https://checkout.paymongo.com/cs_test_456',
+      },
+    });
+
+    await service.createBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        starts_at: '2099-05-13T08:00:00.000Z',
+        ends_at: '2099-05-13T10:00:00.000Z',
+        provider: PaymentProvider.paymongo,
+        payment_stage: 'full',
+      },
+      '9fdd9dc8-11b8-47d2-b4d9-f0c3cc2f38ab',
+    );
+
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalAmount: new Prisma.Decimal('2400.00'),
+        downpaymentAmount: new Prisma.Decimal('720.00'),
+        balanceAmount: new Prisma.Decimal('1680.00'),
+        paymentAmount: new Prisma.Decimal('720.00'),
+        paymentStage: PaymentStage.downpayment,
+      }),
+    );
+    expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 72000,
+        description: 'Basketball Court booking downpayment',
+      }),
+    );
   });
 
   it('creates an awaiting-verification cash payment for split booking initiation', async () => {
@@ -589,6 +786,7 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'pending',
       checkout_url: null,
+      payment_id: 'payment-1',
     });
   });
 
@@ -628,6 +826,7 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'pending',
       checkout_url: 'https://checkout.paymongo.com/cs_test_123',
+      payment_id: 'payment-1',
     });
     expect(
       bookingRepository.createPendingBookingWithPayment,
@@ -669,6 +868,7 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'pending',
       checkout_url: null,
+      payment_id: 'payment-1',
     });
   });
 
@@ -687,7 +887,7 @@ describe('BookingService', () => {
     ).rejects.toBeInstanceOf(HttpException);
   });
 
-  it('confirms pending booking downpayments on shared payment completion', async () => {
+  it('marks booking downpayments balance-pending on shared payment completion', async () => {
     paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
       id: 'payment-1',
       payment_stage: PaymentStage.downpayment,
@@ -703,7 +903,7 @@ describe('BookingService', () => {
     });
     bookingRepository.confirmBookingDownpayment.mockResolvedValue({
       id: 'booking-1',
-      status: 'confirmed',
+      status: 'balance_pending',
     });
 
     await service.handlePaymentCompleted({
@@ -718,13 +918,9 @@ describe('BookingService', () => {
       'booking-1',
       expect.any(Date),
     );
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       BOOKING_CONFIRMED_EVENT,
-      expect.objectContaining({
-        bookingId: 'booking-1',
-        userId: 'member-1',
-        amenityId: 'amenity-1',
-      }),
+      expect.anything(),
     );
   });
 
@@ -850,6 +1046,7 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'balance_pending',
       checkout_url: 'https://checkout.paymongo.com/cs_test_balance_123',
+      payment_id: 'payment-1',
     });
   });
 
@@ -882,10 +1079,11 @@ describe('BookingService', () => {
       booking_id: 'booking-1',
       status: 'balance_pending',
       checkout_url: null,
+      payment_id: 'payment-1',
     });
   });
 
-  it('completes balance_pending bookings on shared balance payment completion', async () => {
+  it('settles balance_pending bookings on shared balance payment completion', async () => {
     paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
       id: 'payment-1',
       payment_stage: PaymentStage.balance,
@@ -894,10 +1092,41 @@ describe('BookingService', () => {
       id: 'booking-1',
       status: 'balance_pending',
       balance_paid_at: null,
+      balance_amount: new Prisma.Decimal('560.00'),
     });
     bookingRepository.completeBookingBalance.mockResolvedValue({
       id: 'booking-1',
-      status: 'completed',
+      status: 'confirmed',
+    });
+
+    await service.handlePaymentCompleted({
+      paymentId: 'payment-1',
+      userId: 'member-1',
+      payableType: PayableType.booking,
+      payableId: 'booking-1',
+      amount: '560',
+    });
+
+    expect(bookingRepository.completeBookingBalance).toHaveBeenCalledWith(
+      'booking-1',
+      expect.any(Date),
+    );
+  });
+
+  it('settles outstanding booking balances even after the downpayment confirmed the booking', async () => {
+    paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
+      id: 'payment-1',
+      payment_stage: PaymentStage.balance,
+    });
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+      balance_paid_at: null,
+      balance_amount: new Prisma.Decimal('560.00'),
+    });
+    bookingRepository.completeBookingBalance.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
     });
 
     await service.handlePaymentCompleted({

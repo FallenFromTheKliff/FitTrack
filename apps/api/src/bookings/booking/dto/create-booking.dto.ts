@@ -98,6 +98,12 @@ export class BookingCheckoutResponseDTO {
     nullable: true,
   })
   checkout_url?: string | null;
+
+  @ApiPropertyOptional({
+    example: '44444444-4444-4444-8444-444444444444',
+    nullable: true,
+  })
+  payment_id?: string | null;
 }
 
 export class ProcessBalanceDTO {
@@ -113,7 +119,12 @@ export class ProcessBalanceDTO {
   @ApiPropertyOptional({
     example: 'https://cdn.fittrack.test/receipts/or-2026-03-23.png',
   })
-  @ValidateIf((dto: ProcessBalanceDTO) => dto.provider === PaymentProvider.cash)
+  @ValidateIf(
+    (dto: ProcessBalanceDTO) =>
+      dto.provider === PaymentProvider.cash &&
+      typeof dto.screenshot_url === 'string' &&
+      dto.screenshot_url.trim().length > 0,
+  )
   @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
   screenshot_url?: string;
 

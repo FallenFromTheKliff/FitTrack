@@ -11,7 +11,6 @@ import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
 import {
   buildRenderableAssetUrl,
   calcBMI,
-  formatDate,
   formatBookingDate,
   splitFullName
 } from "@fittrack/utils";
@@ -44,6 +43,21 @@ type Props = {
 const capitalize = (value: string) => {
   if (!value) return "";
   return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+const GENDER_OPTIONS = [
+  { label: "Male", value: "male" },
+  { label: "Female", value: "female" },
+  { label: "Other", value: "other" }
+] as const;
+
+type GenderOptionValue = (typeof GENDER_OPTIONS)[number]["value"];
+
+const normalizeGenderOption = (value?: string | null): GenderOptionValue => {
+  const normalized = value?.toLowerCase();
+  return normalized === "male" || normalized === "female" || normalized === "other"
+    ? normalized
+    : "other";
 };
 
 type SelectedAvatarAsset = {
@@ -83,7 +97,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const s = useMemo(() => makeEditProfileModalStyles(colors), [colors]);
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const isCoach = user?.role === "COACH";
+  const isCoach = false;
   const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
   const updatePhoneMutation = useMutation(updatePhoneMutationOptions(mobileApiClient));
   const uploadImageMutation = useMutation(uploadImageMutationOptions(mobileApiClient));
@@ -104,7 +118,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       lastName: "",
       email: "",
       phone: "",
-      dateOfBirth: ""
+      dateOfBirth: "",
+      gender: "other"
     }
   });
   const savingText = useLoadingText("Saving", isSubmitting);
@@ -122,6 +137,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const userEmail = user?.email ?? "";
   const userPhone = user?.phone_no ?? "";
   const userDob = user?.dateOfBirth ?? "";
+  const userGender = normalizeGenderOption(user?.gender ?? user?.profile?.gender);
   const userWeight = user?.weightKg;
   const userHeight = user?.heightCm;
   const statusValue = (user?.status ?? "active").toLowerCase();
@@ -137,7 +153,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         lastName: ln,
         email: userEmail,
         phone: formatPhilippineMobileForInput(userPhone),
-        dateOfBirth: userDob
+        dateOfBirth: userDob,
+        gender: userGender
       });
       setWeightInput(String(userWeight ?? ""));
       setHeightInput(String(userHeight ?? ""));
@@ -169,6 +186,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     resetPersonal,
     userDob,
     userEmail,
+    userGender,
     userHeight,
     userName,
     userPhone,
@@ -203,6 +221,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   }));
 
   const dateOfBirth = personalForm.watch("dateOfBirth") ?? "";
+  const selectedGender = personalForm.watch("gender") ?? "other";
   const wKg = parseFloat(weightInput);
   const hCm = parseFloat(heightInput);
   const bmiResult = wKg > 0 && hCm > 0 ? calcBMI(wKg, hCm) : null;
@@ -236,7 +255,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       name: fullName || user?.name,
       email: user?.email ?? "",
       phone_no: (normalizedPhone || user?.phone_no) ?? null,
-      dateOfBirth: personal.dateOfBirth || undefined
+      dateOfBirth: personal.dateOfBirth || undefined,
+      gender: personal.gender
     };
     const wKgNum = parseFloat(weightInput);
     const hCmNum = parseFloat(heightInput);
@@ -273,6 +293,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         lastName: personal.lastName.trim() || undefined,
         avatarUrl: nextAvatarUri,
         dateOfBirth: personal.dateOfBirth || undefined,
+        gender: personal.gender,
         currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : undefined,
         heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
       });
@@ -306,6 +327,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
             firstName: personal.firstName.trim() || null,
             lastName: personal.lastName.trim() || null,
             dateOfBirth: personal.dateOfBirth || null,
+            gender: personal.gender ?? null,
             currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : null,
             heightCm: !isCoach && hCmNum > 0 ? hCmNum : null
           }
@@ -332,8 +354,17 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   };
 
   const roleValue = capitalize(user?.role ?? "");
-  const tierValue = capitalize(user?.tier ?? "");
-  const memberSinceValue = user?.memberSince ? formatDate(user.memberSince) : "--";
+  const hasPaidMembership = user?.membershipCard?.status === "active";
+  const tierValue = hasPaidMembership ? "MEMBER" : "FREE";
+  const memberSinceValue = user?.memberSince
+    ? new Date(user.memberSince).toLocaleString("en-US", {
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        month: "short",
+        year: "numeric"
+      })
+    : "--";
 
   return (
     <Modal
@@ -451,6 +482,41 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                   compact
                   editable={!isSubmitting}
                 />
+                <View style={s.fitRow}>
+                  <FitText style={s.fitLabel}>Gender</FitText>
+                  <View style={s.genderOptionRow}>
+                    {GENDER_OPTIONS.map((option) => {
+                      const isActive = selectedGender === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          disabled={isSubmitting}
+                          onPress={() =>
+                            personalForm.setValue("gender", option.value, {
+                              shouldDirty: true
+                            })
+                          }
+                          style={[
+                            s.genderOption,
+                            isActive && {
+                              backgroundColor: colors.brand + "18",
+                              borderColor: colors.brand
+                            }
+                          ]}
+                        >
+                          <FitText
+                            style={[
+                              s.genderOptionText,
+                              { color: isActive ? colors.brand : colors.textMuted }
+                            ]}
+                          >
+                            {option.label}
+                          </FitText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
               </>
             ) : isCoach ? (
               <>
