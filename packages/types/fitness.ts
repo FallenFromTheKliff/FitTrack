@@ -97,6 +97,38 @@ export type FitnessExerciseListParams = {
   search?: string;
 };
 
+export type MuscleDefinitionListParams = {
+  includeArchived?: boolean;
+  search?: string;
+};
+
+export type MuscleDefinitionRecord = {
+  aliases: string[];
+  bodyRegion: string;
+  createdAt: string;
+  id: string;
+  isActive: boolean;
+  isSystem: boolean;
+  key: string;
+  name: string;
+  sortOrder: number;
+  updatedAt: string;
+};
+
+export type CreateMuscleDefinitionInput = {
+  aliases?: string[];
+  bodyRegion: string;
+  key?: string;
+  name: string;
+  sortOrder?: number;
+};
+
+export type UpdateMuscleDefinitionInput = Partial<
+  CreateMuscleDefinitionInput
+> & {
+  isActive?: boolean;
+};
+
 export type FitnessExerciseReviewSubmissionListParams = {
   limit?: number;
   page?: number;
@@ -106,9 +138,12 @@ export type FitnessExerciseReviewSubmissionListParams = {
 export type CreateFitnessExerciseInput = {
   category: FitnessExerciseCategory;
   description?: string;
+  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
   imageUrl?: string;
   instructions?: string;
+  movementProfile?: ExerciseMovementProfileRecord | null;
   muscleGroup: string;
+  muscleTargets?: ExerciseMuscleTargetRecord[];
   name: string;
   videoUrl?: string;
 };
@@ -123,6 +158,26 @@ export type UpdateExerciseReviewSubmissionInput = {
   publishedExerciseId?: string;
   reviewNotes?: string;
   status?: ExerciseReviewSubmissionStatus;
+};
+
+export type CreateExerciseReviewSubmissionInput = {
+  category: FitnessExerciseCategory;
+  description?: string;
+  evidenceBars?: ExerciseReviewEvidenceRecord | null;
+  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
+  instructions?: string;
+  matchHint?: string;
+  movementProfile?: ExerciseMovementProfileRecord | null;
+  muscleGroup: string;
+  muscleTargets?: ExerciseMuscleTargetRecord[];
+  originLabel?: string;
+  poseSessionId?: string | null;
+  proposedName: string;
+  queueTag?: string;
+  sourceLabel?: string;
+  summary: string;
+  title?: string;
+  triggerLabel?: string;
 };
 
 export type TrainingPlanListParams = {
@@ -191,11 +246,14 @@ export type FitnessExerciseRecord = {
   category: FitnessExerciseCategory;
   createdAt: string;
   description: string | null;
+  handShapeProfile: ExerciseHandShapeProfileRecord | null;
   id: string;
   imageUrl: string | null;
   instructions: string | null;
   isActive: boolean;
+  movementProfile: ExerciseMovementProfileRecord | null;
   muscleGroup: string;
+  muscleTargets: ExerciseMuscleTargetRecord[];
   name: string;
   updatedAt: string;
   videoUrl: string | null;
@@ -214,11 +272,14 @@ export type ExerciseReviewSubmissionRecord = {
   creatorSubmissionCount: number;
   createdAt: string;
   description: string | null;
-  evidenceBars: number[] | null;
+  evidenceBars: ExerciseReviewEvidenceRecord | null;
+  handShapeProfile: ExerciseHandShapeProfileRecord | null;
   id: string;
   instructions: string | null;
   matchHint: string | null;
+  movementProfile: ExerciseMovementProfileRecord | null;
   muscleGroup: string;
+  muscleTargets: ExerciseMuscleTargetRecord[];
   originLabel: string;
   poseSessionId: string | null;
   proposedName: string;
@@ -424,6 +485,11 @@ export type PoseRequiredSides =
   | "either"
   | "alternating";
 
+export type PosePartialRepPolicy =
+  | "strict_full_rep"
+  | "count_half_reps"
+  | "review_only";
+
 export type PoseKeypointRecord = {
   visibility: number;
   x: number;
@@ -478,6 +544,12 @@ export type PoseHipSignalRecord = {
   stable: boolean;
 };
 
+export type PosePointTravelSignalRecord = {
+  averageY: number;
+  rangeX: number;
+  rangeY: number;
+};
+
 export type PoseTemporalMovementSignalRecord = {
   amplitudes: Record<string, number>;
   oscillatingJoints: string[];
@@ -488,16 +560,28 @@ export type PoseSpatialRequirementsRecord = {
   bodyLineTolerance?: number | null;
   bodyXDriftMax?: number | null;
   bodyYTravelMin?: number | null;
+  hipYTravelMin?: number | null;
   leftRightSymmetryTolerance?: number | null;
   phaseSyncToleranceMs?: number | null;
+  shoulderHipTravelMin?: number | null;
+  shoulderYTravelMin?: number | null;
+  torsoSlopeMaxDeg?: number | null;
+  torsoSlopeMinDeg?: number | null;
+  wristAnchorDriftMax?: number | null;
 };
 
 export type PoseSequenceSignalsRecord = {
   angles: PoseAngleFrameSignalRecord[];
   hip: PoseHipSignalRecord;
   orientation: PoseOrientationSignalRecord;
+  shoulder?: PosePointTravelSignalRecord | null;
   temporal: PoseTemporalMovementSignalRecord;
   visibility: PoseVisibilitySignalRecord;
+  wrist?: {
+    leftRangeX: number;
+    rightRangeX: number;
+    maxRangeX: number;
+  } | null;
 };
 
 export type PoseRepThresholdRecord = {
@@ -511,6 +595,7 @@ export type PoseMovementContractRecord = {
   exercise: string;
   noCountConditions?: string[];
   oscillatingJoints: string[];
+  partialRepPolicy?: PosePartialRepPolicy;
   phaseOrder?: string[];
   primaryJoints?: string[];
   repModel?: PoseRepModel;
@@ -530,6 +615,157 @@ export type PoseRepAngleDataRecord = {
   lowAngle: number;
   repNumber: number;
   timestamp: number;
+};
+
+export type ExerciseMuscleTargetRole =
+  | "primary"
+  | "secondary"
+  | "stabilizer";
+
+export type ExerciseMuscleTargetRecord = {
+  allocationPercent: number;
+  muscleGroup: string;
+  role: ExerciseMuscleTargetRole;
+};
+
+export type ExerciseRigKeyframeKind = "start" | "peak" | "end";
+
+export type ExerciseRigSource =
+  | "pose_session"
+  | "generated_contract"
+  | "ai_draft";
+
+export type ExerciseRigKeyframeRecord = {
+  angle: number | null;
+  capturedAtMs: number;
+  confidence: number;
+  keypoints: PoseKeypointRecord[];
+  kind: ExerciseRigKeyframeKind;
+  label: string;
+};
+
+export type ExerciseRigRecord = {
+  angleSummary: {
+    dominantJoint: PoseJointName;
+    maxAngle: number;
+    minAngle: number;
+    repCount: number;
+    travel: number;
+  } | null;
+  capturedFromSession: string | null;
+  exerciseLabel: string | null;
+  keyframes: ExerciseRigKeyframeRecord[];
+  landmarkSchema: PoseLandmarkSchema;
+  repIndex: number | null;
+  schemaVersion: "exercise_rig_v1";
+  source: ExerciseRigSource;
+  warnings: string[];
+};
+
+export type ExerciseMovementProfileRecord = {
+  movementContract: PoseMovementContractRecord | null;
+  rig: ExerciseRigRecord | null;
+  schemaVersion: "exercise_movement_profile_v1";
+  warnings: string[];
+};
+
+export type ExerciseGripProfileRecord = {
+  maxOpenFrames: number;
+  maxOpenRatio: number;
+  minUsableFrames: number;
+  recentFrameLimit: number;
+  reliablePointMinVisibility: number;
+  required: boolean;
+};
+
+export type ExerciseSubjectLockGestureProfileRecord = {
+  enabled: boolean;
+  gesture: "rock_sign";
+  handAboveShoulderOffset: number;
+  handRaisedFromElbowOffset: number;
+  holdMs: number;
+  hornThumbLeadOffset: number;
+  maxHornLiftDelta: number;
+  minFingerDistance: number;
+  minFingerLift: number;
+  minFingerSpreadX: number;
+  minThumbOffset: number;
+  minThumbSeparation: number;
+};
+
+export type ExerciseHandPosePreset =
+  | "open_palm"
+  | "closed_grip"
+  | "rock_sign"
+  | "neutral"
+  | "thumbs_up"
+  | "custom";
+
+export type ExerciseHandPosePreviewPointRecord = {
+  x: number;
+  y: number;
+};
+
+export type ExerciseHandPosePreviewRecord = {
+  points: ExerciseHandPosePreviewPointRecord[];
+  preset: ExerciseHandPosePreset;
+};
+
+export type ExerciseHandShapeProfileRecord = {
+  grip: ExerciseGripProfileRecord;
+  handPosePreview?: ExerciseHandPosePreviewRecord | null;
+  schemaVersion: "exercise_hand_shape_v1";
+  subjectLockGesture: ExerciseSubjectLockGestureProfileRecord;
+  warnings: string[];
+};
+
+export type ExerciseAiDraftEvidenceRecord = {
+  confidence: number | null;
+  integrityNotes: string[];
+  movementContract: PoseMovementContractRecord | null;
+  promptContractVersion: "exercise_creation_v1";
+  repCount: number;
+  rig: ExerciseRigRecord | null;
+  schemaVersion: "exercise_ai_draft_v1";
+  source: "mobile_pose_session";
+};
+
+export type ExerciseReviewEvidenceRecord =
+  | number[]
+  | ExerciseAiDraftEvidenceRecord;
+
+export type ExerciseDraftProposalSource =
+  | "ai"
+  | "deterministic_fallback";
+
+export type CreateExerciseDraftProposalInput = {
+  category?: FitnessExerciseCategory;
+  description?: string;
+  evidence?: ExerciseAiDraftEvidenceRecord | null;
+  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
+  instructions?: string;
+  movementProfile?: ExerciseMovementProfileRecord | null;
+  muscleGroup?: string;
+  muscleTargets?: ExerciseMuscleTargetRecord[];
+  poseSessionId?: string | null;
+  proposedName?: string;
+  summary?: string;
+};
+
+export type ExerciseDraftProposalRecord = {
+  category: FitnessExerciseCategory;
+  confidence: number;
+  description: string;
+  evidence: ExerciseAiDraftEvidenceRecord;
+  handShapeProfile: ExerciseHandShapeProfileRecord;
+  instructions: string;
+  movementProfile: ExerciseMovementProfileRecord;
+  muscleGroup: string;
+  muscleTargets: ExerciseMuscleTargetRecord[];
+  proposalSource: ExerciseDraftProposalSource;
+  proposedName: string;
+  reviewWarnings: string[];
+  summary: string;
 };
 
 export type PoseAnalyzeProcessingMode = "legacy_frame" | "sequence";

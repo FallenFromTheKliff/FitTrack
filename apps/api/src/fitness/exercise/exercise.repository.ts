@@ -5,8 +5,11 @@ import {
   ExerciseCatalog,
   ExerciseReviewSubmission,
   ExerciseReviewSubmissionStatus,
+  MembershipCardStatus,
   ModerationActionType,
+  MuscleDefinition,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 
 import {
@@ -14,7 +17,10 @@ import {
   PaginatedResult,
 } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ExerciseFilterDTO } from './dto/exercise.dto';
+import {
+  ExerciseFilterDTO,
+  MuscleDefinitionFilterDTO,
+} from './dto/exercise.dto';
 import { ExerciseReviewSubmissionFilterDTO } from './dto/exercise-review.dto';
 
 const exerciseOrderBy = [
@@ -35,6 +41,14 @@ export type ExerciseReviewSubmissionStatusRecord = Pick<
   ExerciseReviewSubmission,
   'status' | 'user_id'
 >;
+
+export type CreatorSubmissionAccessRecord = {
+  creatorProfileState: CreatorState | null;
+  membershipCardStatus: MembershipCardStatus | null;
+  role: UserRole;
+};
+
+export type MuscleDefinitionRecord = MuscleDefinition;
 
 const creatorModerationActionByState: Partial<
   Record<CreatorState, ModerationActionType>
@@ -128,6 +142,42 @@ export class ExerciseRepository extends BaseRepository {
     );
   }
 
+  listMuscleDefinitions(
+    dto: MuscleDefinitionFilterDTO,
+  ): Promise<MuscleDefinitionRecord[]> {
+    const where: Prisma.MuscleDefinitionWhereInput = dto.include_archived
+      ? {}
+      : { is_active: true };
+
+    if (dto.search?.trim()) {
+      const term = dto.search.trim();
+      where.OR = [
+        { key: { contains: term, mode: 'insensitive' } },
+        { name: { contains: term, mode: 'insensitive' } },
+        { body_region: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.muscleDefinition.findMany({
+      where,
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  listActiveMuscleDefinitionsByKeys(
+    keys: string[],
+  ): Promise<MuscleDefinitionRecord[]> {
+    if (!keys.length) return Promise.resolve([]);
+
+    return this.prisma.muscleDefinition.findMany({
+      where: {
+        is_active: true,
+        key: { in: keys },
+      },
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+    });
+  }
+
   listCreatorProfilesByUserIds(
     userIds: string[],
   ): Promise<CreatorProfileRecord[]> {
@@ -172,6 +222,61 @@ export class ExerciseRepository extends BaseRepository {
 
       throw error;
     }
+  }
+
+  async createMuscleDefinition(
+    data: Prisma.MuscleDefinitionCreateInput,
+  ): Promise<MuscleDefinitionRecord> {
+    try {
+      return await this.create<MuscleDefinitionRecord>(
+        this.prisma.muscleDefinition,
+        data,
+      );
+    } catch (error) {
+      if (this.isDuplicateMuscleDefinitionKeyError(error)) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Muscle Already Exists',
+          status: 409,
+          detail: 'A muscle definition with this key already exists.',
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  async updateMuscleDefinition(
+    id: string,
+    data: Prisma.MuscleDefinitionUpdateInput,
+  ): Promise<MuscleDefinitionRecord> {
+    try {
+      return await this.updateById<MuscleDefinitionRecord>(
+        this.prisma.muscleDefinition,
+        id,
+        data,
+      );
+    } catch (error) {
+      if (this.isDuplicateMuscleDefinitionKeyError(error)) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Muscle Already Exists',
+          status: 409,
+          detail: 'A muscle definition with this key already exists.',
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  createReviewSubmission(
+    data: Prisma.ExerciseReviewSubmissionCreateInput,
+  ): Promise<ExerciseReviewSubmissionRecord> {
+    return this.create<ExerciseReviewSubmissionRecord>(
+      this.prisma.exerciseReviewSubmission,
+      data,
+    );
   }
 
   async updateExercise(
@@ -288,6 +393,36 @@ export class ExerciseRepository extends BaseRepository {
     });
   }
 
+  async findCreatorSubmissionAccess(
+    userId: string,
+  ): Promise<CreatorSubmissionAccessRecord | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        membership_card: { select: { status: true } },
+        creator_profile: { select: { state: true } },
+      },
+    });
+
+    if (!user) return null;
+
+    return {
+      creatorProfileState: user.creator_profile?.state ?? null,
+      membershipCardStatus: user.membership_card?.status ?? null,
+      role: user.role,
+    };
+  }
+
+  async findPoseSessionOwner(poseSessionId: string): Promise<string | null> {
+    const poseSession = await this.prisma.poseSession.findUnique({
+      where: { id: poseSessionId },
+      select: { user_id: true },
+    });
+
+    return poseSession?.user_id ?? null;
+  }
+
   private buildDuplicateExerciseConflict(): ConflictException {
     return new ConflictException({
       type: 'CONFLICT',
@@ -314,6 +449,25 @@ export class ExerciseRepository extends BaseRepository {
         : '';
 
     return target.includes('name') || String(error.message).includes('name');
+  }
+
+  private isDuplicateMuscleDefinitionKeyError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const targetMeta = error.meta?.target;
+    const target = Array.isArray(targetMeta)
+      ? targetMeta.join(',')
+      : typeof targetMeta === 'string'
+        ? targetMeta
+        : '';
+
+    return target.includes('key') || String(error.message).includes('key');
   }
 
   private async ensureExerciseNameAvailable(

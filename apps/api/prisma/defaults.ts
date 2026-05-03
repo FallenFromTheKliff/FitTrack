@@ -76,6 +76,170 @@ const DEFAULT_AMENITIES = [
   },
 ] as const satisfies ReadonlyArray<Prisma.AmenityCreateInput>;
 
+const DEFAULT_MUSCLE_DEFINITIONS = [
+  {
+    aliases: ['pecs', 'pectorals'],
+    body_region: 'upper_body_push',
+    key: 'chest',
+    name: 'Chest',
+    sort_order: 10,
+  },
+  {
+    aliases: ['upper chest'],
+    body_region: 'upper_body_push',
+    key: 'upper_chest',
+    name: 'Upper Chest',
+    sort_order: 11,
+  },
+  {
+    aliases: ['latissimus dorsi'],
+    body_region: 'upper_body_pull',
+    key: 'lats',
+    name: 'Lats',
+    sort_order: 20,
+  },
+  {
+    aliases: ['mid back', 'rhomboids'],
+    body_region: 'upper_body_pull',
+    key: 'upper_back',
+    name: 'Upper Back',
+    sort_order: 21,
+  },
+  {
+    aliases: ['trapezius'],
+    body_region: 'upper_body_pull',
+    key: 'traps',
+    name: 'Traps',
+    sort_order: 22,
+  },
+  {
+    aliases: ['delts', 'deltoids'],
+    body_region: 'shoulders',
+    key: 'shoulders',
+    name: 'Shoulders',
+    sort_order: 30,
+  },
+  {
+    aliases: ['anterior delts'],
+    body_region: 'shoulders',
+    key: 'front_delts',
+    name: 'Front Delts',
+    sort_order: 31,
+  },
+  {
+    aliases: ['lateral delts'],
+    body_region: 'shoulders',
+    key: 'side_delts',
+    name: 'Side Delts',
+    sort_order: 32,
+  },
+  {
+    aliases: ['posterior delts'],
+    body_region: 'shoulders',
+    key: 'rear_delts',
+    name: 'Rear Delts',
+    sort_order: 33,
+  },
+  {
+    aliases: ['bis'],
+    body_region: 'arms',
+    key: 'biceps',
+    name: 'Biceps',
+    sort_order: 40,
+  },
+  {
+    aliases: ['tris'],
+    body_region: 'arms',
+    key: 'triceps',
+    name: 'Triceps',
+    sort_order: 41,
+  },
+  {
+    aliases: ['grip'],
+    body_region: 'arms',
+    key: 'forearms',
+    name: 'Forearms',
+    sort_order: 42,
+  },
+  {
+    aliases: ['abdominals'],
+    body_region: 'core',
+    key: 'abs',
+    name: 'Abs',
+    sort_order: 50,
+  },
+  {
+    aliases: ['side abs'],
+    body_region: 'core',
+    key: 'obliques',
+    name: 'Obliques',
+    sort_order: 51,
+  },
+  {
+    aliases: ['trunk'],
+    body_region: 'core',
+    key: 'core',
+    name: 'Core',
+    sort_order: 52,
+  },
+  {
+    aliases: ['spinal erectors', 'erectors'],
+    body_region: 'core',
+    key: 'lower_back',
+    name: 'Lower Back',
+    sort_order: 53,
+  },
+  {
+    aliases: ['butt', 'gluteals'],
+    body_region: 'lower_body',
+    key: 'glutes',
+    name: 'Glutes',
+    sort_order: 60,
+  },
+  {
+    aliases: ['quadriceps'],
+    body_region: 'lower_body',
+    key: 'quads',
+    name: 'Quads',
+    sort_order: 61,
+  },
+  {
+    aliases: ['hams'],
+    body_region: 'lower_body',
+    key: 'hamstrings',
+    name: 'Hamstrings',
+    sort_order: 62,
+  },
+  {
+    aliases: ['gastroc', 'soleus'],
+    body_region: 'lower_body',
+    key: 'calves',
+    name: 'Calves',
+    sort_order: 63,
+  },
+  {
+    aliases: ['inner thighs'],
+    body_region: 'lower_body',
+    key: 'adductors',
+    name: 'Adductors',
+    sort_order: 64,
+  },
+  {
+    aliases: ['outer hips'],
+    body_region: 'lower_body',
+    key: 'abductors',
+    name: 'Abductors',
+    sort_order: 65,
+  },
+  {
+    aliases: ['iliopsoas'],
+    body_region: 'lower_body',
+    key: 'hip_flexors',
+    name: 'Hip Flexors',
+    sort_order: 66,
+  },
+] as const;
+
 const ADMIN_EMAIL = 'sertfitadmin@gmail.com';
 const ADMIN_PASSWORD = 'aNYTIMEaNYWHERE2@';
 const ADMIN_FIRST_NAME = 'FitTrack';
@@ -259,6 +423,43 @@ async function ensureDefaultAmenities(prisma: PrismaClient) {
   }
 
   return { createdCount, existingCount, reactivatedCount };
+}
+
+async function ensureDefaultMuscleDefinitions(prisma: PrismaClient) {
+  let createdCount = 0;
+  let existingCount = 0;
+
+  for (const muscle of DEFAULT_MUSCLE_DEFINITIONS) {
+    const existing = await prisma.muscleDefinition.findUnique({
+      where: { key: muscle.key },
+      select: { id: true },
+    });
+
+    await prisma.muscleDefinition.upsert({
+      where: { key: muscle.key },
+      update: {
+        aliases: [...muscle.aliases],
+        body_region: muscle.body_region,
+        is_active: true,
+        is_system: true,
+        name: muscle.name,
+        sort_order: muscle.sort_order,
+      },
+      create: {
+        aliases: [...muscle.aliases],
+        body_region: muscle.body_region,
+        is_system: true,
+        key: muscle.key,
+        name: muscle.name,
+        sort_order: muscle.sort_order,
+      },
+    });
+
+    if (existing) existingCount += 1;
+    else createdCount += 1;
+  }
+
+  return { createdCount, existingCount };
 }
 
 function buildQuarterSeason(now: Date) {
@@ -472,6 +673,7 @@ export async function bootstrapDefaults(prisma: PrismaClient) {
   await ensureAdmin(prisma);
   await ensureDemoMember(prisma);
   const amenitySummary = await ensureDefaultAmenities(prisma);
+  const muscleSummary = await ensureDefaultMuscleDefinitions(prisma);
   await ensureDefaultGamificationBackbone(prisma);
   await ensureDefaultGamificationProfiles(prisma);
 
@@ -479,6 +681,9 @@ export async function bootstrapDefaults(prisma: PrismaClient) {
     adminEmail: ADMIN_EMAIL,
     demoMemberEmail: DEMO_MEMBER_EMAIL,
     defaultAmenityCount: DEFAULT_AMENITIES.length,
+    defaultMuscleCount: DEFAULT_MUSCLE_DEFINITIONS.length,
+    muscleCreatedCount: muscleSummary.createdCount,
+    muscleExistingCount: muscleSummary.existingCount,
     ...amenitySummary,
   };
 }

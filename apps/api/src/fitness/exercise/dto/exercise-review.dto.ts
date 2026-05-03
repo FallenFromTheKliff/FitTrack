@@ -5,8 +5,8 @@ import {
   ExerciseReviewSubmissionStatus,
 } from '@prisma/client';
 import {
-  IsArray,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -26,6 +26,333 @@ export class ExerciseReviewSubmissionFilterDTO extends PaginationDTO {
     message: `status must be one of: ${Object.values(ExerciseReviewSubmissionStatus).join(', ')}`,
   })
   status?: ExerciseReviewSubmissionStatus;
+}
+
+export class CreateExerciseReviewSubmissionDTO {
+  @ApiPropertyOptional({
+    example: '11111111-1111-4111-8111-111111111111',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'pose_session_id must be a valid UUID' })
+  pose_session_id?: string | null;
+
+  @ApiPropertyOptional({ example: 'Mobile pose-created dumbbell curl' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'title must be a string' })
+  @MaxLength(255, { message: 'title must not exceed 255 characters' })
+  title?: string;
+
+  @ApiProperty({ example: 'Dumbbell Bicep Curl Variation' })
+  @TrimString()
+  @IsString({ message: 'proposed_name must be a string' })
+  @IsNotEmpty({ message: 'proposed_name is required' })
+  @MaxLength(255, {
+    message: 'proposed_name must not exceed 255 characters',
+  })
+  proposed_name: string;
+
+  @ApiProperty({
+    example: 'Three clean reps captured with a stable elbow-dominant pattern.',
+  })
+  @TrimString()
+  @IsString({ message: 'summary must be a string' })
+  @IsNotEmpty({ message: 'summary is required' })
+  @MaxLength(255, { message: 'summary must not exceed 255 characters' })
+  summary: string;
+
+  @ApiPropertyOptional({ example: 'member creator session' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'origin_label must be a string' })
+  @MaxLength(100, { message: 'origin_label must not exceed 100 characters' })
+  origin_label?: string;
+
+  @ApiPropertyOptional({ example: '3 reps captured' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'trigger_label must be a string' })
+  @MaxLength(100, { message: 'trigger_label must not exceed 100 characters' })
+  trigger_label?: string;
+
+  @ApiPropertyOptional({ example: 'mobile pose rig' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'source_label must be a string' })
+  @MaxLength(100, { message: 'source_label must not exceed 100 characters' })
+  source_label?: string;
+
+  @ApiPropertyOptional({ example: 'ai draft' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'queue_tag must be a string' })
+  @MaxLength(100, { message: 'queue_tag must not exceed 100 characters' })
+  queue_tag?: string;
+
+  @ApiPropertyOptional({ example: 'dumbbell curl', nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'match_hint must be a string' })
+  @MaxLength(255, { message: 'match_hint must not exceed 255 characters' })
+  match_hint?: string;
+
+  @ApiProperty({ enum: ExerciseCategory, example: ExerciseCategory.strength })
+  @IsEnum(ExerciseCategory, {
+    message: `category must be one of: ${Object.values(ExerciseCategory).join(', ')}`,
+  })
+  category: ExerciseCategory;
+
+  @ApiProperty({ example: 'arms' })
+  @TrimString()
+  @IsString({ message: 'muscle_group must be a string' })
+  @IsNotEmpty({ message: 'muscle_group is required' })
+  @MaxLength(100, {
+    message: 'muscle_group must not exceed 100 characters',
+  })
+  muscle_group: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Structured multi-muscle target allocation proposed by the exercise editor.',
+    example: [
+      { allocationPercent: 70, muscleGroup: 'biceps', role: 'primary' },
+      { allocationPercent: 20, muscleGroup: 'forearms', role: 'secondary' },
+    ],
+    nullable: true,
+    type: 'array',
+  })
+  @IsOptional()
+  muscle_targets?: unknown;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Pose movement contract and optional start/peak/end skeleton rig preview.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  movement_profile?: unknown;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Editable grip and subject-lock gesture thresholds for live pose integrity.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  hand_shape_profile?: unknown;
+
+  @ApiPropertyOptional({
+    example:
+      'Elbow-dominant curl pattern captured from a member-created movement.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  description?: string;
+
+  @ApiPropertyOptional({
+    example:
+      'Keep elbows near the torso, curl to peak contraction, then lower with control.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'instructions must be a string' })
+  instructions?: string;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Legacy evidence bar array or mobile pose draft evidence with rig keyframes.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  evidence_bars?: unknown;
+}
+
+export class CreateExerciseDraftProposalDTO {
+  @ApiPropertyOptional({
+    example: '11111111-1111-4111-8111-111111111111',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'pose_session_id must be a valid UUID' })
+  pose_session_id?: string | null;
+
+  @ApiPropertyOptional({ example: 'Dumbbell Bicep Curl Variation' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'proposed_name must be a string' })
+  @MaxLength(255, {
+    message: 'proposed_name must not exceed 255 characters',
+  })
+  proposed_name?: string;
+
+  @ApiPropertyOptional({
+    example: 'Three clean reps captured with a stable elbow-dominant pattern.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'summary must be a string' })
+  @MaxLength(255, { message: 'summary must not exceed 255 characters' })
+  summary?: string;
+
+  @ApiPropertyOptional({
+    enum: ExerciseCategory,
+    example: ExerciseCategory.strength,
+  })
+  @IsOptional()
+  @IsEnum(ExerciseCategory, {
+    message: `category must be one of: ${Object.values(ExerciseCategory).join(', ')}`,
+  })
+  category?: ExerciseCategory;
+
+  @ApiPropertyOptional({ example: 'biceps' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'muscle_group must be a string' })
+  @MaxLength(100, {
+    message: 'muscle_group must not exceed 100 characters',
+  })
+  muscle_group?: string;
+
+  @ApiPropertyOptional({
+    description: 'Structured multi-muscle target allocation.',
+    nullable: true,
+    type: 'array',
+  })
+  @IsOptional()
+  muscle_targets?: unknown;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Pose movement contract and optional start/peak/end skeleton rig preview.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  movement_profile?: unknown;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Editable grip and subject-lock gesture thresholds for live pose integrity.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  hand_shape_profile?: unknown;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description:
+      'Mobile pose draft evidence with rig keyframes, angles, and integrity notes.',
+    nullable: true,
+    type: 'object',
+  })
+  @IsOptional()
+  evidence?: unknown;
+
+  @ApiPropertyOptional({
+    example:
+      'Elbow-dominant curl pattern captured from a member-created movement.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  description?: string;
+
+  @ApiPropertyOptional({
+    example:
+      'Keep elbows near the torso, curl to peak contraction, then lower with control.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'instructions must be a string' })
+  instructions?: string;
+}
+
+export class ExerciseDraftProposalResponseDTO {
+  @ApiProperty({
+    enum: ['ai', 'deterministic_fallback'],
+    example: 'deterministic_fallback',
+  })
+  proposal_source: 'ai' | 'deterministic_fallback';
+
+  @ApiProperty({ example: 0.72 })
+  confidence: number;
+
+  @ApiProperty({ example: 'Dumbbell Bicep Curl Variation' })
+  proposed_name: string;
+
+  @ApiProperty({
+    example: 'Three clean reps captured with elbow-dominant evidence.',
+  })
+  summary: string;
+
+  @ApiProperty({ enum: ExerciseCategory, example: ExerciseCategory.strength })
+  category: ExerciseCategory;
+
+  @ApiProperty({ example: 'biceps' })
+  muscle_group: string;
+
+  @ApiPropertyOptional({
+    description: 'Structured multi-muscle target allocation.',
+    nullable: true,
+    type: 'array',
+  })
+  muscle_targets: unknown[];
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description: 'Pose movement contract and skeleton rig preview.',
+    nullable: true,
+    type: 'object',
+  })
+  movement_profile: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description: 'Grip and subject-lock gesture thresholds.',
+    nullable: true,
+    type: 'object',
+  })
+  hand_shape_profile: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description: 'Draft evidence used to create the proposal.',
+    nullable: true,
+    type: 'object',
+  })
+  evidence: Record<string, unknown>;
+
+  @ApiProperty({
+    example:
+      'Dumbbell Bicep Curl Variation generated from pose evidence and editable movement thresholds.',
+  })
+  description: string;
+
+  @ApiProperty({
+    example:
+      'Use the visual rig to confirm start, peak contraction, and return before publishing.',
+  })
+  instructions: string;
+
+  @ApiProperty({
+    example: ['AI unavailable; deterministic proposal generated.'],
+    type: 'array',
+  })
+  review_warnings: string[];
 }
 
 export class UpdateExerciseReviewSubmissionDTO {
@@ -140,6 +467,29 @@ export class ExerciseReviewSubmissionResponseDTO {
   muscle_group: string;
 
   @ApiPropertyOptional({
+    description: 'Structured multi-muscle target allocation.',
+    nullable: true,
+    type: 'array',
+  })
+  muscle_targets: unknown[] | null;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description: 'Pose movement contract and skeleton rig preview.',
+    nullable: true,
+    type: 'object',
+  })
+  movement_profile: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    additionalProperties: true,
+    description: 'Grip and subject-lock gesture thresholds.',
+    nullable: true,
+    type: 'object',
+  })
+  hand_shape_profile: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
     example:
       'Static single-leg hold that emphasizes hip control, trunk alignment, and slow corrective balance reactions.',
     nullable: true,
@@ -154,12 +504,14 @@ export class ExerciseReviewSubmissionResponseDTO {
   instructions: string | null;
 
   @ApiPropertyOptional({
-    type: [Number],
+    oneOf: [
+      { type: 'array', items: { type: 'number' } },
+      { type: 'object', additionalProperties: true },
+    ],
     example: [14, 18, 43, 27, 21, 30],
     nullable: true,
   })
-  @IsArray()
-  evidence_bars: number[] | null;
+  evidence_bars: number[] | Record<string, unknown> | null;
 
   @ApiPropertyOptional({
     example: 'Published from live review queue.',

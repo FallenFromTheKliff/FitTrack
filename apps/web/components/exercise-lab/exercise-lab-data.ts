@@ -1,11 +1,27 @@
 "use client";
 
-import type { FitnessExerciseCategory } from "@fittrack/api-client";
+import type {
+  ExerciseHandShapeProfileRecord,
+  ExerciseMovementProfileRecord,
+  ExerciseMuscleTargetRecord,
+  ExerciseReviewEvidenceRecord,
+  FitnessExerciseCategory,
+} from "@fittrack/api-client";
+import {
+  buildFallbackPoseMovementContract,
+  createDefaultExerciseMuscleTargets,
+  createExerciseMovementProfile,
+  createGeneratedExerciseRigFromMovementContract,
+  DEFAULT_EXERCISE_HAND_SHAPE_PROFILE,
+  normalizeExerciseHandShapeProfile,
+  normalizeExerciseMovementProfile,
+  normalizeExerciseMuscleTargets,
+} from "@fittrack/utils";
 
 export type ExerciseLabReviewCandidate = {
   category: FitnessExerciseCategory;
   description: string;
-  evidenceBars: number[];
+  evidenceBars: ExerciseReviewEvidenceRecord;
   id: string;
   instructions: string;
   matchHint: string;
@@ -123,8 +139,12 @@ export function createExerciseDraft(
   candidate?: {
     category?: FitnessExerciseCategory;
     description?: string | null;
+    evidenceBars?: ExerciseReviewEvidenceRecord | null;
+    handShapeProfile?: ExerciseHandShapeProfileRecord | null;
     instructions?: string | null;
+    movementProfile?: ExerciseMovementProfileRecord | null;
     muscleGroup?: string;
+    muscleTargets?: ExerciseMuscleTargetRecord[];
     origin?: string;
     originLabel?: string;
     proposedName?: string;
@@ -132,10 +152,46 @@ export function createExerciseDraft(
     triggerLabel?: string;
   },
 ) {
+  const evidence =
+    candidate?.evidenceBars &&
+    !Array.isArray(candidate.evidenceBars) &&
+    candidate.evidenceBars.schemaVersion === "exercise_ai_draft_v1"
+      ? candidate.evidenceBars
+      : null;
+  const muscleGroup = candidate?.muscleGroup ?? "";
+  const proposedName = candidate?.proposedName ?? "";
+  const movementContract =
+    candidate?.movementProfile?.movementContract ??
+    evidence?.movementContract ??
+    buildFallbackPoseMovementContract(proposedName);
+  const rig =
+    candidate?.movementProfile?.rig ??
+    evidence?.rig ??
+    (movementContract
+      ? createGeneratedExerciseRigFromMovementContract({
+          exerciseLabel: proposedName,
+          movementContract,
+        })
+      : null);
+  const muscleTargets = normalizeExerciseMuscleTargets(
+    candidate?.muscleTargets ?? createDefaultExerciseMuscleTargets(muscleGroup),
+    muscleGroup,
+  );
   return {
-    name: candidate?.proposedName ?? "",
+    name: proposedName,
     category: candidate?.category ?? "strength",
-    muscleGroup: candidate?.muscleGroup ?? "",
+    muscleGroup,
+    muscleTargets,
+    movementProfile: normalizeExerciseMovementProfile(
+      candidate?.movementProfile,
+      {
+        movementContract,
+        rig,
+      },
+    ) ?? createExerciseMovementProfile({}),
+    handShapeProfile: normalizeExerciseHandShapeProfile(
+      candidate?.handShapeProfile ?? DEFAULT_EXERCISE_HAND_SHAPE_PROFILE,
+    ),
     description: candidate?.description ?? "",
     instructions: candidate?.instructions ?? "",
     imageUrl: "",

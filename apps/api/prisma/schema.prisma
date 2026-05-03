@@ -816,6 +816,9 @@ model ExerciseCatalog {
   id           String           @id @default(uuid()) @db.Uuid
   name         String           @db.VarChar(255)
   muscle_group String           @db.VarChar(100)
+  muscle_targets Json?
+  movement_profile Json?
+  hand_shape_profile Json?
   category     ExerciseCategory
   description  String?
   instructions String?
@@ -833,6 +836,23 @@ model ExerciseCatalog {
   @@index([muscle_group, is_active])
   @@index([category])
   @@map("exercise_catalog")
+}
+
+model MuscleDefinition {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  name        String   @db.VarChar(120)
+  body_region String   @db.VarChar(80)
+  aliases     Json?
+  sort_order  Int      @default(0) @db.SmallInt
+  is_active   Boolean  @default(true)
+  is_system   Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([body_region, is_active])
+  @@index([is_active, sort_order])
+  @@map("muscle_definitions")
 }
 
 enum ExerciseCategory {
@@ -865,6 +885,9 @@ model ExerciseReviewSubmission {
   match_hint            String?                        @db.VarChar(255)
   category              ExerciseCategory
   muscle_group          String                         @db.VarChar(100)
+  muscle_targets        Json?
+  movement_profile      Json?
+  hand_shape_profile    Json?
   description           String?
   instructions          String?
   evidence_bars         Json?

@@ -6,6 +6,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ApiClientError } from "@fittrack/api-client";
 
 import type {
+  CreateExerciseDraftProposalInput,
+  CreateExerciseReviewSubmissionInput,
+  ExerciseAiDraftEvidenceRecord,
+  ExerciseHandShapeProfileRecord,
+  ExerciseMovementProfileRecord,
+  ExerciseMuscleTargetRecord,
+  FitnessExerciseCategory,
   IThemeContext,
   PoseCameraFacingMode,
   PoseEquipmentContext,
@@ -22,8 +29,17 @@ import type {
   NativeEquipmentSnapshot,
   NativePoseFrame,
 } from "@/components/workout/NativeVisionPoseCamera.types";
+import type { ExerciseCreationDraft } from "@/components/modals/workout/ExerciseCreationReviewModal";
 import {
+  buildExerciseAiDraftEvidence,
+  buildExerciseRigFromPoseFrames,
   buildFallbackPoseMovementContract,
+  createDefaultExerciseMuscleTargets,
+  createExerciseMovementProfile,
+  getPrimaryExerciseMuscleGroup,
+  normalizeExerciseHandShapeProfile,
+  normalizeExerciseMovementProfile,
+  normalizeExerciseMuscleTargets,
   computePoseSignals,
   getPoseJointAngle,
   getPoseMovementContractAngle,
@@ -37,6 +53,8 @@ import { useCameraCountdown } from "@/hooks/workout/useCameraCountdown";
 import {
   analyzePoseSessionMutationOptions,
   completeWorkoutSessionMutationOptions,
+  createExerciseDraftProposalMutationOptions,
+  createExerciseReviewSubmissionMutationOptions,
   fitnessExercisesQueryOptions,
   fitnessPlanDetailQueryOptions,
   fitnessPlansQueryOptions,
@@ -67,17 +85,23 @@ import {
 
 type SelectedExercise = {
   exerciseId: string;
+  handShapeProfile: ExerciseHandShapeProfileRecord | null;
   label: string;
+  movementProfile: ExerciseMovementProfileRecord | null;
   muscleGroup: string;
+  muscleTargets: ExerciseMuscleTargetRecord[];
   recommendation: string;
 };
 
 type LiveExerciseRecord = {
   category: string;
   description: string | null;
+  handShapeProfile: ExerciseHandShapeProfileRecord | null;
   id: string;
   instructions: string | null;
+  movementProfile: ExerciseMovementProfileRecord | null;
   muscleGroup: string;
+  muscleTargets: ExerciseMuscleTargetRecord[];
   name: string;
 };
 
@@ -104,6 +128,8 @@ const NATIVE_POSE_FEEDBACK = [
   "Lock the exercise manually if auto detection drifts.",
 ];
 const POSE_FRAME_WINDOW_SIZE = 20;
+const EXERCISE_CREATION_FRAME_WINDOW_SIZE = 80;
+const EXERCISE_CREATION_MIN_REPS = 3;
 const POSE_FRAME_BATCH_TRIGGER = 4;
 const POSE_MIN_ANALYZE_FRAMES = 20;
 const TRACKING_UNRELIABLE_MESSAGE =
@@ -413,6 +439,15 @@ function getNativeFrameReliability(keypoints: PoseKeypointRecord[]) {
 }
 
 function isRockSignSubjectLockGesture(keypoints: PoseKeypointRecord[]) {
+  return isRockSignSubjectLockGestureWithProfile(keypoints, null);
+}
+
+function isRockSignSubjectLockGestureWithProfile(
+  keypoints: PoseKeypointRecord[],
+  handShapeProfile: ExerciseHandShapeProfileRecord | null | undefined,
+) {
+  const profile = handShapeProfile?.subjectLockGesture;
+  if (profile && !profile.enabled) return false;
   const hands = [
     { elbow: 13, index: 19, pinky: 17, shoulder: 11, thumb: 21, wrist: 15 },
     { elbow: 14, index: 20, pinky: 18, shoulder: 12, thumb: 22, wrist: 16 },
@@ -436,22 +471,30 @@ function isRockSignSubjectLockGesture(keypoints: PoseKeypointRecord[]) {
       return false;
     }
 
-    const handAboveShoulder = wrist.y <= shoulder.y + 0.22;
-    const handRaisedFromElbow = wrist.y <= elbow.y + 0.08;
+    const handAboveShoulder =
+      wrist.y <= shoulder.y + (profile?.handAboveShoulderOffset ?? 0.22);
+    const handRaisedFromElbow =
+      wrist.y <= elbow.y + (profile?.handRaisedFromElbowOffset ?? 0.08);
     const indexLift = wrist.y - index.y;
     const pinkyLift = wrist.y - pinky.y;
-    const indexExtended = indexLift >= 0.025;
-    const pinkyExtended = pinkyLift >= 0.025;
+    const indexExtended = indexLift >= (profile?.minFingerLift ?? 0.025);
+    const pinkyExtended = pinkyLift >= (profile?.minFingerLift ?? 0.025);
     const fingerSpread =
-      Math.abs(index.x - pinky.x) >= 0.042 &&
-      getPointDistance(index, pinky) >= 0.05;
-    const thumbOffset = getPointDistance(thumb, wrist) >= 0.018;
+      Math.abs(index.x - pinky.x) >= (profile?.minFingerSpreadX ?? 0.042) &&
+      getPointDistance(index, pinky) >= (profile?.minFingerDistance ?? 0.05);
+    const thumbOffset =
+      getPointDistance(thumb, wrist) >= (profile?.minThumbOffset ?? 0.018);
     const thumbSeparated =
-      getPointDistance(thumb, index) >= 0.03 &&
-      getPointDistance(thumb, pinky) >= 0.03;
-    const hornBalance = Math.abs(indexLift - pinkyLift) <= 0.14;
+      getPointDistance(thumb, index) >=
+        (profile?.minThumbSeparation ?? 0.03) &&
+      getPointDistance(thumb, pinky) >=
+        (profile?.minThumbSeparation ?? 0.03);
+    const hornBalance =
+      Math.abs(indexLift - pinkyLift) <=
+      (profile?.maxHornLiftDelta ?? 0.14);
     const hornsLeadThumb =
-      index.y <= thumb.y + 0.08 && pinky.y <= thumb.y + 0.08;
+      index.y <= thumb.y + (profile?.hornThumbLeadOffset ?? 0.08) &&
+      pinky.y <= thumb.y + (profile?.hornThumbLeadOffset ?? 0.08);
 
     return (
       handAboveShoulder &&
@@ -481,6 +524,12 @@ function toPoseNoCountEvidenceLabel(reason: string | null | undefined) {
       return "left/right timing sync";
     case "equipment_required":
       return "dumbbell or load";
+    case "curl_grip_unconfirmed":
+      return "closed dumbbell grip";
+    case "curl_torso_not_upright":
+      return "upright curl posture";
+    case "hip_swing_over_tolerance":
+      return "quiet hips during curls";
     default:
       return (reason ?? "tracking evidence").replace(/_/g, " ");
   }
@@ -504,6 +553,10 @@ function buildPoseNoCountStatusText(
     if (options.equipmentProviderEnabled === null) {
       return "Waiting for dumbbell or load detection before counting weighted reps.";
     }
+  }
+
+  if (reason === "equipment_required") {
+    return "Select or confirm a weighted curl so FitTrack can use declared load context before counting.";
   }
 
   return `Waiting for clean ${toPoseNoCountEvidenceLabel(reason)} evidence before counting.`;
@@ -534,10 +587,16 @@ function toSelectedExercise(
   exercises: LiveExerciseRecord[],
 ): SelectedExercise | null {
   if (currentPlanExercise) {
+    const matchingExercise = exercises.find(
+      (exercise) => exercise.id === currentPlanExercise.exerciseId,
+    );
     return {
       exerciseId: currentPlanExercise.exerciseId,
+      handShapeProfile: matchingExercise?.handShapeProfile ?? null,
       label: currentPlanExercise.exerciseName,
+      movementProfile: matchingExercise?.movementProfile ?? null,
       muscleGroup: currentPlanExercise.muscleGroup,
+      muscleTargets: matchingExercise?.muscleTargets ?? [],
       recommendation:
         currentPlanExercise.notes ??
         `Follow the ${currentPlanExercise.sets} x ${currentPlanExercise.reps ?? "timed"} plan prescription.`,
@@ -548,8 +607,11 @@ function toSelectedExercise(
   if (!firstExercise) return null;
   return {
     exerciseId: firstExercise.id,
+    handShapeProfile: firstExercise.handShapeProfile,
     label: firstExercise.name,
+    movementProfile: firstExercise.movementProfile,
     muscleGroup: firstExercise.muscleGroup,
+    muscleTargets: firstExercise.muscleTargets,
     recommendation:
       firstExercise.instructions ??
       firstExercise.description ??
@@ -1041,9 +1103,10 @@ function toEquipmentSource(
   return isConfirmedByMember ? "member" : "catalog";
 }
 
-function requiresVisualEquipmentContext(context: PoseEquipmentContext | null) {
-  if (!context) return false;
-  return WEIGHTED_EQUIPMENT_CONTEXTS.has(context);
+function requiresVisualEquipmentContext(_context: PoseEquipmentContext | null) {
+  // Object detection is intentionally optional telemetry now. Weighted exercise
+  // integrity is driven by the selected exercise context plus pose mechanics.
+  return false;
 }
 
 function buildPoseQualityFeedback(
@@ -1098,8 +1161,11 @@ function findExerciseByDetectedName(
   if (!matchedExercise) return null;
   return {
     exerciseId: matchedExercise.id,
+    handShapeProfile: matchedExercise.handShapeProfile,
     label: matchedExercise.name,
+    movementProfile: matchedExercise.movementProfile,
     muscleGroup: matchedExercise.muscleGroup,
+    muscleTargets: matchedExercise.muscleTargets,
     recommendation:
       matchedExercise.instructions ??
       matchedExercise.description ??
@@ -1154,6 +1220,10 @@ export function useWorkoutLiveController() {
   const { message, showMessage } = useTimedMessage(2500);
 
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
+  const [isExerciseCreationReviewOpen, setIsExerciseCreationReviewOpen] =
+    useState(false);
+  const [exerciseCreationDraft, setExerciseCreationDraft] =
+    useState<ExerciseCreationDraft | null>(null);
   const [isExerciseConfirmationVisible, setIsExerciseConfirmationVisible] =
     useState(false);
   const [exerciseConfirmationCandidates, setExerciseConfirmationCandidates] =
@@ -1237,6 +1307,7 @@ export function useWorkoutLiveController() {
     null,
   );
   const poseFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
+  const exerciseCreationFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
   const framesSinceAnalyzeRef = useRef(0);
   const trackingReliabilityNotifiedRef = useRef(false);
   const confirmedExerciseLabelRef = useRef<string | null>(null);
@@ -1266,6 +1337,13 @@ export function useWorkoutLiveController() {
         : nextValue;
     liveRepCountRef.current = resolvedValue;
     setReps(resolvedValue);
+  };
+
+  const rememberExerciseCreationFrame = (frame: PoseSequenceFrameRecord) => {
+    exerciseCreationFrameBufferRef.current = [
+      ...exerciseCreationFrameBufferRef.current,
+      frame,
+    ].slice(-EXERCISE_CREATION_FRAME_WINDOW_SIZE);
   };
 
   const setSubjectLockState = (
@@ -1415,20 +1493,23 @@ export function useWorkoutLiveController() {
       return;
     }
 
-    if (!isRockSignSubjectLockGesture(keypoints)) {
+    if (!isRockSignSubjectLockGestureWithProfile(keypoints, activeHandShapeProfile)) {
       if (subjectLockGestureStartMsRef.current !== null) {
         resetSubjectLockGesture();
       }
       return;
     }
 
+    const targetLockHoldMs =
+      activeHandShapeProfile?.subjectLockGesture.holdMs ??
+      SUBJECT_LOCK_GESTURE_HOLD_MS;
     const startMs = subjectLockGestureStartMsRef.current ?? capturedAtMs;
     subjectLockGestureStartMsRef.current = startMs;
     const heldMs = Math.max(0, capturedAtMs - startMs);
-    const progress = Math.min(1, heldMs / SUBJECT_LOCK_GESTURE_HOLD_MS);
+    const progress = Math.min(1, heldMs / targetLockHoldMs);
     const secondsLeft = Math.max(
       0,
-      Math.ceil((SUBJECT_LOCK_GESTURE_HOLD_MS - heldMs) / 1000),
+      Math.ceil((targetLockHoldMs - heldMs) / 1000),
     );
     setSubjectLockGestureProgress(progress);
     setSubjectLockStatusText(
@@ -1436,7 +1517,7 @@ export function useWorkoutLiveController() {
     );
 
     if (
-      heldMs >= SUBJECT_LOCK_GESTURE_HOLD_MS &&
+      heldMs >= targetLockHoldMs &&
       !subjectLockGestureConsumedRef.current
     ) {
       subjectLockGestureConsumedRef.current = true;
@@ -1526,6 +1607,12 @@ export function useWorkoutLiveController() {
   );
   const finalizePoseSessionMutation = useMutation(
     finalizePoseSessionMutationOptions(mobileApiClient, queryClient),
+  );
+  const createExerciseReviewSubmissionMutation = useMutation(
+    createExerciseReviewSubmissionMutationOptions(mobileApiClient, queryClient),
+  );
+  const createExerciseDraftProposalMutation = useMutation(
+    createExerciseDraftProposalMutationOptions(mobileApiClient, queryClient),
   );
 
   const currentPlanExercise = useMemo(() => {
@@ -1646,6 +1733,17 @@ export function useWorkoutLiveController() {
       findExerciseReferenceByName(exerciseReferences, trackingExerciseLabel),
     [exerciseReferences, trackingExerciseLabel],
   );
+  const trackingStructuredExercise = useMemo(
+    () =>
+      findExerciseByDetectedName(exercisesResponse.data, trackingExerciseLabel) ??
+      selectedExercise,
+    [exercisesResponse.data, selectedExercise, trackingExerciseLabel],
+  );
+  const activeHandShapeProfile =
+    trackingStructuredExercise?.handShapeProfile ?? null;
+  const activeMovementProfile =
+    trackingStructuredExercise?.movementProfile ?? null;
+  const activeMuscleTargets = trackingStructuredExercise?.muscleTargets ?? [];
   const planExerciseReference = useMemo(
     () =>
       findExerciseReferenceByName(
@@ -1678,6 +1776,191 @@ export function useWorkoutLiveController() {
     [reps, seconds],
   );
   const permissionGranted = toPermissionGranted(permission);
+  const exerciseCreationReady =
+    !!movementContractRef.current &&
+    !!poseSessionIdRef.current &&
+    repEngineStateRef.current.repCount >= EXERCISE_CREATION_MIN_REPS &&
+    exerciseCreationFrameBufferRef.current.length >= 8;
+
+  const buildCurrentExerciseCreationDraft = (): ExerciseCreationDraft | null => {
+    const activeContract = movementContractRef.current;
+    const activePoseSessionId = poseSessionIdRef.current;
+    const repCount = repEngineStateRef.current.repCount;
+    if (
+      !activeContract ||
+      !activePoseSessionId ||
+      repCount < EXERCISE_CREATION_MIN_REPS
+    ) {
+      return null;
+    }
+
+    const exerciseLabel =
+      confirmedExerciseLabelRef.current ??
+      trackingExerciseLabel ??
+      activeContract.exercise;
+    const displayName = toDisplayExerciseName(exerciseLabel);
+    const rig = buildExerciseRigFromPoseFrames({
+      exerciseLabel,
+      frames: exerciseCreationFrameBufferRef.current,
+      movementContract: activeContract,
+      poseSessionId: activePoseSessionId,
+      rawAngleData: repEngineStateRef.current.rawAngleData,
+    });
+    const evidence: ExerciseAiDraftEvidenceRecord = buildExerciseAiDraftEvidence({
+      confidence: averageConfidenceRef.current,
+      integrityNotes: [
+        subjectLockedRef.current
+          ? "Subject lock was active during capture."
+          : "Subject lock was not active for the entire capture.",
+        ...poseEquipmentConflicts,
+      ].filter(Boolean),
+      movementContract: activeContract,
+      repCount,
+      rig,
+    });
+    const primaryMuscleGroup = getPrimaryExerciseMuscleGroup(activeMuscleTargets);
+    const muscleGroup =
+      primaryMuscleGroup ||
+      trackingExerciseReference?.muscleGroup ||
+      planExerciseReference?.muscleGroup ||
+      selectedExercise?.muscleGroup ||
+      "custom";
+    const muscleTargets = normalizeExerciseMuscleTargets(
+      activeMuscleTargets.length
+        ? activeMuscleTargets
+        : createDefaultExerciseMuscleTargets(muscleGroup),
+      muscleGroup,
+    );
+    const normalizedHandShapeProfile =
+      normalizeExerciseHandShapeProfile(activeHandShapeProfile);
+    const handShapeProfile = {
+      ...normalizedHandShapeProfile,
+      grip: {
+        ...normalizedHandShapeProfile.grip,
+        required:
+          normalizedHandShapeProfile.grip.required ||
+          normalizeExerciseName(exerciseLabel).includes("curl"),
+      },
+    };
+    const movementProfile =
+      normalizeExerciseMovementProfile(activeMovementProfile, {
+        movementContract: activeContract,
+        rig,
+      }) ??
+      createExerciseMovementProfile({
+        movementContract: activeContract,
+        rig,
+      });
+    const category: FitnessExerciseCategory = "strength";
+
+    return {
+      category,
+      description: `${displayName} captured from a live member pose session. The draft is based on ${repCount} counted reps, a ${activeContract.dominantJoint}-dominant movement contract, and the attached rig keyframes.`,
+      evidence,
+      handShapeProfile,
+      instructions:
+        trackingExerciseReference?.recommendation ??
+        `Start in the captured setup, move through the shown range of motion, reach peak contraction, then return with control while keeping the tracked body chain visible.`,
+      movementProfile,
+      muscleGroup,
+      muscleTargets,
+      name: displayName,
+      summary: `${repCount} reps captured with ${activeContract.dominantJoint}-dominant range-of-motion evidence.`,
+    };
+  };
+
+  const handleOpenExerciseCreationReview = async () => {
+    const localDraft = buildCurrentExerciseCreationDraft();
+    if (!localDraft) {
+      showMessage(
+        `Capture ${EXERCISE_CREATION_MIN_REPS} clean reps with a visible rig before creating an exercise draft.`,
+      );
+      return;
+    }
+
+    const payload: CreateExerciseDraftProposalInput = {
+      category: localDraft.category,
+      description: localDraft.description,
+      evidence: localDraft.evidence,
+      handShapeProfile: localDraft.handShapeProfile,
+      instructions: localDraft.instructions,
+      movementProfile: localDraft.movementProfile,
+      muscleGroup: localDraft.muscleGroup,
+      muscleTargets: localDraft.muscleTargets,
+      poseSessionId: poseSessionIdRef.current,
+      proposedName: localDraft.name,
+      summary: localDraft.summary,
+    };
+
+    try {
+      const proposal = await createExerciseDraftProposalMutation.mutateAsync({
+        payload,
+        userId: user?.id,
+      });
+      setExerciseCreationDraft({
+        category: proposal.category,
+        description: proposal.description,
+        evidence: proposal.evidence,
+        handShapeProfile: proposal.handShapeProfile,
+        instructions: proposal.instructions,
+        movementProfile: proposal.movementProfile,
+        muscleGroup: proposal.muscleGroup,
+        muscleTargets: proposal.muscleTargets,
+        name: proposal.proposedName,
+        summary: proposal.summary,
+      });
+      showMessage("Exercise draft proposal generated.");
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 403) {
+        showMessage(error.message);
+        return;
+      }
+      setExerciseCreationDraft(localDraft);
+      showMessage("Using local draft fallback. Review it before submitting.");
+    }
+    setIsExerciseCreationReviewOpen(true);
+    setIsExerciseModalOpen(false);
+  };
+
+  const handleSubmitExerciseCreationDraft = async () => {
+    if (!exerciseCreationDraft) return;
+
+    const payload: CreateExerciseReviewSubmissionInput = {
+      category: exerciseCreationDraft.category,
+      description: exerciseCreationDraft.description,
+      evidenceBars: exerciseCreationDraft.evidence,
+      handShapeProfile: exerciseCreationDraft.handShapeProfile,
+      instructions: exerciseCreationDraft.instructions,
+      matchHint: exerciseCreationDraft.evidence.movementContract?.exercise,
+      movementProfile: exerciseCreationDraft.movementProfile,
+      muscleGroup: exerciseCreationDraft.muscleGroup,
+      muscleTargets: exerciseCreationDraft.muscleTargets,
+      originLabel: "mobile creator session",
+      poseSessionId: poseSessionIdRef.current,
+      proposedName: exerciseCreationDraft.name,
+      queueTag: "ai draft",
+      sourceLabel: "mobile pose rig",
+      summary: exerciseCreationDraft.summary,
+      title: exerciseCreationDraft.name,
+      triggerLabel: `${exerciseCreationDraft.evidence.repCount} reps captured`,
+    };
+
+    try {
+      await createExerciseReviewSubmissionMutation.mutateAsync({
+        payload,
+        userId: user?.id,
+      });
+      setIsExerciseCreationReviewOpen(false);
+      setExerciseCreationDraft(null);
+      showMessage("Exercise draft submitted to Exercise Lab.");
+    } catch (error) {
+      showMessage(
+        error instanceof ApiClientError
+          ? error.message
+          : "Failed to submit exercise draft.",
+      );
+    }
+  };
 
   useEffect(() => {
     if (liveActiveSession?.id && !workoutSessionId) {
@@ -1695,6 +1978,7 @@ export function useWorkoutLiveController() {
 
   const resetPoseTrackingBuffers = () => {
     poseFrameBufferRef.current = [];
+    exerciseCreationFrameBufferRef.current = [];
     framesSinceAnalyzeRef.current = 0;
     trackingReliabilityNotifiedRef.current = false;
     frameInFlightRef.current = false;
@@ -1827,6 +2111,7 @@ export function useWorkoutLiveController() {
       stableNativePoseFrameRef.current,
     );
     stableNativePoseFrameRef.current = stableFrame;
+    rememberExerciseCreationFrame(stableFrame);
 
     setNativeLandmarksActive(true);
     setCurrentKeypoints(stableFrame.keypoints);
@@ -1936,6 +2221,11 @@ export function useWorkoutLiveController() {
         {
           equipmentContext: poseEquipmentContext,
           equipmentSource: poseEquipmentSource,
+          handShapeProfile: activeHandShapeProfile,
+          keypointFrames: bufferedFrames.map(
+            (bufferedFrame) => bufferedFrame.keypoints,
+          ),
+          keypoints: stableFrame.keypoints,
           lowConfidenceLandmarks: signals.visibility.lowConfidenceLandmarks,
           signals,
         },
@@ -2230,6 +2520,7 @@ export function useWorkoutLiveController() {
       return;
     }
 
+    rememberExerciseCreationFrame(frame);
     setCurrentKeypoints(frame.keypoints);
     updateSubjectLockGesture(frame.keypoints, frame.capturedAtMs);
     const instantSignals = computePoseSignals([frame]);
@@ -2299,6 +2590,11 @@ export function useWorkoutLiveController() {
         {
           equipmentContext: poseEquipmentContext,
           equipmentSource: poseEquipmentSource,
+          handShapeProfile: activeHandShapeProfile,
+          keypointFrames: bufferedFrames.map(
+            (bufferedFrame) => bufferedFrame.keypoints,
+          ),
+          keypoints: frame.keypoints,
           lowConfidenceLandmarks: signals.visibility.lowConfidenceLandmarks,
           signals,
         },
@@ -2901,6 +3197,8 @@ export function useWorkoutLiveController() {
       setCustomExerciseLabel("");
       setExerciseConfirmationCandidates([]);
       setIsExerciseConfirmationVisible(false);
+      setExerciseCreationDraft(null);
+      setIsExerciseCreationReviewOpen(false);
       setPoseStatusOverride(null);
       resetPoseRuntimeState(true);
       setSubjectLockState(false, null, "reset");
@@ -2953,6 +3251,8 @@ export function useWorkoutLiveController() {
     currentPlanExerciseLabel: currentPlanExercise?.exerciseName ?? null,
     customExerciseLabel,
     exerciseConfirmationCandidates,
+    exerciseCreationDraft,
+    exerciseCreationReady,
     exerciseFocusText: trackingExerciseLabel
       ? `Tracking: ${toDisplayExerciseName(trackingExerciseLabel)}${trackingExerciseReference ? ` - ${trackingExerciseReference.muscleGroup}` : ""}`
       : currentPlanExercise?.exerciseName
@@ -2979,28 +3279,21 @@ export function useWorkoutLiveController() {
       providerEquipmentContext === "dumbbell"
         ? providerEquipmentDetections
         : [],
-    equipmentDetectionStatusText: requiresEquipmentSnapshot
-      ? equipmentProviderEnabled === false
-        ? shouldUseDeclaredEquipmentFallback
-          ? "DUMBBELL SELECTED"
-          : "EQUIPMENT AI OFF"
-        : shouldUseProviderEquipmentResolution
-          ? `${toDisplayExerciseName(providerEquipmentContext ?? "load")} detected${
-              typeof providerEquipmentConfidence === "number"
-                ? ` ${Math.round(providerEquipmentConfidence * 100)}%`
-                : ""
-            }`
-          : shouldUseDeclaredEquipmentFallback
-            ? "DUMBBELL SELECTED - AI MISS"
-            : isRecording
-              ? "Looking for dumbbell"
-              : "Dumbbell check armed"
-      : null,
+    equipmentDetectionStatusText: shouldUseProviderEquipmentResolution
+      ? `${toDisplayExerciseName(providerEquipmentContext ?? "load")} detected${
+          typeof providerEquipmentConfidence === "number"
+            ? ` ${Math.round(providerEquipmentConfidence * 100)}%`
+            : ""
+        }`
+      : declaredExerciseEquipmentContext === "dumbbell"
+        ? "Dumbbell declared"
+        : declaredExerciseEquipmentContext &&
+            WEIGHTED_EQUIPMENT_CONTEXTS.has(declaredExerciseEquipmentContext)
+          ? `${toDisplayExerciseName(declaredExerciseEquipmentContext)} declared`
+          : null,
     equipmentDetected:
       (shouldUseProviderEquipmentResolution &&
-        providerEquipmentContext === "dumbbell") ||
-      (shouldUseDeclaredEquipmentFallback &&
-        declaredExerciseEquipmentContext === "dumbbell"),
+        providerEquipmentContext === "dumbbell"),
     feedbackItems:
       poseFeedback.length > 0
         ? poseFeedback
@@ -3009,6 +3302,10 @@ export function useWorkoutLiveController() {
           : NATIVE_POSE_FEEDBACK,
     finishVisible,
     isExerciseConfirmationVisible,
+    isExerciseCreationReviewOpen,
+    isExerciseCreationSubmitting:
+      createExerciseReviewSubmissionMutation.isPending ||
+      createExerciseDraftProposalMutation.isPending,
     isExerciseModalOpen,
     isFinishing,
     isFrozen,
@@ -3020,6 +3317,8 @@ export function useWorkoutLiveController() {
     lowConfidenceLandmarks,
     onChangeCustomExerciseLabel: setCustomExerciseLabel,
     onCloseExerciseConfirmation: handleCloseExerciseConfirmation,
+    onCloseExerciseCreationReview: () =>
+      setIsExerciseCreationReviewOpen(false),
     onCloseExerciseModal: () => setIsExerciseModalOpen(false),
     onConfirmExerciseLabel: handleConfirmExerciseLabel,
     onFinishCancel: handleFinishCancel,
@@ -3028,6 +3327,7 @@ export function useWorkoutLiveController() {
     onNativeEquipmentSnapshot: handleNativeEquipmentSnapshot,
     onNativePoseFrame: handleNativePoseFrame,
     onOpenExerciseModal: () => setIsExerciseModalOpen(true),
+    onOpenExerciseCreationReview: handleOpenExerciseCreationReview,
     onPause: handlePause,
     onResumeRecord: handleResumeRecord,
     onSelectExerciseReference: handleSelectExerciseReference,
@@ -3035,6 +3335,8 @@ export function useWorkoutLiveController() {
     onStopRecord: handleStopRecord,
     onToggleCameraFacing: handleToggleCameraFacing,
     onToggleSubjectLock: handleToggleSubjectLock,
+    onUpdateExerciseCreationDraft: setExerciseCreationDraft,
+    onSubmitExerciseCreationDraft: handleSubmitExerciseCreationDraft,
     onUseAutoDetection: handleUseAutoDetection,
     opacity,
     permissionGranted,

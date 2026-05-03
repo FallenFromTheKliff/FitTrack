@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { X } from "lucide-react";
@@ -57,11 +57,20 @@ export default function FitModal({
   const [visible, setVisible] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const subtitleId = useId();
   const Icon = icon;
 
   useEffect(() => {
     setPortalRoot(document.body);
   }, []);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (animationFrameRef.current !== null) {
@@ -88,6 +97,39 @@ export default function FitModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen || !portalRoot) return;
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusFrame = requestAnimationFrame(() => {
+      modalRef.current?.focus({ preventScroll: true });
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const dialogs = Array.from(
+        document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
+      );
+      if (dialogs[dialogs.length - 1] !== modalRef.current) return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus({ preventScroll: true });
+    };
+  }, [isOpen, portalRoot]);
+
   if ((!isOpen && !visible) || !portalRoot) return null;
 
   return createPortal(
@@ -101,6 +143,13 @@ export default function FitModal({
       onClick={onClose}
     >
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={hideHeaderText ? undefined : titleId}
+        aria-describedby={subtitle && !hideHeaderText ? subtitleId : undefined}
+        aria-label={hideHeaderText ? title : undefined}
+        tabIndex={-1}
         style={{
           ...s.container,
           maxWidth,
@@ -126,9 +175,9 @@ export default function FitModal({
             )}
             {!hideHeaderText && (
               <div style={s.headerText}>
-                <FitText style={{ ...s.title, ...titleStyle }}>{title}</FitText>
+                <FitText id={titleId} style={{ ...s.title, ...titleStyle }}>{title}</FitText>
                 {subtitle ? (
-                  <FitText as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
+                  <FitText id={subtitleId} as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
                 ) : null}
               </div>
             )}

@@ -13,6 +13,10 @@ from ..models.business_insights import (
     BusinessAnalyticsInsightResponse,
 )
 from ..models.equipment import EquipmentDetectRequest, EquipmentDetectResponse
+from ..models.exercise_drafts import (
+    ExerciseDraftProposalRequest,
+    ExerciseDraftProposalResponse,
+)
 from ..models.gym_chat import GymChatRequest, GymChatResponse
 from ..models.nutrition import CalculateTdeeRequest, CalculateTdeeResponse
 from ..models.pose import (
@@ -27,6 +31,7 @@ from ..models.pose import (
 from ..services.assistant import AssistantService
 from ..services.business_insights import BusinessInsightService
 from ..services.equipment_detection import EquipmentDetectionService
+from ..services.exercise_drafts import ExerciseDraftProposalService
 from ..services.gym_chat import GymChatService
 from ..services.nutrition import NutritionService
 from ..services.pose_sessions import PoseSessionService
@@ -35,6 +40,7 @@ router = APIRouter()
 assistant_service = AssistantService()
 business_insight_service = BusinessInsightService()
 equipment_detection_service = EquipmentDetectionService()
+exercise_draft_proposal_service = ExerciseDraftProposalService()
 gym_chat_service = GymChatService()
 nutrition_service = NutritionService()
 pose_session_service = PoseSessionService()
@@ -80,6 +86,13 @@ def calculate_tdee(payload: CalculateTdeeRequest) -> CalculateTdeeResponse:
 @router.post("/equipment/detect", response_model=EquipmentDetectResponse)
 def detect_equipment(payload: EquipmentDetectRequest) -> EquipmentDetectResponse:
     return equipment_detection_service.detect(payload)
+
+
+@router.post("/exercise-drafts/propose", response_model=ExerciseDraftProposalResponse)
+def propose_exercise_draft(
+    payload: ExerciseDraftProposalRequest,
+) -> ExerciseDraftProposalResponse:
+    return exercise_draft_proposal_service.propose(payload)
 
 
 @router.post("/pose/session/bootstrap", response_model=PoseBootstrapResponse)

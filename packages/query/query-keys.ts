@@ -338,6 +338,10 @@ const fitnessKeys = {
     params
       ? (["fitness", "exercise-review-submissions", params] as const)
       : (["fitness", "exercise-review-submissions"] as const),
+  muscleDefinitions: (params?: { includeArchived?: boolean; search?: string }) =>
+    params
+      ? (["fitness", "muscle-definitions", params] as const)
+      : (["fitness", "muscle-definitions"] as const),
   plans: (userId?: string, params?: { limit?: number; page?: number }) =>
     userId
       ? params
@@ -512,6 +516,7 @@ export const queryKeys = {
   analyticsInsightDetail: analyticsKeys.insightDetail,
   fitnessExercises: fitnessKeys.exercises,
   fitnessExerciseReviewSubmissions: fitnessKeys.exerciseReviewSubmissions,
+  fitnessMuscleDefinitions: fitnessKeys.muscleDefinitions,
   fitnessPlans: fitnessKeys.plans,
   fitnessPlanDetail: fitnessKeys.planDetail,
   fitnessSessions: fitnessKeys.sessions,

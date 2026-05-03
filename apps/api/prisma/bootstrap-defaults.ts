@@ -17,6 +17,9 @@ async function main() {
   console.log(
     `[bootstrap] default amenities: created=${summary.createdCount}, existing=${summary.existingCount}, reactivated=${summary.reactivatedCount}, total=${summary.defaultAmenityCount}`,
   );
+  console.log(
+    `[bootstrap] default muscles: created=${summary.muscleCreatedCount}, existing=${summary.muscleExistingCount}, total=${summary.defaultMuscleCount}`,
+  );
 }
 
 main()

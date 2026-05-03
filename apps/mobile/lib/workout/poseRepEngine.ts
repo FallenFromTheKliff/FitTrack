@@ -1,6 +1,9 @@
 import type {
+  ExerciseHandShapeProfileRecord,
+  ExerciseGripProfileRecord,
   PoseEquipmentContext,
   PoseEquipmentSource,
+  PoseKeypointRecord,
   PoseMovementContractRecord,
   PoseRepAngleDataRecord,
   PoseSequenceSignalsRecord,
@@ -27,34 +30,48 @@ export type PoseRepEngineState = {
 export type PoseRepEngineEvidence = {
   equipmentContext?: PoseEquipmentContext | null;
   equipmentSource?: PoseEquipmentSource | null;
+  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
+  keypointFrames?: PoseKeypointRecord[][] | null;
+  keypoints?: PoseKeypointRecord[] | null;
   lowConfidenceLandmarks?: string[];
   signals?: PoseSequenceSignalsRecord | null;
 };
 
 const REQUIRED_STREAK = 2;
 const MIN_REP_TRAVEL = 18;
-const BICEP_CURL_MIN_REP_TRAVEL = 8;
-const BICEP_CURL_MIN_REP_INTERVAL_MS = 650;
+const BICEP_CURL_MIN_REP_TRAVEL = 24;
+const BICEP_CURL_MIN_REP_INTERVAL_MS = 800;
 const BICEP_CURL_PEAK_REVERSAL_DELTA = 2;
-const BICEP_CURL_PEAK_LIMIT = 142;
-const BICEP_CURL_START_LIMIT = 118;
-const DIP_BOTTOM_LIMIT = 100;
-const DIP_MIN_REP_INTERVAL_MS = 900;
-const DIP_MIN_REP_TRAVEL = 12;
-const DIP_PEAK_LIMIT = 142;
+const BICEP_CURL_PEAK_LIMIT = 128;
+const BICEP_CURL_START_LIMIT = 136;
+const BICEP_CURL_MIN_TORSO_SLOPE_DEG = 48;
+const BICEP_CURL_MAX_HIP_Y_TRAVEL = 0.08;
+const BICEP_CURL_MIN_SECONDARY_ARM_VISIBILITY = 0.18;
+const BICEP_CURL_MIN_BILATERAL_ELBOW_AMPLITUDE = 12;
+const BICEP_CURL_STRONG_SIDE_ELBOW_AMPLITUDE = 20;
+const BICEP_CURL_MIN_BILATERAL_ELBOW_RATIO = 0.42;
+const BICEP_CURL_PHASE_SYNC_TOLERANCE_MS = 950;
+const BICEP_CURL_GRIP_RECENT_FRAME_LIMIT = 8;
+const BICEP_CURL_GRIP_MIN_USABLE_FRAMES = 2;
+const BICEP_CURL_GRIP_MAX_OPEN_FRAMES = 1;
+const BICEP_CURL_GRIP_MAX_OPEN_RATIO = 0.25;
+const DIP_BOTTOM_LIMIT = 122;
+const DIP_MIN_REP_INTERVAL_MS = 850;
+const DIP_MIN_REP_TRAVEL = 18;
+const DIP_PEAK_LIMIT = 148;
 const DEFAULT_MIN_REP_INTERVAL_MS = 850;
-const PUSH_UP_BOTTOM_LIMIT = 155;
+const PUSH_UP_BOTTOM_LIMIT = 150;
 const PUSH_UP_MIN_REP_INTERVAL_MS = 850;
-const PUSH_UP_MIN_REP_TRAVEL = 5;
-const PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY = 0.12;
-const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 1.5;
-const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.14;
+const PUSH_UP_MIN_REP_TRAVEL = 10;
+const PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY = 0.1;
+const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 1.2;
+const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.1;
 const PUSH_UP_PEAK_REVERSAL_DELTA = 2;
-const PUSH_UP_PEAK_LIMIT = 142;
+const PUSH_UP_PEAK_LIMIT = 152;
 const PUSH_UP_STRONG_SIDE_ELBOW_AMPLITUDE = 5;
-const PUSH_UP_MAX_HIP_X_DRIFT = 0.22;
-const PUSH_UP_MAX_TORSO_SLOPE_DEG = 86;
-const PUSH_UP_PHASE_SYNC_TOLERANCE_MS = 750;
+const PUSH_UP_MAX_HIP_X_DRIFT = 0.26;
+const PUSH_UP_MAX_TORSO_SLOPE_DEG = 92;
+const PUSH_UP_PHASE_SYNC_TOLERANCE_MS = 900;
 const PULL_UP_MIN_REP_INTERVAL_MS = 900;
 const PULL_UP_MIN_REP_TRAVEL = 8;
 const PULL_UP_PEAK_LIMIT = 135;
@@ -69,6 +86,193 @@ const WEIGHTED_CURL_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "band",
   "mixed",
 ]);
+
+const DEFAULT_REQUIRED_CURL_GRIP_PROFILE: ExerciseGripProfileRecord = {
+  maxOpenFrames: BICEP_CURL_GRIP_MAX_OPEN_FRAMES,
+  maxOpenRatio: BICEP_CURL_GRIP_MAX_OPEN_RATIO,
+  minUsableFrames: BICEP_CURL_GRIP_MIN_USABLE_FRAMES,
+  recentFrameLimit: BICEP_CURL_GRIP_RECENT_FRAME_LIMIT,
+  reliablePointMinVisibility: 0.08,
+  required: true,
+};
+
+type GripSide = "left" | "right";
+
+type GripIndexes = {
+  elbow: number;
+  index: number;
+  pinky: number;
+  thumb: number;
+  wrist: number;
+};
+
+const CURL_GRIP_INDEXES: Record<GripSide, GripIndexes> = {
+  left: { elbow: 13, index: 19, pinky: 17, thumb: 21, wrist: 15 },
+  right: { elbow: 14, index: 20, pinky: 18, thumb: 22, wrist: 16 },
+};
+
+function getPointDistance(
+  first: PoseKeypointRecord,
+  second: PoseKeypointRecord,
+) {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function isReliableGripPoint(
+  point: PoseKeypointRecord | undefined,
+  minVisibility = DEFAULT_REQUIRED_CURL_GRIP_PROFILE.reliablePointMinVisibility,
+): point is PoseKeypointRecord {
+  return !!point && point.visibility >= minVisibility;
+}
+
+function isOpenPalmCurlGripCandidate(
+  keypoints: PoseKeypointRecord[] | null | undefined,
+  side: GripSide,
+  minVisibility = DEFAULT_REQUIRED_CURL_GRIP_PROFILE.reliablePointMinVisibility,
+) {
+  const indexes = CURL_GRIP_INDEXES[side];
+  const elbow = keypoints?.[indexes.elbow];
+  const wrist = keypoints?.[indexes.wrist];
+  const index = keypoints?.[indexes.index];
+  const pinky = keypoints?.[indexes.pinky];
+  const thumb = keypoints?.[indexes.thumb];
+
+  const isReliable = (point: PoseKeypointRecord | undefined) =>
+    isReliableGripPoint(point, minVisibility);
+
+  if (!isReliable(elbow) || !isReliable(wrist)) {
+    return false;
+  }
+
+  const forearmLength = Math.max(getPointDistance(elbow, wrist), 0.03);
+  const forearmUnit = {
+    x: (wrist.x - elbow.x) / forearmLength,
+    y: (wrist.y - elbow.y) / forearmLength,
+  };
+  const visibleFingerTips = [index, pinky, thumb].filter(isReliable);
+  if (visibleFingerTips.length < 2) {
+    return false;
+  }
+
+  const toTip = visibleFingerTips.map((point) => ({
+    x: point.x - wrist.x,
+    y: point.y - wrist.y,
+  }));
+  const fingerDistances = visibleFingerTips.flatMap((first, firstIndex) =>
+    visibleFingerTips
+      .slice(firstIndex + 1)
+      .map((second) => getPointDistance(first, second) / forearmLength),
+  );
+  const fingerSpread = Math.max(...fingerDistances, 0);
+  const fingerReaches = visibleFingerTips.map(
+    (point) => getPointDistance(point, wrist) / forearmLength,
+  );
+  const thumbReach = isReliable(thumb)
+    ? getPointDistance(thumb, wrist) / forearmLength
+    : 0;
+  const thumbToIndex =
+    isReliable(thumb) && isReliable(index)
+      ? getPointDistance(thumb, index) / forearmLength
+      : 0;
+  const thumbToPinky =
+    isReliable(thumb) && isReliable(pinky)
+      ? getPointDistance(thumb, pinky) / forearmLength
+      : 0;
+  const normalizedForwardReach = Math.max(
+    ...toTip.map((vector) =>
+      Math.max(0, vector.x * forearmUnit.x + vector.y * forearmUnit.y) /
+      forearmLength,
+    ),
+  );
+  const normalizedSideSpread = Math.max(
+    ...toTip.map((vector) =>
+      Math.abs(vector.x * forearmUnit.y - vector.y * forearmUnit.x) /
+      forearmLength,
+    ),
+  );
+  const fingertipCluster = fingerSpread;
+
+  const averageFingerReach =
+    fingerReaches.reduce((sum, reach) => sum + reach, 0) /
+    Math.max(fingerReaches.length, 1);
+  const thumbPinchDistance =
+    thumbToIndex > 0 && thumbToPinky > 0
+      ? Math.min(thumbToIndex, thumbToPinky)
+      : Math.max(thumbToIndex, thumbToPinky);
+  const widePalm = fingerSpread >= 0.24 || fingertipCluster >= 0.34;
+  const fingersProjectedAway =
+    normalizedForwardReach >= 0.32 || averageFingerReach >= 0.38;
+  const thumbNotPinched =
+    thumbReach > 0 && (thumbPinchDistance >= 0.2 || thumbReach >= 0.34);
+  const sidewaysPalm = normalizedSideSpread >= 0.24 && fingerSpread >= 0.2;
+
+  return (
+    sidewaysPalm ||
+    (widePalm && fingersProjectedAway) ||
+    (widePalm && thumbNotPinched) ||
+    (fingersProjectedAway && thumbNotPinched && fingerSpread >= 0.22)
+  );
+}
+
+function isUsableCurlGripFrame(
+  keypoints: PoseKeypointRecord[] | null | undefined,
+  side: GripSide,
+  minVisibility = DEFAULT_REQUIRED_CURL_GRIP_PROFILE.reliablePointMinVisibility,
+) {
+  const indexes = CURL_GRIP_INDEXES[side];
+  return (
+    isReliableGripPoint(keypoints?.[indexes.elbow], minVisibility) &&
+    isReliableGripPoint(keypoints?.[indexes.wrist], minVisibility) &&
+    isReliableGripPoint(keypoints?.[indexes.index], minVisibility) &&
+    isReliableGripPoint(keypoints?.[indexes.pinky], minVisibility) &&
+    isReliableGripPoint(keypoints?.[indexes.thumb], minVisibility)
+  );
+}
+
+function hasBilateralCurlGrip(
+  keypoints: PoseKeypointRecord[] | null | undefined,
+  keypointFrames?: PoseKeypointRecord[][] | null,
+  handShapeProfile?: ExerciseHandShapeProfileRecord | null,
+) {
+  const grip = handShapeProfile?.grip ?? DEFAULT_REQUIRED_CURL_GRIP_PROFILE;
+  if (!grip.required) return true;
+
+  const recentFrames = [
+    ...(keypointFrames ?? []),
+    ...(keypoints ? [keypoints] : []),
+  ].slice(-grip.recentFrameLimit);
+
+  if (!recentFrames.length) return true;
+
+  return (["left", "right"] as const).every((side) => {
+    const openPalmFrames = recentFrames.filter((frame) =>
+      isOpenPalmCurlGripCandidate(frame, side, grip.reliablePointMinVisibility),
+    ).length;
+    if (
+      openPalmFrames > grip.maxOpenFrames &&
+      openPalmFrames / recentFrames.length > grip.maxOpenRatio
+    ) {
+      return false;
+    }
+
+    const usableFrames = recentFrames.filter((frame) =>
+      isUsableCurlGripFrame(frame, side, grip.reliablePointMinVisibility),
+    );
+    if (usableFrames.length < grip.minUsableFrames) {
+      // A real dumbbell often occludes finger tips. Do not punish missing hand
+      // details; visible open palms are blocked before this fallback.
+      return true;
+    }
+
+    const usableOpenPalmFrames = usableFrames.filter((frame) =>
+      isOpenPalmCurlGripCandidate(frame, side, grip.reliablePointMinVisibility),
+    ).length;
+    return (
+      usableOpenPalmFrames <= grip.maxOpenFrames &&
+      usableOpenPalmFrames / usableFrames.length <= grip.maxOpenRatio
+    );
+  });
+}
 
 function getRepEngineThresholds(contract: PoseMovementContractRecord) {
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
@@ -115,6 +319,17 @@ function getRepAngleLimits(contract: PoseMovementContractRecord) {
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
 
   if (canonicalExercise === "push_up") {
+    const contractStartLimit =
+      contract.repThresholds.down.angle + contract.repThresholds.down.tolerance;
+    const contractPeakLimit =
+      contract.repThresholds.up.angle - contract.repThresholds.up.tolerance;
+    if (contractPeakLimit > contractStartLimit) {
+      return {
+        peakLimit: contractPeakLimit,
+        progressDirection: "increase" as const,
+        startLimit: contractStartLimit,
+      };
+    }
     return {
       peakLimit: PUSH_UP_PEAK_LIMIT,
       progressDirection: "increase" as const,
@@ -277,7 +492,14 @@ function getPoseRepNoCountReason(
 
     if (canonicalExercise === "push_up") {
       const orientation = evidence.signals.orientation;
-      if (orientation.torsoSlopeDeg > PUSH_UP_MAX_TORSO_SLOPE_DEG) {
+      const spatial = contract.spatialRequirements;
+      const maxTorsoSlope =
+        spatial?.torsoSlopeMaxDeg ?? PUSH_UP_MAX_TORSO_SLOPE_DEG;
+      const minTorsoSlope = spatial?.torsoSlopeMinDeg ?? 0;
+      if (
+        orientation.torsoSlopeDeg > maxTorsoSlope ||
+        orientation.torsoSlopeDeg < minTorsoSlope
+      ) {
         return "push_up_body_not_horizontal";
       }
     }
@@ -292,20 +514,112 @@ function getPoseRepNoCountReason(
     return "equipment_required";
   }
 
+  if (canonicalExercise === "bicep_curl") {
+    const leftArmVisibility =
+      evidence.signals.visibility.leftArmVisibility ?? 0;
+    const rightArmVisibility =
+      evidence.signals.visibility.rightArmVisibility ?? 0;
+    const leftElbowAmplitude =
+      evidence.signals.temporal.amplitudes.left_elbow ?? 0;
+    const rightElbowAmplitude =
+      evidence.signals.temporal.amplitudes.right_elbow ?? 0;
+    const weakestArmVisibility = Math.min(
+      leftArmVisibility,
+      rightArmVisibility,
+    );
+    const weakestElbowAmplitude = Math.min(
+      leftElbowAmplitude,
+      rightElbowAmplitude,
+    );
+    const strongestElbowAmplitude = Math.max(
+      leftElbowAmplitude,
+      rightElbowAmplitude,
+    );
+    const weakestArmRatio =
+      strongestElbowAmplitude > 0
+        ? weakestElbowAmplitude / strongestElbowAmplitude
+        : 0;
+
+    if (weakestArmVisibility < BICEP_CURL_MIN_SECONDARY_ARM_VISIBILITY) {
+      return "bilateral_arm_motion_unconfirmed";
+    }
+    if (
+      strongestElbowAmplitude >= BICEP_CURL_STRONG_SIDE_ELBOW_AMPLITUDE &&
+      (weakestElbowAmplitude < BICEP_CURL_MIN_BILATERAL_ELBOW_AMPLITUDE ||
+        weakestArmRatio < BICEP_CURL_MIN_BILATERAL_ELBOW_RATIO)
+    ) {
+      return "bilateral_arm_motion_unconfirmed";
+    }
+    if (
+      typeof evidence.signals.temporal.phaseSyncMs === "number" &&
+      evidence.signals.temporal.phaseSyncMs >
+        BICEP_CURL_PHASE_SYNC_TOLERANCE_MS
+    ) {
+      return "left_right_phase_desync";
+    }
+    if (
+      !hasBilateralCurlGrip(
+        evidence.keypoints,
+        evidence.keypointFrames,
+        evidence.handShapeProfile,
+      )
+    ) {
+      return "curl_grip_unconfirmed";
+    }
+    if (
+      evidence.signals.orientation.torsoSlopeDeg <
+      BICEP_CURL_MIN_TORSO_SLOPE_DEG
+    ) {
+      return "curl_torso_not_upright";
+    }
+    if (evidence.signals.hip.rangeY > BICEP_CURL_MAX_HIP_Y_TRAVEL) {
+      return "hip_swing_over_tolerance";
+    }
+  }
+
   const spatial = contract.spatialRequirements;
   if (
-    canonicalExercise !== "push_up" &&
     typeof spatial?.bodyYTravelMin === "number" &&
-    evidence.signals.hip.rangeY < spatial.bodyYTravelMin
+    Math.max(
+      evidence.signals.hip.rangeY,
+      evidence.signals.shoulder?.rangeY ?? 0,
+    ) < spatial.bodyYTravelMin
   ) {
     return "body_y_travel_below_min";
+  }
+  if (
+    typeof spatial?.hipYTravelMin === "number" &&
+    evidence.signals.hip.rangeY < spatial.hipYTravelMin
+  ) {
+    return "body_y_travel_below_min";
+  }
+  if (
+    typeof spatial?.shoulderYTravelMin === "number" &&
+    (evidence.signals.shoulder?.rangeY ?? 0) < spatial.shoulderYTravelMin
+  ) {
+    return "shoulder_y_travel_below_min";
+  }
+  if (typeof spatial?.shoulderHipTravelMin === "number") {
+    const shoulderHipTravel = Math.min(
+      evidence.signals.hip.rangeY,
+      evidence.signals.shoulder?.rangeY ?? 0,
+    );
+    if (shoulderHipTravel < spatial.shoulderHipTravelMin) {
+      return "shoulder_hip_travel_below_min";
+    }
+  }
+  if (
+    typeof spatial?.wristAnchorDriftMax === "number" &&
+    (evidence.signals.wrist?.maxRangeX ?? 0) > spatial.wristAnchorDriftMax
+  ) {
+    return "wrist_anchor_drift_over_max";
   }
   if (
     typeof spatial?.bodyXDriftMax === "number" &&
     typeof evidence.signals.hip.rangeX === "number" &&
     evidence.signals.hip.rangeX >
       (canonicalExercise === "push_up"
-        ? Math.max(spatial.bodyXDriftMax, PUSH_UP_MAX_HIP_X_DRIFT)
+        ? Math.min(spatial.bodyXDriftMax, PUSH_UP_MAX_HIP_X_DRIFT)
         : spatial.bodyXDriftMax)
   ) {
     return "body_x_drift_over_max";
@@ -315,7 +629,7 @@ function getPoseRepNoCountReason(
     typeof evidence.signals.temporal.phaseSyncMs === "number" &&
     evidence.signals.temporal.phaseSyncMs >
       (canonicalExercise === "push_up"
-        ? Math.max(
+        ? Math.min(
             spatial.phaseSyncToleranceMs,
             PUSH_UP_PHASE_SYNC_TOLERANCE_MS,
           )

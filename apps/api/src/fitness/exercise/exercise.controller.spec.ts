@@ -12,6 +12,10 @@ function getGuardMetadata(
     | 'getExerciseById'
     | 'createExercise'
     | 'updateExercise'
+    | 'listMuscleDefinitions'
+    | 'createMuscleDefinition'
+    | 'updateMuscleDefinition'
+    | 'archiveMuscleDefinition'
     | 'listReviewSubmissions'
     | 'updateReviewSubmission',
 ): unknown[] | undefined {
@@ -25,6 +29,10 @@ function getRolesMetadata(
   methodName:
     | 'createExercise'
     | 'updateExercise'
+    | 'listMuscleDefinitions'
+    | 'createMuscleDefinition'
+    | 'updateMuscleDefinition'
+    | 'archiveMuscleDefinition'
     | 'listReviewSubmissions'
     | 'updateReviewSubmission',
 ): UserRole[] | undefined {
@@ -37,10 +45,14 @@ function getRolesMetadata(
 describe('ExerciseController', () => {
   const exerciseService = {
     listExercises: jest.fn(),
+    listMuscleDefinitions: jest.fn(),
     listReviewSubmissions: jest.fn(),
     getExerciseById: jest.fn(),
     createExercise: jest.fn(),
+    createMuscleDefinition: jest.fn(),
     updateExercise: jest.fn(),
+    updateMuscleDefinition: jest.fn(),
+    archiveMuscleDefinition: jest.fn(),
     updateReviewSubmission: jest.fn(),
   };
 
@@ -70,6 +82,10 @@ describe('ExerciseController', () => {
   it.each([
     'createExercise',
     'updateExercise',
+    'listMuscleDefinitions',
+    'createMuscleDefinition',
+    'updateMuscleDefinition',
+    'archiveMuscleDefinition',
     'listReviewSubmissions',
     'updateReviewSubmission',
   ] as const)('locks %s to admin and staff users', (methodName) => {
@@ -94,6 +110,36 @@ describe('ExerciseController', () => {
       muscle_group: 'legs',
       category: ExerciseCategory.strength,
     });
+  });
+
+  it('manages muscle definitions through the service', async () => {
+    exerciseService.listMuscleDefinitions.mockResolvedValue({ data: [] });
+    exerciseService.createMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
+    exerciseService.updateMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
+    exerciseService.archiveMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
+
+    await controller.listMuscleDefinitions({ include_archived: true });
+    await controller.createMuscleDefinition({
+      body_region: 'upper_body',
+      name: 'Front Delts',
+    });
+    await controller.updateMuscleDefinition('muscle-1', { sort_order: 30 });
+    await controller.archiveMuscleDefinition('muscle-1');
+
+    expect(exerciseService.listMuscleDefinitions).toHaveBeenCalledWith({
+      include_archived: true,
+    });
+    expect(exerciseService.createMuscleDefinition).toHaveBeenCalledWith({
+      body_region: 'upper_body',
+      name: 'Front Delts',
+    });
+    expect(exerciseService.updateMuscleDefinition).toHaveBeenCalledWith(
+      'muscle-1',
+      { sort_order: 30 },
+    );
+    expect(exerciseService.archiveMuscleDefinition).toHaveBeenCalledWith(
+      'muscle-1',
+    );
   });
 
   it('updates review submissions with the current operator as actor', async () => {

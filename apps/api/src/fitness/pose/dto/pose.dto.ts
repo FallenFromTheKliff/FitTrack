@@ -579,6 +579,30 @@ export class PoseSpatialRequirementsDTO {
   )
   body_y_travel_min?: number | null;
 
+  @ApiPropertyOptional({ example: 0.01, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'hip_y_travel_min must be a finite number' },
+  )
+  hip_y_travel_min?: number | null;
+
+  @ApiPropertyOptional({ example: 0.008, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'shoulder_y_travel_min must be a finite number' },
+  )
+  shoulder_y_travel_min?: number | null;
+
+  @ApiPropertyOptional({ example: 0.01, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'shoulder_hip_travel_min must be a finite number' },
+  )
+  shoulder_hip_travel_min?: number | null;
+
   @ApiPropertyOptional({ example: 0.05, nullable: true })
   @IsOptional()
   @IsNumber(
@@ -586,6 +610,30 @@ export class PoseSpatialRequirementsDTO {
     { message: 'body_x_drift_max must be a finite number' },
   )
   body_x_drift_max?: number | null;
+
+  @ApiPropertyOptional({ example: 0.18, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'wrist_anchor_drift_max must be a finite number' },
+  )
+  wrist_anchor_drift_max?: number | null;
+
+  @ApiPropertyOptional({ example: 0, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'torso_slope_min_deg must be a finite number' },
+  )
+  torso_slope_min_deg?: number | null;
+
+  @ApiPropertyOptional({ example: 92, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'torso_slope_max_deg must be a finite number' },
+  )
+  torso_slope_max_deg?: number | null;
 
   @ApiPropertyOptional({ example: 0.08, nullable: true })
   @IsOptional()

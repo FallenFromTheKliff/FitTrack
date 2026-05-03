@@ -223,7 +223,13 @@ export type PoseAnalyzeResponse = {
     phase_order?: string[];
     spatial_requirements?: {
       body_y_travel_min?: number | null;
+      hip_y_travel_min?: number | null;
+      shoulder_y_travel_min?: number | null;
+      shoulder_hip_travel_min?: number | null;
       body_x_drift_max?: number | null;
+      wrist_anchor_drift_max?: number | null;
+      torso_slope_min_deg?: number | null;
+      torso_slope_max_deg?: number | null;
       body_line_tolerance?: number | null;
       left_right_symmetry_tolerance?: number | null;
       phase_sync_tolerance_ms?: number | null;
@@ -418,6 +424,38 @@ export type AIChatResponse = {
   action: string;
   params?: Record<string, unknown> | null;
   model_used?: string | null;
+  token_count?: number | null;
+};
+
+export type ExerciseDraftProposalInput = {
+  category?: ExerciseCategory;
+  description?: string | null;
+  evidence?: Record<string, unknown> | null;
+  hand_shape_profile?: Record<string, unknown> | null;
+  instructions?: string | null;
+  movement_profile?: Record<string, unknown> | null;
+  muscle_group?: string | null;
+  muscle_targets?: unknown[] | null;
+  pose_session_id?: string | null;
+  proposed_name?: string | null;
+  summary?: string | null;
+};
+
+export type ExerciseDraftProposalAIResponse = {
+  category: ExerciseCategory;
+  confidence: number;
+  description: string;
+  evidence: Record<string, unknown>;
+  hand_shape_profile: Record<string, unknown>;
+  instructions: string;
+  movement_profile: Record<string, unknown>;
+  muscle_group: string;
+  muscle_targets: unknown[];
+  model_used?: string | null;
+  proposal_source: 'ai';
+  proposed_name: string;
+  review_warnings: string[];
+  summary: string;
   token_count?: number | null;
 };
 
@@ -741,6 +779,57 @@ export class AiPythonClientService {
           status: 502,
           detail:
             'The AI business-insight service returned an invalid insight payload.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return payload;
+  }
+
+  async generateExerciseDraftProposal(
+    input: ExerciseDraftProposalInput,
+  ): Promise<ExerciseDraftProposalAIResponse> {
+    const response = await this.performRequest(
+      '/exercise-drafts/propose',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+      {
+        unavailableDetail:
+          'The AI exercise-draft service is unavailable right now.',
+        missingConfigDetail: 'AI exercise-draft generation is not configured.',
+      },
+    );
+
+    if (!response.ok) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Exercise Draft Generation Failed',
+          status: 502,
+          detail:
+            'The AI exercise-draft service rejected the draft request.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const payload = (await response.json()) as ExerciseDraftProposalAIResponse;
+
+    if (!this.isValidExerciseDraftProposalPayload(payload)) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Invalid Exercise Draft Response',
+          status: 502,
+          detail:
+            'The AI exercise-draft service returned an invalid proposal payload.',
         },
         HttpStatus.BAD_GATEWAY,
       );
@@ -1200,6 +1289,45 @@ export class AiPythonClientService {
       this.isStringArray(payload.opportunities) &&
       this.isStringArray(payload.anomaly_flags) &&
       this.isStringArray(payload.recommended_actions) &&
+      (payload.model_used === undefined ||
+        payload.model_used === null ||
+        typeof payload.model_used === 'string') &&
+      (payload.token_count === undefined ||
+        payload.token_count === null ||
+        (Number.isInteger(payload.token_count) && payload.token_count >= 0))
+    );
+  }
+
+  private isValidExerciseDraftProposalPayload(
+    payload: ExerciseDraftProposalAIResponse,
+  ): payload is ExerciseDraftProposalAIResponse {
+    return (
+      payload.proposal_source === 'ai' &&
+      typeof payload.confidence === 'number' &&
+      Number.isFinite(payload.confidence) &&
+      payload.confidence >= 0 &&
+      payload.confidence <= 1 &&
+      typeof payload.proposed_name === 'string' &&
+      payload.proposed_name.trim().length > 0 &&
+      typeof payload.summary === 'string' &&
+      payload.summary.trim().length > 0 &&
+      typeof payload.description === 'string' &&
+      payload.description.trim().length > 0 &&
+      typeof payload.instructions === 'string' &&
+      payload.instructions.trim().length > 0 &&
+      typeof payload.muscle_group === 'string' &&
+      payload.muscle_group.trim().length > 0 &&
+      Array.isArray(payload.muscle_targets) &&
+      typeof payload.movement_profile === 'object' &&
+      payload.movement_profile !== null &&
+      !Array.isArray(payload.movement_profile) &&
+      typeof payload.hand_shape_profile === 'object' &&
+      payload.hand_shape_profile !== null &&
+      !Array.isArray(payload.hand_shape_profile) &&
+      typeof payload.evidence === 'object' &&
+      payload.evidence !== null &&
+      !Array.isArray(payload.evidence) &&
+      this.isStringArray(payload.review_warnings) &&
       (payload.model_used === undefined ||
         payload.model_used === null ||
         typeof payload.model_used === 'string') &&

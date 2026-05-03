@@ -110,9 +110,13 @@ export {
 } from "./bookings";
 export {
   analyzePoseSessionMutationOptions,
+  archiveMuscleDefinitionMutationOptions,
   cancelWorkoutSessionMutationOptions,
   completeWorkoutSessionMutationOptions,
+  createExerciseDraftProposalMutationOptions,
+  createExerciseReviewSubmissionMutationOptions,
   createFitnessExerciseMutationOptions,
+  createMuscleDefinitionMutationOptions,
   detectPoseEquipmentMutationOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
@@ -126,6 +130,7 @@ export {
   finalizePoseSessionMutationOptions,
   logWorkoutSetMutationOptions,
   fitnessIntegritySummaryQueryOptions,
+  fitnessMuscleDefinitionsQueryOptions,
   startPoseSessionMutationOptions,
   startWorkoutSessionMutationOptions,
   fitnessMilestonesQueryOptions,
@@ -135,6 +140,7 @@ export {
   updateFitnessRankingProfileMutationOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
+  updateMuscleDefinitionMutationOptions,
 } from "./fitness";
 export {
   archiveInventoryEquipmentMutationOptions,

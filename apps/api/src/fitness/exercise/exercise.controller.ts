@@ -26,12 +26,19 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ExerciseService } from './exercise.service';
 import {
+  CreateMuscleDefinitionDTO,
   CreateExerciseDTO,
   ExerciseFilterDTO,
   ExerciseResponseDTO,
+  MuscleDefinitionFilterDTO,
+  MuscleDefinitionResponseDTO,
+  UpdateMuscleDefinitionDTO,
   UpdateExerciseDTO,
 } from './dto/exercise.dto';
 import {
+  CreateExerciseDraftProposalDTO,
+  CreateExerciseReviewSubmissionDTO,
+  ExerciseDraftProposalResponseDTO,
   ExerciseReviewSubmissionFilterDTO,
   ExerciseReviewSubmissionResponseDTO,
   UpdateExerciseReviewSubmissionDTO,
@@ -68,10 +75,89 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 }
 
 @ApiTags('Fitness')
-@ApiExtraModels(ExerciseResponseDTO, ExerciseReviewSubmissionResponseDTO)
+@ApiExtraModels(
+  CreateExerciseDraftProposalDTO,
+  CreateMuscleDefinitionDTO,
+  CreateExerciseReviewSubmissionDTO,
+  ExerciseDraftProposalResponseDTO,
+  ExerciseResponseDTO,
+  ExerciseReviewSubmissionResponseDTO,
+  MuscleDefinitionResponseDTO,
+)
 @Controller('fitness')
 export class ExerciseController {
   constructor(private readonly exerciseService: ExerciseService) {}
+
+  @Get('muscle-definitions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List canonical muscle definitions for exercise authoring.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Muscle definitions returned.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(MuscleDefinitionResponseDTO) },
+        },
+      },
+    },
+  })
+  listMuscleDefinitions(@Query() dto: MuscleDefinitionFilterDTO) {
+    return this.exerciseService.listMuscleDefinitions(dto);
+  }
+
+  @Post('muscle-definitions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateMuscleDefinitionDTO })
+  @ApiOperation({ summary: 'Create a custom muscle definition.' })
+  @ApiResponse({
+    status: 201,
+    description: 'Muscle definition created.',
+    schema: apiEnvelopeSchema(getSchemaPath(MuscleDefinitionResponseDTO)),
+  })
+  createMuscleDefinition(@Body() dto: CreateMuscleDefinitionDTO) {
+    return this.exerciseService.createMuscleDefinition(dto);
+  }
+
+  @Patch('muscle-definitions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: UpdateMuscleDefinitionDTO })
+  @ApiOperation({ summary: 'Update a muscle definition.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Muscle definition updated.',
+    schema: apiEnvelopeSchema(getSchemaPath(MuscleDefinitionResponseDTO)),
+  })
+  updateMuscleDefinition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMuscleDefinitionDTO,
+  ) {
+    return this.exerciseService.updateMuscleDefinition(id, dto);
+  }
+
+  @Patch('muscle-definitions/:id/archive')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Archive a muscle definition.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Muscle definition archived.',
+    schema: apiEnvelopeSchema(getSchemaPath(MuscleDefinitionResponseDTO)),
+  })
+  archiveMuscleDefinition(@Param('id', ParseUUIDPipe) id: string) {
+    return this.exerciseService.archiveMuscleDefinition(id);
+  }
 
   @Get('exercises')
   @UseGuards(JwtAuthGuard)
@@ -152,6 +238,56 @@ export class ExerciseController {
   })
   listReviewSubmissions(@Query() dto: ExerciseReviewSubmissionFilterDTO) {
     return this.exerciseService.listReviewSubmissions(dto);
+  }
+
+  @Post('exercise-review-submissions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateExerciseReviewSubmissionDTO })
+  @ApiOperation({
+    summary:
+      'Submit a member-created exercise draft from a live mobile pose session.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Review submission created.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
+    ),
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'User cannot submit exercise drafts.',
+  })
+  createReviewSubmission(
+    @Body() dto: CreateExerciseReviewSubmissionDTO,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.exerciseService.createReviewSubmission(dto, user.sub);
+  }
+
+  @Post('exercise-draft-proposals')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateExerciseDraftProposalDTO })
+  @ApiOperation({
+    summary:
+      'Generate a safe exercise draft proposal from mobile pose evidence.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Draft proposal generated.',
+    schema: apiEnvelopeSchema(getSchemaPath(ExerciseDraftProposalResponseDTO)),
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'User cannot generate exercise drafts.',
+  })
+  createExerciseDraftProposal(
+    @Body() dto: CreateExerciseDraftProposalDTO,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.exerciseService.createExerciseDraftProposal(dto, user.sub);
   }
 
   @Patch('exercise-review-submissions/:id')

@@ -91,8 +91,8 @@ const SIDE_JOINT_MAP: Record<PoseSideJointName, JointIndexes> = {
 };
 
 const MIN_CONFIDENCE = 0.5;
-const PUSH_UP_SIDE_ANGLE_CONFIDENCE = 0.25;
-const PUSH_UP_SYMMETRY_TOLERANCE = 55;
+const PUSH_UP_SIDE_ANGLE_CONFIDENCE = 0.2;
+const PUSH_UP_SYMMETRY_TOLERANCE = 85;
 const PULL_UP_SIDE_ANGLE_CONFIDENCE = 0.3;
 const PULL_UP_SYMMETRY_TOLERANCE = 60;
 const MIN_RELIABLE_FRAME_LANDMARKS = 12;
@@ -183,24 +183,27 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     noCountConditions: [
       "equipment_required",
       "insufficient_elbow_rom",
+      "bilateral_arm_motion_unconfirmed",
+      "curl_grip_unconfirmed",
+      "curl_torso_not_upright",
       "hip_swing_over_tolerance",
     ],
     oscillatingJoints: ["elbow"],
     primaryJoints: ["left_elbow", "right_elbow"],
     repThresholds: {
-      down: { angle: 136, tolerance: 18 },
-      up: { angle: 110, tolerance: 32 },
+      down: { angle: 150, tolerance: 12 },
+      up: { angle: 100, tolerance: 22 },
     },
-    repModel: "alternating",
-    requiredSides: "either",
+    repModel: "bilateral",
+    requiredSides: "both",
     secondaryCheck: "hip_stability",
     secondaryJoints: ["hip", "shoulder"],
     spatialRequirements: {
       bodyLineTolerance: 45,
       bodyXDriftMax: 0.08,
       bodyYTravelMin: 0,
-      leftRightSymmetryTolerance: 45,
-      phaseSyncToleranceMs: 650,
+      leftRightSymmetryTolerance: 60,
+      phaseSyncToleranceMs: 950,
     },
   },
   dip: {
@@ -221,8 +224,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 88, tolerance: 12 },
-      up: { angle: 154, tolerance: 12 },
+      down: { angle: 118, tolerance: 12 },
+      up: { angle: 150, tolerance: 14 },
     },
     requiredSides: "both",
     secondaryCheck: "vertical_body_travel",
@@ -274,7 +277,7 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 150, tolerance: 5 },
+      down: { angle: 140, tolerance: 15 },
       up: { angle: 154, tolerance: 12 },
     },
     requiredSides: "both",
@@ -283,9 +286,15 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     spatialRequirements: {
       bodyLineTolerance: 86,
       bodyXDriftMax: 0.22,
-      bodyYTravelMin: 0,
+      bodyYTravelMin: 0.012,
+      hipYTravelMin: 0.01,
       leftRightSymmetryTolerance: PUSH_UP_SYMMETRY_TOLERANCE,
       phaseSyncToleranceMs: 650,
+      shoulderHipTravelMin: 0.01,
+      shoulderYTravelMin: 0.008,
+      torsoSlopeMaxDeg: 92,
+      torsoSlopeMinDeg: 0,
+      wristAnchorDriftMax: 0.18,
     },
   },
   pull_up: {
@@ -730,6 +739,30 @@ export function computePoseSignals(
       ),
     )
     .filter((value) => Number.isFinite(value));
+  const shoulderYValues = frames
+    .map((frame) =>
+      average(
+        [frame.keypoints[11], frame.keypoints[12]]
+          .filter(Boolean)
+          .map((point) => point.y),
+      ),
+    )
+    .filter((value) => Number.isFinite(value));
+  const shoulderXValues = frames
+    .map((frame) =>
+      average(
+        [frame.keypoints[11], frame.keypoints[12]]
+          .filter(Boolean)
+          .map((point) => point.x),
+      ),
+    )
+    .filter((value) => Number.isFinite(value));
+  const leftWristXValues = frames
+    .map((frame) => frame.keypoints[15]?.x)
+    .filter((value): value is number => Number.isFinite(value));
+  const rightWristXValues = frames
+    .map((frame) => frame.keypoints[16]?.x)
+    .filter((value): value is number => Number.isFinite(value));
 
   const averageVisibility = average(
     frames.flatMap((frame) => frame.keypoints.map((point) => point.visibility)),
@@ -808,6 +841,18 @@ export function computePoseSignals(
   const hipXRange = hipXValues.length
     ? Math.max(...hipXValues) - Math.min(...hipXValues)
     : 0;
+  const shoulderRange = shoulderYValues.length
+    ? Math.max(...shoulderYValues) - Math.min(...shoulderYValues)
+    : 0;
+  const shoulderXRange = shoulderXValues.length
+    ? Math.max(...shoulderXValues) - Math.min(...shoulderXValues)
+    : 0;
+  const leftWristXRange = leftWristXValues.length
+    ? Math.max(...leftWristXValues) - Math.min(...leftWristXValues)
+    : 0;
+  const rightWristXRange = rightWristXValues.length
+    ? Math.max(...rightWristXValues) - Math.min(...rightWristXValues)
+    : 0;
   const leftElbowBottomMs = getLatestExtremumTime(
     frames,
     leftElbowSeries,
@@ -836,6 +881,11 @@ export function computePoseSignals(
       torsoSlopeDeg,
       vector: torsoVector,
     },
+    shoulder: {
+      averageY: Number(average(shoulderYValues).toFixed(4)),
+      rangeX: Number(shoulderXRange.toFixed(4)),
+      rangeY: Number(shoulderRange.toFixed(4)),
+    },
     temporal: {
       amplitudes,
       oscillatingJoints,
@@ -863,6 +913,11 @@ export function computePoseSignals(
           rightWrist?.visibility ?? 0,
         ]).toFixed(4),
       ),
+    },
+    wrist: {
+      leftRangeX: Number(leftWristXRange.toFixed(4)),
+      maxRangeX: Number(Math.max(leftWristXRange, rightWristXRange).toFixed(4)),
+      rightRangeX: Number(rightWristXRange.toFixed(4)),
     },
   };
 }

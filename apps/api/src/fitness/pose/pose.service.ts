@@ -642,19 +642,22 @@ const movementContractDefaults: Record<string, PoseMovementContractDefaults> = {
     noCountConditions: [
       'equipment_required',
       'insufficient_elbow_rom',
+      'bilateral_arm_motion_unconfirmed',
+      'curl_grip_unconfirmed',
+      'curl_torso_not_upright',
       'hip_swing_over_tolerance',
     ],
     phaseOrder: ['setup', 'curl', 'extend'],
     primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'alternating',
-    requiredSides: 'either',
+    repModel: 'bilateral',
+    requiredSides: 'both',
     secondaryJoints: ['hip', 'shoulder'],
     spatialRequirements: {
       body_line_tolerance: 45,
       body_x_drift_max: 0.08,
       body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 45,
-      phase_sync_tolerance_ms: 650,
+      left_right_symmetry_tolerance: 60,
+      phase_sync_tolerance_ms: 950,
     },
   },
   dip: {
@@ -718,7 +721,13 @@ const movementContractDefaults: Record<string, PoseMovementContractDefaults> = {
     spatialRequirements: {
       body_line_tolerance: 86,
       body_x_drift_max: 0.22,
-      body_y_travel_min: 0,
+      body_y_travel_min: 0.012,
+      hip_y_travel_min: 0.01,
+      shoulder_hip_travel_min: 0.01,
+      shoulder_y_travel_min: 0.008,
+      torso_slope_max_deg: 92,
+      torso_slope_min_deg: 0,
+      wrist_anchor_drift_max: 0.18,
       left_right_symmetry_tolerance: 55,
       phase_sync_tolerance_ms: 650,
     },
@@ -862,6 +871,33 @@ function toSpatialRequirements(
       toOptionalNumber(
         getObjectValue(value, 'body_y_travel_min', 'bodyYTravelMin'),
       ) ?? fallback?.body_y_travel_min,
+    hip_y_travel_min:
+      toOptionalNumber(getObjectValue(value, 'hip_y_travel_min', 'hipYTravelMin')) ??
+      fallback?.hip_y_travel_min,
+    shoulder_y_travel_min:
+      toOptionalNumber(
+        getObjectValue(value, 'shoulder_y_travel_min', 'shoulderYTravelMin'),
+      ) ?? fallback?.shoulder_y_travel_min,
+    shoulder_hip_travel_min:
+      toOptionalNumber(
+        getObjectValue(
+          value,
+          'shoulder_hip_travel_min',
+          'shoulderHipTravelMin',
+        ),
+      ) ?? fallback?.shoulder_hip_travel_min,
+    wrist_anchor_drift_max:
+      toOptionalNumber(
+        getObjectValue(value, 'wrist_anchor_drift_max', 'wristAnchorDriftMax'),
+      ) ?? fallback?.wrist_anchor_drift_max,
+    torso_slope_min_deg:
+      toOptionalNumber(
+        getObjectValue(value, 'torso_slope_min_deg', 'torsoSlopeMinDeg'),
+      ) ?? fallback?.torso_slope_min_deg,
+    torso_slope_max_deg:
+      toOptionalNumber(
+        getObjectValue(value, 'torso_slope_max_deg', 'torsoSlopeMaxDeg'),
+      ) ?? fallback?.torso_slope_max_deg,
     left_right_symmetry_tolerance:
       toOptionalNumber(
         getObjectValue(
@@ -1159,17 +1195,17 @@ function buildGeneratedMovementContract(
     },
     bicep_curl: {
       dominantJoint: 'elbow' as const,
-      downAngle: 136,
-      upAngle: 96,
-      tolerance: 32,
+      downAngle: 150,
+      upAngle: 100,
+      tolerance: 22,
       secondaryCheck: 'hip_stability',
       oscillatingJoints: ['elbow'],
     },
     dip: {
       dominantJoint: 'elbow' as const,
-      downAngle: 88,
-      upAngle: 154,
-      tolerance: 12,
+      downAngle: 118,
+      upAngle: 150,
+      tolerance: 14,
       secondaryCheck: 'vertical_body_travel',
       oscillatingJoints: ['elbow', 'shoulder'],
     },
@@ -1183,9 +1219,9 @@ function buildGeneratedMovementContract(
     },
     push_up: {
       dominantJoint: 'elbow' as const,
-      downAngle: 150,
+      downAngle: 140,
       upAngle: 154,
-      tolerance: 12,
+      tolerance: 15,
       secondaryCheck: 'body_line',
       oscillatingJoints: ['elbow', 'shoulder'],
     },

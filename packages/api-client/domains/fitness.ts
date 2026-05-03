@@ -1,10 +1,20 @@
 import type {
   AnalyzePoseSequenceInput,
+  CreateExerciseDraftProposalInput,
+  CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
+  CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
+  ExerciseReviewEvidenceRecord,
+  ExerciseDraftProposalRecord,
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
   ExerciseLogRecord,
+  ExerciseHandShapeProfileRecord,
+  ExerciseMovementProfileRecord,
+  ExerciseMuscleTargetRecord,
+  ExerciseMuscleTargetRole,
+  ExerciseRigKeyframeKind,
   FinalizePoseSessionInput,
   FitnessCreatorState,
   PoseEquipmentContext,
@@ -31,9 +41,12 @@ import type {
   FitnessRankingVisibility,
   FitnessSeasonStandingRecord,
   LogWorkoutSetInput,
+  MuscleDefinitionListParams,
+  MuscleDefinitionRecord,
   MuscleMasteryRecord,
   PoseClassificationSource,
   PoseFrameAnalysisRecord,
+  PoseKeypointRecord,
   PoseSessionRecord,
   StartPoseSessionInput,
   StartedPoseSessionRecord,
@@ -44,6 +57,7 @@ import type {
   UpdateFitnessRankingProfileInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
+  UpdateMuscleDefinitionInput,
   WorkoutSessionDetailRecord,
   WorkoutSessionListParams,
   WorkoutSessionSummaryRecord,
@@ -53,12 +67,22 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 
 export type {
   AnalyzePoseSequenceInput,
+  CreateExerciseDraftProposalInput,
+  CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
+  CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
+  ExerciseReviewEvidenceRecord,
+  ExerciseDraftProposalRecord,
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
+  ExerciseHandShapeProfileRecord,
   FitnessCreatorState,
   FitnessExerciseCategory,
+  ExerciseMovementProfileRecord,
+  ExerciseMuscleTargetRecord,
+  ExerciseMuscleTargetRole,
+  ExerciseRigKeyframeKind,
   ExerciseLogRecord,
   FinalizePoseSessionInput,
   FitnessExerciseListParams,
@@ -78,12 +102,15 @@ export type {
   FitnessRankingProfileRecord,
   FitnessRankingVisibility,
   FitnessSeasonStandingRecord,
+  MuscleDefinitionListParams,
+  MuscleDefinitionRecord,
   LogWorkoutSetInput,
   MuscleMasteryRecord,
   PoseEquipmentContext,
   PoseEquipmentDetectionRecord,
   PoseEquipmentSource,
   PoseFrameAnalysisRecord,
+  PoseKeypointRecord,
   PoseProgressionDisposition,
   PoseSessionRecord,
   PoseSessionQualityState,
@@ -96,6 +123,7 @@ export type {
   UpdateFitnessRankingProfileInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
+  UpdateMuscleDefinitionInput,
   WorkoutSessionDetailRecord,
   WorkoutSessionListParams,
   WorkoutSessionSummaryRecord,
@@ -105,14 +133,30 @@ type FitnessExerciseApiRecord = {
   category: FitnessExerciseRecord["category"];
   created_at: string;
   description: string | null;
+  hand_shape_profile?: ExerciseHandShapeProfileRecord | null;
   id: string;
   image_url: string | null;
   instructions: string | null;
   is_active: boolean;
+  movement_profile?: ExerciseMovementProfileRecord | null;
   muscle_group: string;
+  muscle_targets?: ExerciseMuscleTargetRecord[] | null;
   name: string;
   updated_at: string;
   video_url: string | null;
+};
+
+type MuscleDefinitionApiRecord = {
+  aliases: string[] | null;
+  body_region: string;
+  created_at: string;
+  id: string;
+  is_active: boolean;
+  is_system: boolean;
+  key: string;
+  name: string;
+  sort_order: number;
+  updated_at: string;
 };
 
 type ExerciseReviewSubmissionApiRecord = {
@@ -128,11 +172,14 @@ type ExerciseReviewSubmissionApiRecord = {
   creator_submission_count?: number;
   created_at: string;
   description: string | null;
-  evidence_bars: number[] | null;
+  evidence_bars: ExerciseReviewEvidenceRecord | null;
+  hand_shape_profile?: ExerciseHandShapeProfileRecord | null;
   id: string;
   instructions: string | null;
   match_hint: string | null;
+  movement_profile?: ExerciseMovementProfileRecord | null;
   muscle_group: string;
+  muscle_targets?: ExerciseMuscleTargetRecord[] | null;
   origin_label: string;
   pose_session_id: string | null;
   proposed_name: string;
@@ -147,6 +194,22 @@ type ExerciseReviewSubmissionApiRecord = {
   trigger_label: string;
   updated_at: string;
   user_id: string;
+};
+
+type ExerciseDraftProposalApiRecord = {
+  category: ExerciseDraftProposalRecord["category"];
+  confidence: number;
+  description: string;
+  evidence: ExerciseDraftProposalRecord["evidence"];
+  hand_shape_profile: ExerciseDraftProposalRecord["handShapeProfile"];
+  instructions: string;
+  movement_profile: ExerciseDraftProposalRecord["movementProfile"];
+  muscle_group: string;
+  muscle_targets: ExerciseDraftProposalRecord["muscleTargets"];
+  proposal_source: ExerciseDraftProposalRecord["proposalSource"];
+  proposed_name: string;
+  review_warnings: string[];
+  summary: string;
 };
 
 type TrainingPlanExerciseApiRecord = {
@@ -292,6 +355,7 @@ type PoseFrameAnalysisApiRecord = {
     exercise: string;
     no_count_conditions?: string[];
     oscillating_joints: string[];
+    partial_rep_policy?: "strict_full_rep" | "count_half_reps" | "review_only";
     phase_order?: string[];
     primary_joints?: string[];
     rep_model?:
@@ -312,6 +376,12 @@ type PoseFrameAnalysisApiRecord = {
       body_line_tolerance?: number | null;
       body_x_drift_max?: number | null;
       body_y_travel_min?: number | null;
+      hip_y_travel_min?: number | null;
+      shoulder_hip_travel_min?: number | null;
+      shoulder_y_travel_min?: number | null;
+      torso_slope_max_deg?: number | null;
+      torso_slope_min_deg?: number | null;
+      wrist_anchor_drift_max?: number | null;
       left_right_symmetry_tolerance?: number | null;
       phase_sync_tolerance_ms?: number | null;
     } | null;
@@ -503,14 +573,34 @@ function mapExercise(record: FitnessExerciseApiRecord): FitnessExerciseRecord {
     category: record.category,
     createdAt: record.created_at,
     description: record.description,
+    handShapeProfile: record.hand_shape_profile ?? null,
     id: record.id,
     imageUrl: record.image_url,
     instructions: record.instructions,
     isActive: record.is_active,
+    movementProfile: record.movement_profile ?? null,
     muscleGroup: record.muscle_group,
+    muscleTargets: record.muscle_targets ?? [],
     name: record.name,
     updatedAt: record.updated_at,
     videoUrl: record.video_url,
+  };
+}
+
+function mapMuscleDefinition(
+  record: MuscleDefinitionApiRecord,
+): MuscleDefinitionRecord {
+  return {
+    aliases: Array.isArray(record.aliases) ? record.aliases : [],
+    bodyRegion: record.body_region,
+    createdAt: record.created_at,
+    id: record.id,
+    isActive: record.is_active,
+    isSystem: record.is_system,
+    key: record.key,
+    name: record.name,
+    sortOrder: record.sort_order,
+    updatedAt: record.updated_at,
   };
 }
 
@@ -531,10 +621,13 @@ function mapExerciseReviewSubmission(
     createdAt: record.created_at,
     description: record.description,
     evidenceBars: record.evidence_bars,
+    handShapeProfile: record.hand_shape_profile ?? null,
     id: record.id,
     instructions: record.instructions,
     matchHint: record.match_hint,
+    movementProfile: record.movement_profile ?? null,
     muscleGroup: record.muscle_group,
+    muscleTargets: record.muscle_targets ?? [],
     originLabel: record.origin_label,
     poseSessionId: record.pose_session_id,
     proposedName: record.proposed_name,
@@ -549,6 +642,26 @@ function mapExerciseReviewSubmission(
     triggerLabel: record.trigger_label,
     updatedAt: record.updated_at,
     userId: record.user_id,
+  };
+}
+
+function mapExerciseDraftProposal(
+  record: ExerciseDraftProposalApiRecord,
+): ExerciseDraftProposalRecord {
+  return {
+    category: record.category,
+    confidence: record.confidence,
+    description: record.description,
+    evidence: record.evidence,
+    handShapeProfile: record.hand_shape_profile,
+    instructions: record.instructions,
+    movementProfile: record.movement_profile,
+    muscleGroup: record.muscle_group,
+    muscleTargets: record.muscle_targets,
+    proposalSource: record.proposal_source,
+    proposedName: record.proposed_name,
+    reviewWarnings: record.review_warnings ?? [],
+    summary: record.summary,
   };
 }
 
@@ -726,6 +839,7 @@ function mapPoseFrameAnalysis(
           exercise: record.movement_contract.exercise,
           noCountConditions: record.movement_contract.no_count_conditions ?? [],
           oscillatingJoints: record.movement_contract.oscillating_joints,
+          partialRepPolicy: record.movement_contract.partial_rep_policy,
           phaseOrder: record.movement_contract.phase_order ?? [],
           primaryJoints: record.movement_contract.primary_joints ?? [],
           repModel: record.movement_contract.rep_model,
@@ -758,6 +872,36 @@ function mapPoseFrameAnalysis(
                   toNullableNumber(
                     record.movement_contract.spatial_requirements
                       .body_y_travel_min,
+                  ),
+                hipYTravelMin:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .hip_y_travel_min,
+                  ),
+                shoulderHipTravelMin:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .shoulder_hip_travel_min,
+                  ),
+                shoulderYTravelMin:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .shoulder_y_travel_min,
+                  ),
+                torsoSlopeMaxDeg:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .torso_slope_max_deg,
+                  ),
+                torsoSlopeMinDeg:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .torso_slope_min_deg,
+                  ),
+                wristAnchorDriftMax:
+                  toNullableNumber(
+                    record.movement_contract.spatial_requirements
+                      .wrist_anchor_drift_max,
                   ),
                 leftRightSymmetryTolerance:
                   toNullableNumber(
@@ -992,6 +1136,34 @@ function toExerciseReviewSubmissionListParams(
   };
 }
 
+function toMuscleDefinitionListParams(params?: MuscleDefinitionListParams) {
+  return {
+    ...(params?.search ? { search: params.search } : {}),
+    ...(params?.includeArchived ? { include_archived: true } : {}),
+  };
+}
+
+function toMuscleDefinitionPayload(
+  input: CreateMuscleDefinitionInput | UpdateMuscleDefinitionInput,
+) {
+  return {
+    ...(input.key?.trim() ? { key: input.key.trim() } : {}),
+    ...(input.name?.trim() ? { name: input.name.trim() } : {}),
+    ...(input.bodyRegion?.trim()
+      ? { body_region: input.bodyRegion.trim() }
+      : {}),
+    ...("aliases" in input && input.aliases !== undefined
+      ? { aliases: input.aliases }
+      : {}),
+    ...("sortOrder" in input && input.sortOrder !== undefined
+      ? { sort_order: input.sortOrder }
+      : {}),
+    ...("isActive" in input && input.isActive !== undefined
+      ? { is_active: input.isActive }
+      : {}),
+  };
+}
+
 function toExerciseMutationPayload(
   input: CreateFitnessExerciseInput | UpdateFitnessExerciseInput,
 ) {
@@ -999,6 +1171,15 @@ function toExerciseMutationPayload(
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     ...(input.muscleGroup?.trim()
       ? { muscle_group: input.muscleGroup.trim() }
+      : {}),
+    ...("muscleTargets" in input && input.muscleTargets !== undefined
+      ? { muscle_targets: input.muscleTargets }
+      : {}),
+    ...("movementProfile" in input && input.movementProfile !== undefined
+      ? { movement_profile: input.movementProfile }
+      : {}),
+    ...("handShapeProfile" in input && input.handShapeProfile !== undefined
+      ? { hand_shape_profile: input.handShapeProfile }
       : {}),
     ...(input.category ? { category: input.category } : {}),
     ...(input.description?.trim()
@@ -1016,20 +1197,101 @@ function toExerciseMutationPayload(
 }
 
 function toExerciseReviewSubmissionPayload(
-  input: UpdateExerciseReviewSubmissionInput,
+  input: CreateExerciseReviewSubmissionInput | UpdateExerciseReviewSubmissionInput,
 ) {
   return {
-    ...(input.creatorGovernanceNote?.trim()
+    ...("category" in input && input.category ? { category: input.category } : {}),
+    ...("creatorGovernanceNote" in input && input.creatorGovernanceNote?.trim()
       ? { creator_governance_note: input.creatorGovernanceNote.trim() }
       : {}),
-    ...(input.creatorState ? { creator_state: input.creatorState } : {}),
-    ...(input.status ? { status: input.status } : {}),
-    ...(input.publishedExerciseId
+    ...("creatorState" in input && input.creatorState
+      ? { creator_state: input.creatorState }
+      : {}),
+    ...("description" in input && input.description?.trim()
+      ? { description: input.description.trim() }
+      : {}),
+    ...("evidenceBars" in input && input.evidenceBars !== undefined
+      ? { evidence_bars: input.evidenceBars }
+      : {}),
+    ...("instructions" in input && input.instructions?.trim()
+      ? { instructions: input.instructions.trim() }
+      : {}),
+    ...("matchHint" in input && input.matchHint?.trim()
+      ? { match_hint: input.matchHint.trim() }
+      : {}),
+    ...("muscleGroup" in input && input.muscleGroup?.trim()
+      ? { muscle_group: input.muscleGroup.trim() }
+      : {}),
+    ...("muscleTargets" in input && input.muscleTargets !== undefined
+      ? { muscle_targets: input.muscleTargets }
+      : {}),
+    ...("movementProfile" in input && input.movementProfile !== undefined
+      ? { movement_profile: input.movementProfile }
+      : {}),
+    ...("handShapeProfile" in input && input.handShapeProfile !== undefined
+      ? { hand_shape_profile: input.handShapeProfile }
+      : {}),
+    ...("originLabel" in input && input.originLabel?.trim()
+      ? { origin_label: input.originLabel.trim() }
+      : {}),
+    ...("poseSessionId" in input && input.poseSessionId
+      ? { pose_session_id: input.poseSessionId }
+      : {}),
+    ...("proposedName" in input && input.proposedName?.trim()
+      ? { proposed_name: input.proposedName.trim() }
+      : {}),
+    ...("queueTag" in input && input.queueTag?.trim()
+      ? { queue_tag: input.queueTag.trim() }
+      : {}),
+    ...("status" in input && input.status ? { status: input.status } : {}),
+    ...("sourceLabel" in input && input.sourceLabel?.trim()
+      ? { source_label: input.sourceLabel.trim() }
+      : {}),
+    ...("summary" in input && input.summary?.trim()
+      ? { summary: input.summary.trim() }
+      : {}),
+    ...("title" in input && input.title?.trim()
+      ? { title: input.title.trim() }
+      : {}),
+    ...("triggerLabel" in input && input.triggerLabel?.trim()
+      ? { trigger_label: input.triggerLabel.trim() }
+      : {}),
+    ...("publishedExerciseId" in input && input.publishedExerciseId
       ? { published_exercise_id: input.publishedExerciseId }
       : {}),
-    ...(input.reviewNotes?.trim()
+    ...("reviewNotes" in input && input.reviewNotes?.trim()
       ? { review_notes: input.reviewNotes.trim() }
       : {}),
+  };
+}
+
+function toExerciseDraftProposalPayload(input: CreateExerciseDraftProposalInput) {
+  return {
+    ...(input.category ? { category: input.category } : {}),
+    ...(input.description?.trim()
+      ? { description: input.description.trim() }
+      : {}),
+    ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
+    ...(input.handShapeProfile !== undefined
+      ? { hand_shape_profile: input.handShapeProfile }
+      : {}),
+    ...(input.instructions?.trim()
+      ? { instructions: input.instructions.trim() }
+      : {}),
+    ...(input.movementProfile !== undefined
+      ? { movement_profile: input.movementProfile }
+      : {}),
+    ...(input.muscleGroup?.trim()
+      ? { muscle_group: input.muscleGroup.trim() }
+      : {}),
+    ...(input.muscleTargets !== undefined
+      ? { muscle_targets: input.muscleTargets }
+      : {}),
+    ...(input.poseSessionId ? { pose_session_id: input.poseSessionId } : {}),
+    ...(input.proposedName?.trim()
+      ? { proposed_name: input.proposedName.trim() }
+      : {}),
+    ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
   };
 }
 
@@ -1078,6 +1340,56 @@ function toRankingProfilePayload(input: UpdateFitnessRankingProfileInput) {
 
 export function createFitnessApi(transport: ApiTransport) {
   return {
+    async listMuscleDefinitions(
+      params?: MuscleDefinitionListParams,
+    ): Promise<MuscleDefinitionRecord[]> {
+      const result = await unwrapResponse<
+        MuscleDefinitionApiRecord[] | { data?: MuscleDefinitionApiRecord[] }
+      >(
+        transport.get("/fitness/muscle-definitions", {
+          params: toMuscleDefinitionListParams(params),
+        }),
+        "Unable to load muscle definitions.",
+      );
+      const records = Array.isArray(result) ? result : (result.data ?? []);
+      return records.map(mapMuscleDefinition);
+    },
+    async createMuscleDefinition(input: CreateMuscleDefinitionInput) {
+      return mapMuscleDefinition(
+        await unwrapResponse<MuscleDefinitionApiRecord>(
+          transport.post(
+            "/fitness/muscle-definitions",
+            toMuscleDefinitionPayload(input),
+          ),
+          "Unable to create muscle definition.",
+        ),
+      );
+    },
+    async updateMuscleDefinition(
+      muscleDefinitionId: string,
+      input: UpdateMuscleDefinitionInput,
+    ) {
+      return mapMuscleDefinition(
+        await unwrapResponse<MuscleDefinitionApiRecord>(
+          transport.patch(
+            `/fitness/muscle-definitions/${muscleDefinitionId}`,
+            toMuscleDefinitionPayload(input),
+          ),
+          "Unable to update muscle definition.",
+        ),
+      );
+    },
+    async archiveMuscleDefinition(muscleDefinitionId: string) {
+      return mapMuscleDefinition(
+        await unwrapResponse<MuscleDefinitionApiRecord>(
+          transport.patch(
+            `/fitness/muscle-definitions/${muscleDefinitionId}/archive`,
+            {},
+          ),
+          "Unable to archive muscle definition.",
+        ),
+      );
+    },
     async listExercises(
       params?: FitnessExerciseListParams,
     ): Promise<FitnessPaginatedResult<FitnessExerciseRecord>> {
@@ -1131,6 +1443,30 @@ export function createFitnessApi(transport: ApiTransport) {
         ...result,
         data: result.data.map(mapExerciseReviewSubmission),
       };
+    },
+    async createExerciseReviewSubmission(
+      input: CreateExerciseReviewSubmissionInput,
+    ) {
+      return mapExerciseReviewSubmission(
+        await unwrapResponse<ExerciseReviewSubmissionApiRecord>(
+          transport.post(
+            "/fitness/exercise-review-submissions",
+            toExerciseReviewSubmissionPayload(input),
+          ),
+          "Unable to submit exercise review draft.",
+        ),
+      );
+    },
+    async createExerciseDraftProposal(input: CreateExerciseDraftProposalInput) {
+      return mapExerciseDraftProposal(
+        await unwrapResponse<ExerciseDraftProposalApiRecord>(
+          transport.post(
+            "/fitness/exercise-draft-proposals",
+            toExerciseDraftProposalPayload(input),
+          ),
+          "Unable to generate exercise draft proposal.",
+        ),
+      );
     },
     async updateExerciseReviewSubmission(
       submissionId: string,
@@ -1574,6 +1910,8 @@ export function createFitnessApi(transport: ApiTransport) {
                       input.movementContract.noCountConditions,
                     oscillating_joints:
                       input.movementContract.oscillatingJoints,
+                    partial_rep_policy:
+                      input.movementContract.partialRepPolicy,
                     phase_order: input.movementContract.phaseOrder,
                     primary_joints: input.movementContract.primaryJoints,
                     rep_model: input.movementContract.repModel,
@@ -1596,6 +1934,24 @@ export function createFitnessApi(transport: ApiTransport) {
                           body_y_travel_min:
                             input.movementContract.spatialRequirements
                               .bodyYTravelMin,
+                          hip_y_travel_min:
+                            input.movementContract.spatialRequirements
+                              .hipYTravelMin,
+                          shoulder_hip_travel_min:
+                            input.movementContract.spatialRequirements
+                              .shoulderHipTravelMin,
+                          shoulder_y_travel_min:
+                            input.movementContract.spatialRequirements
+                              .shoulderYTravelMin,
+                          torso_slope_max_deg:
+                            input.movementContract.spatialRequirements
+                              .torsoSlopeMaxDeg,
+                          torso_slope_min_deg:
+                            input.movementContract.spatialRequirements
+                              .torsoSlopeMinDeg,
+                          wrist_anchor_drift_max:
+                            input.movementContract.spatialRequirements
+                              .wristAnchorDriftMax,
                           left_right_symmetry_tolerance:
                             input.movementContract.spatialRequirements
                               .leftRightSymmetryTolerance,

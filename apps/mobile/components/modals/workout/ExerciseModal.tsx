@@ -27,6 +27,8 @@ type Props = {
   isLoading?: boolean;
   isVisible: boolean;
   onClose: () => void;
+  onCreateFromSession?: () => void;
+  createFromSessionDisabled?: boolean;
   onSelectReference?: (label: string) => void;
   onUseAutoDetect?: () => void;
   references?: ExerciseReference[];
@@ -38,6 +40,8 @@ export default function ExerciseModal({
   isLoading = false,
   isVisible,
   onClose,
+  onCreateFromSession,
+  createFromSessionDisabled = false,
   onSelectReference,
   onUseAutoDetect,
   references
@@ -201,6 +205,15 @@ export default function ExerciseModal({
               })}
             </ScrollView>
             <View style={s.footer}>
+              {onCreateFromSession ? (
+                <FitButton
+                  disabled={createFromSessionDisabled}
+                  label="Create Draft"
+                  variant="ghost"
+                  onPress={onCreateFromSession}
+                  style={{ flex: 1 }}
+                />
+              ) : null}
               {onUseAutoDetect ? (
                 <FitButton
                   label="Auto Detect"

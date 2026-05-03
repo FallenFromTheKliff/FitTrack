@@ -123,7 +123,13 @@ class PoseRepThresholdPair(StrictModel):
 
 class PoseSpatialRequirements(StrictModel):
     body_y_travel_min: float | None = None
+    hip_y_travel_min: float | None = None
+    shoulder_y_travel_min: float | None = None
+    shoulder_hip_travel_min: float | None = None
     body_x_drift_max: float | None = None
+    wrist_anchor_drift_max: float | None = None
+    torso_slope_min_deg: float | None = None
+    torso_slope_max_deg: float | None = None
     body_line_tolerance: float | None = None
     left_right_symmetry_tolerance: float | None = None
     phase_sync_tolerance_ms: int | None = None

@@ -42,6 +42,8 @@ const extraBlockList = [
   /[\\/]\.uv-cache-local([\\/]|$)/,
   /[\\/]\.uv-runtime([\\/]|$)/,
   /[\\/]\.venv([\\/]|$)/,
+  /[\\/]\.next([\\/]|$)/,
+  /[\\/]\.next-runtime([\\/]|$)/,
   /[\\/]pytest-cache-files[^\\/]*([\\/]|$)/,
   /[\\/]node_modules[\\/]\.pnpm[\\/]next@[^\\/]+[\\/]node_modules[\\/]next_tmp_[^\\/]+([\\/]|$)/,
 ];

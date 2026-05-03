@@ -3,6 +3,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import ExerciseConfirmationModal from "@/components/modals/workout/ExerciseConfirmationModal";
+import ExerciseCreationReviewModal from "@/components/modals/workout/ExerciseCreationReviewModal";
 import ExerciseModal from "@/components/modals/workout/ExerciseModal";
 import { FitText } from "@/components/fit/FitText";
 import { WorkoutContextSection } from "@/components/workout/WorkoutContextSection";
@@ -110,7 +111,17 @@ export function WorkoutLiveScreen() {
         onSelectReference={controller.onSelectExerciseReference}
         references={controller.exerciseReferences}
         onClose={controller.onCloseExerciseModal}
+        onCreateFromSession={controller.onOpenExerciseCreationReview}
+        createFromSessionDisabled={!controller.exerciseCreationReady}
         onUseAutoDetect={controller.onUseAutoDetection}
+      />
+      <ExerciseCreationReviewModal
+        draft={controller.exerciseCreationDraft}
+        isSubmitting={controller.isExerciseCreationSubmitting}
+        isVisible={controller.isExerciseCreationReviewOpen}
+        onChangeDraft={controller.onUpdateExerciseCreationDraft}
+        onClose={controller.onCloseExerciseCreationReview}
+        onSubmit={controller.onSubmitExerciseCreationDraft}
       />
       <ExerciseConfirmationModal
         candidateExercises={controller.exerciseConfirmationCandidates}
