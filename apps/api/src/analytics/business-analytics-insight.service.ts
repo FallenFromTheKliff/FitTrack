@@ -136,10 +136,56 @@ export class BusinessAnalyticsInsightService {
     };
   }
 
-  private toInsightPayload(
-    value: Prisma.JsonValue,
-  ): BusinessAnalyticsInsightResponse {
-    return value as BusinessAnalyticsInsightResponse;
+  private toInsightPayload(value: Prisma.JsonValue): BusinessAnalyticsInsightResponse {
+    const payload = this.toJsonObject(value);
+
+    return {
+      summary: this.toStringValue(payload.summary, 'No insight summary recorded.'),
+      highlights: this.toStringArray(payload.highlights),
+      risks: this.toStringArray(payload.risks),
+      opportunities: this.toStringArray(payload.opportunities),
+      anomaly_flags: this.toStringArray(payload.anomaly_flags),
+      recommended_actions: this.toStringArray(
+        payload.recommended_actions ?? payload.recommendedActions,
+      ),
+      model_used: this.toNullableString(payload.model_used),
+      token_count: this.toNullableNumber(payload.token_count),
+    };
+  }
+
+  private toJsonObject(value: Prisma.JsonValue): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private toStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((item): item is string | number => {
+        return typeof item === 'string' || typeof item === 'number';
+      })
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+
+  private toStringValue(value: unknown, fallback: string): string {
+    return typeof value === 'string' && value.trim().length > 0
+      ? value
+      : fallback;
+  }
+
+  private toNullableString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value : null;
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
   private async generateInsightPayload(input: {

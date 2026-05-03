@@ -26,6 +26,7 @@
     "db:bootstrap": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/bootstrap-defaults.ts",
     "db:migrate": "pnpm --filter @fittrack/api exec npx prisma migrate dev",
     "db:seed": "pnpm --filter @fittrack/api exec npx prisma db seed",
+    "db:seed:realistic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-realistic-data.ts",
     "db:seed:test": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=reset",
     "db:seed:test:additive": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=additive",
     "db:seed:test:report": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/report-test-data.ts",

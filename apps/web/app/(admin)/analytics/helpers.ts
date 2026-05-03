@@ -152,10 +152,10 @@ export function buildAnalyticsQuickAnalysisPrompt(
     `You are helping a FitTrack admin review analytics for ${periodLabel.toLowerCase()}.`,
     "Use the business insight below as the source of truth and turn it into a short operator-friendly briefing.",
     `Insight summary: ${insight.summary}`,
-    insight.highlights.length ? `Highlights: ${insight.highlights.join(" | ")}` : "",
-    insight.risks.length ? `Risks: ${insight.risks.join(" | ")}` : "",
-    insight.opportunities.length ? `Opportunities: ${insight.opportunities.join(" | ")}` : "",
-    insight.recommendedActions.length
+    insight.highlights?.length ? `Highlights: ${insight.highlights.join(" | ")}` : "",
+    insight.risks?.length ? `Risks: ${insight.risks.join(" | ")}` : "",
+    insight.opportunities?.length ? `Opportunities: ${insight.opportunities.join(" | ")}` : "",
+    insight.recommendedActions?.length
       ? `Recommended actions: ${insight.recommendedActions.join(" | ")}`
       : "",
     "Reply with three parts: what changed, what needs attention, and the top next actions."

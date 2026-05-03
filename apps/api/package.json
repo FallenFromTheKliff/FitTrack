@@ -8,6 +8,7 @@
   "scripts": {
     "build": "pnpm run prisma:prepare-client && nest build",
     "db:push:deploy": "npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
+    "db:seed:realistic": "node -r ts-node/register prisma/seed-realistic-data.ts",
     "db:seed:exercise-review": "node -r ts-node/register prisma/bootstrap-exercise-review-submissions.ts",
     "db:seed:test": "node -r ts-node/register prisma/seed-test-data.ts --mode=reset",
     "db:seed:test:additive": "node -r ts-node/register prisma/seed-test-data.ts --mode=additive",

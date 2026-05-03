@@ -208,11 +208,12 @@ type BusinessInsightRunSummaryApiRecord = {
 };
 
 type BusinessInsightRunDetailApiRecord = BusinessInsightRunSummaryApiRecord & {
-  anomaly_flags: string[];
-  highlights: string[];
-  opportunities: string[];
-  recommended_actions: string[];
-  risks: string[];
+  anomaly_flags?: string[] | null;
+  highlights?: string[] | null;
+  opportunities?: string[] | null;
+  recommendedActions?: string[] | null;
+  recommended_actions?: string[] | null;
+  risks?: string[] | null;
 };
 
 function toNumber(value: string | number | null | undefined) {
@@ -422,12 +423,27 @@ function mapInsightDetail(
 ): BusinessInsightRunDetailRecord {
   return {
     ...mapInsightSummary(record),
-    anomalyFlags: record.anomaly_flags,
-    highlights: record.highlights,
-    opportunities: record.opportunities,
-    recommendedActions: record.recommended_actions,
-    risks: record.risks,
+    anomalyFlags: toStringArray(record.anomaly_flags),
+    highlights: toStringArray(record.highlights),
+    opportunities: toStringArray(record.opportunities),
+    recommendedActions: toStringArray(
+      record.recommended_actions ?? record.recommendedActions,
+    ),
+    risks: toStringArray(record.risks),
   };
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string | number => {
+      return typeof item === "string" || typeof item === "number";
+    })
+    .map((item) => String(item).trim())
+    .filter(Boolean);
 }
 
 function toAnalyticsQueryParams(params?: AnalyticsQueryParams) {

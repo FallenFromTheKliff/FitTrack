@@ -311,6 +311,8 @@ export function AnalyticsDashboard() {
   const selectedRevenueSeriesKey =
     REVENUE_SOURCE_SERIES_KEY[revenueSourceFilter];
   const topRevenueSources = analytics.revenue?.topRevenueSources ?? [];
+  const latestRecommendedActions =
+    analytics.latestInsight?.recommendedActions ?? [];
 
   const dailyInsightCards = [
     {
@@ -632,33 +634,31 @@ export function AnalyticsDashboard() {
                     "No generated insight yet. Use Generate Insights to create a fresh business readout.")}
               </FitText>
 
-              {analytics.latestInsight?.recommendedActions.length ? (
+              {latestRecommendedActions.length ? (
                 <div style={{ display: "grid", gap: 10 }}>
-                  {analytics.latestInsight.recommendedActions
-                    .slice(0, 3)
-                    .map((action) => (
-                      <div
-                        key={action}
-                        className="analytics-inline-icon-row"
-                        style={{ gap: 10 }}
+                  {latestRecommendedActions.slice(0, 3).map((action) => (
+                    <div
+                      key={action}
+                      className="analytics-inline-icon-row"
+                      style={{ gap: 10 }}
+                    >
+                      <ArrowUpRight
+                        size={14}
+                        color={colors.brand}
+                        style={{ marginTop: 2 }}
+                      />
+                      <FitText
+                        as="p"
+                        style={{
+                          fontSize: 13,
+                          color: colors.textMuted,
+                          lineHeight: 1.7,
+                        }}
                       >
-                        <ArrowUpRight
-                          size={14}
-                          color={colors.brand}
-                          style={{ marginTop: 2 }}
-                        />
-                        <FitText
-                          as="p"
-                          style={{
-                            fontSize: 13,
-                            color: colors.textMuted,
-                            lineHeight: 1.7,
-                          }}
-                        >
-                          {action}
-                        </FitText>
-                      </div>
-                    ))}
+                        {action}
+                      </FitText>
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </div>
