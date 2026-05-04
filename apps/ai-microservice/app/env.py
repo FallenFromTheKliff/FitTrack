@@ -14,7 +14,7 @@ def load_local_env() -> None:
 
 
 def _candidate_env_paths() -> list[Path]:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _repo_root()
     explicit = os.getenv("FITTRACK_ENV_FILE")
 
     candidates: list[Path] = []
@@ -28,6 +28,13 @@ def _candidate_env_paths() -> list[Path]:
         ]
     )
     return candidates
+
+
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    if len(current.parents) > 3:
+        return current.parents[3]
+    return current.parents[1]
 
 
 def _should_override_existing() -> bool:
