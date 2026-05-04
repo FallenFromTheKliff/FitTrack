@@ -128,3 +128,23 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
   font-size: 0.875rem;
   color: var(--fit-text-muted);
 }
+
+.fit-layout-background {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.fit-layout-background-line {
+  position: absolute;
+  display: flex;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.fit-layout-background-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}

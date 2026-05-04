@@ -195,6 +195,7 @@ describe('AiPythonClientService', () => {
       sessionContext: {
         session_id: 'session-1',
         context_type: 'nutrition',
+        assistant_scope: 'member_fitness',
       },
     });
 
@@ -205,7 +206,7 @@ describe('AiPythonClientService', () => {
     const requestBody = typeof init?.body === 'string' ? init.body : '';
     const body = JSON.parse(requestBody) as {
       messages: Array<{ role: string; content: string }>;
-      session_context: { context_type: string };
+      session_context: { context_type: string; assistant_scope: string };
     };
 
     expect(url).toBe('https://ai.fittrack.test/chat');
@@ -215,6 +216,7 @@ describe('AiPythonClientService', () => {
       content: 'Help me with nutrition.',
     });
     expect(body.session_context.context_type).toBe('nutrition');
+    expect(body.session_context.assistant_scope).toBe('member_fitness');
     expect(result).toEqual({
       content: 'Let us work through your nutrition goals.',
       action: 'NONE',
@@ -259,6 +261,7 @@ describe('AiPythonClientService', () => {
         sessionContext: {
           session_id: 'session-1',
           context_type: 'nutrition',
+          assistant_scope: 'member_fitness',
         },
       }),
     ).rejects.toMatchObject({
@@ -352,6 +355,7 @@ describe('AiPythonClientService', () => {
         sessionContext: {
           session_id: 'session-1',
           context_type: 'nutrition',
+          assistant_scope: 'member_fitness',
         },
       }),
     ).rejects.toThrow(HttpException);
@@ -392,6 +396,7 @@ describe('AiPythonClientService', () => {
         sessionContext: {
           session_id: 'session-1',
           context_type: 'nutrition',
+          assistant_scope: 'member_fitness',
         },
       }),
     ).rejects.toThrow(HttpException);

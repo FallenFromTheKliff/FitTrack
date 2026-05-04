@@ -18,19 +18,15 @@ export default function AiPageHeader({
   onStartFresh
 }: AiPageHeaderProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <FitText style={{ fontSize: 20, fontWeight: 700 }}>BrodigyAI</FitText>
-        <FitText as="p" style={{ fontSize: 13, color: mutedColor, marginTop: 4 }}>
-          Live AI chat now runs through the mounted Nest API and shared query layer.
-        </FitText>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div style={{ minHeight: 22 }}>
         {lastError ? (
-          <FitText as="p" style={{ fontSize: 12, color: dangerColor, marginTop: 8 }}>
+          <FitText as="p" style={{ fontSize: 12, color: dangerColor, margin: 0 }}>
             {lastError}
           </FitText>
         ) : null}
         {message ? (
-          <FitText as="p" style={{ fontSize: 12, color: mutedColor, marginTop: 8 }}>
+          <FitText as="p" style={{ fontSize: 12, color: mutedColor, margin: 0 }}>
             {message}
           </FitText>
         ) : null}

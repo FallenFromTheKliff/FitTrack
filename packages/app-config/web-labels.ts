@@ -16,35 +16,31 @@ export type PageKey =
 export const PAGE_NAMES: Record<PageKey, string> = {
   dashboard: "Dashboard",
   ai: "BrodigyAI",
-  members: "Account Module",
+  members: "Accounts",
   schedule: "Gym Operations",
   "exercise-lab": "Exercise Lab",
   gamification: "Gamification",
   "gym-actions": "Gym Actions",
-  "memberships-promos": "Memberships + Promos",
+  "memberships-promos": "Membership",
   facilities: "Facilities",
   inventory: "Inventory Management",
-  analytics: "Analytics & Reports",
+  analytics: "Data Analytics",
   settings: "Settings",
   profile: "Profile Settings",
 };
 
 export const ADMIN_SUBTITLES: Record<PageKey, string> = {
-  dashboard: "Quick pulse check of today's gym activity!",
-  ai: "Live AI conversations across web and mobile.",
-  members: "People and access",
-  schedule:
-    "Run scheduling, appointments, and coach operations from one console.",
-  "exercise-lab": "Review submissions and definitions.",
-  gamification:
-    "Govern seasons, rankings, milestones, integrity cases, and XP corrections.",
-  "gym-actions":
-    "Review transactions, audit logs, and recent operational activity.",
-  "memberships-promos":
-    "Manage membership plan prices and active promotion windows.",
-  facilities: "Shape every zone for a cleaner training flow!",
-  inventory: "Keep shelves ready for every workout day!",
-  analytics: "Read the numbers and spot your next gain!",
-  settings: "Tune the portal to match your gym rhythm!",
-  profile: "Keep your admin profile secure and accurate!",
+  dashboard: "Admin pulse check before the gym floor goes full send!",
+  ai: "Admin operations desk, let BrodigyAI sharpen the next business move!",
+  members: "Keep every account dialed in and the crew moving strong!",
+  schedule: "Staff ops, stack the day like a clean workout split!",
+  "exercise-lab": "Admin eyes on form, approvals, and every legit rep!",
+  gamification: "Keep the leaderboard fair and the win streaks firing!",
+  "gym-actions": "Staff crew, keep payments, logs, and floor moves tight!",
+  "memberships-promos": "Admin mode, keep plans pumping and promos ready!",
+  facilities: "Staff check, keep every training zone ready to rip!",
+  inventory: "Admin sweep, stock the essentials before the gains stall!",
+  analytics: "Admin squad, read the numbers and spot the next win!",
+  settings: "Admin tune-up, keep the portal running smooth!",
+  profile: "Keep your portal profile fit, secure, and locked in!",
 };

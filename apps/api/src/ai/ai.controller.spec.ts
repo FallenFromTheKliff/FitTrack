@@ -3,8 +3,11 @@ import {
   THROTTLER_LIMIT,
   THROTTLER_TTL,
 } from '@nestjs/throttler/dist/throttler.constants';
+import { UserRole } from '@prisma/client';
 
+import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { AiController } from './ai.controller';
 
 function getMethodGuardMetadata(
@@ -48,6 +51,26 @@ function getThrottleMetadata(methodName: 'chat' | 'generatePlan'): {
   };
 }
 
+function getRolesMetadata(
+  methodName:
+    | 'chat'
+    | 'getMyChatSessions'
+    | 'getChatSessionById'
+    | 'getChatMessages'
+    | 'archiveSession'
+    | 'restoreSession'
+    | 'generatePlan',
+): UserRole[] | undefined {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    AiController.prototype,
+    methodName,
+  );
+
+  return Reflect.getMetadata(ROLES_KEY, descriptor?.value as object) as
+    | UserRole[]
+    | undefined;
+}
+
 describe('AiController', () => {
   const aiService = {
     chat: jest.fn(),
@@ -75,7 +98,28 @@ describe('AiController', () => {
     'restoreSession',
     'generatePlan',
   ] as const)('protects %s with JWT auth', (methodName) => {
-    expect(getMethodGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
+    expect(getMethodGuardMetadata(methodName)).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+  });
+
+  it.each([
+    'chat',
+    'getMyChatSessions',
+    'getChatSessionById',
+    'getChatMessages',
+    'archiveSession',
+    'restoreSession',
+  ] as const)('allows only admins and members to %s', (methodName) => {
+    expect(getRolesMetadata(methodName)).toEqual([
+      UserRole.admin,
+      UserRole.member,
+    ]);
+  });
+
+  it('allows only members to generate AI plans', () => {
+    expect(getRolesMetadata('generatePlan')).toEqual([UserRole.member]);
   });
 
   it.each(['chat', 'generatePlan'] as const)(
@@ -91,15 +135,19 @@ describe('AiController', () => {
   it('delegates chat requests to the service', async () => {
     aiService.chat.mockResolvedValue({ session_id: 'session-1' });
 
-    await controller.chat({ sub: 'user-1' } as never, {
+    await controller.chat({ sub: 'user-1', role: UserRole.member } as never, {
       message: 'Help me with nutrition.',
       context_type: 'nutrition' as never,
     });
 
-    expect(aiService.chat).toHaveBeenCalledWith('user-1', {
-      message: 'Help me with nutrition.',
-      context_type: 'nutrition',
-    });
+    expect(aiService.chat).toHaveBeenCalledWith(
+      'user-1',
+      UserRole.member,
+      {
+        message: 'Help me with nutrition.',
+        context_type: 'nutrition',
+      },
+    );
   });
 
   it('lists chat sessions through the service', async () => {

@@ -20,7 +20,7 @@ export const AI_CONTEXT_LABELS: Record<string, string> = {
 };
 
 export const WEB_GREETING_MESSAGE =
-  "Hello! I'm BrodigyAI. Ask me about training plans, nutrition, or your next workout.";
+  "Hello! I'm BrodigyAI. Ask me about revenue, attendance, staffing, inventory, or gym operations.";
 
 export const MOBILE_GREETING_MESSAGE =
   "Hello! I'm BrodigyAI. Ask me about training plans, nutrition, or your next workout.";

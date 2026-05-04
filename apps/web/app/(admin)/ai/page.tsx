@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import { useFadeIn } from "@/hooks/animations/useFadeIn";
+import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { chatbotStyles } from "@/styles/pageStyles";
 import ChatPanel from "@/components/chatbot/ChatPanel";
 import HistoryPanel from "@/components/chatbot/HistoryPanel";
@@ -13,7 +15,9 @@ import { ConfirmModal } from "@/components/modals";
 
 export default function AiPage() {
   const { colors } = useTheme();
-  const s = chatbotStyles(colors);
+  const s = useMemo(() => chatbotStyles(colors), [colors]);
+  const fadeIn = useFadeIn();
+  const themeTransition = useThemeTransition();
   const [statusFilter, setStatusFilter] = useState<
     "active" | "all" | "archived"
   >("active");
@@ -80,9 +84,16 @@ export default function AiPage() {
     const restoredSessionId = await handleRestore();
     if (!restoredSessionId) return;
   };
+  const pageStyle = useMemo(
+    () => ({
+      ...s.page,
+      ...fadeIn
+    }),
+    [fadeIn, s.page]
+  );
 
   return (
-    <div style={s.page}>
+    <div className={themeTransition} style={pageStyle}>
       <AiPageHeader
         dangerColor={colors.danger}
         lastError={lastError}
@@ -128,7 +139,7 @@ export default function AiPage() {
             placeholder={
               isSelectedSessionDeleted
                 ? "Restore this chat to continue the conversation."
-                : "Ask BrodigyAI about training, nutrition, or your next session..."
+                : "Ask BrodigyAI about revenue, attendance, staffing, inventory, or gym operations..."
             }
           />
         </div>

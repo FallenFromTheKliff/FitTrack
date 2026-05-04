@@ -46,9 +46,12 @@ export type ChatMessageInput = {
   content: string;
 };
 
+export type AssistantScope = 'admin_business' | 'member_fitness';
+
 export type ChatSessionContextInput = {
   session_id: string;
   context_type: string;
+  assistant_scope: AssistantScope;
 };
 
 export type ChatUserContextInput = {

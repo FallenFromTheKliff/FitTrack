@@ -9,6 +9,12 @@ import { headerStyles } from "@/styles/layoutStyles";
 import HeaderMessage from "@/components/layout/HeaderMessage";
 import NotificationsPanel from "@/components/layout/NotificationsPanel";
 import FitButton from "@/components/fit/FitButton";
+import { FitSelect } from "@/components/fit";
+import {
+  ANALYTICS_SECTION_FILTER_OPTIONS,
+  useAnalyticsSectionFilter,
+  type AnalyticsSectionFilter,
+} from "@/contexts/AnalyticsSectionFilterContext";
 
 type Props = {
   onMenuToggle: () => void;
@@ -21,10 +27,11 @@ export default function Header({
   showMenuButton,
   pageKey,
 }: Props) {
-  const { colors, activeThemeKey } = useTheme();
-  const s = headerStyles(colors, activeThemeKey);
+  const { colors } = useTheme();
+  const s = headerStyles(colors);
   const [notifOpen, setNotifOpen] = useState(false);
   const [isNotifHovered, setIsNotifHovered] = useState(false);
+  const { sectionFilter, setSectionFilter } = useAnalyticsSectionFilter();
   const {
     isBusy,
     notifications,
@@ -54,6 +61,21 @@ export default function Header({
         <HeaderMessage pageKey={pageKey} />
       </div>
       <div style={s.rightSection}>
+        {pageKey === "analytics" ? (
+          <div style={s.analyticsHeaderFilterWrap}>
+            <FitSelect
+              compact
+              value={sectionFilter}
+              onChange={(event) =>
+                setSectionFilter(event.target.value as AnalyticsSectionFilter)
+              }
+              options={[...ANALYTICS_SECTION_FILTER_OPTIONS]}
+              name="analyticsHeaderSectionFilter"
+              aria-label="Filter Data Analytics sections"
+              style={s.analyticsHeaderFilter}
+            />
+          </div>
+        ) : null}
         <div style={s.notificationButtonWrap}>
           <FitButton
             variant="iconClear"

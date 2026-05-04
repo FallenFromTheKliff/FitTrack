@@ -13,8 +13,6 @@ import {
   LogOut,
   ChevronRight,
   Bot,
-  PanelLeftClose,
-  PanelLeftOpen,
   BadgePercent,
   ClipboardList,
   Trophy,
@@ -39,7 +37,6 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   pageKey:
-    | "dashboard"
     | "members"
     | "schedule"
     | "exercise-lab"
@@ -53,58 +50,78 @@ type NavItem = {
     | "settings";
 };
 
-const NAV: NavItem[] = [
+const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
-    href: "/analytics",
-    label: "Analytics",
-    icon: BarChart2,
-    pageKey: "analytics",
-  },
-  { href: "/members", label: "Account Module", icon: Users, pageKey: "members" },
-  {
-    href: "/schedule",
-    label: "Gym Operations",
-    icon: CalendarDays,
-    pageKey: "schedule",
-  },
-  {
-    href: "/exercise-lab",
-    label: "Exercise Lab",
-    icon: Dumbbell,
-    pageKey: "exercise-lab",
-  },
-  {
-    href: "/gamification",
-    label: "Gamification",
-    icon: Trophy,
-    pageKey: "gamification",
-  },
-  {
-    href: "/gym-actions",
-    label: "Gym Actions",
-    icon: ClipboardList,
-    pageKey: "gym-actions",
-  },
-  {
-    href: "/memberships-promos",
-    label: "Memberships + Promos",
-    icon: BadgePercent,
-    pageKey: "memberships-promos",
-  },
-  { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
-  {
-    href: "/facilities",
-    label: "Facilities",
-    icon: Grid2X2,
-    pageKey: "facilities",
+    label: "Main",
+    items: [
+      {
+        href: "/analytics",
+        label: "Data Analytics",
+        icon: BarChart2,
+        pageKey: "analytics",
+      },
+      { href: "/members", label: "Accounts", icon: Users, pageKey: "members" },
+      {
+        href: "/schedule",
+        label: "Gym Operations",
+        icon: CalendarDays,
+        pageKey: "schedule",
+      },
+      {
+        href: "/facilities",
+        label: "Facilities",
+        icon: Grid2X2,
+        pageKey: "facilities",
+      },
+      {
+        href: "/inventory",
+        label: "Inventory",
+        icon: Package,
+        pageKey: "inventory",
+      },
+      {
+        href: "/gym-actions",
+        label: "Gym Actions",
+        icon: ClipboardList,
+        pageKey: "gym-actions",
+      },
+    ],
   },
   {
-    href: "/inventory",
-    label: "Inventory",
-    icon: Package,
-    pageKey: "inventory",
+    label: "Fitness Ops",
+    items: [
+      {
+        href: "/gamification",
+        label: "Gamification",
+        icon: Trophy,
+        pageKey: "gamification",
+      },
+      {
+        href: "/exercise-lab",
+        label: "Exercise Labs",
+        icon: Dumbbell,
+        pageKey: "exercise-lab",
+      },
+      {
+        href: "/memberships-promos",
+        label: "Memberships",
+        icon: BadgePercent,
+        pageKey: "memberships-promos",
+      },
+    ],
   },
-  { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
+  {
+    label: "System",
+    items: [
+      { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        pageKey: "settings",
+      },
+    ],
+  },
 ];
 
 function isRouteMatch(path: string, href: string) {
@@ -112,17 +129,13 @@ function isRouteMatch(path: string, href: string) {
 }
 
 type Props = {
-  collapsed?: boolean;
   isMobileOverlay?: boolean;
   onClose?: () => void;
-  onCollapseToggle?: () => void;
 };
 
 export default function Sidebar({
-  collapsed = false,
   isMobileOverlay = false,
   onClose,
-  onCollapseToggle,
 }: Props) {
   const path = usePathname() ?? "/";
   const { colors, activeThemeKey } = useTheme();
@@ -132,36 +145,37 @@ export default function Sidebar({
   );
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
-  const [isBrandHovered, setIsBrandHovered] = useState(false);
   const fontClass = useFontClass();
   const s = sidebarStyles(colors, activeThemeKey);
   const initials =
     user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
   const isProfileActive = path.startsWith("/profile");
   const portalLabel = getWebPortalLabel(user?.role);
-  const visibleNav = useMemo(
-    () => NAV.filter((item) => canAccessWebPage(user?.role, item.pageKey)),
+  const visibleNavSections = useMemo(
+    () =>
+      NAV_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          canAccessWebPage(user?.role, item.pageKey),
+        ),
+      })).filter((section) => section.items.length > 0),
     [user?.role],
   );
-  const canToggleCollapse = !isMobileOverlay && !!onCollapseToggle;
 
-  const brandContent = (
-    <>
-      <div
-        style={{
-          ...s.logoMark,
-          transform:
-            canToggleCollapse && isBrandHovered ? "translateY(-1px)" : "none",
-          boxShadow:
-            canToggleCollapse && isBrandHovered
-              ? `0 10px 24px ${colors.brand}26`
-              : "none",
-          transition: "transform 180ms ease, box-shadow 180ms ease",
-        }}
-      >
-        <Dumbbell size={24} color="white" strokeWidth={2} />
-      </div>
-      {!collapsed ? (
+  const handleLogout = async () => {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
+    showMessage("Logging out...");
+    await sleep(FEEDBACK_DURATION_MS.standard);
+    await logout();
+  };
+
+  return (
+    <aside style={s.sidebar}>
+      <div style={s.logoRow}>
+        <div style={s.logoMark}>
+          <Dumbbell size={24} color={colors.onBrand} strokeWidth={2} />
+        </div>
         <div
           style={{
             flex: 1,
@@ -170,9 +184,6 @@ export default function Sidebar({
             flexDirection: "column",
             justifyContent: "center",
             gap: 0,
-            transform:
-              canToggleCollapse && isBrandHovered ? "translateX(1px)" : "none",
-            transition: "transform 180ms ease",
           }}
         >
           <FitText
@@ -202,101 +213,11 @@ export default function Sidebar({
             {portalLabel}
           </FitText>
         </div>
-      ) : null}
-      {canToggleCollapse ? (
-        <div
-          aria-hidden="true"
-          style={{
-            marginLeft: collapsed ? 0 : "auto",
-            width: 34,
-            height: 34,
-            borderRadius: 10,
-            border: `1px solid ${
-              isBrandHovered ? `${colors.brand}55` : colors.border
-            }`,
-            backgroundColor: isBrandHovered
-              ? `${colors.brand}14`
-              : colors.surfaceRaised,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: isBrandHovered ? colors.brand : colors.textMuted,
-            opacity: collapsed ? 0.95 : isBrandHovered ? 1 : 0.82,
-            transform:
-              collapsed || isBrandHovered ? "translateX(0)" : "translateX(4px)",
-            transition:
-              "opacity 180ms ease, transform 180ms ease, color 180ms ease, background-color 180ms ease, border-color 180ms ease",
-            flexShrink: 0,
-          }}
-        >
-          {collapsed ? (
-            <PanelLeftOpen size={18} strokeWidth={2.1} />
-          ) : (
-            <PanelLeftClose size={18} strokeWidth={2.1} />
-          )}
-        </div>
-      ) : null}
-    </>
-  );
-
-  const handleLogout = async () => {
-    if (logoutLoading) return;
-    setLogoutLoading(true);
-    showMessage("Logging out...");
-    await sleep(FEEDBACK_DURATION_MS.standard);
-    await logout();
-  };
-
-  return (
-    <aside
-      style={{
-        ...s.sidebar,
-        width: collapsed ? 96 : s.sidebar.width,
-        padding: collapsed ? "0 10px 20px" : s.sidebar.padding,
-        transition: "width 220ms ease, padding 220ms ease",
-      }}
-    >
-      {canToggleCollapse ? (
-        <button
-          type="button"
-          onClick={onCollapseToggle}
-          onMouseEnter={() => setIsBrandHovered(true)}
-          onMouseLeave={() => setIsBrandHovered(false)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          style={{
-            ...s.logoRow,
-            width: "100%",
-            border: `1px solid ${isBrandHovered ? `${colors.brand}40` : "transparent"}`,
-            backgroundColor: isBrandHovered
-              ? colors.surfaceRaised
-              : "transparent",
-            borderRadius: 16,
-            cursor: "pointer",
-            justifyContent: collapsed ? "center" : "flex-start",
-            padding: collapsed ? "0 2px" : "0 8px",
-            transition:
-              "background-color 180ms ease, border-color 180ms ease, transform 180ms ease",
-            transform: isBrandHovered ? "translateX(1px)" : "none",
-          }}
-        >
-          {brandContent}
-        </button>
-      ) : (
-        <div style={s.logoRow}>{brandContent}</div>
-      )}
+      </div>
       <div style={s.topSeparator} />
       <Link
         href="/profile"
-        title={collapsed ? `${user?.name ?? "Admin"} profile` : undefined}
-        aria-label={collapsed ? "Profile" : undefined}
-        style={{
-          ...s.profileCard(isProfileActive),
-          padding: collapsed
-            ? "12px 10px"
-            : s.profileCard(isProfileActive).padding,
-          alignItems: collapsed ? "center" : undefined,
-        }}
+        style={s.profileCard(isProfileActive)}
         className={fontClass}
         onClick={isMobileOverlay ? onClose : undefined}
       >
@@ -309,87 +230,81 @@ export default function Sidebar({
               {initials}
             </FitText>
           </div>
-          {!collapsed ? (
-            <div style={s.profileCardInfo}>
-              <FitText
-                style={{
-                  ...s.profileName,
-                  fontSize: 16,
-                  fontWeight: 600,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  display: "block",
-                }}
-                excludeGlobalScale
-              >
-                {user?.name ?? "Admin"}
+          <div style={s.profileCardInfo}>
+            <FitText
+              style={{
+                ...s.profileName,
+                fontSize: 15,
+                fontWeight: 600,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                display: "block",
+              }}
+              excludeGlobalScale
+            >
+              {user?.name ?? "Admin"}
+            </FitText>
+            <div style={s.profileManageWrap}>
+              <Settings size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
+              <FitText as="p" style={s.profileManage} excludeGlobalScale>
+                Manage Profile Details
               </FitText>
-              <div style={s.profileManageWrap}>
-                <Settings size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
-                <FitText as="p" style={s.profileManage} excludeGlobalScale>
-                  Manage Profile Details
-                </FitText>
-              </div>
             </div>
-          ) : null}
+          </div>
         </div>
       </Link>
       <div style={s.profileSeparator} />
       <nav style={s.navList}>
-        {visibleNav.map((item) => {
-          const isActive =
-            item.href === "/analytics"
-              ? path === "/dashboard" || isRouteMatch(path, "/analytics")
-              : isRouteMatch(path, item.href);
-          const shouldWrapLabel = item.pageKey === "memberships-promos";
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={fontClass}
-              title={collapsed || shouldWrapLabel ? item.label : undefined}
-              aria-label={collapsed ? item.label : undefined}
-              style={{
-                ...s.navItem(isActive),
-                alignItems: "center",
-                justifyContent: collapsed ? "center" : "flex-start",
-                padding: collapsed ? "14px 10px" : s.navItem(isActive).padding,
-                whiteSpace: shouldWrapLabel ? "normal" : s.navItem(isActive).whiteSpace,
-              }}
-              onClick={isMobileOverlay ? onClose : undefined}
-            >
-              <item.icon size={22} strokeWidth={2} style={{ flexShrink: 0 }} />
-              {!collapsed ? (
-                <>
-                  <FitText
-                    as="span"
-                    style={{
-                      ...s.navLabel(isActive),
-                      display: "block",
-                      flex: 1,
-                      fontSize: shouldWrapLabel ? 14 : 16,
-                      lineHeight: shouldWrapLabel ? 1.15 : undefined,
-                      overflow: shouldWrapLabel ? "visible" : s.navLabel(isActive).overflow,
-                      textOverflow: shouldWrapLabel ? "clip" : s.navLabel(isActive).textOverflow,
-                      whiteSpace: shouldWrapLabel ? "normal" : s.navLabel(isActive).whiteSpace,
-                    }}
-                    excludeGlobalScale
+        {visibleNavSections.map((section) => (
+          <div key={section.label} style={s.navSection}>
+            <FitText as="p" style={s.navSectionLabel} excludeGlobalScale>
+              {section.label}
+            </FitText>
+            <div style={s.navSectionItems}>
+              {section.items.map((item) => {
+                const isActive =
+                  item.href === "/analytics"
+                    ? path === "/dashboard" || isRouteMatch(path, "/analytics")
+                    : isRouteMatch(path, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={fontClass}
+                    style={s.navItem(isActive)}
+                    onClick={isMobileOverlay ? onClose : undefined}
                   >
-                    {item.label}
-                  </FitText>
-                  {isActive ? (
-                    <ChevronRight
-                      size={18}
-                      style={s.navChevron}
-                      className="shrink-0"
+                    <item.icon
+                      size={22}
+                      strokeWidth={2}
+                      style={{ flexShrink: 0 }}
                     />
-                  ) : null}
-                </>
-              ) : null}
-            </Link>
-          );
-        })}
+                    <FitText
+                      as="span"
+                      style={{
+                        ...s.navLabel(isActive),
+                        display: "block",
+                        flex: 1,
+                        fontSize: 14,
+                      }}
+                      excludeGlobalScale
+                    >
+                      {item.label}
+                    </FitText>
+                    {isActive ? (
+                      <ChevronRight
+                        size={18}
+                        style={s.navChevron}
+                        className="shrink-0"
+                      />
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
       <div style={s.logoutSeparator} />
       {message ? (
@@ -405,15 +320,10 @@ export default function Sidebar({
         icon={LogOut}
         iconSize={21}
         onClick={() => setLogoutOpen(true)}
-        aria-label={collapsed ? "Sign out" : "SIGN OUT"}
-        title={collapsed ? "Sign out" : undefined}
-        style={{
-          ...s.logoutBtn,
-          justifyContent: collapsed ? "center" : "flex-start",
-          padding: collapsed ? "14px 10px" : s.logoutBtn.padding,
-        }}
+        aria-label="SIGN OUT"
+        style={s.logoutBtn}
       >
-        {!collapsed ? "SIGN OUT" : ""}
+        SIGN OUT
       </FitButton>
       <ConfirmModal
         isOpen={logoutOpen}

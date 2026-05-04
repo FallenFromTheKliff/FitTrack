@@ -362,11 +362,10 @@ def test_chat_route_wraps_plain_text_provider_reply_as_none_action(
 def test_chat_route_refuses_out_of_scope_prompts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setenv(
-        "OPENROUTER_ASSISTANT_MODEL",
-        "meta-llama/llama-3.3-70b-instruct:free",
-    )
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
 
     client = TestClient(app)
     response = client.post(
@@ -394,8 +393,147 @@ def test_chat_route_refuses_out_of_scope_prompts(
 
     assert response.status_code == 200
     assert payload["action"] == "NONE"
-    assert payload["model_used"] == "scope-guard"
-    assert "FitTrack and SertFit topics" in payload["content"]
+    assert payload["model_used"] == "intent-guard"
+    assert "fitness, training, nutrition" in payload["content"]
+
+
+def test_chat_route_admin_scope_refuses_fitness_coaching(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Build me a 4 week workout plan."}
+            ],
+            "user_context": {
+                "age": None,
+                "gender": None,
+                "weight_kg": None,
+                "height_cm": None,
+                "activity_level": None,
+                "fitness_goal": None,
+            },
+            "session_context": {
+                "session_id": "admin-session-fitness-refusal",
+                "context_type": "general",
+                "assistant_scope": "admin_business",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["action"] == "NONE"
+    assert payload["model_used"] == "intent-guard"
+    assert "admin business operations" in payload["content"]
+    assert "can't handle fitness coaching" in payload["content"]
+
+
+def test_chat_route_member_scope_refuses_business_ops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "How do I improve revenue and staffing?"}
+            ],
+            "user_context": {
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
+            },
+            "session_context": {
+                "session_id": "member-business-refusal",
+                "context_type": "general",
+                "assistant_scope": "member_fitness",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["action"] == "NONE"
+    assert payload["model_used"] == "intent-guard"
+    assert "business analytics" in payload["content"]
+
+
+def test_chat_route_answers_admin_allowed_part_of_mixed_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return _openrouter_response(
+            {
+                "content": "Review revenue, attendance, and staffing before the evening rush.",
+                "action": "GENERATE_PLAN",
+                "params": {"duration_weeks": 4, "days_per_week": 3},
+            },
+            model="meta-llama/llama-3.3-70b-instruct:free",
+            tokens=61,
+        )
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "How should I improve revenue, and can you make me a workout plan?",
+                }
+            ],
+            "user_context": {
+                "age": None,
+                "gender": None,
+                "weight_kg": None,
+                "height_cm": None,
+                "activity_level": None,
+                "fitness_goal": None,
+            },
+            "session_context": {
+                "session_id": "admin-mixed-scope",
+                "context_type": "general",
+                "assistant_scope": "admin_business",
+            },
+        },
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert "Review revenue, attendance, and staffing" in payload["content"]
+    assert "fitness coaching" in payload["content"]
+    assert len(calls) == 2
 
 
 def test_generate_plan_route_uses_openrouter_plan_model_when_available(

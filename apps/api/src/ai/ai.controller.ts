@@ -21,10 +21,13 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import {
   ActiveTdeeResponseDTO,
   NutritionLogResponseDTO,
@@ -95,7 +98,8 @@ export class AiController {
 
   @Post('chat')
   @Throttle({ default: { limit: 10, ttl: 60 } })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: AIChatDTO })
   @ApiOperation({
@@ -120,11 +124,12 @@ export class AiController {
     description: 'AI chat is unavailable.',
   })
   chat(@CurrentUser() user: JwtPayload, @Body() dto: AIChatDTO) {
-    return this.aiService.chat(user.sub, dto);
+    return this.aiService.chat(user.sub, user.role, dto);
   }
 
   @Get('chat/sessions')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: "List the authenticated user's AI chat sessions.",
@@ -142,7 +147,8 @@ export class AiController {
   }
 
   @Get('chat/sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a single owned AI chat session.',
@@ -168,7 +174,8 @@ export class AiController {
   }
 
   @Get('chat/sessions/:id/messages')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List owned message history for an AI chat session.',
@@ -195,7 +202,8 @@ export class AiController {
   }
 
   @Delete('chat/sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Soft delete an owned AI chat session.',
@@ -218,7 +226,8 @@ export class AiController {
   }
 
   @Patch('chat/sessions/:id/restore')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Restore a soft-deleted owned AI chat session.',
@@ -242,7 +251,8 @@ export class AiController {
 
   @Post('generate-plan')
   @Throttle({ default: { limit: 10, ttl: 60 } })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: GeneratePlanDTO })
   @ApiOperation({

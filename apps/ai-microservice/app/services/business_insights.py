@@ -43,29 +43,25 @@ class OpenRouterBusinessInsightProvider:
         payload: BusinessAnalyticsInsightRequest,
     ) -> BusinessAnalyticsInsightResponse:
         settings = self._get_settings()
-        response = self._run_request_variants(
+        insight, response_payload = self._run_generation_variants(
             settings,
             [
-                self.build_openrouter_insight_request(payload),
+                self.build_openrouter_insight_request(
+                    payload,
+                    response_format_type="json_schema",
+                    require_parameters=True,
+                ),
                 self.build_openrouter_insight_request(
                     payload,
                     response_format_type="json_object",
                 ),
+                self.build_openrouter_insight_request(
+                    payload,
+                    response_format_type="prompt_json",
+                ),
                 *self._build_fallback_variants(payload),
             ],
         )
-
-        try:
-            response_payload = response.json()
-        except ValueError as exc:
-            raise ServiceError(
-                type="BAD_GATEWAY",
-                title="Invalid Business Insight Response",
-                status=502,
-                detail="OpenRouter returned a non-JSON business insight payload.",
-            ) from exc
-
-        insight = self._parse_generated_insight(response_payload)
         anomaly_flags = self._merge_unique_strings(
             insight.anomaly_flags,
             BusinessInsightService.detect_anomalies(payload.grounding),
@@ -87,35 +83,30 @@ class OpenRouterBusinessInsightProvider:
         payload: BusinessAnalyticsInsightRequest,
         *,
         model_override: str | None = None,
-        response_format_type: Literal["json_object", "json_schema"] = "json_schema",
+        response_format_type: Literal[
+            "json_object",
+            "json_schema",
+            "prompt_json",
+        ] = "json_schema",
+        require_parameters: bool = False,
     ) -> dict[str, object]:
         settings = self._get_settings()
         anomaly_flags = BusinessInsightService.detect_anomalies(payload.grounding)
-        response_format = (
-            {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "business_analytics_insight",
-                    "strict": True,
-                    "schema": GeneratedBusinessInsight.model_json_schema(),
-                },
-            }
-            if response_format_type == "json_schema"
-            else {"type": "json_object"}
-        )
         system_prompt = (
             "You are a grounded gym business analyst. Use only the provided "
             "analytics grounding. Return strict JSON only, with no markdown, no "
-            "prose outside the JSON object, and no extra keys."
+            "prose outside the JSON object, and no extra keys. If the data is "
+            "thin or mixed, write cautious business analysis from the supplied "
+            "metrics instead of refusing."
         )
-        if response_format_type == "json_object":
+        if response_format_type in {"json_object", "prompt_json"}:
             system_prompt += (
                 " Return a single JSON object with exactly these keys: "
                 "summary, highlights, risks, opportunities, anomaly_flags, "
                 "recommended_actions."
             )
 
-        return {
+        request_payload: dict[str, object] = {
             "model": model_override or settings.insight_model,
             "messages": [
                 {
@@ -134,8 +125,23 @@ class OpenRouterBusinessInsightProvider:
                 },
             ],
             "temperature": 0.2,
-            "response_format": response_format,
         }
+
+        if response_format_type == "json_schema":
+            request_payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "business_analytics_insight",
+                    "strict": True,
+                    "schema": GeneratedBusinessInsight.model_json_schema(),
+                },
+            }
+            if require_parameters:
+                request_payload["provider"] = {"require_parameters": True}
+        elif response_format_type == "json_object":
+            request_payload["response_format"] = {"type": "json_object"}
+
+        return request_payload
 
     def _post_chat_completion(
         self,
@@ -167,20 +173,59 @@ class OpenRouterBusinessInsightProvider:
                 detail="OpenRouter business insight generation is unavailable.",
             ) from exc
 
-    def _run_request_variants(
+    def _run_generation_variants(
         self,
         settings: OpenRouterInsightSettings,
         payloads: list[dict[str, object]],
-    ) -> httpx.Response:
+    ) -> tuple[GeneratedBusinessInsight, dict[str, object]]:
         last_response: httpx.Response | None = None
+        last_error: ServiceError | None = None
         for request_payload in payloads:
-            response = self._post_chat_completion(settings, request_payload)
-            if response.status_code < 400:
-                return response
-            last_response = response
+            try:
+                response = self._post_chat_completion(settings, request_payload)
+            except ServiceError as exc:
+                last_error = exc
+                continue
 
-        assert last_response is not None
-        raise self._build_upstream_error(last_response)
+            if response.status_code < 400:
+                try:
+                    response_payload = response.json()
+                except ValueError as exc:
+                    last_error = ServiceError(
+                        type="BAD_GATEWAY",
+                        title="Invalid Business Insight Response",
+                        status=502,
+                        detail=(
+                            "OpenRouter returned a non-JSON business insight "
+                            "payload."
+                        ),
+                    )
+                    last_error.__cause__ = exc
+                    continue
+
+                try:
+                    return (
+                        self._parse_generated_insight(response_payload),
+                        response_payload,
+                    )
+                except ServiceError as exc:
+                    last_error = exc
+                    continue
+
+            last_response = response
+            last_error = self._build_upstream_error(response)
+
+        if last_error is not None:
+            raise last_error
+        if last_response is not None:
+            raise self._build_upstream_error(last_response)
+
+        raise ServiceError(
+            type="SERVICE_UNAVAILABLE",
+            title="Business Insight Provider Unavailable",
+            status=503,
+            detail="OpenRouter business insight generation is unavailable.",
+        )
 
     def _build_fallback_variants(
         self,
@@ -197,11 +242,18 @@ class OpenRouterBusinessInsightProvider:
             self.build_openrouter_insight_request(
                 payload,
                 model_override=settings.fallback_model,
+                response_format_type="json_schema",
+                require_parameters=True,
             ),
             self.build_openrouter_insight_request(
                 payload,
                 model_override=settings.fallback_model,
                 response_format_type="json_object",
+            ),
+            self.build_openrouter_insight_request(
+                payload,
+                model_override=settings.fallback_model,
+                response_format_type="prompt_json",
             ),
         ]
 
@@ -343,9 +395,24 @@ class OpenRouterBusinessInsightProvider:
             )
 
         content = self._normalize_message_content(message.get("content"))
+        if not content.strip():
+            raise ServiceError(
+                type="BAD_GATEWAY",
+                title="Invalid Business Insight Response",
+                status=502,
+                detail="OpenRouter returned an empty business insight message.",
+            )
+        if self._is_refusal_like(content):
+            raise ServiceError(
+                type="BAD_GATEWAY",
+                title="Invalid Business Insight Response",
+                status=502,
+                detail="OpenRouter refused a grounded business insight request.",
+            )
+
         try:
             parsed_content = self._load_json_content(content)
-            return GeneratedBusinessInsight.model_validate(parsed_content)
+            insight = GeneratedBusinessInsight.model_validate(parsed_content)
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ServiceError(
                 type="BAD_GATEWAY",
@@ -356,6 +423,16 @@ class OpenRouterBusinessInsightProvider:
                     "match the required schema."
                 ),
             ) from exc
+
+        if self._is_refusal_like(insight.summary):
+            raise ServiceError(
+                type="BAD_GATEWAY",
+                title="Invalid Business Insight Response",
+                status=502,
+                detail="OpenRouter returned a refusal instead of a business insight.",
+            )
+
+        return insight
 
     def _normalize_message_content(self, content: object) -> str:
         if isinstance(content, str):
@@ -400,6 +477,27 @@ class OpenRouterBusinessInsightProvider:
                 return json.loads(cleaned[object_start : object_end + 1])
 
             raise
+
+    def _is_refusal_like(self, content: str) -> bool:
+        normalized = content.strip().lower().replace("\u2019", "'")
+        if not normalized:
+            return True
+
+        refusal_markers = (
+            "i can't",
+            "i cannot",
+            "i'm unable",
+            "i am unable",
+            "cannot assist",
+            "can't assist",
+            "not able to",
+            "outside my scope",
+            "not allowed",
+            "do not have access",
+            "don't have access",
+            "as an ai",
+        )
+        return any(marker in normalized for marker in refusal_markers)
 
     def _extract_model_used(self, response_payload: object) -> str | None:
         if isinstance(response_payload, dict):

@@ -10,6 +10,7 @@ import {
   Gender,
   NutritionUnit,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 
 import { PaginatedResult } from '../common/base-repository/base-repository';
@@ -43,6 +44,7 @@ import { AiInteractionLogRepository } from './ai-interaction-log.repository';
 import {
   AIChatAction,
   AIChatInput,
+  AssistantScope,
   AiGeneratePlanResponse,
   AiGeneratedDay,
   AiGeneratedExercise,
@@ -124,6 +126,7 @@ type ChatPromptBlueprint = {
   context: {
     sessionId: string;
     contextType: ChatContext;
+    assistantScope: AssistantScope;
     recentMessageCount: number;
     latestUserMessage: string;
     userContext: ChatPromptUserContext;
@@ -229,7 +232,24 @@ export class AiService {
     );
   }
 
-  async chat(userId: string, dto: AIChatDTO): Promise<AIChatResponseDTO> {
+  async chat(
+    userId: string,
+    actorRoleOrDto: UserRole | AIChatDTO,
+    maybeDto?: AIChatDTO,
+  ): Promise<AIChatResponseDTO> {
+    const actorRole =
+      typeof actorRoleOrDto === 'string' ? actorRoleOrDto : UserRole.member;
+    const dto =
+      typeof actorRoleOrDto === 'string' ? maybeDto : actorRoleOrDto;
+
+    if (!dto) {
+      throw this.buildValidationException(
+        'Missing AI Chat Request',
+        'A chat message is required.',
+      );
+    }
+
+    const assistantScope = this.resolveAssistantScope(actorRole);
     const resolved = await this.resolveChatSession(userId, dto);
     const history =
       await this.aiChatMessageRepository.listRecentMessagesBySessionId(
@@ -242,12 +262,14 @@ export class AiService {
       history,
       userContext,
       dto.message,
+      assistantScope,
     );
     const promptBlueprint = this.buildChatPromptBlueprint(
       resolved.session,
       history,
       userContext,
       dto.message,
+      assistantScope,
     );
     const persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
       requestPayload,
@@ -261,6 +283,7 @@ export class AiService {
       const { actionTriggered, actionResult } =
         await this.validateAndExecuteAction(
           userId,
+          actorRole,
           response.action,
           response.params,
         );
@@ -375,6 +398,26 @@ export class AiService {
       aiGenerationPrompt: persistedRequestPayload as Prisma.InputJsonValue,
       schedule,
     });
+  }
+
+  private resolveAssistantScope(actorRole: UserRole): AssistantScope {
+    if (actorRole === UserRole.admin) {
+      return 'admin_business';
+    }
+
+    if (actorRole === UserRole.member) {
+      return 'member_fitness';
+    }
+
+    throw new HttpException(
+      {
+        type: 'FORBIDDEN',
+        title: 'BrodigyAI Access Denied',
+        status: HttpStatus.FORBIDDEN,
+        detail: 'BrodigyAI is available to admins and members only.',
+      },
+      HttpStatus.FORBIDDEN,
+    );
   }
 
   private buildRequestPayload(
@@ -701,9 +744,17 @@ export class AiService {
 
   private async validateAndExecuteAction(
     userId: string,
+    actorRole: UserRole,
     action: string,
     params: unknown,
   ): Promise<ActionExecutionResult> {
+    if (actorRole !== UserRole.member) {
+      return {
+        actionTriggered: null,
+        actionResult: null,
+      };
+    }
+
     const validatedAction = this.validateAction(action);
 
     if (!validatedAction || validatedAction === 'NONE') {
@@ -978,6 +1029,7 @@ export class AiService {
     history: AiChatMessageRecord[],
     userContext: AIChatInput['userContext'],
     message: string,
+    assistantScope: AssistantScope,
   ): AIChatInput {
     return {
       messages: [
@@ -994,6 +1046,7 @@ export class AiService {
       sessionContext: {
         session_id: session.id,
         context_type: session.context_type,
+        assistant_scope: assistantScope,
       },
     };
   }
@@ -1003,52 +1056,71 @@ export class AiService {
     history: AiChatMessageRecord[],
     userContext: AIChatInput['userContext'],
     message: string,
+    assistantScope: AssistantScope,
   ): ChatPromptBlueprint {
     const messagePurpose = this.inferChatMessagePurpose(
       message,
       session.context_type,
     );
+    const isAdminBusiness = assistantScope === 'admin_business';
 
     return {
       version: 'v1',
       domain: 'chat',
-      persona:
-        'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
-      objective:
-        'Help the user make the safest useful next step inside FitTrack without inventing profile facts or overpromising.',
+      persona: isAdminBusiness
+        ? 'FitTrack admin business assistant: concise, operational, and grounded in gym management workflows.'
+        : 'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
+      objective: isAdminBusiness
+        ? 'Help admins reason about business operations, analytics interpretation, staffing, inventory, members as accounts, and management decisions without inventing live KPI values.'
+        : 'Help the user make the safest useful next step inside FitTrack without inventing profile facts or overpromising.',
       responseStyle: [
         'Keep replies brief and practical.',
-        'Use a supportive coach tone, not a lecture.',
+        isAdminBusiness
+          ? 'Use an operator tone, not member coaching language.'
+          : 'Use a supportive coach tone, not a lecture.',
         'Ask at most one clarifying question when the next step is unclear.',
         'Prefer specific next actions over generic motivation.',
       ],
-      guardrails: [
-        'Do not invent weights, measurements, meal logs, plan adherence, or other profile facts that are not in the provided context or chat history.',
-        'Do not claim a logged action or plan update unless the requested action is supported by the visible context and response policy.',
-        'Do not provide medical diagnosis or emergency guidance; safely redirect when the user asks for medical advice.',
-        'Stay inside the current FitTrack workflow and keep the reply grounded in the user context and recent conversation.',
-      ],
+      guardrails: isAdminBusiness
+        ? [
+            'Answer only gym business, admin, and operations questions.',
+            'Do not provide workout programming, fitness coaching, macros, TDEE changes, or meal logging.',
+            'Do not invent live KPI values; direct admins to Analytics or Generate Insights for source-of-truth numbers.',
+            'Keep the reply grounded in the visible context and recent conversation.',
+          ]
+        : [
+            'Do not invent weights, measurements, meal logs, plan adherence, or other profile facts that are not in the provided context or chat history.',
+            'Do not claim a logged action or plan update unless the requested action is supported by the visible context and response policy.',
+            'Do not answer business analytics, revenue, staffing, inventory, or admin operations questions.',
+            'Do not provide medical diagnosis or emergency guidance; safely redirect when the user asks for medical advice.',
+            'Stay inside the current FitTrack workflow and keep the reply grounded in the user context and recent conversation.',
+          ],
       actionPolicy: {
-        allowedActions: [
-          'ADJUST_TDEE',
-          'GENERATE_PLAN',
-          'LOG_NUTRITION',
-          'NONE',
-        ],
-        triggerNotes: [
-          'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',
-          'Return ADJUST_TDEE when the user asks to recalculate calories or macros.',
-          'Return LOG_NUTRITION when the user is clearly asking to log a meal or nutrition entry.',
-          'Return NONE for general coaching, clarification, or unsupported requests.',
-        ],
+        allowedActions: isAdminBusiness
+          ? ['NONE']
+          : ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE'],
+        triggerNotes: isAdminBusiness
+          ? [
+              'Always return NONE for admin business chat.',
+              'Point admins to Analytics or Generate Insights for live metric generation.',
+            ]
+          : [
+              'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',
+              'Return ADJUST_TDEE when the user asks to recalculate calories or macros.',
+              'Return LOG_NUTRITION when the user is clearly asking to log a meal or nutrition entry.',
+              'Return NONE for general coaching, clarification, or unsupported requests.',
+            ],
         safetyNotes: [
           'Prefer NONE when the intent is ambiguous rather than guessing.',
-          'If the request is outside scope, acknowledge the limitation and steer back to training, nutrition, or TDEE guidance.',
+          isAdminBusiness
+            ? 'If the request is outside scope, acknowledge the limitation and steer back to business operations guidance.'
+            : 'If the request is outside scope, acknowledge the limitation and steer back to training, nutrition, or TDEE guidance.',
         ],
       },
       context: {
         sessionId: session.id,
         contextType: session.context_type,
+        assistantScope,
         recentMessageCount: history.length,
         latestUserMessage: message,
         userContext,

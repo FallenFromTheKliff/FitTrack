@@ -26,6 +26,7 @@ class AssistantChatUserContext(StrictModel):
 class AssistantChatSessionContext(StrictModel):
     session_id: str = Field(min_length=1)
     context_type: str = Field(min_length=1)
+    assistant_scope: Literal["admin_business", "member_fitness"] = "member_fitness"
 
 
 class AssistantChatRequest(StrictModel):

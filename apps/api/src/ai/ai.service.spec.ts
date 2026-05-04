@@ -5,6 +5,7 @@ import {
   ChatRole,
   ExerciseCategory,
   FitnessGoal,
+  UserRole,
 } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -321,10 +322,11 @@ describe('AiService', () => {
             content: 'I want help with meal planning.',
           },
         ],
-        sessionContext: {
+        sessionContext: expect.objectContaining({
           session_id: 'session-1',
           context_type: ChatContext.general,
-        },
+          assistant_scope: 'member_fitness',
+        }),
       }),
     );
     expect(aiChatMessageRepository.createMessage).toHaveBeenNthCalledWith(1, {
@@ -380,6 +382,105 @@ describe('AiService', () => {
       }),
     );
   });
+
+  it('scopes admin chat to business operations and suppresses assistant actions', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: null,
+        gender: null,
+        weight_kg: null,
+        height_cm: null,
+        activity_level: null,
+        fitness_goal: null,
+      },
+    });
+    aiChatSessionRepository.findOwnedActiveSessionByContext.mockResolvedValue(
+      null,
+    );
+    aiChatSessionRepository.createSession.mockResolvedValue({
+      id: 'admin-session-1',
+      user_id: 'admin-1',
+      context_type: ChatContext.general,
+      title: null,
+      is_active: true,
+      last_activity_at: new Date('2026-03-27T05:00:00.000Z'),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+    aiChatMessageRepository.listRecentMessagesBySessionId.mockResolvedValue([]);
+    aiClient.chat.mockResolvedValue({
+      content: 'Review revenue, attendance, and staffing before the next shift.',
+      action: 'GENERATE_PLAN',
+      params: { duration_weeks: 4, days_per_week: 3 },
+      token_count: 64,
+      model_used: 'fittrack-llama',
+    });
+    aiInteractionLogRepository.createInteractionLog.mockResolvedValue({
+      id: 'admin-log-1',
+    });
+
+    await expect(
+      service.chat('admin-1', UserRole.admin, {
+        message: 'Which revenue and attendance issues should I review?',
+      }),
+    ).resolves.toEqual({
+      session_id: 'admin-session-1',
+      reply: 'Review revenue, attendance, and staffing before the next shift.',
+      action_triggered: null,
+      action_result: null,
+    });
+
+    expect(aiClient.chat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionContext: expect.objectContaining({
+          session_id: 'admin-session-1',
+          context_type: ChatContext.general,
+          assistant_scope: 'admin_business',
+        }),
+      }),
+    );
+    expect(trainingPlanService.createAiGeneratedPlan).not.toHaveBeenCalled();
+    expect(nutritionService.recalculateTdee).not.toHaveBeenCalled();
+    expect(nutritionService.logNutrition).not.toHaveBeenCalled();
+    expect(
+      aiInteractionLogRepository.createInteractionLog,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestPayload: expect.objectContaining({
+          promptBlueprint: expect.objectContaining({
+            persona:
+              'FitTrack admin business assistant: concise, operational, and grounded in gym management workflows.',
+            actionPolicy: expect.objectContaining({
+              allowedActions: ['NONE'],
+            }),
+            context: expect.objectContaining({
+              assistantScope: 'admin_business',
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each([UserRole.staff, UserRole.coach])(
+    'denies %s BrodigyAI access before resolving chat sessions',
+    async (role) => {
+      await expect(
+        service.chat('staff-1', role, {
+          message: 'Can BrodigyAI help with revenue today?',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          status: 403,
+        }),
+      });
+
+      expect(
+        aiChatSessionRepository.findOwnedActiveSessionByContext,
+      ).not.toHaveBeenCalled();
+      expect(aiClient.chat).not.toHaveBeenCalled();
+    },
+  );
 
   it('reuses an existing active context session without creating a replacement', async () => {
     userService.getMyProfile.mockResolvedValue({
@@ -585,10 +686,11 @@ describe('AiService', () => {
     });
     expect(aiClient.chat).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionContext: {
+        sessionContext: expect.objectContaining({
           session_id: 'fresh-session',
           context_type: ChatContext.nutrition,
-        },
+          assistant_scope: 'member_fitness',
+        }),
       }),
     );
   });

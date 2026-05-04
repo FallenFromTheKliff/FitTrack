@@ -10,8 +10,9 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useDebounce } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { canAccessWebPage, isWebPortalRole } from "@/lib/portal-access";
-import { layoutStyles } from "@/styles/layoutStyles";
+import { SIDEBAR_WIDTH, layoutStyles } from "@/styles/layoutStyles";
 
+import { AnalyticsSectionFilterProvider } from "@/contexts/AnalyticsSectionFilterContext";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 
@@ -31,6 +32,11 @@ function getPageKey(pathname: string): PageKey {
   return "dashboard";
 }
 
+const BACKGROUND_LINES = Array.from({ length: 4 }, (_, index) => index);
+const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
+  index % 2 === 0 ? "FITTRACK" : "SERTFIT",
+);
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { colors, activeThemeKey } = useTheme();
@@ -41,8 +47,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pageKey = getPageKey(pathname);
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
-    useState(false);
   const mobileSidebarRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const debouncedViewportWidth = useDebounce(viewportWidth, 120);
@@ -74,22 +78,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     window.addEventListener("resize", evaluateViewportMode);
     return () => window.removeEventListener("resize", evaluateViewportMode);
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("fittrack:web-sidebar-collapsed");
-    if (saved === "true") {
-      setIsDesktopSidebarCollapsed(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      "fittrack:web-sidebar-collapsed",
-      isDesktopSidebarCollapsed ? "true" : "false",
-    );
-  }, [isDesktopSidebarCollapsed]);
 
   useEffect(() => {
     if (!isMobileOpen) return;
@@ -127,29 +115,54 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   let content = (
     <div className={themeTransition} style={s.root}>
+      <div
+        className="fit-layout-background"
+        style={s.backgroundLayer}
+        aria-hidden="true"
+      >
+        {BACKGROUND_LINES.map((line) => (
+          <div
+            key={line}
+            className="fit-layout-background-line"
+            style={s.backgroundLine(line)}
+          >
+            {BACKGROUND_WORDS.map((word, index) => (
+              <span key={`${line}-${index}`} style={s.backgroundWord(index)}>
+                {word}
+              </span>
+            ))}
+          </div>
+        ))}
+        <div
+          className="fit-layout-background-fade"
+          style={s.backgroundFadeLeft}
+        />
+        <div
+          className="fit-layout-background-fade"
+          style={s.backgroundFadeRight}
+        />
+      </div>
       {!isHalfScreenOrLess ? (
         <div
           style={{
             ...s.desktopSidebarWrap,
-            width: isDesktopSidebarCollapsed ? 96 : 300,
-            transition: "width 220ms ease",
+            width: SIDEBAR_WIDTH,
           }}
         >
-          <Sidebar
-            collapsed={isDesktopSidebarCollapsed}
-            onCollapseToggle={() =>
-              setIsDesktopSidebarCollapsed((value) => !value)
-            }
-          />
+          <Sidebar />
         </div>
       ) : null}
       <div style={s.main}>
-        <Header
-          onMenuToggle={() => setIsMobileOpen((v) => !v)}
-          showMenuButton={isHalfScreenOrLess}
-          pageKey={pageKey}
-        />
-        <main style={s.content}>{children}</main>
+        <AnalyticsSectionFilterProvider key={pageKey}>
+          <main style={s.content}>
+            <Header
+              onMenuToggle={() => setIsMobileOpen((v) => !v)}
+              showMenuButton={isHalfScreenOrLess}
+              pageKey={pageKey}
+            />
+            <div style={s.contentBody}>{children}</div>
+          </main>
+        </AnalyticsSectionFilterProvider>
       </div>
       {isHalfScreenOrLess ? (
         <>

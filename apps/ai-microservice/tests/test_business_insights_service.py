@@ -327,7 +327,7 @@ def test_generate_business_insight_retries_with_openrouter_free_model_after_rate
 
     def fake_post(*args, **kwargs):
         calls.append(kwargs["json"])
-        if len(calls) < 3:
+        if len(calls) < 4:
             return RateLimitedResponse()
         return FreeAcceptedResponse()
 
@@ -339,7 +339,75 @@ def test_generate_business_insight_retries_with_openrouter_free_model_after_rate
     assert response.token_count == 88
     assert calls[0]["model"] == "openrouter/test-model"
     assert calls[1]["model"] == "openrouter/test-model"
-    assert calls[2]["model"] == "openrouter/free"
+    assert calls[2]["model"] == "openrouter/test-model"
+    assert "response_format" not in calls[2]
+    assert calls[3]["model"] == "openrouter/free"
+
+
+def test_generate_business_insight_retries_after_invalid_200_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    provider = OpenRouterBusinessInsightProvider()
+    request = _build_request()
+    calls: list[dict[str, object]] = []
+
+    class InvalidAcceptedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/test-model",
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({"summary": "Missing fields"})
+                        }
+                    }
+                ],
+            }
+
+    class ValidAcceptedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/test-model",
+                "usage": {"total_tokens": 102},
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "Revenue is holding steady.",
+                                    "highlights": ["Attendance stayed consistent."],
+                                    "risks": ["Peak-hour pressure remains."],
+                                    "opportunities": ["Pair retail prompts with check-ins."],
+                                    "anomaly_flags": [],
+                                    "recommended_actions": ["Review staffing at 06:00."],
+                                }
+                            )
+                        }
+                    }
+                ],
+            }
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return InvalidAcceptedResponse()
+        return ValidAcceptedResponse()
+
+    monkeypatch.setattr("app.services.business_insights.httpx.post", fake_post)
+
+    response = provider.generate_business_insight(request)
+
+    assert response.summary == "Revenue is holding steady."
+    assert response.model_used == "openrouter/test-model"
+    assert response.token_count == 102
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[1]["response_format"]["type"] == "json_object"
 
 
 def test_generate_business_insight_parses_code_fenced_json(

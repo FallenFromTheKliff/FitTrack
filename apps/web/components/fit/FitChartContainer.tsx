@@ -15,6 +15,10 @@ type Props = {
   minWidth?: number;
   minHeight?: number;
   aspect?: number;
+  initialDimension?: {
+    width: number;
+    height: number;
+  };
   sectionClassName?: string;
   chartStyle?: CSSProperties;
   contentPadding?: string;
@@ -33,6 +37,7 @@ export default function FitChartContainer({
   minWidth,
   minHeight,
   aspect,
+  initialDimension,
   sectionClassName,
   chartStyle,
   contentPadding = "20px 16px 10px",
@@ -52,7 +57,7 @@ export default function FitChartContainer({
           </div>
         ) : null}
         <div style={{ width: typeof width === "number" ? `${width}px` : width, height, ...chartStyle }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={minWidth} minHeight={minHeight} aspect={aspect}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={minWidth} minHeight={minHeight} aspect={aspect} initialDimension={initialDimension}>
             {children}
           </ResponsiveContainer>
         </div>

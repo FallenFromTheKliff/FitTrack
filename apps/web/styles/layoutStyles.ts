@@ -3,62 +3,113 @@ import { themes } from "@fittrack/ui/theme";
 import type { ThemeColors } from "@fittrack/ui/tokens";
 import type { ThemeKey } from "@fittrack/types";
 import { getReadableTextColor } from "@fittrack/utils";
-function getLayoutBackground(colors: ThemeColors, activeThemeKey?: ThemeKey): string {
-    switch (activeThemeKey) {
-        case "night":
-            return "#151515";
-        case "dark":
-            return colors.base;
-        case "navy":
-            return colors.base;
-        default:
-            return colors.base;
-    }
+
+export const SIDEBAR_WIDTH = 280;
+
+function getLayoutBackground(colors: ThemeColors): string {
+    return colors.base;
 }
 
 function getSidebarBackground(colors: ThemeColors, activeThemeKey?: ThemeKey): string {
     switch (activeThemeKey) {
         case "sunlight":
-            return "#F3ECE3";
+            return colors.surfaceRaised;
         case "dark":
-            return "#121212";
+            return colors.surfaceRaised;
         case "light":
-            return "#E7EEF6";
+            return colors.surfaceRaised;
         case "navy":
-            return "#1B2531";
+            return colors.surfaceRaised;
         default:
-            return colors.base;
+            return colors.surfaceRaised;
     }
 }
 
 export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
-    const layoutBg = getLayoutBackground(colors, activeThemeKey);
+    const layoutBg = getLayoutBackground(colors);
+    const backgroundClusterColors = [colors.border, colors.surfaceRaised] as const;
 
     return {
         root: {
             display: "flex",
             height: "100vh",
             overflow: "hidden",
+            backgroundColor: layoutBg,
+            position: "relative",
+            isolation: "isolate"
+        } as CSSProperties,
+        backgroundLayer: {
+            zIndex: 0,
             backgroundColor: layoutBg
+        } as CSSProperties,
+        backgroundLine: (index: number): CSSProperties => {
+            const clusterIndex = index % backgroundClusterColors.length;
+            const clusterColor = backgroundClusterColors[clusterIndex];
+
+            return {
+                left: -420,
+                right: -420,
+                top: `${-9 + index * 32}%`,
+                transform: "rotate(-3deg)",
+                gap: 0,
+                padding: "14px 0 16px",
+                borderTop: `7px solid ${clusterColor}`,
+                borderBottom: `7px solid ${clusterColor}`,
+                color: clusterColor,
+                opacity: activeThemeKey === "sunlight" || activeThemeKey === "light" ? 0.056 : 0.07,
+                filter: "blur(1px)",
+                fontSize: clusterIndex === 0 ? 192 : 176,
+                lineHeight: 0.9,
+                fontWeight: 900,
+                letterSpacing: 0,
+                userSelect: "none"
+            };
+        },
+        backgroundWord: (_index: number): CSSProperties => ({
+            color: "inherit"
+        }),
+        backgroundFadeLeft: {
+            left: 0,
+            width: "clamp(96px, 9vw, 170px)",
+            background: `linear-gradient(90deg, ${layoutBg} 0%, transparent 100%)`
+        } as CSSProperties,
+        backgroundFadeRight: {
+            right: 0,
+            width: "clamp(96px, 9vw, 170px)",
+            background: `linear-gradient(270deg, ${layoutBg} 0%, transparent 100%)`
         } as CSSProperties,
         desktopSidebarWrap: {
             height: "100vh",
             overflow: "hidden",
-            flexShrink: 0
+            flexShrink: 0,
+            position: "relative",
+            zIndex: 2
         } as CSSProperties,
         main: {
             display: "flex",
             flexDirection: "column",
             flex: 1,
             minHeight: 0,
-            overflow: "hidden"
+            overflow: "hidden",
+            position: "relative",
+            zIndex: 1
         } as CSSProperties,
         content: {
             flex: 1,
             minHeight: 0,
+            overflow: "hidden",
+            padding: "22px 18px 0",
+            backgroundColor: "transparent",
+            display: "flex",
+            flexDirection: "column"
+        } as CSSProperties,
+        contentBody: {
+            flex: 1,
+            minHeight: 0,
+            display: "block",
             overflowY: "auto",
-            padding: "10px 18px 18px",
-            backgroundColor: layoutBg
+            overflowX: "hidden",
+            paddingBottom: 18
         } as CSSProperties,
         mobileSidebarBackdrop: {
             zIndex: 40,
@@ -67,7 +118,7 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         mobileSidebarPanel: {
             zIndex: 45,
             backgroundColor: colors.base,
-            width: "min(84vw, 300px)"
+            width: `min(84vw, ${SIDEBAR_WIDTH}px)`
         } as CSSProperties,
         notificationsBackdrop: {
             position: "fixed",
@@ -177,70 +228,83 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
     };
 }
 
-export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
-    const headerBg = getLayoutBackground(colors, activeThemeKey);
+export function headerStyles(colors: ThemeColors) {
     const onDanger = getReadableTextColor(colors.danger, colors.textPrimary, themes.sunlight.surface);
 
     return {
         header: {
-            minHeight: 84,
+            minHeight: 82,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             flexShrink: 0,
-            position: "sticky",
-            top: 0,
+            position: "relative",
             zIndex: 30,
-            borderBottom: `1px solid ${colors.border}`,
-            backgroundColor: headerBg
+            borderBottom: "none",
+            backgroundColor: "transparent",
+            marginBottom: 16
         } as CSSProperties,
         leftSection: {
-            flex: 9,
+            flex: "1 1 auto",
+            minWidth: 0,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "flex-start",
-            padding: "8px 18px",
+            padding: 0,
             gap: 10,
-            backgroundColor: headerBg
+            backgroundColor: "transparent"
         } as CSSProperties,
         rightSection: {
             flex: "0 0 auto",
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-end",
-            padding: "0 14px",
+            gap: 10,
+            padding: "4px 0 0",
             position: "relative",
             backgroundColor: "transparent",
             borderLeft: "none",
             overflow: "visible"
         } as CSSProperties,
+        analyticsHeaderFilterWrap: {
+            display: "inline-flex",
+            alignItems: "center",
+            minWidth: 0,
+            flexShrink: 0
+        } as CSSProperties,
+        analyticsHeaderFilter: {
+            minWidth: 154,
+            height: 32,
+            backgroundColor: colors.surfaceRaised,
+            border: `1px solid ${colors.border}`,
+            color: colors.textPrimary,
+            fontSize: 12
+        } as CSSProperties,
         messageWrap: {
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
+            justifyContent: "flex-start",
             minWidth: 0,
             flex: 1
         } as CSSProperties,
         messageTitle: {
-            fontSize: 20,
-            fontWeight: 700,
-            lineHeight: 1.2,
+            fontSize: 38,
+            fontWeight: 500,
+            lineHeight: 1.08,
             margin: 0,
             display: "block",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
+            whiteSpace: "normal",
+            overflowWrap: "break-word"
         } as CSSProperties,
         messageSubtitle: {
-            fontSize: 12,
-            color: colors.textSecondary,
-            marginTop: 5,
+            fontSize: 15,
+            color: colors.brandLight,
+            marginTop: 8,
             marginBottom: 0,
             lineHeight: 1.35,
             paddingBottom: 2,
             display: "block",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
+            whiteSpace: "normal",
+            overflowWrap: "break-word"
         } as CSSProperties,
         iconBtn: {
             width: 40,
@@ -260,8 +324,8 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
-            minWidth: 44,
-            minHeight: 44,
+            minWidth: 36,
+            minHeight: 36,
             backgroundColor: "transparent",
             border: "none",
             boxShadow: "none",
@@ -300,7 +364,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
 }
 
 export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
-    const onBrand = getReadableTextColor(colors.brand, themes.sunlight.textPrimary, colors.textPrimary);
+    const onBrand = colors.onBrand ?? getReadableTextColor(colors.brand, themes.sunlight.surface, colors.textPrimary);
 
     const sidebarBg = getSidebarBackground(colors, activeThemeKey);
     const sidebarBorder = colors.border;
@@ -317,11 +381,11 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         sidebar: {
             backgroundColor: sidebarBg,
             borderRight: `1px solid ${sidebarBorder}`,
-            padding: "0 14px 20px",
+            padding: "8px 14px 10px",
             display: "flex",
             flexDirection: "column",
             height: "100vh",
-            width: 300,
+            width: SIDEBAR_WIDTH,
             overflow: "hidden"
         } as CSSProperties,
         logoRow: {
@@ -329,7 +393,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             alignItems: "center",
             gap: 10,
             minWidth: 0,
-            minHeight: 88,
+            minHeight: 58,
             padding: "0 6px",
             marginTop: 0,
             marginBottom: 0,
@@ -339,7 +403,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             width: "100%",
             height: 1,
             backgroundColor: separatorColor,
-            marginBottom: 14,
+            marginBottom: 10,
             flexShrink: 0
         } as CSSProperties,
         logoTitle: {
@@ -362,8 +426,9 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "flex",
             flexDirection: "column",
             gap: 10,
-            padding: "14px 14px",
+            padding: "7px 12px",
             borderRadius: 12,
+            marginTop: 2,
             marginBottom: 10,
             cursor: "pointer",
             backgroundColor: cardBg,
@@ -382,13 +447,13 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             width: "100%",
             height: 1,
             backgroundColor: separatorColor,
-            marginBottom: 14,
+            marginBottom: 10,
             flexShrink: 0
         } as CSSProperties,
         profileCardAvatar: {
-            width: 56,
-            height: 56,
-            borderRadius: 16,
+            width: 44,
+            height: 44,
+            borderRadius: 14,
             backgroundColor: colors.brand,
             border: `1px solid ${colors.border}`,
             display: "flex",
@@ -417,7 +482,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            marginTop: 8,
+            marginTop: 4,
             marginLeft: -1,
             alignSelf: "flex-start",
             border: `1px solid ${colors.border}`,
@@ -429,7 +494,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         } as CSSProperties,
         profileManage: {
             display: "block",
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: 600,
             color: manageText,
             margin: 0,
@@ -437,22 +502,42 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         } as CSSProperties,
         navList: {
             flex: 1,
-            overflowY: "auto",
+            overflow: "visible",
             display: "flex",
             flexDirection: "column",
-            gap: 14,
-            paddingBottom: 16
+            gap: 8,
+            paddingBottom: 0
+        } as CSSProperties,
+        navSection: {
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            flexShrink: 0
+        } as CSSProperties,
+        navSectionLabel: {
+            fontSize: 10,
+            fontWeight: 800,
+            lineHeight: 1,
+            color: colors.textMuted,
+            letterSpacing: 0,
+            textTransform: "uppercase",
+            padding: "0 12px 4px"
+        } as CSSProperties,
+        navSectionItems: {
+            display: "flex",
+            flexDirection: "column",
+            gap: 3
         } as CSSProperties,
         navItem: (active: boolean): CSSProperties => ({
             display: "flex",
             alignItems: "center",
             gap: 12,
-            padding: "12px 14px",
+            padding: "9px 12px",
             borderRadius: 12,
             cursor: "pointer",
             backgroundColor: active ? colors.brand : "transparent",
             color: active ? onBrand : textMuted,
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: active ? 600 : 400,
             border: "none",
             width: "100%",
@@ -462,7 +547,7 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             overflow: "hidden",
             whiteSpace: "nowrap"
         }),
-                navLabel: (active: boolean): CSSProperties => ({
+        navLabel: (active: boolean): CSSProperties => ({
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -480,15 +565,15 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             width: "100%",
             height: 1,
             backgroundColor: separatorColor,
-            marginTop: 10,
-            marginBottom: 12,
+            marginTop: 4,
+            marginBottom: 6,
             flexShrink: 0
         } as CSSProperties,
         logoutBtn: {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            padding: "14px 14px",
+            padding: "8px 14px",
             marginTop: 0,
             borderRadius: 12,
             cursor: "pointer",
