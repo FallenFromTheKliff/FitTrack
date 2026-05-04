@@ -13,10 +13,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /uvx /bin/
 RUN addgroup --system --gid 1001 python \
     && adduser --system --uid 1001 aiuser --ingroup python
 
-COPY pyproject.toml uv.lock ./
+COPY apps/ai-microservice/pyproject.toml apps/ai-microservice/uv.lock ./
 RUN uv sync --frozen --no-dev
 
-COPY --chown=aiuser:python app ./app
+COPY --chown=aiuser:python apps/ai-microservice/app ./app
 
 USER aiuser
 
