@@ -247,6 +247,37 @@ export interface AdminGamificationOverviewRecord {
   recentModerationActions: AdminOverviewModerationActionRecord[];
 }
 
+export type AdminSeasonListRecord = Prisma.SeasonDefinitionGetPayload<{
+  include: {
+    standings: {
+      select: {
+        is_disqualified: true;
+        is_hidden: true;
+      };
+    };
+  };
+}>;
+
+export type AdminSeasonStandingRecord = Prisma.SeasonalStandingGetPayload<{
+  include: {
+    season: true;
+    user: {
+      include: {
+        profile: {
+          select: {
+            first_name: true;
+            last_name: true;
+          };
+        };
+        ranking_profile: true;
+        progression_profile: true;
+        muscle_mastery: true;
+        milestone_progress: true;
+      };
+    };
+  };
+}>;
+
 export interface SeasonStatusUpdateResult {
   archivedAt: Date | null;
   closedAt: Date | null;
@@ -780,6 +811,157 @@ export class GamificationRepository extends BaseRepository {
     });
   }
 
+  listAdminSeasons(input?: {
+    includeArchived?: boolean;
+  }): Promise<AdminSeasonListRecord[]> {
+    return this.prisma.seasonDefinition.findMany({
+      where: input?.includeArchived
+        ? {}
+        : { status: { not: SeasonStatus.archived } },
+      include: {
+        standings: {
+          select: {
+            is_disqualified: true,
+            is_hidden: true,
+          },
+        },
+      },
+      orderBy: [{ starts_at: 'desc' }, { updated_at: 'desc' }],
+    });
+  }
+
+  async listAdminSeasonStandings(input: {
+    governanceStatus?: RankingGovernanceStatus;
+    includeArchived?: boolean;
+    limit?: number;
+    muscleKey?: string;
+    page?: number;
+    search?: string;
+    seasonId?: string;
+    visibility?: RankingVisibility;
+  }): Promise<PaginatedResult<AdminSeasonStandingRecord>> {
+    const page = input.page ?? 1;
+    const limit = input.limit ?? 20;
+    const trimmedSearch = input.search?.trim();
+    const trimmedMuscleKey = input.muscleKey?.trim();
+    const userWhere: Prisma.UserWhereInput = {};
+
+    if (trimmedMuscleKey) {
+      userWhere.muscle_mastery = {
+        some: {
+          muscle_group: {
+            contains: trimmedMuscleKey,
+            mode: 'insensitive',
+          },
+        },
+      };
+    }
+
+    if (input.visibility || input.governanceStatus) {
+      userWhere.ranking_profile = {
+        is: {
+          ...(input.visibility ? { visibility: input.visibility } : {}),
+          ...(input.governanceStatus
+            ? { governance_status: input.governanceStatus }
+            : {}),
+        },
+      };
+    }
+
+    const where: Prisma.SeasonalStandingWhereInput = {
+      ...(input.seasonId ? { season_id: input.seasonId } : {}),
+      season: input.includeArchived
+        ? {}
+        : {
+            status: { not: SeasonStatus.archived },
+          },
+      ...(Object.keys(userWhere).length ? { user: userWhere } : {}),
+      ...(trimmedSearch
+        ? {
+            OR: [
+              {
+                user: {
+                  profile: {
+                    is: {
+                      first_name: {
+                        contains: trimmedSearch,
+                        mode: 'insensitive',
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                user: {
+                  profile: {
+                    is: {
+                      last_name: {
+                        contains: trimmedSearch,
+                        mode: 'insensitive',
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                user: {
+                  ranking_profile: {
+                    is: {
+                      display_alias: {
+                        contains: trimmedSearch,
+                        mode: 'insensitive',
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.seasonalStanding.findMany({
+        where,
+        include: {
+          season: true,
+          user: {
+            include: {
+              profile: {
+                select: {
+                  first_name: true,
+                  last_name: true,
+                },
+              },
+              ranking_profile: true,
+              progression_profile: true,
+              muscle_mastery: true,
+              milestone_progress: true,
+            },
+          },
+        },
+        orderBy: [
+          { season: { starts_at: 'desc' } },
+          { season_points: 'desc' },
+          { updated_at: 'desc' },
+        ],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.seasonalStanding.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async updateSeasonStatus(input: {
     actorUserId: string;
     rationale: string;
@@ -1154,6 +1336,64 @@ export class GamificationRepository extends BaseRepository {
         },
       },
       orderBy: [{ is_hidden: 'asc' }, { created_at: 'asc' }],
+    });
+  }
+
+  getMilestoneProgressById(
+    userId: string,
+    milestoneDefinitionId: string,
+  ): Promise<MilestoneProgressRecord | null> {
+    return this.prisma.milestoneDefinition.findFirst({
+      where: {
+        id: milestoneDefinitionId,
+        is_active: true,
+        retired_at: null,
+      },
+      include: {
+        user_progress: {
+          where: {
+            user_id: userId,
+          },
+          take: 1,
+          orderBy: {
+            created_at: 'desc',
+          },
+        },
+      },
+    });
+  }
+
+  async claimMilestoneProgress(
+    userId: string,
+    milestoneDefinitionId: string,
+  ): Promise<MilestoneProgressRecord> {
+    const now = new Date();
+    await this.prisma.userMilestoneProgress.update({
+      where: {
+        user_id_milestone_definition_id: {
+          user_id: userId,
+          milestone_definition_id: milestoneDefinitionId,
+        },
+      },
+      data: {
+        status: MilestoneProgressStatus.claimed,
+        claimed_at: now,
+      },
+    });
+
+    return this.prisma.milestoneDefinition.findUniqueOrThrow({
+      where: { id: milestoneDefinitionId },
+      include: {
+        user_progress: {
+          where: {
+            user_id: userId,
+          },
+          take: 1,
+          orderBy: {
+            created_at: 'desc',
+          },
+        },
+      },
     });
   }
 

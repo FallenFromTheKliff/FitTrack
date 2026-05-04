@@ -286,6 +286,32 @@ describe('NutritionService', () => {
     expect(eventEmitter.emit).not.toHaveBeenCalled();
   });
 
+  it('rejects recalculation when the final date of birth is under the member age minimum', async () => {
+    const underageDate = new Date();
+    underageDate.setUTCFullYear(underageDate.getUTCFullYear() - 1);
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: underageDate,
+        gender: Gender.male,
+        weight_kg: new Prisma.Decimal('75'),
+        height_cm: new Prisma.Decimal('175'),
+        activity_level: ActivityLevel.moderate,
+        fitness_goal: FitnessGoal.cutting,
+      },
+    });
+
+    await expect(service.recalculateTdee('user-1', {})).rejects.toMatchObject({
+      response: {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Invalid Date Of Birth',
+        status: 422,
+      },
+    });
+    expect(aiClient.calculateTdee).not.toHaveBeenCalled();
+    expect(repo.rotateActiveTdeeSnapshot).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
   it('links new nutrition logs to the active macro target when one exists', async () => {
     repo.findActiveMacroTarget.mockResolvedValue({
       id: 'macro-1',

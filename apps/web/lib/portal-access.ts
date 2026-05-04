@@ -20,6 +20,8 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     schedule: WEB_PORTAL_ALLOWED_ROLES,
     "exercise-lab": WEB_PORTAL_ALLOWED_ROLES,
     gamification: ["ADMIN"],
+    "gym-actions": WEB_PORTAL_ALLOWED_ROLES,
+    "memberships-promos": WEB_PORTAL_ALLOWED_ROLES,
     ai: ["ADMIN", "STAFF"],
     facilities: ["ADMIN"],
     inventory: ["ADMIN", "STAFF"],

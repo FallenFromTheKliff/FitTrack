@@ -68,15 +68,46 @@ describe('UserService', () => {
       first_name: 'Fit',
       avatar_url: 'https://cdn.fittrack.test/avatars/fit.png',
       height_cm: 180,
-      date_of_birth: '2026-03-22T00:00:00.000Z',
+      date_of_birth: '1998-03-22T00:00:00.000Z',
     });
 
     expect(repo.updateProfile).toHaveBeenCalledWith('user-1', {
       first_name: 'Fit',
       avatar_url: 'https://cdn.fittrack.test/avatars/fit.png',
       height_cm: 180,
-      date_of_birth: new Date('2026-03-22T00:00:00.000Z'),
+      date_of_birth: new Date('1998-03-22T00:00:00.000Z'),
     });
+  });
+
+  it('rejects future or underage member profile birth dates', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
+    const nextYear = new Date().getUTCFullYear() + 1;
+    const underageYear = new Date().getUTCFullYear() - 1;
+
+    await expect(
+      service.updateMyProfile('user-1', {
+        date_of_birth: `${nextYear}-01-01`,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Invalid Date Of Birth',
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      },
+    });
+
+    await expect(
+      service.updateMyProfile('user-1', {
+        date_of_birth: `${underageYear}-01-01`,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Invalid Date Of Birth',
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      },
+    });
+    expect(repo.updateProfile).not.toHaveBeenCalled();
   });
 
   it('enriches /users/me aggregates with preferred email and phone fields', async () => {
@@ -503,6 +534,7 @@ describe('AttendanceService', () => {
 
   const repo = {
     findActiveUserByQrTokenOrThrow: jest.fn(),
+    findUserAggregateOrThrow: jest.fn(),
     findLatestDeletionRequest: jest.fn(),
     findOpenAttendanceToday: jest.fn(),
     createAttendanceLog: jest.fn(),
@@ -511,12 +543,17 @@ describe('AttendanceService', () => {
     checkoutAttendance: jest.fn(),
     getAllAttendance: jest.fn(),
   };
+  const eventEmitter = {
+    emit: jest.fn(),
+    emitAsync: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
         { provide: UserRepository, useValue: repo },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -554,6 +591,22 @@ describe('AttendanceService', () => {
     repo.findUserProfileByUserIdOrThrow.mockResolvedValue({
       first_name: 'Fit',
       last_name: 'Track',
+    });
+    repo.findUserAggregateOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      auth_identities: [
+        {
+          provider: 'email',
+          identifier: 'member@example.com',
+          is_primary: true,
+          verified_at: new Date('2026-03-22T00:00:00.000Z'),
+        },
+      ],
+      profile: {
+        first_name: 'Fit',
+        last_name: 'Track',
+      },
     });
 
     const result = await service.scanQr('staff-1', {

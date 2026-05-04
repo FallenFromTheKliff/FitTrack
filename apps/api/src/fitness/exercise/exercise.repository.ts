@@ -1,5 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import {
+  AuthProvider,
   CreatorProfile,
   CreatorState,
   ExerciseCatalog,
@@ -36,6 +37,12 @@ export type ActiveExerciseGenerationRecord = Pick<
 export type ExerciseReviewSubmissionRecord = ExerciseReviewSubmission;
 
 export type CreatorProfileRecord = CreatorProfile;
+
+export type CreatorUserIdentityRecord = {
+  auth_identities: { identifier: string }[];
+  id: string;
+  profile: { first_name: string; last_name: string } | null;
+};
 
 export type ExerciseReviewSubmissionStatusRecord = Pick<
   ExerciseReviewSubmission,
@@ -130,7 +137,52 @@ export class ExerciseRepository extends BaseRepository {
   ): Promise<PaginatedResult<ExerciseReviewSubmissionRecord>> {
     const where: Prisma.ExerciseReviewSubmissionWhereInput = {
       ...(dto.status ? { status: dto.status } : {}),
+      ...(dto.category ? { category: dto.category } : {}),
     };
+
+    if (dto.muscle_group?.trim()) {
+      where.muscle_group = {
+        contains: dto.muscle_group.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (dto.search?.trim()) {
+      const term = dto.search.trim();
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { proposed_name: { contains: term, mode: 'insensitive' } },
+        { summary: { contains: term, mode: 'insensitive' } },
+        { source_label: { contains: term, mode: 'insensitive' } },
+        { origin_label: { contains: term, mode: 'insensitive' } },
+        { queue_tag: { contains: term, mode: 'insensitive' } },
+        { trigger_label: { contains: term, mode: 'insensitive' } },
+        { match_hint: { contains: term, mode: 'insensitive' } },
+        { muscle_group: { contains: term, mode: 'insensitive' } },
+        {
+          user: {
+            profile: {
+              is: {
+                OR: [
+                  { first_name: { contains: term, mode: 'insensitive' } },
+                  { last_name: { contains: term, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
+        {
+          user: {
+            auth_identities: {
+              some: {
+                identifier: { contains: term, mode: 'insensitive' },
+                provider: AuthProvider.email,
+              },
+            },
+          },
+        },
+      ];
+    }
 
     return this.paginate<ExerciseReviewSubmissionRecord>(
       this.prisma.exerciseReviewSubmission,
@@ -185,6 +237,31 @@ export class ExerciseRepository extends BaseRepository {
 
     return this.prisma.creatorProfile.findMany({
       where: { user_id: { in: userIds } },
+    });
+  }
+
+  listCreatorUserIdentitiesByUserIds(
+    userIds: string[],
+  ): Promise<CreatorUserIdentityRecord[]> {
+    if (!userIds.length) return Promise.resolve([]);
+
+    return this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: {
+        auth_identities: {
+          orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+          select: { identifier: true },
+          take: 1,
+          where: { provider: AuthProvider.email },
+        },
+        id: true,
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
+      },
     });
   }
 

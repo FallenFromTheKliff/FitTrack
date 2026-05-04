@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "node --max-old-space-size=8192 ./node_modules/expo/bin/cli start --lan",
+    "dev": "node ./scripts/start-dev.cjs",
+    "dev:prime-android": "node ./scripts/prime-android-dev.cjs",
     "android": "node ./scripts/run-android.cjs",
     "ios": "node ./node_modules/expo/bin/cli run:ios",
     "web": "node ./node_modules/expo/bin/cli start --web",

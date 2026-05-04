@@ -4,11 +4,12 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type DragEvent,
   type MouseEvent,
 } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { Map } from "lucide-react";
+import { ImagePlus, Map } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 
@@ -78,6 +79,7 @@ type Props = {
     delta: { width: number; height: number },
   ) => void;
   isVenueSubmitting?: boolean;
+  isUploadingFloorImage?: boolean;
   onSubmitVenueEdit?: (
     venueMapId: string,
     data: Record<string, string>,
@@ -86,6 +88,7 @@ type Props = {
   onOpenEquipment: () => void;
   onSelectVenue: (venue: FloorVenueRecord) => void;
   onOpenVenues: () => void;
+  onUploadFloorImage?: (file: File) => void | Promise<void>;
 };
 
 type VenueCardProps = {
@@ -693,11 +696,13 @@ export function FloorPlanPanel({
   onNudgeVenue,
   onResizeVenue,
   isVenueSubmitting = false,
+  isUploadingFloorImage = false,
   onSubmitVenueEdit,
   onRequestVenueDelete,
   onOpenEquipment,
   onSelectVenue,
   onOpenVenues,
+  onUploadFloorImage,
 }: Props) {
   const gap = isCompact ? 1 : 2;
   const baseBrightness = brightness(colors.base);
@@ -709,6 +714,7 @@ export function FloorPlanPanel({
   const mapBackground = lowContrast ? darken(colors.base, 0.16) : colors.base;
   const markerBackground = lowContrast ? colors.surface : colors.surfaceRaised;
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const floorImageInputRef = useRef<HTMLInputElement | null>(null);
   const panStartRef = useRef<{
     pointerX: number;
     pointerY: number;
@@ -807,6 +813,15 @@ export function FloorPlanPanel({
 
   const updateVenueFormField = (field: string, value: string) => {
     setVenueFormData((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const handleFloorImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+
+    if (file && onUploadFloorImage) {
+      void onUploadFloorImage(file);
+    }
   };
 
   const handleSubmitVenueEdit = async () => {
@@ -981,6 +996,22 @@ export function FloorPlanPanel({
               variant="ghost"
               label="EQUIPMENT >"
               onClick={onOpenEquipment}
+            />
+            <input
+              ref={floorImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleFloorImageChange}
+            />
+            <FitButton
+              variant="ghost"
+              icon={ImagePlus}
+              label={renderableFloorImageUrl ? "REPLACE IMAGE" : "ADD IMAGE"}
+              loading={isUploadingFloorImage}
+              loadingLabel="UPLOADING"
+              disabled={!isEditMode || !onUploadFloorImage}
+              onClick={() => floorImageInputRef.current?.click()}
             />
           </div>
           <FitText style={{ fontSize: 11, color: colors.textMuted }}>

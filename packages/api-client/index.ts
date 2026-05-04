@@ -1,6 +1,7 @@
 import type { AxiosInstance } from "axios";
 import { createAiApi } from "./domains/ai";
 import { createAnalyticsApi } from "./domains/analytics";
+import { createAuditApi } from "./domains/audit";
 import { createAuthApi } from "./domains/auth";
 import { createUsersApi } from "./domains/users";
 import { createVenuesApi } from "./domains/venues";
@@ -45,6 +46,11 @@ export type {
   AiTrainingPlanDetailRecord,
   AiPaginationParams,
 } from "./domains/ai";
+export type {
+  AuditActorRecord,
+  AuditLogListParams,
+  AuditLogRecord,
+} from "./domains/audit";
 export type {
   AnalyticsAttendancePeakHourRecord,
   AnalyticsAttendanceRecord,
@@ -131,6 +137,7 @@ export type {
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMilestoneListParams,
   FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
@@ -164,7 +171,10 @@ export type {
 } from "./domains/fitness";
 export type { UploadedFileRecord } from "./domains/files";
 export type {
+  CreateGymPromotionInput,
+  GymKnowledgePaginationParams,
   GymProfileRecord,
+  GymPromotionRecord,
   UpdateGymProfileInput,
 } from "./domains/gym-knowledge";
 export type {
@@ -194,6 +204,7 @@ export type {
 } from "./domains/inventory";
 export type {
   CancelMembershipInput,
+  CreateMembershipPlanInput,
   MembershipCardPurchaseRecord,
   ManualMembershipPaymentInput,
   MembershipCheckoutRecord,
@@ -207,6 +218,7 @@ export type {
   PaginatedResult,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput,
 } from "./domains/membership";
 export type {
@@ -278,6 +290,9 @@ export type {
   AdminGamificationRankingOverrideInput,
   AdminGamificationRankingOverrideRecord,
   AdminGamificationSeasonGovernanceRecord,
+  AdminGamificationSeasonStandingListParams,
+  AdminGamificationSeasonStandingRecord,
+  AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
   ManualAttendanceCheckInInput,
   RestoreUserResult,
@@ -310,6 +325,7 @@ export function createApiClient(config: CreateApiClientConfig) {
     transport,
     ai: createAiApi(transport),
     analytics: createAnalyticsApi(transport),
+    audit: createAuditApi(transport),
     auth: createAuthApi(transport),
     users: createUsersApi(transport),
     venues: createVenuesApi(transport),

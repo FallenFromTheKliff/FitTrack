@@ -200,6 +200,25 @@ function toEquipmentDetailRow(
   };
 }
 
+function resolveQuantityForEquipmentStatus(
+  status: EquipmentAvailabilityStatus,
+  equipment: InventoryEquipmentTableRow | InventoryEquipmentDetailRow
+): number | string {
+  if (status === "Available") {
+    return equipment.quantityTotal;
+  }
+
+  if (status === "Broken") {
+    return 0;
+  }
+
+  if (equipment.quantityTotal <= 1) {
+    return "Under Maintenance requires more than one total unit in this count-based inventory model.";
+  }
+
+  return Math.max(1, equipment.quantityTotal - 1);
+}
+
 export function useInventoryDashboard() {
   const { user } = useAuth();
   const router = useRouter();
@@ -921,6 +940,7 @@ export function useInventoryDashboard() {
 
     const name = normalizeOptionalText(data.name);
     const unit = normalizeOptionalText(data.unit);
+    const nextStatus = data.status as EquipmentAvailabilityStatus | undefined;
 
     if (!name) {
       showMessage("Equipment name is required.");
@@ -930,11 +950,29 @@ export function useInventoryDashboard() {
       showMessage("Equipment unit is required.");
       return;
     }
+    if (
+      nextStatus !== "Available" &&
+      nextStatus !== "Under Maintenance" &&
+      nextStatus !== "Broken"
+    ) {
+      showMessage("Choose a valid equipment status.");
+      return;
+    }
+
+    const nextQuantityCurrent = resolveQuantityForEquipmentStatus(
+      nextStatus,
+      selectedEquipment
+    );
+    if (typeof nextQuantityCurrent === "string") {
+      showMessage(nextQuantityCurrent);
+      return;
+    }
 
     const payload: InventoryEquipmentUpdateInput = {
       description: normalizeOptionalText(data.description),
       imageUrl: normalizeOptionalText(detailEquipmentImageUrl),
       name,
+      quantityCurrent: nextQuantityCurrent,
       unit
     };
 

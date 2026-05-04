@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import {
   IsEnum,
+  IsBoolean,
   IsObject,
   IsOptional,
   IsString,
@@ -24,6 +25,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 import { TrimString } from '../../../common/validators/trim-string.decorator';
 import { PaginationDTO } from '../../../user/dto/user-dto';
@@ -451,6 +453,18 @@ export class MilestoneProgressResponseDTO {
     nullable: true,
   })
   updated_at: string | null;
+}
+
+export class MilestoneListFilterDTO {
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'When true, the client is intentionally rendering locked milestone definitions.',
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean({ message: 'include_locked must be a boolean' })
+  include_locked?: boolean;
 }
 
 export class IntegrityCaseSummaryResponseDTO {
@@ -912,6 +926,120 @@ export class AdminGamificationSeasonSummaryDTO {
 
   @ApiProperty({ example: 1 })
   disqualified_count: number;
+}
+
+export class AdminGamificationSeasonListItemDTO extends AdminGamificationSeasonSummaryDTO {}
+
+export class AdminSeasonStandingFilterDTO extends PaginationDTO {
+  @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333' })
+  @IsOptional()
+  @IsUUID('4', { message: 'season_id must be a valid UUID' })
+  season_id?: string;
+
+  @ApiPropertyOptional({ example: 'chest' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'muscle_key must be a string' })
+  @MaxLength(100, {
+    message: 'muscle_key must not exceed 100 characters',
+  })
+  muscle_key?: string;
+
+  @ApiPropertyOptional({ example: 'sera' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(100, {
+    message: 'search must not exceed 100 characters',
+  })
+  search?: string;
+
+  @ApiPropertyOptional({ enum: RankingVisibility })
+  @IsOptional()
+  @IsEnum(RankingVisibility, {
+    message: `visibility must be one of: ${Object.values(RankingVisibility).join(', ')}`,
+  })
+  visibility?: RankingVisibility;
+
+  @ApiPropertyOptional({ enum: RankingGovernanceStatus })
+  @IsOptional()
+  @IsEnum(RankingGovernanceStatus, {
+    message: `governance_status must be one of: ${Object.values(RankingGovernanceStatus).join(', ')}`,
+  })
+  governance_status?: RankingGovernanceStatus;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean({ message: 'include_archived must be a boolean' })
+  include_archived?: boolean;
+}
+
+export class AdminSeasonStandingRowDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  user_id: string;
+
+  @ApiProperty({ example: 'Fit Member' })
+  member_name: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Anonymous Phoenix',
+    nullable: true,
+  })
+  display_alias: string | null;
+
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  season_id: string;
+
+  @ApiProperty({ example: 'Spring 2026' })
+  season_title: string;
+
+  @ApiProperty({ enum: SeasonStatus, example: SeasonStatus.active })
+  season_status: SeasonStatus;
+
+  @ApiProperty({ example: 580 })
+  season_points: number;
+
+  @ApiPropertyOptional({ type: Number, example: 4, nullable: true })
+  rank_position: number | null;
+
+  @ApiProperty({ example: 2750 })
+  total_xp: number;
+
+  @ApiPropertyOptional({ type: String, example: 'chest', nullable: true })
+  top_muscle: string | null;
+
+  @ApiProperty({ example: 950 })
+  top_muscle_xp: number;
+
+  @ApiProperty({ example: 3 })
+  milestone_unlocked_count: number;
+
+  @ApiProperty({ example: 2 })
+  milestone_claimed_count: number;
+
+  @ApiProperty({ enum: RankingVisibility, example: RankingVisibility.public })
+  visibility: RankingVisibility;
+
+  @ApiProperty({
+    enum: RankingGovernanceStatus,
+    example: RankingGovernanceStatus.normal,
+  })
+  governance_status: RankingGovernanceStatus;
+
+  @ApiProperty({ example: false })
+  is_hidden: boolean;
+
+  @ApiProperty({ example: false })
+  is_disqualified: boolean;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-04-23T09:30:00.000Z',
+    nullable: true,
+  })
+  last_earned_at: string | null;
 }
 
 export class AdminGamificationIntegrityCaseDTO {

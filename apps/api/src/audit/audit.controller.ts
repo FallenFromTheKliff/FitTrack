@@ -72,8 +72,8 @@ export class AuditController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
-  @ApiOperation({ summary: 'List audit logs. Admin only.' })
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'List audit logs. Admin/Staff only.' })
   @ApiResponse({
     status: 200,
     description: 'Audit logs returned.',
@@ -85,8 +85,8 @@ export class AuditController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
-  @ApiOperation({ summary: 'Get one audit log entry. Admin only.' })
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'Get one audit log entry. Admin/Staff only.' })
   @ApiResponse({
     status: 200,
     description: 'Audit log returned.',

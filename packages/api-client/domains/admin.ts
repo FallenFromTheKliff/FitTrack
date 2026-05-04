@@ -7,6 +7,9 @@ import type {
   AdminGamificationRankingOverrideInput,
   AdminGamificationRankingOverrideRecord,
   AdminGamificationSeasonGovernanceRecord,
+  AdminGamificationSeasonStandingListParams,
+  AdminGamificationSeasonStandingRecord,
+  AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
   AttendanceCheckInRecord,
   CreateUserInput,
@@ -18,6 +21,7 @@ import { normalizePhilippineMobileNumber } from "@fittrack/validators";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import {
   getListFromEnvelope,
+  unwrapPaginatedResponse,
   unwrapResponse,
   unwrapVoidResponse,
 } from "../request";
@@ -32,6 +36,9 @@ export type {
   AdminGamificationRankingOverrideInput,
   AdminGamificationRankingOverrideRecord,
   AdminGamificationSeasonGovernanceRecord,
+  AdminGamificationSeasonStandingListParams,
+  AdminGamificationSeasonStandingRecord,
+  AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
 };
 
@@ -154,6 +161,40 @@ type AdminSeasonGovernanceApiRecord = {
   season_id: string;
   status: AdminGamificationSeasonGovernanceRecord["status"];
   title: string;
+};
+
+type AdminGamificationSeasonListApiRecord = {
+  archived_at: string | null;
+  closed_at: string | null;
+  disqualified_count: number;
+  ends_at: string;
+  hidden_count: number;
+  id: string;
+  standing_count: number;
+  starts_at: string;
+  status: AdminGamificationSeasonSummaryRecord["status"];
+  title: string;
+};
+
+type AdminSeasonStandingApiRecord = {
+  display_alias: string | null;
+  governance_status: AdminGamificationSeasonStandingRecord["governanceStatus"];
+  is_disqualified: boolean;
+  is_hidden: boolean;
+  last_earned_at: string | null;
+  member_name: string;
+  milestone_claimed_count: number;
+  milestone_unlocked_count: number;
+  rank_position: number | null;
+  season_id: string;
+  season_points: number;
+  season_status: AdminGamificationSeasonStandingRecord["seasonStatus"];
+  season_title: string;
+  top_muscle: string | null;
+  top_muscle_xp: number;
+  total_xp: number;
+  user_id: string;
+  visibility: AdminGamificationSeasonStandingRecord["visibility"];
 };
 
 type AdminCreatorStateApiRecord = {
@@ -280,6 +321,65 @@ function mapAdminSeasonGovernance(
     seasonId: record.season_id,
     status: record.status,
     title: record.title,
+  };
+}
+
+function mapAdminGamificationSeason(
+  record: AdminGamificationSeasonListApiRecord,
+): AdminGamificationSeasonSummaryRecord {
+  return {
+    archivedAt: record.archived_at,
+    closedAt: record.closed_at,
+    disqualifiedCount: record.disqualified_count,
+    endsAt: record.ends_at,
+    hiddenCount: record.hidden_count,
+    id: record.id,
+    standingCount: record.standing_count,
+    startsAt: record.starts_at,
+    status: record.status,
+    title: record.title,
+  };
+}
+
+function mapAdminSeasonStanding(
+  record: AdminSeasonStandingApiRecord,
+): AdminGamificationSeasonStandingRecord {
+  return {
+    displayAlias: record.display_alias,
+    governanceStatus: record.governance_status,
+    isDisqualified: record.is_disqualified,
+    isHidden: record.is_hidden,
+    lastEarnedAt: record.last_earned_at,
+    memberName: record.member_name,
+    milestoneClaimedCount: record.milestone_claimed_count,
+    milestoneUnlockedCount: record.milestone_unlocked_count,
+    rankPosition: record.rank_position,
+    seasonId: record.season_id,
+    seasonPoints: record.season_points,
+    seasonStatus: record.season_status,
+    seasonTitle: record.season_title,
+    topMuscle: record.top_muscle,
+    topMuscleXp: record.top_muscle_xp,
+    totalXp: record.total_xp,
+    userId: record.user_id,
+    visibility: record.visibility,
+  };
+}
+
+function toAdminSeasonStandingParams(
+  params?: AdminGamificationSeasonStandingListParams,
+) {
+  return {
+    ...(params?.page !== undefined ? { page: params.page } : {}),
+    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params?.seasonId ? { season_id: params.seasonId } : {}),
+    ...(params?.muscleKey ? { muscle_key: params.muscleKey } : {}),
+    ...(params?.search ? { search: params.search } : {}),
+    ...(params?.visibility ? { visibility: params.visibility } : {}),
+    ...(params?.governanceStatus
+      ? { governance_status: params.governanceStatus }
+      : {}),
+    ...(params?.includeArchived ? { include_archived: true } : {}),
   };
 }
 
@@ -498,6 +598,27 @@ export function createAdminApi(transport: ApiTransport) {
         "Unable to load gamification governance.",
       );
       return mapAdminGamificationOverview(data);
+    },
+    async listGamificationSeasons() {
+      const data = await unwrapResponse<AdminGamificationSeasonListApiRecord[]>(
+        transport.get("/admin/gamification/seasons"),
+        "Unable to load gamification seasons.",
+      );
+      return data.map(mapAdminGamificationSeason);
+    },
+    async listGamificationSeasonStandings(
+      params?: AdminGamificationSeasonStandingListParams,
+    ) {
+      const result = await unwrapPaginatedResponse<AdminSeasonStandingApiRecord>(
+        transport.get("/admin/gamification/season-standings", {
+          params: toAdminSeasonStandingParams(params),
+        }),
+        "Unable to load season standings.",
+      );
+      return {
+        ...result,
+        data: result.data.map(mapAdminSeasonStanding),
+      };
     },
     async updateGamificationSeasonStatus(
       seasonId: string,

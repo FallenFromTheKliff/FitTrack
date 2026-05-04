@@ -130,8 +130,11 @@ export type UpdateMuscleDefinitionInput = Partial<
 };
 
 export type FitnessExerciseReviewSubmissionListParams = {
+  category?: FitnessExerciseCategory;
   limit?: number;
+  muscleGroup?: string;
   page?: number;
+  search?: string;
   status?: ExerciseReviewSubmissionStatus;
 };
 
@@ -195,6 +198,10 @@ export type FitnessLeaderboardListParams = {
   page?: number;
 };
 
+export type FitnessMilestoneListParams = {
+  includeLocked?: boolean;
+};
+
 export type FitnessProgressionSourceListParams = {
   limit?: number;
   page?: number;
@@ -235,6 +242,17 @@ export type AdminGamificationIntegrityResolutionInput = {
   >;
 };
 
+export type AdminGamificationSeasonStandingListParams = {
+  governanceStatus?: FitnessRankingGovernanceStatus;
+  includeArchived?: boolean;
+  limit?: number;
+  muscleKey?: string;
+  page?: number;
+  search?: string;
+  seasonId?: string;
+  visibility?: FitnessRankingVisibility;
+};
+
 export type WorkoutSessionListParams = {
   endDate?: string;
   limit?: number;
@@ -262,6 +280,8 @@ export type FitnessExerciseRecord = {
 export type ExerciseReviewSubmissionRecord = {
   category: FitnessExerciseCategory;
   creatorCandidateScore: number;
+  creatorDisplayName: string | null;
+  creatorEmail: string | null;
   creatorGovernanceNote: string | null;
   creatorLastStateChangedAt: string | null;
   creatorProfileUpdatedAt: string | null;
@@ -1002,6 +1022,27 @@ export type AdminGamificationSeasonSummaryRecord = {
   startsAt: string;
   status: FitnessSeasonStatus;
   title: string;
+};
+
+export type AdminGamificationSeasonStandingRecord = {
+  displayAlias: string | null;
+  governanceStatus: FitnessRankingGovernanceStatus;
+  isDisqualified: boolean;
+  isHidden: boolean;
+  lastEarnedAt: string | null;
+  memberName: string;
+  milestoneClaimedCount: number;
+  milestoneUnlockedCount: number;
+  rankPosition: number | null;
+  seasonId: string;
+  seasonPoints: number;
+  seasonStatus: FitnessSeasonStatus;
+  seasonTitle: string;
+  topMuscle: string | null;
+  topMuscleXp: number;
+  totalXp: number;
+  userId: string;
+  visibility: FitnessRankingVisibility;
 };
 
 export type AdminGamificationIntegrityCaseRecord = {

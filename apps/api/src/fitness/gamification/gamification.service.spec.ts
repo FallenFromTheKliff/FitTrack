@@ -1,5 +1,5 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { MasteryRank, Prisma } from '@prisma/client';
 
@@ -22,6 +22,7 @@ describe('GamificationService', () => {
     getActiveSeasonStanding: jest.fn(),
     getIntegrityCaseById: jest.fn(),
     getIntegritySummary: jest.fn(),
+    getMilestoneProgressById: jest.fn(),
     getProgressionProfile: jest.fn(),
     getProgressionGrantById: jest.fn(),
     getRankingProfile: jest.fn(),
@@ -31,6 +32,8 @@ describe('GamificationService', () => {
     listMuscleMastery: jest.fn(),
     listProgressionSources: jest.fn(),
     listLeaderboardTotals: jest.fn(),
+    listAdminSeasons: jest.fn(),
+    listAdminSeasonStandings: jest.fn(),
     listWorkoutCompletionLogs: jest.fn(),
     recordPoseSessionProgressionSource: jest.fn(),
     reconcileWorkoutSourceReviewFromPose: jest.fn(),
@@ -41,6 +44,7 @@ describe('GamificationService', () => {
     upsertMuscleMasteryProgress: jest.fn(),
     updateMuscleMasteryRank: jest.fn(),
     updateSeasonStatus: jest.fn(),
+    claimMilestoneProgress: jest.fn(),
     voidProgressionGrant: jest.fn(),
   };
 
@@ -259,6 +263,51 @@ describe('GamificationService', () => {
       reviewRequiredMarkers: ['low_classification_confidence'],
     },
     ...overrides,
+  });
+
+  const makeMilestoneRecord = (
+    status: 'in_progress' | 'unlocked' | 'claimed' = 'unlocked',
+    definitionOverrides: Record<string, unknown> = {},
+    progressOverrides: Record<string, unknown> | null = {},
+  ) => ({
+    id: 'milestone-1',
+    key: 'first-workout-complete',
+    title: 'First Workout Complete',
+    description: 'Complete your first tracked workout session.',
+    category: 'training',
+    trigger_type: 'source_event',
+    condition_payload: { target: 1, metric: 'completed_workout_sessions' },
+    reward_payload: { badge_tone: 'ember' },
+    is_active: true,
+    is_hidden: false,
+    retired_at: null,
+    created_at: new Date('2026-03-27T01:00:00.000Z'),
+    updated_at: new Date('2026-03-27T01:00:00.000Z'),
+    ...definitionOverrides,
+    user_progress:
+      progressOverrides === null
+        ? []
+        : [
+            {
+              id: 'progress-1',
+              user_id: 'user-1',
+              milestone_definition_id: 'milestone-1',
+              status,
+              progress_value: status === 'in_progress' ? 0 : 1,
+              progress_payload: null,
+              unlocked_at:
+                status === 'in_progress'
+                  ? null
+                  : new Date('2026-03-27T03:00:00.000Z'),
+              claimed_at:
+                status === 'claimed'
+                  ? new Date('2026-03-27T03:10:00.000Z')
+                  : null,
+              created_at: new Date('2026-03-27T03:00:00.000Z'),
+              updated_at: new Date('2026-03-27T03:00:00.000Z'),
+              ...progressOverrides,
+            },
+          ],
   });
 
   beforeEach(async () => {
@@ -995,9 +1044,40 @@ describe('GamificationService', () => {
         updated_at: new Date('2026-03-27T01:00:00.000Z'),
         user_progress: [],
       },
+      {
+        id: 'milestone-3',
+        key: 'secret-unlocked',
+        title: 'Secret Unlocked',
+        description: 'A hidden milestone should appear after it is unlocked.',
+        category: 'consistency',
+        trigger_type: 'streak',
+        condition_payload: { target: 5, metric: 'current_streak' },
+        reward_payload: null,
+        is_active: true,
+        is_hidden: true,
+        retired_at: null,
+        created_at: new Date('2026-03-27T01:00:00.000Z'),
+        updated_at: new Date('2026-03-27T01:00:00.000Z'),
+        user_progress: [
+          {
+            id: 'progress-3',
+            user_id: 'user-1',
+            milestone_definition_id: 'milestone-3',
+            status: 'unlocked',
+            progress_value: 5,
+            progress_payload: null,
+            unlocked_at: new Date('2026-03-28T03:00:00.000Z'),
+            claimed_at: null,
+            created_at: new Date('2026-03-28T03:00:00.000Z'),
+            updated_at: new Date('2026-03-28T03:00:00.000Z'),
+          },
+        ],
+      },
     ]);
 
-    await expect(service.getMilestoneProgress('user-1')).resolves.toEqual([
+    await expect(
+      service.getMilestoneProgress('user-1', { include_locked: true }),
+    ).resolves.toEqual([
       {
         milestone_definition_id: 'milestone-1',
         key: 'first-workout-complete',
@@ -1015,7 +1095,79 @@ describe('GamificationService', () => {
         claimed_at: null,
         updated_at: '2026-03-27T03:00:00.000Z',
       },
+      {
+        milestone_definition_id: 'milestone-3',
+        key: 'secret-unlocked',
+        title: 'Secret Unlocked',
+        description: 'A hidden milestone should appear after it is unlocked.',
+        category: 'consistency',
+        trigger_type: 'streak',
+        target_value: 5,
+        progress_value: 5,
+        progress_percent: 100,
+        status: 'unlocked',
+        is_hidden: true,
+        reward_payload: null,
+        unlocked_at: '2026-03-28T03:00:00.000Z',
+        claimed_at: null,
+        updated_at: '2026-03-28T03:00:00.000Z',
+      },
     ]);
+  });
+
+  it('claims an unlocked milestone and maps the claimed response', async () => {
+    repo.getMilestoneProgressById.mockResolvedValue(
+      makeMilestoneRecord('unlocked'),
+    );
+    repo.claimMilestoneProgress.mockResolvedValue(
+      makeMilestoneRecord('claimed'),
+    );
+
+    await expect(
+      service.claimMilestone('user-1', 'milestone-1'),
+    ).resolves.toMatchObject({
+      milestone_definition_id: 'milestone-1',
+      status: 'claimed',
+      claimed_at: '2026-03-27T03:10:00.000Z',
+    });
+    expect(repo.claimMilestoneProgress).toHaveBeenCalledWith(
+      'user-1',
+      'milestone-1',
+    );
+  });
+
+  it('treats already claimed milestones as idempotent claim success', async () => {
+    repo.getMilestoneProgressById.mockResolvedValue(
+      makeMilestoneRecord('claimed'),
+    );
+
+    await expect(
+      service.claimMilestone('user-1', 'milestone-1'),
+    ).resolves.toMatchObject({
+      milestone_definition_id: 'milestone-1',
+      status: 'claimed',
+    });
+    expect(repo.claimMilestoneProgress).not.toHaveBeenCalled();
+  });
+
+  it('rejects milestone claims before unlock and hides locked hidden definitions', async () => {
+    repo.getMilestoneProgressById.mockResolvedValueOnce(
+      makeMilestoneRecord('in_progress'),
+    );
+
+    await expect(
+      service.claimMilestone('user-1', 'milestone-1'),
+    ).rejects.toThrow(BadRequestException);
+    expect(repo.claimMilestoneProgress).not.toHaveBeenCalled();
+
+    repo.getMilestoneProgressById.mockResolvedValueOnce(
+      makeMilestoneRecord('in_progress', { is_hidden: true }),
+    );
+
+    await expect(
+      service.claimMilestone('user-1', 'milestone-1'),
+    ).rejects.toThrow(NotFoundException);
+    expect(repo.claimMilestoneProgress).not.toHaveBeenCalled();
   });
 
   it('returns integrity summary defaults when the member has no integrity profile yet', async () => {
@@ -1167,6 +1319,122 @@ describe('GamificationService', () => {
         ],
       },
     });
+  });
+
+  it('maps admin season filter options', async () => {
+    repo.listAdminSeasons.mockResolvedValue([
+      {
+        id: 'season-1',
+        title: 'Spring 2026',
+        status: 'active',
+        starts_at: new Date('2026-04-01T00:00:00.000Z'),
+        ends_at: new Date('2026-06-30T23:59:59.000Z'),
+        closed_at: null,
+        archived_at: null,
+        standings: [{ user_id: 'user-1' }, { user_id: 'user-2' }],
+      },
+    ]);
+
+    await expect(service.listAdminSeasons()).resolves.toEqual([
+      {
+        id: 'season-1',
+        title: 'Spring 2026',
+        status: 'active',
+        starts_at: '2026-04-01T00:00:00.000Z',
+        ends_at: '2026-06-30T23:59:59.000Z',
+        closed_at: null,
+        archived_at: null,
+        standing_count: 2,
+        hidden_count: 0,
+        disqualified_count: 0,
+      },
+    ]);
+    expect(repo.listAdminSeasons).toHaveBeenCalledWith({
+      includeArchived: true,
+    });
+  });
+
+  it('maps admin season standings including hidden and private participants', async () => {
+    repo.listAdminSeasonStandings.mockResolvedValue({
+      data: [
+        {
+          user_id: 'user-1',
+          season_id: 'season-1',
+          season_points: 240,
+          rank_position: 3,
+          is_hidden: true,
+          is_disqualified: false,
+          last_earned_at: new Date('2026-04-05T00:00:00.000Z'),
+          season: {
+            id: 'season-1',
+            title: 'Spring 2026',
+            status: 'active',
+          },
+          user: {
+            profile: { first_name: 'Riley', last_name: 'Runner' },
+            progression_profile: { total_xp: 900 },
+            ranking_profile: {
+              visibility: 'private',
+              governance_status: 'hidden_by_admin',
+              display_alias: 'Quiet Lifter',
+            },
+            muscle_mastery: [
+              { muscle_group: 'legs', xp_points: 420 },
+              { muscle_group: 'chest', xp_points: 180 },
+            ],
+            milestone_progress: [
+              { status: 'claimed' },
+              { status: 'unlocked' },
+              { status: 'in_progress' },
+            ],
+          },
+        },
+      ],
+      meta: { page: 1, limit: 8, total: 1, total_pages: 1 },
+    });
+
+    await expect(
+      service.listAdminSeasonStandings({
+        limit: 8,
+        page: 1,
+        search: 'riley',
+        visibility: 'private',
+        governance_status: 'hidden_by_admin',
+      }),
+    ).resolves.toEqual({
+      data: [
+        {
+          user_id: 'user-1',
+          member_name: 'Riley Runner',
+          display_alias: 'Quiet Lifter',
+          season_id: 'season-1',
+          season_title: 'Spring 2026',
+          season_status: 'active',
+          season_points: 240,
+          rank_position: 3,
+          total_xp: 900,
+          top_muscle: 'legs',
+          top_muscle_xp: 420,
+          milestone_unlocked_count: 2,
+          milestone_claimed_count: 1,
+          visibility: 'private',
+          governance_status: 'hidden_by_admin',
+          is_hidden: true,
+          is_disqualified: false,
+          last_earned_at: '2026-04-05T00:00:00.000Z',
+        },
+      ],
+      meta: { page: 1, limit: 8, total: 1, total_pages: 1 },
+    });
+    expect(repo.listAdminSeasonStandings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        governanceStatus: 'hidden_by_admin',
+        limit: 8,
+        page: 1,
+        search: 'riley',
+        visibility: 'private',
+      }),
+    );
   });
 
   it('updates a season through allowed lifecycle transitions', async () => {

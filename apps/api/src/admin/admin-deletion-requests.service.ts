@@ -34,6 +34,23 @@ function getIdentityIdentifier(
   );
 }
 
+function getProfileDisplayName(
+  profile:
+    | {
+        first_name?: string | null;
+        last_name?: string | null;
+      }
+    | null
+    | undefined,
+) {
+  const name = [profile?.first_name, profile?.last_name]
+    .map((part) => part?.trim() ?? '')
+    .filter(Boolean)
+    .join(' ');
+
+  return name || null;
+}
+
 function toFrontendRole(role: UserRole) {
   switch (role) {
     case UserRole.admin:
@@ -165,6 +182,12 @@ export class AdminDeletionRequestsService {
                 verified_at: true,
               },
             },
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
           },
         },
       },
@@ -200,6 +223,7 @@ export class AdminDeletionRequestsService {
         request.user.auth_identities,
         AuthProvider.email,
       ),
+      targetName: getProfileDisplayName(request.user.profile),
       targetRole: request.user.role,
       targetUserId: request.user.id,
     });
@@ -226,6 +250,12 @@ export class AdminDeletionRequestsService {
                 provider: true,
                 identifier: true,
                 verified_at: true,
+              },
+            },
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
               },
             },
           },
@@ -258,6 +288,7 @@ export class AdminDeletionRequestsService {
         request.user.auth_identities,
         AuthProvider.email,
       ),
+      targetName: getProfileDisplayName(request.user.profile),
       targetRole: request.user.role,
       targetUserId: request.user.id,
     });
@@ -271,6 +302,7 @@ export class AdminDeletionRequestsService {
     action: 'termination_approved' | 'termination_rejected';
     actorId: string;
     targetEmail?: string | null;
+    targetName?: string | null;
     targetRole?: UserRole | null;
     targetUserId: string;
   }) {

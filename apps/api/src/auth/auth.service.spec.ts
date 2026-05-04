@@ -1,7 +1,6 @@
 import {
   ConflictException,
   ForbiddenException,
-  GoneException,
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +14,7 @@ import { USER_REGISTERED_EVENT } from './events/user-registered.event';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
 import { AuthOtpService } from './otp/auth-otp.service';
+import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -26,6 +26,7 @@ describe('AuthService', () => {
     markEmailIdentityVerified: jest.fn(),
     findUserWithProfile: jest.fn(),
     findUserWithProfileOrThrow: jest.fn(),
+    findUserByIdOrThrow: jest.fn(),
     createRefreshToken: jest.fn(),
     findRefreshTokenByHash: jest.fn(),
     revokeRefreshToken: jest.fn(),
@@ -44,6 +45,7 @@ describe('AuthService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
 
   const otpService = {
@@ -163,7 +165,11 @@ describe('AuthService', () => {
 
   it('emits a user-registered event when email verification activates the account', async () => {
     otpService.consumeOtp.mockResolvedValue(undefined);
-    repo.updateUser.mockResolvedValue({ id: 'user-1' });
+    repo.findUserByIdOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+    });
+    repo.updateUser.mockResolvedValue({ id: 'user-1', role: UserRole.member });
     repo.markEmailIdentityVerified.mockResolvedValue({ count: 1 });
     repo.findUserWithProfileOrThrow.mockResolvedValue({
       id: 'user-1',
@@ -311,7 +317,7 @@ describe('AuthService', () => {
     );
   });
 
-  it('rejects login for archived accounts', async () => {
+  it('preserves invalid-credential semantics for archived accounts', async () => {
     repo.findIdentity.mockResolvedValue({
       id: 'identity-1',
       user_id: 'user-1',
@@ -334,8 +340,7 @@ describe('AuthService', () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        detail:
-          'This account has been archived and can no longer access FitTrack.',
+        detail: 'Incorrect email or password.',
       },
     });
 
@@ -345,7 +350,7 @@ describe('AuthService', () => {
         'device',
         '127.0.0.1',
       ),
-    ).rejects.toThrow(GoneException);
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('preserves forbidden semantics for suspended Google accounts', async () => {
@@ -603,10 +608,9 @@ describe('AuthService', () => {
     expect(otpService.issueOtp).not.toHaveBeenCalled();
   });
 
-  it('creates staff accounts as active and verified without OTP', async () => {
+  it('creates staff accounts as pending and issues registration OTP', async () => {
     repo.findIdentity.mockResolvedValue(null);
     repo.createUserWithProfile.mockResolvedValue({ id: 'staff-1' });
-    repo.markEmailIdentityVerified.mockResolvedValue({ count: 1 });
 
     const result = await service.adminCreateUser(
       {
@@ -630,7 +634,7 @@ describe('AuthService', () => {
     expect(repo.createUserWithProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         role: UserRole.staff,
-        status: UserStatus.active,
+        status: UserStatus.pending,
       }),
     );
     const createUserCalls = repo.createUserWithProfile.mock.calls as Array<
@@ -645,16 +649,27 @@ describe('AuthService', () => {
       emailVerifiedAt?: Date;
       qrCodeToken?: string;
     };
-    expect(createUserArgs.emailVerifiedAt).toBeInstanceOf(Date);
-    expect(createUserArgs.qrCodeToken).toMatch(/^[a-f0-9]{64}$/);
-    expect(repo.markEmailIdentityVerified).toHaveBeenCalledWith('staff-1');
-    expect(otpService.issueOtp).not.toHaveBeenCalled();
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
+    expect(createUserArgs.emailVerifiedAt).toBeUndefined();
+    expect(createUserArgs.qrCodeToken).toBeUndefined();
+    expect(repo.markEmailIdentityVerified).not.toHaveBeenCalled();
+    expect(otpService.issueOtp).toHaveBeenCalledWith(
+      'staff-1',
+      'registration',
+      'email',
+      'staff@example.com',
+    );
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       USER_REGISTERED_EVENT,
+      expect.anything(),
+    );
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      ACCOUNT_ACTIVITY_EVENT,
       expect.objectContaining({
-        userId: 'staff-1',
-        role: UserRole.staff,
-        source: 'admin_create',
+        action: 'account_created',
+        targetEmail: 'staff@example.com',
+        targetName: 'Staff One',
+        targetRole: 'staff',
+        targetUserId: 'staff-1',
       }),
     );
   });
@@ -711,6 +726,16 @@ describe('AuthService', () => {
     expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       USER_REGISTERED_EVENT,
       expect.anything(),
+    );
+    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+      ACCOUNT_ACTIVITY_EVENT,
+      expect.objectContaining({
+        action: 'account_created',
+        targetEmail: 'member@example.com',
+        targetName: 'Member One',
+        targetRole: 'member',
+        targetUserId: 'member-1',
+      }),
     );
   });
 

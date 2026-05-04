@@ -170,6 +170,13 @@ function validateEquipmentDetailForm(data: Record<string, string>) {
   if (!data.unit?.trim()) {
     errors.unit = "Unit is required";
   }
+  if (
+    data.status !== "Available" &&
+    data.status !== "Under Maintenance" &&
+    data.status !== "Broken"
+  ) {
+    errors.status = "Choose a valid equipment status.";
+  }
 
   return errors;
 }
@@ -717,7 +724,8 @@ export function InventoryDashboard() {
     ? {
         name: inventory.selectedEquipment.name,
         description: inventory.selectedEquipment.description ?? "",
-        unit: inventory.selectedEquipment.unit
+        unit: inventory.selectedEquipment.unit,
+        status: inventory.selectedEquipment.status
       }
     : undefined;
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Activity,
   Archive,
@@ -12,23 +13,26 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trophy,
-  UserCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  FitnessCreatorState,
+  AdminGamificationSeasonStandingListParams,
   FitnessRankingGovernanceStatus,
 } from "@fittrack/api-client";
 import type {
-  AdminGamificationCreatorProfileRecord,
   AdminGamificationOverviewRecord,
   AdminGamificationRankingProfileRecord,
+  AdminGamificationSeasonStandingRecord,
+  AdminGamificationSeasonSummaryRecord,
+  FitnessRankingVisibility,
   FitnessSeasonStatus,
 } from "@fittrack/types";
 import {
+  adminGamificationSeasonStandingsQueryOptions,
+  adminGamificationSeasonsQueryOptions,
   adminGamificationOverviewQueryOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
-  updateAdminGamificationCreatorStateMutationOptions,
   updateAdminGamificationRankingOverrideMutationOptions,
   updateAdminGamificationSeasonStatusMutationOptions,
 } from "@fittrack/query";
@@ -39,21 +43,21 @@ import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import {
   FitButton,
+  FitPagination,
   FitPill,
+  FitSearch,
   FitSection,
   FitSelect,
   FitText,
   FitTextArea,
 } from "@/components/fit";
-
-const CREATOR_STATE_OPTIONS: { label: string; value: FitnessCreatorState }[] = [
-  { label: "Candidate", value: "candidate" },
-  { label: "Pending review", value: "pending_review" },
-  { label: "Approved", value: "approved" },
-  { label: "Suspended", value: "suspended" },
-  { label: "Revoked", value: "revoked" },
-  { label: "None", value: "none" },
-];
+import { ConfirmModal } from "@/components/modals";
+import {
+  ACHIEVEMENT_REVIEW_SEED,
+  ACHIEVEMENT_REVIEW_STATUS_COLORS,
+  type AchievementReviewRecord,
+  type AchievementReviewStatus,
+} from "@/data/progress/milestones";
 
 const RANKING_GOVERNANCE_OPTIONS: {
   label: string;
@@ -66,6 +70,46 @@ const RANKING_GOVERNANCE_OPTIONS: {
   { label: "Hide from rankings", value: "hidden_by_admin" },
   { label: "Disqualify season", value: "disqualified" },
 ];
+
+const SEASON_VISIBILITY_OPTIONS: Array<{
+  label: string;
+  value: FitnessRankingVisibility | "";
+}> = [
+  { label: "All visibility", value: "" },
+  { label: "Public", value: "public" },
+  { label: "Anonymous", value: "anonymous" },
+  { label: "Private", value: "private" },
+];
+
+const SEASON_GOVERNANCE_OPTIONS: Array<{
+  label: string;
+  value: FitnessRankingGovernanceStatus | "";
+}> = [
+  { label: "All governance", value: "" },
+  { label: "Normal", value: "normal" },
+  { label: "Hidden", value: "hidden_by_admin" },
+  { label: "Disqualified", value: "disqualified" },
+];
+
+const MILESTONE_STATUS_OPTIONS: Array<{
+  label: string;
+  value: AchievementReviewStatus | "all";
+}> = [
+  { label: "Pending", value: "Pending" },
+  { label: "All", value: "all" },
+  { label: "Approved", value: "Approved" },
+  { label: "Rejected", value: "Rejected" },
+];
+
+type GamificationTab = "overview" | "milestones";
+type AdminConfirmationState = {
+  confirmIcon?: LucideIcon;
+  confirmLabel: string;
+  isDanger?: boolean;
+  message: string;
+  onConfirm: () => void;
+  title: string;
+};
 
 function formatDateTime(value?: string | null) {
   if (!value) return "No timestamp yet";
@@ -103,7 +147,6 @@ function getSeasonNextActions(
 }
 
 type DraftMap = Record<string, string>;
-type CreatorStateDraftMap = Record<string, FitnessCreatorState>;
 type RankingStateDraftMap = Record<
   string,
   Extract<
@@ -117,19 +160,77 @@ export default function GamificationAdminDashboard() {
   const fadeIn = useFadeIn({ duration: 240 });
   const themeTransition = useThemeTransition();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<GamificationTab>("overview");
+  const [confirmationState, setConfirmationState] =
+    useState<AdminConfirmationState | null>(null);
   const [seasonRationale, setSeasonRationale] = useState(
     "Admin lifecycle review completed.",
   );
+  const [seasonStandingPage, setSeasonStandingPage] = useState(1);
+  const [seasonStandingSearch, setSeasonStandingSearch] = useState("");
+  const [seasonFilterId, setSeasonFilterId] = useState("");
+  const [seasonMuscleFilter, setSeasonMuscleFilter] = useState("");
+  const [seasonVisibilityFilter, setSeasonVisibilityFilter] =
+    useState<FitnessRankingVisibility | "">("");
+  const [seasonGovernanceFilter, setSeasonGovernanceFilter] =
+    useState<FitnessRankingGovernanceStatus | "">("");
+  const [seasonIncludeArchived, setSeasonIncludeArchived] = useState(false);
+  const [milestoneReviews, setMilestoneReviews] = useState<
+    AchievementReviewRecord[]
+  >(ACHIEVEMENT_REVIEW_SEED);
+  const [milestoneStatus, setMilestoneStatus] =
+    useState<AchievementReviewStatus | "all">("Pending");
+  const [milestoneSearch, setMilestoneSearch] = useState("");
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState(
+    ACHIEVEMENT_REVIEW_SEED[0]?.id ?? "",
+  );
+  const [milestoneNotes, setMilestoneNotes] = useState("");
   const [integrityNotes, setIntegrityNotes] = useState<DraftMap>({});
   const [rankingNotes, setRankingNotes] = useState<DraftMap>({});
   const [rankingStateDrafts, setRankingStateDrafts] =
     useState<RankingStateDraftMap>({});
-  const [creatorNotes, setCreatorNotes] = useState<DraftMap>({});
-  const [creatorStateDrafts, setCreatorStateDrafts] =
-    useState<CreatorStateDraftMap>({});
 
   const overviewQuery = useQuery(
     adminGamificationOverviewQueryOptions(webApiClient),
+  );
+  const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
+    () => ({
+      includeArchived: seasonIncludeArchived,
+      limit: 8,
+      page: seasonStandingPage,
+      ...(seasonFilterId ? { seasonId: seasonFilterId } : {}),
+      ...(seasonMuscleFilter.trim()
+        ? { muscleKey: seasonMuscleFilter.trim() }
+        : {}),
+      ...(seasonStandingSearch.trim()
+        ? { search: seasonStandingSearch.trim() }
+        : {}),
+      ...(seasonVisibilityFilter
+        ? { visibility: seasonVisibilityFilter }
+        : {}),
+      ...(seasonGovernanceFilter
+        ? { governanceStatus: seasonGovernanceFilter }
+        : {}),
+    }),
+    [
+      seasonFilterId,
+      seasonGovernanceFilter,
+      seasonIncludeArchived,
+      seasonMuscleFilter,
+      seasonStandingPage,
+      seasonStandingSearch,
+      seasonVisibilityFilter,
+    ],
+  );
+  const seasonsQuery = useQuery(
+    adminGamificationSeasonsQueryOptions(webApiClient),
+  );
+  const seasonStandingsQuery = useQuery(
+    adminGamificationSeasonStandingsQueryOptions(
+      webApiClient,
+      seasonFilterParams,
+    ),
   );
   const seasonMutation = useMutation(
     updateAdminGamificationSeasonStatusMutationOptions(
@@ -149,12 +250,22 @@ export default function GamificationAdminDashboard() {
       queryClient,
     ),
   );
-  const creatorMutation = useMutation(
-    updateAdminGamificationCreatorStateMutationOptions(
-      webApiClient,
-      queryClient,
-    ),
-  );
+  useEffect(() => {
+    if (searchParams.get("tab") === "milestones") {
+      setActiveTab("milestones");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    setSeasonStandingPage(1);
+  }, [
+    seasonFilterId,
+    seasonGovernanceFilter,
+    seasonIncludeArchived,
+    seasonMuscleFilter,
+    seasonStandingSearch,
+    seasonVisibilityFilter,
+  ]);
 
   const overview = overviewQuery.data;
   const activeSeasonActions = useMemo(
@@ -166,10 +277,11 @@ export default function GamificationAdminDashboard() {
   );
   const pageError =
     overviewQuery.error ??
+    seasonsQuery.error ??
+    seasonStandingsQuery.error ??
     seasonMutation.error ??
     integrityMutation.error ??
-    rankingMutation.error ??
-    creatorMutation.error;
+    rankingMutation.error;
 
   const panelStyle = {
     border: `1px solid ${colors.border}`,
@@ -201,9 +313,25 @@ export default function GamificationAdminDashboard() {
         ? "Manual review confirmed this progression can stand."
         : "Manual review confirmed this progression should stay invalid.");
 
-    integrityMutation.mutate({
-      caseId,
-      payload: { status, rationale },
+    setConfirmationState({
+      confirmIcon: status === "resolved_valid" ? ShieldCheck : EyeOff,
+      confirmLabel:
+        status === "resolved_valid" ? "Resolve valid" : "Resolve invalid",
+      isDanger: status === "resolved_invalid",
+      message:
+        status === "resolved_valid"
+          ? "This closes the integrity case and keeps the related progression in force."
+          : "This closes the integrity case and preserves the invalid progression decision.",
+      title:
+        status === "resolved_valid"
+          ? "Resolve Integrity Case As Valid?"
+          : "Resolve Integrity Case As Invalid?",
+      onConfirm: () => {
+        integrityMutation.mutate({
+          caseId,
+          payload: { status, rationale },
+        });
+      },
     });
   };
 
@@ -217,28 +345,21 @@ export default function GamificationAdminDashboard() {
       rankingNotes[profile.userId]?.trim() ||
       "Admin ranking-governance review completed.";
 
-    rankingMutation.mutate({
-      userId: profile.userId,
-      payload: {
-        governanceStatus,
-        rationale,
-        adminNote: governanceStatus === "normal" ? null : rationale,
-      },
-    });
-  };
-
-  const updateCreator = (profile: AdminGamificationCreatorProfileRecord) => {
-    const state = creatorStateDrafts[profile.userId] ?? profile.state;
-    const rationale =
-      creatorNotes[profile.userId]?.trim() ||
-      "Admin creator-governance review completed.";
-
-    creatorMutation.mutate({
-      userId: profile.userId,
-      payload: {
-        state,
-        rationale,
-        adminNotes: rationale,
+    setConfirmationState({
+      confirmIcon: ShieldCheck,
+      confirmLabel: "Apply ranking decision",
+      isDanger: governanceStatus === "disqualified",
+      message: `${profile.memberName} will move to ${labelize(governanceStatus)} ranking governance with the saved admin note.`,
+      title: "Apply Ranking Governance Decision?",
+      onConfirm: () => {
+        rankingMutation.mutate({
+          userId: profile.userId,
+          payload: {
+            governanceStatus,
+            rationale,
+            adminNote: governanceStatus === "normal" ? null : rationale,
+          },
+        });
       },
     });
   };
@@ -283,13 +404,12 @@ export default function GamificationAdminDashboard() {
                 fontWeight: 900,
               }}
             >
-              Governance cockpit for seasons, rankings, creators, and XP trust.
+              Governance cockpit for seasons, rankings, milestones, and XP trust.
             </FitText>
             <FitText as="p" style={{ ...muted, maxWidth: 760 }}>
-              Batch 6 separates admin gamification from Exercise Lab. This page
-              is the operator layer: spot unhealthy progression, resolve review
-              queues, restore ranking participation, and keep creator privileges
-              audit-safe.
+              This operator layer keeps progression fair: spot unhealthy XP
+              patterns, resolve integrity queues, restore ranking participation,
+              and manage milestone review without duplicating Exercise Lab.
             </FitText>
           </div>
           <div
@@ -330,7 +450,63 @@ export default function GamificationAdminDashboard() {
           </div>
         ) : null}
 
-        <MetricGrid overview={overview} />
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
+          {[
+            { label: "Governance Overview", value: "overview" as const },
+            { label: "Milestone Management", value: "milestones" as const },
+          ].map((tab) => {
+            const isActive = activeTab === tab.value;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                style={{
+                  border: `1px solid ${isActive ? colors.brand : colors.border}`,
+                  backgroundColor: isActive
+                    ? `${colors.brand}16`
+                    : colors.surfaceRaised,
+                  borderRadius: 999,
+                  color: isActive ? colors.brand : colors.textSecondary,
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  padding: "10px 16px",
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "overview" ? (
+          <>
+            <MetricGrid overview={overview} />
+
+            <SeasonPerformanceTable
+              includeArchived={seasonIncludeArchived}
+              muscleFilter={seasonMuscleFilter}
+              onIncludeArchivedChange={setSeasonIncludeArchived}
+              onMuscleFilterChange={setSeasonMuscleFilter}
+              onPageChange={setSeasonStandingPage}
+              onSearchChange={setSeasonStandingSearch}
+              onSeasonChange={setSeasonFilterId}
+              onVisibilityChange={setSeasonVisibilityFilter}
+              onGovernanceChange={setSeasonGovernanceFilter}
+              page={seasonStandingPage}
+              search={seasonStandingSearch}
+              selectedGovernance={seasonGovernanceFilter}
+              selectedSeasonId={seasonFilterId}
+              selectedVisibility={seasonVisibilityFilter}
+              seasons={seasonsQuery.data ?? []}
+              standings={seasonStandingsQuery.data}
+            />
 
         <div
           style={{
@@ -373,13 +549,23 @@ export default function GamificationAdminDashboard() {
                       label={`Move to ${labelize(status)}`}
                       loading={seasonMutation.isPending}
                       onClick={() =>
-                        seasonMutation.mutate({
-                          seasonId: overview.activeSeason!.id,
-                          payload: {
-                            status,
-                            rationale:
-                              seasonRationale.trim() ||
-                              "Admin lifecycle review completed.",
+                        setConfirmationState({
+                          confirmIcon:
+                            status === "archived" ? Archive : CheckCircle2,
+                          confirmLabel: `Move to ${labelize(status)}`,
+                          isDanger: status === "archived",
+                          message: `${overview.activeSeason!.title} will move from ${labelize(overview.activeSeason!.status)} to ${labelize(status)}. This affects season availability and admin reporting.`,
+                          title: "Confirm Season Lifecycle Change?",
+                          onConfirm: () => {
+                            seasonMutation.mutate({
+                              seasonId: overview.activeSeason!.id,
+                              payload: {
+                                status,
+                                rationale:
+                                  seasonRationale.trim() ||
+                                  "Admin lifecycle review completed.",
+                              },
+                            });
                           },
                         })
                       }
@@ -543,60 +729,6 @@ export default function GamificationAdminDashboard() {
             </RecordList>
           </FitSection>
 
-          <FitSection
-            heading="Creator Governance"
-            action={<UserCheck size={16} color={colors.brand} />}
-            style={panelStyle}
-            bare
-          >
-            <RecordList emptyCopy="No creator profiles need attention yet.">
-              {overview?.creators.profiles.map((profile) => (
-                <div key={profile.userId} style={subPanelStyle}>
-                  <ProfileHeading
-                    title={profile.memberName}
-                    subtitle={`${profile.stateLabel} • ${profile.publishedSubmissionCount}/${profile.submissionCount} published`}
-                  />
-                  <FitSelect
-                    fullWidth
-                    value={creatorStateDrafts[profile.userId] ?? profile.state}
-                    options={CREATOR_STATE_OPTIONS}
-                    onChange={(event) =>
-                      setCreatorStateDrafts((current) => ({
-                        ...current,
-                        [profile.userId]: event.target
-                          .value as FitnessCreatorState,
-                      }))
-                    }
-                    style={{ marginTop: 12 }}
-                  />
-                  <FitTextArea
-                    value={
-                      creatorNotes[profile.userId] ?? profile.adminNotes ?? ""
-                    }
-                    onChange={(event) =>
-                      updateDraft(
-                        setCreatorNotes,
-                        profile.userId,
-                        event.target.value,
-                      )
-                    }
-                    rows={2}
-                    placeholder="Creator governance note"
-                    style={{ marginTop: 10 }}
-                  />
-                  <FitButton
-                    fullWidth
-                    variant="primary"
-                    icon={UserCheck}
-                    label="Save creator state"
-                    loading={creatorMutation.isPending}
-                    onClick={() => updateCreator(profile)}
-                    style={{ marginTop: 12 }}
-                  />
-                </div>
-              ))}
-            </RecordList>
-          </FitSection>
         </div>
 
         <FitSection
@@ -647,7 +779,547 @@ export default function GamificationAdminDashboard() {
             ))}
           </RecordList>
         </FitSection>
+          </>
+        ) : (
+          <MilestoneManagementPanel
+            notes={milestoneNotes}
+            onNotesChange={setMilestoneNotes}
+            onReviewsChange={setMilestoneReviews}
+            onSearchChange={setMilestoneSearch}
+            onSelectedChange={setSelectedMilestoneId}
+            onStatusChange={setMilestoneStatus}
+            reviews={milestoneReviews}
+            search={milestoneSearch}
+            selectedId={selectedMilestoneId}
+            status={milestoneStatus}
+          />
+        )}
       </div>
+      <ConfirmModal
+        isOpen={confirmationState !== null}
+        title={confirmationState?.title ?? "Confirm action"}
+        message={confirmationState?.message ?? ""}
+        confirmLabel={confirmationState?.confirmLabel ?? "Confirm"}
+        confirmIcon={confirmationState?.confirmIcon}
+        isDanger={confirmationState?.isDanger}
+        isLoading={
+          seasonMutation.isPending ||
+          integrityMutation.isPending ||
+          rankingMutation.isPending
+        }
+        loadingLabel="Applying..."
+        onConfirm={() => {
+          confirmationState?.onConfirm();
+          setConfirmationState(null);
+        }}
+        onCancel={() => setConfirmationState(null)}
+      />
+    </FitSection>
+  );
+}
+
+function SeasonPerformanceTable({
+  includeArchived,
+  muscleFilter,
+  onGovernanceChange,
+  onIncludeArchivedChange,
+  onMuscleFilterChange,
+  onPageChange,
+  onSearchChange,
+  onSeasonChange,
+  onVisibilityChange,
+  page,
+  search,
+  selectedGovernance,
+  selectedSeasonId,
+  selectedVisibility,
+  seasons,
+  standings,
+}: {
+  includeArchived: boolean;
+  muscleFilter: string;
+  onGovernanceChange: (value: FitnessRankingGovernanceStatus | "") => void;
+  onIncludeArchivedChange: (value: boolean) => void;
+  onMuscleFilterChange: (value: string) => void;
+  onPageChange: (page: number) => void;
+  onSearchChange: (value: string) => void;
+  onSeasonChange: (value: string) => void;
+  onVisibilityChange: (value: FitnessRankingVisibility | "") => void;
+  page: number;
+  search: string;
+  selectedGovernance: FitnessRankingGovernanceStatus | "";
+  selectedSeasonId: string;
+  selectedVisibility: FitnessRankingVisibility | "";
+  seasons: AdminGamificationSeasonSummaryRecord[];
+  standings:
+    | {
+        data: AdminGamificationSeasonStandingRecord[];
+        meta: { limit: number; page: number; total: number; total_pages: number };
+      }
+    | undefined;
+}) {
+  const { colors } = useTheme();
+  const rows = standings?.data ?? [];
+  const meta = standings?.meta ?? {
+    limit: 8,
+    page,
+    total: 0,
+    total_pages: 1,
+  };
+  const seasonOptions = [
+    { label: "All seasons", value: "" },
+    ...seasons.map((season) => ({
+      label: `${season.title} (${labelize(season.status)})`,
+      value: season.id,
+    })),
+  ];
+
+  return (
+    <FitSection
+      heading="Season Performance"
+      action={<Trophy size={16} color={colors.brand} />}
+      bare
+      style={{
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surfaceRaised,
+        borderRadius: 22,
+        padding: 18,
+      }}
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+          }}
+        >
+          <FitSearch
+            compact
+            placeholder="Search member"
+            value={search}
+            onChangeText={onSearchChange}
+          />
+          <FitSearch
+            compact
+            placeholder="Muscle or EXP area"
+            value={muscleFilter}
+            onChangeText={onMuscleFilterChange}
+          />
+          <FitSelect
+            fullWidth
+            value={selectedSeasonId}
+            options={seasonOptions}
+            onChange={(event) => onSeasonChange(event.target.value)}
+          />
+          <FitSelect
+            fullWidth
+            value={selectedVisibility}
+            options={SEASON_VISIBILITY_OPTIONS}
+            onChange={(event) =>
+              onVisibilityChange(event.target.value as FitnessRankingVisibility | "")
+            }
+          />
+          <FitSelect
+            fullWidth
+            value={selectedGovernance}
+            options={SEASON_GOVERNANCE_OPTIONS}
+            onChange={(event) =>
+              onGovernanceChange(
+                event.target.value as FitnessRankingGovernanceStatus | "",
+              )
+            }
+          />
+          <label
+            style={{
+              alignItems: "center",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 14,
+              color: colors.textSecondary,
+              display: "flex",
+              gap: 10,
+              padding: "0 14px",
+            }}
+          >
+            <input
+              checked={includeArchived}
+              onChange={(event) => onIncludeArchivedChange(event.target.checked)}
+              type="checkbox"
+            />
+            Include archived
+          </label>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              minWidth: 920,
+              width: "100%",
+            }}
+          >
+            <thead>
+              <tr>
+                {[
+                  "Rank",
+                  "Participant",
+                  "Season",
+                  "EXP",
+                  "Top Muscle",
+                  "Milestones",
+                  "Governance",
+                  "Last Earned",
+                ].map((heading) => (
+                  <th
+                    key={heading}
+                    style={{
+                      borderBottom: `1px solid ${colors.border}`,
+                      color: colors.textMuted,
+                      fontSize: 11,
+                      padding: "10px 12px",
+                      textAlign: "left",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length ? (
+                rows.map((row) => (
+                  <tr key={`${row.userId}-${row.seasonId}`}>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 900 }}>
+                        {row.rankPosition ? `#${row.rankPosition}` : "--"}
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 800 }}>
+                        {row.displayAlias ?? row.memberName}
+                      </FitText>
+                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                        {row.memberName}
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 700 }}>
+                        {row.seasonTitle}
+                      </FitText>
+                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                        {labelize(row.seasonStatus)}
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 800 }}>
+                        {row.totalXp.toLocaleString("en-US")} XP
+                      </FitText>
+                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                        {row.seasonPoints.toLocaleString("en-US")} season pts
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 800 }}>
+                        {row.topMuscle ?? "No muscle yet"}
+                      </FitText>
+                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                        {row.topMuscleXp.toLocaleString("en-US")} XP
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ fontWeight: 800 }}>
+                        {row.milestoneClaimedCount}/
+                        {row.milestoneUnlockedCount}
+                      </FitText>
+                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                        claimed/unlocked
+                      </FitText>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        <FitPill
+                          mode="status"
+                          label={labelize(row.visibility)}
+                          color={row.visibility === "private" ? colors.warning : colors.brand}
+                        />
+                        <FitPill
+                          mode="status"
+                          label={labelize(row.governanceStatus)}
+                          color={
+                            row.isDisqualified
+                              ? colors.danger
+                              : row.isHidden
+                                ? colors.warning
+                                : colors.success
+                          }
+                        />
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <FitText style={{ color: colors.textSecondary, fontSize: 13 }}>
+                        {formatDateTime(row.lastEarnedAt)}
+                      </FitText>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} style={{ padding: 18 }}>
+                    <EmptyState copy="No season standings match the current filters." />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <FitPagination
+          currentPage={meta.page}
+          totalPages={Math.max(1, meta.total_pages)}
+          onPageChange={onPageChange}
+          ariaLabel="Season standing pagination"
+        />
+      </div>
+    </FitSection>
+  );
+}
+
+function MilestoneManagementPanel({
+  notes,
+  onNotesChange,
+  onReviewsChange,
+  onSearchChange,
+  onSelectedChange,
+  onStatusChange,
+  reviews,
+  search,
+  selectedId,
+  status,
+}: {
+  notes: string;
+  onNotesChange: (value: string) => void;
+  onReviewsChange: Dispatch<SetStateAction<AchievementReviewRecord[]>>;
+  onSearchChange: (value: string) => void;
+  onSelectedChange: (value: string) => void;
+  onStatusChange: (value: AchievementReviewStatus | "all") => void;
+  reviews: AchievementReviewRecord[];
+  search: string;
+  selectedId: string;
+  status: AchievementReviewStatus | "all";
+}) {
+  const { colors } = useTheme();
+  const [confirmTarget, setConfirmTarget] = useState<{
+    nextStatus: AchievementReviewStatus;
+    review: AchievementReviewRecord;
+  } | null>(null);
+  const filteredReviews = reviews.filter((review) => {
+    const matchesStatus = status === "all" || review.status === status;
+    const q = search.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      review.memberName.toLowerCase().includes(q) ||
+      review.memberEmail.toLowerCase().includes(q) ||
+      review.badgeLabel.toLowerCase().includes(q);
+    return matchesStatus && matchesSearch;
+  });
+  const selectedReview =
+    filteredReviews.find((review) => review.id === selectedId) ??
+    filteredReviews[0] ??
+    null;
+
+  const applyDecision = () => {
+    if (!confirmTarget) return;
+    const note =
+      notes.trim() ||
+      `${confirmTarget.nextStatus} from Admin Gamification milestone management.`;
+    onReviewsChange((current) =>
+      current.map((review) =>
+        review.id === confirmTarget.review.id
+          ? {
+              ...review,
+              reviewerNotes: note,
+              reviewedAt: new Date().toISOString(),
+              status: confirmTarget.nextStatus,
+            }
+          : review,
+      ),
+    );
+    onNotesChange("");
+    setConfirmTarget(null);
+  };
+
+  return (
+    <FitSection
+      heading="Milestone Management"
+      action={<ShieldCheck size={16} color={colors.brand} />}
+      bare
+      style={{
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surfaceRaised,
+        borderRadius: 22,
+        padding: 18,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gap: 18,
+          gridTemplateColumns: "minmax(280px, 0.85fr) minmax(320px, 1.15fr)",
+        }}
+      >
+        <div style={{ display: "grid", gap: 12 }}>
+          <FitSearch
+            compact
+            placeholder="Search member or milestone"
+            value={search}
+            onChangeText={onSearchChange}
+          />
+          <FitSelect
+            fullWidth
+            value={status}
+            options={MILESTONE_STATUS_OPTIONS}
+            onChange={(event) =>
+              onStatusChange(event.target.value as AchievementReviewStatus | "all")
+            }
+          />
+          <div style={{ display: "grid", gap: 10 }}>
+            {filteredReviews.length ? (
+              filteredReviews.map((review) => {
+                const active = selectedReview?.id === review.id;
+                return (
+                  <button
+                    key={review.id}
+                    type="button"
+                    onClick={() => onSelectedChange(review.id)}
+                    style={{
+                      border: `1px solid ${active ? colors.brand : colors.border}`,
+                      backgroundColor: active
+                        ? `${colors.brand}12`
+                        : colors.surface,
+                      borderRadius: 18,
+                      cursor: "pointer",
+                      padding: 14,
+                      textAlign: "left",
+                    }}
+                  >
+                    <FitText style={{ fontWeight: 800 }}>
+                      {review.badgeLabel}
+                    </FitText>
+                    <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                      {review.memberName} / {formatDateTime(review.submittedAt)}
+                    </FitText>
+                    <FitPill
+                      mode="status"
+                      label={review.status}
+                      color={ACHIEVEMENT_REVIEW_STATUS_COLORS[review.status]}
+                      style={{ marginTop: 8 }}
+                    />
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState copy="No milestone reviews match the current filters." />
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            backgroundColor: colors.surface,
+            borderRadius: 20,
+            display: "grid",
+            gap: 14,
+            padding: 18,
+          }}
+        >
+          {selectedReview ? (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 14,
+                  gridTemplateColumns: "minmax(180px, 260px) minmax(0, 1fr)",
+                }}
+              >
+                <img
+                  alt={`${selectedReview.badgeLabel} proof`}
+                  src={selectedReview.proofImageUrl}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 16,
+                    height: 180,
+                    objectFit: "cover",
+                    width: "100%",
+                  }}
+                />
+                <div>
+                  <FitText style={{ fontSize: 22, fontWeight: 900 }}>
+                    {selectedReview.badgeLabel}
+                  </FitText>
+                  <FitText style={{ color: colors.textSecondary, marginTop: 6 }}>
+                    {selectedReview.memberName} / {selectedReview.memberEmail}
+                  </FitText>
+                  <FitText style={{ color: colors.textMuted, fontSize: 13, marginTop: 10 }}>
+                    {selectedReview.proofCaption}
+                  </FitText>
+                  <FitPill
+                    mode="status"
+                    label={selectedReview.status}
+                    color={ACHIEVEMENT_REVIEW_STATUS_COLORS[selectedReview.status]}
+                    style={{ marginTop: 12 }}
+                  />
+                </div>
+              </div>
+              <FitTextArea
+                rows={3}
+                value={notes}
+                onChange={(event) => onNotesChange(event.target.value)}
+                placeholder="Moderator notes for this milestone decision"
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <FitButton
+                  icon={CheckCircle2}
+                  label="Approve milestone"
+                  onClick={() =>
+                    setConfirmTarget({
+                      nextStatus: "Approved",
+                      review: selectedReview,
+                    })
+                  }
+                  variant="primary"
+                />
+                <FitButton
+                  icon={EyeOff}
+                  label="Reject milestone"
+                  onClick={() =>
+                    setConfirmTarget({
+                      nextStatus: "Rejected",
+                      review: selectedReview,
+                    })
+                  }
+                  variant="danger"
+                />
+              </div>
+            </>
+          ) : (
+            <EmptyState copy="Select a milestone review to inspect proof and make a decision." />
+          )}
+        </div>
+      </div>
+      <ConfirmModal
+        isOpen={confirmTarget !== null}
+        title={`${confirmTarget?.nextStatus ?? "Review"} Milestone?`}
+        message={`This updates ${confirmTarget?.review.badgeLabel ?? "the selected milestone"} for ${confirmTarget?.review.memberName ?? "this member"} and stores the moderator note.`}
+        confirmLabel={confirmTarget?.nextStatus ?? "Confirm"}
+        confirmIcon={
+          confirmTarget?.nextStatus === "Rejected" ? EyeOff : CheckCircle2
+        }
+        isDanger={confirmTarget?.nextStatus === "Rejected"}
+        onConfirm={applyDecision}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </FitSection>
   );
 }
@@ -670,9 +1342,9 @@ function MetricGrid({
       icon: Trophy,
     },
     {
-      label: "Creator candidates",
-      value: overview?.creators.candidateCount ?? 0,
-      icon: UserCheck,
+      label: "Season standings",
+      value: overview?.activeSeason?.standingCount ?? 0,
+      icon: CheckCircle2,
     },
     {
       label: "Corrections logged",

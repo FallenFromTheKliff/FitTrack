@@ -29,6 +29,7 @@ import type {
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMilestoneListParams,
   FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
@@ -91,6 +92,7 @@ export type {
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMilestoneListParams,
   FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
@@ -162,6 +164,8 @@ type MuscleDefinitionApiRecord = {
 type ExerciseReviewSubmissionApiRecord = {
   category: ExerciseReviewSubmissionRecord["category"];
   creator_candidate_score?: number;
+  creator_display_name?: string | null;
+  creator_email?: string | null;
   creator_governance_note?: string | null;
   creator_last_state_changed_at?: string | null;
   creator_profile_updated_at?: string | null;
@@ -610,6 +614,8 @@ function mapExerciseReviewSubmission(
   return {
     category: record.category,
     creatorCandidateScore: record.creator_candidate_score ?? 0,
+    creatorDisplayName: record.creator_display_name ?? null,
+    creatorEmail: record.creator_email ?? null,
     creatorGovernanceNote: record.creator_governance_note ?? null,
     creatorLastStateChangedAt: record.creator_last_state_changed_at ?? null,
     creatorProfileUpdatedAt: record.creator_profile_updated_at ?? null,
@@ -1133,6 +1139,9 @@ function toExerciseReviewSubmissionListParams(
     ...(params?.page !== undefined ? { page: params.page } : {}),
     ...(params?.limit !== undefined ? { limit: params.limit } : {}),
     ...(params?.status ? { status: params.status } : {}),
+    ...(params?.search ? { search: params.search } : {}),
+    ...(params?.category ? { category: params.category } : {}),
+    ...(params?.muscleGroup ? { muscle_group: params.muscleGroup } : {}),
   };
 }
 
@@ -1326,6 +1335,12 @@ function toSessionListParams(params?: WorkoutSessionListParams) {
     ...(params?.limit !== undefined ? { limit: params.limit } : {}),
     ...(params?.startDate ? { start_date: params.startDate } : {}),
     ...(params?.endDate ? { end_date: params.endDate } : {}),
+  };
+}
+
+function toMilestoneListParams(params?: FitnessMilestoneListParams) {
+  return {
+    ...(params?.includeLocked ? { include_locked: true } : {}),
   };
 }
 
@@ -1591,13 +1606,26 @@ export function createFitnessApi(transport: ApiTransport) {
         ),
       );
     },
-    async listMilestones() {
+    async listMilestones(params?: FitnessMilestoneListParams) {
       return (
         await unwrapResponse<MilestoneProgressApiRecord[]>(
-          transport.get("/fitness/milestones"),
+          transport.get("/fitness/milestones", {
+            params: toMilestoneListParams(params),
+          }),
           "Unable to load milestone progress.",
         )
       ).map(mapMilestoneProgress);
+    },
+    async claimMilestone(milestoneDefinitionId: string) {
+      return mapMilestoneProgress(
+        await unwrapResponse<MilestoneProgressApiRecord>(
+          transport.post(
+            `/fitness/milestones/${milestoneDefinitionId}/claim`,
+            {},
+          ),
+          "Unable to claim milestone.",
+        ),
+      );
     },
     async getIntegritySummary() {
       return mapIntegritySummary(

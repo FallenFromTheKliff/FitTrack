@@ -35,6 +35,7 @@ import {
   recurringCoachingPlanSessionsQueryOptions,
   replaceStaffCoachAvailabilityMutationOptions,
   respondToStaffAppointmentMutationOptions,
+  queryKeys,
   staffAppointmentsQueryOptions,
   staffCoachesQueryOptions,
   staffUsersQueryOptions,
@@ -1207,16 +1208,27 @@ export default function GymOperationsPage() {
   };
 
   const refreshGymOperationsData = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["staff", "appointments"] }),
-      queryClient.invalidateQueries({ queryKey: ["staff", "bookings"] }),
-      queryClient.invalidateQueries({ queryKey: ["staff", "coaches"] }),
-      queryClient.invalidateQueries({ queryKey: ["recurring-coaching-plans"] }),
-      queryClient.invalidateQueries({ queryKey: ["venues"] }),
-      queryClient.invalidateQueries({ queryKey: ["coaches"] }),
-      queryClient.invalidateQueries({ queryKey: ["bookings"] }),
-      queryClient.invalidateQueries({ queryKey: ["analytics"] }),
-    ]);
+    const keys = [
+      queryKeys.adminBookings(),
+      queryKeys.staffAppointments(),
+      queryKeys.staffBookings(),
+      queryKeys.staffBookings("all"),
+      queryKeys.staffCoaches(),
+      queryKeys.staffUsers(),
+      queryKeys.recurringCoachingPlanSessions(),
+      queryKeys.venues(),
+      queryKeys.analyticsSnapshot(),
+      queryKeys.analyticsOverview(),
+    ];
+
+    await Promise.all(
+      keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    );
+    await Promise.all(
+      keys.map((queryKey) =>
+        queryClient.refetchQueries({ queryKey, type: "active" }),
+      ),
+    );
     showFeedback("Gym Operations data refreshed.");
   };
 

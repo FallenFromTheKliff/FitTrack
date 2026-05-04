@@ -686,7 +686,7 @@ export default function MembersDashboard() {
     editTarget &&
     !isSelfEdit &&
     editTarget.role?.name === "USER" &&
-    editTarget.status === "active" &&
+    (editTarget.status === "active" || editTarget.status === "pending") &&
     !editPendingRequest &&
     !isEditTargetArchived,
   );
@@ -712,19 +712,11 @@ export default function MembersDashboard() {
     setAddLoading(false);
     if (result.success) {
       setContentMode("directory");
-      if (role === "member") {
-        notify(
-          "success",
-          "Account created",
-          "Verification OTP sent to the member's email.",
-        );
-      } else {
-        notify(
-          "success",
-          `${role === "admin" ? "Admin" : "Staff"} account created`,
-          "The account can sign in immediately.",
-        );
-      }
+      notify(
+        "success",
+        `${role === "admin" ? "Admin" : role === "staff" ? "Staff" : "Member"} account created`,
+        "Verification OTP sent to the account email.",
+      );
       return;
     }
     notify(

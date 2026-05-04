@@ -2,12 +2,14 @@ import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react
 import type { ApiClient } from "@fittrack/api-client";
 import type {
   CancelMembershipInput,
+  CreateMembershipPlanInput,
   ManualMembershipPaymentInput,
   MembershipPaymentHistoryParams,
   MembershipPaymentReviewFilters,
   MembershipPlanListParams,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
 import {
@@ -24,6 +26,37 @@ export function membershipPlansQueryOptions(
   return queryOptions({
     queryKey: queryKeys.membershipPlans(params),
     queryFn: () => client.membership.listPlans(params)
+  });
+}
+
+export function createMembershipPlanMutationOptions(
+  client: Pick<ApiClient, "membership">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: (payload: CreateMembershipPlanInput) =>
+      client.membership.createPlan(payload),
+    onSuccess: async () => {
+      await invalidateMembershipQueries(queryClient);
+    }
+  });
+}
+
+export function updateMembershipPlanMutationOptions(
+  client: Pick<ApiClient, "membership">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      planId,
+      payload
+    }: {
+      planId: string;
+      payload: UpdateMembershipPlanInput;
+    }) => client.membership.updatePlan(planId, payload),
+    onSuccess: async () => {
+      await invalidateMembershipQueries(queryClient);
+    }
   });
 }
 

@@ -7,6 +7,7 @@ import type {
   AdminGamificationCreatorStateInput,
   AdminGamificationIntegrityResolutionInput,
   AdminGamificationRankingOverrideInput,
+  AdminGamificationSeasonStandingListParams,
   AdminGamificationSeasonStatusInput,
   ApiClient,
   ManualAttendanceCheckInInput,
@@ -66,6 +67,25 @@ export function adminGamificationOverviewQueryOptions(
   return queryOptions({
     queryKey: queryKeys.adminGamificationOverview(),
     queryFn: () => client.admin.getGamificationOverview(),
+  });
+}
+
+export function adminGamificationSeasonsQueryOptions(
+  client: Pick<ApiClient, "admin">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.adminGamificationSeasons(),
+    queryFn: () => client.admin.listGamificationSeasons(),
+  });
+}
+
+export function adminGamificationSeasonStandingsQueryOptions(
+  client: Pick<ApiClient, "admin">,
+  params?: AdminGamificationSeasonStandingListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.adminGamificationSeasonStandings(params),
+    queryFn: () => client.admin.listGamificationSeasonStandings(params),
   });
 }
 

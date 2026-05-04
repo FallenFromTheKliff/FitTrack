@@ -16,6 +16,7 @@ import type {
   FitnessExerciseReviewSubmissionListParams,
   FitnessLeaderboardListParams,
   FitnessMasteryListParams,
+  FitnessMilestoneListParams,
   LogWorkoutSetInput,
   MuscleDefinitionListParams,
   StartPoseSessionInput,
@@ -346,12 +347,30 @@ export function fitnessSeasonStandingQueryOptions(
 export function fitnessMilestonesQueryOptions(
   client: Pick<ApiClient, "fitness">,
   userId?: string,
+  params?: FitnessMilestoneListParams,
 ) {
   return queryOptions({
-    queryKey: queryKeys.fitnessMilestones(userId),
+    queryKey: queryKeys.fitnessMilestones(userId, params),
     queryFn: async () => {
       if (!userId) return [];
-      return client.fitness.listMilestones();
+      return client.fitness.listMilestones(params);
+    },
+  });
+}
+
+export function claimFitnessMilestoneMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      milestoneDefinitionId,
+    }: {
+      milestoneDefinitionId: string;
+      userId?: string;
+    }) => client.fitness.claimMilestone(milestoneDefinitionId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
     },
   });
 }

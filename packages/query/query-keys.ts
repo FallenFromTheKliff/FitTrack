@@ -23,6 +23,20 @@ const adminKeys = {
   bookings: () => ["admin", "bookings"] as const,
   activeBookings: () => ["admin", "bookings", "active"] as const,
   gamificationOverview: () => ["admin", "gamification", "overview"] as const,
+  gamificationSeasons: () => ["admin", "gamification", "seasons"] as const,
+  gamificationSeasonStandings: (params?: {
+    governanceStatus?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    muscleKey?: string;
+    page?: number;
+    search?: string;
+    seasonId?: string;
+    visibility?: string;
+  }) =>
+    params
+      ? (["admin", "gamification", "season-standings", params] as const)
+      : (["admin", "gamification", "season-standings"] as const),
 };
 
 const staffKeys = {
@@ -142,6 +156,13 @@ const gymLayoutKeys = {
   equipment: () => ["gym-layout", "equipment"] as const,
   archivedEquipment: () => ["gym-layout", "equipment", "archived"] as const,
   floorPlanMedia: () => ["gym-layout", "floor-plans", "media"] as const,
+};
+
+const gymKnowledgeKeys = {
+  promotions: (params?: { limit?: number; page?: number }) =>
+    params
+      ? (["gym-knowledge", "promotions", params] as const)
+      : (["gym-knowledge", "promotions"] as const),
 };
 
 const recurringCoachingPlanKeys = {
@@ -319,6 +340,20 @@ const analyticsKeys = {
       : (["analytics", "insights", "detail"] as const),
 };
 
+const auditKeys = {
+  logs: (params?: {
+    action?: string;
+    endDate?: string;
+    entity?: string;
+    limit?: number;
+    page?: number;
+    startDate?: string;
+  }) =>
+    params
+      ? (["audit", "logs", params] as const)
+      : (["audit", "logs"] as const),
+};
+
 const fitnessKeys = {
   exercises: (params?: {
     category?: string;
@@ -331,8 +366,11 @@ const fitnessKeys = {
       ? (["fitness", "exercises", params] as const)
       : (["fitness", "exercises"] as const),
   exerciseReviewSubmissions: (params?: {
+    category?: string;
     limit?: number;
+    muscleGroup?: string;
     page?: number;
+    search?: string;
     status?: string;
   }) =>
     params
@@ -421,10 +459,14 @@ const fitnessKeys = {
     userId
       ? (["fitness", "season-standing", userId] as const)
       : (["fitness", "season-standing"] as const),
-  milestones: (userId?: string) =>
+  milestones: (userId?: string, params?: { includeLocked?: boolean }) =>
     userId
-      ? (["fitness", "milestones", userId] as const)
-      : (["fitness", "milestones"] as const),
+      ? params
+        ? (["fitness", "milestones", userId, params] as const)
+        : (["fitness", "milestones", userId] as const)
+      : params
+        ? (["fitness", "milestones", params] as const)
+        : (["fitness", "milestones"] as const),
   integritySummary: (userId?: string) =>
     userId
       ? (["fitness", "integrity-summary", userId] as const)
@@ -462,6 +504,8 @@ export const queryKeys = {
   adminBookings: adminKeys.bookings,
   adminActiveBookings: adminKeys.activeBookings,
   adminGamificationOverview: adminKeys.gamificationOverview,
+  adminGamificationSeasons: adminKeys.gamificationSeasons,
+  adminGamificationSeasonStandings: adminKeys.gamificationSeasonStandings,
   staffDashboardStats: staffKeys.dashboardStats,
   staffBookings: staffKeys.bookings,
   staffBookingDetail: staffKeys.bookingDetail,
@@ -514,6 +558,7 @@ export const queryKeys = {
   analyticsCoaches: analyticsKeys.coaches,
   analyticsInsights: analyticsKeys.insights,
   analyticsInsightDetail: analyticsKeys.insightDetail,
+  auditLogs: auditKeys.logs,
   fitnessExercises: fitnessKeys.exercises,
   fitnessExerciseReviewSubmissions: fitnessKeys.exerciseReviewSubmissions,
   fitnessMuscleDefinitions: fitnessKeys.muscleDefinitions,
@@ -532,4 +577,5 @@ export const queryKeys = {
   gymLayoutEquipment: gymLayoutKeys.equipment,
   gymLayoutArchivedEquipment: gymLayoutKeys.archivedEquipment,
   gymLayoutFloorPlanMedia: gymLayoutKeys.floorPlanMedia,
+  gymKnowledgePromotions: gymKnowledgeKeys.promotions,
 };

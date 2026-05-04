@@ -18,6 +18,7 @@ import {
   coachProfileSchema,
   editProfilePersonalSchema,
   formatPhilippineMobileForInput,
+  getLatestAllowedMemberBirthDate,
   normalizePhilippineMobileNumber,
   sanitizePhilippineMobileInput,
   type EditProfilePersonalData
@@ -123,6 +124,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     }
   });
   const savingText = useLoadingText("Saving", isSubmitting);
+  const latestAllowedBirthDate = useMemo(() => getLatestAllowedMemberBirthDate(), []);
   const { reset: resetPersonal } = personalForm;
   const wasVisibleRef = useRef(false);
   const [weightInput, setWeightInput] = useState("");
@@ -653,6 +655,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         isVisible={isDobCalOpen}
         selectedDate={dateOfBirth}
         allowEmpty
+        maxDate={latestAllowedBirthDate}
         defaultYear={2000}
         defaultMonth={1}
         onSelect={(date) => {

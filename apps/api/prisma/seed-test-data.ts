@@ -1,14 +1,31 @@
 import {
   AccountDeletionRequestStatus,
+  ActivityLevel,
   AmenityType,
   AppointmentStatus,
   AuthProvider,
   BookingStatus,
+  ChatContext,
+  ChatRole,
+  CreatorState,
+  EquipmentStatus,
   ExerciseCategory,
+  ExerciseReviewSubmissionStatus,
   FitnessGoal,
+  Gender,
+  GymChatRole,
+  GymFaqCategory,
+  InsightFocus,
+  InsightPeriod,
+  IntegrityCaseStatus,
+  IntegrityRiskLevel,
+  InteractionType,
   MasteryRank,
   MembershipCardSource,
   MembershipCardStatus,
+  MilestoneProgressStatus,
+  ModerationActionType,
+  NutritionUnit,
   PayableType,
   PaymentProvider,
   PaymentStage,
@@ -17,12 +34,26 @@ import {
   PoseProfileKind,
   Prisma,
   PrismaClient,
+  ProgressionGrantStatus,
+  ProgressionGrantType,
+  ProgressionSourceStatus,
+  ProgressionSourceType,
+  RankingGovernanceStatus,
+  RankingVisibility,
+  RecurringCoachingBillingCycleStatus,
+  RecurringCoachingFrequency,
+  RecurringCoachingPlanStatus,
+  RelationshipStatus,
   SalePaymentMethod,
   SaleStatus,
+  SeasonStatus,
   SessionStatus,
   SubscriptionStatus,
   UserRole,
   UserStatus,
+  NotificationChannel,
+  NotificationStatus,
+  NotificationType,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
@@ -32,6 +63,7 @@ import { config } from 'dotenv';
 import { localEnvFilePath } from '../env-path';
 import { bootstrapDefaults } from './defaults';
 import {
+  MANUAL_TEST_PATHS,
   TEST_ACCOUNTS,
   type TestAccount,
   type TestDataSeedMode,
@@ -41,30 +73,18 @@ import {
   toManifestCredentials,
   writeTestDataManifest,
 } from './test-data/manifest';
+import { EXERCISE_REVIEW_SUBMISSION_SEEDS } from './test-data/exercise-review-submission-seeds';
 
 const PASSWORD_HASH_ROUNDS = 12;
 
 const TEST_MANUAL_PATHS = [
-  {
-    area: 'web-members',
-    credentialKey: 'admin',
-    route: '/members',
-    expected:
-      'Review the seeded member-card roster and membership lifecycle states from the admin or staff side.',
-  },
+  ...MANUAL_TEST_PATHS,
   {
     area: 'web-schedule',
     credentialKey: 'staff',
     route: '/schedule',
     expected:
-      'Confirm Gym Operations starts from a clean slate, then create coach profiles, availability, appointments, and venue bookings manually.',
-  },
-  {
-    area: 'mobile-profile',
-    credentialKey: 'member-active',
-    route: '/(tabs)/profile',
-    expected:
-      'Verify the clean active member baseline, membership-card access, QR readiness, and empty payment/activity history.',
+      'Review seeded coach profiles, availability, appointments, and venue bookings from Gym Operations.',
   },
 ] as const;
 
@@ -79,7 +99,9 @@ const LEGACY_COACH_SEED_ACCOUNTS = [
   },
 ] as const;
 
-const BASELINE_TEST_ACCOUNT_KEYS = new Set(['admin', 'staff']);
+const BASELINE_TEST_ACCOUNT_KEYS = new Set(
+  TEST_ACCOUNTS.map((account) => account.key),
+);
 const BASELINE_TEST_ACCOUNTS = TEST_ACCOUNTS.filter((account) =>
   BASELINE_TEST_ACCOUNT_KEYS.has(account.key),
 );
@@ -198,6 +220,13 @@ function analyticsAt(args: {
   }
 
   target.setUTCHours(args.hour ?? 9, args.minute ?? 0, 0, 0);
+  return target;
+}
+
+function nutritionDate(daysAgo = 0) {
+  const target = new Date();
+  target.setUTCDate(target.getUTCDate() - daysAgo);
+  target.setUTCHours(0, 0, 0, 0);
   return target;
 }
 
@@ -751,9 +780,6 @@ async function cleanupUsersOutsideBaseline(
   });
 }
 
-// Legacy gym-operations fixture builders are intentionally disabled. The seed now
-// clears coach/bookings data and keeps only reservable venue records.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
   await ensureReservableAmenities();
   const coachProfiles: Record<string, string> = {};
@@ -1154,7 +1180,6 @@ async function ensureReservableAmenities() {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function ensureGymOperationsVenueBookings(
   ensuredAccounts: readonly EnsuredAccount[],
   coachProfiles: Record<string, string>,
@@ -1593,6 +1618,357 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
 
     await prisma.membershipCard.deleteMany({
       where: { user_id: userId },
+    });
+  }
+}
+
+async function ensureNutritionFixtures(
+  ensuredAccounts: readonly EnsuredAccount[],
+) {
+  const memberAccounts = ensuredAccounts.filter(
+    ({ account }) => account.role === UserRole.member,
+  );
+  const memberUserIds = memberAccounts.map(({ userId }) => userId);
+
+  if (!memberUserIds.length) {
+    return;
+  }
+
+  await prisma.nutritionLog.deleteMany({
+    where: { user_id: { in: memberUserIds } },
+  });
+  await prisma.macroTarget.deleteMany({
+    where: { user_id: { in: memberUserIds } },
+  });
+  await prisma.tdeeProfile.deleteMany({
+    where: { user_id: { in: memberUserIds } },
+  });
+  await prisma.progressMetric.deleteMany({
+    where: { user_id: { in: memberUserIds } },
+  });
+
+  const nutritionProfiles = {
+    'member-active': {
+      age: 27,
+      activityLevel: ActivityLevel.moderate,
+      bmrCalories: '1396.00',
+      bodyFatPct: '22.40',
+      carbsG: '255.00',
+      chestCm: '90.00',
+      dateOfBirth: '1998-07-14',
+      fatG: '68.00',
+      fitnessGoal: FitnessGoal.maintenance,
+      gender: Gender.female,
+      heightCm: '164.00',
+      muscleMassKg: '39.80',
+      proteinG: '132.00',
+      targetCalories: '2160.00',
+      tdeeCalories: '2160.00',
+      waistCm: '72.00',
+      weightKg: '62.00',
+    },
+    'member-premium': {
+      age: 24,
+      activityLevel: ActivityLevel.active,
+      bmrCalories: '1748.00',
+      bodyFatPct: '17.80',
+      carbsG: '390.00',
+      chestCm: '100.00',
+      dateOfBirth: '2001-04-22',
+      fatG: '90.00',
+      fitnessGoal: FitnessGoal.bulking,
+      gender: Gender.male,
+      heightCm: '175.00',
+      muscleMassKg: '55.20',
+      proteinG: '175.00',
+      targetCalories: '3075.00',
+      tdeeCalories: '3015.00',
+      waistCm: '80.00',
+      weightKg: '74.00',
+    },
+    'member-frozen': {
+      age: 31,
+      activityLevel: ActivityLevel.light,
+      bmrCalories: '1415.00',
+      bodyFatPct: '25.10',
+      carbsG: '185.00',
+      chestCm: '93.00',
+      dateOfBirth: '1994-02-03',
+      fatG: '55.00',
+      fitnessGoal: FitnessGoal.cutting,
+      gender: Gender.female,
+      heightCm: '166.00',
+      muscleMassKg: '41.30',
+      proteinG: '145.00',
+      targetCalories: '1815.00',
+      tdeeCalories: '1945.00',
+      waistCm: '76.00',
+      weightKg: '67.00',
+    },
+    'member-pending': {
+      age: 22,
+      activityLevel: ActivityLevel.moderate,
+      bmrCalories: '1662.00',
+      bodyFatPct: '19.50',
+      carbsG: '280.00',
+      chestCm: '96.00',
+      dateOfBirth: '2003-09-01',
+      fatG: '70.00',
+      fitnessGoal: FitnessGoal.maintenance,
+      gender: Gender.other,
+      heightCm: '171.00',
+      muscleMassKg: '49.20',
+      proteinG: '150.00',
+      targetCalories: '2350.00',
+      tdeeCalories: '2350.00',
+      waistCm: '79.00',
+      weightKg: '70.00',
+    },
+    'member-nomembership': {
+      age: 29,
+      activityLevel: ActivityLevel.sedentary,
+      bmrCalories: '1325.00',
+      bodyFatPct: '28.00',
+      carbsG: '190.00',
+      chestCm: '88.00',
+      dateOfBirth: '1996-11-19',
+      fatG: '58.00',
+      fitnessGoal: FitnessGoal.maintenance,
+      gender: Gender.female,
+      heightCm: '158.00',
+      muscleMassKg: '35.60',
+      proteinG: '110.00',
+      targetCalories: '1720.00',
+      tdeeCalories: '1720.00',
+      waistCm: '74.00',
+      weightKg: '58.00',
+    },
+    'member-expired': {
+      age: 35,
+      activityLevel: ActivityLevel.light,
+      bmrCalories: '1548.00',
+      bodyFatPct: '24.20',
+      carbsG: '215.00',
+      chestCm: '94.00',
+      dateOfBirth: '1990-05-28',
+      fatG: '62.00',
+      fitnessGoal: FitnessGoal.cutting,
+      gender: Gender.female,
+      heightCm: '168.00',
+      muscleMassKg: '42.90',
+      proteinG: '140.00',
+      targetCalories: '1980.00',
+      tdeeCalories: '2110.00',
+      waistCm: '78.00',
+      weightKg: '68.00',
+    },
+  } satisfies Record<
+    string,
+    {
+      activityLevel: ActivityLevel;
+      age: number;
+      bmrCalories: string;
+      bodyFatPct: string;
+      carbsG: string;
+      chestCm: string;
+      dateOfBirth: string;
+      fatG: string;
+      fitnessGoal: FitnessGoal;
+      gender: Gender;
+      heightCm: string;
+      muscleMassKg: string;
+      proteinG: string;
+      targetCalories: string;
+      tdeeCalories: string;
+      waistCm: string;
+      weightKg: string;
+    }
+  >;
+
+  for (const { account, userId } of memberAccounts) {
+    const profile = nutritionProfiles[account.key];
+
+    if (!profile) {
+      continue;
+    }
+
+    await prisma.userProfile.update({
+      where: { user_id: userId },
+      data: {
+        activity_level: profile.activityLevel,
+        date_of_birth: new Date(`${profile.dateOfBirth}T00:00:00.000Z`),
+        fitness_goal: profile.fitnessGoal,
+        gender: profile.gender,
+        height_cm: new Prisma.Decimal(profile.heightCm),
+        weight_kg: new Prisma.Decimal(profile.weightKg),
+      },
+    });
+
+    const tdeeProfileId = seedId(`nutrition:tdee:${account.key}:active`);
+    const macroTargetId = seedId(`nutrition:macro:${account.key}:active`);
+    const calculatedAt = analyticsAt({ daysAgo: 1, hour: 6, minute: 30 });
+
+    await prisma.tdeeProfile.create({
+      data: {
+        id: tdeeProfileId,
+        user_id: userId,
+        weight_kg: new Prisma.Decimal(profile.weightKg),
+        height_cm: new Prisma.Decimal(profile.heightCm),
+        age: profile.age,
+        gender: profile.gender,
+        activity_level: profile.activityLevel,
+        fitness_goal: profile.fitnessGoal,
+        bmr_calories: new Prisma.Decimal(profile.bmrCalories),
+        tdee_calories: new Prisma.Decimal(profile.tdeeCalories),
+        is_active: true,
+        calculated_at: calculatedAt,
+      },
+    });
+
+    await prisma.macroTarget.create({
+      data: {
+        id: macroTargetId,
+        user_id: userId,
+        tdee_profile_id: tdeeProfileId,
+        target_calories: new Prisma.Decimal(profile.targetCalories),
+        protein_g: new Prisma.Decimal(profile.proteinG),
+        carbs_g: new Prisma.Decimal(profile.carbsG),
+        fat_g: new Prisma.Decimal(profile.fatG),
+        is_active: true,
+      },
+    });
+
+    await prisma.progressMetric.createMany({
+      data: [
+        {
+          id: seedId(`nutrition:progress:${account.key}:baseline`),
+          user_id: userId,
+          weight_kg: new Prisma.Decimal(profile.weightKg),
+          height_cm: new Prisma.Decimal(profile.heightCm),
+          body_fat_pct: new Prisma.Decimal(profile.bodyFatPct),
+          muscle_mass_kg: new Prisma.Decimal(profile.muscleMassKg),
+          waist_cm: new Prisma.Decimal(profile.waistCm),
+          chest_cm: new Prisma.Decimal(profile.chestCm),
+          notes: 'Baseline nutrition profile seeded for role and dashboard testing.',
+          recorded_at: analyticsAt({ daysAgo: 14, hour: 8 }),
+        },
+        {
+          id: seedId(`nutrition:progress:${account.key}:current`),
+          user_id: userId,
+          weight_kg: new Prisma.Decimal(profile.weightKg),
+          height_cm: new Prisma.Decimal(profile.heightCm),
+          body_fat_pct: new Prisma.Decimal(profile.bodyFatPct),
+          muscle_mass_kg: new Prisma.Decimal(profile.muscleMassKg),
+          waist_cm: new Prisma.Decimal(profile.waistCm),
+          chest_cm: new Prisma.Decimal(profile.chestCm),
+          notes: 'Current nutrition checkpoint aligned with the active macro target.',
+          recorded_at: analyticsAt({ daysAgo: 1, hour: 8 }),
+        },
+      ],
+    });
+
+    const dailyModifier =
+      account.key === 'member-premium'
+        ? 1.18
+        : account.key === 'member-frozen' || account.key === 'member-expired'
+          ? 0.82
+          : 1;
+    const calories = Number(profile.targetCalories);
+    const protein = Number(profile.proteinG);
+    const carbs = Number(profile.carbsG);
+    const fat = Number(profile.fatG);
+
+    await prisma.nutritionLog.createMany({
+      data: [
+        {
+          id: seedId(`nutrition:log:${account.key}:today-breakfast`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(0),
+          meal_name: 'Breakfast',
+          food_item: 'Greek yogurt, banana, and oats',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.23 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.24 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.26 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.16 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+        },
+        {
+          id: seedId(`nutrition:log:${account.key}:today-lunch`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(0),
+          meal_name: 'Lunch',
+          food_item: 'Chicken rice bowl with vegetables',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.31 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.36 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.30 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.28 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+        },
+        {
+          id: seedId(`nutrition:log:${account.key}:yesterday-summary`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(1),
+          meal_name: 'Daily summary',
+          food_item: 'Seeded full-day meal coverage',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.92 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.96 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.88 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.90 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+        },
+        {
+          id: seedId(`nutrition:log:${account.key}:week-history`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(6),
+          meal_name: 'Post-workout meal',
+          food_item: 'Tuna sandwich and fruit',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.42 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.46 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.38 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.32 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+        },
+      ],
     });
   }
 }
@@ -3607,12 +3983,1125 @@ async function ensureWorkoutFixtures(
   });
 }
 
+async function ensureFeatureCoverageFixtures(
+  ensuredAccounts: readonly EnsuredAccount[],
+  coachProfiles: Record<string, string>,
+) {
+  const userIdByKey = (key: string) =>
+    ensuredAccounts.find(({ account }) => account.key === key)?.userId ?? null;
+
+  const adminUserId = userIdByKey('admin');
+  const staffUserId = userIdByKey('staff');
+  const memberActiveId = userIdByKey('member-active');
+  const memberPremiumId = userIdByKey('member-premium');
+  const memberFrozenId = userIdByKey('member-frozen');
+  const memberPendingId = userIdByKey('member-pending');
+  const memberNoMembershipId = userIdByKey('member-nomembership');
+  const memberExpiredId = userIdByKey('member-expired');
+  const memberUserIds = [
+    memberActiveId,
+    memberPremiumId,
+    memberFrozenId,
+    memberPendingId,
+    memberNoMembershipId,
+    memberExpiredId,
+  ].filter((userId): userId is string => Boolean(userId));
+  const baselineUserIds = ensuredAccounts.map(({ userId }) => userId);
+  const staffCoachId = coachProfiles['staff'] ?? null;
+  const conditioningCoachId = coachProfiles['member-nomembership'] ?? null;
+
+  if (!adminUserId || !staffUserId || !memberActiveId || !memberPremiumId) {
+    return;
+  }
+
+  await prisma.gymChatInteractionLog.deleteMany({});
+  await prisma.gymChatMessage.deleteMany({});
+  await prisma.gymChatSession.deleteMany({});
+  await prisma.aiInteractionLog.deleteMany({});
+  await prisma.aiChatMessage.deleteMany({});
+  await prisma.aiChatSession.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.businessInsightRun.deleteMany({});
+  await prisma.equipmentWriteOff.deleteMany({});
+  await prisma.gymEquipment.deleteMany({});
+  await prisma.gymFaqEntry.deleteMany({});
+  await prisma.gymPromotion.deleteMany({});
+  await prisma.gymSpecialSchedule.deleteMany({});
+  await prisma.gymOperatingHour.deleteMany({});
+  await prisma.facilityFloorPlanMedia.deleteMany({});
+  await prisma.moderationActionRecord.deleteMany({});
+  await prisma.integrityEvent.deleteMany({});
+  await prisma.integrityCase.deleteMany({});
+  await prisma.integrityProfile.deleteMany({});
+  await prisma.rankingProfile.deleteMany({});
+  await prisma.userMilestoneProgress.deleteMany({});
+  await prisma.seasonalStanding.deleteMany({});
+  await prisma.progressionGrantLedger.deleteMany({});
+  await prisma.progressionSourceEvent.deleteMany({});
+  await prisma.userProgressionProfile.deleteMany({});
+  await prisma.exerciseReviewSubmission.deleteMany({});
+  await prisma.recurringCoachingBillingCycle.deleteMany({});
+  await prisma.recurringCoachingPlan.deleteMany({});
+  await prisma.coachClientRelationship.deleteMany({});
+
+  const [activeSeason, milestones, activeWorkout, activePose, curlExercise] =
+    await Promise.all([
+      prisma.seasonDefinition.findFirst({
+        where: { status: SeasonStatus.active },
+        select: { id: true },
+      }),
+      prisma.milestoneDefinition.findMany({
+        select: {
+          id: true,
+          key: true,
+        },
+      }),
+      prisma.workoutSession.findFirst({
+        where: { user_id: memberActiveId },
+        orderBy: { completed_at: 'desc' },
+        select: { id: true },
+      }),
+      prisma.poseSession.findFirst({
+        where: { user_id: memberActiveId },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+      }),
+      prisma.exerciseCatalog.findFirst({
+        where: { name: 'Dumbbell Bicep Curl' },
+        select: { id: true },
+      }),
+    ]);
+
+  const milestoneIds = new Map(
+    milestones.map((milestone) => [milestone.key, milestone.id]),
+  );
+  const activeSeasonId = activeSeason?.id ?? null;
+
+  for (const [key, state] of [
+    ['member-active', CreatorState.candidate],
+    ['member-premium', CreatorState.approved],
+    ['member-pending', CreatorState.pending_review],
+    ['member-frozen', CreatorState.suspended],
+    ['member-expired', CreatorState.none],
+    ['member-nomembership', CreatorState.none],
+  ] as const) {
+    const userId = userIdByKey(key);
+    if (!userId) {
+      continue;
+    }
+
+    await prisma.creatorProfile.upsert({
+      where: { user_id: userId },
+      update: {
+        admin_notes:
+          state === CreatorState.approved
+            ? 'Seeded creator-approved member for mobile exercise draft flows.'
+            : 'Seeded creator governance state for Exercise Lab coverage.',
+        last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
+        state,
+      },
+      create: {
+        id: seedId(`creator-profile:${key}`),
+        admin_notes:
+          state === CreatorState.approved
+            ? 'Seeded creator-approved member for mobile exercise draft flows.'
+            : 'Seeded creator governance state for Exercise Lab coverage.',
+        last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
+        state,
+        user_id: userId,
+      },
+    });
+  }
+
+  if (staffCoachId) {
+    await prisma.coachClientRelationship.createMany({
+      data: [
+        {
+          id: seedId('coach-client:staff:member-premium'),
+          coach_id: staffCoachId,
+          member_id: memberPremiumId,
+          notes:
+            'Premium member paired with staff coach for recurring coaching and analytics demos.',
+          started_at: analyticsAt({ daysAgo: 18, hour: 8 }),
+          status: RelationshipStatus.active,
+        },
+        ...(memberPendingId
+          ? [
+              {
+                id: seedId('coach-client:staff:member-pending'),
+                coach_id: staffCoachId,
+                member_id: memberPendingId,
+                notes:
+                  'Pending member relationship used for approval-state filtering.',
+                started_at: null,
+                status: RelationshipStatus.pending,
+              },
+            ]
+          : []),
+      ],
+    });
+
+    const recurringPlanId = seedId('recurring-plan:member-premium:staff');
+    await prisma.recurringCoachingPlan.create({
+      data: {
+        id: recurringPlanId,
+        coach_id: staffCoachId,
+        completed_sessions: 3,
+        created_by: staffUserId,
+        duration_minutes: 60,
+        end_date: nutritionDate(-60),
+        frequency: RecurringCoachingFrequency.weekly,
+        member_id: memberPremiumId,
+        preferred_days: [1, 3],
+        preferred_time: fixedTime('08:30:00'),
+        start_date: nutritionDate(21),
+        status: RecurringCoachingPlanStatus.active,
+        total_sessions: 12,
+      },
+    });
+
+    await prisma.recurringCoachingBillingCycle.createMany({
+      data: [
+        {
+          id: seedId('recurring-cycle:member-premium:paid'),
+          amount: new Prisma.Decimal('1700'),
+          cycle_end_date: nutritionDate(1),
+          cycle_start_date: nutritionDate(30),
+          due_date: nutritionDate(28),
+          grace_period_ends_at: analyticsAt({ daysAgo: 23, hour: 23 }),
+          paid_at: analyticsAt({ daysAgo: 27, hour: 12 }),
+          recurring_plan_id: recurringPlanId,
+          status: RecurringCoachingBillingCycleStatus.paid,
+        },
+        {
+          id: seedId('recurring-cycle:member-premium:due'),
+          amount: new Prisma.Decimal('1700'),
+          cycle_end_date: nutritionDate(-29),
+          cycle_start_date: nutritionDate(0),
+          due_date: nutritionDate(-2),
+          grace_period_ends_at: analyticsAt({ daysAgo: -5, hour: 23 }),
+          recurring_plan_id: recurringPlanId,
+          status: RecurringCoachingBillingCycleStatus.due,
+        },
+      ],
+    });
+  }
+
+  await prisma.exerciseReviewSubmission.createMany({
+    data: EXERCISE_REVIEW_SUBMISSION_SEEDS.map((seed) => {
+      const userId = userIdByKey(seed.creatorKey);
+      if (!userId) {
+        throw new Error(
+          `Missing creator account for exercise review seed ${seed.key}.`,
+        );
+      }
+
+      return {
+        id: seedId(`exercise-review:${seed.key}`),
+        category: seed.category,
+        created_at: analyticsAt({ daysAgo: seed.daysAgo, hour: seed.hour }),
+        description: seed.description,
+        evidence_bars: seed.evidenceBars as Prisma.InputJsonValue,
+        hand_shape_profile: {
+          exerciseRequirement:
+            seed.category === ExerciseCategory.strength ? 'grip_optional' : 'none',
+          targetLockGesture: 'rock_sign',
+        } as Prisma.InputJsonValue,
+        instructions: seed.instructions,
+        match_hint: seed.matchHint ?? null,
+        movement_profile: {
+          movementType:
+            seed.category === ExerciseCategory.balance ? 'static_hold' : 'dynamic_rep',
+          rigSource: 'seeded_creator_capture',
+          thresholds: { downAngle: 145, tolerance: 18, upAngle: 92 },
+        } as Prisma.InputJsonValue,
+        muscle_group: seed.muscleGroup,
+        muscle_targets: seed.muscleTargets as Prisma.InputJsonValue,
+        origin_label: seed.originLabel,
+        pose_session_id:
+          seed.key === 'member-active:rotational-press'
+            ? activePose?.id ?? null
+            : null,
+        proposed_name: seed.proposedName,
+        published_exercise_id:
+          seed.status === ExerciseReviewSubmissionStatus.published
+            ? curlExercise?.id ?? null
+            : null,
+        queue_tag: seed.queueTag,
+        reviewed_at:
+          seed.status === ExerciseReviewSubmissionStatus.pending
+            ? null
+            : analyticsAt({ daysAgo: seed.reviewedDaysAgo ?? 1, hour: seed.hour }),
+        review_notes: seed.reviewNotes ?? null,
+        source_label: seed.sourceLabel,
+        status: seed.status,
+        summary: seed.summary,
+        title: seed.title,
+        trigger_label: seed.triggerLabel,
+        user_id: userId,
+      };
+    }),
+  });
+
+  await prisma.userProgressionProfile.createMany({
+    data: [
+      {
+        id: seedId('progression-profile:member-active'),
+        active_season_id: activeSeasonId,
+        current_season_points: 186,
+        current_streak: 5,
+        last_progressed_at: analyticsAt({ daysAgo: 1, hour: 20 }),
+        longest_streak: 9,
+        total_xp: 4260,
+        user_id: memberActiveId,
+      },
+      {
+        id: seedId('progression-profile:member-premium'),
+        active_season_id: activeSeasonId,
+        current_season_points: 312,
+        current_streak: 12,
+        last_progressed_at: analyticsAt({ daysAgo: 0, hour: 19 }),
+        longest_streak: 15,
+        total_xp: 7810,
+        user_id: memberPremiumId,
+      },
+      ...(memberFrozenId
+        ? [
+            {
+              id: seedId('progression-profile:member-frozen'),
+              active_season_id: activeSeasonId,
+              current_season_points: 42,
+              current_streak: 0,
+              last_progressed_at: analyticsAt({ daysAgo: 10, hour: 18 }),
+              longest_streak: 4,
+              total_xp: 1290,
+              user_id: memberFrozenId,
+            },
+          ]
+        : []),
+      ...(memberPendingId
+        ? [
+            {
+              id: seedId('progression-profile:member-pending'),
+              active_season_id: activeSeasonId,
+              current_season_points: 16,
+              current_streak: 1,
+              last_progressed_at: analyticsAt({ daysAgo: 3, hour: 17 }),
+              longest_streak: 1,
+              total_xp: 320,
+              user_id: memberPendingId,
+            },
+          ]
+        : []),
+      ...(memberExpiredId
+        ? [
+            {
+              id: seedId('progression-profile:member-expired'),
+              active_season_id: activeSeasonId,
+              current_season_points: 0,
+              current_streak: 0,
+              last_progressed_at: analyticsAt({ daysAgo: 31, hour: 16 }),
+              longest_streak: 7,
+              total_xp: 2140,
+              user_id: memberExpiredId,
+            },
+          ]
+        : []),
+    ],
+  });
+
+  await prisma.rankingProfile.createMany({
+    data: ensuredAccounts.map(({ account, userId }) => ({
+      id: seedId(`ranking-profile:${account.key}`),
+      admin_note:
+        account.key === 'member-frozen'
+          ? 'Frozen account hidden while termination request is pending.'
+          : null,
+      display_alias:
+        account.key === 'member-premium'
+          ? 'Iron Luca'
+          : account.key === 'member-active'
+            ? 'Ava Strong'
+            : null,
+      governance_status:
+        account.key === 'member-frozen'
+          ? RankingGovernanceStatus.hidden_by_user
+          : account.key === 'member-expired'
+            ? RankingGovernanceStatus.hidden_by_admin
+            : RankingGovernanceStatus.normal,
+      user_id: userId,
+      visibility:
+        account.key === 'member-expired'
+          ? RankingVisibility.private
+          : account.key === 'member-pending'
+            ? RankingVisibility.anonymous
+            : RankingVisibility.public,
+    })),
+  });
+
+  await prisma.integrityProfile.createMany({
+    data: ensuredAccounts.map(({ account, userId }) => ({
+      id: seedId(`integrity-profile:${account.key}`),
+      last_flagged_at:
+        account.key === 'member-frozen'
+          ? analyticsAt({ daysAgo: 1, hour: 21 })
+          : null,
+      last_resolved_at:
+        account.key === 'member-expired'
+          ? analyticsAt({ daysAgo: 33, hour: 10 })
+          : null,
+      open_case_count: account.key === 'member-frozen' ? 1 : 0,
+      risk_level:
+        account.key === 'member-frozen'
+          ? IntegrityRiskLevel.medium
+          : account.key === 'member-expired'
+            ? IntegrityRiskLevel.high
+            : IntegrityRiskLevel.low,
+      user_id: userId,
+    })),
+  });
+
+  if (activeSeasonId) {
+    await prisma.seasonalStanding.createMany({
+      data: [
+        {
+          id: seedId('standing:active-season:member-premium'),
+          is_disqualified: false,
+          is_hidden: false,
+          last_earned_at: analyticsAt({ daysAgo: 0, hour: 19 }),
+          rank_position: 1,
+          season_id: activeSeasonId,
+          season_points: 312,
+          user_id: memberPremiumId,
+        },
+        {
+          id: seedId('standing:active-season:member-active'),
+          is_disqualified: false,
+          is_hidden: false,
+          last_earned_at: analyticsAt({ daysAgo: 1, hour: 20 }),
+          rank_position: 2,
+          season_id: activeSeasonId,
+          season_points: 186,
+          user_id: memberActiveId,
+        },
+        ...(memberPendingId
+          ? [
+              {
+                id: seedId('standing:active-season:member-pending'),
+                is_disqualified: false,
+                is_hidden: false,
+                last_earned_at: analyticsAt({ daysAgo: 3, hour: 17 }),
+                rank_position: 3,
+                season_id: activeSeasonId,
+                season_points: 16,
+                user_id: memberPendingId,
+              },
+            ]
+          : []),
+        ...(memberFrozenId
+          ? [
+              {
+                id: seedId('standing:active-season:member-frozen'),
+                is_disqualified: false,
+                is_hidden: true,
+                last_earned_at: analyticsAt({ daysAgo: 10, hour: 18 }),
+                rank_position: null,
+                season_id: activeSeasonId,
+                season_points: 42,
+                user_id: memberFrozenId,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+
+  const milestoneProgressRows = [
+    {
+      key: 'first-workout-complete',
+      userId: memberActiveId,
+      status: MilestoneProgressStatus.claimed,
+      progress: 1,
+    },
+    {
+      key: 'first-workout-complete',
+      userId: memberPremiumId,
+      status: MilestoneProgressStatus.claimed,
+      progress: 1,
+    },
+    {
+      key: 'season-100-points',
+      userId: memberPremiumId,
+      status: MilestoneProgressStatus.unlocked,
+      progress: 312,
+    },
+    {
+      key: 'multi-muscle-foundation',
+      userId: memberActiveId,
+      status: MilestoneProgressStatus.in_progress,
+      progress: 2,
+    },
+  ];
+  await prisma.userMilestoneProgress.createMany({
+    data: milestoneProgressRows
+      .map((row) => {
+        const milestoneId = milestoneIds.get(row.key);
+        if (!milestoneId) {
+          return null;
+        }
+
+        const unlockedAt =
+          row.status === MilestoneProgressStatus.in_progress
+            ? null
+            : analyticsAt({ daysAgo: 1, hour: 20 });
+
+        return {
+          id: seedId(`milestone-progress:${row.userId}:${row.key}`),
+          claimed_at:
+            row.status === MilestoneProgressStatus.claimed
+              ? analyticsAt({ daysAgo: 1, hour: 21 })
+              : null,
+          milestone_definition_id: milestoneId,
+          progress_payload: {
+            source: 'seed-test-data',
+            value: row.progress,
+          } as Prisma.InputJsonValue,
+          progress_value: row.progress,
+          status: row.status,
+          unlocked_at: unlockedAt,
+          user_id: row.userId,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row)),
+  });
+
+  const workoutSourceEventId = seedId('progression-source:member-active:workout');
+  const poseSourceEventId = seedId('progression-source:member-active:pose');
+  const flaggedSourceEventId = seedId('progression-source:member-frozen:flagged');
+  const workoutSourceId =
+    activeWorkout?.id ?? seedId('source-id:member-active:workout');
+
+  await prisma.progressionSourceEvent.createMany({
+    data: [
+      {
+        id: workoutSourceEventId,
+        processed_at: analyticsAt({ daysAgo: 1, hour: 20 }),
+        source_context: {
+          integrity: 'VERIFIED',
+          reps: 18,
+          source: 'seed workout session',
+        } as Prisma.InputJsonValue,
+        source_id: workoutSourceId,
+        source_status: ProgressionSourceStatus.applied,
+        source_type: ProgressionSourceType.workout_session_completed,
+        user_id: memberActiveId,
+      },
+      {
+        id: poseSourceEventId,
+        processed_at: analyticsAt({ daysAgo: 1, hour: 20 }),
+        source_context: {
+          classificationConfidence: 0.92,
+          poseSessionId: activePose?.id ?? null,
+        } as Prisma.InputJsonValue,
+        source_id: activePose?.id ?? seedId('source-id:member-active:pose'),
+        source_status: ProgressionSourceStatus.applied,
+        source_type: ProgressionSourceType.pose_session_finalized,
+        user_id: memberActiveId,
+      },
+      ...(memberFrozenId
+        ? [
+            {
+              id: flaggedSourceEventId,
+              processed_at: analyticsAt({ daysAgo: 1, hour: 21 }),
+              source_context: {
+                reason_codes: ['one_arm_motion', 'body_line_break'],
+                exercise: 'Push-Up',
+              } as Prisma.InputJsonValue,
+              source_id: seedId('source-id:member-frozen:flagged-pushup'),
+              source_status: ProgressionSourceStatus.reduced,
+              source_type: ProgressionSourceType.pose_session_flagged,
+              user_id: memberFrozenId,
+            },
+          ]
+        : []),
+    ],
+  });
+
+  const penaltyGrantId = seedId('progression-grant:member-frozen:penalty');
+  await prisma.progressionGrantLedger.createMany({
+    data: [
+      {
+        id: seedId('progression-grant:member-active:xp'),
+        amount: 96,
+        grant_status: ProgressionGrantStatus.applied,
+        grant_type: ProgressionGrantType.xp,
+        metadata: {
+          integrityMultiplier: 1.2,
+          muscleShares: [
+            { muscle: 'chest', xp: 48 },
+            { muscle: 'triceps', xp: 29 },
+            { muscle: 'front_delts', xp: 19 },
+          ],
+        } as Prisma.InputJsonValue,
+        muscle_group: 'Chest',
+        reason: 'Verified workout session XP',
+        season_id: activeSeasonId,
+        source_event_id: workoutSourceEventId,
+        user_id: memberActiveId,
+      },
+      {
+        id: seedId('progression-grant:member-active:season-points'),
+        amount: 24,
+        grant_status: ProgressionGrantStatus.applied,
+        grant_type: ProgressionGrantType.season_points,
+        metadata: {
+          seasonRule: 'verified-rep-block',
+        } as Prisma.InputJsonValue,
+        reason: 'Verified season points from workout',
+        season_id: activeSeasonId,
+        source_event_id: workoutSourceEventId,
+        user_id: memberActiveId,
+      },
+      ...(memberFrozenId
+        ? [
+            {
+              id: penaltyGrantId,
+              amount: -20,
+              grant_status: ProgressionGrantStatus.applied,
+              grant_type: ProgressionGrantType.penalty,
+              metadata: {
+                reason_codes: ['push_up_body_not_horizontal'],
+              } as Prisma.InputJsonValue,
+              reason: 'Reduced reward for flagged pose evidence',
+              season_id: activeSeasonId,
+              source_event_id: flaggedSourceEventId,
+              user_id: memberFrozenId,
+            },
+          ]
+        : []),
+    ],
+  });
+
+  let integrityCaseId: string | null = null;
+  if (memberFrozenId) {
+    integrityCaseId = seedId('integrity-case:member-frozen:pushup');
+    await prisma.integrityCase.create({
+      data: {
+        id: integrityCaseId,
+        opened_at: analyticsAt({ daysAgo: 1, hour: 21 }),
+        status: IntegrityCaseStatus.under_review,
+        summary:
+          'Push-up evidence showed one-arm motion and insufficient body travel.',
+        user_id: memberFrozenId,
+      },
+    });
+
+    await prisma.integrityEvent.create({
+      data: {
+        id: seedId('integrity-event:member-frozen:pushup'),
+        details: {
+          bodyLineTolerance: 45,
+          elbowSymmetryDelta: 60,
+          reason: 'Seeded event for admin integrity queue coverage.',
+        } as Prisma.InputJsonValue,
+        event_type: 'pose_session_flagged',
+        integrity_case_id: integrityCaseId,
+        is_resolved: false,
+        reason_code: 'bilateral_motion_failed',
+        risk_level: IntegrityRiskLevel.medium,
+        source_event_id: flaggedSourceEventId,
+        user_id: memberFrozenId,
+      },
+    });
+
+    await prisma.moderationActionRecord.create({
+      data: {
+        id: seedId('moderation-action:member-frozen:void-grant'),
+        action_type: ModerationActionType.void_progression_grant,
+        actor_user_id: adminUserId,
+        after_state: {
+          rewardVisibility: 'reduced',
+        } as Prisma.InputJsonValue,
+        before_state: {
+          rewardVisibility: 'normal',
+        } as Prisma.InputJsonValue,
+        integrity_case_id: integrityCaseId,
+        progression_grant_id: penaltyGrantId,
+        rationale:
+          'Seeded moderation action for testing progression audit and integrity queues.',
+        season_id: activeSeasonId,
+        source_event_id: flaggedSourceEventId,
+        target_user_id: memberFrozenId,
+      },
+    });
+  }
+
+  await prisma.notification.createMany({
+    data: [
+      {
+        id: seedId('notification:member-active:rank-up'),
+        body: 'Your verified workout pushed you into the top three this season.',
+        channel: NotificationChannel.in_app,
+        data: { rank: 2, seasonId: activeSeasonId } as Prisma.InputJsonValue,
+        read_at: null,
+        sent_at: analyticsAt({ daysAgo: 1, hour: 20 }),
+        status: NotificationStatus.sent,
+        title: 'Season rank updated',
+        type: NotificationType.rank_up,
+        user_id: memberActiveId,
+      },
+      {
+        id: seedId('notification:member-premium:booking'),
+        body: 'Your next recurring coaching block is queued for this week.',
+        channel: NotificationChannel.in_app,
+        data: {
+          recurringPlanId: seedId('recurring-plan:member-premium:staff'),
+        } as Prisma.InputJsonValue,
+        read_at: analyticsAt({ daysAgo: 0, hour: 9 }),
+        sent_at: analyticsAt({ daysAgo: 0, hour: 8 }),
+        status: NotificationStatus.read,
+        title: 'Coaching plan ready',
+        type: NotificationType.booking_confirmed,
+        user_id: memberPremiumId,
+      },
+      ...(memberExpiredId
+        ? [
+            {
+              id: seedId('notification:member-expired:expired'),
+              body: 'Your membership has expired. Renew to restore member-only workout features.',
+              channel: NotificationChannel.in_app,
+              data: { route: '/profile' } as Prisma.InputJsonValue,
+              error: null,
+              read_at: null,
+              sent_at: analyticsAt({ daysAgo: 2, hour: 8 }),
+              status: NotificationStatus.sent,
+              title: 'Membership expired',
+              type: NotificationType.subscription_expired,
+              user_id: memberExpiredId,
+            },
+          ]
+        : []),
+      {
+        id: seedId('notification:staff:low-stock'),
+        body: 'Hex dumbbell set quantity was adjusted after inventory review.',
+        channel: NotificationChannel.in_app,
+        data: {
+          equipmentId: seedId('analytics-equipment:hex-dumbbell-set'),
+        } as Prisma.InputJsonValue,
+        read_at: null,
+        sent_at: analyticsAt({ daysAgo: 0, hour: 11 }),
+        status: NotificationStatus.sent,
+        title: 'Inventory adjustment logged',
+        type: NotificationType.equipment_write_off,
+        user_id: staffUserId,
+      },
+    ],
+  });
+
+  const aiSessionId = seedId('ai-chat-session:member-active:nutrition');
+  await prisma.aiChatSession.create({
+    data: {
+      id: aiSessionId,
+      context_type: ChatContext.nutrition,
+      is_active: true,
+      last_activity_at: analyticsAt({ daysAgo: 0, hour: 9 }),
+      title: 'Protein target check-in',
+      user_id: memberActiveId,
+    },
+  });
+  await prisma.aiChatMessage.createMany({
+    data: [
+      {
+        id: seedId('ai-message:member-active:user'),
+        content: 'Can I hit my protein target with chicken and rice today?',
+        role: ChatRole.user,
+        session_id: aiSessionId,
+      },
+      {
+        id: seedId('ai-message:member-active:assistant'),
+        action_triggered: 'nutrition_summary',
+        content:
+          'Yes. Your remaining target is roughly 52g protein, so one chicken-rice meal plus yogurt would close the gap.',
+        role: ChatRole.assistant,
+        session_id: aiSessionId,
+      },
+    ],
+  });
+  await prisma.aiInteractionLog.create({
+    data: {
+      id: seedId('ai-interaction:member-active:nutrition'),
+      action_result: {
+        suggestedMeal: 'chicken rice bowl',
+        targetClosed: true,
+      } as Prisma.InputJsonValue,
+      action_triggered: 'nutrition_summary',
+      interaction_type: InteractionType.chat,
+      latency_ms: 820,
+      model_used: 'seed-local-contract',
+      request_payload: {
+        context: 'nutrition',
+        prompt: 'Can I hit protein target today?',
+      } as Prisma.InputJsonValue,
+      response_payload: {
+        confidence: 0.84,
+        answer: 'Protein gap can be closed with one meal.',
+      } as Prisma.InputJsonValue,
+      session_id: aiSessionId,
+      token_count: 310,
+      user_id: memberActiveId,
+    },
+  });
+
+  const gymChatSessionId = seedId('gym-chat-session:member-premium:hours');
+  await prisma.gymChatSession.create({
+    data: {
+      id: gymChatSessionId,
+      is_active: true,
+      last_activity_at: analyticsAt({ daysAgo: 0, hour: 10 }),
+      title: 'Gym hours and promos',
+      user_id: memberPremiumId,
+    },
+  });
+  await prisma.gymChatMessage.createMany({
+    data: [
+      {
+        id: seedId('gym-chat-message:member-premium:user'),
+        content: 'What time does the gym close and are there promos?',
+        role: GymChatRole.user,
+        session_id: gymChatSessionId,
+      },
+      {
+        id: seedId('gym-chat-message:member-premium:assistant'),
+        content:
+          'Weekday closing is 10 PM. The seeded student starter promo is active this month.',
+        grounded_sources: {
+          sources: ['gym_operating_hours', 'gym_promotions'],
+        } as Prisma.InputJsonValue,
+        role: GymChatRole.assistant,
+        session_id: gymChatSessionId,
+      },
+    ],
+  });
+  await prisma.gymChatInteractionLog.create({
+    data: {
+      id: seedId('gym-chat-interaction:member-premium:hours'),
+      grounding_payload: {
+        tables: ['gym_operating_hours', 'gym_promotions', 'gym_faq_entries'],
+      } as Prisma.InputJsonValue,
+      latency_ms: 540,
+      model_used: 'seed-grounded-chat',
+      request_payload: {
+        query: 'hours and promos',
+      } as Prisma.InputJsonValue,
+      response_payload: {
+        answer: 'Weekday closing is 10 PM and starter promo is active.',
+      } as Prisma.InputJsonValue,
+      session_id: gymChatSessionId,
+      token_count: 180,
+      user_id: memberPremiumId,
+    },
+  });
+
+  await prisma.gymOperatingHour.createMany({
+    data: [
+      ['Sunday', 0, '08:00:00', '18:00:00', false],
+      ['Monday', 1, '06:00:00', '22:00:00', false],
+      ['Tuesday', 2, '06:00:00', '22:00:00', false],
+      ['Wednesday', 3, '06:00:00', '22:00:00', false],
+      ['Thursday', 4, '06:00:00', '22:00:00', false],
+      ['Friday', 5, '06:00:00', '22:00:00', false],
+      ['Saturday', 6, '07:00:00', '20:00:00', false],
+    ].map(([label, day, opensAt, closesAt, isClosed]) => ({
+      id: seedId(`gym-hour:${day}`),
+      closes_at: fixedTime(closesAt as string),
+      day_of_week: day as number,
+      is_active: true,
+      is_closed: isClosed as boolean,
+      label: label as string,
+      opens_at: fixedTime(opensAt as string),
+    })),
+  });
+
+  await prisma.gymSpecialSchedule.create({
+    data: {
+      id: seedId('gym-special-schedule:founders-day'),
+      closes_at: fixedTime('17:00:00'),
+      ends_on: nutritionDate(-14),
+      is_active: true,
+      is_closed: false,
+      opens_at: fixedTime('09:00:00'),
+      pricing_note: 'Member guest passes are half price during the event.',
+      reason: 'Founder Day shortened hours',
+      starts_on: nutritionDate(-14),
+    },
+  });
+
+  await prisma.gymPromotion.create({
+    data: {
+      id: seedId('gym-promotion:student-starter'),
+      description:
+        'Starter package for students with discounted first-month access and free onboarding.',
+      ends_at: analyticsAt({ daysAgo: -21, hour: 23 }),
+      is_active: true,
+      pricing_note: 'Save PHP 250 on Starter Monthly.',
+      promo_code: 'STUDENTSTART',
+      starts_at: analyticsAt({ daysAgo: 6, hour: 0 }),
+      title: 'Student Starter Promo',
+    },
+  });
+
+  await prisma.gymFaqEntry.createMany({
+    data: [
+      {
+        id: seedId('gym-faq:hours'),
+        answer:
+          'Weekdays run 6 AM to 10 PM, Saturday runs 7 AM to 8 PM, and Sunday runs 8 AM to 6 PM.',
+        category: GymFaqCategory.hours,
+        keywords: ['hours', 'schedule', 'closing'] as Prisma.InputJsonValue,
+        question: 'What are the gym hours?',
+        sort_order: 1,
+      },
+      {
+        id: seedId('gym-faq:membership-card'),
+        answer:
+          'Members need an active membership card or active subscription to access member-only gym features.',
+        category: GymFaqCategory.membership,
+        keywords: ['membership', 'card', 'access'] as Prisma.InputJsonValue,
+        question: 'Do I need a membership card?',
+        sort_order: 2,
+      },
+      {
+        id: seedId('gym-faq:coaching'),
+        answer:
+          'Coaching can be booked per session or through a recurring plan once a coach accepts the relationship.',
+        category: GymFaqCategory.coaching,
+        keywords: ['coach', 'booking', 'recurring'] as Prisma.InputJsonValue,
+        question: 'How does coaching work?',
+        sort_order: 3,
+      },
+      {
+        id: seedId('gym-faq:training'),
+        answer:
+          'Workout tracking uses pose evidence, rep rules, spatial rules, and admin-reviewed exercise definitions.',
+        category: GymFaqCategory.training,
+        keywords: ['workout', 'pose', 'exercise'] as Prisma.InputJsonValue,
+        question: 'How are workouts tracked?',
+        sort_order: 4,
+      },
+      {
+        id: seedId('gym-faq:nutrition'),
+        answer:
+          'Nutrition targets use your active TDEE profile and macro target, then compare logged meals against your goal.',
+        category: GymFaqCategory.nutrition,
+        keywords: ['nutrition', 'macro', 'tdee'] as Prisma.InputJsonValue,
+        question: 'How are macro targets calculated?',
+        sort_order: 5,
+      },
+    ],
+  });
+
+  await prisma.facilityFloorPlanMedia.createMany({
+    data: [
+      {
+        floor_id: 'floor-1',
+        image_url: 'https://fittrack.dev/floor-plans/floor-1.png',
+      },
+      {
+        floor_id: 'floor-2',
+        image_url: 'https://fittrack.dev/floor-plans/floor-2.png',
+      },
+      {
+        floor_id: 'floor-3',
+        image_url: 'https://fittrack.dev/floor-plans/floor-3.png',
+      },
+    ],
+  });
+
+  await prisma.gymEquipment.createMany({
+    data: [
+      {
+        id: seedId('gym-equipment:bench-a'),
+        floor_id: 'floor-1',
+        grid_column: 4,
+        grid_row: 3,
+        icon_key: 'bench',
+        name: 'Adjustable Bench A',
+        position_x: new Prisma.Decimal('34.25'),
+        position_y: new Prisma.Decimal('28.50'),
+        status: EquipmentStatus.available,
+        type: 'bench',
+      },
+      {
+        id: seedId('gym-equipment:dumbbell-rack'),
+        floor_id: 'floor-1',
+        grid_column: 5,
+        grid_row: 4,
+        icon_key: 'dumbbell',
+        name: 'Dumbbell Rack',
+        position_x: new Prisma.Decimal('45.00'),
+        position_y: new Prisma.Decimal('38.75'),
+        status: EquipmentStatus.occupied,
+        type: 'free_weights',
+      },
+      {
+        id: seedId('gym-equipment:cable-station'),
+        floor_id: 'floor-1',
+        grid_column: 8,
+        grid_row: 2,
+        icon_key: 'cable',
+        name: 'Cable Station',
+        position_x: new Prisma.Decimal('70.50'),
+        position_y: new Prisma.Decimal('22.25'),
+        status: EquipmentStatus.available,
+        type: 'cable_machine',
+      },
+      {
+        id: seedId('gym-equipment:rower-a'),
+        floor_id: 'floor-2',
+        grid_column: 3,
+        grid_row: 6,
+        icon_key: 'rower',
+        name: 'Concept Rower A',
+        position_x: new Prisma.Decimal('24.00'),
+        position_y: new Prisma.Decimal('62.00'),
+        status: EquipmentStatus.maintenance,
+        type: 'cardio',
+      },
+    ],
+  });
+
+  await prisma.equipmentWriteOff.create({
+    data: {
+      id: seedId('equipment-writeoff:hex-dumbbell-set'),
+      equipment_id: seedId('analytics-equipment:hex-dumbbell-set'),
+      performed_by: staffUserId,
+      quantity_before: 20,
+      quantity_lost: 2,
+      quantity_set_to: 18,
+      reason: 'Two adjustable collars were damaged during audit and removed from available inventory.',
+    },
+  });
+
+  await prisma.auditLog.createMany({
+    data: [
+      {
+        id: seedId('audit:member-premium:creator-approved'),
+        action: 'CREATOR_PROFILE_APPROVED',
+        after: { state: 'approved' } as Prisma.InputJsonValue,
+        before: { state: 'pending_review' } as Prisma.InputJsonValue,
+        entity: 'CreatorProfile',
+        entity_id: seedId('creator-profile:member-premium'),
+        ip_address: '127.0.0.1',
+        user_id: adminUserId,
+      },
+      {
+        id: seedId('audit:equipment:writeoff'),
+        action: 'EQUIPMENT_WRITE_OFF_CREATED',
+        after: { quantity_current: 18 } as Prisma.InputJsonValue,
+        before: { quantity_current: 20 } as Prisma.InputJsonValue,
+        entity: 'GymEquipmentItem',
+        entity_id: seedId('analytics-equipment:hex-dumbbell-set'),
+        ip_address: '127.0.0.1',
+        user_id: staffUserId,
+      },
+      {
+        id: seedId('audit:exercise-review:hammer-curl'),
+        action: 'EXERCISE_REVIEW_QUEUED',
+        after: { status: 'pending' } as Prisma.InputJsonValue,
+        entity: 'ExerciseReviewSubmission',
+        entity_id: seedId('exercise-review:member-premium:hammer-curl'),
+        ip_address: '127.0.0.1',
+        user_id: memberPremiumId,
+      },
+    ],
+  });
+
+  await prisma.businessInsightRun.createMany({
+    data: [
+      {
+        id: seedId('business-insight:overview:weekly'),
+        end_date: nutritionDate(0),
+        focus: InsightFocus.overview,
+        insight_payload: {
+          headline: 'Premium members and verified workout sessions are driving engagement.',
+          risks: ['Frozen account integrity cases need closure'],
+          opportunities: ['Promote recurring coaching to active members'],
+        } as Prisma.InputJsonValue,
+        latency_ms: 940,
+        model_used: 'seed-business-analyst',
+        period: InsightPeriod.weekly,
+        request_payload: {
+          source: 'seed dashboard',
+          include: ['revenue', 'attendance', 'gamification'],
+        } as Prisma.InputJsonValue,
+        requested_by: adminUserId,
+        start_date: nutritionDate(7),
+        token_count: 640,
+      },
+      {
+        id: seedId('business-insight:inventory:monthly'),
+        end_date: nutritionDate(0),
+        focus: InsightFocus.inventory,
+        insight_payload: {
+          headline: 'Dumbbell stock needs review after write-off.',
+          risks: ['Free-weight shortages during peak hours'],
+          opportunities: ['Move cable station maintenance earlier'],
+        } as Prisma.InputJsonValue,
+        latency_ms: 710,
+        model_used: 'seed-business-analyst',
+        period: InsightPeriod.monthly,
+        request_payload: {
+          source: 'seed inventory view',
+          include: ['equipment', 'write_offs'],
+        } as Prisma.InputJsonValue,
+        requested_by: staffUserId,
+        start_date: nutritionDate(30),
+        token_count: 420,
+      },
+    ],
+  });
+
+  if (conditioningCoachId && memberNoMembershipId) {
+    await prisma.coachClientRelationship.create({
+      data: {
+        id: seedId('coach-client:conditioning:member-nomembership'),
+        coach_id: conditioningCoachId,
+        member_id: memberNoMembershipId,
+        notes:
+          'Terminated seed relationship to cover relationship history states.',
+        ended_at: analyticsAt({ daysAgo: 12, hour: 15 }),
+        started_at: analyticsAt({ daysAgo: 60, hour: 15 }),
+        status: RelationshipStatus.terminated,
+      },
+    });
+  }
+
+  if (curlExercise?.id) {
+    await prisma.exerciseCatalog.update({
+      where: { id: curlExercise.id },
+      data: {
+        muscle_targets: [
+          { key: 'biceps', role: 'primary', effortPercent: 70 },
+          { key: 'forearms', role: 'secondary', effortPercent: 20 },
+          { key: 'front_delts', role: 'stabilizer', effortPercent: 10 },
+        ] as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  await prisma.user.updateMany({
+    where: { id: { in: baselineUserIds } },
+    data: { status: UserStatus.active },
+  });
+}
+
 async function buildCounts() {
   const [
     users,
     identities,
     profiles,
-    notifications,
+    notificationPreferences,
     coachProfiles,
     coachAvailabilitySlots,
     coachAppointments,
@@ -3629,7 +5118,38 @@ async function buildCounts() {
     poseProfiles,
     poseSessions,
     muscleMastery,
+    tdeeProfiles,
+    macroTargets,
+    nutritionLogs,
+    progressMetrics,
     amenities,
+    aiChatSessions,
+    aiInteractionLogs,
+    auditLogs,
+    businessInsightRuns,
+    coachClientRelationships,
+    equipmentWriteOffs,
+    exerciseReviewSubmissions,
+    facilityFloorPlans,
+    gymChatSessions,
+    gymEquipment,
+    gymFaqEntries,
+    gymOperatingHours,
+    gymPromotions,
+    gymSpecialSchedules,
+    integrityCases,
+    integrityEvents,
+    integrityProfiles,
+    moderationActions,
+    notifications,
+    progressionEvents,
+    progressionGrants,
+    progressionProfiles,
+    rankingProfiles,
+    recurringBillingCycles,
+    recurringPlans,
+    seasonalStandings,
+    userMilestoneProgress,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.authIdentity.count(),
@@ -3651,40 +5171,110 @@ async function buildCounts() {
     prisma.poseExerciseProfile.count(),
     prisma.poseSession.count(),
     prisma.muscleMasteryProgress.count(),
+    prisma.tdeeProfile.count(),
+    prisma.macroTarget.count(),
+    prisma.nutritionLog.count(),
+    prisma.progressMetric.count(),
     prisma.amenity.count(),
+    prisma.aiChatSession.count(),
+    prisma.aiInteractionLog.count(),
+    prisma.auditLog.count(),
+    prisma.businessInsightRun.count(),
+    prisma.coachClientRelationship.count(),
+    prisma.equipmentWriteOff.count(),
+    prisma.exerciseReviewSubmission.count(),
+    prisma.facilityFloorPlanMedia.count(),
+    prisma.gymChatSession.count(),
+    prisma.gymEquipment.count(),
+    prisma.gymFaqEntry.count(),
+    prisma.gymOperatingHour.count(),
+    prisma.gymPromotion.count(),
+    prisma.gymSpecialSchedule.count(),
+    prisma.integrityCase.count(),
+    prisma.integrityEvent.count(),
+    prisma.integrityProfile.count(),
+    prisma.moderationActionRecord.count(),
+    prisma.notification.count(),
+    prisma.progressionSourceEvent.count(),
+    prisma.progressionGrantLedger.count(),
+    prisma.userProgressionProfile.count(),
+    prisma.rankingProfile.count(),
+    prisma.recurringCoachingBillingCycle.count(),
+    prisma.recurringCoachingPlan.count(),
+    prisma.seasonalStanding.count(),
+    prisma.userMilestoneProgress.count(),
   ]);
 
   return {
     auth: {
       identities,
-      notificationPreferences: notifications,
+      notificationPreferences,
       profiles,
       users,
     },
     coaching: {
       appointments: coachAppointments,
       availabilitySlots: coachAvailabilitySlots,
+      clientRelationships: coachClientRelationships,
       coachProfiles,
+      recurringBillingCycles,
+      recurringPlans,
       reviews: coachReviews,
+    },
+    communications: {
+      aiChatSessions,
+      aiInteractionLogs,
+      gymChatSessions,
+      notifications,
     },
     facilities: {
       amenities,
       bookings: amenityBookings,
+      equipment: gymEquipment,
+      faqEntries: gymFaqEntries,
+      floorPlans: facilityFloorPlans,
+      operatingHours: gymOperatingHours,
+      promotions: gymPromotions,
+      specialSchedules: gymSpecialSchedules,
     },
     fitness: {
       exerciseCatalog,
       exerciseLogs,
+      exerciseReviewSubmissions,
       muscleMastery,
       poseProfiles,
       poseSessions,
       trainingPlans,
       workoutSessions,
     },
+    gamification: {
+      integrityCases,
+      integrityEvents,
+      integrityProfiles,
+      moderationActions,
+      progressionEvents,
+      progressionGrants,
+      progressionProfiles,
+      rankingProfiles,
+      seasonalStandings,
+      userMilestoneProgress,
+    },
+    operations: {
+      auditLogs,
+      businessInsightRuns,
+      equipmentWriteOffs,
+    },
     membership: {
       deletionRequests,
       membershipCards,
       membershipPlans,
       subscriptions,
+    },
+    nutrition: {
+      macroTargets,
+      nutritionLogs,
+      progressMetrics,
+      tdeeProfiles,
     },
   };
 }
@@ -3705,6 +5295,13 @@ async function main() {
 
   await cleanupUsersOutsideBaseline(ensuredAccounts);
   await ensureMemberStates(ensuredAccounts);
+  await ensureNutritionFixtures(ensuredAccounts);
+  const coachProfiles = await ensureCoachProfiles(ensuredAccounts);
+  await ensureGymOperationsVenueBookings(ensuredAccounts, coachProfiles);
+  await ensureAnalyticsFixtures(ensuredAccounts, coachProfiles);
+  await ensureMasteryProgress(ensuredAccounts);
+  await ensureWorkoutFixtures(ensuredAccounts);
+  await ensureFeatureCoverageFixtures(ensuredAccounts, coachProfiles);
 
   const counts = await buildCounts();
   const notableIds = {
@@ -3738,7 +5335,7 @@ async function main() {
     `[test-data] bootstrap defaults ensured for ${bootstrapSummary.adminEmail} and ${bootstrapSummary.demoMemberEmail}`,
   );
   console.log(
-    `[test-data] coaching fixtures remaining=${counts.coaching.coachProfiles} profiles, ${counts.coaching.appointments} appointments, masteryRows=${counts.fitness.muscleMastery}`,
+    `[test-data] coaching fixtures ensured=${counts.coaching.coachProfiles} profiles, ${counts.coaching.appointments} appointments, masteryRows=${counts.fitness.muscleMastery}`,
   );
   console.log(
     `[test-data] workout fixtures ensured: exercises=${counts.fitness.exerciseCatalog}, plans=${counts.fitness.trainingPlans}, sessions=${counts.fitness.workoutSessions}, logs=${counts.fitness.exerciseLogs}, poseSessions=${counts.fitness.poseSessions}`,

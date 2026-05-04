@@ -18,6 +18,7 @@ type Props = {
   allowEmpty?: boolean;
   blockPast?: boolean;
   minDate?: string;
+  maxDate?: string;
   defaultYear?: number;
   defaultMonth?: number;
   blockedDates?: string[];
@@ -26,7 +27,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, defaultYear, defaultMonth, blockedDates = [], highlightedDates = [], onSelect, onClose }: Props) {
+export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, maxDate, defaultYear, defaultMonth, blockedDates = [], highlightedDates = [], onSelect, onClose }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -37,6 +38,7 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
   const fallbackDate = useMemo(() => new Date(fallbackYear, fallbackMonth - 1, 1), [fallbackMonth, fallbackYear]);
   const todayStr = formatDateYMD(today);
   const minSelectable = minDate && minDate > todayStr ? minDate : blockPast ? todayStr : minDate ?? "";
+  const maxSelectable = maxDate ?? "";
   const selected = useMemo(() => parseDateYMD(selectedDate, fallbackDate), [fallbackDate, selectedDate]);
   const [cursor, setCursor] = useState<Date>(selected);
   const [currentView, setCurrentView] = useState<CalendarViewMode>("DAYS");
@@ -164,8 +166,9 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
                     const isHighlighted = highlightedDateSet.has(cell.ymd);
                     const isBlocked = blockedDateSet.has(cell.ymd);
                     const isBeforeMin = minSelectable ? cell.ymd < minSelectable : false;
+                    const isAfterMax = maxSelectable ? cell.ymd > maxSelectable : false;
                     const isPast = blockPast && cell.ymd < todayStr;
-                    const isDisabled = isPast || isBeforeMin;
+                    const isDisabled = isPast || isBeforeMin || isAfterMax;
                     return (
                       <View key={cell.ymd} style={s.dayCell}>
                         <FitButton
@@ -244,7 +247,7 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton label="Cancel" variant="ghost" onPress={onClose} flex={1} style={s.footerButton} />
             {allowEmpty && <FitButton label="Clear" variant="ghost" onPress={() => onSelect("")} flex={1} style={s.footerButton} />}
-            <FitButton label="Today" variant="ghost" onPress={() => onSelect(todayStr)} flex={1} style={s.footerButton} />
+            <FitButton label="Today" variant="ghost" onPress={() => !maxSelectable || todayStr <= maxSelectable ? onSelect(todayStr) : undefined} disabled={!!maxSelectable && todayStr > maxSelectable} flex={1} style={s.footerButton} />
           </Animated.View>
         </Animated.View>
       </Animated.View>

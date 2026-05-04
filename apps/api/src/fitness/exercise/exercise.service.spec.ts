@@ -20,6 +20,7 @@ describe('ExerciseService', () => {
     findActiveExerciseByIdOrThrow: jest.fn(),
     listActiveExercisesForGeneration: jest.fn(),
     listCreatorProfilesByUserIds: jest.fn(),
+    listCreatorUserIdentitiesByUserIds: jest.fn(),
     listReviewSubmissionStatusesByUserIds: jest.fn(),
     listReviewSubmissions: jest.fn(),
     listMuscleDefinitions: jest.fn(),
@@ -121,6 +122,7 @@ describe('ExerciseService', () => {
           }),
         ),
     );
+    repo.listCreatorUserIdentitiesByUserIds.mockResolvedValue([]);
     global.fetch = originalFetch;
   });
 
@@ -335,11 +337,20 @@ describe('ExerciseService', () => {
       { user_id: 'member-1', status: ExerciseReviewSubmissionStatus.pending },
       { user_id: 'member-1', status: ExerciseReviewSubmissionStatus.published },
     ]);
+    repo.listCreatorUserIdentitiesByUserIds.mockResolvedValue([
+      {
+        id: 'member-1',
+        profile: { first_name: 'Ava', last_name: 'Rivera' },
+        auth_identities: [{ identifier: 'seed.member.active@fittrack.com' }],
+      },
+    ]);
 
     await expect(service.listReviewSubmissions({})).resolves.toEqual({
       data: [
         expect.objectContaining({
           creator_candidate_score: 47,
+          creator_display_name: 'Ava Rivera',
+          creator_email: 'seed.member.active@fittrack.com',
           creator_governance_note: 'Two clean custom submissions.',
           creator_published_count: 1,
           creator_state: CreatorState.candidate,
@@ -573,5 +584,51 @@ describe('ExerciseService', () => {
       note: 'Approved from operator review.',
       state: CreatorState.approved,
     });
+  });
+
+  it('persists reject rationale as review notes', async () => {
+    repo.updateReviewSubmission.mockResolvedValue(
+      makeReviewSubmission({
+        review_notes:
+          'Rejected because the submitted evidence does not show a repeatable movement contract.',
+        reviewed_at: new Date('2026-04-22T04:00:00.000Z'),
+        status: ExerciseReviewSubmissionStatus.rejected,
+      }),
+    );
+    repo.listCreatorProfilesByUserIds.mockResolvedValue([]);
+    repo.listReviewSubmissionStatusesByUserIds.mockResolvedValue([
+      { user_id: 'member-1', status: ExerciseReviewSubmissionStatus.rejected },
+    ]);
+
+    const result = await service.updateReviewSubmission(
+      'submission-1',
+      {
+        review_notes:
+          'Rejected because the submitted evidence does not show a repeatable movement contract.',
+        status: ExerciseReviewSubmissionStatus.rejected,
+      },
+      'operator-1',
+    );
+
+    const [, submissionUpdate] = repo.updateReviewSubmission.mock.calls[0] as [
+      string,
+      {
+        review_notes?: string;
+        reviewed_at?: Date;
+        status?: ExerciseReviewSubmissionStatus;
+      },
+    ];
+
+    expect(submissionUpdate).toEqual(
+      expect.objectContaining({
+        review_notes:
+          'Rejected because the submitted evidence does not show a repeatable movement contract.',
+        reviewed_at: expect.any(Date),
+        status: ExerciseReviewSubmissionStatus.rejected,
+      }),
+    );
+    expect(result.review_notes).toBe(
+      'Rejected because the submitted evidence does not show a repeatable movement contract.',
+    );
   });
 });

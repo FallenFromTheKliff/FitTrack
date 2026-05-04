@@ -172,6 +172,8 @@ export function useFacilitiesPageController() {
     handleRequestClearFloor,
     handleClearFloor,
     handleRestoreEquipment,
+    handleUploadFloorPlanImage,
+    updateFloorPlanMediaMutation,
     assignEquipmentToVenue,
   } = useFloorLayout();
 
@@ -608,6 +610,7 @@ export function useFacilitiesPageController() {
       onNudgeVenue={handleNudgeRegionByMapId}
       onResizeVenue={handleResizeRegionByMapId}
       isVenueSubmitting={isVenueSubmitting}
+      isUploadingFloorImage={updateFloorPlanMediaMutation.isPending}
       onSubmitVenueEdit={handleSubmitVenueFromCanvas}
       onRequestVenueDelete={handleRequestVenueDeleteFromCanvas}
       onOpenEquipment={handleOpenEquipmentManager}
@@ -617,6 +620,7 @@ export function useFacilitiesPageController() {
         setViewMotionKey((prev) => prev + 1);
         setActiveTab("venues");
       }}
+      onUploadFloorImage={handleUploadFloorPlanImage}
     />
   );
 

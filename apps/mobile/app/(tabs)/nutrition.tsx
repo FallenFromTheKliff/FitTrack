@@ -11,11 +11,13 @@ import type {
   NutritionCoachingInsightRecord,
   DailyNutritionSummaryRecord,
   NutritionLogRecord,
-  NutritionMacroTotalsRecord
+  NutritionMacroTotalsRecord,
+  NutritionTdeeRecord
 } from "@fittrack/types";
 import {
   nutritionActiveTdeeQueryOptions,
   nutritionDailySummaryQueryOptions,
+  nutritionHistoryQueryOptions,
   nutritionLogsQueryOptions
 } from "@fittrack/query";
 import {
@@ -87,6 +89,24 @@ function formatMacroDelta(delta: number) {
 
 function formatNutritionLogSubtitle(entry: NutritionLogRecord) {
   return `${entry.calories.toFixed(0)} kcal | P ${entry.proteinG.toFixed(0)} C ${entry.carbsG.toFixed(0)} F ${entry.fatG.toFixed(0)}`;
+}
+
+function formatShortDateTime(value?: string | null) {
+  if (!value) return "Not calculated yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not calculated yet";
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function formatCalorieDelta(current?: number, previous?: number) {
+  if (!current || !previous) return "No previous target";
+  const delta = current - previous;
+  if (Math.abs(delta) < 1) return "No change";
+  return `${delta > 0 ? "+" : ""}${delta.toFixed(0)} kcal`;
 }
 
 function getAlertToneStyle(tone: NutritionGuidanceAlertTone, styles: NutritionStyles) {
@@ -206,6 +226,13 @@ export default function NutritionScreen() {
     }),
     enabled: isFocused && !!user?.id && canUsePremiumNutrition
   });
+  const { data: nutritionHistory = { data: [], meta: { page: 1, limit: 4, total: 0, total_pages: 0 } } } = useQuery({
+    ...nutritionHistoryQueryOptions<NutritionTdeeRecord>(mobileApiClient, user?.id, {
+      page: 1,
+      limit: 4
+    }),
+    enabled: isFocused && !!user?.id
+  });
 
   const loggedTotals = dailySummary?.logged ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
   const targetTotals = dailySummary?.target ?? (
@@ -224,6 +251,20 @@ export default function NutritionScreen() {
   const calorieDelta = target - today;
   const hasGoal = !!activeNutrition?.macros;
   const goalLabel = formatGoalLabel(activeNutrition?.tdee.fitnessGoal);
+  const recentTdee = nutritionHistory.data[0] ?? activeNutrition?.tdee ?? null;
+  const previousTdee = nutritionHistory.data.find((entry) => entry.id !== activeNutrition?.tdee.id) ?? null;
+  const targetAdherence = target > 0 ? Math.min((today / target) * 100, 999) : 0;
+  const targetStatusLabel = hasGoal
+    ? calorieDelta >= 0
+      ? "In range"
+      : "Over target"
+    : "Needs setup";
+  const targetStatusDetail = hasGoal
+    ? `${Math.min(targetAdherence, 100).toFixed(0)}% of today's target logged.`
+    : "Create a nutrition goal before macro comparisons can run.";
+  const recalculationDetail = recentTdee
+    ? `Last calculated ${formatShortDateTime(recentTdee.calculatedAt)}.`
+    : "No backend TDEE calculation is active yet.";
   const macroRows = formatMacroRows(loggedTotals, targetTotals);
   const guidanceAlerts = useMemo(
     () =>
@@ -354,6 +395,15 @@ export default function NutritionScreen() {
                     ? `${calorieDelta.toFixed(0)} kcal remaining`
                     : `${Math.abs(calorieDelta).toFixed(0)} kcal over target`}
                 </FitText>
+                {!isFrozen ? (
+                  <FitButton
+                    label="Recalculate Target"
+                    icon={Target}
+                    variant={hasGoal ? "ghost" : "primary"}
+                    onPress={() => setGoalsVisible(true)}
+                    style={{ marginTop: 12 }}
+                  />
+                ) : null}
               </>
             ) : (
               <>
@@ -371,6 +421,38 @@ export default function NutritionScreen() {
               </>
             )}
           </View>
+
+          <FitSection heading="Target Status">
+            <View style={s.cardList}>
+              <FitCard
+                label="Daily Target"
+                subtitle={targetStatusDetail}
+                trailingLabel={targetStatusLabel}
+                trailingLabelColor={targetStatusLabel === "Over target" ? colors.warning : colors.brand}
+                hasBorder
+                noChevron
+              />
+              <FitCard
+                label="Recent Adherence"
+                subtitle={
+                  target > 0
+                    ? `${today.toFixed(0)} kcal logged against ${target.toFixed(0)} kcal today.`
+                    : "No calorie target is available for today's comparison."
+                }
+                trailingLabel={target > 0 ? `${Math.min(targetAdherence, 100).toFixed(0)}%` : "--"}
+                trailingLabelColor={targetAdherence > 105 ? colors.warning : colors.success}
+                hasBorder
+                noChevron
+              />
+              <FitCard
+                label="Target History"
+                subtitle={`${recalculationDetail} ${nutritionHistory.meta.total} saved calculation${nutritionHistory.meta.total === 1 ? "" : "s"} on record.`}
+                trailingLabel={formatCalorieDelta(activeNutrition?.tdee.tdeeCalories, previousTdee?.tdeeCalories)}
+                trailingLabelColor={colors.brand}
+                noChevron
+              />
+            </View>
+          </FitSection>
 
           <FitSection heading="Macro Breakdown">
             <View style={s.macroBlock}>

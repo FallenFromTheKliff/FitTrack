@@ -14,7 +14,8 @@ import type {
   MembershipPaymentProvider,
   MembershipPaymentStatus,
   MembershipSubscriptionRecord,
-  MuscleMasteryRecord
+  MuscleMasteryRecord,
+  FitnessRankingVisibility
 } from "@fittrack/types";
 import {
   queryKeys,
@@ -25,6 +26,7 @@ import {
   deleteCoachAvailabilityMutationOptions,
   fitnessLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
+  fitnessRankingProfileQueryOptions,
   membershipPaymentsQueryOptions,
   membershipPlansQueryOptions,
   purchaseMembershipCardMutationOptions,
@@ -32,6 +34,7 @@ import {
   refreshAttendanceQrMutationOptions,
   requestDeletionMutationOptions,
   setProfileDeletionStatusQueryData,
+  updateFitnessRankingProfileMutationOptions,
   updateCoachAvailabilityMutationOptions
 } from "@fittrack/query";
 import { ApiClientError } from "@fittrack/api-client";
@@ -57,6 +60,31 @@ type ProfileFitnessSummaryCard = {
   label: string;
   value: string;
 };
+
+type RankingPrivacyOption = {
+  description: string;
+  isSelected: boolean;
+  label: string;
+  value: FitnessRankingVisibility;
+};
+
+const RANKING_PRIVACY_OPTIONS: Array<Omit<RankingPrivacyOption, "isSelected">> = [
+  {
+    value: "public",
+    label: "Public",
+    description: "Show your profile name on ranked member surfaces."
+  },
+  {
+    value: "anonymous",
+    label: "Anonymous",
+    description: "Stay ranked while masking your member identity."
+  },
+  {
+    value: "private",
+    label: "Private",
+    description: "Hide your visible ranking while keeping progression history."
+  }
+];
 
 export const WEEKDAY_OPTIONS = [
   { label: "Sun", value: 0 },
@@ -86,6 +114,10 @@ function formatMembershipStatus(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatRankingVisibility(value: FitnessRankingVisibility) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function getInitialAvailabilityDraft(slot?: CoachAvailabilityRecord): AvailabilityDraft {
@@ -222,6 +254,7 @@ export function useProfileScreen() {
   const [isAvailabilityTimeOpen, setIsAvailabilityTimeOpen] = useState(false);
   const [availabilityTimeTarget, setAvailabilityTimeTarget] = useState<"start" | "end">("start");
   const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<MembershipPaymentProvider | null>(null);
+  const [rankingPrivacyTarget, setRankingPrivacyTarget] = useState<FitnessRankingVisibility | null>(null);
 
   useEffect(() => {
     return () => {
@@ -265,6 +298,12 @@ export function useProfileScreen() {
     staleTime: 60_000,
     gcTime: 300_000
   });
+  const rankingProfileQuery = useQuery({
+    ...fitnessRankingProfileQueryOptions(mobileApiClient, user?.id),
+    enabled: !!user?.id && isMember && hasMemberCardAccess && isFocused,
+    staleTime: 60_000,
+    gcTime: 300_000
+  });
   const attendanceQrQuery = useQuery({
     ...attendanceQrQueryOptions(mobileApiClient, user?.id),
     enabled: !!user?.id && isMember && isFocused,
@@ -281,6 +320,9 @@ export function useProfileScreen() {
   const deleteAvailabilityMutation = useMutation(deleteCoachAvailabilityMutationOptions(mobileApiClient, queryClient));
   const purchaseMembershipCardMutation = useMutation(
     purchaseMembershipCardMutationOptions(mobileApiClient, queryClient)
+  );
+  const updateRankingProfileMutation = useMutation(
+    updateFitnessRankingProfileMutationOptions(mobileApiClient, queryClient)
   );
 
   const isFrozen = user?.status === "frozen";
@@ -409,6 +451,21 @@ export function useProfileScreen() {
     [masteryQuery.data]
   );
   const leaderboard = leaderboardQuery.data?.data ?? [];
+  const rankingVisibility = rankingProfileQuery.data?.visibility ?? "public";
+  const rankingPrivacyOptions = RANKING_PRIVACY_OPTIONS.map((option) => ({
+    ...option,
+    isSelected: option.value === rankingVisibility
+  }));
+  const rankingPrivacyTargetOption =
+    RANKING_PRIVACY_OPTIONS.find((option) => option.value === rankingPrivacyTarget) ?? null;
+  const rankingPrivacyTargetLabel = rankingPrivacyTarget
+    ? formatRankingVisibility(rankingPrivacyTarget)
+    : "";
+  const rankingPrivacyTargetMessage = rankingPrivacyTargetOption
+    ? rankingPrivacyTarget === "private"
+      ? `${rankingPrivacyTargetOption.description} Your name and visible standing will be hidden from member-facing leaderboards until you switch it back.`
+      : `${rankingPrivacyTargetOption.description} This change affects member-facing leaderboards and ranking cards.`
+    : "";
   const topMuscle = mastery[0] ?? null;
   const highestRankEntry = resolveHighestRank(mastery);
   const totalXp = mastery.reduce((sum, entry) => sum + entry.xpPoints, 0);
@@ -426,10 +483,13 @@ export function useProfileScreen() {
   ];
   const profileFitnessLoading =
     hasMemberCardAccess &&
-    (masteryQuery.status === "pending" || leaderboardQuery.status === "pending");
+    (masteryQuery.status === "pending" ||
+      leaderboardQuery.status === "pending" ||
+      rankingProfileQuery.status === "pending");
   const profileFitnessError =
     (masteryQuery.error as Error | null)?.message ??
     (leaderboardQuery.error as Error | null)?.message ??
+    (rankingProfileQuery.error as Error | null)?.message ??
     null;
   const fitnessSummaryBadge = highestRankEntry
     ? `${highestRankEntry.rankDisplay} badge`
@@ -653,6 +713,36 @@ export function useProfileScreen() {
     user?.id
   ]);
 
+  const handleConfirmRankingPrivacy = useCallback(async () => {
+    if (!rankingPrivacyTarget || !user?.id || updateRankingProfileMutation.isPending) return;
+
+    if (rankingPrivacyTarget === rankingVisibility) {
+      setRankingPrivacyTarget(null);
+      return;
+    }
+
+    try {
+      await updateRankingProfileMutation.mutateAsync({
+        input: { visibility: rankingPrivacyTarget },
+        userId: user.id
+      });
+      showMessage(`Ranking visibility set to ${formatRankingVisibility(rankingPrivacyTarget)}.`);
+      setRankingPrivacyTarget(null);
+    } catch (error) {
+      showMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update ranking privacy right now."
+      );
+    }
+  }, [
+    rankingPrivacyTarget,
+    rankingVisibility,
+    showMessage,
+    updateRankingProfileMutation,
+    user?.id
+  ]);
+
   const handleRequestTermination = async () => {
     if (isTerminating) return;
     setIsTerminating(true);
@@ -787,6 +877,7 @@ export function useProfileScreen() {
     handleDeleteAvailability,
     handleOpenAttendanceQr,
     handlePurchaseMembershipCard,
+    handleConfirmRankingPrivacy,
     handleRefreshAttendanceQr,
     handleRequestTermination,
     onRefreshFitnessSummary: async () => {
@@ -806,6 +897,7 @@ export function useProfileScreen() {
     isRefreshingAttendanceQr: refreshAttendanceQrMutation.isPending,
     isPlanAccessLoading,
     isMembershipCardPurchasePending: purchaseMembershipCardMutation.isPending,
+    isRankingPrivacySaving: updateRankingProfileMutation.isPending,
     isPremiumLocked,
     isTerminating,
     latestMembershipPayment,
@@ -823,6 +915,13 @@ export function useProfileScreen() {
     qrCodeStatusColor,
     qrCodeStatusLabel,
     qrCodeSubtitle,
+    rankingPrivacyError:
+      (updateRankingProfileMutation.error as Error | null)?.message ?? null,
+    rankingPrivacyOptions,
+    rankingPrivacyTarget,
+    rankingPrivacyTargetLabel,
+    rankingPrivacyTargetMessage,
+    rankingVisibility,
     setAttendanceQrVisible,
     setAvailabilityDeleteTarget,
     setAvailabilityDraft,
@@ -831,6 +930,7 @@ export function useProfileScreen() {
     setEditVisible,
     setIsAvailabilityEditorOpen,
     setIsAvailabilityTimeOpen,
+    setRankingPrivacyTarget,
     setTerminateVisible,
     statusMessage,
     profileFitnessError,

@@ -76,6 +76,15 @@ export const EQUIPMENT_STATUS_FILTER_OPTIONS: Array<{
   { label: "Broken", value: "Broken" }
 ];
 
+export const EQUIPMENT_STATUS_EDIT_OPTIONS: Array<{
+  label: EquipmentAvailabilityStatus;
+  value: EquipmentAvailabilityStatus;
+}> = [
+  { label: "Available", value: "Available" },
+  { label: "Under Maintenance", value: "Under Maintenance" },
+  { label: "Broken", value: "Broken" }
+];
+
 export const INVENTORY_ANALYTICS_PERIOD_OPTIONS: Array<{
   label: InventoryAnalyticsPeriod;
   value: InventoryAnalyticsPeriod;
@@ -249,6 +258,14 @@ export const INVENTORY_EQUIPMENT_EDIT_FIELDS: FieldConfig[] = [
     type: "text",
     required: true,
     placeholder: "e.g., units"
+  },
+  {
+    name: "status",
+    label: "Equipment Status",
+    type: "select",
+    required: true,
+    options: EQUIPMENT_STATUS_EDIT_OPTIONS,
+    hint: "Status updates the available quantity count for this equipment item."
   }
 ];
 

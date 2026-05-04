@@ -1,5 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
-import { ExerciseCategory } from '@prisma/client';
+import {
+  AuthProvider,
+  ExerciseCategory,
+  ExerciseReviewSubmissionStatus,
+} from '@prisma/client';
 
 import { ExerciseRepository } from './exercise.repository';
 
@@ -11,6 +15,10 @@ describe('ExerciseRepository', () => {
     create: jest.fn(),
     update: jest.fn(),
   };
+  const exerciseReviewSubmission = {
+    findMany: jest.fn(),
+    count: jest.fn(),
+  };
   const muscleDefinition = {
     findMany: jest.fn(),
     create: jest.fn(),
@@ -19,6 +27,7 @@ describe('ExerciseRepository', () => {
 
   const prisma = {
     exerciseCatalog,
+    exerciseReviewSubmission,
     muscleDefinition,
     $transaction: jest.fn(),
   };
@@ -76,6 +85,67 @@ describe('ExerciseRepository', () => {
           { instructions: { contains: 'squat', mode: 'insensitive' } },
         ],
       },
+    });
+  });
+
+  it('lists review submissions with server-side table filters', async () => {
+    exerciseReviewSubmission.findMany.mockResolvedValue([{ id: 'submission-1' }]);
+    exerciseReviewSubmission.count.mockResolvedValue(18);
+
+    await repo.listReviewSubmissions({
+      page: 2,
+      limit: 8,
+      status: ExerciseReviewSubmissionStatus.pending,
+      category: ExerciseCategory.strength,
+      muscle_group: 'arms',
+      search: 'ava curl',
+    });
+
+    const expectedWhere = {
+      status: ExerciseReviewSubmissionStatus.pending,
+      category: ExerciseCategory.strength,
+      muscle_group: {
+        contains: 'arms',
+        mode: 'insensitive',
+      },
+      OR: expect.arrayContaining([
+        { title: { contains: 'ava curl', mode: 'insensitive' } },
+        { proposed_name: { contains: 'ava curl', mode: 'insensitive' } },
+        { summary: { contains: 'ava curl', mode: 'insensitive' } },
+        { match_hint: { contains: 'ava curl', mode: 'insensitive' } },
+        {
+          user: {
+            profile: {
+              is: {
+                OR: [
+                  { first_name: { contains: 'ava curl', mode: 'insensitive' } },
+                  { last_name: { contains: 'ava curl', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
+        {
+          user: {
+            auth_identities: {
+              some: {
+                identifier: { contains: 'ava curl', mode: 'insensitive' },
+                provider: AuthProvider.email,
+              },
+            },
+          },
+        },
+      ]),
+    };
+
+    expect(exerciseReviewSubmission.findMany).toHaveBeenCalledWith({
+      where: expectedWhere,
+      orderBy: [{ created_at: 'desc' }],
+      skip: 8,
+      take: 8,
+    });
+    expect(exerciseReviewSubmission.count).toHaveBeenCalledWith({
+      where: expectedWhere,
     });
   });
 

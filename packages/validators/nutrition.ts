@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+import { ISO_DATE_PATTERN, requiredMemberDateOfBirthSchema } from "./profile";
 
 const genderSchema = z.enum(["male", "female", "other"]);
 const activityLevelSchema = z.enum(["sedentary", "light", "moderate", "active", "very_active"]);
@@ -26,7 +26,7 @@ const nonNegativeNumberFromString = (label: string, max: number) =>
     .refine((value) => value <= max, `${label} must not exceed ${max}`);
 
 export const nutritionGoalSetupSchema = z.object({
-  dateOfBirth: z.string().regex(ISO_DATE_PATTERN, "Date of birth is required"),
+  dateOfBirth: requiredMemberDateOfBirthSchema,
   weightKg: positiveNumberFromString("Weight", 500),
   heightCm: positiveNumberFromString("Height", 300),
   gender: genderSchema,

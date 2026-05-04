@@ -39,17 +39,21 @@ import {
   AdminCreatorStateDTO,
   AdminCreatorStateResponseDTO,
   AdminGamificationOverviewResponseDTO,
+  AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
+  AdminSeasonStandingFilterDTO,
+  AdminSeasonStandingRowDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStatusDTO,
   IntegritySummaryResponseDTO,
   CreateIntegrityCaseDTO,
   LeaderboardEntryResponseDTO,
   MasteryFilterDTO,
+  MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
   MuscleMasteryResponseDTO,
   ProgressionProfileResponseDTO,
@@ -74,6 +78,8 @@ import {
   GamificationRepository,
   type ActiveSeasonStandingRecord,
   type AdminGamificationOverviewRecord,
+  type AdminSeasonListRecord,
+  type AdminSeasonStandingRecord,
   type CreatorStateUpdateResult,
   type GrantModerationResult,
   type IntegrityCaseMutationResult,
@@ -368,8 +374,10 @@ export class GamificationService {
 
   async getMilestoneProgress(
     userId: string,
+    dto?: MilestoneListFilterDTO,
   ): Promise<MilestoneProgressResponseDTO[]> {
     const milestones = await this.repo.listMilestoneProgress(userId);
+    void dto;
 
     return milestones.flatMap((milestone) => {
       const progress = milestone.user_progress[0] ?? null;
@@ -385,6 +393,45 @@ export class GamificationService {
     });
   }
 
+  async claimMilestone(
+    userId: string,
+    milestoneDefinitionId: string,
+  ): Promise<MilestoneProgressResponseDTO> {
+    const milestone = await this.repo.getMilestoneProgressById(
+      userId,
+      milestoneDefinitionId,
+    );
+
+    if (!milestone) {
+      throw new NotFoundException('Milestone was not found.');
+    }
+
+    const progress = milestone.user_progress[0] ?? null;
+    const isHiddenLocked =
+      milestone.is_hidden &&
+      (!progress || progress.status === MilestoneProgressStatus.in_progress);
+
+    if (isHiddenLocked) {
+      throw new NotFoundException('Milestone was not found.');
+    }
+
+    if (!progress || progress.status === MilestoneProgressStatus.in_progress) {
+      throw new BadRequestException(
+        'Milestone must be unlocked before it can be claimed.',
+      );
+    }
+
+    if (progress.status === MilestoneProgressStatus.claimed) {
+      return this.toMilestoneProgressResponse(milestone);
+    }
+
+    const claimed = await this.repo.claimMilestoneProgress(
+      userId,
+      milestoneDefinitionId,
+    );
+    return this.toMilestoneProgressResponse(claimed);
+  }
+
   async getIntegritySummary(
     userId: string,
   ): Promise<IntegritySummaryResponseDTO> {
@@ -395,6 +442,33 @@ export class GamificationService {
   async getAdminOverview(): Promise<AdminGamificationOverviewResponseDTO> {
     const overview = await this.repo.getAdminOverview();
     return this.toAdminOverviewResponse(overview);
+  }
+
+  async listAdminSeasons(): Promise<AdminGamificationSeasonListItemDTO[]> {
+    const seasons = await this.repo.listAdminSeasons({ includeArchived: true });
+    return seasons.map((season) => this.toAdminSeasonListItemResponse(season));
+  }
+
+  async listAdminSeasonStandings(
+    dto: AdminSeasonStandingFilterDTO,
+  ): Promise<PaginatedResult<AdminSeasonStandingRowDTO>> {
+    const standings = await this.repo.listAdminSeasonStandings({
+      governanceStatus: dto.governance_status,
+      includeArchived: dto.include_archived,
+      limit: dto.limit,
+      muscleKey: dto.muscle_key,
+      page: dto.page,
+      search: dto.search,
+      seasonId: dto.season_id,
+      visibility: dto.visibility,
+    });
+
+    return {
+      ...standings,
+      data: standings.data.map((standing) =>
+        this.toAdminSeasonStandingResponse(standing),
+      ),
+    };
   }
 
   async adminUpdateSeasonStatus(
@@ -906,6 +980,65 @@ export class GamificationService {
           season_id: action.season_id,
         })),
       },
+    };
+  }
+
+  private toAdminSeasonListItemResponse(
+    season: AdminSeasonListRecord,
+  ): AdminGamificationSeasonListItemDTO {
+    return {
+      id: season.id,
+      title: season.title,
+      status: season.status,
+      starts_at: season.starts_at.toISOString(),
+      ends_at: season.ends_at.toISOString(),
+      closed_at: season.closed_at?.toISOString() ?? null,
+      archived_at: season.archived_at?.toISOString() ?? null,
+      standing_count: season.standings.length,
+      hidden_count: season.standings.filter((standing) => standing.is_hidden)
+        .length,
+      disqualified_count: season.standings.filter(
+        (standing) => standing.is_disqualified,
+      ).length,
+    };
+  }
+
+  private toAdminSeasonStandingResponse(
+    standing: AdminSeasonStandingRecord,
+  ): AdminSeasonStandingRowDTO {
+    const topMuscle = [...standing.user.muscle_mastery].sort(
+      (left, right) => right.xp_points - left.xp_points,
+    )[0];
+    const rankingProfile = standing.user.ranking_profile;
+    const milestoneUnlockedCount = standing.user.milestone_progress.filter(
+      (progress) =>
+        progress.status === MilestoneProgressStatus.unlocked ||
+        progress.status === MilestoneProgressStatus.claimed,
+    ).length;
+    const milestoneClaimedCount = standing.user.milestone_progress.filter(
+      (progress) => progress.status === MilestoneProgressStatus.claimed,
+    ).length;
+
+    return {
+      user_id: standing.user_id,
+      member_name: this.formatUserName(standing.user),
+      display_alias: rankingProfile?.display_alias ?? null,
+      season_id: standing.season_id,
+      season_title: standing.season.title,
+      season_status: standing.season.status,
+      season_points: standing.season_points,
+      rank_position: standing.rank_position,
+      total_xp: standing.user.progression_profile?.total_xp ?? 0,
+      top_muscle: topMuscle?.muscle_group ?? null,
+      top_muscle_xp: topMuscle?.xp_points ?? 0,
+      milestone_unlocked_count: milestoneUnlockedCount,
+      milestone_claimed_count: milestoneClaimedCount,
+      visibility: rankingProfile?.visibility ?? RankingVisibility.public,
+      governance_status:
+        rankingProfile?.governance_status ?? RankingGovernanceStatus.normal,
+      is_hidden: standing.is_hidden,
+      is_disqualified: standing.is_disqualified,
+      last_earned_at: standing.last_earned_at?.toISOString() ?? null,
     };
   }
 

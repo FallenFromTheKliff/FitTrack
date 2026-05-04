@@ -16,10 +16,12 @@ import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 
 function getPageKey(pathname: string): PageKey {
+  if (pathname.startsWith("/memberships-promos")) return "memberships-promos";
   if (pathname.startsWith("/members")) return "members";
   if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/exercise-lab")) return "exercise-lab";
   if (pathname.startsWith("/gamification")) return "gamification";
+  if (pathname.startsWith("/gym-actions")) return "gym-actions";
   if (pathname.startsWith("/ai")) return "ai";
   if (pathname.startsWith("/facilities")) return "facilities";
   if (pathname.startsWith("/inventory")) return "inventory";

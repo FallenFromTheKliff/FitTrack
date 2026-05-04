@@ -117,18 +117,19 @@ export class AuthService {
       OtpPurpose.registration,
     );
 
-    const qrToken = this.generateQrToken();
-
+    const pendingUser = await this.repo.findUserByIdOrThrow(dto.user_id);
     const user = await this.repo.updateUser(dto.user_id, {
       status: UserStatus.active,
       email_verified_at: new Date(),
-      qr_code_token: qrToken,
+      ...(pendingUser.role === UserRole.member
+        ? { qr_code_token: this.generateQrToken() }
+        : {}),
     });
 
     await this.repo.markEmailIdentityVerified(dto.user_id);
     this.emitUserRegistered({
       userId: user.id,
-      role: UserRole.member,
+      role: user.role,
       source: 'email_verification',
       registeredAt: new Date().toISOString(),
     });
@@ -558,34 +559,22 @@ export class AuthService {
       PASSWORD_HASH_ROUNDS,
     );
 
-    const isMemberAccount = dto.role === 'member';
-
     const user = await this.repo.createUserWithProfile({
       role: dto.role as UserRole,
-      status: isMemberAccount ? UserStatus.pending : UserStatus.active,
+      status: UserStatus.pending,
       email: dto.email,
       credentialHash,
       firstName: dto.first_name,
       lastName: dto.last_name,
       phone: dto.phone,
-      ...(isMemberAccount
-        ? {}
-        : {
-            emailVerifiedAt: new Date(),
-            qrCodeToken: this.generateQrToken(),
-          }),
     });
 
-    if (isMemberAccount) {
-      await this.otpService.issueOtp(
-        user.id,
-        OtpPurpose.registration,
-        OtpChannel.email,
-        dto.email,
-      );
-    } else {
-      await this.repo.markEmailIdentityVerified(user.id);
-    }
+    await this.otpService.issueOtp(
+      user.id,
+      OtpPurpose.registration,
+      OtpChannel.email,
+      dto.email,
+    );
 
     this.emitAudit({
       userId: actorId,
@@ -596,20 +585,15 @@ export class AuthService {
       ipAddress: ip,
     });
 
-    if (!isMemberAccount) {
-      this.emitUserRegistered({
-        userId: user.id,
-        role: dto.role as UserRole,
-        source: 'admin_create',
-        registeredAt: new Date().toISOString(),
-      });
-    }
-
     await this.eventEmitter.emitAsync(ACCOUNT_ACTIVITY_EVENT, {
       action: 'account_created',
       actorId,
       occurredAt: new Date().toISOString(),
       targetEmail: dto.email,
+      targetName: [dto.first_name, dto.last_name]
+        .map((part) => part?.trim() ?? '')
+        .filter(Boolean)
+        .join(' '),
       targetRole: dto.role,
       targetUserId: user.id,
     });

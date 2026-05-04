@@ -15,6 +15,8 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
+  BadgePercent,
+  ClipboardList,
   Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -42,6 +44,8 @@ type NavItem = {
     | "schedule"
     | "exercise-lab"
     | "gamification"
+    | "gym-actions"
+    | "memberships-promos"
     | "ai"
     | "facilities"
     | "inventory"
@@ -75,6 +79,18 @@ const NAV: NavItem[] = [
     icon: Trophy,
     pageKey: "gamification",
   },
+  {
+    href: "/gym-actions",
+    label: "Gym Actions",
+    icon: ClipboardList,
+    pageKey: "gym-actions",
+  },
+  {
+    href: "/memberships-promos",
+    label: "Memberships + Promos",
+    icon: BadgePercent,
+    pageKey: "memberships-promos",
+  },
   { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
   {
     href: "/facilities",
@@ -90,6 +106,10 @@ const NAV: NavItem[] = [
   },
   { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
 ];
+
+function isRouteMatch(path: string, href: string) {
+  return path === href || path.startsWith(`${href}/`);
+}
 
 type Props = {
   collapsed?: boolean;
@@ -320,20 +340,22 @@ export default function Sidebar({
         {visibleNav.map((item) => {
           const isActive =
             item.href === "/analytics"
-              ? path === "/dashboard" || path.startsWith("/analytics")
-              : path.startsWith(item.href);
+              ? path === "/dashboard" || isRouteMatch(path, "/analytics")
+              : isRouteMatch(path, item.href);
+          const shouldWrapLabel = item.pageKey === "memberships-promos";
           return (
             <Link
               key={item.href}
               href={item.href}
               className={fontClass}
-              title={collapsed ? item.label : undefined}
+              title={collapsed || shouldWrapLabel ? item.label : undefined}
               aria-label={collapsed ? item.label : undefined}
               style={{
                 ...s.navItem(isActive),
                 alignItems: "center",
                 justifyContent: collapsed ? "center" : "flex-start",
                 padding: collapsed ? "14px 10px" : s.navItem(isActive).padding,
+                whiteSpace: shouldWrapLabel ? "normal" : s.navItem(isActive).whiteSpace,
               }}
               onClick={isMobileOverlay ? onClose : undefined}
             >
@@ -342,7 +364,16 @@ export default function Sidebar({
                 <>
                   <FitText
                     as="span"
-                    style={{ ...s.navLabel(isActive), fontSize: 16, flex: 1 }}
+                    style={{
+                      ...s.navLabel(isActive),
+                      display: "block",
+                      flex: 1,
+                      fontSize: shouldWrapLabel ? 14 : 16,
+                      lineHeight: shouldWrapLabel ? 1.15 : undefined,
+                      overflow: shouldWrapLabel ? "visible" : s.navLabel(isActive).overflow,
+                      textOverflow: shouldWrapLabel ? "clip" : s.navLabel(isActive).textOverflow,
+                      whiteSpace: shouldWrapLabel ? "normal" : s.navLabel(isActive).whiteSpace,
+                    }}
                     excludeGlobalScale
                   >
                     {item.label}

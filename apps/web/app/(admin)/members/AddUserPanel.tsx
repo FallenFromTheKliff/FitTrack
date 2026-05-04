@@ -85,24 +85,24 @@ const ROLE_OPTIONS = [
   {
     value: "staff",
     label: "Staff",
-    eyebrow: "Active on create",
-    summary: "Starts active with directory and attendance access.",
+    eyebrow: "OTP on create",
+    summary: "Starts pending until email verification.",
     access: "Operational admin access",
-    state: "Active immediately",
-    automation: "No verification hold",
+    state: "Pending verification",
+    automation: "OTP email is sent automatically",
     icon: UserCog,
-    note: "Operational account with active access right away.",
+    note: "Operational account with verification required before active use.",
   },
   {
     value: "admin",
     label: "Admin",
-    eyebrow: "Active on create",
-    summary: "Starts active with full portal access.",
+    eyebrow: "OTP on create",
+    summary: "Starts pending until email verification.",
     access: "Full admin access",
-    state: "Active immediately",
-    automation: "No verification hold",
+    state: "Pending verification",
+    automation: "OTP email is sent automatically",
     icon: ShieldCheck,
-    note: "Full-access admin account, active immediately.",
+    note: "Full-access admin account with verification required before active use.",
   },
 ] as const;
 
@@ -659,9 +659,8 @@ export default function AddUserPanel({
                   What happens next
                 </FitText>
                 <FitText style={{ fontSize: 13.5, lineHeight: 1.6, color: colors.textSecondary }}>
-                  {reviewRoleMeta.value === "member"
-                    ? "After confirmation, the account is created in pending verification status and the OTP email is sent automatically."
-                    : "After confirmation, the account is created in active status and can sign in immediately."}
+                  After confirmation, the account is created in pending
+                  verification status and the OTP email is sent automatically.
                 </FitText>
               </div>
             </div>

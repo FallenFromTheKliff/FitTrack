@@ -19,6 +19,7 @@ import {
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import {
   ActiveExerciseGenerationRecord,
+  CreatorUserIdentityRecord,
   ExerciseRepository,
   MuscleDefinitionRecord,
 } from './exercise.repository';
@@ -68,6 +69,7 @@ type CreatorReviewCounts = {
 
 type CreatorReviewContext = {
   counts: CreatorReviewCounts;
+  identity: CreatorUserIdentityRecord | null;
   profile: CreatorProfile | null;
 };
 
@@ -879,6 +881,8 @@ export class ExerciseService {
       id: submission.id,
       user_id: submission.user_id,
       pose_session_id: submission.pose_session_id ?? null,
+      creator_display_name: this.toCreatorDisplayName(creatorContext?.identity),
+      creator_email: this.toCreatorEmail(creatorContext?.identity),
       published_exercise_id: submission.published_exercise_id ?? null,
       status: submission.status,
       title: submission.title,
@@ -922,9 +926,10 @@ export class ExerciseService {
     const uniqueUserIds = [...new Set(userIds)].filter(Boolean);
     if (!uniqueUserIds.length) return new Map();
 
-    const [profiles, statusRows] = await Promise.all([
+    const [profiles, statusRows, identities] = await Promise.all([
       this.repo.listCreatorProfilesByUserIds(uniqueUserIds),
       this.repo.listReviewSubmissionStatusesByUserIds(uniqueUserIds),
+      this.repo.listCreatorUserIdentitiesByUserIds(uniqueUserIds),
     ]);
     const contextByUserId = new Map<string, CreatorReviewContext>();
 
@@ -937,8 +942,16 @@ export class ExerciseService {
           rejected: 0,
           total: 0,
         },
+        identity: null,
         profile: null,
       });
+    }
+
+    for (const identity of identities) {
+      const context = contextByUserId.get(identity.id);
+      if (context) {
+        context.identity = identity;
+      }
     }
 
     for (const profile of profiles) {
@@ -965,6 +978,23 @@ export class ExerciseService {
     }
 
     return contextByUserId;
+  }
+
+  private toCreatorDisplayName(
+    identity: CreatorUserIdentityRecord | null | undefined,
+  ): string | null {
+    const profile = identity?.profile;
+    const displayName = [profile?.first_name, profile?.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return displayName || null;
+  }
+
+  private toCreatorEmail(
+    identity: CreatorUserIdentityRecord | null | undefined,
+  ): string | null {
+    return identity?.auth_identities[0]?.identifier ?? null;
   }
 
   private async ensureCanSubmitExerciseDraft(userId: string): Promise<void> {

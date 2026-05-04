@@ -12,6 +12,7 @@ import {
 
 import { AiPythonClientService } from '../ai/ai-python-client.service';
 import { type PaginatedResult } from '../common/base-repository/base-repository';
+import { assertValidMemberDateOfBirth } from '../common/validators';
 import { UserService } from '../user/user.service';
 import { DateRangeDTO, type PaginationDTO } from '../user/dto/user-dto';
 import {
@@ -348,8 +349,12 @@ export class NutritionService {
       );
     }
 
+    const validatedDateOfBirth = assertValidMemberDateOfBirth(
+      dateOfBirth as Date,
+    );
+
     return {
-      age: this.calculateAge(dateOfBirth as Date),
+      age: this.calculateAge(validatedDateOfBirth),
       gender: gender as Gender,
       weightKg: weightKg as number,
       heightCm: heightCm as number,

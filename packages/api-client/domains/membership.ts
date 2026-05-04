@@ -1,5 +1,6 @@
 import type {
   CancelMembershipInput,
+  CreateMembershipPlanInput,
   MembershipCardPurchaseRecord,
   MembershipCardRecord,
   ManualMembershipPaymentInput,
@@ -14,6 +15,7 @@ import type {
   PaginatedResult,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
 import { ApiClientError } from "../errors/api-client-error";
@@ -22,6 +24,7 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 
 export type {
   CancelMembershipInput,
+  CreateMembershipPlanInput,
   MembershipCardPurchaseRecord,
   ManualMembershipPaymentInput,
   MembershipCheckoutRecord,
@@ -35,6 +38,7 @@ export type {
   PaginatedResult,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
 
@@ -77,6 +81,25 @@ function toSubscribeRequest(payload: SubscribeToMembershipInput) {
   return {
     plan_id: payload.planId,
     provider: payload.provider
+  };
+}
+
+function toPlanMutationRequest(
+  payload: CreateMembershipPlanInput | UpdateMembershipPlanInput
+) {
+  return {
+    ...(payload.name !== undefined ? { name: payload.name } : {}),
+    ...(payload.description !== undefined ? { description: payload.description } : {}),
+    ...(payload.price !== undefined ? { price: payload.price } : {}),
+    ...(payload.durationDays !== undefined ? { duration_days: payload.durationDays } : {}),
+    ...(payload.features !== undefined ? { features: payload.features } : {}),
+    ...(payload.sortOrder !== undefined ? { sort_order: payload.sortOrder } : {}),
+    ...(payload.includesCoaching !== undefined
+      ? { includes_coaching: payload.includesCoaching }
+      : {}),
+    ...("isActive" in payload && payload.isActive !== undefined
+      ? { is_active: payload.isActive }
+      : {})
   };
 }
 
@@ -156,6 +179,18 @@ export function createMembershipApi(transport: ApiTransport) {
       return unwrapResponse<MembershipPlanRecord>(
         transport.get(`/membership/plans/${planId}`),
         "Unable to load membership plan."
+      );
+    },
+    createPlan(payload: CreateMembershipPlanInput) {
+      return unwrapResponse<MembershipPlanRecord>(
+        transport.post("/membership/plans", toPlanMutationRequest(payload)),
+        "Unable to create membership plan."
+      );
+    },
+    updatePlan(planId: string, payload: UpdateMembershipPlanInput) {
+      return unwrapResponse<MembershipPlanRecord>(
+        transport.patch(`/membership/plans/${planId}`, toPlanMutationRequest(payload)),
+        "Unable to update membership plan."
       );
     },
     async getCurrentSubscription(): Promise<MembershipSubscriptionRecord | null> {

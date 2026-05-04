@@ -25,10 +25,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type {
-  AnalyticsRecentActivityRecord,
-  IThemeContext,
-} from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
@@ -42,7 +38,6 @@ import {
 import {
   FitButton,
   FitChartContainer,
-  FitPagination,
   FitSection,
   FitSelect,
   FitText,
@@ -50,21 +45,12 @@ import {
 import { FitModal } from "@/components/modals";
 import { useAnalyticsDashboard } from "../../hooks/analytics/useAnalyticsDashboard";
 
-type RecentActivityFilter = "all" | "bookings" | "checkins";
 type RevenueSourceFilter =
   | "all"
   | "membership"
   | "bookings"
   | "products"
   | "coaching";
-
-const RECENT_ACTIVITY_FILTER_OPTIONS = [
-  { label: "All Activities", value: "all" },
-  { label: "Check-ins", value: "checkins" },
-  { label: "Bookings", value: "bookings" },
-] as const;
-
-const RECENT_ACTIVITY_PAGE_SIZE = 3;
 
 const REVENUE_SOURCE_FILTER_OPTIONS = [
   { label: "All Business Revenue", value: "all" },
@@ -111,9 +97,9 @@ const ANALYTICS_SECTION_NAV = [
     helper: "All-time totals",
   },
   {
-    id: "analytics-activity",
-    label: "Activity",
-    helper: "Alerts + recent ops",
+    id: "analytics-alerts",
+    label: "Alerts",
+    helper: "Operational warnings",
   },
   {
     id: "analytics-attendance",
@@ -121,14 +107,6 @@ const ANALYTICS_SECTION_NAV = [
     helper: "Check-in trends",
   },
 ] as const;
-
-function formatStatusLabel(value: string) {
-  return value
-    .split(/[_-]/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function getAlertIcon(kind: string) {
   if (kind === "maintenance_due") return Wrench;
@@ -139,130 +117,16 @@ function getAlertLaneLabel(kind: string) {
   return kind === "maintenance_due" ? "Equipment warning" : "Inventory warning";
 }
 
-function getActivityIcon(kind: string) {
-  switch (kind) {
-    case "booking":
-      return CalendarClock;
-    case "coaching":
-      return TrendingUp;
-    case "sale":
-      return BarChart3;
-    default:
-      return Users;
-  }
-}
-
-function getActivityAccent(kind: string, colors: IThemeContext["colors"]) {
-  switch (kind) {
-    case "booking":
-      return colors.textSecondary;
-    case "coaching":
-      return colors.brand;
-    case "sale":
-      return colors.success;
-    default:
-      return colors.warning;
-  }
-}
-
-function formatRelativeTime(value: string) {
-  const parsed = new Date(value);
-  const timestamp = parsed.getTime();
-  if (Number.isNaN(timestamp)) return "Unknown";
-
-  const deltaMs = Date.now() - timestamp;
-  if (deltaMs < -60_000) {
-    return formatDateTime(value);
-  }
-
-  const deltaMinutes = Math.max(1, Math.floor(deltaMs / 60_000));
-  if (deltaMinutes < 60) return `${deltaMinutes} min ago`;
-
-  const deltaHours = Math.floor(deltaMinutes / 60);
-  if (deltaHours < 24) return `${deltaHours}h ago`;
-
-  const deltaDays = Math.floor(deltaHours / 24);
-  if (deltaDays < 7) return `${deltaDays}d ago`;
-
-  return formatDateTime(value);
-}
-
-function getRecentActivityAction(activity: AnalyticsRecentActivityRecord) {
-  switch (activity.kind) {
-    case "attendance":
-      return "Checked in";
-    case "booking":
-      return activity.status === "cancelled"
-        ? "Booking updated"
-        : "Booked venue";
-    case "coaching":
-      return "Coaching activity";
-    case "sale":
-      return "Retail sale";
-    default:
-      return activity.title;
-  }
-}
-
 export function AnalyticsDashboard() {
   const router = useRouter();
   const { colors } = useTheme();
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const analytics = useAnalyticsDashboard();
-  const [recentActivityFilter, setRecentActivityFilter] =
-    useState<RecentActivityFilter>("all");
-  const [recentActivityPage, setRecentActivityPage] = useState(1);
   const [revenueSourceFilter, setRevenueSourceFilter] =
     useState<RevenueSourceFilter>("all");
 
   const systemAlerts = analytics.snapshot?.systemAlerts ?? [];
-  const recentActivities = useMemo(
-    () => analytics.snapshot?.recentActivities ?? [],
-    [analytics.snapshot?.recentActivities],
-  );
-  const filteredRecentActivities = useMemo(() => {
-    if (recentActivityFilter === "checkins") {
-      return recentActivities.filter(
-        (activity) => activity.kind === "attendance",
-      );
-    }
-
-    if (recentActivityFilter === "bookings") {
-      return recentActivities.filter((activity) => activity.kind === "booking");
-    }
-
-    return recentActivities;
-  }, [recentActivities, recentActivityFilter]);
-  const recentActivityTotalPages = Math.max(
-    1,
-    Math.ceil(filteredRecentActivities.length / RECENT_ACTIVITY_PAGE_SIZE),
-  );
-  const normalizedRecentActivityPage = Math.min(
-    recentActivityPage,
-    recentActivityTotalPages,
-  );
-  const recentActivityPageStart =
-    filteredRecentActivities.length === 0
-      ? 0
-      : (normalizedRecentActivityPage - 1) * RECENT_ACTIVITY_PAGE_SIZE + 1;
-  const recentActivityPageEnd = Math.min(
-    filteredRecentActivities.length,
-    normalizedRecentActivityPage * RECENT_ACTIVITY_PAGE_SIZE,
-  );
-  const pagedRecentActivities = filteredRecentActivities.slice(
-    (normalizedRecentActivityPage - 1) * RECENT_ACTIVITY_PAGE_SIZE,
-    normalizedRecentActivityPage * RECENT_ACTIVITY_PAGE_SIZE,
-  );
-  const recentActivityLaneLabel = `${filteredRecentActivities.length} activity lane${filteredRecentActivities.length === 1 ? "" : "s"}`;
-  useEffect(() => {
-    setRecentActivityPage(1);
-  }, [recentActivityFilter]);
-  useEffect(() => {
-    if (recentActivityPage > recentActivityTotalPages) {
-      setRecentActivityPage(recentActivityTotalPages);
-    }
-  }, [recentActivityPage, recentActivityTotalPages]);
   const selectedRevenueValue = useMemo(() => {
     const totals = analytics.revenue?.totals;
     if (!totals) return 0;
@@ -666,7 +530,7 @@ export function AnalyticsDashboard() {
           </FitSection>
         </div>
 
-        <div id="analytics-activity" className="analytics-operations-stack">
+        <div id="analytics-alerts" className="analytics-operations-stack">
           <FitSection
             heading="System Alerts"
             action={
@@ -795,230 +659,6 @@ export function AnalyticsDashboard() {
             </div>
           </FitSection>
 
-          <FitSection
-            heading="Recent Activity"
-            action={
-              <div className="analytics-section-action">
-                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-                  {recentActivityLaneLabel}
-                </FitText>
-                <FitSelect
-                  compact
-                  value={recentActivityFilter}
-                  onChange={(event) =>
-                    setRecentActivityFilter(
-                      event.target.value as RecentActivityFilter,
-                    )
-                  }
-                  options={[...RECENT_ACTIVITY_FILTER_OPTIONS]}
-                />
-              </div>
-            }
-          >
-            <div
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: 22,
-                backgroundColor: colors.surface,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                className="analytics-activity-head"
-                style={{
-                  borderBottom: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surfaceRaised,
-                }}
-              >
-                <FitText
-                  as="span"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  MEMBER
-                </FitText>
-                <FitText
-                  as="span"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  ACTION
-                </FitText>
-                <FitText
-                  as="span"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  TIME
-                </FitText>
-                <FitText
-                  as="span"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  STATUS
-                </FitText>
-              </div>
-
-              {pagedRecentActivities.length ? (
-                pagedRecentActivities.map((activity, index) => {
-                  const accent = getActivityAccent(activity.kind, colors);
-                  const Icon = getActivityIcon(activity.kind);
-
-                  return (
-                    <div
-                      key={activity.id}
-                      className="analytics-activity-row"
-                      style={{
-                        borderBottom:
-                          index < pagedRecentActivities.length - 1
-                            ? `1px solid ${colors.border}`
-                            : "none",
-                      }}
-                    >
-                      <div
-                        className="analytics-inline-icon-row"
-                        style={{ gap: 10, minWidth: 0 }}
-                      >
-                        <div
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 12,
-                            backgroundColor: `${accent}18`,
-                            color: accent,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Icon size={16} />
-                        </div>
-                        <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                          <FitText
-                            as="p"
-                            style={{ fontSize: 15, fontWeight: 700 }}
-                          >
-                            {activity.actorName}
-                          </FitText>
-                          <FitText
-                            as="p"
-                            style={{ fontSize: 12, color: colors.textMuted }}
-                          >
-                            {activity.entityLabel}
-                          </FitText>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-                        <FitText
-                          as="p"
-                          style={{ fontSize: 15, fontWeight: 700 }}
-                        >
-                          {getRecentActivityAction(activity)}
-                        </FitText>
-                        <FitText
-                          as="p"
-                          style={{
-                            fontSize: 12,
-                            color: colors.textMuted,
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          {activity.description}
-                        </FitText>
-                      </div>
-
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <FitText
-                          as="p"
-                          style={{ fontSize: 15, fontWeight: 700 }}
-                        >
-                          {formatRelativeTime(activity.occurredAt)}
-                        </FitText>
-                        <FitText
-                          as="p"
-                          style={{ fontSize: 12, color: colors.textMuted }}
-                        >
-                          {formatDateTime(activity.occurredAt)}
-                        </FitText>
-                      </div>
-
-                      <div
-                        style={{
-                          justifySelf: "end",
-                          borderRadius: 999,
-                          padding: "6px 12px",
-                          backgroundColor: `${accent}18`,
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: 800,
-                          letterSpacing: "0.08em",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {formatStatusLabel(activity.status)}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div style={{ padding: 24 }}>
-                  <FitText
-                    as="p"
-                    style={{
-                      fontSize: 14,
-                      color: colors.textMuted,
-                      lineHeight: 1.7,
-                    }}
-                  >
-                    No activities match this filter right now.
-                  </FitText>
-                </div>
-              )}
-              {filteredRecentActivities.length > RECENT_ACTIVITY_PAGE_SIZE ? (
-                <div
-                  style={{
-                    borderTop: `1px solid ${colors.border}`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    padding: "14px 22px",
-                    flexWrap: "wrap",
-                    backgroundColor: colors.surfaceRaised,
-                  }}
-                >
-                  <FitText
-                    as="p"
-                    style={{ fontSize: 12, color: colors.textMuted }}
-                  >
-                    Showing {recentActivityPageStart} - {recentActivityPageEnd}{" "}
-                    of {filteredRecentActivities.length}
-                  </FitText>
-                  <FitPagination
-                    currentPage={normalizedRecentActivityPage}
-                    totalPages={recentActivityTotalPages}
-                    onPageChange={setRecentActivityPage}
-                    ariaLabel="Recent activity pagination"
-                  />
-                </div>
-              ) : null}
-            </div>
-          </FitSection>
         </div>
 
         <div id="analytics-daily" className="analytics-anchor-section">
@@ -1695,8 +1335,8 @@ export function AnalyticsDashboard() {
 
         .analytics-command-rail {
           position: sticky;
-          top: 12px;
-          z-index: 6;
+          top: 0;
+          z-index: 20;
           display: grid;
           grid-template-columns: minmax(220px, 0.68fr) minmax(0, 1.6fr);
           gap: 14px;

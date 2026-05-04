@@ -37,6 +37,27 @@ export type MembershipPlanRecord = {
   updated_at: string;
 };
 
+export type CreateMembershipPlanInput = {
+  description?: string;
+  durationDays: number;
+  features?: Record<string, unknown>;
+  includesCoaching?: boolean;
+  name: string;
+  price: number;
+  sortOrder?: number;
+};
+
+export type UpdateMembershipPlanInput = {
+  description?: string;
+  durationDays?: number;
+  features?: Record<string, unknown>;
+  includesCoaching?: boolean;
+  isActive?: boolean;
+  name?: string;
+  price?: number;
+  sortOrder?: number;
+};
+
 export type MembershipSubscriptionStatus =
   | "pending_payment"
   | "active"

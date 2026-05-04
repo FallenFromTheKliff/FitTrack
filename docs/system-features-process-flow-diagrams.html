@@ -1,0 +1,1097 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FitTrack System Features and Process Flow Diagrams</title>
+  <style>
+    :root {
+      --paper: #f8fafc;
+      --ink: #172033;
+      --muted: #5b677a;
+      --line: #cbd5e1;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --green: #0f8a5f;
+      --green-soft: #dcfce7;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --red: #b42318;
+      --red-soft: #fee2e2;
+      --violet: #6d28d9;
+      --violet-soft: #ede9fe;
+      --slate-soft: #e2e8f0;
+      --white: #ffffff;
+      --shadow: 0 18px 55px rgba(15, 23, 42, 0.12);
+      font-family: "Segoe UI", Arial, sans-serif;
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.48;
+    }
+
+    .shell {
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 72px;
+    }
+
+    .hero {
+      padding: 28px 0 24px;
+      border-bottom: 2px solid var(--line);
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin: 14px 0 8px;
+      max-width: 980px;
+      font-size: clamp(36px, 5vw, 68px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 12px;
+      font-size: clamp(26px, 3vw, 40px);
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 980px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .sample {
+      width: 18px;
+      height: 18px;
+      border: 2px solid currentColor;
+      background: currentColor;
+      opacity: 0.72;
+    }
+
+    .sample.oval {
+      width: 28px;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--blue);
+    }
+
+    .sample.action {
+      border-radius: 7px;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .sample.decision {
+      transform: rotate(45deg);
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .sample.start {
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--ink);
+    }
+
+    .sample.end {
+      border-radius: 999px;
+      border-width: 4px;
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .sheet {
+      margin: 30px 0 44px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+      box-shadow: var(--shadow);
+      break-inside: avoid;
+    }
+
+    .sheet-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .sheet-header p {
+      max-width: 960px;
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: var(--slate-soft);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .diagram-frame {
+      width: 100%;
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .module-flow {
+      min-height: 100%;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      break-inside: avoid;
+    }
+
+    .module-flow h3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 12px;
+      font-size: 17px;
+    }
+
+    .module-flow .actor {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .lane-head {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .lane-head span {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 56px minmax(0, 1fr) 42px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .node {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 10px;
+      border: 2px solid var(--line);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .node.start,
+    .node.end {
+      width: 24px;
+      height: 24px;
+      min-height: 24px;
+      padding: 0;
+      justify-self: center;
+      border-radius: 999px;
+      background: var(--ink);
+      color: transparent;
+      font-size: 0;
+    }
+
+    .node.end {
+      border: 5px solid var(--ink);
+      background: #ffffff;
+    }
+
+    .node.action {
+      border-color: #86efac;
+      border-radius: 8px;
+      background: var(--green-soft);
+      color: #14532d;
+    }
+
+    .node.system {
+      border-color: #93c5fd;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: #1e3a8a;
+    }
+
+    .node.external {
+      border-color: #c4b5fd;
+      border-radius: 8px;
+      background: var(--violet-soft);
+      color: #4c1d95;
+    }
+
+    .node.decision {
+      width: 54px;
+      height: 54px;
+      min-height: 54px;
+      padding: 5px;
+      border-color: #f59e0b;
+      background: var(--amber-soft);
+      color: #78350f;
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      font-size: 10px;
+      line-height: 1.05;
+    }
+
+    .arrow {
+      color: var(--muted);
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .alt {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+      color: #78350f;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .caption {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .note {
+      padding: 12px 14px;
+      border: 1px solid #bfdbfe;
+      border-left: 5px solid var(--blue);
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .print-break {
+      break-before: page;
+    }
+
+    @media (max-width: 980px) {
+      .sheet-header,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .tag-row {
+        justify-content: flex-start;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .shell {
+        width: 100%;
+        padding: 0;
+      }
+
+      .hero {
+        padding-top: 0;
+      }
+
+      .sheet {
+        box-shadow: none;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">FitTrack documentation diagram sheet</span>
+      <h1>System Features and Process Flow Diagrams</h1>
+      <p class="lead">
+        Screenshot-ready academic diagrams for the FitTrack web/admin portal and mobile gym member application.
+        The written narratives belong in the Notion child page; this HTML exists as the visual source for diagrams.
+      </p>
+      <div class="legend" aria-label="Diagram notation legend">
+        <span class="legend-item"><span class="sample oval"></span>Use case</span>
+        <span class="legend-item"><span class="sample action"></span>User action</span>
+        <span class="legend-item"><span class="sample action" style="color: var(--blue); background: var(--blue-soft);"></span>System action</span>
+        <span class="legend-item"><span class="sample decision"></span>Decision</span>
+        <span class="legend-item"><span class="sample start"></span>Start</span>
+        <span class="legend-item"><span class="sample end"></span>End</span>
+      </div>
+    </section>
+
+    <section class="sheet" id="use-case-diagram">
+      <div class="sheet-header">
+        <div>
+          <h2>Use Case Diagram</h2>
+          <p>
+            Actors connect to the FitTrack modules they can use. Shared backend services support both web and mobile flows,
+            while external services support OTP, payment verification, AI response generation, and camera-based capture.
+          </p>
+        </div>
+        <div class="tag-row">
+          <span class="tag">UML use case</span>
+          <span class="tag">Actors and modules</span>
+        </div>
+      </div>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1420 930" role="img" aria-label="FitTrack use case diagram">
+          <defs>
+            <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path>
+            </marker>
+            <style>
+              .uc-boundary { fill: #ffffff; stroke: #94a3b8; stroke-width: 2.5; }
+              .uc-title { font: 800 18px Segoe UI, Arial; fill: #172033; }
+              .uc-label { font: 700 13px Segoe UI, Arial; fill: #172033; text-anchor: middle; dominant-baseline: middle; }
+              .uc-small { font: 700 12px Segoe UI, Arial; fill: #475569; text-anchor: middle; dominant-baseline: middle; }
+              .actor-label { font: 800 16px Segoe UI, Arial; fill: #172033; text-anchor: middle; }
+              .line { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow-blue); }
+              .assoc { stroke: #64748b; stroke-width: 2; fill: none; }
+              .include { stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 8 7; fill: none; marker-end: url(#arrow-blue); }
+            </style>
+          </defs>
+
+          <rect class="uc-boundary" x="250" y="60" width="920" height="800" rx="8"></rect>
+          <text class="uc-title" x="280" y="95">FitTrack Gym Management System</text>
+
+          <!-- Actors -->
+          <g transform="translate(92 170)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">Admin</text>
+          </g>
+          <g transform="translate(92 420)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">Staff</text>
+          </g>
+          <g transform="translate(92 675)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">Gym Member</text>
+          </g>
+
+          <g transform="translate(1320 150)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">Email / OTP</text>
+          </g>
+          <g transform="translate(1320 390)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">PayMongo</text>
+          </g>
+          <g transform="translate(1320 650)">
+            <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#172033" stroke-width="3"></circle>
+            <line x1="0" y1="22" x2="0" y2="82" stroke="#172033" stroke-width="3"></line>
+            <line x1="-38" y1="48" x2="38" y2="48" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="-34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <line x1="0" y1="82" x2="34" y2="130" stroke="#172033" stroke-width="3"></line>
+            <text class="actor-label" x="0" y="165">AI / Camera</text>
+          </g>
+
+          <!-- Use case ovals -->
+          <g>
+            <ellipse cx="430" cy="150" rx="126" ry="40" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="150">Authenticate and authorize</text>
+
+            <ellipse cx="710" cy="150" rx="115" ry="40" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="150">Dashboard / landing</text>
+
+            <ellipse cx="965" cy="150" rx="128" ry="40" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="150">Analytics and reports</text>
+
+            <ellipse cx="430" cy="265" rx="122" ry="42" fill="#dcfce7" stroke="#0f8a5f" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="265">Manage accounts</text>
+
+            <ellipse cx="710" cy="265" rx="134" ry="42" fill="#dcfce7" stroke="#0f8a5f" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="265">Run gym operations</text>
+
+            <ellipse cx="965" cy="265" rx="120" ry="42" fill="#dcfce7" stroke="#0f8a5f" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="265">Manage facilities</text>
+
+            <ellipse cx="430" cy="380" rx="132" ry="42" fill="#fef3c7" stroke="#b45309" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="380">Manage inventory</text>
+
+            <ellipse cx="710" cy="380" rx="126" ry="42" fill="#fef3c7" stroke="#b45309" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="380">Exercise lab</text>
+
+            <ellipse cx="965" cy="380" rx="128" ry="42" fill="#fef3c7" stroke="#b45309" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="380">Gamification admin</text>
+
+            <ellipse cx="430" cy="500" rx="130" ry="42" fill="#ede9fe" stroke="#6d28d9" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="500">BrodigyAI</text>
+
+            <ellipse cx="710" cy="500" rx="130" ry="42" fill="#ede9fe" stroke="#6d28d9" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="500">Settings and profile</text>
+
+            <ellipse cx="965" cy="500" rx="134" ry="42" fill="#ede9fe" stroke="#6d28d9" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="500">Notifications</text>
+
+            <ellipse cx="430" cy="630" rx="132" ry="42" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="630">Member home</text>
+
+            <ellipse cx="710" cy="630" rx="132" ry="42" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="630">Book facilities / coaching</text>
+
+            <ellipse cx="965" cy="630" rx="132" ry="42" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="630">Nutrition tracking</text>
+
+            <ellipse cx="430" cy="750" rx="132" ry="42" fill="#fee2e2" stroke="#b42318" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="430" y="750">Workout and pose session</text>
+
+            <ellipse cx="710" cy="750" rx="132" ry="42" fill="#fee2e2" stroke="#b42318" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="710" y="750">Muscle mastery</text>
+
+            <ellipse cx="965" cy="750" rx="132" ry="42" fill="#fee2e2" stroke="#b42318" stroke-width="2.5"></ellipse>
+            <text class="uc-label" x="965" y="750">Membership and payments</text>
+          </g>
+
+          <!-- Associations -->
+          <path class="assoc" d="M 130 205 C 185 185, 230 165, 304 152"></path>
+          <path class="assoc" d="M 130 205 C 220 218, 278 238, 314 257"></path>
+          <path class="assoc" d="M 130 205 C 230 250, 285 325, 323 367"></path>
+          <path class="assoc" d="M 130 205 C 230 125, 740 118, 853 142"></path>
+          <path class="assoc" d="M 130 205 C 250 290, 800 345, 850 370"></path>
+
+          <path class="assoc" d="M 130 455 C 220 380, 305 292, 578 266"></path>
+          <path class="assoc" d="M 130 455 C 225 410, 295 390, 304 380"></path>
+          <path class="assoc" d="M 130 455 C 225 455, 285 485, 304 500"></path>
+          <path class="assoc" d="M 130 455 C 235 500, 520 505, 580 500"></path>
+          <path class="assoc" d="M 130 455 C 210 330, 295 275, 320 265"></path>
+
+          <path class="assoc" d="M 130 710 C 210 690, 270 650, 304 630"></path>
+          <path class="assoc" d="M 130 710 C 260 690, 560 650, 580 630"></path>
+          <path class="assoc" d="M 130 710 C 260 680, 825 645, 835 630"></path>
+          <path class="assoc" d="M 130 710 C 210 740, 270 750, 304 750"></path>
+          <path class="assoc" d="M 130 710 C 250 760, 560 765, 580 750"></path>
+          <path class="assoc" d="M 130 710 C 250 790, 825 780, 835 750"></path>
+
+          <path class="include" d="M 555 150 C 905 105, 1165 115, 1283 175"></path>
+          <path class="include" d="M 846 630 C 1050 570, 1190 495, 1284 422"></path>
+          <path class="include" d="M 1075 750 C 1160 690, 1225 570, 1284 422"></path>
+          <path class="include" d="M 550 500 C 870 530, 1120 670, 1284 675"></path>
+          <path class="include" d="M 550 750 C 860 760, 1090 735, 1284 675"></path>
+
+          <text class="uc-small" x="1206" y="126">includes OTP email</text>
+          <text class="uc-small" x="1180" y="520">opens checkout or verifies proof</text>
+          <text class="uc-small" x="1130" y="700">uses AI/camera services</text>
+        </svg>
+      </div>
+      <p class="caption">
+        The diagram shows access at module level. Admin can access the full web portal, Staff can operate assigned management modules,
+        and Gym Members use the mobile-facing member modules. Payments, OTP, AI, and camera services are supporting actors.
+      </p>
+    </section>
+
+    <section class="sheet print-break" id="functional-decomposition">
+      <div class="sheet-header">
+        <div>
+          <h2>Functional Decomposition Diagram</h2>
+          <p>
+            FitTrack decomposes into presentation surfaces, shared backend services, domain modules, external integrations,
+            and persistent data. The decomposition shows how user-facing modules depend on common service capabilities.
+          </p>
+        </div>
+        <div class="tag-row">
+          <span class="tag">FDD</span>
+          <span class="tag">System hierarchy</span>
+        </div>
+      </div>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1420 790" role="img" aria-label="FitTrack functional decomposition diagram">
+          <defs>
+            <style>
+              .fdd-root { fill: #172033; stroke: #172033; stroke-width: 2; }
+              .fdd-group { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; }
+              .fdd-web { fill: #dbeafe; stroke: #2563eb; stroke-width: 2; }
+              .fdd-mobile { fill: #dcfce7; stroke: #0f8a5f; stroke-width: 2; }
+              .fdd-api { fill: #fef3c7; stroke: #b45309; stroke-width: 2; }
+              .fdd-ext { fill: #ede9fe; stroke: #6d28d9; stroke-width: 2; }
+              .fdd-data { fill: #fee2e2; stroke: #b42318; stroke-width: 2; }
+              .fdd-title { font: 900 17px Segoe UI, Arial; fill: #172033; text-anchor: middle; dominant-baseline: middle; }
+              .fdd-root-text { font: 900 20px Segoe UI, Arial; fill: #ffffff; text-anchor: middle; dominant-baseline: middle; }
+              .fdd-text { font: 750 12px Segoe UI, Arial; fill: #334155; text-anchor: middle; dominant-baseline: middle; }
+              .fdd-line { stroke: #64748b; stroke-width: 2; fill: none; }
+            </style>
+          </defs>
+
+          <rect class="fdd-root" x="530" y="28" width="360" height="62" rx="10"></rect>
+          <text class="fdd-root-text" x="710" y="59">FitTrack System</text>
+
+          <rect class="fdd-group" x="40" y="150" width="250" height="555" rx="8"></rect>
+          <rect class="fdd-web" x="60" y="180" width="210" height="50" rx="8"></rect>
+          <text class="fdd-title" x="165" y="205">Web/Admin Portal</text>
+
+          <rect class="fdd-group" x="320" y="150" width="250" height="555" rx="8"></rect>
+          <rect class="fdd-mobile" x="340" y="180" width="210" height="50" rx="8"></rect>
+          <text class="fdd-title" x="445" y="205">Mobile Member App</text>
+
+          <rect class="fdd-group" x="600" y="150" width="250" height="555" rx="8"></rect>
+          <rect class="fdd-api" x="620" y="180" width="210" height="50" rx="8"></rect>
+          <text class="fdd-title" x="725" y="205">Backend API</text>
+
+          <rect class="fdd-group" x="880" y="150" width="250" height="555" rx="8"></rect>
+          <rect class="fdd-ext" x="900" y="180" width="210" height="50" rx="8"></rect>
+          <text class="fdd-title" x="1005" y="205">External Services</text>
+
+          <rect class="fdd-group" x="1160" y="150" width="220" height="555" rx="8"></rect>
+          <rect class="fdd-data" x="1180" y="180" width="180" height="50" rx="8"></rect>
+          <text class="fdd-title" x="1270" y="205">Data Layer</text>
+
+          <path class="fdd-line" d="M 710 90 V 120 H 165 V 150"></path>
+          <path class="fdd-line" d="M 710 120 H 445 V 150"></path>
+          <path class="fdd-line" d="M 710 120 H 725 V 150"></path>
+          <path class="fdd-line" d="M 710 120 H 1005 V 150"></path>
+          <path class="fdd-line" d="M 710 120 H 1270 V 150"></path>
+
+          <g>
+            <rect class="fdd-web" x="70" y="265" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="286">Auth and portal routing</text>
+            <rect class="fdd-web" x="70" y="322" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="343">Analytics and reports</text>
+            <rect class="fdd-web" x="70" y="379" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="400">Accounts and attendance</text>
+            <rect class="fdd-web" x="70" y="436" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="457">Operations and coaching</text>
+            <rect class="fdd-web" x="70" y="493" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="514">Facilities and inventory</text>
+            <rect class="fdd-web" x="70" y="550" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="571">Exercise, AI, gamification</text>
+            <rect class="fdd-web" x="70" y="607" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="165" y="628">Settings and profile</text>
+          </g>
+
+          <g>
+            <rect class="fdd-mobile" x="350" y="265" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="286">Auth and registration</text>
+            <rect class="fdd-mobile" x="350" y="322" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="343">Home and membership</text>
+            <rect class="fdd-mobile" x="350" y="379" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="400">Bookings and facilities</text>
+            <rect class="fdd-mobile" x="350" y="436" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="457">Nutrition</text>
+            <rect class="fdd-mobile" x="350" y="493" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="514">Workout and pose</text>
+            <rect class="fdd-mobile" x="350" y="550" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="571">Mastery and AI chat</text>
+            <rect class="fdd-mobile" x="350" y="607" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="445" y="628">Profile and settings</text>
+          </g>
+
+          <g>
+            <rect class="fdd-api" x="630" y="265" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="286">Auth, users, attendance</text>
+            <rect class="fdd-api" x="630" y="322" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="343">Membership and payments</text>
+            <rect class="fdd-api" x="630" y="379" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="400">Bookings and coaching</text>
+            <rect class="fdd-api" x="630" y="436" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="457">Fitness and pose</text>
+            <rect class="fdd-api" x="630" y="493" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="514">Nutrition and analytics</text>
+            <rect class="fdd-api" x="630" y="550" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="571">Inventory and layout</text>
+            <rect class="fdd-api" x="630" y="607" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="725" y="628">AI and notifications</text>
+          </g>
+
+          <g>
+            <rect class="fdd-ext" x="910" y="265" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="286">Email and OTP delivery</text>
+            <rect class="fdd-ext" x="910" y="322" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="343">PayMongo checkout</text>
+            <rect class="fdd-ext" x="910" y="379" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="400">Payment webhooks</text>
+            <rect class="fdd-ext" x="910" y="436" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="457">AI response provider</text>
+            <rect class="fdd-ext" x="910" y="493" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="514">Pose and equipment model</text>
+            <rect class="fdd-ext" x="910" y="550" width="190" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1005" y="571">Browser camera device</text>
+          </g>
+
+          <g>
+            <rect class="fdd-data" x="1190" y="265" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="286">Users and roles</text>
+            <rect class="fdd-data" x="1190" y="322" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="343">Memberships</text>
+            <rect class="fdd-data" x="1190" y="379" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="400">Bookings</text>
+            <rect class="fdd-data" x="1190" y="436" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="457">Fitness sessions</text>
+            <rect class="fdd-data" x="1190" y="493" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="514">Inventory</text>
+            <rect class="fdd-data" x="1190" y="550" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="571">Analytics events</text>
+            <rect class="fdd-data" x="1190" y="607" width="160" height="42" rx="8"></rect>
+            <text class="fdd-text" x="1270" y="628">AI chat history</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section class="sheet print-break" id="web-admin-activity">
+      <div class="sheet-header">
+        <div>
+          <h2>Web/Admin Activity Diagrams</h2>
+          <p>
+            These module-level activity diagrams summarize management portal behavior from login through each protected page.
+            They intentionally omit visual micro-interactions and confirmation modal details unless they change the outcome.
+          </p>
+        </div>
+        <div class="tag-row">
+          <span class="tag">Admin</span>
+          <span class="tag">Staff</span>
+          <span class="tag">Protected routes</span>
+        </div>
+      </div>
+      <div class="matrix">
+        <article class="module-flow">
+          <h3>Web Login and Access Control <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>External</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Enter email and password</span><span class="arrow">-></span>
+            <span class="node decision">Valid?</span><span class="arrow">-></span>
+            <span class="node system">Check lock, OTP, and role gate</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: invalid credentials show an error; locked accounts route to Locked; OTP-required accounts must verify code; non-web roles are redirected to Login.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Dashboard / Portal Landing <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Open root or landing route</span><span class="arrow">-></span>
+            <span class="node decision">Authenticated?</span><span class="arrow">-></span>
+            <span class="node system">Redirect to role landing and load portal context</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: unauthenticated users are sent to Login; unauthorized routes fall back to Dashboard or Login.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Analytics and Reports <span class="actor">Admin</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Choose period, metric, or export</span><span class="arrow">-></span>
+            <span class="node system">Fetch snapshots, revenue, attendance, members, coaches</span><span class="arrow">-></span>
+            <span class="node decision">Export?</span><span class="arrow">-></span>
+            <span class="node system">Render dashboard or PDF report</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: if data fetch fails, the page shows a recoverable empty/error state and keeps filters available.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Account Module / Members <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>External</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Search member, create account, review payment, or scan QR</span><span class="arrow">-></span>
+            <span class="node decision">Valid action?</span><span class="arrow">-></span>
+            <span class="node system">Update user, attendance, deletion, or payment state</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: duplicate or incomplete user input is rejected; invalid QR falls back to manual entry; rejected payment keeps access blocked.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Gym Operations / Schedule <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Payment</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Manage coach, availability, appointment, booking, or recurring plan</span><span class="arrow">-></span>
+            <span class="node decision">Slot / payment valid?</span><span class="arrow">-></span>
+            <span class="node system">Create, update, complete, cancel, or collect payment</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: unavailable slots are rejected; cash payment can be verified by staff; PayMongo opens checkout and waits for final status.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Exercise Lab <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Review submission or edit exercise contract</span><span class="arrow">-></span>
+            <span class="node decision">Approve / update?</span><span class="arrow">-></span>
+            <span class="node system">Persist exercise, muscle, pose, or review state</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: invalid exercise metadata remains in review and does not enter the public exercise library.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Gamification Admin <span class="actor">Admin</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Inspect overview, season, creator, ranking, or integrity case</span><span class="arrow">-></span>
+            <span class="node decision">Governance change?</span><span class="arrow">-></span>
+            <span class="node system">Update season, override, creator state, or case outcome</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: staff role cannot access this module; unresolved cases remain open and visible.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>BrodigyAI Web <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>AI</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Select session or send prompt</span><span class="arrow">-></span>
+            <span class="node system">Load history and create/update session</span><span class="arrow">-></span>
+            <span class="node decision">AI available?</span><span class="arrow">-></span>
+            <span class="node external">Return answer or fallback error</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: archived sessions can be restored; deleted/failed sessions do not erase unrelated chat history.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Facilities <span class="actor">Admin</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Create, edit, archive, restore amenity or layout equipment</span><span class="arrow">-></span>
+            <span class="node decision">Has reservations?</span><span class="arrow">-></span>
+            <span class="node system">Save layout/media/equipment or block unsafe deletion</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: occupied amenities cannot be deleted without preserving booking integrity.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Inventory Management <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Payment</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Manage products, equipment, restock, writeoff, or sale</span><span class="arrow">-></span>
+            <span class="node decision">Stock sufficient?</span><span class="arrow">-></span>
+            <span class="node system">Persist inventory movement and sales summary</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: out-of-stock products cannot complete sale; writeoffs reduce usable equipment quantity.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Settings <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Update gym details, appearance, notifications, or security</span><span class="arrow">-></span>
+            <span class="node decision">Valid settings?</span><span class="arrow">-></span>
+            <span class="node system">Persist preferences and apply portal state</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: invalid password/security input is rejected and previous settings remain active.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Profile Settings <span class="actor">Admin / Staff</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>File</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Edit personal details or avatar</span><span class="arrow">-></span>
+            <span class="node decision">Changed and valid?</span><span class="arrow">-></span>
+            <span class="node system">Patch profile and refresh session user</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: canceled edits restore the prior profile values; invalid uploads are not committed.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="sheet print-break" id="mobile-member-activity">
+      <div class="sheet-header">
+        <div>
+          <h2>Mobile/Gym Member Activity Diagrams</h2>
+          <p>
+            These diagrams summarize member application behavior from login, registration, and protected tab navigation through
+            the major gym member modules.
+          </p>
+        </div>
+        <div class="tag-row">
+          <span class="tag">Gym Member</span>
+          <span class="tag">Mobile app</span>
+          <span class="tag">Member services</span>
+        </div>
+      </div>
+      <div class="matrix">
+        <article class="module-flow">
+          <h3>Mobile Auth and Registration <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Email</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Sign in, register, or reset password</span><span class="arrow">-></span>
+            <span class="node decision">Valid?</span><span class="arrow">-></span>
+            <span class="node system">Commit member session or send OTP/reset code</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: non-member portal roles are denied; locked or invalid accounts stay on auth screen.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Home <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Open member home</span><span class="arrow">-></span>
+            <span class="node system">Load progress, membership, goals, and quick actions</span><span class="arrow">-></span>
+            <span class="node decision">Membership active?</span><span class="arrow">-></span>
+            <span class="node system">Show available actions or upsell restrictions</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: missing membership limits member-only actions until payment/card state is resolved.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Facilities <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Browse gym floor and facility details</span><span class="arrow">-></span>
+            <span class="node system">Load amenities, floor plan, and status</span><span class="arrow">-></span>
+            <span class="node decision">Bookable?</span><span class="arrow">-></span>
+            <span class="node system">Open booking path or show information only</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: archived or unavailable facilities are visible only as inactive or unavailable items.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Bookings <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Payment</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Select date, amenity, coach, and time slot</span><span class="arrow">-></span>
+            <span class="node decision">Slot available?</span><span class="arrow">-></span>
+            <span class="node system">Create booking or appointment and payment request</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: unavailable slots fail validation; pending payments keep bookings from becoming fully settled.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Nutrition <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Calculate targets or log meal</span><span class="arrow">-></span>
+            <span class="node decision">Complete inputs?</span><span class="arrow">-></span>
+            <span class="node system">Save TDEE, macro target, log, and summary</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: incomplete or invalid nutrition inputs block calculation or log creation.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Muscle Mastery <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Open mastery profile or leaderboard</span><span class="arrow">-></span>
+            <span class="node system">Load progression, milestones, rankings, and integrity summary</span><span class="arrow">-></span>
+            <span class="node decision">New progress?</span><span class="arrow">-></span>
+            <span class="node system">Display mastery state and earned progress</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: suspicious or unresolved activity can be surfaced through integrity status rather than granting progress silently.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Workout and Pose Session <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Camera / AI</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Choose workout and start session</span><span class="arrow">-></span>
+            <span class="node decision">Camera ready?</span><span class="arrow">-></span>
+            <span class="node system">Analyze pose, count reps, save sets, finalize session</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: camera or pose failure falls back to manual workout review; pending membership can lock live tracking.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>BrodigyAI Chat <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>AI</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Open chat history or send prompt</span><span class="arrow">-></span>
+            <span class="node system">Create/select session and send grounded context</span><span class="arrow">-></span>
+            <span class="node decision">In scope?</span><span class="arrow">-></span>
+            <span class="node external">Return answer, refusal, or error</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: archived chat sessions can be removed from normal history; out-of-scope prompts receive a bounded response.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Profile <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Payment</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">View QR, membership, subscription, avatar, or deletion request</span><span class="arrow">-></span>
+            <span class="node decision">Payment needed?</span><span class="arrow">-></span>
+            <span class="node system">Update profile or initiate/await membership payment</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: cancelled checkout leaves membership unchanged; deletion request freezes account state until admin review.</div>
+        </article>
+
+        <article class="module-flow">
+          <h3>Settings <span class="actor">Gym Member</span></h3>
+          <div class="lane-head"><span>Actor</span><span>System</span><span>Data</span></div>
+          <div class="steps">
+            <span class="node start">start</span><span class="arrow">-></span>
+            <span class="node action">Change preferences, password, help, or legal information</span><span class="arrow">-></span>
+            <span class="node decision">Valid update?</span><span class="arrow">-></span>
+            <span class="node system">Persist preference or security update</span><span class="arrow">-></span>
+            <span class="node end">end</span>
+          </div>
+          <div class="alt">Alternative: invalid current password or weak new password blocks the change.</div>
+        </article>
+      </div>
+      <p class="note" style="margin-top:18px;">
+        Runtime audit note: the local browser confirmed web and mobile login screens and protected-route redirects.
+        Playwright MCP through Browser Use was unavailable because the local Node runtime resolved to 22.19.0 while the tool required 22.22.0 or newer.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

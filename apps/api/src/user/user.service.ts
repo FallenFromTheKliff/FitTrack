@@ -18,6 +18,7 @@ import { FilesService } from '../files/files.service';
 import type { UploadedImageFile } from '../files/files.types';
 import { UserRepository } from './user.repository';
 import { AuditAction, AuditEvent } from '../audit/audit.service';
+import { assertValidMemberDateOfBirth } from '../common/validators';
 import {
   UpdateProfileDTO,
   LogProgressDTO,
@@ -402,6 +403,7 @@ export class UserService {
         AuthProvider.email,
         AuthProvider.google,
       ]),
+      targetName: `${updatedProfile.first_name} ${updatedProfile.last_name}`.trim(),
       targetRole: target.role,
       targetUserId: id,
     });
@@ -449,7 +451,7 @@ export class UserService {
     return {
       ...pickDefined(dto, PROFILE_DIRECT_FIELDS),
       ...(dto.date_of_birth !== undefined
-        ? { date_of_birth: new Date(dto.date_of_birth) }
+        ? { date_of_birth: assertValidMemberDateOfBirth(dto.date_of_birth) }
         : {}),
     };
   }
@@ -596,7 +598,9 @@ export class AttendanceService {
     scannerUserId: string | null,
     dto: ManualAttendanceCheckInDTO,
   ) {
-    const user = await this.repo.findActiveUserByIdOrThrow(dto.user_id);
+    const user = await this.repo.findAttendanceEligibleUserByIdOrThrow(
+      dto.user_id,
+    );
     return this.createCheckIn(user.id, scannerUserId);
   }
 
@@ -635,6 +639,7 @@ export class AttendanceService {
         AuthProvider.email,
         AuthProvider.google,
       ]),
+      targetName: `${profile.first_name} ${profile.last_name}`.trim(),
       targetRole: target.role,
       targetUserId: userId,
     });

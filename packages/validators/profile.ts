@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export const MINIMUM_MEMBER_AGE_YEARS = 5;
+
 export const canonicalPhilippineMobilePattern = /^\+639\d{9}$/;
 export const localPhilippineMobilePattern = /^09\d{9}$/;
 export const supportedPhilippineMobilePattern = /^(\+639\d{9}|09\d{9})$/;
@@ -48,6 +51,104 @@ export function isSupportedPhilippineMobileNumber(value: string) {
   return trimmed.length === 0 || supportedPhilippineMobilePattern.test(trimmed);
 }
 
+function parseIsoDateOnly(value: string) {
+  const match = ISO_DATE_PATTERN.exec(value);
+  if (!match) return null;
+
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return { day, month, year };
+}
+
+function getTodayParts(today = new Date()) {
+  return {
+    day: today.getDate(),
+    month: today.getMonth() + 1,
+    year: today.getFullYear()
+  };
+}
+
+export function formatDatePartsYmd(parts: { day: number; month: number; year: number }) {
+  return [
+    String(parts.year).padStart(4, "0"),
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0")
+  ].join("-");
+}
+
+export function getLatestAllowedMemberBirthDate(today = new Date()) {
+  const todayParts = getTodayParts(today);
+  return formatDatePartsYmd({
+    day: todayParts.day,
+    month: todayParts.month,
+    year: todayParts.year - MINIMUM_MEMBER_AGE_YEARS
+  });
+}
+
+export function calculateAgeFromDateOfBirth(value: string, today = new Date()) {
+  const parsed = parseIsoDateOnly(value);
+  if (!parsed) return null;
+
+  const todayParts = getTodayParts(today);
+  let age = todayParts.year - parsed.year;
+  if (
+    todayParts.month < parsed.month ||
+    (todayParts.month === parsed.month && todayParts.day < parsed.day)
+  ) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+export function isValidMemberDateOfBirth(value: string, today = new Date()) {
+  const trimmed = value.trim();
+  if (!parseIsoDateOnly(trimmed)) return false;
+  if (trimmed > formatDatePartsYmd(getTodayParts(today))) return false;
+  const age = calculateAgeFromDateOfBirth(trimmed, today);
+  return age !== null && age >= MINIMUM_MEMBER_AGE_YEARS;
+}
+
+export const requiredMemberDateOfBirthSchema = z
+  .string()
+  .trim()
+  .regex(ISO_DATE_PATTERN, "Date of birth is required")
+  .refine((value) => parseIsoDateOnly(value) !== null, {
+    message: "Date of birth must be a real calendar date"
+  })
+  .refine((value) => value <= formatDatePartsYmd(getTodayParts()), {
+    message: "Date of birth cannot be in the future"
+  })
+  .refine((value) => isValidMemberDateOfBirth(value), {
+    message: `Member must be at least ${MINIMUM_MEMBER_AGE_YEARS} years old`
+  });
+
+export const optionalMemberDateOfBirthSchema = z
+  .string()
+  .trim()
+  .optional()
+  .refine((value) => !value || parseIsoDateOnly(value) !== null, {
+    message: "Date of birth must be a real calendar date"
+  })
+  .refine((value) => !value || value <= formatDatePartsYmd(getTodayParts()), {
+    message: "Date of birth cannot be in the future"
+  })
+  .refine((value) => !value || isValidMemberDateOfBirth(value), {
+    message: `Member must be at least ${MINIMUM_MEMBER_AGE_YEARS} years old`
+  });
+
 export const profilePersonalSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
@@ -75,7 +176,7 @@ export const editProfilePersonalSchema = z.object({
   phone: z.string().trim().refine((value) => isSupportedPhilippineMobileNumber(value), {
     message: "Enter a valid PH mobile number"
   }),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: optionalMemberDateOfBirthSchema,
   gender: z.enum(["male", "female", "other"]).optional()
 });
 

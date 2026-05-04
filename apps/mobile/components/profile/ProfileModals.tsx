@@ -56,6 +56,21 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
           onNo={() => controller.setAvailabilityDeleteTarget(null)}
         />
       ) : null}
+      {controller.rankingPrivacyTarget ? (
+        <ConfirmModal
+          isVisible={!!controller.rankingPrivacyTarget}
+          title={`Set Ranking Visibility to ${controller.rankingPrivacyTargetLabel}?`}
+          message={controller.rankingPrivacyTargetMessage}
+          yesLabel="Apply"
+          noLabel="Keep Current"
+          isDestructive={controller.rankingPrivacyTarget === "private"}
+          isLoading={controller.isRankingPrivacySaving}
+          loadingLabel="UPDATING"
+          loadingTitle="Updating visibility"
+          onYes={controller.handleConfirmRankingPrivacy}
+          onNo={() => controller.setRankingPrivacyTarget(null)}
+        />
+      ) : null}
       {controller.editVisible ? (
         <EditProfileModal
           isVisible={controller.editVisible}

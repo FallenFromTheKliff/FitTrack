@@ -135,6 +135,7 @@ describe('NotificationDomainEventsListener', () => {
       actorId: 'actor-1',
       occurredAt: '2026-04-25T08:00:00.000Z',
       targetEmail: 'member@fittrack.test',
+      targetName: 'Mina Rivera',
       targetRole: UserRole.member,
       targetUserId: 'member-1',
     });
@@ -148,10 +149,16 @@ describe('NotificationDomainEventsListener', () => {
     expect(dispatchCalls[1]?.[0]).toBe('staff-1');
     expect(dispatchCalls[0]?.[1]).toBe(NotificationType.system);
     expect(dispatchCalls[0]?.[2].title).toBe(
-      'Account archived: member@fittrack.test',
+      'Account archived: Mina Rivera',
     );
     expect(
       (dispatchCalls[0]?.[2].data as Record<string, unknown>).action,
     ).toBe('account_archived');
+    expect(
+      (dispatchCalls[0]?.[2].data as Record<string, unknown>).target_email,
+    ).toBe('member@fittrack.test');
+    expect(
+      (dispatchCalls[0]?.[2].data as Record<string, unknown>).target_name,
+    ).toBe('Mina Rivera');
   });
 });

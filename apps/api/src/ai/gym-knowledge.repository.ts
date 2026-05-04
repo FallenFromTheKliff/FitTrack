@@ -158,6 +158,15 @@ export class GymKnowledgeRepository extends BaseRepository {
     });
   }
 
+  deactivatePromotion(id: string): Promise<GymPromotionRecord> {
+    return this.updateOneOrThrow<GymPromotionRecord>(
+      this.prisma.gymPromotion,
+      { id },
+      { is_active: false },
+      'GymPromotion',
+    );
+  }
+
   listFaqEntries(
     dto: PaginationDTO,
   ): Promise<PaginatedResult<GymFaqEntryRecord>> {

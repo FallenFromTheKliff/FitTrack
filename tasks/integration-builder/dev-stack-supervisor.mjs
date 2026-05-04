@@ -751,7 +751,20 @@ async function statusCommand(options) {
     console.log('- bootstrap: no managed targets registered yet');
   }
 
-  for (const record of manifest.processes ?? []) {
+  const records = [...(manifest.processes ?? [])];
+  const hasMobileRecord = records.some((record) => /mobile|expo/i.test(record.target ?? ''));
+  if (!hasMobileRecord) {
+    records.push({
+      owner: 'external',
+      target: 'Mobile Expo Dev Server',
+      port: 8081,
+      pid: null,
+      health_url: 'http://127.0.0.1:8081/status',
+      restart_count: 0,
+    });
+  }
+
+  for (const record of records) {
     const owner = record.owner === 'external' ? 'external' : 'managed';
     const alive = owner === 'managed'
       ? processExists(Number(record.pid))

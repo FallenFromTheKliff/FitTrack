@@ -164,9 +164,17 @@ export function invalidateAdminBookingsQuery(queryClient: QueryClient) {
 export function invalidateAdminGamificationOverviewQuery(
   queryClient: QueryClient,
 ) {
-  return queryClient.invalidateQueries({
-    queryKey: queryKeys.adminGamificationOverview(),
-  });
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationOverview(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationSeasons(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationSeasonStandings(),
+    }),
+  ]);
 }
 
 export function invalidateAdminMembershipPaymentQueries(

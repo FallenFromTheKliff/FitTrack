@@ -26,6 +26,32 @@ export class ExerciseReviewSubmissionFilterDTO extends PaginationDTO {
     message: `status must be one of: ${Object.values(ExerciseReviewSubmissionStatus).join(', ')}`,
   })
   status?: ExerciseReviewSubmissionStatus;
+
+  @ApiPropertyOptional({ example: 'hammer curl' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(100, { message: 'search must not exceed 100 characters' })
+  search?: string;
+
+  @ApiPropertyOptional({
+    enum: ExerciseCategory,
+    example: ExerciseCategory.strength,
+  })
+  @IsOptional()
+  @IsEnum(ExerciseCategory, {
+    message: `category must be one of: ${Object.values(ExerciseCategory).join(', ')}`,
+  })
+  category?: ExerciseCategory;
+
+  @ApiPropertyOptional({ example: 'arms' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'muscle_group must be a string' })
+  @MaxLength(100, {
+    message: 'muscle_group must not exceed 100 characters',
+  })
+  muscle_group?: string;
 }
 
 export class CreateExerciseReviewSubmissionDTO {
@@ -415,6 +441,12 @@ export class ExerciseReviewSubmissionResponseDTO {
 
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   user_id: string;
+
+  @ApiPropertyOptional({ example: 'Ava Rivera', nullable: true })
+  creator_display_name: string | null;
+
+  @ApiPropertyOptional({ example: 'seed.member.active@fittrack.com', nullable: true })
+  creator_email: string | null;
 
   @ApiPropertyOptional({
     example: '33333333-3333-4333-8333-333333333333',

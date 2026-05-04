@@ -154,6 +154,11 @@ export class GymKnowledgeService {
     return this.toPromotionResponse(record);
   }
 
+  async deactivatePromotion(id: string): Promise<GymPromotionResponseDTO> {
+    const record = await this.gymKnowledgeRepository.deactivatePromotion(id);
+    return this.toPromotionResponse(record);
+  }
+
   async getFaqEntries(
     dto: PaginationDTO,
   ): Promise<PaginatedResult<GymFaqEntryResponseDTO>> {

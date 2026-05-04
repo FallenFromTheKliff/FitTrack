@@ -5,7 +5,11 @@ import { CalendarDays, Dumbbell, Target } from "lucide-react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { MemberProfile } from "@fittrack/types";
-import { nutritionGoalSetupSchema, type NutritionGoalSetupData } from "@fittrack/validators";
+import {
+  getLatestAllowedMemberBirthDate,
+  nutritionGoalSetupSchema,
+  type NutritionGoalSetupData
+} from "@fittrack/validators";
 import { recalculateNutritionMutationOptions, updateProfileMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -91,6 +95,7 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof NutritionGoalSetupData, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const savingText = useLoadingText("Saving", isSubmitting);
+  const latestAllowedBirthDate = useMemo(() => getLatestAllowedMemberBirthDate(), []);
 
   const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
   const recalculateMutation = useMutation(recalculateNutritionMutationOptions(mobileApiClient, queryClient));
@@ -370,8 +375,9 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
         isVisible={isCalOpen}
         selectedDate={dateOfBirth}
         blockPast={false}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
+        maxDate={latestAllowedBirthDate}
+        defaultYear={2000}
+        defaultMonth={1}
         onSelect={(date) => {
           setDateOfBirth(date);
           setFieldErrors((previous) => ({ ...previous, dateOfBirth: undefined }));

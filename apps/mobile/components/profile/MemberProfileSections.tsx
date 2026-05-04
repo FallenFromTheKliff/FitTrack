@@ -1,10 +1,23 @@
 import { View } from "react-native";
-import { Award, CreditCard, Dumbbell, HeartPulse, RefreshCw, ScanLine, Trophy, UserCog } from "lucide-react-native";
+import {
+  Award,
+  CreditCard,
+  Dumbbell,
+  Eye,
+  EyeOff,
+  HeartPulse,
+  RefreshCw,
+  ScanLine,
+  Trophy,
+  UserCog,
+  UserRound
+} from "lucide-react-native";
 
 import { makeProfileStyles } from "@/styles/shared/ScreenStyles";
 import { FitButton, FitCard, FitSection, FitText } from "@/components/fit";
 import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
+import type { FitnessRankingVisibility } from "@fittrack/types";
 
 type MemberProfileSectionsProps = {
   controller: ProfileScreenController;
@@ -16,6 +29,12 @@ function formatMembershipStatus(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getRankingPrivacyIcon(value: FitnessRankingVisibility) {
+  if (value === "anonymous") return UserRound;
+  if (value === "private") return EyeOff;
+  return Eye;
 }
 
 export default function MemberProfileSections({ controller, styles }: MemberProfileSectionsProps) {
@@ -121,6 +140,32 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
           />
         </FitSection>
       )}
+      {canShowGamification ? (
+        <FitSection heading="Ranking Privacy">
+          {controller.rankingPrivacyOptions.map((option) => (
+            <FitCard
+              key={option.value}
+              icon={getRankingPrivacyIcon(option.value)}
+              label={option.label}
+              subtitle={option.description}
+              trailingLabel={option.isSelected ? "Active" : undefined}
+              trailingLabelColor={option.isSelected ? controller.memberAccessColor : undefined}
+              hasBorder
+              selected={option.isSelected}
+              onPress={
+                option.isSelected || controller.isRankingPrivacySaving
+                  ? undefined
+                  : () => controller.setRankingPrivacyTarget(option.value)
+              }
+            />
+          ))}
+          {controller.rankingPrivacyError ? (
+            <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 10 }}>
+              {controller.rankingPrivacyError}
+            </FitText>
+          ) : null}
+        </FitSection>
+      ) : null}
       <FitSection heading="ACCOUNT">
         <FitCard
           icon={UserCog}

@@ -39,6 +39,7 @@ export {
   analyticsSnapshotQueryOptions,
   generateAnalyticsInsightMutationOptions,
 } from "./analytics";
+export { auditLogsQueryOptions } from "./audit";
 export {
   aiChatMessagesQueryOptions,
   aiChatMutationOptions,
@@ -81,6 +82,8 @@ export {
   adminBookingsQueryOptions,
   adminDeletionRequestsQueryOptions,
   adminGamificationOverviewQueryOptions,
+  adminGamificationSeasonStandingsQueryOptions,
+  adminGamificationSeasonsQueryOptions,
   adminMembersQueryOptions,
   approveDeletionRequestMutationOptions,
   cancelAdminBookingMutationOptions,
@@ -117,6 +120,7 @@ export {
   createExerciseReviewSubmissionMutationOptions,
   createFitnessExerciseMutationOptions,
   createMuscleDefinitionMutationOptions,
+  claimFitnessMilestoneMutationOptions,
   detectPoseEquipmentMutationOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
@@ -162,6 +166,7 @@ export {
 } from "./inventory";
 export {
   cancelMembershipMutationOptions,
+  createMembershipPlanMutationOptions,
   membershipCurrentSubscriptionQueryOptions,
   membershipPaymentsQueryOptions,
   membershipPlansQueryOptions,
@@ -169,8 +174,14 @@ export {
   reviewMembershipPaymentsQueryOptions,
   submitManualMembershipPaymentMutationOptions,
   subscribeMembershipMutationOptions,
+  updateMembershipPlanMutationOptions,
   verifyMembershipPaymentMutationOptions,
 } from "./membership";
+export {
+  createGymPromotionMutationOptions,
+  deactivateGymPromotionMutationOptions,
+  gymPromotionsQueryOptions,
+} from "./gym-knowledge";
 export {
   createNutritionLogMutationOptions,
   deleteNutritionLogMutationOptions,

@@ -1,4 +1,12 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Body, Patch } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -18,6 +26,7 @@ import {
   IntegritySummaryResponseDTO,
   LeaderboardEntryResponseDTO,
   MasteryFilterDTO,
+  MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
   MuscleMasteryResponseDTO,
   ProgressionProfileResponseDTO,
@@ -192,8 +201,38 @@ export class GamificationController {
     description: 'Milestone progress returned.',
     schema: arrayEnvelopeSchema(getSchemaPath(MilestoneProgressResponseDTO)),
   })
-  listMilestones(@CurrentUser() user: JwtPayload) {
-    return this.gamificationService.getMilestoneProgress(user.sub);
+  listMilestones(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: MilestoneListFilterDTO,
+  ) {
+    return this.gamificationService.getMilestoneProgress(user.sub, dto);
+  }
+
+  @Post('milestones/:milestoneDefinitionId/claim')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Claim an unlocked milestone for the authenticated user.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Milestone claimed.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: { $ref: getSchemaPath(MilestoneProgressResponseDTO) },
+      },
+    },
+  })
+  claimMilestone(
+    @CurrentUser() user: JwtPayload,
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+  ) {
+    return this.gamificationService.claimMilestone(
+      user.sub,
+      milestoneDefinitionId,
+    );
   }
 
   @Get('integrity-summary')

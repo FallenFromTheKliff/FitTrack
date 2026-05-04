@@ -1,5 +1,6 @@
 export * from './allowed-email.decorator';
 export * from './date-range.decorator';
+export * from './member-date-of-birth.validator';
 export * from './otp-code.decorator';
 export * from './person-name.decorator';
 export * from './ph-mobile.decorator';

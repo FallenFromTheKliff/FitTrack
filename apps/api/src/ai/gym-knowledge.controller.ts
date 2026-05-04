@@ -2,6 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   ParseArrayPipe,
   Post,
   Put,
@@ -191,7 +194,8 @@ export class GymKnowledgeController {
   }
 
   @Get('promotions')
-  @ApiOperation({ summary: 'List active gym promotions. Admin only.' })
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'List active gym promotions. Admin/Staff only.' })
   @ApiResponse({
     status: 200,
     description: 'Promotions returned.',
@@ -202,7 +206,8 @@ export class GymKnowledgeController {
   }
 
   @Post('promotions')
-  @ApiOperation({ summary: 'Create a gym promotion. Admin only.' })
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'Create a gym promotion. Admin/Staff only.' })
   @ApiResponse({
     status: 201,
     description: 'Promotion created.',
@@ -210,6 +215,19 @@ export class GymKnowledgeController {
   })
   createPromotion(@Body() dto: CreateGymPromotionDTO) {
     return this.gymKnowledgeService.createPromotion(dto);
+  }
+
+  @Patch('promotions/:id/deactivate')
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'Deactivate a gym promotion. Admin/Staff only.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Promotion deactivated.',
+    schema: apiEnvelopeSchema(getSchemaPath(GymPromotionResponseDTO)),
+  })
+  @ApiResponse({ status: 404, description: 'Promotion not found.' })
+  deactivatePromotion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.gymKnowledgeService.deactivatePromotion(id);
   }
 
   @Get('faqs')

@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,11 +26,14 @@ import {
   AdminCreatorStateDTO,
   AdminCreatorStateResponseDTO,
   AdminGamificationOverviewResponseDTO,
+  AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
+  AdminSeasonStandingFilterDTO,
+  AdminSeasonStandingRowDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStatusDTO,
   CreateIntegrityCaseDTO,
@@ -52,7 +56,9 @@ function singleEnvelopeSchema(itemSchemaRef: string) {
 @ApiBearerAuth('access-token')
 @ApiExtraModels(
   AdminGamificationOverviewResponseDTO,
+  AdminGamificationSeasonListItemDTO,
   AdminSeasonGovernanceResponseDTO,
+  AdminSeasonStandingRowDTO,
   AdminCreatorStateResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideResponseDTO,
@@ -77,6 +83,57 @@ export class GamificationAdminController {
   })
   getOverview() {
     return this.gamificationService.getAdminOverview();
+  }
+
+  @Get('seasons')
+  @ApiOperation({
+    summary: 'List gamification seasons for admin filters.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Gamification seasons loaded.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(AdminGamificationSeasonListItemDTO) },
+        },
+      },
+    },
+  })
+  listSeasons() {
+    return this.gamificationService.listAdminSeasons();
+  }
+
+  @Get('season-standings')
+  @ApiOperation({
+    summary: 'List all-season participant performance for admins.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Season standings loaded.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(AdminSeasonStandingRowDTO) },
+        },
+        meta: {
+          type: 'object',
+          properties: {
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 20 },
+            total: { type: 'number', example: 1 },
+            total_pages: { type: 'number', example: 1 },
+          },
+        },
+      },
+    },
+  })
+  listSeasonStandings(@Query() dto: AdminSeasonStandingFilterDTO) {
+    return this.gamificationService.listAdminSeasonStandings(dto);
   }
 
   @Patch('seasons/:seasonId/status')

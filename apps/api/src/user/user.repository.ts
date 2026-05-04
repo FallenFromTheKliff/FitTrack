@@ -156,12 +156,7 @@ export class UserRepository extends BaseRepository {
       },
       deletedAt: null,
       role: UserRole.member,
-      status: 'active',
-      membership_card: {
-        is: {
-          status: 'active',
-        },
-      },
+      status: { in: [UserStatus.active, UserStatus.pending] },
     });
 
     if (!user) {
@@ -169,7 +164,7 @@ export class UserRepository extends BaseRepository {
         type: 'NOT_FOUND',
         title: 'Invalid QR',
         status: 404,
-        detail: 'QR code not found or membership access is inactive.',
+        detail: 'QR code not found or this account cannot be checked in.',
       });
     }
 
@@ -181,12 +176,7 @@ export class UserRepository extends BaseRepository {
       id,
       deletedAt: null,
       role: UserRole.member,
-      status: UserStatus.active,
-      membership_card: {
-        is: {
-          status: 'active',
-        },
-      },
+      status: { in: [UserStatus.active, UserStatus.pending] },
     });
 
     if (!user) {
@@ -194,7 +184,7 @@ export class UserRepository extends BaseRepository {
         type: 'NOT_FOUND',
         title: 'Invalid QR',
         status: 404,
-        detail: 'QR code not found or membership access is inactive.',
+        detail: 'QR code not found or this account cannot be checked in.',
       });
     }
 

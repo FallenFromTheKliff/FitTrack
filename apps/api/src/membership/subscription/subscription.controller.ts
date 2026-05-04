@@ -176,9 +176,9 @@ export class SubscriptionController {
 
   @Post('plans')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Create a membership plan. Admin only.' })
+  @ApiOperation({ summary: 'Create a membership plan. Admin/Staff only.' })
   @ApiResponse({ status: 201, description: 'Membership plan created.' })
   createPlan(@Body() dto: CreatePlanDTO) {
     return this.subscriptionService.createPlan(dto);
@@ -186,9 +186,9 @@ export class SubscriptionController {
 
   @Patch('plans/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Update a membership plan. Admin only.' })
+  @ApiOperation({ summary: 'Update a membership plan. Admin/Staff only.' })
   @ApiResponse({ status: 200, description: 'Membership plan updated.' })
   @ApiResponse({ status: 404, description: 'Membership plan not found.' })
   updatePlan(
