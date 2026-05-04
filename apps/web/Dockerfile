@@ -40,8 +40,8 @@ ENV HOSTNAME=::
 RUN addgroup -S fittrack && adduser -S fittrack -G fittrack
 
 COPY --from=builder --chown=fittrack:fittrack /app/apps/web/public ./public
-COPY --from=builder --chown=fittrack:fittrack /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=fittrack:fittrack /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=fittrack:fittrack /app/apps/web/.next-runtime/standalone ./
+COPY --from=builder --chown=fittrack:fittrack /app/apps/web/.next-runtime/static ./apps/web/.next-runtime/static
 
 USER fittrack
 

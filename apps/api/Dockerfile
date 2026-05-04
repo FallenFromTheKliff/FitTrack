@@ -13,6 +13,7 @@ COPY apps/api/package.json apps/api/package.json
 RUN pnpm install --frozen-lockfile --filter @fittrack/api...
 
 COPY apps/api ./apps/api
+COPY tasks/ensure-prisma-client-link.mjs ./tasks/ensure-prisma-client-link.mjs
 
 RUN pnpm --filter @fittrack/api exec prisma generate --schema prisma/schema.prisma
 RUN pnpm --filter @fittrack/api run build

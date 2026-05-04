@@ -1,0 +1,11 @@
+# FitTrack AI microservice Railway config.
+# Use this file as the service's custom Config-as-Code path: /apps/ai-microservice/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "/apps/ai-microservice/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
