@@ -218,21 +218,34 @@ export class AuthRepository extends BaseRepository {
       ),
       payment_revenue AS (
         SELECT
-          COALESCE(SUM(CASE WHEN payable_type = 'subscription' THEN amount ELSE 0 END), 0)
+          COALESCE(SUM(CASE WHEN payable_type IN ('subscription', 'membership_card') THEN amount ELSE 0 END), 0)
           + COALESCE(SUM(CASE WHEN payable_type = 'booking' THEN amount ELSE 0 END), 0) AS payment_revenue
         FROM payments
         WHERE status = 'completed'
+          AND COALESCE(verified_at, created_at) <= ${referenceDate}
       ),
       product_revenue AS (
         SELECT COALESCE(SUM(total_amount), 0) AS product_revenue
         FROM sale_transactions
         WHERE status = 'completed'
+          AND created_at <= ${referenceDate}
       ),
       coaching_revenue AS (
-        SELECT COALESCE(SUM(amount), 0) AS coaching_gym_revenue
+        SELECT COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
         FROM payments
+        LEFT JOIN coach_appointments
+          ON payments.payable_type = 'coaching'
+         AND coach_appointments.id = payments.payable_id
+        LEFT JOIN recurring_coaching_billing_cycles
+          ON payments.payable_type = 'recurring_coaching'
+         AND recurring_coaching_billing_cycles.id = payments.payable_id
+        LEFT JOIN recurring_coaching_plans
+          ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+        JOIN coach_profiles
+          ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
         WHERE status = 'completed'
           AND payable_type IN ('coaching', 'recurring_coaching')
+          AND COALESCE(payments.verified_at, payments.created_at) <= ${referenceDate}
       )
       SELECT
         active_members.active_members,

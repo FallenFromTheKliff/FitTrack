@@ -32,6 +32,7 @@ apps/web/debug_logs.txt
 apps/web/dom.html
 temp_skill_build/
 .railway-deploy/
+.railway-upload/
 members-admin-*.png
 apps/web/dashboard.png
 apps/web/members.png
