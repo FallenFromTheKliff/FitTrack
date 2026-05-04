@@ -1,5 +1,17 @@
 node_modules
 **/node_modules
+.git
+**/.git
+.railway-deploy
+**/.railway-deploy
+.codex
+**/.codex
+.serena
+**/.serena
+.idea
+**/.idea
+.vscode
+**/.vscode
 .next
 **/.next
 dist
@@ -8,6 +20,8 @@ dist
 **/.turbo
 .expo
 **/.expo
+logs
+**/logs
 apps/mobile
 *.log
 **/*.log
