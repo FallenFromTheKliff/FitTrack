@@ -243,8 +243,8 @@ export class AuthRepository extends BaseRepository {
           ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
         JOIN coach_profiles
           ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
-        WHERE status = 'completed'
-          AND payable_type IN ('coaching', 'recurring_coaching')
+        WHERE payments.status = 'completed'
+          AND payments.payable_type IN ('coaching', 'recurring_coaching')
           AND COALESCE(payments.verified_at, payments.created_at) <= ${referenceDate}
       )
       SELECT
