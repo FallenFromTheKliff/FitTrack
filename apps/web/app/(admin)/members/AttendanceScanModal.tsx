@@ -70,6 +70,7 @@ type Props = {
 const DETECTION_INTERVAL_MS = 220;
 const DUPLICATE_SCAN_WINDOW_MS = 4000;
 const POST_SCAN_PAUSE_MS = 1800;
+const SCANNER_RUNTIME_TIMEOUT_MS = 5000;
 const ZXING_READER_SCRIPT_PATH = "/vendor/zxing/reader/index.js";
 const ZXING_READER_WASM_PATH = "/vendor/zxing/reader/zxing_reader.wasm";
 
@@ -132,6 +133,20 @@ function buildCameraConstraints(selectedDeviceId?: string) {
     width: { ideal: 1280 },
     height: { ideal: 720 },
   };
+}
+
+function withScannerTimeout<T>(promise: Promise<T>, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message));
+    }, SCANNER_RUNTIME_TIMEOUT_MS);
+
+    promise
+      .then(resolve, reject)
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+      });
+  });
 }
 
 export default function AttendanceScanModal({
@@ -246,15 +261,20 @@ export default function AttendanceScanModal({
       if (!window.__fittrackZxingReaderLoader) {
         window.__fittrackZxingReaderLoader = new Promise<ZXingReaderModule>(
           (resolve, reject) => {
-            const existingScript = document.querySelector<HTMLScriptElement>(
-              'script[data-fittrack-zxing="reader"]',
-            );
             if (window.ZXingWASM) {
               resolve(window.ZXingWASM);
               return;
             }
 
-            const script = existingScript ?? document.createElement("script");
+            document
+              .querySelectorAll<HTMLScriptElement>(
+                'script[data-fittrack-zxing="reader"]',
+              )
+              .forEach((scriptNode) => {
+                scriptNode.remove();
+              });
+
+            const script = document.createElement("script");
             script.async = true;
             script.dataset.fittrackZxing = "reader";
             script.src = ZXING_READER_SCRIPT_PATH;
@@ -274,15 +294,13 @@ export default function AttendanceScanModal({
               reject(new Error("Unable to load the QR scanner runtime."));
             };
 
-            if (!existingScript) {
-              document.head.appendChild(script);
-            }
+            document.head.appendChild(script);
           },
         );
       }
 
       if (!window.__fittrackZxingReaderPrepared) {
-        window.__fittrackZxingReaderPrepared =
+        window.__fittrackZxingReaderPrepared = withScannerTimeout(
           window.__fittrackZxingReaderLoader
             .then(async (scannerModule) => {
               await scannerModule.prepareZXingModule({
@@ -296,11 +314,12 @@ export default function AttendanceScanModal({
               });
 
               return scannerModule;
-            })
-            .catch((error) => {
-              window.__fittrackZxingReaderPrepared = undefined;
-              throw error;
-            });
+            }),
+          "QR scanner runtime timed out. Use the paste field below, then refresh the page before trying camera scan again.",
+        ).catch((error) => {
+          window.__fittrackZxingReaderPrepared = undefined;
+          throw error;
+        });
       }
 
       return window.__fittrackZxingReaderPrepared;
