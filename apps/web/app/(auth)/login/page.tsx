@@ -16,9 +16,16 @@ type PortalSummaryEnvelope = {
 };
 
 async function getPortalSummary(): Promise<PortalSummaryResponse | null> {
+  const fallbackBaseUrl =
+    process.env.NODE_ENV === "production"
+      ? process.env.API_INTERNAL_ORIGIN
+      : "http://127.0.0.1:3001/v1";
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_API_URL?.startsWith("http")
+    ? process.env.NEXT_PUBLIC_API_URL
+    : undefined;
   const baseUrl = resolveApiBaseUrl(
-    process.env.NEXT_PUBLIC_API_URL,
-    "http://127.0.0.1:3001/v1"
+    configuredBaseUrl,
+    fallbackBaseUrl ?? "http://127.0.0.1:3001/v1"
   );
 
   try {

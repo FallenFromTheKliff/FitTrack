@@ -3,9 +3,12 @@
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@fittrack/app-core";
 import { createApiClient, createTokenStore, resolveApiBaseUrl } from "@fittrack/api-client";
 
+const DEFAULT_WEB_API_BASE_URL =
+  process.env.NODE_ENV === "production" ? "/v1" : "http://127.0.0.1:3001/v1";
+
 export const WEB_API_BASE_URL = resolveApiBaseUrl(
   process.env.NEXT_PUBLIC_API_URL,
-  "http://127.0.0.1:3001/v1"
+  DEFAULT_WEB_API_BASE_URL
 );
 
 function getSafeStorage() {

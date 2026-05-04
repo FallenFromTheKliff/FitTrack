@@ -14,7 +14,7 @@ COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001/v1
+ARG NEXT_PUBLIC_API_URL=/v1
 ARG NEXT_PUBLIC_R2_PUBLIC_BASE_URL=
 ARG NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR=defaults/avatars
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -27,7 +27,7 @@ RUN pnpm --filter @fittrack/web run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001/v1
+ARG NEXT_PUBLIC_API_URL=/v1
 ARG NEXT_PUBLIC_R2_PUBLIC_BASE_URL=
 ARG NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR=defaults/avatars
 ENV NEXT_TELEMETRY_DISABLED=1
