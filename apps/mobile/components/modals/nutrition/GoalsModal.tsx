@@ -25,6 +25,11 @@ import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 
+type NutritionFieldErrors = Partial<Record<keyof NutritionGoalSetupData, string[]>>;
+type GenderValue = "male" | "female" | "other";
+type ActivityLevelValue = "sedentary" | "light" | "moderate" | "active" | "very_active";
+type FitnessGoalValue = "bulking" | "cutting" | "maintenance" | "sport_specific";
+
 export type NutritionGoal = {
   id: string;
   name: string;
@@ -77,6 +82,30 @@ function normalizeProfilePatch(
   };
 }
 
+function pickProfileValue<T>(
+  directValue: T | null | undefined,
+  profileValue: T | null | undefined,
+  fallback: T
+) {
+  return directValue ?? profileValue ?? fallback;
+}
+
+function toInputNumber(value?: number | null) {
+  return value != null ? String(value) : "";
+}
+
+function isGenderValue(value?: string | null): value is GenderValue {
+  return GENDER_OPTIONS.some((option) => option.value === value);
+}
+
+function isActivityLevelValue(value?: string | null): value is ActivityLevelValue {
+  return ACTIVITY_OPTIONS.some((option) => option.value === value);
+}
+
+function isFitnessGoalValue(value?: string | null): value is FitnessGoalValue {
+  return GOAL_OPTIONS.some((option) => option.value === value);
+}
+
 export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const { colors } = useTheme();
   const { user, updateUser } = useAuth();
@@ -87,12 +116,12 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
-  const [gender, setGender] = useState<"male" | "female" | "other">("male");
-  const [activityLevel, setActivityLevel] = useState<"sedentary" | "light" | "moderate" | "active" | "very_active">("moderate");
-  const [fitnessGoal, setFitnessGoal] = useState<"bulking" | "cutting" | "maintenance" | "sport_specific">("maintenance");
+  const [gender, setGender] = useState<GenderValue>("male");
+  const [activityLevel, setActivityLevel] = useState<ActivityLevelValue>("moderate");
+  const [fitnessGoal, setFitnessGoal] = useState<FitnessGoalValue>("maintenance");
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof NutritionGoalSetupData, string>>>({});
+  const [fieldErrors, setFieldErrors] = useState<NutritionFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const savingText = useLoadingText("Saving", isSubmitting);
   const latestAllowedBirthDate = useMemo(() => getLatestAllowedMemberBirthDate(), []);
@@ -104,21 +133,31 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
 
   useEffect(() => {
     if (!isVisible) return;
-    setDateOfBirth(user?.dateOfBirth ?? "");
-    setWeightKg(user?.weightKg != null ? String(user.weightKg) : "");
-    setHeightCm(user?.heightCm != null ? String(user.heightCm) : "");
-    setGender((user?.gender as "male" | "female" | "other" | undefined) ?? "male");
-    setActivityLevel(
-      (user?.activityLevel as "sedentary" | "light" | "moderate" | "active" | "very_active" | undefined) ?? "moderate"
-    );
-    setFitnessGoal(
-      (user?.fitnessGoal as "bulking" | "cutting" | "maintenance" | "sport_specific" | undefined) ?? "maintenance"
-    );
+    const profile = user?.profile;
+    const nextGender = pickProfileValue(user?.gender, profile?.gender, "male");
+    const nextActivityLevel = pickProfileValue(user?.activityLevel, profile?.activityLevel, "moderate");
+    const nextFitnessGoal = pickProfileValue(user?.fitnessGoal, profile?.fitnessGoal, "maintenance");
+
+    setDateOfBirth(pickProfileValue(user?.dateOfBirth, profile?.dateOfBirth, ""));
+    setWeightKg(toInputNumber(user?.weightKg ?? profile?.currentWeightKg));
+    setHeightCm(toInputNumber(user?.heightCm ?? profile?.heightCm));
+    setGender(isGenderValue(nextGender) ? nextGender : "male");
+    setActivityLevel(isActivityLevelValue(nextActivityLevel) ? nextActivityLevel : "moderate");
+    setFitnessGoal(isFitnessGoalValue(nextFitnessGoal) ? nextFitnessGoal : "maintenance");
     setFieldErrors({});
     setSubmitError(null);
     setIsSubmitting(false);
     setIsCalOpen(false);
-  }, [isVisible, user?.activityLevel, user?.dateOfBirth, user?.fitnessGoal, user?.gender, user?.heightCm, user?.weightKg]);
+  }, [
+    isVisible,
+    user?.activityLevel,
+    user?.dateOfBirth,
+    user?.fitnessGoal,
+    user?.gender,
+    user?.heightCm,
+    user?.profile,
+    user?.weightKg
+  ]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -149,7 +188,7 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
     });
 
     if (!parsed.success) {
-      setFieldErrors(parsed.error.flatten().fieldErrors as Partial<Record<keyof NutritionGoalSetupData, string>>);
+      setFieldErrors(parsed.error.flatten().fieldErrors as NutritionFieldErrors);
       return;
     }
 

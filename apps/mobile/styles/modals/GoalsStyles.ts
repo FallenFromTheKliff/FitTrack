@@ -10,12 +10,13 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: 20,
+      paddingVertical: 20,
       backgroundColor: "rgba(0,0,0,0.45)"
     },
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
-      maxHeight: "88%",
+      maxHeight: "92%",
       flex: 1,
       borderRadius: R.xl,
       borderWidth: 1,
@@ -43,10 +44,10 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
     headerTitle: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
     headerSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
     body: {
-      flex: 1,
+      flexGrow: 1,
       paddingHorizontal: 16,
       paddingTop: 16,
-      paddingBottom: 8
+      paddingBottom: 24
     },
     sectionLabel: {
       fontSize: 11,

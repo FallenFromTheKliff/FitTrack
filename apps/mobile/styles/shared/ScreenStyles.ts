@@ -7,7 +7,7 @@ export function makeScreenStyles(colors: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.base },
     content: { flex: 1 },
-    scrollContent: { padding: 20, paddingBottom: 40 }
+    scrollContent: { flexGrow: 1, padding: 20, paddingBottom: 120 }
   });
 }
 
