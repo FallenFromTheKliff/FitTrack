@@ -569,6 +569,10 @@ export class AuthService {
       phone: dto.phone,
     });
 
+    if (dto.role === 'coach') {
+      await this.repo.createCoachProfile(user.id);
+    }
+
     await this.otpService.issueOtp(
       user.id,
       OtpPurpose.registration,

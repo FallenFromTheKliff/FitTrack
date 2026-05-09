@@ -2,9 +2,10 @@ import type { FieldConfig } from "@/components/modals/DetailsModal";
 import type { MemberRecord } from "@fittrack/types";
 
 export const MEMBER_STATUS_TABS = [
+  { key: "All", label: "All" },
   { key: "Active", label: "Active" },
   { key: "Archived", label: "Archived" },
-  { key: "Termination Requests", label: "Termination Requests" }
+  { key: "Termination Requests", label: "Requests" }
 ] as const;
 
 export type MemberStatusTab = typeof MEMBER_STATUS_TABS[number]["key"];

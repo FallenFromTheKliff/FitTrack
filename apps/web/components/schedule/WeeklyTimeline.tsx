@@ -12,8 +12,22 @@ import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 
 const WEEK_DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CELL_HEIGHT = 42;
-const HOUR_COL_WIDTH = 52;
+const CELL_HEIGHT = 46;
+const HOUR_COL_WIDTH = 60;
+
+function formatTimeLabel(hour: number, minute = 0) {
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}${suffix}`;
+}
+
+function formatBookingWindow(booking: Booking) {
+  const startMinutes = booking.startHour * 60 + booking.startMinute;
+  const endMinutes = startMinutes + booking.durationMin;
+  const endHour = Math.floor(endMinutes / 60) % 24;
+  const endMinute = endMinutes % 60;
+  return `${formatTimeLabel(booking.startHour, booking.startMinute)} - ${formatTimeLabel(endHour, endMinute)}`;
+}
 
 type Props = {
   weekDays: Date[];
@@ -23,6 +37,7 @@ type Props = {
   isLoading: boolean;
   colors: ThemeColors;
   allowDrag?: boolean;
+  height?: number;
   onBlockClick: (booking: Booking) => void;
 };
 
@@ -31,18 +46,20 @@ function DropCell({
   children,
   isToday,
   colors,
+  cellHeight,
 }: {
   id: string;
   children?: React.ReactNode;
   isToday: boolean;
   colors: ThemeColors;
+  cellHeight: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
       ref={setNodeRef}
       style={{
-        height: CELL_HEIGHT,
+        height: cellHeight,
         boxSizing: "border-box",
         borderBottom: `1px solid ${colors.border}`,
         borderRight: `1px solid ${colors.border}`,
@@ -65,6 +82,7 @@ function BookingNode({
   colors,
   bookingMutedTextColor,
   bookingTextColor,
+  cellHeight,
   allowDrag,
   onBlockClick,
 }: {
@@ -72,6 +90,7 @@ function BookingNode({
   colors: ThemeColors;
   bookingMutedTextColor: string;
   bookingTextColor: string;
+  cellHeight: number;
   allowDrag: boolean;
   onBlockClick: (booking: Booking) => void;
 }) {
@@ -104,10 +123,9 @@ function BookingNode({
         borderRadius: 6,
         backgroundColor: booking.color ?? colors.brand,
         border: "none",
-        padding: "3px 6px",
+        padding: "5px 7px",
         textAlign: "left",
         zIndex: 2,
-        minHeight: 30,
         boxShadow: isDragging
           ? "0 10px 24px rgba(0,0,0,0.22)"
           : "0 2px 8px rgba(0,0,0,0.2)",
@@ -116,22 +134,10 @@ function BookingNode({
         touchAction: allowDrag ? "none" : "auto",
         opacity: isDragging ? 0.56 : 1,
         transform: CSS.Translate.toString(transform),
+        minHeight: Math.max(34, (booking.durationMin / 60) * cellHeight - 8),
         transition: canAnimate
           ? "box-shadow 160ms ease, opacity 160ms ease, filter 160ms ease"
           : "box-shadow 160ms ease, opacity 160ms ease",
-      }}
-      onMouseEnter={(event) => {
-        if (!canAnimate || isDragging) return;
-        event.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.22)";
-        event.currentTarget.style.filter = fullMotion
-          ? "brightness(1.03)"
-          : "brightness(1.02)";
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.boxShadow = isDragging
-          ? "0 10px 24px rgba(0,0,0,0.22)"
-          : "0 2px 8px rgba(0,0,0,0.2)";
-        event.currentTarget.style.filter = "none";
       }}
       onMouseDown={(event) => {
         if (!canAnimate || isDragging) return;
@@ -141,16 +147,14 @@ function BookingNode({
       }}
       onMouseUp={(event) => {
         if (!canAnimate || isDragging) return;
-        event.currentTarget.style.filter = fullMotion
-          ? "brightness(1.03)"
-          : "brightness(1.02)";
+        event.currentTarget.style.filter = "none";
       }}
     >
       <FitText
         excludeGlobalScale
         style={{
-          fontSize: 9,
-          fontWeight: 700,
+          fontSize: 13,
+          fontWeight: 800,
           color: bookingTextColor,
           display: "block",
           whiteSpace: "nowrap",
@@ -158,29 +162,72 @@ function BookingNode({
           textOverflow: "ellipsis",
         }}
       >
-        Coach: {booking.resourceName}
+        1 Session
       </FitText>
+      <FitText
+        excludeGlobalScale
+        style={{
+          fontSize: 11,
+          color: bookingMutedTextColor,
+          display: "block",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          marginTop: 2,
+        }}
+      >
+        {formatBookingWindow(booking)}
+      </FitText>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          marginTop: 6,
+          minHeight: 13,
+        }}
+      >
+        <span
+          style={{
+            minWidth: 18,
+            height: 18,
+            borderRadius: 4,
+            backgroundColor: "rgba(255,255,255,0.16)",
+            color: bookingTextColor,
+            display: "inline-grid",
+            placeItems: "center",
+            fontSize: 10,
+            fontWeight: 800,
+            lineHeight: 1,
+          }}
+        >
+          {booking.resourceName
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part.charAt(0))
+            .join("")
+            .toUpperCase()}
+        </span>
+      </div>
       {booking.venueLabel && (
         <FitText
           excludeGlobalScale
           style={{
-            fontSize: 9,
+            fontSize: 10.5,
+            fontWeight: 700,
             color: bookingMutedTextColor,
             display: "block",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            marginTop: 8,
+            textTransform: "uppercase",
           }}
         >
-          Member: {booking.venueLabel}
+          {booking.venueLabel}
         </FitText>
       )}
-      <FitText
-        excludeGlobalScale
-        style={{ fontSize: 9, color: bookingMutedTextColor, display: "block" }}
-      >
-        {booking.durationMin}min
-      </FitText>
     </FitButton>
   );
 }
@@ -193,21 +240,29 @@ export default function WeeklyTimeline({
   isLoading,
   colors,
   allowDrag = true,
+  height,
   onBlockClick,
 }: Props) {
   const today = toYmd(new Date());
   const bookingTextColor = colors.onBrand ?? colors.surface;
   const bookingMutedTextColor = `${bookingTextColor}CC`;
-  const timelineColumns = `${HOUR_COL_WIDTH}px repeat(7, minmax(0, 1fr))`;
+  const dayCount = Math.max(1, weekDays.length);
+  const timelineColumns = `${HOUR_COL_WIDTH}px repeat(${dayCount}, minmax(0, 1fr))`;
+  const headerHeight = 42;
+  const cellHeight =
+    height && hours.length
+      ? Math.max(CELL_HEIGHT, Math.floor((height - headerHeight) / hours.length))
+      : CELL_HEIGHT;
 
   return (
-    <motion.div style={slideStyle}>
+    <motion.div style={{ ...slideStyle, height: height ?? undefined }}>
       <div
         style={{
           backgroundColor: colors.surface,
           border: `1px solid ${colors.border}`,
-          borderRadius: 12,
+          borderRadius: 8,
           overflow: "hidden",
+          height: height ?? undefined,
         }}
       >
         <div
@@ -218,9 +273,7 @@ export default function WeeklyTimeline({
             borderBottom: `1px solid ${colors.border}`,
           }}
         >
-          <div
-            style={{ height: 40, borderRight: `1px solid ${colors.border}` }}
-          />
+          <div style={{ height: headerHeight, borderRight: `1px solid ${colors.border}` }} />
           {weekDays.map((day, i) => {
             const ymd = toYmd(day);
             const isToday = ymd === today;
@@ -228,13 +281,14 @@ export default function WeeklyTimeline({
               <div
                 key={i}
                 style={{
-                  height: 40,
+                  height: headerHeight,
                   boxSizing: "border-box",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRight: i < 6 ? `1px solid ${colors.border}` : "none",
+                  borderRight:
+                    i < dayCount - 1 ? `1px solid ${colors.border}` : "none",
                   backgroundColor: isToday
                     ? `${colors.brand}14`
                     : "transparent",
@@ -243,9 +297,10 @@ export default function WeeklyTimeline({
                 <FitText
                   excludeGlobalScale
                   style={{
-                    fontSize: 10,
+                    fontSize: 9,
                     color: colors.textMuted,
-                    fontWeight: 600,
+                    fontWeight: 800,
+                    textTransform: "uppercase",
                   }}
                 >
                   {WEEK_DAYS_SHORT[day.getDay()]}
@@ -253,8 +308,8 @@ export default function WeeklyTimeline({
                 <FitText
                   excludeGlobalScale
                   style={{
-                    fontSize: 13,
-                    fontWeight: isToday ? 700 : 500,
+                    fontSize: 12,
+                    fontWeight: isToday ? 800 : 700,
                     color: isToday ? colors.brand : colors.textPrimary,
                     lineHeight: 1.05,
                   }}
@@ -283,13 +338,13 @@ export default function WeeklyTimeline({
             >
               <div
                 style={{
-                  height: CELL_HEIGHT,
+                  height: cellHeight,
                   boxSizing: "border-box",
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "flex-end",
                   paddingRight: 8,
-                  paddingTop: 5,
+                  paddingTop: 6,
                   borderRight: `1px solid ${colors.border}`,
                   borderBottom: `1px solid ${colors.border}`,
                 }}
@@ -297,12 +352,12 @@ export default function WeeklyTimeline({
                 <FitText
                   excludeGlobalScale
                   style={{
-                    fontSize: 10,
+                    fontSize: 9,
                     color: colors.textMuted,
-                    fontWeight: 600,
+                    fontWeight: 700,
                   }}
                 >
-                  {hour}:00
+                  {formatTimeLabel(hour)}
                 </FitText>
               </div>
               {weekDays.map((day, dayIdx) => {
@@ -318,6 +373,7 @@ export default function WeeklyTimeline({
                     id={`${dayIdx}:${hour}`}
                     isToday={isToday}
                     colors={colors}
+                    cellHeight={cellHeight}
                   >
                     {cellBookings.map((b) => (
                       <BookingNode
@@ -326,6 +382,7 @@ export default function WeeklyTimeline({
                         colors={colors}
                         bookingMutedTextColor={bookingMutedTextColor}
                         bookingTextColor={bookingTextColor}
+                        cellHeight={cellHeight}
                         allowDrag={allowDrag}
                         onBlockClick={onBlockClick}
                       />

@@ -48,13 +48,13 @@ export function useProfilePage() {
   const updatePhoneMutation = useMutation(updatePhoneMutationOptions(webApiClient));
   const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
 
-  const resolvedName = (() => {
+  const resolvedName = useMemo(() => {
     const fallbackName = splitFullName(user?.name ?? "");
     return {
       firstName: user?.profile?.firstName?.trim() || fallbackName.firstName,
       lastName: user?.profile?.lastName?.trim() || fallbackName.lastName
     };
-  })();
+  }, [user?.name, user?.profile?.firstName, user?.profile?.lastName]);
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -81,13 +81,9 @@ export function useProfilePage() {
   useEffect(() => {
     if (editing) return;
 
-    const nextName = {
-      firstName: user?.profile?.firstName?.trim() || splitFullName(user?.name ?? "").firstName,
-      lastName: user?.profile?.lastName?.trim() || splitFullName(user?.name ?? "").lastName
-    };
     setPersonalData({
-      firstName: nextName.firstName,
-      lastName: nextName.lastName,
+      firstName: resolvedName.firstName,
+      lastName: resolvedName.lastName,
       email: user?.email ?? "",
       phone: formatPhilippineMobileForInput(user?.phone_no),
       dateOfBirth: user?.dateOfBirth ?? ""
@@ -101,7 +97,9 @@ export function useProfilePage() {
     user?.heightCm,
     user?.name,
     user?.phone_no,
-    user?.weightKg
+    user?.weightKg,
+    resolvedName.firstName,
+    resolvedName.lastName
   ]);
 
   useEffect(() => {

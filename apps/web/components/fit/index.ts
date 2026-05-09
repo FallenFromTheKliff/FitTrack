@@ -3,6 +3,8 @@ export type { FitButtonVariant } from "./FitButton";
 export { default as FitCard, FitKpiCard, FitSelect } from "./FitCard";
 export { default as FitChartContainer } from "./FitChartContainer";
 export { default as FitFilter } from "./FitFilter";
+export { default as FitDropdown } from "./FitDropdown";
+export type { FitDropdownOption } from "./FitDropdown";
 export { default as FitInputField } from "./FitInputField";
 export { default as FitPill } from "./FitPill";
 export type { FitPillOption } from "./FitPill";

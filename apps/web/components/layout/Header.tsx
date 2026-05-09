@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Bell, Menu } from "lucide-react";
+import { Bell, ListFilter, Menu } from "lucide-react";
 import { type PageKey } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -27,8 +27,8 @@ export default function Header({
   showMenuButton,
   pageKey,
 }: Props) {
-  const { colors } = useTheme();
-  const s = headerStyles(colors);
+  const { colors, activeThemeKey } = useTheme();
+  const s = headerStyles(colors, activeThemeKey);
   const [notifOpen, setNotifOpen] = useState(false);
   const [isNotifHovered, setIsNotifHovered] = useState(false);
   const { sectionFilter, setSectionFilter } = useAnalyticsSectionFilter();
@@ -63,6 +63,12 @@ export default function Header({
       <div style={s.rightSection}>
         {pageKey === "analytics" ? (
           <div style={s.analyticsHeaderFilterWrap}>
+            <ListFilter
+              size={16}
+              strokeWidth={2}
+              style={s.analyticsHeaderFilterIcon}
+              aria-hidden="true"
+            />
             <FitSelect
               compact
               value={sectionFilter}

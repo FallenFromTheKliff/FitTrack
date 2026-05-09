@@ -8,6 +8,7 @@ import {
   type DragEvent,
   type MouseEvent,
 } from "react";
+import dynamic from "next/dynamic";
 import { useDroppable } from "@dnd-kit/core";
 import { ImagePlus, Map } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -31,6 +32,10 @@ import {
 } from "@/data/facilities/venueFields";
 import type { QuickFloorRegionTemplate } from "@/hooks/facilities/useFacilities";
 import { WEB_API_BASE_URL } from "@/lib/api-client";
+
+const FacilitiesKonvaMap = dynamic(() => import("./FacilitiesKonvaMap"), {
+  ssr: false,
+});
 
 type AssignedEquipmentDisplay = {
   color: string;
@@ -738,10 +743,12 @@ export function FloorPlanPanel({
 
   const canvasWidth = isCompact ? 940 : 1260;
   const canvasHeight = Math.round((canvasWidth * ROWS) / COLS);
-  const renderableFloorImageUrl = buildRenderableAssetUrl({
+  const resolvedFloorImageUrl = buildRenderableAssetUrl({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: floorImageUrl ?? null,
   });
+  const renderableFloorImageUrl =
+    resolvedFloorImageUrl?.startsWith("https://fittrack.dev/") ? null : resolvedFloorImageUrl;
 
   const quickRegionPlacement = useMemo(() => {
     if (!quickRegionTemplate || !hoverCell) {
@@ -1089,7 +1096,35 @@ export function FloorPlanPanel({
           style={{
             position: "absolute",
             inset: 0,
-            display: "flex",
+            padding: isCompact ? 10 : 14,
+          }}
+        >
+          <FacilitiesKonvaMap
+            assignedEquipment={assignedEquipment}
+            colors={colors}
+            equipmentById={equipmentById}
+            floorImageUrl={renderableFloorImageUrl}
+            isEditMode={isEditMode}
+            onAssignEquipmentToVenue={(equipmentId, venueMapId) =>
+              onAssignEquipmentToVenue(equipmentId, venueMapId)
+            }
+            onMoveVenue={onMoveVenue}
+            onPanChange={setPan}
+            onPlaceQuickRegionAtCell={onPlaceQuickRegionAtCell}
+            onSelectVenue={onSelectVenue}
+            pan={pan}
+            quickRegionTemplate={quickRegionTemplate}
+            selectedEquipmentId={selectedEquipmentId}
+            selectedVenueMapId={selectedVenueMapId}
+            venues={venues}
+            zoom={zoom}
+          />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "none",
             alignItems: "center",
             justifyContent: "center",
             padding: isCompact ? 10 : 14,

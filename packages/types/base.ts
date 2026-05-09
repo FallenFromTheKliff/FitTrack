@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "STAFF" | "USER";
+export type Role = "ADMIN" | "STAFF" | "USER" | "COACH";
 export type ThemeKey = "night" | "sunlight" | "dark" | "light" | "navy";
 export type FontKey = "standard" | "retro" | "painter";
 export type AnimationLevel = "full" | "minimal" | "none";

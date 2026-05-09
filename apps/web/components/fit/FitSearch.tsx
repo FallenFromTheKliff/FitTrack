@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Search, XCircle } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -32,7 +32,7 @@ export default function FitSearch({
   compact = false,
 }: Props) {
   const { colors } = useTheme();
-  const s = makeFitSearchStyles(colors);
+  const s = useMemo(() => makeFitSearchStyles(colors), [colors]);
   const [inputValue, setInputValue] = useState(value);
   const debouncedInput = useDebounce(inputValue, 300);
 
@@ -94,7 +94,7 @@ type FitSearchActionBarProps = {
 
 export function FitSearchActionBar({ search, actions, filters, className, style }: FitSearchActionBarProps) {
   const { colors } = useTheme();
-  const s = makeFitSearchStyles(colors);
+  const s = useMemo(() => makeFitSearchStyles(colors), [colors]);
   const hasFilters = !!filters;
   return (
     <div className={className} style={s.actionBar(style)}>

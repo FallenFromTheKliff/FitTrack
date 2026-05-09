@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
@@ -12,6 +12,7 @@ import HistoryPanel from "@/components/chatbot/HistoryPanel";
 import AiPageHeader from "@/components/chatbot/AiPageHeader";
 import { useAiPageController } from "@/hooks/ai/useAiPageController";
 import { ConfirmModal } from "@/components/modals";
+import { FitButton } from "@/components/fit";
 
 export default function AiPage() {
   const { colors } = useTheme();
@@ -109,25 +110,41 @@ export default function AiPage() {
           flex: 1,
           gap: 16,
           gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
-          minHeight: "calc(100vh - 190px)",
+          minHeight: "calc(100vh - 154px)",
           minWidth: 0,
         }}
       >
         <div style={{ ...s.panel, minHeight: 0 }}>
-          <HistoryPanel
-            activeId={activeSessionId}
-            isDeleting={deleteMutation.isPending}
-            isRestoring={restoreMutation.isPending}
-            onRequestDelete={() => setDeleteConfirmOpen(true)}
-            onRestore={() => void handleRestoreSelectedSession()}
-            onSelect={handleSelectSession}
-            onStatusFilterChange={setStatusFilter}
-            selectedSession={selectedSession}
-            sessions={filteredSessions}
-            statusFilter={statusFilter}
-          />
+          <div className="brodigy-compact-new-chat">
+            <FitButton
+              variant="primary"
+              label="New Chat"
+              icon={Plus}
+              fullWidth
+              onClick={handleStartFresh}
+            />
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <HistoryPanel
+              activeId={activeSessionId}
+              isDeleting={deleteMutation.isPending}
+              isRestoring={restoreMutation.isPending}
+              onRequestDelete={() => setDeleteConfirmOpen(true)}
+              onRestore={() => void handleRestoreSelectedSession()}
+              onSelect={handleSelectSession}
+              onStatusFilterChange={setStatusFilter}
+              selectedSession={selectedSession}
+              sessions={filteredSessions}
+              statusFilter={statusFilter}
+            />
+          </div>
         </div>
-        <div style={{ ...s.panel, minHeight: 0 }}>
+        <div
+          style={{
+            ...s.panel,
+            minHeight: 0,
+          }}
+        >
           <ChatPanel
             disabled={sendMutation.isPending || isSelectedSessionDeleted}
             input={input}
@@ -145,10 +162,27 @@ export default function AiPage() {
         </div>
       </div>
       <style>{`
+        .brodigy-compact-new-chat {
+          display: none;
+          padding: 12px 12px 0;
+        }
+
         @media (max-width: 980px) {
           [data-brodigy-grid="true"] {
             grid-template-columns: 1fr !important;
             min-height: auto !important;
+          }
+
+          .brodigy-compact-new-chat {
+            display: block;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          [data-brodigy-grid="true"] > div {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
           }
         }
       `}</style>

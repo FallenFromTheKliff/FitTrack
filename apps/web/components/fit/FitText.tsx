@@ -1,5 +1,5 @@
 "use client";
-import { forwardRef, type HTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type CSSProperties } from "react";
+import { forwardRef, useMemo, type HTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type CSSProperties } from "react";
 
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { cn } from "@/utils/cn";
@@ -46,7 +46,7 @@ export function FitText({
 }: FitTextProps) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
-  const s = makeFitTextStyles(colors);
+  const s = useMemo(() => makeFitTextStyles(colors), [colors]);
   const sizeStyle = size ? FIT_TEXT_SIZE_MAP[size] : undefined;
   const scaleStyle = scale !== undefined ? { fontSize: `calc(1em * ${scale})` } : undefined;
   const scaledStyle = excludeGlobalScale || !style?.fontSize
@@ -79,7 +79,7 @@ export const FitTextInput = forwardRef<HTMLInputElement, FitTextInputProps>(func
 ) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
-  const s = makeFitTextStyles(colors);
+  const s = useMemo(() => makeFitTextStyles(colors), [colors]);
   return (
     <input
       {...props}
@@ -100,7 +100,7 @@ export const FitTextArea = forwardRef<HTMLTextAreaElement, FitTextAreaProps>(fun
 ) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
-  const s = makeFitTextStyles(colors);
+  const s = useMemo(() => makeFitTextStyles(colors), [colors]);
   return (
     <textarea
       {...props}

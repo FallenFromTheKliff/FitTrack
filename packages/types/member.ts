@@ -63,7 +63,7 @@ export interface MemberRecord {
   profile?: MemberProfile | null;
 }
 
-export type CreateUserRole = "admin" | "staff" | "member";
+export type CreateUserRole = "admin" | "staff" | "member" | "coach";
 
 export type CreateUserInput = {
   email: string;

@@ -166,13 +166,13 @@ export class AdminCreateUserDTO {
   @IsPersonName('last_name')
   last_name: string;
 
-  @ApiProperty({ enum: ['admin', 'staff', 'member'], example: 'member' })
+  @ApiProperty({ enum: ['admin', 'staff', 'member', 'coach'], example: 'member' })
   @IsString({ message: 'role must be a string' })
   @IsNotEmpty({ message: 'role is required' })
-  @IsIn(['admin', 'staff', 'member'], {
-    message: 'role must be one of: admin, staff, member',
+  @IsIn(['admin', 'staff', 'member', 'coach'], {
+    message: 'role must be one of: admin, staff, member, coach',
   })
-  role: 'admin' | 'staff' | 'member';
+  role: 'admin' | 'staff' | 'member' | 'coach';
 
   @ApiPropertyOptional({ example: '+639171234567' })
   @IsOptional()

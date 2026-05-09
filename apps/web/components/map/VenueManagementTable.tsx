@@ -1,83 +1,241 @@
 "use client";
+
+import { useEffect, useMemo, useState } from "react";
 import type { ThemeColors } from "@fittrack/types";
-import { FACILITY_FLOOR_MAP, type VenueRecord } from "@/data/facilities/mapTypes";
+import {
+  FACILITY_FLOOR_MAP,
+  type VenueRecord,
+} from "@/data/facilities/mapTypes";
 
-import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitPagination from "@/components/fit/FitPagination";
+import { FitText } from "@/components/fit/FitText";
 
-type Props = {
+type Props<TVenue extends VenueRecord = VenueRecord> = {
   colors: ThemeColors;
-  venues: VenueRecord[];
+  embedded?: boolean;
   isLoading: boolean;
   onEditVenue: (venue: VenueRecord) => void;
+  onSelectVenue?: (venue: TVenue) => void;
+  selectedVenueId?: TVenue["id"] | null;
+  venues: TVenue[];
 };
 
-const COLS = "minmax(140px, 1fr) minmax(88px, 0.45fr) minmax(140px, 0.75fr) minmax(120px, 0.65fr) 110px";
+const COLS =
+  "minmax(140px, 1fr) minmax(78px, 0.38fr) minmax(140px, 0.72fr) minmax(108px, 0.55fr) 104px";
+const PAGE_SIZE = 5;
 
-export function VenueManagementTable({ colors, venues, isLoading, onEditVenue }: Props) {
+export function VenueManagementTable<TVenue extends VenueRecord = VenueRecord>({
+  colors,
+  embedded = false,
+  isLoading,
+  onEditVenue,
+  onSelectVenue,
+  selectedVenueId,
+  venues,
+}: Props<TVenue>) {
+  const [page, setPage] = useState(1);
+  const sortedVenues = useMemo(
+    () =>
+      [...venues].sort((a, b) => {
+        const floorDiff = (a.floorId ?? "floor-1").localeCompare(
+          b.floorId ?? "floor-1",
+        );
+        if (floorDiff !== 0) return floorDiff;
+        const orderDiff = (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+        if (orderDiff !== 0) return orderDiff;
+        return a.name.localeCompare(b.name);
+      }),
+    [venues],
+  );
+  const totalPages = Math.max(1, Math.ceil(sortedVenues.length / PAGE_SIZE));
+  const rows = sortedVenues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   if (isLoading) {
-    return <FitText style={{ fontSize: 13, color: colors.textMuted }}>Loading venues...</FitText>;
+    return (
+      <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+        Loading venues...
+      </FitText>
+    );
   }
 
   if (venues.length === 0) {
-    return <FitText style={{ fontSize: 13, color: colors.textMuted }}>No active venues.</FitText>;
+    return (
+      <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+        No active venues.
+      </FitText>
+    );
   }
 
-  const sortedVenues = [...venues].sort((a, b) => {
-    const floorDiff = (a.floorId ?? "floor-1").localeCompare(b.floorId ?? "floor-1");
-    if (floorDiff !== 0) return floorDiff;
-    const orderDiff = (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
-    if (orderDiff !== 0) return orderDiff;
-    return a.name.localeCompare(b.name);
-  });
-
   return (
-    <div style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: COLS, backgroundColor: colors.surfaceRaised }}>
+    <div
+      style={{
+        border: embedded ? "none" : `1px solid ${colors.border}`,
+        borderRadius: embedded ? 0 : 10,
+        display: "grid",
+        gridTemplateRows: "auto minmax(0, 1fr) auto",
+        height: embedded ? "100%" : undefined,
+        minHeight: 0,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: colors.surfaceRaised,
+          display: "grid",
+          gridTemplateColumns: COLS,
+        }}
+      >
         {["NAME", "CAPACITY", "ZONE", "STATUS", "ACTION"].map((heading) => (
           <FitText
             key={heading}
-            style={{ fontSize: 11, fontWeight: 700, padding: "10px 12px", color: colors.textMuted }}
+            style={{
+              color: colors.textMuted,
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "8px 10px",
+            }}
           >
             {heading}
           </FitText>
         ))}
       </div>
-      {sortedVenues.map((venue) => (
-        <div
-          key={venue.id}
-          style={{ display: "grid", gridTemplateColumns: COLS, borderTop: `1px solid ${colors.border}` }}
-        >
-          <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
-            <FitText style={{ fontSize: 13, fontWeight: 600 }}>{venue.name}</FitText>
-          </div>
-          <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
-            <FitText style={{ fontSize: 13 }}>{venue.capacity ?? 0}</FitText>
-          </div>
-          <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
-            <FitText style={{ fontSize: 13 }}>
-              {FACILITY_FLOOR_MAP[venue.floorId ?? "floor-1"].shortLabel} • C{venue.gridColumn ?? 1}/R{venue.gridRow ?? 1} - {venue.gridWidth ?? 2}x{venue.gridHeight ?? 2}
-            </FitText>
-          </div>
-          <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
-            <FitText
+      <div
+        style={{
+          alignContent: "start",
+          display: "grid",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        {rows.map((venue) => {
+          const isSelected = selectedVenueId === venue.id;
+
+          return (
+            <div
+              key={venue.id}
+              onClick={() => onSelectVenue?.(venue)}
               style={{
-                fontSize: 12,
-                color: venue.isActive === false ? colors.warning : colors.success
+                backgroundColor: isSelected ? `${colors.brand}16` : undefined,
+                borderTop: `1px solid ${colors.border}`,
+                boxShadow: isSelected
+                  ? `inset 0 0 0 1px ${colors.brand}88, 0 0 18px ${colors.brand}2e`
+                  : undefined,
+                cursor: onSelectVenue ? "pointer" : "default",
+                display: "grid",
+                gridTemplateColumns: COLS,
+                position: "relative",
+                transition: "background-color 140ms ease, box-shadow 140ms ease",
+                zIndex: isSelected ? 1 : undefined,
               }}
             >
-              {venue.isActive === false
-                ? "Inactive"
-                : venue.isReservable === false
-                  ? "Core Facility"
-                  : "Reservable"}
-            </FitText>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                minWidth: 0,
+                padding: "8px 10px",
+              }}
+            >
+              <FitText
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {venue.name}
+              </FitText>
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                padding: "8px 10px",
+              }}
+            >
+              <FitText style={{ fontSize: 12 }}>{venue.capacity ?? 0}</FitText>
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                minWidth: 0,
+                padding: "8px 10px",
+              }}
+            >
+              <FitText
+                style={{
+                  fontSize: 12,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {FACILITY_FLOOR_MAP[venue.floorId ?? "floor-1"].shortLabel} C
+                {venue.gridColumn ?? 1}/R{venue.gridRow ?? 1} -{" "}
+                {venue.gridWidth ?? 2}x{venue.gridHeight ?? 2}
+              </FitText>
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                padding: "8px 10px",
+              }}
+            >
+              <FitText
+                style={{
+                  color:
+                    venue.isActive === false ? colors.warning : colors.success,
+                  fontSize: 11,
+                }}
+              >
+                {venue.isActive === false
+                  ? "Inactive"
+                  : venue.isReservable === false
+                    ? "Core Facility"
+                    : "Reservable"}
+              </FitText>
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: 6,
+                padding: "6px 8px",
+              }}
+            >
+              <FitButton
+                label="EDIT"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditVenue(venue);
+                }}
+                style={{ height: 30, minHeight: 30 }}
+                textStyle={{ fontSize: 11 }}
+                variant="ghost"
+              />
+            </div>
           </div>
-          <div style={{ padding: "8px 10px", display: "flex", gap: 6, alignItems: "center" }}>
-            <FitButton variant="ghost" label="EDIT" onClick={() => onEditVenue(venue)} />
-          </div>
-        </div>
-      ))}
+          );
+        })}
+      </div>
+      <div style={{ borderTop: `1px solid ${colors.border}`, padding: "8px 10px" }}>
+        <FitPagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          showSinglePage
+          ariaLabel="Venue management pagination"
+        />
+      </div>
     </div>
   );
 }

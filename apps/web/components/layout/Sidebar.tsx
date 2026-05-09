@@ -3,7 +3,13 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Apple,
+  Building2,
+  CalendarCheck,
   Dumbbell,
+  Home,
+  MessageCircle,
+  User,
   Users,
   CalendarDays,
   Grid2X2,
@@ -18,6 +24,7 @@ import {
   Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { PageKey } from "@fittrack/app-config";
 
 import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,21 +43,10 @@ type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  pageKey:
-    | "members"
-    | "schedule"
-    | "exercise-lab"
-    | "gamification"
-    | "gym-actions"
-    | "memberships-promos"
-    | "ai"
-    | "facilities"
-    | "inventory"
-    | "analytics"
-    | "settings";
+  pageKey: PageKey;
 };
 
-const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+const MANAGEMENT_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Main",
     items: [
@@ -124,6 +120,67 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
+const MEMBER_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Main",
+    items: [
+      { href: "/member/home", label: "Home", icon: Home, pageKey: "member-home" },
+      {
+        href: "/member/facilities",
+        label: "Gym Facilities",
+        icon: Building2,
+        pageKey: "member-facilities",
+      },
+      {
+        href: "/member/bookings",
+        label: "Bookings",
+        icon: CalendarCheck,
+        pageKey: "member-bookings",
+      },
+    ],
+  },
+  {
+    label: "Fitness Ops",
+    items: [
+      {
+        href: "/member/nutrition",
+        label: "Nutrition",
+        icon: Apple,
+        pageKey: "member-nutrition",
+      },
+      {
+        href: "/member/mastery",
+        label: "Muscle Mastery",
+        icon: Trophy,
+        pageKey: "member-mastery",
+      },
+      {
+        href: "/member/ai",
+        label: "BrodigyAI",
+        icon: MessageCircle,
+        pageKey: "member-ai",
+      },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      {
+        href: "/member/profile",
+        label: "Profile",
+        icon: User,
+        pageKey: "member-profile",
+      },
+      {
+        href: "/member/settings",
+        label: "Settings",
+        icon: Settings,
+        pageKey: "member-settings",
+      },
+    ],
+  },
+];
+
 function isRouteMatch(path: string, href: string) {
   return path === href || path.startsWith(`${href}/`);
 }
@@ -149,17 +206,19 @@ export default function Sidebar({
   const s = sidebarStyles(colors, activeThemeKey);
   const initials =
     user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
-  const isProfileActive = path.startsWith("/profile");
+  const isMember = user?.role === "USER";
+  const profileHref = isMember ? "/member/profile" : "/profile";
+  const isProfileActive = isRouteMatch(path, profileHref);
   const portalLabel = getWebPortalLabel(user?.role);
   const visibleNavSections = useMemo(
     () =>
-      NAV_SECTIONS.map((section) => ({
+      (isMember ? MEMBER_NAV_SECTIONS : MANAGEMENT_NAV_SECTIONS).map((section) => ({
         ...section,
         items: section.items.filter((item) =>
           canAccessWebPage(user?.role, item.pageKey),
         ),
       })).filter((section) => section.items.length > 0),
-    [user?.role],
+    [isMember, user?.role],
   );
 
   const handleLogout = async () => {
@@ -216,7 +275,7 @@ export default function Sidebar({
       </div>
       <div style={s.topSeparator} />
       <Link
-        href="/profile"
+        href={profileHref}
         style={s.profileCard(isProfileActive)}
         className={fontClass}
         onClick={isMobileOverlay ? onClose : undefined}
@@ -265,7 +324,7 @@ export default function Sidebar({
               {section.items.map((item) => {
                 const isActive =
                   item.href === "/analytics"
-                    ? path === "/dashboard" || isRouteMatch(path, "/analytics")
+                    ? isRouteMatch(path, "/analytics")
                     : isRouteMatch(path, item.href);
                 return (
                   <Link

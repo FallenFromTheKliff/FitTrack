@@ -30,9 +30,6 @@ type Props = {
   title: string;
 };
 
-const REVIEW_TONE = "#8E84FF";
-const ACCENT_TONE = "#7CB7FF";
-
 export default function MembersRouteShell({
   actions,
   children,
@@ -52,9 +49,9 @@ export default function MembersRouteShell({
       case "warning":
         return colors.warning;
       case "accent":
-        return ACCENT_TONE;
+        return colors.brand;
       case "review":
-        return REVIEW_TONE;
+        return colors.warning;
       default:
         return colors.textSecondary;
     }
@@ -95,12 +92,10 @@ export default function MembersRouteShell({
     const toneColor = getToneColor(tone);
     const surfaceBackground = tone === "brand"
       ? `${colors.brand}10`
-      : tone === "review"
-        ? `${REVIEW_TONE}10`
-        : tone === "warning"
+      : tone === "review" || tone === "warning"
           ? `${colors.warning}12`
           : tone === "accent"
-            ? `${ACCENT_TONE}10`
+            ? `${colors.brand}10`
             : `${colors.surface}f0`;
 
     return (
@@ -148,7 +143,7 @@ export default function MembersRouteShell({
           display: "grid",
           gap: 12,
           padding: "16px 18px",
-          borderRadius: 26,
+          borderRadius: 14,
           border: `1px solid ${colors.border}`,
           background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
           boxShadow: "0 16px 28px rgba(0,0,0,0.12)",
@@ -214,7 +209,7 @@ export default function MembersRouteShell({
               display: "grid",
               gap: 10,
               padding: "12px",
-              borderRadius: 22,
+              borderRadius: 12,
               border: `1px solid ${colors.border}`,
               backgroundColor: `${colors.surface}f0`,
             }}
@@ -257,12 +252,12 @@ export default function MembersRouteShell({
         @keyframes members-route-shell-stage-in {
           0% {
             opacity: 0;
-            transform: translateY(12px) scale(0.992);
+            transform: translateY(12px);
           }
 
           100% {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translateY(0);
           }
         }
 
@@ -276,12 +271,7 @@ export default function MembersRouteShell({
 
         .members-route-shell-chip,
         .members-route-shell-metric {
-          transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
-        }
-
-        .members-route-shell-metric:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.12);
+          transition: border-color 140ms ease;
         }
 
         @media (prefers-reduced-motion: reduce) {

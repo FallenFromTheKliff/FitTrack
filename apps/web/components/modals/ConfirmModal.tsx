@@ -58,7 +58,7 @@ export default function ConfirmModal({
       headerStyle={{ alignItems: "flex-start", paddingBottom: 8 }}
       footer={isLoading ? undefined : (
         <FitButton
-          variant={isDanger ? "danger" : "primary"}
+          variant={isDanger ? "danger" : "positive"}
           label={confirmLabel}
           icon={confirmIcon}
           onClick={onConfirm}

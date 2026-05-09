@@ -34,7 +34,7 @@ type CreateUserPayload = {
   password: string;
   firstName: string;
   lastName: string;
-  role: "admin" | "staff" | "member";
+  role: "admin" | "staff" | "member" | "coach";
   phone_no?: string;
 };
 

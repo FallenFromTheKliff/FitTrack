@@ -41,10 +41,13 @@ export function buildVenueInitialValues(venueEditTarget: VenueRecord | null) {
   };
 }
 
-export function isCompactViewport(viewportWidth: number) {
+export function isCompactViewport(
+  viewportWidth: number,
+  availableViewportWidth: number,
+) {
   return (
     viewportWidth > 0 &&
-    viewportWidth <=
-      (window.screen?.availWidth || window.screen?.width || window.innerWidth) * 0.6
+    availableViewportWidth > 0 &&
+    viewportWidth <= availableViewportWidth * 0.6
   );
 }

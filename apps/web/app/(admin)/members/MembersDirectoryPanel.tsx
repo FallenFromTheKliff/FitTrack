@@ -12,7 +12,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 type Props = {
   activeRowId?: string;
   actionsHeading?: string;
-  badgeLabel?: string;
   emptyMessage?: string;
   filteredCount: number;
   footerNote?: string;
@@ -22,26 +21,25 @@ type Props = {
   page: number;
   pageSize: number;
   pageLoading: boolean;
+  renderGridCard?: (member: MemberRecord) => ReactNode;
   renderMobileCard?: (member: MemberRecord) => ReactNode;
   rows: MemberRecord[];
-  subtitle?: string;
   tableActions?: FitTableAction<MemberRecord>[];
-  tableMotionKey?: string;
   tableColumns: FitTableColumn<MemberRecord>[];
-  title: string;
+  toolbar?: ReactNode;
   totalPages: number;
+  viewMode: "list" | "grid";
 };
 
 function getGridTemplate(hasActions: boolean) {
   return hasActions
-    ? "minmax(0, 2.4fr) minmax(140px, 1.05fr) minmax(140px, 1fr) minmax(108px, 0.82fr) auto"
-    : "minmax(0, 2.55fr) minmax(148px, 1.08fr) minmax(146px, 1fr) minmax(112px, 0.84fr)";
+    ? "minmax(0, 2.35fr) minmax(104px, 0.82fr) minmax(100px, 0.76fr) minmax(112px, 0.78fr) minmax(128px, 0.9fr) auto"
+    : "minmax(0, 2.35fr) minmax(104px, 0.82fr) minmax(100px, 0.76fr) minmax(112px, 0.78fr) minmax(128px, 0.9fr)";
 }
 
 export default function MembersDirectoryPanel({
   activeRowId,
   actionsHeading,
-  badgeLabel,
   emptyMessage = "No accounts match your current filters.",
   filteredCount,
   footerNote,
@@ -51,14 +49,14 @@ export default function MembersDirectoryPanel({
   page,
   pageSize,
   pageLoading,
+  renderGridCard,
   renderMobileCard,
   rows,
-  subtitle,
   tableActions,
-  tableMotionKey,
   tableColumns,
-  title,
+  toolbar,
   totalPages,
+  viewMode,
 }: Props) {
   const { colors } = useTheme();
   const pageStart = filteredCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -75,161 +73,231 @@ export default function MembersDirectoryPanel({
   return (
     <section
       className="members-directory-panel"
+      data-members-directory-panel
       style={{
         display: "grid",
-        gap: 14,
-        padding: 18,
-        borderRadius: 26,
+        gridTemplateRows: "auto minmax(0, 1fr) auto",
+        gap: 0,
+        height: "100%",
+        minHeight: 0,
+        padding: 0,
+        borderRadius: 8,
         border: `1px solid ${colors.border}`,
-        background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-        boxShadow: "0 16px 30px rgba(0,0,0,0.12)",
+        backgroundColor: `${colors.surface}f2`,
+        boxShadow: "none",
+        overflow: "hidden",
       }}
     >
-      <div
-        className="members-directory-panel__header"
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "grid", gap: 4, maxWidth: 720 }}>
-          <FitText style={{ fontSize: 20, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.08 }}>
-            {title}
-          </FitText>
-          {subtitle ? (
-            <FitText style={{ fontSize: 11.75, lineHeight: 1.45, color: colors.textSecondary }}>
-              {subtitle}
-            </FitText>
-          ) : null}
-        </div>
-        {badgeLabel ? (
-          <FitText style={{ fontSize: 11.5, fontWeight: 600, color: colors.textSecondary }}>
-            {badgeLabel}
-          </FitText>
-        ) : null}
-      </div>
-
-      <div key={tableMotionKey} className="members-directory-panel__desktop members-directory-panel__desktop--animated">
+      {toolbar ? (
         <div
-          className="members-directory-panel__table-head"
+          className="members-directory-panel__top"
           style={{
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns,
-            padding: "0 18px 2px",
+            padding: "14px 12px",
+            borderRadius: 0,
+            border: "none",
+            borderBottom: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.surfaceRaised}f5`,
           }}
         >
-          {tableColumns.map((column) => (
-            <FitText
-              key={column.key}
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: colors.textMuted,
-                letterSpacing: "0.05em",
-              }}
-            >
-              {column.heading}
-            </FitText>
-          ))}
-          {hasActions ? (
-            <FitText
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: colors.textMuted,
-                letterSpacing: "0.05em",
-                textAlign: "right",
-              }}
-            >
-              {actionsHeading ?? "Actions"}
-            </FitText>
-          ) : null}
+          <div className="members-directory-panel__toolbar">{toolbar}</div>
         </div>
+      ) : null}
 
-        {pageLoading ? (
-          <div
-            style={{
-              padding: 18,
-              borderRadius: 20,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: `${colors.surface}e8`,
-            }}
-          >
-            <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
-              {isAdmin ? "Loading accounts..." : "Loading staff directory..."}
-            </FitText>
-          </div>
-        ) : rows.length > 0 ? (
-          <div className="members-directory-panel__rows" style={{ display: "grid", gap: 12 }}>
-            {rows.map((member, index) => {
-              const isActive = member.id === activeRowId;
+      <div
+        className="members-directory-panel__middle"
+        style={{
+          display: "grid",
+          minHeight: 0,
+          padding: 10,
+          borderRadius: 0,
+          border: "none",
+          background: colors.surface,
+        }}
+      >
+        <div
+          className="members-directory-panel__desktop"
+          style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}
+        >
+          {pageLoading ? (
+            <div
+              key="loading"
+              className="members-directory-panel__view-enter"
+              style={{
+                padding: 18,
+            borderRadius: 0,
+            border: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.surface}e8`,
+              }}
+            >
+              <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
+                {isAdmin ? "Loading accounts..." : "Loading staff directory..."}
+              </FitText>
+            </div>
+          ) : rows.length > 0 && viewMode === "grid" ? (
+            <div key="grid" className="members-directory-panel__grid members-directory-panel__view-enter">
+              {rows.map((member) => {
+                const card = renderGridCard?.(member) ?? renderMobileCard?.(member);
+                if (!card) return null;
+                return (
+                  <div
+                    key={member.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={member.id === activeRowId}
+                    className={
+                      member.id === activeRowId
+                        ? "members-directory-panel__grid-card members-directory-panel__grid-card-active"
+                        : "members-directory-panel__grid-card"
+                    }
+                    onClick={() => onRowClick(member)}
+                    onKeyDown={(event) => handleRowKeyDown(event, member)}
+                  >
+                    {card}
+                  </div>
+                );
+              })}
+            </div>
+          ) : rows.length > 0 ? (
+            <div
+              key="list"
+              className="members-directory-panel__list members-directory-panel__view-enter"
+              style={{
+                display: "grid",
+                gridTemplateRows: "auto minmax(0, 1fr)",
+                minHeight: 0,
+              }}
+            >
+            <div
+              className="members-directory-panel__table-head"
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns,
+                padding: "7px 12px 8px",
+                backgroundColor: `${colors.surfaceRaised}bd`,
+                borderBottom: `1px solid ${colors.border}`,
+              }}
+            >
+              {tableColumns.map((column) => {
+                const isStatusColumn = column.key === "status";
 
-              return (
-                <div
-                  key={member.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isActive}
-                  className={isActive ? "members-directory-panel__row members-directory-panel__row-active" : "members-directory-panel__row"}
-                  data-row-index={index + 1}
-                  onClick={() => onRowClick(member)}
-                  onKeyDown={(event) => handleRowKeyDown(event, member)}
+                return (
+                <FitText
+                  key={column.key}
+                  data-status-header={isStatusColumn ? "true" : undefined}
                   style={{
-                    display: "grid",
-                    gap: 12,
-                    gridTemplateColumns,
-                    alignItems: "center",
-                    padding: "14px 18px",
-                    borderRadius: 20,
-                    border: `1px solid ${isActive ? `${colors.brand}36` : colors.border}`,
-                    backgroundColor: isActive ? `${colors.brand}0f` : `${colors.surface}ea`,
-                    boxShadow: isActive ? `0 16px 30px -24px ${colors.brand}` : "0 8px 18px rgba(0,0,0,0.06)",
-                    cursor: "pointer",
-                    outline: "none",
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                    letterSpacing: "0.05em",
+                    justifySelf: isStatusColumn ? "center" : undefined,
+                    textAlign: isStatusColumn ? "center" : undefined,
                   }}
                 >
-                  {tableColumns.map((column) => (
-                    <div key={column.key} className="members-directory-panel__cell">
-                      {column.render(member, colors)}
-                    </div>
-                  ))}
-                  {hasActions ? (
-                    <div
-                      className="members-directory-panel__actions"
-                      style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}
-                    >
-                      {tableActions?.map((action) => (
-                        <FitButton
-                          key={`${member.id}-${action.label}`}
-                          variant={action.variant}
-                          label={action.iconOnly ? undefined : action.label}
-                          icon={action.icon}
-                          iconSize={action.iconSize ?? 14}
-                          iconOnly={action.iconOnly}
-                          disabled={action.disabled?.(member)}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            action.onClick(member);
-                          }}
-                          style={action.style}
-                          aria-label={action.ariaLabel?.(member)}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+                  {column.heading}
+                </FitText>
+                );
+              })}
+              {hasActions ? (
+                <FitText
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                    letterSpacing: "0.05em",
+                    textAlign: "right",
+                  }}
+                >
+                  {actionsHeading ?? "Actions"}
+                </FitText>
+              ) : null}
+            </div>
+            <div
+              className="members-directory-panel__rows"
+              style={{ display: "grid", gap: 0, alignContent: "start", minHeight: 0 }}
+            >
+              {rows.map((member, index) => {
+                const isActive = member.id === activeRowId;
+
+                return (
+                  <div
+                    key={member.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isActive}
+                    className={isActive ? "members-directory-panel__row members-directory-panel__row-active" : "members-directory-panel__row"}
+                    data-row-index={index + 1}
+                    onClick={() => onRowClick(member)}
+                    onKeyDown={(event) => handleRowKeyDown(event, member)}
+                    style={{
+                      display: "grid",
+                      gap: 12,
+                      gridTemplateColumns,
+                      alignItems: "center",
+                      minHeight: 44,
+                      padding: "7px 12px",
+                      borderRadius: 0,
+                      border: "none",
+                      borderBottom: `1px solid ${colors.border}`,
+                      backgroundColor: isActive ? `${colors.brand}12` : "transparent",
+                      boxShadow: isActive ? `3px 0 0 ${colors.brand} inset` : "none",
+                      cursor: "pointer",
+                      outline: "none",
+                    }}
+                  >
+                    {tableColumns.map((column) => {
+                      const isStatusColumn = column.key === "status";
+
+                      return (
+                      <div
+                        key={column.key}
+                        className="members-directory-panel__cell"
+                        data-member-status-cell={isStatusColumn ? "true" : undefined}
+                        style={{
+                          justifySelf: isStatusColumn ? "center" : undefined,
+                          textAlign: isStatusColumn ? "center" : undefined,
+                        }}
+                      >
+                        {column.render(member, colors)}
+                      </div>
+                      );
+                    })}
+                    {hasActions ? (
+                      <div
+                        className="members-directory-panel__actions"
+                        style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}
+                      >
+                        {tableActions?.map((action) => (
+                          <FitButton
+                            key={`${member.id}-${action.label}`}
+                            variant={action.variant}
+                            label={action.iconOnly ? undefined : action.label}
+                            icon={action.icon}
+                            iconSize={action.iconSize ?? 14}
+                            iconOnly={action.iconOnly}
+                            disabled={action.disabled?.(member)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              action.onClick(member);
+                            }}
+                            style={action.style}
+                            aria-label={action.ariaLabel?.(member)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div
+            key="empty"
+            className="members-directory-panel__view-enter"
             style={{
               padding: 18,
-              borderRadius: 20,
+              borderRadius: 8,
               border: `1px dashed ${colors.border}`,
               backgroundColor: `${colors.surface}d8`,
             }}
@@ -246,7 +314,7 @@ export default function MembersDirectoryPanel({
           <div
             style={{
               padding: 18,
-              borderRadius: 18,
+              borderRadius: 8,
               border: `1px solid ${colors.border}`,
               backgroundColor: `${colors.surface}e2`,
             }}
@@ -257,13 +325,27 @@ export default function MembersDirectoryPanel({
           </div>
         ) : rows.length > 0 && renderMobileCard ? (
           rows.map((member) => (
-            <div key={member.id}>{renderMobileCard(member)}</div>
+            <div
+              key={member.id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={member.id === activeRowId}
+              className={
+                member.id === activeRowId
+                  ? "members-directory-panel__mobile-card members-directory-panel__mobile-card-active"
+                  : "members-directory-panel__mobile-card"
+              }
+              onClick={() => onRowClick(member)}
+              onKeyDown={(event) => handleRowKeyDown(event, member)}
+            >
+              {renderMobileCard(member)}
+            </div>
           ))
         ) : (
           <div
             style={{
               padding: 18,
-              borderRadius: 18,
+              borderRadius: 8,
               border: `1px dashed ${colors.border}`,
               backgroundColor: `${colors.surface}d8`,
             }}
@@ -274,11 +356,21 @@ export default function MembersDirectoryPanel({
           </div>
         )}
       </div>
+      </div>
 
-      {!pageLoading && filteredCount > 0 ? (
+      {!pageLoading ? (
         <div
-          key={`${tableMotionKey ?? "stable"}-footer`}
-          className="members-directory-panel__footer members-directory-panel__footer--animated"
+          className="members-directory-panel__bottom"
+          style={{
+            padding: "10px 12px",
+            borderRadius: 0,
+            border: "none",
+            borderTop: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.surfaceRaised}f5`,
+          }}
+        >
+          <div
+            className="members-directory-panel__footer"
           style={{
             display: "flex",
             alignItems: "center",
@@ -302,36 +394,14 @@ export default function MembersDirectoryPanel({
             totalPages={totalPages}
             onPageChange={onPageChange}
             ariaLabel="Account directory pagination"
+            showSinglePage
           />
+          </div>
         </div>
       ) : null}
 
       <style>{`
-        @keyframes members-directory-panel-surface-in {
-          0% {
-            opacity: 0;
-            transform: translateY(14px) scale(0.985);
-          }
-
-          100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        @keyframes members-directory-row-in {
-          0% {
-            opacity: 0;
-            transform: translateY(16px) scale(0.992);
-          }
-
-          100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        @keyframes members-directory-footer-in {
+        @keyframes members-directory-view-enter {
           0% {
             opacity: 0;
             transform: translateY(10px);
@@ -343,40 +413,12 @@ export default function MembersDirectoryPanel({
           }
         }
 
-        .members-directory-panel__desktop--animated {
-          animation: members-directory-panel-surface-in 260ms cubic-bezier(0.18, 0.88, 0.24, 1) both;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row {
-          animation: members-directory-row-in 280ms cubic-bezier(0.18, 0.88, 0.24, 1) both;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row[data-row-index="1"] {
-          animation-delay: 45ms;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row[data-row-index="2"] {
-          animation-delay: 80ms;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row[data-row-index="3"] {
-          animation-delay: 115ms;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row[data-row-index="4"] {
-          animation-delay: 150ms;
-        }
-
-        .members-directory-panel__desktop--animated .members-directory-panel__row[data-row-index="5"] {
-          animation-delay: 185ms;
-        }
-
-        .members-directory-panel__footer--animated {
-          animation: members-directory-footer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+        .members-directory-panel__view-enter {
+          animation: members-directory-view-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
         }
 
         .members-directory-panel__row {
-          transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 180ms ease, background-color 180ms ease;
+          transition: border-color 120ms ease, background-color 120ms ease;
         }
 
         .members-directory-panel__cell,
@@ -385,54 +427,10 @@ export default function MembersDirectoryPanel({
           min-width: 0;
         }
 
-        .members-directory-panel__identity-avatar {
-          transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-          transform-origin: center;
-        }
-
-        .members-directory-panel__primary-text,
-        .members-directory-panel__secondary-text,
-        .members-directory-panel__emphasis-text {
-          transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), color 180ms ease, letter-spacing 180ms ease, opacity 180ms ease;
-          transform-origin: left center;
-        }
-
-        .members-directory-panel__row:hover,
         .members-directory-panel__row:focus-visible {
-          transform: translateY(-3px) scale(1.006);
-          box-shadow: 0 24px 46px rgba(0, 0, 0, 0.16);
           border-color: ${colors.brand}2f !important;
-        }
-
-        .members-directory-panel__row:hover .members-directory-panel__identity-avatar,
-        .members-directory-panel__row:focus-visible .members-directory-panel__identity-avatar {
-          transform: translateY(-1px) scale(1.06);
-          box-shadow: 0 16px 24px rgba(0, 0, 0, 0.16);
-        }
-
-        .members-directory-panel__row:hover .members-directory-panel__primary-text,
-        .members-directory-panel__row:focus-visible .members-directory-panel__primary-text {
-          transform: translateX(2px);
-          letter-spacing: 0.012em;
-          font-weight: 800 !important;
-        }
-
-        .members-directory-panel__row:hover .members-directory-panel__secondary-text,
-        .members-directory-panel__row:focus-visible .members-directory-panel__secondary-text {
-          transform: translateX(2px);
-          color: ${colors.textPrimary} !important;
-          opacity: 0.94;
-        }
-
-        .members-directory-panel__row:hover .members-directory-panel__emphasis-text,
-        .members-directory-panel__row:focus-visible .members-directory-panel__emphasis-text {
-          transform: translateX(1px);
-          color: ${colors.textPrimary} !important;
-          font-weight: 700 !important;
-        }
-
-        .members-directory-panel__row-active {
-          box-shadow: 0 20px 38px rgba(0, 0, 0, 0.16) !important;
+          outline: 2px solid ${colors.brand}35;
+          outline-offset: 2px;
         }
 
         .members-directory-panel__row-active .members-directory-panel__primary-text {
@@ -444,14 +442,41 @@ export default function MembersDirectoryPanel({
           opacity: 0.94;
         }
 
-        .members-directory-panel__table-head > :last-child,
+        .members-directory-panel__grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px 10px;
+          align-content: start;
+          min-height: 0;
+        }
+
+        .members-directory-panel__grid-card,
+        .members-directory-panel__mobile-card {
+          outline: none;
+        }
+
+        .members-directory-panel__grid-card-active > .members-grid-card,
+        .members-directory-panel__mobile-card-active > .members-account-card {
+          border-color: ${colors.brand}66 !important;
+          box-shadow: 0 0 0 1px ${colors.brand}22 inset, 0 16px 30px rgba(0, 0, 0, 0.14) !important;
+        }
+
         .members-directory-panel__actions {
           justify-self: end;
         }
 
-        @media (max-width: 980px) {
+        @media (max-width: 1259px) {
+          .members-directory-panel {
+            height: auto !important;
+            min-height: 0 !important;
+          }
+
           .members-directory-panel__desktop {
             display: none !important;
+          }
+
+          .members-directory-panel__middle {
+            padding: 10px !important;
           }
 
           .members-directory-panel__mobile {
@@ -460,12 +485,7 @@ export default function MembersDirectoryPanel({
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .members-directory-panel__desktop--animated,
-          .members-directory-panel__desktop--animated .members-directory-panel__row,
-          .members-directory-panel__footer--animated {
-            animation: none !important;
-          }
-
+          .members-directory-panel__view-enter,
           .members-directory-panel__row,
           .members-directory-panel__identity-avatar,
           .members-directory-panel__primary-text,
@@ -476,10 +496,6 @@ export default function MembersDirectoryPanel({
         }
 
         @media (max-width: 640px) {
-          .members-directory-panel {
-            padding: 14px !important;
-          }
-
           .members-directory-panel__footer {
             align-items: flex-start !important;
           }

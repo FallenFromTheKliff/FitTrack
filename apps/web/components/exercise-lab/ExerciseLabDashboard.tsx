@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
@@ -62,6 +68,7 @@ import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { useTimedMessage } from "@fittrack/hooks";
 import {
   FitButton,
+  FitDropdown,
   FitPagination,
   FitPill,
   FitSearch,
@@ -98,6 +105,11 @@ import {
 } from "./ExerciseContractEditors";
 
 type SurfaceMode = "library" | "milestones" | "muscles" | "review";
+const SURFACE_MODE_OPTIONS: Array<{ label: string; value: SurfaceMode }> = [
+  { label: "Review", value: "review" },
+  { label: "Library", value: "library" },
+  { label: "Muscles", value: "muscles" },
+];
 type LibraryScope = "active" | "all";
 type MilestoneScope = "all" | "closed" | "pending";
 type MuscleDefinitionDraft = {
@@ -137,6 +149,7 @@ type ExerciseDraft = {
 const DRAWER_WIDTH = 420;
 const EMPTY_REVIEW_CANDIDATES: ExerciseReviewSubmissionRecord[] = [];
 const EMPTY_LIBRARY_EXERCISES: FitnessExerciseRecord[] = [];
+const MUSCLE_LIBRARY_PAGE_SIZE = 7;
 const CREATOR_STATE_OPTIONS = [
   { label: "None", value: "none" },
   { label: "Candidate", value: "candidate" },
@@ -284,13 +297,6 @@ function getEvidenceBars(evidence: ExerciseReviewEvidenceRecord | null) {
   return [18, 28, 44, 34, 24, 20];
 }
 
-function getDraftEvidence(evidence: ExerciseReviewEvidenceRecord | null) {
-  return !Array.isArray(evidence) &&
-    evidence?.schemaVersion === "exercise_ai_draft_v1"
-    ? evidence
-    : null;
-}
-
 function getEvidenceSummary(evidence: ExerciseReviewEvidenceRecord | null) {
   if (Array.isArray(evidence)) {
     return `${evidence.length} evidence bars`;
@@ -377,7 +383,7 @@ function ExerciseLabField({
   hint,
   label,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   hint?: string;
   label: string;
 }) {
@@ -414,95 +420,51 @@ function ExerciseLabDrawer({
   onClose,
   title,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   isOpen: boolean;
   onClose: () => void;
   title: string;
 }) {
   const { colors } = useTheme();
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
-  const panelRef = useRef<HTMLElement | null>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const titleId = useId();
-
-  useEffect(() => {
-    setPortalRoot(document.body);
-  }, []);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!isOpen || !portalRoot) return;
-
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const focusFrame = requestAnimationFrame(() => {
-      panelRef.current?.focus({ preventScroll: true });
-    });
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const dialogs = Array.from(
-        document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
-      );
-      if (dialogs[dialogs.length - 1] !== panelRef.current) return;
-      event.preventDefault();
-      onCloseRef.current();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousFocusRef.current?.focus({ preventScroll: true });
-    };
-  }, [isOpen, portalRoot]);
-
-  if (!portalRoot || !isOpen) return null;
-
-  return createPortal(
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
+  return (
+    <FitModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      maxWidth={DRAWER_WIDTH}
+      noScroll
+      hideHeaderText
+      hideCloseButton
+      hideHeaderDivider
+      headerStyle={{ display: "none" }}
+      overlayStyle={{
+        alignItems: "stretch",
+        justifyContent: "flex-end",
+        padding: 0,
         backgroundColor: "rgba(0, 0, 0, 0.45)",
-        pointerEvents: "auto",
-        transition: "background-color 180ms ease",
-        zIndex: 60,
       }}
-      onClick={onClose}
+      containerStyle={{
+        width: `min(${DRAWER_WIDTH}px, 92vw)`,
+        maxWidth: `min(${DRAWER_WIDTH}px, 92vw)`,
+        height: "100vh",
+        maxHeight: "100vh",
+        borderRadius: 0,
+        borderLeft: `1px solid ${colors.border}`,
+        backgroundColor: colors.surfaceRaised,
+        boxShadow: "-16px 0 40px rgba(0,0,0,0.28)",
+      }}
+      contentStyle={{
+        padding: 0,
+        overflow: "hidden",
+      }}
     >
       <aside
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
         style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          width: `min(${DRAWER_WIDTH}px, 92vw)`,
           height: "100%",
-          backgroundColor: colors.surfaceRaised,
-          borderLeft: `1px solid ${colors.border}`,
-          boxShadow: "-16px 0 40px rgba(0,0,0,0.28)",
-          transform: "translateX(0)",
-          transition: "transform 220ms ease",
           display: "grid",
           gridTemplateRows: "auto 1fr",
           padding: 20,
         }}
-        onClick={(event) => event.stopPropagation()}
       >
         <div
           style={{
@@ -514,7 +476,7 @@ function ExerciseLabDrawer({
             borderBottom: `1px solid ${colors.border}`,
           }}
         >
-          <FitText id={titleId} style={{ fontSize: 18, fontWeight: 800 }}>{title}</FitText>
+          <FitText style={{ fontSize: 18, fontWeight: 800 }}>{title}</FitText>
           <FitButton
             aria-label="Close drawer"
             icon={X}
@@ -525,8 +487,7 @@ function ExerciseLabDrawer({
         </div>
         <div style={{ overflowY: "auto", paddingTop: 16 }}>{children}</div>
       </aside>
-    </div>,
-    portalRoot,
+    </FitModal>
   );
 }
 
@@ -538,7 +499,7 @@ export function ExerciseLabDashboard() {
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const queryClient = useQueryClient();
-  const { message, showMessage } = useTimedMessage(
+  const { message: feedbackMessage, showMessage } = useTimedMessage(
     FEEDBACK_DURATION_MS.standard,
   );
   const [mode, setMode] = useState<SurfaceMode>("review");
@@ -555,6 +516,7 @@ export function ExerciseLabDashboard() {
     sortOrder: 500,
   });
   const [editingMuscleId, setEditingMuscleId] = useState<string | null>(null);
+  const [musclePage, setMusclePage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewSearch, setReviewSearch] = useState("");
   const [reviewStatus, setReviewStatus] = useState<
@@ -677,7 +639,7 @@ export function ExerciseLabDashboard() {
 
   const reviewQueueQuery = useQuery(
     fitnessExerciseReviewSubmissionsQueryOptions(webApiClient, {
-      limit: 8,
+      limit: 3,
       page: reviewPage,
       ...(reviewStatus ? { status: reviewStatus } : {}),
       ...(reviewSearch.trim() ? { search: reviewSearch.trim() } : {}),
@@ -692,7 +654,7 @@ export function ExerciseLabDashboard() {
   );
   const libraryQuery = useQuery(
     fitnessExercisesQueryOptions(webApiClient, {
-      limit: 8,
+      limit: 4,
       page: libraryPage,
       includeInactive: libraryScope === "all",
       ...(librarySearch.trim() ? { search: librarySearch.trim() } : {}),
@@ -729,7 +691,6 @@ export function ExerciseLabDashboard() {
 
   const reviewCandidates =
     reviewQueueQuery.data?.data ?? EMPTY_REVIEW_CANDIDATES;
-  const pendingCandidates = reviewCandidates;
   const visibleReviewCandidates = reviewCandidates;
   const reviewViewportHeight = Math.max(540, viewportHeight - 228);
   const workbenchMotionKey = `${mode}-${reviewModalCandidate?.id ?? "empty"}`;
@@ -742,10 +703,11 @@ export function ExerciseLabDashboard() {
     setReviewPage(1);
   }, [reviewCategory, reviewMuscleFilter, reviewSearch, reviewStatus]);
 
+  useEffect(() => {
+    setMusclePage(1);
+  }, [muscleSearch]);
+
   const selectedCandidate = reviewModalCandidate;
-  const selectedDraftEvidence = selectedCandidate
-    ? getDraftEvidence(selectedCandidate.evidenceBars)
-    : null;
   const selectedCreatorTone = selectedCandidate
     ? getCreatorStateTone(selectedCandidate.creatorState)
     : "muted";
@@ -842,6 +804,14 @@ export function ExerciseLabDashboard() {
   const libraryItems = libraryQuery.data?.data ?? EMPTY_LIBRARY_EXERCISES;
   const libraryMeta = libraryQuery.data?.meta;
   const muscleDefinitions = muscleDefinitionsQuery.data ?? [];
+  const muscleTotalPages = Math.max(
+    1,
+    Math.ceil(muscleDefinitions.length / MUSCLE_LIBRARY_PAGE_SIZE),
+  );
+  const visibleMuscleDefinitions = muscleDefinitions.slice(
+    (musclePage - 1) * MUSCLE_LIBRARY_PAGE_SIZE,
+    musclePage * MUSCLE_LIBRARY_PAGE_SIZE,
+  );
   const activeMuscleDefinitions = muscleDefinitions.filter(
     (definition) => definition.isActive,
   );
@@ -1327,12 +1297,6 @@ export function ExerciseLabDashboard() {
     showMessage(`Copied taxonomy cues from ${exercise.name}.`);
   };
 
-  const topActionLabel =
-    mode === "review"
-      ? "Review custom exercise submissions, compare them with existing records, and decide whether they join the global library."
-      : mode === "muscles"
-          ? "Manage canonical muscle targets used by Exercise Lab and muscle-level progression."
-          : "Maintain canonical exercise records used across FitTrack plans and tracking.";
   const confirmationTitle =
     confirmationState?.mode === "discard-sheet"
       ? "Discard changes?"
@@ -1413,13 +1377,20 @@ export function ExerciseLabDashboard() {
         key: "submission",
         heading: "Submission",
         render: (candidate) => (
-          <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
+          <div style={{ display: "grid", gap: 5, minWidth: 180 }}>
             <FitText style={{ fontSize: 14, fontWeight: 800 }}>
               {candidate.title}
             </FitText>
             <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
               {candidate.proposedName}
             </FitText>
+            <FitPill
+              mode="status"
+              label={toTitleCase(candidate.status)}
+              color={getReviewStatusColor(candidate.status, colors)}
+              fontSize={11}
+              style={{ width: "fit-content" }}
+            />
           </div>
         ),
       },
@@ -1439,7 +1410,7 @@ export function ExerciseLabDashboard() {
                     ? colors.brand
                     : colors.textMuted;
           return (
-            <div style={{ display: "grid", gap: 6, minWidth: 190 }}>
+            <div style={{ display: "grid", gap: 6, minWidth: 165 }}>
               <FitText style={{ fontSize: 13, fontWeight: 800 }}>
                 {candidate.creatorDisplayName ?? "Creator member"}
               </FitText>
@@ -1477,7 +1448,7 @@ export function ExerciseLabDashboard() {
         render: (candidate) => {
           const match = reviewMatchByCandidateId.get(candidate.id);
           return (
-            <div style={{ display: "grid", gap: 3, minWidth: 150 }}>
+            <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
               <FitText style={{ fontSize: 13, fontWeight: 800 }}>
                 {match?.exercise.name ?? candidate.matchHint ?? "Manual review"}
               </FitText>
@@ -1492,7 +1463,7 @@ export function ExerciseLabDashboard() {
         key: "evidence",
         heading: "Evidence",
         render: (candidate) => (
-          <div style={{ display: "grid", gap: 3, minWidth: 150 }}>
+          <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
             <FitText style={{ fontSize: 13, fontWeight: 800 }}>
               {getEvidenceSummary(candidate.evidenceBars)}
             </FitText>
@@ -1509,18 +1480,6 @@ export function ExerciseLabDashboard() {
           <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>
             {formatDate(candidate.createdAt)}
           </FitText>
-        ),
-      },
-      {
-        key: "status",
-        heading: "Status",
-        render: (candidate) => (
-          <FitPill
-            mode="status"
-            label={toTitleCase(candidate.status)}
-            color={getReviewStatusColor(candidate.status, colors)}
-            fontSize={11}
-          />
         ),
       },
     ],
@@ -1541,125 +1500,348 @@ export function ExerciseLabDashboard() {
     [],
   );
 
+  const libraryTableColumns: FitTableColumn<FitnessExerciseRecord>[] = [
+    {
+      key: "name",
+      heading: "Exercise",
+      render: (exercise, c) => (
+        <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
+          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
+            {exercise.name}
+          </FitText>
+          <FitText style={{ fontSize: 12, color: c.textSecondary }}>
+            {exercise.description ?? "No description saved yet."}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "category",
+      heading: "Category",
+      render: (exercise, c) => (
+        <FitPill
+          mode="status"
+          label={toTitleCase(exercise.category)}
+          color={c.brand}
+          fontSize={11}
+        />
+      ),
+    },
+    {
+      key: "muscle",
+      heading: "Muscle",
+      render: (exercise, c) => (
+        <FitText style={{ fontSize: 13, fontWeight: 800, color: c.textPrimary }}>
+          {toTitleCase(exercise.muscleGroup)}
+        </FitText>
+      ),
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (exercise, c) => (
+        <FitPill
+          mode="status"
+          label={exercise.isActive ? "Active" : "Archived"}
+          color={exercise.isActive ? c.success : c.textMuted}
+          fontSize={11}
+        />
+      ),
+    },
+    {
+      key: "updated",
+      heading: "Updated",
+      render: (exercise, c) => (
+        <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+          {formatDate(exercise.updatedAt)}
+        </FitText>
+      ),
+    },
+  ];
+
+  const libraryTableActions: FitTableAction<FitnessExerciseRecord>[] = [
+    {
+      icon: Pencil,
+      label: "Edit",
+      onClick: handleOpenEdit,
+      variant: "ghost",
+    },
+    {
+      icon: Archive,
+      label: "Archive",
+      disabled: (exercise) => !exercise.isActive,
+      onClick: (exercise) =>
+        setConfirmationState({
+          exercise,
+          mode: "archive",
+          nextActive: false,
+        }),
+      variant: "ghost",
+    },
+    {
+      icon: RefreshCcw,
+      label: "Restore",
+      disabled: (exercise) => exercise.isActive,
+      onClick: (exercise) =>
+        setConfirmationState({
+          exercise,
+          mode: "archive",
+          nextActive: true,
+        }),
+      variant: "ghost",
+    },
+  ];
+
+  const muscleTableColumns: FitTableColumn<MuscleDefinitionRecord>[] = [
+    {
+      key: "name",
+      heading: "Muscle",
+      render: (definition, c) => (
+        <div style={{ display: "grid", gap: 3, minWidth: 180 }}>
+          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
+            {definition.name}
+          </FitText>
+          <FitText style={{ fontSize: 12, color: c.textSecondary }}>
+            {definition.key}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "region",
+      heading: "Region",
+      render: (definition, c) => (
+        <FitText style={{ fontSize: 13, fontWeight: 800, color: c.textPrimary }}>
+          {toTitleCase(definition.bodyRegion)}
+        </FitText>
+      ),
+    },
+    {
+      key: "aliases",
+      heading: "Aliases",
+      render: (definition, c) => (
+        <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+          {definition.aliases.length ? definition.aliases.join(", ") : "None"}
+        </FitText>
+      ),
+    },
+    {
+      key: "sort",
+      heading: "Sort",
+      render: (definition, c) => (
+        <FitText style={{ fontSize: 13, color: c.textSecondary }}>
+          {definition.sortOrder}
+        </FitText>
+      ),
+    },
+  ];
+
+  const muscleTableActions: FitTableAction<MuscleDefinitionRecord>[] = [
+    {
+      icon: Pencil,
+      label: "Edit",
+      onClick: resetMuscleDraft,
+      variant: "ghost",
+    },
+    {
+      icon: Archive,
+      label: "Archive",
+      disabled: (definition) => !definition.isActive,
+      onClick: (definition) => void handleArchiveMuscleDefinition(definition),
+      variant: "ghost",
+    },
+    {
+      icon: RefreshCcw,
+      label: "Restore",
+      disabled: (definition) => definition.isActive,
+      onClick: (definition) =>
+        void updateMuscleDefinitionMutation
+          .mutateAsync({
+            muscleDefinitionId: definition.id,
+            payload: {
+              isActive: true,
+            } satisfies UpdateMuscleDefinitionInput,
+          })
+          .then(() => showMessage(`${definition.name} was restored.`))
+          .catch((error) =>
+            showMessage(getErrorMessage(error, "Unable to restore muscle.")),
+          ),
+      variant: "ghost",
+    },
+  ];
+
+  const surfaceTopRowStyle: CSSProperties = {
+    display: "grid",
+    alignItems: "center",
+    gap: 10,
+    gridTemplateColumns: isCompact
+      ? "minmax(0, 1fr)"
+      : "minmax(260px, auto) minmax(0, 1fr)",
+    minHeight: 50,
+    padding: 8,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  };
+  const surfaceTitleNavStyle: CSSProperties = {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    minWidth: 0,
+  };
+  const surfaceControlsStyle: CSSProperties = {
+    alignItems: "center",
+    display: "grid",
+    gap: 8,
+    gridTemplateColumns: isCompact
+      ? "minmax(0, 1fr)"
+      : "minmax(220px, 1fr) repeat(auto-fit, minmax(140px, auto))",
+    justifyContent: "end",
+    minWidth: 0,
+  };
+  const renderModeNavigation = () => (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {SURFACE_MODE_OPTIONS.map((option) => {
+        const isActive = mode === option.value;
+
+        return (
+          <FitButton
+            key={option.value}
+            active={isActive}
+            label={option.label}
+            variant={isActive ? "primary" : "ghost"}
+            onClick={() => handleModeChange(option.value)}
+            style={{ minWidth: 72, minHeight: 34, borderRadius: 8 }}
+          />
+        );
+      })}
+    </div>
+  );
+
   const renderReviewSurface = () => (
     <FitSection
-      heading="Exercise Review Queue"
-      action={<Dumbbell size={16} color={colors.brand} />}
-      bare
+      heading=""
+      hideHeading
+      noPadding
       style={{
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surfaceRaised,
-        borderRadius: 22,
-        padding: 18,
+        borderRadius: 8,
+        marginBottom: 0,
+        padding: 10,
+        height: isCompact ? "auto" : "100%",
+        overflow: isCompact ? "visible" : "hidden",
       }}
     >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
-            Review submitted creator exercises, inspect details in a modal, and
-            publish approved movements into the global library.
-          </FitText>
-          <FitPill
-            mode="status"
-            label={`${reviewMeta?.total ?? 0} ${reviewStatus ? toTitleCase(reviewStatus) : "Total"}`}
-            color={colors.brand}
-          />
+      <div
+        style={{
+          display: "grid",
+          gap: 10,
+          gridTemplateRows: isCompact ? undefined : "auto minmax(0, 1fr) auto",
+          height: isCompact ? "auto" : "100%",
+          minHeight: 0,
+        }}
+      >
+        <div style={surfaceTopRowStyle}>
+          <div style={surfaceTitleNavStyle}>
+            <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
+              Review Queue
+            </FitText>
+            {renderModeNavigation()}
+          </div>
+          <div style={surfaceControlsStyle}>
+            <FitSearch
+              ariaLabel="Search exercise review queue"
+              compact
+              name="exercise-review-search"
+              placeholder="Search exercise, creator, source, or match"
+              value={reviewSearch}
+              onChangeText={setReviewSearch}
+            />
+            <FitDropdown
+              fullWidth
+              ariaLabel="Exercise review status filter"
+              value={reviewStatus}
+              options={[...REVIEW_STATUS_OPTIONS]}
+              onChange={(value) =>
+                setReviewStatus(
+                  value as ExerciseReviewSubmissionStatus | "",
+                )
+              }
+            />
+            <FitDropdown
+              fullWidth
+              ariaLabel="Exercise review category filter"
+              value={reviewCategory}
+              options={[
+                { label: "All categories", value: "" },
+                ...EXERCISE_CATEGORY_OPTIONS.map((option) => ({
+                  label: option.label,
+                  value: option.value,
+                })),
+              ]}
+              onChange={(value) =>
+                setReviewCategory(value as FitnessExerciseCategory | "")
+              }
+            />
+            <FitTextInput
+              name="exercise-review-muscle-filter"
+              value={reviewMuscleFilter}
+              onChange={(event) => setReviewMuscleFilter(event.target.value)}
+              placeholder="Muscle group"
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: 8,
+                backgroundColor: colors.fieldBg,
+                padding: "0 14px",
+                minHeight: 38,
+              }}
+            />
+            <FitPill
+              mode="status"
+              label={`${reviewMeta?.total ?? 0} ${reviewStatus ? toTitleCase(reviewStatus) : "Total"}`}
+              color={colors.brand}
+            />
+          </div>
         </div>
 
         <div
           style={{
-            display: "grid",
-            gap: 10,
-            gridTemplateColumns: isCompact
-              ? "minmax(0, 1fr)"
-              : "minmax(240px, 1.4fr) repeat(3, minmax(150px, 0.7fr))",
+            minHeight: 0,
+            overflow: "hidden",
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            backgroundColor: colors.surface,
           }}
         >
-          <FitSearch
-            ariaLabel="Search exercise review queue"
+          <FitTable
+            columns={reviewTableColumns}
+            rows={visibleReviewCandidates}
+            getRowKey={(candidate) => candidate.id}
+            getRowClassName={(candidate) =>
+              candidate.id === selectedCandidateId ? "is-selected" : undefined
+            }
+            isLoading={reviewQueueQuery.isLoading}
+            loadingMessage="Loading exercise review queue..."
+            emptyMessage={
+              reviewSearch.trim() || reviewCategory || reviewMuscleFilter.trim()
+                ? "No exercise submissions match the current filters."
+                : "The review queue is clear."
+            }
+            actions={reviewTableActions}
             compact
-            name="exercise-review-search"
-            placeholder="Search exercise, creator, source, or match..."
-            value={reviewSearch}
-            onChangeText={setReviewSearch}
-          />
-          <FitSelect
-            fullWidth
-            aria-label="Exercise review status filter"
-            id="exercise-review-status-filter"
-            name="exercise-review-status-filter"
-            value={reviewStatus}
-            options={[...REVIEW_STATUS_OPTIONS]}
-            onChange={(event) =>
-              setReviewStatus(
-                event.target.value as ExerciseReviewSubmissionStatus | "",
-              )
-            }
-          />
-          <FitSelect
-            fullWidth
-            aria-label="Exercise review category filter"
-            id="exercise-review-category-filter"
-            name="exercise-review-category-filter"
-            value={reviewCategory}
-            options={[
-              { label: "All categories", value: "" },
-              ...EXERCISE_CATEGORY_OPTIONS.map((option) => ({
-                label: option.label,
-                value: option.value,
-              })),
-            ]}
-            onChange={(event) =>
-              setReviewCategory(event.target.value as FitnessExerciseCategory | "")
-            }
-          />
-          <FitTextInput
-            name="exercise-review-muscle-filter"
-            value={reviewMuscleFilter}
-            onChange={(event) => setReviewMuscleFilter(event.target.value)}
-            placeholder="Muscle group"
-            style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: 14,
-              backgroundColor: colors.fieldBg,
-              padding: "0 14px",
-              minHeight: 42,
-            }}
+            onRowClick={openReviewModal}
+            overflowX={false}
+            style={{ borderRadius: 0, border: 0 }}
           />
         </div>
-
-        <FitTable
-          columns={reviewTableColumns}
-          rows={visibleReviewCandidates}
-          getRowKey={(candidate) => candidate.id}
-          getRowClassName={(candidate) =>
-            candidate.id === selectedCandidateId ? "is-selected" : undefined
-          }
-          isLoading={reviewQueueQuery.isLoading}
-          loadingMessage="Loading exercise review queue..."
-          emptyMessage={
-            reviewSearch.trim() || reviewCategory || reviewMuscleFilter.trim()
-              ? "No exercise submissions match the current filters."
-              : "The review queue is clear."
-          }
-          actions={reviewTableActions}
-          onRowClick={openReviewModal}
-          maxHeight={null}
-        />
 
         {reviewQueueQuery.isError ? (
           <div
             style={{
               border: `1px solid ${colors.danger}45`,
-              borderRadius: 16,
+              borderRadius: 8,
               backgroundColor: `${colors.danger}10`,
               padding: 12,
             }}
@@ -1679,8 +1861,12 @@ export function ExerciseLabDashboard() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 12,
+              gap: 10,
               flexWrap: "wrap",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
+              backgroundColor: colors.surface,
+              padding: "8px 10px",
             }}
           >
             <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
@@ -1707,94 +1893,38 @@ export function ExerciseLabDashboard() {
       bare
       noPadding
       className={themeTransition}
-      style={fadeIn}
+      style={{
+        ...fadeIn,
+        height: isCompact ? "auto" : "100%",
+        marginBottom: 0,
+        minHeight: 0,
+        overflow: isCompact ? "visible" : "hidden",
+      }}
     >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: "14px 16px",
-            borderRadius: 18,
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.surfaceRaised,
-          }}
-        >
+      <div
+        style={{
+          display: "grid",
+          gap: 10,
+          height: isCompact ? "auto" : "100%",
+          minHeight: 0,
+          overflow: isCompact ? "visible" : "hidden",
+        }}
+      >
+        {feedbackMessage ? (
           <div
+            role="status"
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
+              border: `1px solid ${colors.brand}45`,
+              borderRadius: 8,
+              backgroundColor: `${colors.brand}12`,
+              padding: "8px 10px",
             }}
           >
-            <div style={{ display: "grid", gap: 4, maxWidth: 820 }}>
-              <FitText
-                style={{
-                  fontSize: 11.5,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: colors.brand,
-                }}
-                excludeGlobalScale
-              >
-                Exercise library controls
-              </FitText>
-            </div>
-            {message ? (
-              <FitText style={{ fontSize: 13, color: colors.success }}>
-                {message}
-              </FitText>
-            ) : null}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 18,
-              flexWrap: "wrap",
-            }}
-          >
-            <FitText
-              style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: colors.textSecondary,
-                  maxWidth: 700,
-                  lineHeight: 1.45,
-                }}
-              >
-              {topActionLabel}
+            <FitText style={{ color: colors.textPrimary, fontSize: 12.5, fontWeight: 800 }}>
+              {feedbackMessage}
             </FitText>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <FitButton
-                active={mode === "review"}
-                label="Exercise review"
-                variant={mode === "review" ? "primary" : "ghost"}
-                onClick={() => handleModeChange("review")}
-                style={{ minWidth: 126, minHeight: 42 }}
-              />
-              <FitButton
-                active={mode === "library"}
-                label="Global library"
-                variant={mode === "library" ? "primary" : "ghost"}
-                onClick={() => handleModeChange("library")}
-                style={{ minWidth: 126, minHeight: 42 }}
-              />
-              <FitButton
-                active={mode === "muscles"}
-                label="Muscle Library"
-                variant={mode === "muscles" ? "primary" : "ghost"}
-                onClick={() => handleModeChange("muscles")}
-                style={{ minWidth: 126, minHeight: 42 }}
-              />
-            </div>
           </div>
-        </div>
-
+        ) : null}
         {mode === "review" ? (
           renderReviewSurface()
         ) : mode === "milestones" ? (
@@ -1815,11 +1945,11 @@ export function ExerciseLabDashboard() {
                 gridTemplateRows: "auto auto auto minmax(0, 1fr)",
                 minHeight: 0,
                 maxHeight: reviewViewportHeight,
-                padding: 14,
-                borderRadius: 22,
+                padding: 12,
+                borderRadius: 8,
                 border: `1px solid ${colors.border}`,
                 background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-                boxShadow: "0 18px 34px rgba(0,0,0,0.18)",
+                boxShadow: "0 12px 24px rgba(0,0,0,0.14)",
               }}
             >
               <div style={{ display: "grid", gap: 4 }}>
@@ -1905,8 +2035,8 @@ export function ExerciseLabDashboard() {
                         style={{
                           display: "grid",
                           gap: 8,
-                          padding: 14,
-                          borderRadius: 18,
+                          padding: 12,
+                          borderRadius: 8,
                           border: `1px solid ${
                             isActive ? `${colors.brand}AA` : colors.border
                           }`,
@@ -1999,7 +2129,7 @@ export function ExerciseLabDashboard() {
                   <div
                     style={{
                       padding: 18,
-                      borderRadius: 20,
+                      borderRadius: 8,
                       border: `1px dashed ${colors.border}`,
                       backgroundColor: colors.surface,
                     }}
@@ -2561,68 +2691,84 @@ export function ExerciseLabDashboard() {
           <section
             style={{
               display: "grid",
-              gap: 18,
-              padding: 22,
-              borderRadius: 28,
+              gap: 14,
+              padding: 14,
+              borderRadius: 8,
               border: `1px solid ${colors.border}`,
-              background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-              boxShadow: "0 18px 34px rgba(0,0,0,0.18)",
+              backgroundColor: colors.surfaceRaised,
+              gridTemplateRows: isCompact ? undefined : "auto minmax(0, 1fr)",
+              height: isCompact ? "auto" : "100%",
+              minHeight: 0,
+              overflow: isCompact ? "visible" : "hidden",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 16,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <FitText style={{ fontSize: 28, fontWeight: 800 }}>
+            <div style={surfaceTopRowStyle}>
+              <div style={surfaceTitleNavStyle}>
+                <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
                   Muscle Library
                 </FitText>
-                <FitText
-                  style={{ fontSize: 13.5, color: colors.textSecondary }}
-                >
-                  Canonical muscles used by Muscle Effort XP, rankings, and
-                  exercise matching. Add missing muscles here, not inside the
-                  exercise modal.
-                </FitText>
+                {renderModeNavigation()}
               </div>
-              <FitButton
-                icon={RefreshCcw}
-                label="Refresh"
-                variant="ghost"
-                onClick={() => void muscleDefinitionsQuery.refetch()}
-              />
+              <div style={surfaceControlsStyle}>
+                <FitSearch
+                  ariaLabel="Search muscle library"
+                  name="muscle-library-search"
+                  placeholder="Search muscles, aliases, or body region..."
+                  value={muscleSearch}
+                  onChangeText={setMuscleSearch}
+                />
+                <FitButton
+                  icon={RefreshCcw}
+                  label="Refresh"
+                  variant="ghost"
+                  onClick={() => void muscleDefinitionsQuery.refetch()}
+                  style={{ minHeight: 34 }}
+                />
+                <FitPill
+                  mode="status"
+                  label={`${muscleDefinitions.length} definitions`}
+                  color={colors.brand}
+                />
+              </div>
             </div>
 
             <div
               style={{
                 display: "grid",
-                gap: 16,
+                gap: 12,
                 gridTemplateColumns: isCompact
                   ? "minmax(0, 1fr)"
-                  : "minmax(300px, 390px) minmax(0, 1fr)",
+                  : "minmax(0, 1fr) minmax(320px, 360px)",
+                height: isCompact ? "auto" : "100%",
+                minHeight: 0,
+                overflow: isCompact ? "visible" : "hidden",
               }}
             >
               <aside
                 style={{
+                  gridColumn: isCompact ? undefined : "2",
+                  gridRow: isCompact ? undefined : "1",
                   display: "grid",
                   gap: 12,
-                  alignSelf: "start",
-                  padding: 18,
-                  borderRadius: 22,
+                  alignContent: "start",
+                  gridTemplateColumns: "minmax(0, 1fr)",
+                  padding: 12,
+                  borderRadius: 8,
                   border: `1px solid ${colors.border}`,
                   backgroundColor: colors.surface,
+                  minHeight: 0,
+                  overflow: "hidden",
                 }}
               >
-                <FitText style={{ fontSize: 18, fontWeight: 800 }}>
-                  {editingMuscleId ? "Edit muscle" : "Add muscle"}
+                <FitText style={{ fontSize: 18, fontWeight: 800, gridColumn: "1 / -1" }}>
+                  {editingMuscleId ? "Muscle Details" : "Muscle Creation"}
                 </FitText>
                 <FitText
-                  style={{ fontSize: 12.5, color: colors.textSecondary }}
+                  style={{
+                    fontSize: 12.5,
+                    color: colors.textSecondary,
+                    gridColumn: "1 / -1",
+                  }}
                 >
                   Keys are normalized identifiers such as `front_delts`; names
                   are what admins see in Exercise Lab.
@@ -2639,7 +2785,7 @@ export function ExerciseLabDashboard() {
                   }
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 14,
+                    borderRadius: 8,
                     padding: "12px 14px",
                     width: "100%",
                   }}
@@ -2657,7 +2803,7 @@ export function ExerciseLabDashboard() {
                   }
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 14,
+                    borderRadius: 8,
                     opacity: editingMuscleId ? 0.55 : 1,
                     padding: "12px 14px",
                     width: "100%",
@@ -2675,7 +2821,7 @@ export function ExerciseLabDashboard() {
                   }
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 14,
+                    borderRadius: 8,
                     padding: "12px 14px",
                     width: "100%",
                   }}
@@ -2692,7 +2838,7 @@ export function ExerciseLabDashboard() {
                   }
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 14,
+                    borderRadius: 8,
                     padding: "12px 14px",
                     width: "100%",
                   }}
@@ -2710,12 +2856,19 @@ export function ExerciseLabDashboard() {
                   }
                   style={{
                     border: `1px solid ${colors.border}`,
-                    borderRadius: 14,
+                    borderRadius: 8,
                     padding: "12px 14px",
                     width: "100%",
                   }}
                 />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 10,
+                    gridColumn: "1 / -1",
+                  }}
+                >
                   <FitButton
                     label={editingMuscleId ? "Save muscle" : "Create muscle"}
                     loading={
@@ -2732,35 +2885,23 @@ export function ExerciseLabDashboard() {
                 </div>
               </aside>
 
-              <div style={{ display: "grid", gap: 14 }}>
-                <FitSearch
-                  ariaLabel="Search muscle library"
-                  name="muscle-library-search"
-                  placeholder="Search muscles, aliases, or body region..."
-                  value={muscleSearch}
-                  onChangeText={setMuscleSearch}
-                />
-
-                {muscleDefinitionsQuery.isLoading ? (
+              <div
+                style={{
+                  gridColumn: isCompact ? undefined : "1",
+                  gridRow: isCompact ? undefined : "1",
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateRows: isCompact ? undefined : "minmax(0, 1fr) auto",
+                  height: isCompact ? "auto" : "100%",
+                  minHeight: 0,
+                  overflow: isCompact ? "visible" : "hidden",
+                }}
+              >
+                {muscleDefinitionsQuery.isError ? (
                   <div
                     style={{
                       padding: 18,
-                      borderRadius: 22,
-                      border: `1px solid ${colors.border}`,
-                      backgroundColor: colors.surface,
-                    }}
-                  >
-                    <FitText
-                      style={{ fontSize: 14, color: colors.textSecondary }}
-                    >
-                      Loading muscle definitions...
-                    </FitText>
-                  </div>
-                ) : muscleDefinitionsQuery.isError ? (
-                  <div
-                    style={{
-                      padding: 18,
-                      borderRadius: 22,
+                      borderRadius: 8,
                       border: `1px solid ${colors.danger}40`,
                       backgroundColor: `${colors.danger}10`,
                     }}
@@ -2772,167 +2913,55 @@ export function ExerciseLabDashboard() {
                       )}
                     </FitText>
                   </div>
-                ) : muscleDefinitions.length ? (
-                  muscleDefinitions.map((definition) => (
-                    <article
-                      key={definition.id}
-                      style={{
-                        display: "grid",
-                        gap: 10,
-                        padding: 16,
-                        borderRadius: 20,
-                        border: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surface,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 12,
-                          justifyContent: "space-between",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: 4 }}>
-                          <FitText style={{ fontSize: 17, fontWeight: 800 }}>
-                            {definition.name}
-                          </FitText>
-                          <FitText
-                            style={{
-                              fontSize: 12.5,
-                              color: colors.textSecondary,
-                            }}
-                          >
-                            {definition.key} / {toTitleCase(definition.bodyRegion)}
-                          </FitText>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <FitButton
-                            icon={Pencil}
-                            label="Edit"
-                            variant="ghost"
-                            onClick={() => resetMuscleDraft(definition)}
-                          />
-                          {definition.isActive ? (
-                            <FitButton
-                              icon={Archive}
-                              label="Archive"
-                              variant="ghost"
-                              loading={archiveMuscleDefinitionMutation.isPending}
-                              onClick={() =>
-                                void handleArchiveMuscleDefinition(definition)
-                              }
-                            />
-                          ) : (
-                            <FitButton
-                              icon={RefreshCcw}
-                              label="Restore"
-                              variant="ghost"
-                              loading={updateMuscleDefinitionMutation.isPending}
-                              onClick={() =>
-                                void updateMuscleDefinitionMutation
-                                  .mutateAsync({
-                                    muscleDefinitionId: definition.id,
-                                    payload: {
-                                      isActive: true,
-                                    } satisfies UpdateMuscleDefinitionInput,
-                                  })
-                                  .then(() =>
-                                    showMessage(
-                                      `${definition.name} was restored.`,
-                                    ),
-                                  )
-                                  .catch((error) =>
-                                    showMessage(
-                                      getErrorMessage(
-                                        error,
-                                        "Unable to restore muscle.",
-                                      ),
-                                    ),
-                                  )
-                              }
-                            />
-                          )}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            border: `1px solid ${
-                              definition.isActive
-                                ? `${colors.success}44`
-                                : colors.border
-                            }`,
-                            borderRadius: 999,
-                            color: definition.isActive
-                              ? colors.success
-                              : colors.textMuted,
-                            fontSize: 11,
-                            fontWeight: 800,
-                            padding: "5px 9px",
-                          }}
-                        >
-                          {definition.isActive ? "Active" : "Archived"}
-                        </span>
-                        {definition.isSystem ? (
-                          <span
-                            style={{
-                              border: `1px solid ${colors.brand}33`,
-                              borderRadius: 999,
-                              color: colors.brand,
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: "5px 9px",
-                            }}
-                          >
-                            System
-                          </span>
-                        ) : null}
-                        {definition.aliases.map((alias) => (
-                          <span
-                            key={alias}
-                            style={{
-                              border: `1px solid ${colors.border}`,
-                              borderRadius: 999,
-                              color: colors.textMuted,
-                              fontSize: 11,
-                              padding: "5px 9px",
-                            }}
-                          >
-                            {alias}
-                          </span>
-                        ))}
-                      </div>
-                    </article>
-                  ))
                 ) : (
                   <div
                     style={{
-                      padding: 20,
-                      borderRadius: 22,
-                      border: `1px dashed ${colors.border}`,
+                      minHeight: 0,
+                      overflow: "hidden",
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 8,
                       backgroundColor: colors.surface,
                     }}
                   >
-                    <FitText
-                      style={{ fontSize: 14, color: colors.textSecondary }}
-                    >
-                      No muscle definitions match the current search.
-                    </FitText>
+                    <FitTable
+                      columns={muscleTableColumns}
+                      rows={visibleMuscleDefinitions}
+                      getRowKey={(definition) => definition.id}
+                      isLoading={muscleDefinitionsQuery.isLoading}
+                      loadingMessage="Loading muscle definitions..."
+                      emptyMessage="No muscle definitions match the current search."
+                      actions={muscleTableActions}
+                      onRowClick={resetMuscleDraft}
+                      compact
+                      overflowX={false}
+                      style={{ border: 0, borderRadius: 0 }}
+                    />
                   </div>
                 )}
+                <div
+                  style={{
+                    alignItems: "center",
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 8,
+                    backgroundColor: colors.surface,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    padding: "8px 10px",
+                  }}
+                >
+                  <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+                    Showing {muscleDefinitions.length} muscle definitions
+                  </FitText>
+                  <FitPagination
+                    ariaLabel="Muscle library pagination"
+                    currentPage={musclePage}
+                    totalPages={muscleTotalPages}
+                    onPageChange={setMusclePage}
+                    showSinglePage
+                  />
+                </div>
               </div>
             </div>
           </section>
@@ -2940,120 +2969,91 @@ export function ExerciseLabDashboard() {
           <section
             style={{
               display: "grid",
-              gap: 18,
-              padding: 22,
-              borderRadius: 28,
+              gap: 14,
+              padding: 14,
+              borderRadius: 8,
               border: `1px solid ${colors.border}`,
-              background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-              boxShadow: "0 18px 34px rgba(0,0,0,0.18)",
+              backgroundColor: colors.surfaceRaised,
+              gridTemplateRows: isCompact ? undefined : "auto minmax(0, 1fr) auto",
+              height: isCompact ? "auto" : "100%",
+              minHeight: 0,
+              overflow: isCompact ? "visible" : "hidden",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 16,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <FitText style={{ fontSize: 28, fontWeight: 800 }}>
-                  Global library
+            <div style={surfaceTopRowStyle}>
+              <div style={surfaceTitleNavStyle}>
+                <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
+                  Global Library
                 </FitText>
-                <FitText
-                  style={{ fontSize: 13.5, color: colors.textSecondary }}
-                >
-                  Search, edit, archive, and restore canonical FitTrack exercise
-                  records.
-                </FitText>
+                {renderModeNavigation()}
               </div>
-              <FitButton
-                icon={Plus}
-                label="Create global exercise"
-                onClick={handleOpenCreate}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                gridTemplateColumns: isCompact
-                  ? "minmax(0, 1fr)"
-                  : "minmax(260px, 360px) minmax(180px, 220px) auto auto",
-              }}
-            >
-              <FitSearch
-                ariaLabel="Search global exercises"
-                name="exercise-library-search"
-                placeholder="Search exercise name, muscle group, or notes..."
-                value={librarySearch}
-                onChangeText={setLibrarySearch}
-              />
-              <FitSelect
-                fullWidth
-                name="exercise-library-category"
-                value={libraryCategory}
-                onChange={(event) => setLibraryCategory(event.target.value)}
-                options={EXERCISE_CATEGORY_OPTIONS.map((option) => ({
-                  label: option.label,
-                  value: option.value,
-                }))}
-                placeholder="All categories"
-              />
-              <FitPill
-                mode="toggle"
-                active={libraryScope}
-                onChange={setLibraryScope}
-                options={[
-                  { key: "active", label: "Active only" },
-                  { key: "all", label: "Include archived" },
-                ]}
-              />
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 10,
-                  justifyContent: isCompact ? "flex-start" : "flex-end",
-                }}
-              >
-                <FitButton
-                  icon={RefreshCcw}
-                  label="Refresh"
-                  variant="ghost"
-                  onClick={() => void libraryQuery.refetch()}
+              <div style={surfaceControlsStyle}>
+                <FitSearch
+                  ariaLabel="Search global exercises"
+                  name="exercise-library-search"
+                  placeholder="Search exercise name, muscle group, or notes..."
+                  value={librarySearch}
+                  onChangeText={setLibrarySearch}
                 />
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 14,
-              }}
-            >
-              {libraryQuery.isLoading ? (
+                <FitDropdown
+                    fullWidth
+                    value={libraryCategory}
+                    onChange={setLibraryCategory}
+                    options={[
+                      { label: "All categories", value: "" },
+                      ...EXERCISE_CATEGORY_OPTIONS.map((option) => ({
+                        label: option.label,
+                        value: option.value,
+                      })),
+                    ]}
+                />
+                <FitPill
+                  mode="toggle"
+                  active={libraryScope}
+                  onChange={setLibraryScope}
+                  options={[
+                    { key: "active", label: "Active only" },
+                    { key: "all", label: "Include archived" },
+                  ]}
+                />
                 <div
                   style={{
-                    padding: 18,
-                    borderRadius: 22,
-                    border: `1px solid ${colors.border}`,
-                    backgroundColor: colors.surface,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    justifyContent: isCompact ? "flex-start" : "flex-end",
                   }}
                 >
-                  <FitText
-                    style={{ fontSize: 14, color: colors.textSecondary }}
-                  >
-                    Loading global exercise records...
-                  </FitText>
+                  <FitButton
+                    icon={Plus}
+                    label="Create"
+                    onClick={handleOpenCreate}
+                    style={{ minHeight: 34 }}
+                    textStyle={{ whiteSpace: "nowrap" }}
+                  />
+                  <FitButton
+                    icon={RefreshCcw}
+                    label="Refresh"
+                    variant="ghost"
+                    onClick={() => void libraryQuery.refetch()}
+                    style={{ minHeight: 34 }}
+                  />
                 </div>
-              ) : libraryQuery.isError ? (
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                minHeight: 0,
+                overflow: "hidden",
+              }}
+            >
+              {libraryQuery.isError ? (
                 <div
                   style={{
                     padding: 18,
-                    borderRadius: 22,
+                    borderRadius: 8,
                     border: `1px solid ${colors.danger}40`,
                     backgroundColor: `${colors.danger}10`,
                   }}
@@ -3065,167 +3065,33 @@ export function ExerciseLabDashboard() {
                     )}
                   </FitText>
                 </div>
-              ) : libraryItems.length ? (
-                libraryItems.map((exercise) => (
-                  <article
-                    key={exercise.id}
-                    style={{
-                      display: "grid",
-                      gap: 14,
-                      padding: 18,
-                      borderRadius: 24,
-                      border: `1px solid ${colors.border}`,
-                      backgroundColor: colors.surface,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        justifyContent: "space-between",
-                        gap: 16,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <FitText style={{ fontSize: 20, fontWeight: 800 }}>
-                            {exercise.name}
-                          </FitText>
-                          <div
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 999,
-                              border: `1px solid ${colors.brand}35`,
-                              backgroundColor: `${colors.brand}10`,
-                            }}
-                          >
-                            <FitText
-                              style={{
-                                fontSize: 11,
-                                color: colors.textPrimary,
-                              }}
-                            >
-                              {toTitleCase(exercise.category)}
-                            </FitText>
-                          </div>
-                          <div
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 999,
-                              border: `1px solid ${
-                                exercise.isActive
-                                  ? `${colors.success}35`
-                                  : `${colors.border}`
-                              }`,
-                              backgroundColor: exercise.isActive
-                                ? `${colors.success}12`
-                                : colors.surfaceRaised,
-                            }}
-                          >
-                            <FitText
-                              style={{
-                                fontSize: 11,
-                                color: exercise.isActive
-                                  ? colors.success
-                                  : colors.textMuted,
-                              }}
-                            >
-                              {exercise.isActive ? "Active" : "Archived"}
-                            </FitText>
-                          </div>
-                        </div>
-                        <FitText
-                          style={{ fontSize: 13, color: colors.textSecondary }}
-                        >
-                          {toTitleCase(exercise.muscleGroup)} / Updated{" "}
-                          {formatDate(exercise.updatedAt)}
-                        </FitText>
-                        <FitText
-                          style={{
-                            fontSize: 13.5,
-                            color: colors.textSecondary,
-                          }}
-                        >
-                          {exercise.description ?? "No description saved yet."}
-                        </FitText>
-                      </div>
-                      <div
-                        style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
-                      >
-                        <FitButton
-                          icon={Pencil}
-                          label="Edit"
-                          variant="ghost"
-                          onClick={() => handleOpenEdit(exercise)}
-                        />
-                        <FitButton
-                          icon={exercise.isActive ? Archive : RefreshCcw}
-                          label={exercise.isActive ? "Archive" : "Restore"}
-                          variant="ghost"
-                          onClick={() =>
-                            setConfirmationState({
-                              exercise,
-                              mode: "archive",
-                              nextActive: !exercise.isActive,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    {exercise.instructions ? (
-                      <div
-                        style={{
-                          padding: 14,
-                          borderRadius: 18,
-                          backgroundColor: colors.surfaceRaised,
-                          border: `1px solid ${colors.border}`,
-                        }}
-                      >
-                        <FitText
-                          style={{ fontSize: 12, color: colors.textMuted }}
-                        >
-                          Instruction summary
-                        </FitText>
-                        <FitText
-                          style={{
-                            fontSize: 13.5,
-                            color: colors.textSecondary,
-                          }}
-                        >
-                          {exercise.instructions}
-                        </FitText>
-                      </div>
-                    ) : null}
-                  </article>
-                ))
               ) : (
                 <div
                   style={{
-                    padding: 20,
-                    borderRadius: 22,
-                    border: `1px dashed ${colors.border}`,
+                    minHeight: 0,
+                    overflow: "hidden",
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 8,
                     backgroundColor: colors.surface,
                   }}
                 >
-                  <FitText
-                    style={{ fontSize: 14, color: colors.textSecondary }}
-                  >
-                    No global exercises match the current filters yet.
-                  </FitText>
+                  <FitTable
+                    columns={libraryTableColumns}
+                    rows={libraryItems}
+                    getRowKey={(exercise) => exercise.id}
+                    isLoading={libraryQuery.isLoading}
+                    loadingMessage="Loading global exercise records..."
+                    emptyMessage="No global exercises match the current filters yet."
+                    actions={libraryTableActions}
+                    compact
+                    overflowX={false}
+                    style={{ borderRadius: 0, border: 0 }}
+                  />
                 </div>
               )}
             </div>
 
-            {libraryMeta && libraryMeta.total_pages > 1 ? (
+            {libraryMeta ? (
               <div
                 style={{
                   display: "flex",
@@ -3233,6 +3099,10 @@ export function ExerciseLabDashboard() {
                   justifyContent: "space-between",
                   gap: 12,
                   flexWrap: "wrap",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  backgroundColor: colors.surface,
+                  padding: "8px 10px",
                 }}
               >
                 <FitText
@@ -3244,8 +3114,9 @@ export function ExerciseLabDashboard() {
                 <FitPagination
                   ariaLabel="Exercise library pagination"
                   currentPage={libraryMeta.page}
-                  totalPages={libraryMeta.total_pages}
+                  totalPages={Math.max(1, libraryMeta.total_pages)}
                   onPageChange={setLibraryPage}
+                  showSinglePage
                 />
               </div>
             ) : null}
@@ -4446,16 +4317,8 @@ export function ExerciseLabDashboard() {
         .exercise-lab-drawer-option,
         .exercise-lab-action-dock {
           transition:
-            transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
             border-color 160ms ease,
             background-color 160ms ease;
-        }
-
-        .exercise-lab-queue-card:hover,
-        .exercise-lab-drawer-option:hover,
-        .exercise-lab-action-dock:hover {
-          transform: translateY(-1px);
         }
 
         .exercise-lab-queue-card--animated {

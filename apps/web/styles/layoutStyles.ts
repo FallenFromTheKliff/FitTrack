@@ -98,7 +98,7 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flex: 1,
             minHeight: 0,
             overflow: "hidden",
-            padding: "22px 18px 0",
+            padding: "22px 0 0 18px",
             backgroundColor: "transparent",
             display: "flex",
             flexDirection: "column"
@@ -109,7 +109,10 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "block",
             overflowY: "auto",
             overflowX: "hidden",
-            paddingBottom: 18
+            paddingRight: 18,
+            paddingBottom: 18,
+            boxSizing: "border-box",
+            scrollbarGutter: "stable"
         } as CSSProperties,
         mobileSidebarBackdrop: {
             zIndex: 40,
@@ -228,8 +231,9 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
     };
 }
 
-export function headerStyles(colors: ThemeColors) {
+export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
     const onDanger = getReadableTextColor(colors.danger, colors.textPrimary, themes.sunlight.surface);
+    const subtitleColor = activeThemeKey === "night" ? colors.brandLight : colors.textSecondary;
 
     return {
         header: {
@@ -241,7 +245,8 @@ export function headerStyles(colors: ThemeColors) {
             zIndex: 30,
             borderBottom: "none",
             backgroundColor: "transparent",
-            marginBottom: 16
+            marginBottom: 16,
+            paddingRight: 18
         } as CSSProperties,
         leftSection: {
             flex: "1 1 auto",
@@ -268,7 +273,12 @@ export function headerStyles(colors: ThemeColors) {
         analyticsHeaderFilterWrap: {
             display: "inline-flex",
             alignItems: "center",
+            gap: 8,
             minWidth: 0,
+            flexShrink: 0
+        } as CSSProperties,
+        analyticsHeaderFilterIcon: {
+            color: colors.textSecondary,
             flexShrink: 0
         } as CSSProperties,
         analyticsHeaderFilter: {
@@ -297,7 +307,7 @@ export function headerStyles(colors: ThemeColors) {
         } as CSSProperties,
         messageSubtitle: {
             fontSize: 15,
-            color: colors.brandLight,
+            color: subtitleColor,
             marginTop: 8,
             marginBottom: 0,
             lineHeight: 1.35,

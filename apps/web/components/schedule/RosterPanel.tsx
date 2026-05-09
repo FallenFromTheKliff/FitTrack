@@ -218,8 +218,8 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, canDrag, canSele
         touchAction: canDrag ? "none" : "auto",
         transformOrigin: "center",
         transition: canAnimate
-          ? "border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, filter 0.18s ease"
-          : "border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, filter 0.18s ease"
+          ? "border-color 0.2s ease, background-color 0.2s ease"
+          : "border-color 0.2s ease, background-color 0.2s ease"
       }}
       onClick={onCardClick}
       role={isInteractive ? "button" : undefined}
@@ -231,17 +231,6 @@ function DraggableStaffCard({ staff, bookingCount, borderColor, canDrag, canSele
           onCardClick();
         }
       } : undefined}
-      onMouseEnter={(event) => {
-        if (!canAnimate || isDragging) return;
-        event.currentTarget.style.boxShadow = isSelected
-          ? `0 0 0 1px ${colors.brand}1f inset, 0 8px 18px rgba(0,0,0,0.16)`
-          : "0 8px 18px rgba(0,0,0,0.16)";
-        event.currentTarget.style.filter = "brightness(1.03)";
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.boxShadow = isSelected ? `0 0 0 1px ${colors.brand}1f inset` : "none";
-        event.currentTarget.style.filter = "none";
-      }}
     >
       <div
         style={{

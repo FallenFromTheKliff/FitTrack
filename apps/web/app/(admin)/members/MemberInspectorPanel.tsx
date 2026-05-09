@@ -2,78 +2,69 @@
 
 import type { ReactNode } from "react";
 
-import { FitText } from "@/components/fit";
 import { useTheme } from "@/contexts/ThemeContext";
 
 type Props = {
+  ariaLabel: string;
   children?: ReactNode;
-  description?: string;
   footer?: ReactNode;
-  eyebrow: string;
-  title: string;
 };
 
 export default function MemberInspectorPanel({
+  ariaLabel,
   children,
-  description,
   footer,
-  eyebrow,
-  title,
 }: Props) {
   const { colors } = useTheme();
 
   return (
     <aside
       className="member-inspector-panel"
-      aria-label={title}
+      data-member-inspector-panel
+      aria-label={ariaLabel}
       style={{
         display: "grid",
-        gap: 16,
-        padding: 20,
-        borderRadius: 28,
+        gridTemplateRows: "minmax(0, 1fr) auto",
+        gap: 0,
+        height: "100%",
+        minHeight: 0,
+        padding: 0,
+        borderRadius: 8,
         border: `1px solid ${colors.border}`,
-        background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-        boxShadow: "0 18px 34px rgba(0,0,0,0.14)",
+        backgroundColor: colors.surface,
+        boxShadow: "none",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "grid", gap: 6 }}>
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: colors.textMuted,
-            letterSpacing: "0.06em",
-          }}
-        >
-          {eyebrow}
-        </FitText>
-        <FitText style={{ fontSize: 24, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.08 }}>
-          {title}
-        </FitText>
-        {description ? (
-          <FitText style={{ fontSize: 12.5, lineHeight: 1.55, color: colors.textSecondary }}>
-            {description}
-          </FitText>
-        ) : null}
-      </div>
-
       {children ? <div className="member-inspector-panel__body">{children}</div> : null}
       {footer ? <div className="member-inspector-panel__footer">{footer}</div> : null}
 
       <style>{`
         .member-inspector-panel__body {
           display: grid;
+          align-content: start;
           gap: 12px;
+          min-height: 0;
+          overflow: hidden;
+          padding: 18px;
+          background: ${colors.surface};
         }
 
         .member-inspector-panel__footer {
           display: grid;
           gap: 10px;
+          padding: 16px 18px 18px;
+          border-top: 1px solid ${colors.border};
+          background-color: ${colors.surfaceRaised};
         }
 
-        @media (max-width: 980px) {
-          .member-inspector-panel {
-            padding: 18px !important;
+        @media (max-width: 1259px) {
+          .member-inspector-panel__body {
+            padding: 16px !important;
+          }
+
+          .member-inspector-panel__footer {
+            padding: 14px 16px 16px !important;
           }
         }
       `}</style>

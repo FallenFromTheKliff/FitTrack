@@ -229,9 +229,9 @@ export const adminCreateUserSchema = z.object({
   lastName: buildAuthPersonNameSchema("Last name"),
   email: buildAuthAllowedEmailSchema("Email"),
   password: buildAuthStrongPasswordSchema("Password"),
-  role: z.enum(["admin", "staff", "member"], {
+  role: z.enum(["admin", "staff", "member", "coach"], {
     required_error: "Role is required",
-    invalid_type_error: "Role must be one of: admin, staff, member",
+    invalid_type_error: "Role must be one of: admin, staff, member, coach",
   }),
   phone_no: buildOptionalAuthPhilippineMobileSchema("Phone number"),
 });

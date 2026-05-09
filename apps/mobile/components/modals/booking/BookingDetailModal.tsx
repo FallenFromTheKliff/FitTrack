@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays } from "lucide-react-native";
 
@@ -216,11 +216,11 @@ export default function BookingDetailModal({
       visible={isVisible}
       transparent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={() => undefined}
       statusBarTranslucent
     >
       <Animated.View style={[s.backdrop, backdropStyle]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={StyleSheet.absoluteFill} />
         <Animated.View style={[s.card, cardStyle]}>
           <Animated.View style={[s.header, headerBorderStyle]}>
             <Animated.View style={[s.headerIcon, headerIconStyle]}>

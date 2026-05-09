@@ -8,7 +8,6 @@ import { buildRenderableAssetUrl } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { dashboardStyles } from "@/styles/pageStyles";
 import {
   EQUIPMENT_STATUS_COLOR,
   INVENTORY_EQUIPMENT_ARCHIVE_FIELDS,
@@ -26,7 +25,6 @@ import { FitSelect } from "@/components/fit/FitCard";
 import { FitText, FitTextArea, FitTextInput } from "@/components/fit/FitText";
 import { ConfirmModal, DetailsModal } from "@/components/modals";
 import FitModal from "@/components/modals/FitModal";
-import { InventoryKpiSidebar } from "@/components/inventory/InventoryKpiSidebar";
 import { InventoryMainPanel } from "@/components/inventory/InventoryMainPanel";
 import {
   useInventoryDashboard,
@@ -658,10 +656,13 @@ function RetailSaleModal({
 
 export function InventoryDashboard() {
   const { colors } = useTheme();
-  const styles = dashboardStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const inventory = useInventoryDashboard();
+  const [detailEditorOpen, setDetailEditorOpen] = useState<
+    "retail" | "equipment" | null
+  >(null);
+  const [isCompactDetail, setIsCompactDetail] = useState(false);
   const [pendingArchiveEquipmentForm, setPendingArchiveEquipmentForm] =
     useState<Record<string, string> | null>(null);
 
@@ -729,6 +730,25 @@ export function InventoryDashboard() {
       }
     : undefined;
 
+  useEffect(() => {
+    const evaluateDetailMode = () => {
+      setIsCompactDetail(window.innerWidth < 1040);
+    };
+
+    evaluateDetailMode();
+    window.addEventListener("resize", evaluateDetailMode);
+    return () => window.removeEventListener("resize", evaluateDetailMode);
+  }, []);
+
+  useEffect(() => {
+    if (!inventory.selectedRetail && detailEditorOpen === "retail") {
+      setDetailEditorOpen(null);
+    }
+    if (!inventory.selectedEquipment && detailEditorOpen === "equipment") {
+      setDetailEditorOpen(null);
+    }
+  }, [detailEditorOpen, inventory.selectedEquipment, inventory.selectedRetail]);
+
   return (
     <FitSection
       as="section"
@@ -747,18 +767,12 @@ export function InventoryDashboard() {
         </div>
       ) : null}
 
-      <div
-        className="inventory-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(220px, 260px) 1fr",
-          gap: 20,
-          alignItems: "start"
-        }}
-      >
-        <InventoryKpiSidebar colors={colors} inventory={inventory} styles={styles} />
-        <InventoryMainPanel colors={colors} inventory={inventory} />
-      </div>
+      <InventoryMainPanel
+        colors={colors}
+        inventory={inventory}
+        isCompactDetail={isCompactDetail}
+        onOpenDetailEditor={setDetailEditorOpen}
+      />
 
       <DetailsModal
         isOpen={inventory.createRetailOpen}
@@ -809,7 +823,10 @@ export function InventoryDashboard() {
       </DetailsModal>
 
       <DetailsModal
-        isOpen={inventory.retailDetailOpen}
+        isOpen={
+          inventory.retailDetailOpen &&
+          (isCompactDetail || detailEditorOpen === "retail")
+        }
         title="Retail Item Details"
         subtitle={inventory.selectedRetail?.name ?? "Retail item"}
         fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
@@ -825,8 +842,17 @@ export function InventoryDashboard() {
           inventory.closeRetailDetails();
           inventory.openRetailArchive(inventory.selectedRetail.id);
         }}
-        onSubmit={inventory.handleUpdateRetail}
-        onCancel={inventory.closeRetailDetails}
+        onSubmit={(data) => {
+          void inventory.handleUpdateRetail(data);
+          if (!isCompactDetail) setDetailEditorOpen(null);
+        }}
+        onCancel={() => {
+          if (isCompactDetail) {
+            inventory.closeRetailDetails();
+          } else {
+            setDetailEditorOpen(null);
+          }
+        }}
       >
         {inventory.selectedRetail ? (
           <div
@@ -1035,7 +1061,10 @@ export function InventoryDashboard() {
       </DetailsModal>
 
       <DetailsModal
-        isOpen={inventory.selectedEquipment !== null}
+        isOpen={
+          inventory.selectedEquipment !== null &&
+          (isCompactDetail || detailEditorOpen === "equipment")
+        }
         title="Equipment Details"
         subtitle={inventory.selectedEquipment?.name ?? "Equipment item"}
         fields={INVENTORY_EQUIPMENT_EDIT_FIELDS}
@@ -1051,8 +1080,17 @@ export function InventoryDashboard() {
           inventory.closeEquipmentDetails();
           inventory.openEquipmentArchive(inventory.selectedEquipment.id);
         }}
-        onSubmit={inventory.handleUpdateEquipment}
-        onCancel={inventory.closeEquipmentDetails}
+        onSubmit={(data) => {
+          void inventory.handleUpdateEquipment(data);
+          if (!isCompactDetail) setDetailEditorOpen(null);
+        }}
+        onCancel={() => {
+          if (isCompactDetail) {
+            inventory.closeEquipmentDetails();
+          } else {
+            setDetailEditorOpen(null);
+          }
+        }}
       >
         {inventory.selectedEquipment ? (
           <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
@@ -1256,12 +1294,6 @@ export function InventoryDashboard() {
           setPendingArchiveEquipmentForm(null);
         }}
       />
-
-      <style>{`
-        @media (max-width: 860px) {
-          .inventory-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
     </FitSection>
   );
 }

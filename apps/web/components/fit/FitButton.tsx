@@ -8,7 +8,7 @@ import { cn } from "@/utils/cn";
 import { makeFitButtonVariants } from "@/styles/fitStyles";
 
 export type FitButtonVariant =
-    | "primary" | "ghost" | "danger"
+    | "primary" | "positive" | "ghost" | "danger"
     | "link" | "nav" | "navActive"
     | "sidebarLogout" | "field" | "chip"
     | "iconClear" | "card" | "overlay";

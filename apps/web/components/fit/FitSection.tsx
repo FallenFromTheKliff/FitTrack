@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -35,7 +36,7 @@ export default function FitSection({
   style
 }: Props) {
   const { colors } = useTheme();
-  const s = makeFitSectionStyles(colors);
+  const s = useMemo(() => makeFitSectionStyles(colors), [colors]);
 
   const body = noPadding
     ? <>{children}</>

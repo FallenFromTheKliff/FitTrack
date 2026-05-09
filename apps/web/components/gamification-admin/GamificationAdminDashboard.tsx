@@ -43,14 +43,17 @@ import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import {
   FitButton,
+  FitDropdown,
   FitPagination,
   FitPill,
   FitSearch,
   FitSection,
   FitSelect,
+  FitTable,
   FitText,
   FitTextArea,
 } from "@/components/fit";
+import type { FitTableColumn } from "@/components/fit/FitTable";
 import { ConfirmModal } from "@/components/modals";
 import {
   ACHIEVEMENT_REVIEW_SEED,
@@ -197,7 +200,7 @@ export default function GamificationAdminDashboard() {
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
       includeArchived: seasonIncludeArchived,
-      limit: 8,
+      limit: 6,
       page: seasonStandingPage,
       ...(seasonFilterId ? { seasonId: seasonFilterId } : {}),
       ...(seasonMuscleFilter.trim()
@@ -286,14 +289,30 @@ export default function GamificationAdminDashboard() {
   const panelStyle = {
     border: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
-    borderRadius: 22,
-    padding: 18,
+    borderRadius: 8,
+    padding: 10,
   };
   const subPanelStyle = {
     border: `1px solid ${colors.border}`,
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 8,
+    padding: 8,
+  };
+  const overviewBottomCardStyle = {
+    ...panelStyle,
+    padding: 14,
+    display: "grid",
+    gap: 10,
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    minHeight: 250,
+    overflow: "visible",
+  };
+  const overviewBottomContentStyle = {
+    ...subPanelStyle,
+    display: "grid",
+    gap: 8,
+    minWidth: 0,
+    overflow: "visible",
   };
   const muted = { color: colors.textMuted, fontSize: 13, lineHeight: 1.5 };
 
@@ -372,182 +391,113 @@ export default function GamificationAdminDashboard() {
       bare
       noPadding
       className={themeTransition}
-      style={fadeIn}
+      style={{
+        ...fadeIn,
+        height: "100%",
+        marginBottom: 0,
+        overflowX: "hidden",
+        overflowY: "auto",
+        paddingRight: 4,
+        scrollbarGutter: "stable",
+      }}
     >
-      <div style={{ display: "grid", gap: 22 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 10,
+        }}
+      >
         <div
           style={{
             border: `1px solid ${colors.border}`,
-            borderRadius: 28,
-            padding: "24px clamp(18px, 3vw, 32px)",
-            background: `radial-gradient(circle at top left, ${colors.brand}22, transparent 32%), ${colors.surface}`,
+            borderRadius: 8,
+            padding: 10,
+            backgroundColor: colors.surface,
             display: "grid",
             gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-            gap: 18,
-            alignItems: "stretch",
+              "minmax(0, 1fr) minmax(360px, 0.42fr)",
+            gap: 8,
+            alignItems: "center",
+            minHeight: 0,
           }}
         >
-          <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "grid", gap: 7, minHeight: 0 }}>
             <FitPill
               mode="status"
-              label="Admin Gamification"
+              label="Governance View"
               color={colors.brand}
               style={{ width: "fit-content" }}
             />
             <FitText
               as="h1"
               style={{
-                fontSize: "clamp(30px, 5vw, 56px)",
-                lineHeight: 0.92,
-                letterSpacing: "-0.06em",
+                fontSize: 18,
+                lineHeight: 1.12,
+                letterSpacing: 0,
                 fontWeight: 900,
               }}
             >
-              Governance cockpit for seasons, rankings, milestones, and XP trust.
+              Seasons, rankings, integrity, and XP trust.
             </FitText>
-            <FitText as="p" style={{ ...muted, maxWidth: 760 }}>
-              This operator layer keeps progression fair: spot unhealthy XP
-              patterns, resolve integrity queues, restore ranking participation,
-              and manage milestone review without duplicating Exercise Lab.
-            </FitText>
-          </div>
-          <div
-            style={{
-              ...panelStyle,
-              display: "grid",
-              gap: 14,
-              alignContent: "space-between",
-            }}
-          >
-            <FitText style={{ ...muted, textTransform: "uppercase" }}>
-              Latest sync
-            </FitText>
-            <FitText style={{ fontSize: 26, fontWeight: 800 }}>
-              {overview ? formatDateTime(overview.generatedAt) : "Loading"}
-            </FitText>
-            <FitButton
-              variant="ghost"
-              icon={RefreshCcw}
-              label="Refresh governance"
-              loading={overviewQuery.isFetching}
-              onClick={() => overviewQuery.refetch()}
-            />
-          </div>
-        </div>
-
-        {pageError ? (
-          <div
-            style={{
-              ...panelStyle,
-              borderColor: `${colors.danger}55`,
-              backgroundColor: `${colors.danger}10`,
-            }}
-          >
-            <FitText style={{ color: colors.danger, fontWeight: 800 }}>
-              {getErrorMessage(pageError, "Gamification admin action failed.")}
-            </FitText>
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 10,
-          }}
-        >
-          {[
-            { label: "Governance Overview", value: "overview" as const },
-            { label: "Milestone Management", value: "milestones" as const },
-          ].map((tab) => {
-            const isActive = activeTab === tab.value;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setActiveTab(tab.value)}
+            {overview?.activeSeason ? (
+              <div
                 style={{
-                  border: `1px solid ${isActive ? colors.brand : colors.border}`,
-                  backgroundColor: isActive
-                    ? `${colors.brand}16`
-                    : colors.surfaceRaised,
-                  borderRadius: 999,
-                  color: isActive ? colors.brand : colors.textSecondary,
-                  cursor: "pointer",
-                  fontWeight: 800,
-                  padding: "10px 16px",
+                  ...subPanelStyle,
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateColumns:
+                    "minmax(0, 1fr) minmax(210px, 0.36fr) minmax(190px, auto)",
+                  alignItems: "center",
                 }}
               >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {activeTab === "overview" ? (
-          <>
-            <MetricGrid overview={overview} />
-
-            <SeasonPerformanceTable
-              includeArchived={seasonIncludeArchived}
-              muscleFilter={seasonMuscleFilter}
-              onIncludeArchivedChange={setSeasonIncludeArchived}
-              onMuscleFilterChange={setSeasonMuscleFilter}
-              onPageChange={setSeasonStandingPage}
-              onSearchChange={setSeasonStandingSearch}
-              onSeasonChange={setSeasonFilterId}
-              onVisibilityChange={setSeasonVisibilityFilter}
-              onGovernanceChange={setSeasonGovernanceFilter}
-              page={seasonStandingPage}
-              search={seasonStandingSearch}
-              selectedGovernance={seasonGovernanceFilter}
-              selectedSeasonId={seasonFilterId}
-              selectedVisibility={seasonVisibilityFilter}
-              seasons={seasonsQuery.data ?? []}
-              standings={seasonStandingsQuery.data}
-            />
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 18,
-          }}
-        >
-          <FitSection
-            heading="Season Control"
-            action={<Trophy size={16} color={colors.brand} />}
-            style={panelStyle}
-            bare
-          >
-            {overview?.activeSeason ? (
-              <div style={{ display: "grid", gap: 14 }}>
-                <div style={subPanelStyle}>
-                  <FitText style={{ fontSize: 22, fontWeight: 800 }}>
-                    {overview.activeSeason.title}
-                  </FitText>
-                  <FitText style={muted}>
-                    {labelize(overview.activeSeason.status)} season with{" "}
-                    {overview.activeSeason.standingCount} standings,{" "}
-                    {overview.activeSeason.hiddenCount} hidden, and{" "}
-                    {overview.activeSeason.disqualifiedCount} disqualified.
-                  </FitText>
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    gap: 10,
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <div>
+                    <FitText style={{ display: "block", fontSize: 16, fontWeight: 900 }}>
+                      {overview.activeSeason.title}
+                    </FitText>
+                    <FitText style={muted}>
+                      {labelize(overview.activeSeason.status)} /{" "}
+                      {overview.activeSeason.standingCount} standings /{" "}
+                      {overview.activeSeason.hiddenCount} hidden /{" "}
+                      {overview.activeSeason.disqualifiedCount} disqualified
+                    </FitText>
+                  </div>
+                  <FitPill
+                    mode="status"
+                    label={labelize(overview.activeSeason.status)}
+                    color={colors.brand}
+                  />
                 </div>
                 <FitTextArea
                   value={seasonRationale}
                   onChange={(event) => setSeasonRationale(event.target.value)}
-                  rows={3}
+                  rows={1}
                   placeholder="Lifecycle rationale"
+                  style={{ minHeight: 38 }}
                 />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   {activeSeasonActions.map((status) => (
                     <FitButton
                       key={status}
                       variant={status === "archived" ? "ghost" : "primary"}
                       icon={status === "archived" ? Archive : CheckCircle2}
-                      label={`Move to ${labelize(status)}`}
+                      label={
+                        status === "archived"
+                          ? "Archive"
+                          : status === "closed"
+                            ? "Close"
+                            : labelize(status)
+                      }
                       loading={seasonMutation.isPending}
+                      style={{ minHeight: 34, minWidth: 86, paddingInline: 10 }}
+                      textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
                       onClick={() =>
                         setConfirmationState({
                           confirmIcon:
@@ -579,19 +529,136 @@ export default function GamificationAdminDashboard() {
                 </div>
               </div>
             ) : (
-              <EmptyState copy="No active season is currently eligible for lifecycle controls." />
+              <FitText style={muted}>
+                No active season is currently eligible for lifecycle controls.
+              </FitText>
             )}
-          </FitSection>
+          </div>
+          <div
+            style={{
+              ...panelStyle,
+              padding: 6,
+              display: "grid",
+              gap: 10,
+              alignContent: "space-between",
+            }}
+          >
+            <FitText style={{ ...muted, textTransform: "uppercase" }}>
+              Latest sync
+            </FitText>
+            <FitText style={{ fontSize: 18, fontWeight: 800 }}>
+              {overview ? formatDateTime(overview.generatedAt) : "Loading"}
+            </FitText>
+            <FitButton
+              variant="ghost"
+              icon={RefreshCcw}
+              label="REFRESH"
+              loading={overviewQuery.isFetching}
+              onClick={() => overviewQuery.refetch()}
+            />
+          </div>
+        </div>
 
+        {pageError ? (
+          <div
+            style={{
+              ...panelStyle,
+              borderColor: `${colors.danger}55`,
+              backgroundColor: `${colors.danger}10`,
+            }}
+          >
+            <FitText style={{ color: colors.danger, fontWeight: 800 }}>
+              {getErrorMessage(pageError, "Gamification admin action failed.")}
+            </FitText>
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          {[
+            { label: "Governance Overview", value: "overview" as const },
+            { label: "Milestone Management", value: "milestones" as const },
+          ].map((tab) => {
+            const isActive = activeTab === tab.value;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                style={{
+                  border: `1px solid ${isActive ? colors.brand : colors.border}`,
+                  backgroundColor: isActive
+                    ? `${colors.brand}16`
+                    : colors.surfaceRaised,
+                  borderRadius: 999,
+                  color: isActive ? colors.brand : colors.textSecondary,
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  padding: "8px 14px",
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "overview" ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateRows: "auto minmax(430px, auto) minmax(250px, auto)",
+              gap: 14,
+              minHeight: 0,
+              overflow: "visible",
+            }}
+          >
+            <MetricGrid overview={overview} />
+
+            <div style={{ minHeight: 0, overflow: "visible" }}>
+              <SeasonPerformanceTable
+                includeArchived={seasonIncludeArchived}
+                muscleFilter={seasonMuscleFilter}
+                onIncludeArchivedChange={setSeasonIncludeArchived}
+                onMuscleFilterChange={setSeasonMuscleFilter}
+                onPageChange={setSeasonStandingPage}
+                onSearchChange={setSeasonStandingSearch}
+                onSeasonChange={setSeasonFilterId}
+                onVisibilityChange={setSeasonVisibilityFilter}
+                onGovernanceChange={setSeasonGovernanceFilter}
+                page={seasonStandingPage}
+                search={seasonStandingSearch}
+                selectedGovernance={seasonGovernanceFilter}
+                selectedSeasonId={seasonFilterId}
+                selectedVisibility={seasonVisibilityFilter}
+                seasons={seasonsQuery.data ?? []}
+                standings={seasonStandingsQuery.data}
+              />
+            </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 14,
+            alignItems: "stretch",
+            minHeight: 0,
+          }}
+        >
           <FitSection
             heading="Integrity Review"
             action={<ShieldAlert size={16} color={colors.brand} />}
-            style={panelStyle}
+            style={overviewBottomCardStyle}
             bare
           >
-            <RecordList emptyCopy="No open integrity cases. Clean board, bro.">
-              {overview?.integrity.cases.map((integrityCase) => (
-                <div key={integrityCase.caseId} style={subPanelStyle}>
+            <RecordList emptyCopy="No open integrity cases.">
+              {overview?.integrity.cases.slice(0, 1).map((integrityCase) => (
+                <div key={integrityCase.caseId} style={overviewBottomContentStyle}>
                   <div
                     style={{
                       display: "flex",
@@ -600,10 +667,19 @@ export default function GamificationAdminDashboard() {
                     }}
                   >
                     <div>
-                      <FitText style={{ fontWeight: 800 }}>
+                      <FitText style={{ display: "block", fontWeight: 800 }}>
                         {integrityCase.memberName}
                       </FitText>
-                      <FitText style={muted}>
+                      <FitText
+                        style={{
+                          ...muted,
+                          display: "-webkit-box",
+                          marginTop: 4,
+                          overflow: "hidden",
+                          WebkitBoxOrient: "vertical",
+                          WebkitLineClamp: 1,
+                        }}
+                      >
                         {integrityCase.summary ?? "No case summary provided."}
                       </FitText>
                     </div>
@@ -618,6 +694,7 @@ export default function GamificationAdminDashboard() {
                     />
                   </div>
                   <FitTextArea
+                    rows={2}
                     value={integrityNotes[integrityCase.caseId] ?? ""}
                     onChange={(event) =>
                       updateDraft(
@@ -626,16 +703,17 @@ export default function GamificationAdminDashboard() {
                         event.target.value,
                       )
                     }
-                    rows={2}
-                    placeholder="Resolution rationale"
-                    style={{ marginTop: 12 }}
+                    placeholder="Reviewer rationale for this integrity decision"
+                    style={{ marginTop: 10 }}
                   />
-                  <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     <FitButton
                       variant="ghost"
                       icon={ShieldCheck}
                       label="Resolve valid"
                       loading={integrityMutation.isPending}
+                      style={{ minHeight: 32, padding: "6px 10px" }}
+                      textStyle={{ fontSize: 11, fontWeight: 800 }}
                       onClick={() =>
                         resolveIntegrityCase(
                           integrityCase.caseId,
@@ -648,6 +726,8 @@ export default function GamificationAdminDashboard() {
                       icon={EyeOff}
                       label="Resolve invalid"
                       loading={integrityMutation.isPending}
+                      style={{ minHeight: 32, padding: "6px 10px" }}
+                      textStyle={{ fontSize: 11, fontWeight: 800 }}
                       onClick={() =>
                         resolveIntegrityCase(
                           integrityCase.caseId,
@@ -660,49 +740,57 @@ export default function GamificationAdminDashboard() {
               ))}
             </RecordList>
           </FitSection>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 18,
-          }}
-        >
           <FitSection
             heading="Ranking Governance"
             action={<Crown size={16} color={colors.brand} />}
-            style={panelStyle}
+            style={overviewBottomCardStyle}
             bare
           >
             <RecordList emptyCopy="No admin-governed ranking profiles yet.">
-              {overview?.rankings.profiles.map((profile) => (
-                <div key={profile.userId} style={subPanelStyle}>
+              {overview?.rankings.profiles.slice(0, 1).map((profile) => (
+                <div key={profile.userId} style={overviewBottomContentStyle}>
                   <ProfileHeading
                     title={profile.memberName}
-                    subtitle={`${labelize(profile.governanceStatus)} • ${labelize(
+                    subtitle={`${labelize(profile.governanceStatus)} / ${labelize(
                       profile.visibility,
                     )}`}
                   />
-                  <FitSelect
-                    fullWidth
-                    value={
-                      rankingStateDrafts[profile.userId] ??
-                      (profile.governanceStatus === "disqualified"
-                        ? "normal"
-                        : "hidden_by_admin")
-                    }
-                    options={RANKING_GOVERNANCE_OPTIONS}
-                    onChange={(event) =>
-                      setRankingStateDrafts((current) => ({
-                        ...current,
-                        [profile.userId]: event.target
-                          .value as RankingStateDraftMap[string],
-                      }))
-                    }
-                    style={{ marginTop: 12 }}
-                  />
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      marginTop: 10,
+                    }}
+                  >
+                    <FitDropdown
+                      fullWidth
+                      value={
+                        rankingStateDrafts[profile.userId] ??
+                        (profile.governanceStatus === "disqualified"
+                          ? "normal"
+                          : "hidden_by_admin")
+                      }
+                      options={RANKING_GOVERNANCE_OPTIONS}
+                      onChange={(value) =>
+                        setRankingStateDrafts((current) => ({
+                          ...current,
+                          [profile.userId]: value as RankingStateDraftMap[string],
+                        }))
+                      }
+                    />
+                    <FitButton
+                      variant="primary"
+                      icon={ShieldCheck}
+                      label="Apply"
+                      loading={rankingMutation.isPending}
+                      onClick={() => updateRanking(profile)}
+                      style={{ minHeight: 36, padding: "8px 12px" }}
+                      textStyle={{ fontSize: 11, fontWeight: 800 }}
+                    />
+                  </div>
                   <FitTextArea
+                    rows={2}
                     value={rankingNotes[profile.userId] ?? ""}
                     onChange={(event) =>
                       updateDraft(
@@ -711,50 +799,38 @@ export default function GamificationAdminDashboard() {
                         event.target.value,
                       )
                     }
-                    rows={2}
-                    placeholder="Ranking governance rationale"
-                    style={{ marginTop: 10 }}
-                  />
-                  <FitButton
-                    fullWidth
-                    variant="primary"
-                    icon={ShieldCheck}
-                    label="Apply ranking decision"
-                    loading={rankingMutation.isPending}
-                    onClick={() => updateRanking(profile)}
-                    style={{ marginTop: 12 }}
+                    placeholder="Admin note for this ranking governance decision"
+                    style={{ marginTop: 8 }}
                   />
                 </div>
               ))}
             </RecordList>
           </FitSection>
 
-        </div>
-
         <FitSection
           heading="Audit And Corrections"
           action={<Activity size={16} color={colors.brand} />}
-          style={panelStyle}
+          style={overviewBottomCardStyle}
           bare
         >
           <RecordList emptyCopy="No moderation actions have been recorded yet.">
-            {overview?.audit.recentActions.map((action) => (
+            {overview?.audit.recentActions.slice(0, 1).map((action) => (
               <div
                 key={action.id}
                 style={{
-                  ...subPanelStyle,
+                  ...overviewBottomContentStyle,
                   display: "grid",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
-                  gap: 14,
+                  gap: 12,
                   alignItems: "center",
                 }}
               >
                 <div>
-                  <FitText style={{ fontWeight: 800 }}>
+                  <FitText style={{ display: "block", fontWeight: 800 }}>
                     {labelize(action.actionType)}
                   </FitText>
-                  <FitText style={muted}>
-                    {action.targetName} • {formatDateTime(action.createdAt)}
+                  <FitText style={{ ...muted, display: "block", marginTop: 4 }}>
+                    {action.targetName} / {formatDateTime(action.createdAt)}
                   </FitText>
                   {action.rationale ? (
                     <FitText style={{ ...muted, marginTop: 6 }}>
@@ -779,7 +855,8 @@ export default function GamificationAdminDashboard() {
             ))}
           </RecordList>
         </FitSection>
-          </>
+        </div>
+          </div>
         ) : (
           <MilestoneManagementPanel
             notes={milestoneNotes}
@@ -861,7 +938,7 @@ function SeasonPerformanceTable({
   const { colors } = useTheme();
   const rows = standings?.data ?? [];
   const meta = standings?.meta ?? {
-    limit: 8,
+    limit: 6,
     page,
     total: 0,
     total_pages: 1,
@@ -873,25 +950,190 @@ function SeasonPerformanceTable({
       value: season.id,
     })),
   ];
+  const tableColumns: FitTableColumn<AdminGamificationSeasonStandingRecord>[] = [
+    {
+      key: "rank",
+      heading: "Rank",
+      render: (row) => (
+        <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
+          {row.rankPosition ? `#${row.rankPosition}` : "--"}
+        </FitText>
+      ),
+    },
+    {
+      key: "participant",
+      heading: "Participant",
+      render: (row, themeColors) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
+            {row.displayAlias ?? row.memberName}
+          </FitText>
+          <FitText
+            style={{
+              color: themeColors.textMuted,
+              display: "block",
+              fontSize: 11,
+            }}
+          >
+            {row.memberName}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "season",
+      heading: "Season",
+      render: (row, themeColors) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText style={{ display: "block", fontSize: 13, fontWeight: 760 }}>
+            {row.seasonTitle}
+          </FitText>
+          <FitText
+            style={{
+              color: themeColors.textMuted,
+              display: "block",
+              fontSize: 11,
+            }}
+          >
+            {labelize(row.seasonStatus)}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "exp",
+      heading: "EXP",
+      align: "right",
+      render: (row, themeColors) => (
+        <div style={{ display: "grid", gap: 2, justifyItems: "end" }}>
+          <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
+            {row.totalXp.toLocaleString("en-US")} XP
+          </FitText>
+          <FitText
+            style={{
+              color: themeColors.textMuted,
+              display: "block",
+              fontSize: 11,
+            }}
+          >
+            {row.seasonPoints.toLocaleString("en-US")} season pts
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "topMuscle",
+      heading: "Top Muscle",
+      render: (row, themeColors) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
+            {row.topMuscle ?? "No muscle yet"}
+          </FitText>
+          <FitText
+            style={{
+              color: themeColors.textMuted,
+              display: "block",
+              fontSize: 11,
+            }}
+          >
+            {row.topMuscleXp.toLocaleString("en-US")} XP
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "milestones",
+      heading: "Milestones",
+      render: (row, themeColors) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
+            {row.milestoneClaimedCount}/{row.milestoneUnlockedCount}
+          </FitText>
+          <FitText
+            style={{
+              color: themeColors.textMuted,
+              display: "block",
+              fontSize: 11,
+            }}
+          >
+            claimed/unlocked
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "governance",
+      heading: "Governance",
+      render: (row, themeColors) => (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <FitPill
+            mode="status"
+            label={labelize(row.visibility)}
+            color={row.visibility === "private" ? themeColors.warning : themeColors.brand}
+          />
+          <FitPill
+            mode="status"
+            label={labelize(row.governanceStatus)}
+            color={
+              row.isDisqualified
+                ? themeColors.danger
+                : row.isHidden
+                  ? themeColors.warning
+                  : themeColors.success
+            }
+          />
+        </div>
+      ),
+    },
+    {
+      key: "lastEarned",
+      heading: "Last Earned",
+      render: (row, themeColors) => (
+        <FitText style={{ color: themeColors.textSecondary, fontSize: 12 }}>
+          {formatDateTime(row.lastEarnedAt)}
+        </FitText>
+      ),
+    },
+  ];
+  const rangeStart = meta.total ? (meta.page - 1) * meta.limit + 1 : 0;
+  const rangeEnd = Math.min(meta.total, meta.page * meta.limit);
 
   return (
     <FitSection
-      heading="Season Performance"
+      heading="Season Leaderboard"
       action={<Trophy size={16} color={colors.brand} />}
       bare
+      noPadding
       style={{
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surfaceRaised,
-        borderRadius: 22,
-        padding: 18,
+        borderRadius: 8,
+        marginBottom: 0,
+        overflow: "hidden",
+        padding: 12,
+        display: "grid",
+        gridTemplateRows: "auto",
+        minHeight: 430,
       }}
     >
-      <div style={{ display: "grid", gap: 14 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: "auto auto auto",
+          gap: 0,
+          minHeight: 0,
+          overflow: "visible",
+        }}
+      >
         <div
           style={{
             display: "grid",
-            gap: 10,
-            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: 8,
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            padding: 10,
+            borderBottom: `1px solid ${colors.border}`,
+            backgroundColor: colors.surfaceRaised,
+            borderRadius: "8px 8px 0 0",
           }}
         >
           <FitSearch
@@ -906,27 +1148,27 @@ function SeasonPerformanceTable({
             value={muscleFilter}
             onChangeText={onMuscleFilterChange}
           />
-          <FitSelect
+          <FitDropdown
             fullWidth
             value={selectedSeasonId}
             options={seasonOptions}
-            onChange={(event) => onSeasonChange(event.target.value)}
+            onChange={onSeasonChange}
           />
-          <FitSelect
+          <FitDropdown
             fullWidth
             value={selectedVisibility}
             options={SEASON_VISIBILITY_OPTIONS}
-            onChange={(event) =>
-              onVisibilityChange(event.target.value as FitnessRankingVisibility | "")
+            onChange={(value) =>
+              onVisibilityChange(value as FitnessRankingVisibility | "")
             }
           />
-          <FitSelect
+          <FitDropdown
             fullWidth
             value={selectedGovernance}
             options={SEASON_GOVERNANCE_OPTIONS}
-            onChange={(event) =>
+            onChange={(value) =>
               onGovernanceChange(
-                event.target.value as FitnessRankingGovernanceStatus | "",
+                value as FitnessRankingGovernanceStatus | "",
               )
             }
           />
@@ -934,10 +1176,11 @@ function SeasonPerformanceTable({
             style={{
               alignItems: "center",
               border: `1px solid ${colors.border}`,
-              borderRadius: 14,
+              borderRadius: 8,
               color: colors.textSecondary,
               display: "flex",
               gap: 10,
+              minHeight: 38,
               padding: "0 14px",
             }}
           >
@@ -950,136 +1193,56 @@ function SeasonPerformanceTable({
           </label>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table
+        <div
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            overflow: "auto",
+            padding: "10px 0 0",
+          }}
+          data-season-performance-table="true"
+        >
+          <FitTable
+            columns={tableColumns}
+            rows={rows}
+            getRowKey={(row) => `${row.userId}-${row.seasonId}`}
+            emptyMessage="No season standings match the current filters."
+            compact
+            overflowX
             style={{
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              minWidth: 920,
-              width: "100%",
+              border: 0,
+              borderRadius: 0,
             }}
-          >
-            <thead>
-              <tr>
-                {[
-                  "Rank",
-                  "Participant",
-                  "Season",
-                  "EXP",
-                  "Top Muscle",
-                  "Milestones",
-                  "Governance",
-                  "Last Earned",
-                ].map((heading) => (
-                  <th
-                    key={heading}
-                    style={{
-                      borderBottom: `1px solid ${colors.border}`,
-                      color: colors.textMuted,
-                      fontSize: 11,
-                      padding: "10px 12px",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length ? (
-                rows.map((row) => (
-                  <tr key={`${row.userId}-${row.seasonId}`}>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 900 }}>
-                        {row.rankPosition ? `#${row.rankPosition}` : "--"}
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 800 }}>
-                        {row.displayAlias ?? row.memberName}
-                      </FitText>
-                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                        {row.memberName}
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 700 }}>
-                        {row.seasonTitle}
-                      </FitText>
-                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                        {labelize(row.seasonStatus)}
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 800 }}>
-                        {row.totalXp.toLocaleString("en-US")} XP
-                      </FitText>
-                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                        {row.seasonPoints.toLocaleString("en-US")} season pts
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 800 }}>
-                        {row.topMuscle ?? "No muscle yet"}
-                      </FitText>
-                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                        {row.topMuscleXp.toLocaleString("en-US")} XP
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ fontWeight: 800 }}>
-                        {row.milestoneClaimedCount}/
-                        {row.milestoneUnlockedCount}
-                      </FitText>
-                      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                        claimed/unlocked
-                      </FitText>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        <FitPill
-                          mode="status"
-                          label={labelize(row.visibility)}
-                          color={row.visibility === "private" ? colors.warning : colors.brand}
-                        />
-                        <FitPill
-                          mode="status"
-                          label={labelize(row.governanceStatus)}
-                          color={
-                            row.isDisqualified
-                              ? colors.danger
-                              : row.isHidden
-                                ? colors.warning
-                                : colors.success
-                          }
-                        />
-                      </div>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <FitText style={{ color: colors.textSecondary, fontSize: 13 }}>
-                        {formatDateTime(row.lastEarnedAt)}
-                      </FitText>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} style={{ padding: 18 }}>
-                    <EmptyState copy="No season standings match the current filters." />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            tableStyle={{ minWidth: 1080, tableLayout: "fixed" }}
+          />
         </div>
-        <FitPagination
-          currentPage={meta.page}
-          totalPages={Math.max(1, meta.total_pages)}
-          onPageChange={onPageChange}
-          ariaLabel="Season standing pagination"
-        />
+        <style>{`
+          [data-season-performance-table="true"] th,
+          [data-season-performance-table="true"] td {
+            padding: 9px 10px !important;
+          }
+        `}</style>
+        <div
+          style={{
+            alignItems: "center",
+            borderTop: `1px solid ${colors.border}`,
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "10px 2px 0",
+          }}
+        >
+          <FitText style={{ color: colors.textSecondary, fontSize: 12 }}>
+            Showing {rangeStart} to {rangeEnd} of {meta.total} results
+          </FitText>
+          <FitPagination
+            currentPage={meta.page}
+            totalPages={Math.max(1, meta.total_pages)}
+            onPageChange={onPageChange}
+            ariaLabel="Season standing pagination"
+            showSinglePage
+          />
+        </div>
       </div>
     </FitSection>
   );
@@ -1357,8 +1520,8 @@ function MetricGrid({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        gap: 14,
+        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+        gap: 8,
       }}
     >
       {metrics.map((metric) => {
@@ -1369,17 +1532,17 @@ function MetricGrid({
             style={{
               border: `1px solid ${colors.border}`,
               backgroundColor: colors.surface,
-              borderRadius: 20,
-              padding: 18,
+              borderRadius: 8,
+              padding: 8,
               display: "grid",
-              gap: 10,
+              gap: 4,
             }}
           >
-            <Icon size={18} color={colors.brand} />
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+            <Icon size={15} color={colors.brand} />
+            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
               {metric.label}
             </FitText>
-            <FitText style={{ fontSize: 28, fontWeight: 900 }}>
+            <FitText style={{ fontSize: 19, fontWeight: 900 }}>
               {metric.value}
             </FitText>
           </div>
@@ -1406,7 +1569,11 @@ function RecordList({
     return <EmptyState copy={emptyCopy} />;
   }
 
-  return <div style={{ display: "grid", gap: 12 }}>{entries}</div>;
+  return (
+    <div style={{ alignContent: "start", display: "grid", gap: 8, minHeight: 0 }}>
+      {entries}
+    </div>
+  );
 }
 
 function ProfileHeading({
@@ -1419,8 +1586,15 @@ function ProfileHeading({
   const { colors } = useTheme();
   return (
     <div>
-      <FitText style={{ fontWeight: 800 }}>{title}</FitText>
-      <FitText style={{ color: colors.textMuted, fontSize: 13, marginTop: 3 }}>
+      <FitText style={{ display: "block", fontWeight: 800 }}>{title}</FitText>
+      <FitText
+        style={{
+          color: colors.textMuted,
+          display: "block",
+          fontSize: 13,
+          marginTop: 3,
+        }}
+      >
         {subtitle}
       </FitText>
     </div>
@@ -1434,8 +1608,8 @@ function EmptyState({ copy }: { copy: string }) {
       style={{
         border: `1px dashed ${colors.border}`,
         backgroundColor: colors.surface,
-        borderRadius: 18,
-        padding: 18,
+        borderRadius: 8,
+        padding: 14,
       }}
     >
       <FitText style={{ color: colors.textMuted, fontSize: 13 }}>

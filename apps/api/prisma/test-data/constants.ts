@@ -48,6 +48,16 @@ export const TEST_ACCOUNTS: readonly TestAccount[] = [
     phone: '+639110000002',
   },
   {
+    key: 'coach',
+    label: 'Seed Coach',
+    role: UserRole.coach,
+    email: `seed.coach@${TEST_DATA_EMAIL_DOMAIN}`,
+    password: 'SeedCoach!2026',
+    firstName: 'Mia',
+    lastName: 'Coach',
+    phone: '+639110000003',
+  },
+  {
     key: 'member-active',
     label: 'Member Active',
     role: UserRole.member,
@@ -137,6 +147,20 @@ export const MANUAL_TEST_PATHS: readonly ManualTestPath[] = [
     route: '/analytics',
     expected:
       'Switch periods and confirm seeded revenue, attendance, membership, and coach metrics render.',
+  },
+  {
+    area: 'web-member-profile-only',
+    credentialKey: 'member-active',
+    route: '/profile',
+    expected:
+      'Confirm the web shell authenticates the member and shows only Profile plus Sign Out in the sidebar.',
+  },
+  {
+    area: 'web-coach-profile-only',
+    credentialKey: 'coach',
+    route: '/profile',
+    expected:
+      'Confirm the web shell authenticates the coach and shows only Profile plus Sign Out in the sidebar.',
   },
   {
     area: 'mobile-bookings',

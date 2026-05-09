@@ -1,43 +1,61 @@
 "use client";
 
-import { Plus, ReceiptText, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { Bar, BarChart, Tooltip, XAxis, YAxis } from "recharts";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  Archive,
+  Edit3,
+  Package,
+  Plus,
+  ReceiptText,
+  RefreshCw,
+  SlidersHorizontal,
+  Wrench,
+} from "lucide-react";
 
 import type { IThemeContext } from "@fittrack/types";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 import {
   EQUIPMENT_STATUS_COLOR,
   EQUIPMENT_STATUS_FILTER_OPTIONS,
-  INVENTORY_ANALYTICS_PERIOD_OPTIONS,
   INVENTORY_CATEGORY_FILTER_OPTIONS,
-  INVENTORY_TOP_RETAIL_FILTER_OPTIONS,
+  INVENTORY_REVENUE_WINDOW_OPTIONS,
   INVENTORY_TABS,
   RETAIL_STOCK_FILTER_OPTIONS,
-  RETAIL_STOCK_STATUS_COLOR
+  RETAIL_STOCK_STATUS_COLOR,
 } from "@/data/inventory/inventory";
 import FitButton from "@/components/fit/FitButton";
-import FitChartContainer from "@/components/fit/FitChartContainer";
-import { FitSelect } from "@/components/fit/FitCard";
-import { FitInlineFilterChips } from "@/components/fit/FitFilter";
+import FitDropdown from "@/components/fit/FitDropdown";
 import FitPill from "@/components/fit/FitPill";
+import FitPagination from "@/components/fit/FitPagination";
 import FitSearch from "@/components/fit/FitSearch";
-import FitSection from "@/components/fit/FitSection";
 import FitTable, {
-  type FitTableAction,
-  type FitTableColumn
+  type FitTableColumn,
 } from "@/components/fit/FitTable";
 import { FitText } from "@/components/fit/FitText";
 import { WEB_API_BASE_URL } from "@/lib/api-client";
 import type {
   InventoryEquipmentTableRow,
   InventoryRetailTableRow,
-  useInventoryDashboard
+  useInventoryDashboard,
 } from "@/hooks/inventory/useInventoryDashboard";
 
 type InventoryMainPanelProps = {
   colors: IThemeContext["colors"];
   inventory: ReturnType<typeof useInventoryDashboard>;
+  isCompactDetail: boolean;
+  onOpenDetailEditor: (kind: "retail" | "equipment") => void;
 };
+
+const INVENTORY_PAGE_SIZE = 6;
+
+function getInventoryImageUrl(assetUrl: string | null | undefined) {
+  const imageUrl = buildRenderableAssetUrl({
+    apiBaseUrl: WEB_API_BASE_URL,
+    assetUrl: assetUrl ?? null,
+  });
+
+  return imageUrl?.startsWith("https://fittrack.dev/") ? null : imageUrl;
+}
 
 function formatLabel(value: string) {
   return value
@@ -47,31 +65,38 @@ function formatLabel(value: string) {
     .join(" ");
 }
 
+function panelStyle(colors: IThemeContext["colors"]): CSSProperties {
+  return {
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+  };
+}
+
 function getRetailColumns(
-  colors: IThemeContext["colors"]
+  colors: IThemeContext["colors"],
 ): FitTableColumn<InventoryRetailTableRow>[] {
   return [
     {
       key: "image",
-      heading: "IMAGE",
-      headingStyle: { width: 88 },
+      heading: "Image",
+      align: "center",
+      headingStyle: { width: 76 },
       render: (product, c) => {
-        const imageUrl = buildRenderableAssetUrl({
-          apiBaseUrl: WEB_API_BASE_URL,
-          assetUrl: product.imageUrl
-        });
+        const imageUrl = getInventoryImageUrl(product.imageUrl);
 
         return (
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
+              width: 42,
+              height: 42,
+              borderRadius: 8,
               overflow: "hidden",
               border: `1px solid ${c.border}`,
               backgroundColor: c.surfaceRaised,
               display: "grid",
-              placeItems: "center"
+              margin: "0 auto",
+              placeItems: "center",
             }}
           >
             {imageUrl ? (
@@ -81,119 +106,141 @@ function getRetailColumns(
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <FitText style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>
-                N/A
-              </FitText>
+              <Package size={17} color={c.textMuted} />
             )}
           </div>
         );
-      }
+      },
     },
     {
       key: "name",
-      heading: "PRODUCT",
+      heading: "Product",
+      headingStyle: { width: 260 },
       render: (product, c) => (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <FitText style={{ fontSize: 14, fontWeight: 700, color: c.textPrimary }}>
+        <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+          <FitText
+            style={{
+              color: c.textPrimary,
+              display: "block",
+              fontSize: 14,
+              fontWeight: 850,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {product.name}
           </FitText>
-          <FitText style={{ fontSize: 12, color: c.textMuted }}>
-            {product.id.slice(0, 8).toUpperCase()}
+          <FitText
+            style={{
+              color: c.textMuted,
+              display: "block",
+              fontSize: 12,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {formatLabel(product.category)} / {product.id.slice(0, 8).toUpperCase()}
           </FitText>
         </div>
-      )
-    },
-    {
-      key: "category",
-      heading: "CATEGORY",
-      render: (product) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
-          {formatLabel(product.category)}
-        </FitText>
-      )
+      ),
     },
     {
       key: "stockQuantity",
-      heading: "STOCK",
+      heading: "Stock",
+      align: "right",
+      headingStyle: { width: 92 },
       render: (product) => (
-        <FitText style={{ fontSize: 14 }}>{product.stockQuantity}</FitText>
-      )
+        <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
+          {product.stockQuantity}
+        </FitText>
+      ),
     },
     {
       key: "reorderThreshold",
-      heading: "REORDER AT",
+      heading: "Reorder",
+      align: "right",
+      headingStyle: { width: 96 },
       render: (product) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           {product.reorderThreshold}
         </FitText>
-      )
+      ),
     },
     {
       key: "status",
-      heading: "STATUS",
+      heading: "Status",
+      align: "center",
+      headingStyle: { width: 150 },
       render: (product) => (
-        <FitPill
-          mode="status"
-          label={product.status}
-          color={RETAIL_STOCK_STATUS_COLOR[product.status]}
-          fontSize={13}
-        />
-      )
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <FitPill
+            mode="status"
+            label={product.status}
+            color={RETAIL_STOCK_STATUS_COLOR[product.status]}
+            fontSize={13}
+          />
+        </div>
+      ),
     },
     {
       key: "price",
-      heading: "PRICE",
+      heading: "Price",
+      align: "right",
+      headingStyle: { width: 138 },
       render: (product) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           PHP{" "}
           {product.price.toLocaleString("en-PH", {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 2,
           })}
         </FitText>
-      )
+      ),
     },
     {
       key: "totalValue",
-      heading: "VALUE",
+      heading: "Value",
+      align: "right",
+      headingStyle: { width: 148 },
       render: (product) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           PHP{" "}
           {product.totalValue.toLocaleString("en-PH", {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 2,
           })}
         </FitText>
-      )
-    }
+      ),
+    },
   ];
 }
 
 function getEquipmentColumns(
-  colors: IThemeContext["colors"]
+  colors: IThemeContext["colors"],
 ): FitTableColumn<InventoryEquipmentTableRow>[] {
   return [
     {
       key: "image",
-      heading: "IMAGE",
-      headingStyle: { width: 88 },
+      heading: "Image",
+      align: "center",
+      headingStyle: { width: 76 },
       render: (equipment, c) => {
-        const imageUrl = buildRenderableAssetUrl({
-          apiBaseUrl: WEB_API_BASE_URL,
-          assetUrl: equipment.imageUrl
-        });
+        const imageUrl = getInventoryImageUrl(equipment.imageUrl);
 
         return (
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
+              width: 42,
+              height: 42,
+              borderRadius: 8,
               overflow: "hidden",
               border: `1px solid ${c.border}`,
               backgroundColor: c.surfaceRaised,
               display: "grid",
-              placeItems: "center"
+              margin: "0 auto",
+              placeItems: "center",
             }}
           >
             {imageUrl ? (
@@ -203,382 +250,720 @@ function getEquipmentColumns(
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <FitText style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>
-                N/A
-              </FitText>
+              <Wrench size={17} color={c.textMuted} />
             )}
           </div>
         );
-      }
+      },
     },
     {
       key: "name",
-      heading: "EQUIPMENT",
+      heading: "Equipment",
+      headingStyle: { width: 280 },
       render: (equipment, c) => (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <FitText style={{ fontSize: 14, fontWeight: 700, color: c.textPrimary }}>
+        <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+          <FitText
+            style={{
+              color: c.textPrimary,
+              display: "block",
+              fontSize: 14,
+              fontWeight: 850,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {equipment.name}
           </FitText>
-          <FitText style={{ fontSize: 12, color: c.textMuted }}>
+          <FitText
+            style={{
+              color: c.textMuted,
+              display: "block",
+              fontSize: 12,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {equipment.id.slice(0, 8).toUpperCase()}
           </FitText>
         </div>
-      )
+      ),
     },
     {
       key: "quantityCurrent",
-      heading: "CURRENT",
+      heading: "Current",
+      align: "right",
+      headingStyle: { width: 96 },
       render: (equipment) => (
-        <FitText style={{ fontSize: 14 }}>{equipment.quantityCurrent}</FitText>
-      )
+        <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
+          {equipment.quantityCurrent}
+        </FitText>
+      ),
     },
     {
       key: "quantityTotal",
-      heading: "TOTAL",
+      heading: "Total",
+      align: "right",
+      headingStyle: { width: 88 },
       render: (equipment) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           {equipment.quantityTotal}
         </FitText>
-      )
+      ),
     },
     {
       key: "missingCount",
-      heading: "MISSING",
+      heading: "Missing",
+      align: "right",
+      headingStyle: { width: 96 },
       render: (equipment) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           {equipment.missingCount}
         </FitText>
-      )
+      ),
     },
     {
       key: "unit",
-      heading: "UNIT",
+      heading: "Unit",
+      align: "center",
+      headingStyle: { width: 100 },
       render: (equipment) => (
-        <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
           {equipment.unit}
         </FitText>
-      )
+      ),
     },
     {
       key: "status",
-      heading: "STATUS",
+      heading: "Status",
+      align: "center",
+      headingStyle: { width: 150 },
       render: (equipment) => (
-        <FitPill
-          mode="status"
-          label={equipment.status}
-          color={EQUIPMENT_STATUS_COLOR[equipment.status]}
-          fontSize={13}
-        />
-      )
-    }
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <FitPill
+            mode="status"
+            label={equipment.status}
+            color={EQUIPMENT_STATUS_COLOR[equipment.status]}
+            fontSize={13}
+          />
+        </div>
+      ),
+    },
   ];
 }
 
 export function InventoryMainPanel({
   colors,
-  inventory
+  inventory,
+  isCompactDetail,
+  onOpenDetailEditor,
 }: InventoryMainPanelProps) {
-  const retailColumns = getRetailColumns(colors);
-  const equipmentColumns = getEquipmentColumns(colors);
-  const actionLabel =
-    inventory.tab === "retail"
-      ? "ADD PRODUCT"
-      : inventory.tab === "equipment"
-        ? "ADD EQUIPMENT"
-        : null;
+  const retailColumns = useMemo(() => getRetailColumns(colors), [colors]);
+  const equipmentColumns = useMemo(() => getEquipmentColumns(colors), [colors]);
+  const visibleInventoryTabs = INVENTORY_TABS.filter(
+    (option) => option.key !== "analytics",
+  );
+  const isRetail = inventory.tab === "retail";
+  const selectedRetail = inventory.selectedRetail;
+  const selectedEquipment = inventory.selectedEquipment;
+  const selectedRows = isRetail
+    ? inventory.filteredRetailProducts
+    : inventory.filteredEquipmentItems;
+  const [retailPage, setRetailPage] = useState(1);
+  const [equipmentPage, setEquipmentPage] = useState(1);
+  const retailTotalPages = Math.max(
+    1,
+    Math.ceil(inventory.filteredRetailProducts.length / INVENTORY_PAGE_SIZE),
+  );
+  const equipmentTotalPages = Math.max(
+    1,
+    Math.ceil(inventory.filteredEquipmentItems.length / INVENTORY_PAGE_SIZE),
+  );
 
-  const retailActions: FitTableAction<InventoryRetailTableRow>[] = [
-    {
-      label: "Details",
-      variant: "ghost",
-      onClick: (product) => inventory.openRetailDetails(product.id)
-    },
-    {
-      label: "Restock",
-      variant: "primary",
-      onClick: (product) => inventory.openRetailRestock(product.id)
-    }
-  ];
+  useEffect(() => {
+    setRetailPage((page) => Math.min(page, retailTotalPages));
+  }, [retailTotalPages]);
 
-  const equipmentActions: FitTableAction<InventoryEquipmentTableRow>[] = [
-    {
-      label: "View Details",
-      variant: "ghost",
-      onClick: (equipment) => inventory.openEquipmentDetails(equipment.id)
-    },
-    {
-      label: "Write-Off",
-      variant: "primary",
-      onClick: (equipment) => inventory.openEquipmentWriteOff(equipment.id)
-    }
-  ];
+  useEffect(() => {
+    setEquipmentPage((page) => Math.min(page, equipmentTotalPages));
+  }, [equipmentTotalPages]);
+
+  useEffect(() => {
+    setRetailPage(1);
+    setEquipmentPage(1);
+  }, [
+    inventory.equipmentStatusFilter,
+    inventory.q,
+    inventory.retailCategoryFilter,
+    inventory.retailStockFilter,
+    inventory.tab,
+  ]);
+
+  const retailRows = useMemo(
+    () =>
+      inventory.filteredRetailProducts.slice(
+        (retailPage - 1) * INVENTORY_PAGE_SIZE,
+        retailPage * INVENTORY_PAGE_SIZE,
+      ),
+    [inventory.filteredRetailProducts, retailPage],
+  );
+  const equipmentRows = useMemo(
+    () =>
+      inventory.filteredEquipmentItems.slice(
+        (equipmentPage - 1) * INVENTORY_PAGE_SIZE,
+        equipmentPage * INVENTORY_PAGE_SIZE,
+      ),
+    [equipmentPage, inventory.filteredEquipmentItems],
+  );
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <div style={{ flex: "1 1 360px", minWidth: 240 }}>
+    <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+      <section
+        style={{
+          ...panelStyle(colors),
+          padding: 14,
+          display: "grid",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "auto minmax(240px, 1fr) auto",
+            alignItems: "center",
+          }}
+        >
+          <FitPill
+            options={visibleInventoryTabs}
+            active={inventory.tab}
+            onChange={(value) => inventory.setTab(value as typeof inventory.tab)}
+          />
           <FitSearch
             value={inventory.q}
             onChangeText={inventory.setQ}
             placeholder={
-              inventory.tab === "equipment"
-                ? "Search by equipment name, unit, or description..."
-                : "Search by name, category, or description..."
+              isRetail
+                ? "Search retail products, categories, or descriptions..."
+                : "Search equipment, units, or descriptions..."
             }
           />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <FitButton
+              variant="ghost"
+              label="FILTERS"
+              icon={SlidersHorizontal}
+              iconSize={15}
+              onClick={() => inventory.setShowFilters((value) => !value)}
+            />
+            {isRetail ? (
+              <FitButton
+                variant="primary"
+                label="RECORD SALE"
+                icon={ReceiptText}
+                iconSize={15}
+                onClick={() => inventory.openRetailSale()}
+                disabled={inventory.retailSaleProductOptions.length === 0}
+              />
+            ) : null}
+            <FitButton
+              variant="primary"
+              label={isRetail ? "ADD PRODUCT" : "ADD EQUIPMENT"}
+              icon={Plus}
+              iconSize={15}
+              onClick={isRetail ? inventory.openCreateRetail : inventory.openCreateEquipment}
+            />
+          </div>
         </div>
-        <FitButton
-          variant="primary"
-          label={inventory.isRefreshing ? "REFRESHING" : "REFRESH"}
-          icon={RefreshCw}
-          iconSize={14}
-          onClick={() => {
-            void inventory.handleRefresh();
-          }}
-          disabled={inventory.isRefreshing}
-        />
-        {inventory.tab === "retail" ? (
-          <FitButton
-            variant="primary"
-            label="RECORD SALE"
-            icon={ReceiptText}
-            iconSize={14}
-            onClick={() => inventory.openRetailSale()}
-            disabled={inventory.retailSaleProductOptions.length === 0}
-          />
+
+        {inventory.showFilters ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: isRetail
+                ? "repeat(2, minmax(180px, 1fr))"
+                : "minmax(180px, 320px)",
+            }}
+          >
+            {isRetail ? (
+              <>
+                <LabeledSelect
+                  colors={colors}
+                  label="Category"
+                  value={inventory.retailCategoryFilter}
+                  options={INVENTORY_CATEGORY_FILTER_OPTIONS}
+                  onChange={(value) =>
+                    inventory.setRetailCategoryFilter(
+                      value as typeof inventory.retailCategoryFilter,
+                    )
+                  }
+                />
+                <LabeledSelect
+                  colors={colors}
+                  label="Stock"
+                  value={inventory.retailStockFilter}
+                  options={RETAIL_STOCK_FILTER_OPTIONS}
+                  onChange={(value) =>
+                    inventory.setRetailStockFilter(
+                      value as typeof inventory.retailStockFilter,
+                    )
+                  }
+                />
+                <LabeledSelect
+                  colors={colors}
+                  label="Revenue Window"
+                  value={inventory.salesRevenueWindowFilter}
+                  options={INVENTORY_REVENUE_WINDOW_OPTIONS}
+                  onChange={(value) =>
+                    inventory.setSalesRevenueWindowFilter(
+                      value as typeof inventory.salesRevenueWindowFilter,
+                    )
+                  }
+                />
+              </>
+            ) : (
+              <LabeledSelect
+                colors={colors}
+                label="Equipment Status"
+                value={inventory.equipmentStatusFilter}
+                options={EQUIPMENT_STATUS_FILTER_OPTIONS}
+                onChange={(value) =>
+                  inventory.setEquipmentStatusFilter(
+                    value as typeof inventory.equipmentStatusFilter,
+                  )
+                }
+              />
+            )}
+          </div>
         ) : null}
-        {actionLabel ? (
-          <FitButton
-            variant="primary"
-            label={actionLabel}
-            icon={Plus}
-            iconSize={14}
-            onClick={
-              inventory.tab === "retail"
-                ? inventory.openCreateRetail
-                : inventory.openCreateEquipment
-            }
-          />
-        ) : null}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <FitPill
-          options={[...INVENTORY_TABS]}
-          active={inventory.tab}
-          onChange={(value) => inventory.setTab(value as typeof inventory.tab)}
-        />
-      </div>
-      {inventory.tab !== "analytics" ? (
-        <div
+      </section>
+
+      <div
+        className="inventory-workbench"
+        style={{
+          display: "grid",
+          gap: 14,
+          gridTemplateColumns: isCompactDetail
+            ? "minmax(0, 1fr)"
+            : "minmax(0, 1fr) minmax(280px, 340px)",
+          alignItems: "stretch",
+          height: isCompactDetail ? "auto" : "calc(100vh - 238px)",
+          minHeight: isCompactDetail ? 0 : 560,
+        }}
+      >
+        <section
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginBottom: 14,
-            position: "relative"
+            ...panelStyle(colors),
+            minWidth: 0,
+            overflow: "hidden",
+            display: "grid",
+            gridTemplateRows: "auto minmax(0, 1fr) auto",
+            minHeight: 0,
           }}
         >
-          <FitButton
-            variant="ghost"
-            label="Filters"
-            icon={SlidersHorizontal}
-            iconSize={16}
-            onClick={() => inventory.setShowFilters((value) => !value)}
-            style={{ alignSelf: "flex-start" }}
-          />
-          {inventory.showFilters ? (
-            <div
-              style={{
-                alignSelf: "flex-start",
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: 18,
-                boxShadow: "0 18px 50px rgba(0, 0, 0, 0.28)",
-                display: "grid",
-                gap: 12,
-                minWidth: inventory.tab === "retail" ? 420 : 240,
-                padding: 14,
-                position: "absolute",
-                top: 46,
-                zIndex: 20
-              }}
-            >
-              {inventory.tab === "retail" ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 12,
-                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
-                  }}
-                >
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <FitText style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                      Category
-                    </FitText>
-                    <FitSelect
-                      fullWidth
-                      compact
-                      options={INVENTORY_CATEGORY_FILTER_OPTIONS}
-                      value={inventory.retailCategoryFilter}
-                      onChange={(event) =>
-                        inventory.setRetailCategoryFilter(
-                          event.target.value as typeof inventory.retailCategoryFilter
-                        )
-                      }
-                    />
-                  </label>
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <FitText style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                      Stock
-                    </FitText>
-                    <FitSelect
-                      fullWidth
-                      compact
-                      options={RETAIL_STOCK_FILTER_OPTIONS}
-                      value={inventory.retailStockFilter}
-                      onChange={(event) =>
-                        inventory.setRetailStockFilter(
-                          event.target.value as typeof inventory.retailStockFilter
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-              ) : (
-                <label style={{ display: "grid", gap: 6 }}>
-                  <FitText style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                    Equipment Status
-                  </FitText>
-                  <FitSelect
-                    fullWidth
-                    compact
-                    options={EQUIPMENT_STATUS_FILTER_OPTIONS}
-                    value={inventory.equipmentStatusFilter}
-                    onChange={(event) =>
-                      inventory.setEquipmentStatusFilter(
-                        event.target.value as typeof inventory.equipmentStatusFilter
-                      )
-                    }
-                  />
-                </label>
-              )}
+          <div
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.surfaceRaised,
+              borderBottom: `1px solid ${colors.border}`,
+              display: "flex",
+              gap: 12,
+              justifyContent: "space-between",
+              padding: "14px 16px",
+            }}
+          >
+            <div>
+              <FitText style={{ fontSize: 18, fontWeight: 900 }}>
+                {isRetail ? "Retail Inventory Table" : "Equipment Inventory Table"}
+              </FitText>
+              <FitText style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 3 }}>
+                {selectedRows.length} row{selectedRows.length === 1 ? "" : "s"} in the current view
+              </FitText>
             </div>
-          ) : null}
-        </div>
-      ) : null}
-      {inventory.tab === "retail" ? (
-        <FitSection heading="Retail Inventory">
-          <FitText style={{ fontSize: 13, color: colors.textMuted, marginBottom: 10 }}>
-            Retail items carry category-aware stock thresholds and are the only inventory
-            records that trigger low-stock notifications.
-          </FitText>
-          <FitTable
-            columns={retailColumns}
-            rows={inventory.filteredRetailProducts}
-            getRowKey={(product) => product.id}
-            isLoading={inventory.isRetailLoading}
-            loadingMessage="Loading live retail inventory..."
-            emptyMessage="No retail items match this view."
-            actions={retailActions}
-            onRowClick={(product) => inventory.openRetailDetails(product.id)}
-          />
-        </FitSection>
-      ) : null}
-      {inventory.tab === "equipment" ? (
-        <FitSection heading="Equipment Inventory">
-          <FitText style={{ fontSize: 13, color: colors.textMuted, marginBottom: 10 }}>
-            Equipment tracks operational availability so staff can surface write-offs,
-            maintenance, and missing-item follow-up without turning dumbbells into low-stock
-            retail alerts.
-          </FitText>
-          <FitTable
-            columns={equipmentColumns}
-            rows={inventory.filteredEquipmentItems}
-            getRowKey={(equipment) => equipment.id}
-            isLoading={inventory.isEquipmentLoading}
-            loadingMessage="Loading live equipment inventory..."
-            emptyMessage="No equipment items match this view."
-            actions={equipmentActions}
-            onRowClick={(equipment) => inventory.openEquipmentDetails(equipment.id)}
-          />
-        </FitSection>
-      ) : null}
-      {inventory.tab === "analytics" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FitText style={{ fontSize: 13, color: colors.textMuted, marginBottom: 4 }}>
-            Analytics stay retail-centric because sales and low-stock thresholds currently belong
-            to the retail side of inventory.
-          </FitText>
-          <FitInlineFilterChips
-            isOpen
-            options={INVENTORY_ANALYTICS_PERIOD_OPTIONS}
-            activeValue={inventory.salesRevenuePeriod}
-            onChange={(value) =>
-              inventory.setSalesRevenuePeriod(
-                value as typeof inventory.salesRevenuePeriod
+            <FitButton
+              variant="ghost"
+              label={inventory.isRefreshing ? "REFRESHING" : "REFRESH"}
+              icon={RefreshCw}
+              iconSize={15}
+              onClick={() => {
+                void inventory.handleRefresh();
+              }}
+              disabled={inventory.isRefreshing}
+            />
+          </div>
+          {isRetail ? (
+            <FitTable
+              columns={retailColumns}
+              rows={retailRows}
+              getRowKey={(product) => product.id}
+              isLoading={inventory.isRetailLoading}
+              loadingMessage="Loading live retail inventory..."
+              emptyMessage="No retail items match this view."
+              onRowClick={(product) => inventory.openRetailDetails(product.id)}
+              getRowClassName={(product) =>
+                product.id === selectedRetail?.id
+                  ? "inventory-table-row--selected"
+                  : undefined
+              }
+              style={{ border: 0, borderRadius: 0 }}
+              tableStyle={{ minWidth: 960, tableLayout: "fixed" }}
+            />
+          ) : (
+            <FitTable
+              columns={equipmentColumns}
+              rows={equipmentRows}
+              getRowKey={(equipment) => equipment.id}
+              isLoading={inventory.isEquipmentLoading}
+              loadingMessage="Loading live equipment inventory..."
+              emptyMessage="No equipment items match this view."
+              onRowClick={(equipment) => inventory.openEquipmentDetails(equipment.id)}
+              getRowClassName={(equipment) =>
+                equipment.id === selectedEquipment?.id
+                  ? "inventory-table-row--selected"
+                  : undefined
+              }
+              style={{ border: 0, borderRadius: 0 }}
+              tableStyle={{ minWidth: 900, tableLayout: "fixed" }}
+            />
+          )}
+          <div
+            style={{
+              borderTop: `1px solid ${colors.border}`,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              padding: "12px 16px",
+              backgroundColor: colors.surface,
+            }}
+          >
+            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+              Page {isRetail ? retailPage : equipmentPage} of{" "}
+              {isRetail ? retailTotalPages : equipmentTotalPages}
+            </FitText>
+            <FitPagination
+              currentPage={isRetail ? retailPage : equipmentPage}
+              totalPages={isRetail ? retailTotalPages : equipmentTotalPages}
+              onPageChange={isRetail ? setRetailPage : setEquipmentPage}
+              showSinglePage
+              ariaLabel={`${isRetail ? "Retail" : "Equipment"} inventory pagination`}
+            />
+          </div>
+        </section>
+
+        {!isCompactDetail ? (
+          <aside
+            style={{
+              ...panelStyle(colors),
+              minHeight: 0,
+              height: "100%",
+              padding: 16,
+              overflow: "hidden",
+            }}
+          >
+            {isRetail ? (
+              selectedRetail ? (
+                <RetailDetailCard
+                  colors={colors}
+                  product={selectedRetail}
+                  onArchive={() => inventory.openRetailArchive(selectedRetail.id)}
+                  onEdit={() => onOpenDetailEditor("retail")}
+                  onRecordSale={() => inventory.openRetailSale(selectedRetail.id)}
+                  onRestock={() => inventory.openRetailRestock(selectedRetail.id)}
+                />
+              ) : (
+                <EmptyDetailCard
+                  colors={colors}
+                  copy="Select a retail row to inspect stock, pricing, image, and sale actions here."
+                  title="No retail item selected"
+                />
               )
-            }
-            maxWidth={640}
+            ) : selectedEquipment ? (
+              <EquipmentDetailCard
+                colors={colors}
+                equipment={selectedEquipment}
+                onArchive={() => inventory.openEquipmentArchive(selectedEquipment.id)}
+                onEdit={() => onOpenDetailEditor("equipment")}
+                onWriteOff={() => inventory.openEquipmentWriteOff(selectedEquipment.id)}
+              />
+            ) : (
+              <EmptyDetailCard
+                colors={colors}
+                copy="Select an equipment row to inspect status, quantities, images, and write-off actions here."
+                title="No equipment selected"
+              />
+            )}
+          </aside>
+        ) : null}
+      </div>
+
+      <style>{`
+        .inventory-table-row--selected {
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fit-brand) 56%, transparent),
+            0 0 18px color-mix(in srgb, var(--fit-brand) 24%, transparent);
+        }
+
+        .inventory-table-row--selected > td {
+          background-color: color-mix(in srgb, var(--fit-brand) 14%, transparent);
+        }
+
+        .inventory-table-row--selected > td:first-child {
+          box-shadow: inset 3px 0 0 var(--fit-brand);
+        }
+
+        @media (max-width: 760px) {
+          .inventory-workbench,
+          section[style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function LabeledSelect({
+  colors,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  colors: IThemeContext["colors"];
+  label: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+}) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <FitText style={{ color: colors.textMuted, fontSize: 11, fontWeight: 850 }}>
+        {label}
+      </FitText>
+      <FitDropdown
+        fullWidth
+        compact
+        value={value}
+        options={options}
+        onChange={onChange}
+      />
+    </label>
+  );
+}
+
+function EmptyDetailCard({
+  colors,
+  copy,
+  title,
+}: {
+  colors: IThemeContext["colors"];
+  copy: string;
+  title: string;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+      <FitText style={{ fontSize: 18, fontWeight: 900 }}>{title}</FitText>
+      <FitText style={{ color: colors.textMuted, fontSize: 13, lineHeight: 1.55 }}>
+        {copy}
+      </FitText>
+    </div>
+  );
+}
+
+function RetailDetailCard({
+  colors,
+  onArchive,
+  onEdit,
+  onRecordSale,
+  onRestock,
+  product,
+}: {
+  colors: IThemeContext["colors"];
+  onArchive: () => void;
+  onEdit: () => void;
+  onRecordSale: () => void;
+  onRestock: () => void;
+  product: InventoryRetailTableRow;
+}) {
+  const imageUrl = getInventoryImageUrl(product.imageUrl);
+
+  return (
+    <DetailCardShell
+      colors={colors}
+      imageAlt={product.name}
+      imageUrl={imageUrl}
+      status={
+        <FitPill
+          mode="status"
+          label={product.status}
+          color={RETAIL_STOCK_STATUS_COLOR[product.status]}
+        />
+      }
+      title={product.name}
+    >
+      <DetailMetricGrid
+        colors={colors}
+        items={[
+          ["Category", formatLabel(product.category)],
+          ["Stock", String(product.stockQuantity)],
+          ["Reorder At", String(product.reorderThreshold)],
+          ["Price", `PHP ${product.price.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`],
+          ["Cost", `PHP ${product.cost.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`],
+          ["Value", `PHP ${product.totalValue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`],
+        ]}
+      />
+      <div style={{ display: "grid", gap: 8 }}>
+        <FitButton variant="primary" label="RECORD SALE" icon={ReceiptText} onClick={onRecordSale} />
+        <FitButton variant="ghost" label="RESTOCK ITEM" icon={RefreshCw} onClick={onRestock} />
+        <FitButton variant="ghost" label="EDIT DETAILS" icon={Edit3} onClick={onEdit} />
+        <FitButton variant="danger" label="ARCHIVE ITEM" icon={Archive} onClick={onArchive} />
+      </div>
+    </DetailCardShell>
+  );
+}
+
+function EquipmentDetailCard({
+  colors,
+  equipment,
+  onArchive,
+  onEdit,
+  onWriteOff,
+}: {
+  colors: IThemeContext["colors"];
+  equipment: InventoryEquipmentTableRow;
+  onArchive: () => void;
+  onEdit: () => void;
+  onWriteOff: () => void;
+}) {
+  const imageUrl = getInventoryImageUrl(equipment.imageUrl);
+
+  return (
+    <DetailCardShell
+      colors={colors}
+      imageAlt={equipment.name}
+      imageUrl={imageUrl}
+      status={
+        <FitPill
+          mode="status"
+          label={equipment.status}
+          color={EQUIPMENT_STATUS_COLOR[equipment.status]}
+        />
+      }
+      title={equipment.name}
+    >
+      <DetailMetricGrid
+        colors={colors}
+        items={[
+          ["Current", String(equipment.quantityCurrent)],
+          ["Total", String(equipment.quantityTotal)],
+          ["Missing", String(equipment.missingCount)],
+          ["Unit", equipment.unit],
+          ["Status", equipment.status],
+        ]}
+      />
+      <div style={{ display: "grid", gap: 8 }}>
+        <FitButton variant="primary" label="RECORD WRITEOFF" icon={Wrench} onClick={onWriteOff} />
+        <FitButton variant="ghost" label="EDIT DETAILS" icon={Edit3} onClick={onEdit} />
+        <FitButton variant="danger" label="ARCHIVE EQUIPMENT" icon={Archive} onClick={onArchive} />
+      </div>
+    </DetailCardShell>
+  );
+}
+
+function DetailCardShell({
+  children,
+  colors,
+  imageAlt,
+  imageUrl,
+  status,
+  title,
+}: {
+  children: ReactNode;
+  colors: IThemeContext["colors"];
+  imageAlt: string;
+  imageUrl: string | null | undefined;
+  status: ReactNode;
+  title: string;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: 8,
+          backgroundColor: colors.surfaceRaised,
+          minHeight: 170,
+          overflow: "hidden",
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={imageAlt}
+            style={{ width: "100%", height: 190, objectFit: "cover" }}
           />
-          <FitChartContainer
-            heading="Sales Revenue"
-            subtitle={`Viewing ${inventory.salesRevenuePeriod.toLowerCase()} revenue from completed inventory transactions.`}
-            chartStyle={{ height: 260 }}
-          >
-            <BarChart data={inventory.salesRevenueSeries}>
-              <XAxis
-                dataKey="bucketLabel"
-                stroke={colors.textMuted}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: colors.surface,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 8
-                }}
-              />
-              <Bar dataKey="revenue" fill={colors.brand} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </FitChartContainer>
-          <FitInlineFilterChips
-            isOpen
-            options={INVENTORY_TOP_RETAIL_FILTER_OPTIONS}
-            activeValue={inventory.topRetailMetric}
-            onChange={(value) =>
-              inventory.setTopRetailMetric(value as typeof inventory.topRetailMetric)
-            }
-            maxWidth={420}
-          />
-          <FitChartContainer
-            heading={`Top Retail Items ${inventory.topRetailMetric}`}
-            subtitle={
-              inventory.topRetailMetric === "By Stocks Sold"
-                ? "All-time ranking from completed inventory sales."
-                : "Live ranking from current retail stock value."
-            }
-            chartStyle={{ height: 240 }}
-          >
-            <BarChart data={inventory.topProducts} margin={{ bottom: 40 }}>
-              <XAxis
-                dataKey="name"
-                stroke={colors.textMuted}
-                tick={{ fontSize: 11, angle: -15, textAnchor: "end" }}
-              />
-              <YAxis stroke={colors.textMuted} tick={{ fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: colors.surface,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 8
-                }}
-              />
-              <Bar dataKey="value" fill={colors.brand} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </FitChartContainer>
+        ) : (
+          <Package size={32} color={colors.textMuted} />
+        )}
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <FitText style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.12 }}>
+            {title}
+          </FitText>
+          {status}
         </div>
-      ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DetailMetricGrid({
+  colors,
+  items,
+}: {
+  colors: IThemeContext["colors"];
+  items: Array<[string, string]>;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gap: 8,
+      }}
+    >
+      {items.map(([label, value]) => (
+        <div
+          key={label}
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            padding: 8,
+            backgroundColor: colors.surfaceRaised,
+            minWidth: 0,
+          }}
+        >
+          <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>
+            {label}
+          </FitText>
+          <FitText
+            style={{
+              fontSize: 12.5,
+              fontWeight: 800,
+              marginTop: 3,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {value}
+          </FitText>
+        </div>
+      ))}
     </div>
   );
 }

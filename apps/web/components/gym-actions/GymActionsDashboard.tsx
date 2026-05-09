@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Activity, RefreshCcw, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type {
@@ -27,12 +26,14 @@ import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { webApiClient } from "@/lib/api-client";
 import {
   FitButton,
+  FitDropdown,
+  FitPagination,
   FitPill,
-  FitSection,
-  FitSelect,
+  FitTable,
   FitText,
   FitTextInput,
 } from "@/components/fit";
+import type { FitTableColumn } from "@/components/fit/FitTable";
 
 type TransactionKind = "all" | "payment" | "sale" | "booking" | "coaching";
 type AuditKind = "all" | "User" | "MembershipCard" | "Equipment" | "Payment";
@@ -129,6 +130,7 @@ export default function GymActionsDashboard() {
   const [auditSearch, setAuditSearch] = useState("");
   const [auditKind, setAuditKind] = useState<AuditKind>("all");
   const [auditPage, setAuditPage] = useState(1);
+  const [recentPage, setRecentPage] = useState(1);
 
   const snapshotQuery = useQuery(analyticsSnapshotQueryOptions(webApiClient));
   const auditQuery = useQuery(auditLogsQueryOptions(webApiClient, { limit: 100, page: 1 }));
@@ -233,6 +235,8 @@ export default function GymActionsDashboard() {
   const auditTotalPages = Math.max(1, Math.ceil(filteredAuditLogs.length / PAGE_SIZE));
   const auditRows = paginate(filteredAuditLogs, Math.min(auditPage, auditTotalPages));
   const recentActivities = snapshotQuery.data?.recentActivities ?? [];
+  const recentTotalPages = Math.max(1, Math.ceil(recentActivities.length / PAGE_SIZE));
+  const recentRows = paginate(recentActivities, Math.min(recentPage, recentTotalPages));
   const isBusy =
     snapshotQuery.isFetching ||
     auditQuery.isFetching ||
@@ -240,67 +244,171 @@ export default function GymActionsDashboard() {
     salesQuery.isFetching ||
     bookingsQuery.isFetching ||
     appointmentsQuery.isFetching;
-  const panelStyle = {
-    backgroundColor: colors.surfaceRaised,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 20,
-    padding: 18,
-  };
-  const muted = { color: colors.textMuted, fontSize: 13, lineHeight: 1.45 };
   const shell = {
     ...fadeIn,
     display: "grid",
-    gap: 18,
+    gap: 12,
     paddingBottom: 32,
   };
 
-  const refreshAll = () => {
-    void snapshotQuery.refetch();
-    void auditQuery.refetch();
-    void paymentsQuery.refetch();
-    void salesQuery.refetch();
-    void bookingsQuery.refetch();
-    void appointmentsQuery.refetch();
-  };
+  const transactionColumns: FitTableColumn<TransactionRow>[] = [
+    {
+      key: "transaction",
+      heading: "Transaction",
+      render: (row, c) => (
+        <div style={{ display: "grid", gap: 4, minWidth: 240 }}>
+          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
+            {row.title} - {row.actor}
+          </FitText>
+          <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+            {row.description}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "amount",
+      heading: "Amount",
+      render: (row, c) => (
+        <FitText style={{ fontSize: 13.5, fontWeight: 850, color: c.textPrimary }}>
+          {formatPeso(row.amount)}
+        </FitText>
+      ),
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (row, c) => (
+        <FitPill mode="status" label={row.status} color={c.brand} />
+      ),
+    },
+    {
+      key: "created",
+      heading: "Created",
+      render: (row, c) => (
+        <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+          {formatDateTime(row.createdAt)}
+        </FitText>
+      ),
+    },
+  ];
+
+  const auditColumns: FitTableColumn<AuditLogRecord>[] = [
+    {
+      key: "action",
+      heading: "Action",
+      render: (log, c) => (
+        <div style={{ display: "grid", gap: 4, minWidth: 240 }}>
+          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
+            {labelize(log.action)}
+          </FitText>
+          <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+            {log.entity} {log.entity_id}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "actor",
+      heading: "Actor",
+      render: (log, c) => (
+        <FitText style={{ fontSize: 13, color: c.textSecondary }}>
+          {profileName(log.actor?.profile) || log.actor?.role || "System"}
+        </FitText>
+      ),
+    },
+    {
+      key: "entity",
+      heading: "Entity",
+      render: (log, c) => (
+        <FitPill mode="status" label={log.entity} color={c.brand} />
+      ),
+    },
+    {
+      key: "created",
+      heading: "Created",
+      render: (log, c) => (
+        <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+          {formatDateTime(log.created_at)}
+        </FitText>
+      ),
+    },
+  ];
+
+  const recentColumns: FitTableColumn<AnalyticsRecentActivityRecord>[] = [
+    {
+      key: "activity",
+      heading: "Activity",
+      render: (activity, c) => (
+        <div style={{ display: "grid", gap: 4, minWidth: 240 }}>
+          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
+            {activity.title}
+          </FitText>
+          <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+            {activity.description}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "actor",
+      heading: "Actor",
+      render: (activity, c) => (
+        <FitText style={{ fontSize: 13, color: c.textSecondary }}>
+          {activity.actorName}
+        </FitText>
+      ),
+    },
+    {
+      key: "status",
+      heading: "Status",
+      render: (activity, c) => (
+        <FitPill mode="status" label={activity.status} color={c.brand} />
+      ),
+    },
+    {
+      key: "time",
+      heading: "Time",
+      render: (activity, c) => (
+        <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
+          {formatDateTime(activity.occurredAt)}
+        </FitText>
+      ),
+    },
+  ];
 
   return (
     <main className={themeTransition} style={shell}>
-      <section
-        style={{
-          ...panelStyle,
-          display: "grid",
-          gap: 14,
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-          alignItems: "center",
-        }}
+      <ActionTableSection
+        colors={colors}
+        heading="Transaction History"
+        action={
+          <FitButton
+            icon={RefreshCcw}
+            label="REFRESH"
+            loading={
+              paymentsQuery.isFetching ||
+              salesQuery.isFetching ||
+              bookingsQuery.isFetching ||
+              appointmentsQuery.isFetching
+            }
+            onClick={() => {
+              void paymentsQuery.refetch();
+              void salesQuery.refetch();
+              void bookingsQuery.refetch();
+              void appointmentsQuery.refetch();
+            }}
+          />
+        }
       >
-        <div style={{ display: "grid", gap: 8 }}>
-          <FitText as="p" style={{ color: colors.brand, fontSize: 12, fontWeight: 800 }}>
-            GYM ACTIONS
-          </FitText>
-          <FitText as="h2" style={{ fontSize: 28, fontWeight: 900 }}>
-            Operational transaction and audit trail
-          </FitText>
-          <FitText as="p" style={muted}>
-            Search manual actions, payments, bookings, coaching appointments,
-            retail sales, and the recent activity stream in one place.
-          </FitText>
-        </div>
-        <FitButton
-          icon={RefreshCcw}
-          label="REFRESH"
-          loading={isBusy}
-          onClick={refreshAll}
-        />
-      </section>
-
-      <FitSection heading="Transaction History">
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 0 }}>
           <div
             style={{
               display: "grid",
               gap: 10,
               gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 0.28fr)",
+              padding: 14,
+              borderBottom: `1px solid ${colors.border}`,
             }}
           >
             <label
@@ -325,11 +433,11 @@ export default function GymActionsDashboard() {
                 placeholder="Search transactions"
               />
             </label>
-            <FitSelect
+            <FitDropdown
               fullWidth
               value={transactionKind}
-              onChange={(event) => {
-                setTransactionKind(event.target.value as TransactionKind);
+              onChange={(value) => {
+                setTransactionKind(value as TransactionKind);
                 setTransactionPage(1);
               }}
               options={[
@@ -341,54 +449,47 @@ export default function GymActionsDashboard() {
               ]}
             />
           </div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {transactionRows.map((row) => (
-              <div
-                key={`${row.kind}-${row.id}`}
-                style={{
-                  ...panelStyle,
-                  backgroundColor: colors.surface,
-                  display: "grid",
-                  gap: 12,
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(120px, 0.2fr) minmax(130px, 0.22fr)",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ display: "grid", gap: 5 }}>
-                  <FitText as="p" style={{ fontSize: 15, fontWeight: 800 }}>
-                    {row.title} - {row.actor}
-                  </FitText>
-                  <FitText as="p" style={muted}>{row.description}</FitText>
-                  <FitText as="p" style={{ ...muted, fontSize: 12 }}>
-                    {formatDateTime(row.createdAt)}
-                  </FitText>
-                </div>
-                <FitText style={{ fontSize: 14, fontWeight: 800 }}>
-                  {formatPeso(row.amount)}
-                </FitText>
-                <FitPill mode="status" label={row.status} color={colors.brand} />
-              </div>
-            ))}
-            {transactionRows.length === 0 ? (
-              <FitText as="p" style={muted}>No transactions match the current view.</FitText>
-            ) : null}
-          </div>
-          <Pager
-            colors={colors}
-            page={Math.min(transactionPage, transactionTotalPages)}
-            setPage={setTransactionPage}
-            totalPages={transactionTotalPages}
+          <FitTable
+            columns={transactionColumns}
+            rows={transactionRows}
+            getRowKey={(row) => `${row.kind}-${row.id}`}
+            isLoading={isBusy}
+            loadingMessage="Loading transactions..."
+            emptyMessage="No transactions match the current view."
+            style={{ border: 0, borderRadius: 0 }}
           />
+          <div style={{ borderTop: `1px solid ${colors.border}`, padding: "12px 14px" }}>
+            <FitPagination
+              ariaLabel="Transaction history pagination"
+              currentPage={Math.min(transactionPage, transactionTotalPages)}
+              totalPages={transactionTotalPages}
+              onPageChange={setTransactionPage}
+              showSinglePage
+            />
+          </div>
         </div>
-      </FitSection>
+      </ActionTableSection>
 
-      <FitSection heading="Audit Log">
-        <div style={{ display: "grid", gap: 12 }}>
+      <ActionTableSection
+        colors={colors}
+        heading="Audit Log"
+        action={
+          <FitButton
+            icon={RefreshCcw}
+            label="REFRESH"
+            loading={auditQuery.isFetching}
+            onClick={() => void auditQuery.refetch()}
+          />
+        }
+      >
+        <div style={{ display: "grid", gap: 0 }}>
           <div
             style={{
               display: "grid",
               gap: 10,
               gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 0.28fr)",
+              padding: 14,
+              borderBottom: `1px solid ${colors.border}`,
             }}
           >
             <label
@@ -413,11 +514,11 @@ export default function GymActionsDashboard() {
                 placeholder="Search audit logs"
               />
             </label>
-            <FitSelect
+            <FitDropdown
               fullWidth
               value={auditKind}
-              onChange={(event) => {
-                setAuditKind(event.target.value as AuditKind);
+              onChange={(value) => {
+                setAuditKind(value as AuditKind);
                 setAuditPage(1);
               }}
               options={[
@@ -429,50 +530,36 @@ export default function GymActionsDashboard() {
               ]}
             />
           </div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {auditRows.map((log: AuditLogRecord) => (
-              <div
-                key={log.id}
-                style={{
-                  ...panelStyle,
-                  backgroundColor: colors.surface,
-                  display: "grid",
-                  gap: 12,
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(130px, 0.22fr)",
-                }}
-              >
-                <div style={{ display: "grid", gap: 5 }}>
-                  <FitText as="p" style={{ fontSize: 15, fontWeight: 800 }}>
-                    {labelize(log.action)}
-                  </FitText>
-                  <FitText as="p" style={muted}>
-                    {log.entity} {log.entity_id}
-                  </FitText>
-                  <FitText as="p" style={{ ...muted, fontSize: 12 }}>
-                    {profileName(log.actor?.profile) || log.actor?.role || "System"} - {formatDateTime(log.created_at)}
-                  </FitText>
-                </div>
-                <FitPill mode="status" label={log.entity} color={colors.brand} />
-              </div>
-            ))}
-            {auditRows.length === 0 ? (
-              <FitText as="p" style={muted}>No audit logs match the current view.</FitText>
-            ) : null}
-          </div>
-          <Pager
-            colors={colors}
-            page={Math.min(auditPage, auditTotalPages)}
-            setPage={setAuditPage}
-            totalPages={auditTotalPages}
+          <FitTable
+            columns={auditColumns}
+            rows={auditRows}
+            getRowKey={(log) => log.id}
+            isLoading={auditQuery.isFetching}
+            loadingMessage="Loading audit logs..."
+            emptyMessage="No audit logs match the current view."
+            style={{ border: 0, borderRadius: 0 }}
           />
+          <div style={{ borderTop: `1px solid ${colors.border}`, padding: "12px 14px" }}>
+            <FitPagination
+              ariaLabel="Audit log pagination"
+              currentPage={Math.min(auditPage, auditTotalPages)}
+              totalPages={auditTotalPages}
+              onPageChange={setAuditPage}
+              showSinglePage
+            />
+          </div>
         </div>
-      </FitSection>
+      </ActionTableSection>
 
       <RecentActivitySection
-        activities={recentActivities}
+        activities={recentRows}
+        columns={recentColumns}
         colors={colors}
-        muted={muted}
-        panelStyle={panelStyle}
+        isLoading={snapshotQuery.isFetching}
+        onRefresh={() => void snapshotQuery.refetch()}
+        page={Math.min(recentPage, recentTotalPages)}
+        setPage={setRecentPage}
+        totalPages={recentTotalPages}
       />
 
       <style>{`
@@ -487,92 +574,102 @@ export default function GymActionsDashboard() {
   );
 }
 
-function Pager({
+function RecentActivitySection({
+  activities,
+  columns,
   colors,
+  isLoading,
+  onRefresh,
   page,
   setPage,
   totalPages,
 }: {
+  activities: AnalyticsRecentActivityRecord[];
+  columns: FitTableColumn<AnalyticsRecentActivityRecord>[];
   colors: ReturnType<typeof useTheme>["colors"];
+  isLoading: boolean;
+  onRefresh: () => void;
   page: number;
   setPage: (page: number) => void;
   totalPages: number;
 }) {
   return (
-    <nav
-      aria-label="Pagination"
-      style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "flex-end" }}
-    >
-      <FitButton
-        label="PREV"
-        variant="ghost"
-        disabled={page <= 1}
-        onClick={() => setPage(Math.max(1, page - 1))}
-      />
-      <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-        Page {page} of {totalPages}
-      </FitText>
-      <FitButton
-        label="NEXT"
-        variant="ghost"
-        disabled={page >= totalPages}
-        onClick={() => setPage(Math.min(totalPages, page + 1))}
-      />
-    </nav>
-  );
-}
-
-function RecentActivitySection({
-  activities,
-  colors,
-  muted,
-  panelStyle,
-}: {
-  activities: AnalyticsRecentActivityRecord[];
-  colors: ReturnType<typeof useTheme>["colors"];
-  muted: { color: string; fontSize: number; lineHeight: number };
-  panelStyle: CSSProperties;
-}) {
-  return (
-    <FitSection
+    <ActionTableSection
+      colors={colors}
       heading="Recent Activity"
       action={
         <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
           <Activity size={15} color={colors.brand} />
-          <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-            {activities.length} activity lanes
-          </FitText>
+          <FitButton
+            icon={RefreshCcw}
+            label="REFRESH"
+            loading={isLoading}
+            onClick={onRefresh}
+          />
         </div>
       }
     >
-      <div style={{ display: "grid", gap: 10 }}>
-        {activities.slice(0, 8).map((activity) => (
-          <div
-            key={activity.id}
-            style={{
-              ...panelStyle,
-              backgroundColor: colors.surface,
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "minmax(0, 1fr) minmax(130px, 0.22fr)",
-            }}
-          >
-            <div style={{ display: "grid", gap: 5 }}>
-              <FitText as="p" style={{ fontSize: 15, fontWeight: 800 }}>
-                {activity.title}
-              </FitText>
-              <FitText as="p" style={muted}>{activity.description}</FitText>
-              <FitText as="p" style={{ ...muted, fontSize: 12 }}>
-                {activity.actorName} - {formatDateTime(activity.occurredAt)}
-              </FitText>
-            </div>
-            <FitPill mode="status" label={activity.status} color={colors.brand} />
-          </div>
-        ))}
-        {activities.length === 0 ? (
-          <FitText as="p" style={muted}>No recent activities are available.</FitText>
-        ) : null}
+      <div style={{ display: "grid", gap: 0 }}>
+        <FitTable
+          columns={columns}
+          rows={activities}
+          getRowKey={(activity) => activity.id}
+          isLoading={isLoading}
+          loadingMessage="Loading recent activity..."
+          emptyMessage="No recent activities are available."
+          style={{ border: 0, borderRadius: 0 }}
+        />
+        <div style={{ borderTop: `1px solid ${colors.border}`, padding: "12px 14px" }}>
+          <FitPagination
+            ariaLabel="Recent activity pagination"
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            showSinglePage
+          />
+        </div>
       </div>
-    </FitSection>
+    </ActionTableSection>
+  );
+}
+
+function ActionTableSection({
+  action,
+  children,
+  colors,
+  heading,
+}: {
+  action: ReactNode;
+  children: ReactNode;
+  colors: ReturnType<typeof useTheme>["colors"];
+  heading: string;
+}) {
+  return (
+    <section
+      style={{
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surfaceRaised,
+          borderBottom: `1px solid ${colors.border}`,
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+          padding: "14px 16px",
+        }}
+      >
+        <FitText style={{ fontSize: 18, fontWeight: 900 }}>
+          {heading}
+        </FitText>
+        {action}
+      </div>
+      <div style={{ display: "grid", minWidth: 0 }}>{children}</div>
+    </section>
   );
 }

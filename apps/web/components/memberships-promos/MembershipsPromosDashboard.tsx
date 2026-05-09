@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { BadgePercent, CheckCircle2, Plus, RefreshCcw, Save } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GymPromotionRecord, MembershipPlanRecord } from "@fittrack/api-client";
@@ -20,7 +20,6 @@ import { webApiClient } from "@/lib/api-client";
 import {
   FitButton,
   FitPill,
-  FitSection,
   FitText,
   FitTextArea,
   FitTextInput,
@@ -121,13 +120,6 @@ function validatePromoCode(value: string) {
   return null;
 }
 
-function formatPeso(value: string | number) {
-  return `PHP ${Number(value).toLocaleString("en-PH", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`;
-}
-
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-PH", {
     day: "numeric",
@@ -226,8 +218,8 @@ export default function MembershipsPromosDashboard() {
   const panelStyle = {
     backgroundColor: colors.surfaceRaised,
     border: `1px solid ${colors.border}`,
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 8,
+    padding: 14,
   };
   const fieldBorder = `1px solid ${colors.fieldBorder}`;
   const muted = { color: colors.textMuted, fontSize: 13, lineHeight: 1.45 };
@@ -354,56 +346,21 @@ export default function MembershipsPromosDashboard() {
 
   return (
     <main className={themeTransition} style={shell}>
-      <section
-        style={{
-          ...panelStyle,
-          alignItems: "center",
-          display: "grid",
-          gap: 14,
-          gridTemplateColumns: "minmax(0, 1.45fr) repeat(2, minmax(160px, 0.32fr))",
-        }}
-      >
-        <div style={{ display: "grid", gap: 8 }}>
-          <FitText as="p" style={{ color: colors.brand, fontSize: 12, fontWeight: 800 }}>
-            MEMBERSHIPS + PROMOS
+      {pageMessage ? (
+        <section style={panelStyle}>
+          <FitText
+            as="p"
+            role="alert"
+            style={{ color: colors.danger, fontSize: 13, fontWeight: 700 }}
+          >
+            {pageMessage}
           </FitText>
-          <FitText as="h2" style={{ fontSize: 28, fontWeight: 900 }}>
-            Plan pricing and active offers
-          </FitText>
-          <FitText as="p" style={muted}>
-            Admin and staff can keep membership prices current, publish active
-            promotions, and retire offers from one management surface.
-          </FitText>
-          {pageMessage ? (
-            <FitText
-              as="p"
-              role="alert"
-              style={{ color: colors.danger, fontSize: 13, fontWeight: 700 }}
-            >
-              {pageMessage}
-            </FitText>
-          ) : null}
-        </div>
-        <div style={{ ...panelStyle, alignSelf: "center", borderRadius: 16, minHeight: 96, padding: 16 }}>
-          <FitText as="p" style={{ color: colors.textMuted, fontSize: 12 }}>
-            Active plans
-          </FitText>
-          <FitText as="p" style={{ fontSize: 26, fontWeight: 900 }}>
-            {plansTotal}
-          </FitText>
-        </div>
-        <div style={{ ...panelStyle, alignSelf: "center", borderRadius: 16, minHeight: 96, padding: 16 }}>
-          <FitText as="p" style={{ color: colors.textMuted, fontSize: 12 }}>
-            Active promos
-          </FitText>
-          <FitText as="p" style={{ fontSize: 26, fontWeight: 900 }}>
-            {promotionsTotal}
-          </FitText>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <FitSection
-        heading="Membership Plans"
+      <MembershipSurface
+        colors={colors}
+        heading={`MEMBERSHIP PLANS (${plansTotal})`}
         action={
           <FitButton
             icon={RefreshCcw}
@@ -502,9 +459,18 @@ export default function MembershipsPromosDashboard() {
             </FitText>
           ) : null}
         </div>
-      </FitSection>
-
-      <FitSection heading="Create Membership Plan">
+        <div
+          style={{
+            borderTop: `1px solid ${colors.border}`,
+            display: "grid",
+            gap: 12,
+            marginTop: 6,
+            paddingTop: 16,
+          }}
+        >
+          <FitText style={{ fontSize: 13, fontWeight: 900, color: colors.textMuted }}>
+            CREATE MEMBERSHIP PLAN
+          </FitText>
         <div
           style={{
             display: "grid",
@@ -601,10 +567,12 @@ export default function MembershipsPromosDashboard() {
             <FitText style={{ fontSize: 12 }}>Includes coaching</FitText>
           </label>
         </div>
-      </FitSection>
+        </div>
+      </MembershipSurface>
 
-      <FitSection
-        heading="Active Promos"
+      <MembershipSurface
+        colors={colors}
+        heading={`ACTIVE PROMOS (${promotionsTotal})`}
         action={
           <FitButton
             icon={RefreshCcw}
@@ -658,9 +626,18 @@ export default function MembershipsPromosDashboard() {
             </FitText>
           ) : null}
         </div>
-      </FitSection>
-
-      <FitSection heading="Create Promo">
+        <div
+          style={{
+            borderTop: `1px solid ${colors.border}`,
+            display: "grid",
+            gap: 12,
+            marginTop: 6,
+            paddingTop: 16,
+          }}
+        >
+          <FitText style={{ fontSize: 13, fontWeight: 900, color: colors.textMuted }}>
+            CREATE PROMO
+          </FitText>
         <div style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 0.4fr 0.4fr" }}>
             <label style={{ display: "grid", gap: 6 }}>
@@ -767,7 +744,8 @@ export default function MembershipsPromosDashboard() {
             />
           </div>
         </div>
-      </FitSection>
+        </div>
+      </MembershipSurface>
 
       <style>{`
         main :where(h1, h2, h3, h4, p) {
@@ -798,5 +776,46 @@ export default function MembershipsPromosDashboard() {
         onCancel={() => setDeactivatePromoTarget(null)}
       />
     </main>
+  );
+}
+
+function MembershipSurface({
+  action,
+  children,
+  colors,
+  heading,
+}: {
+  action: ReactNode;
+  children: ReactNode;
+  colors: ReturnType<typeof useTheme>["colors"];
+  heading: string;
+}) {
+  return (
+    <section
+      style={{
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surfaceRaised,
+          borderBottom: `1px solid ${colors.border}`,
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+          padding: "14px 16px",
+        }}
+      >
+        <FitText style={{ fontSize: 18, fontWeight: 900 }}>
+          {heading}
+        </FitText>
+        {action}
+      </div>
+      <div style={{ display: "grid", gap: 14, padding: 14 }}>{children}</div>
+    </section>
   );
 }

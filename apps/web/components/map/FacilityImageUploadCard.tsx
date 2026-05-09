@@ -36,8 +36,8 @@ export function FacilityImageUploadCard({
   return (
     <div
       style={{
-        padding: 14,
-        borderRadius: 16,
+        padding: 12,
+        borderRadius: 8,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surfaceRaised,
       }}
@@ -57,8 +57,8 @@ export function FacilityImageUploadCard({
         <div
           style={{
             width: 92,
-            height: 92,
-            borderRadius: 18,
+            height: 76,
+            borderRadius: 8,
             border: `1px solid ${colors.border}`,
             overflow: "hidden",
             display: "grid",

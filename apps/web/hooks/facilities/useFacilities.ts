@@ -723,7 +723,10 @@ export function useFloorLayout() {
   const { data: inventoryEquipmentPage } = useQuery(
     inventoryEquipmentQueryOptions(webApiClient, { limit: 100, page: 1 })
   );
-  const inventoryEquipment = inventoryEquipmentPage?.data ?? [];
+  const inventoryEquipment = useMemo(
+    () => inventoryEquipmentPage?.data ?? [],
+    [inventoryEquipmentPage?.data]
+  );
   const displayEquipmentCatalogById = useMemo(
     () =>
       Object.fromEntries(

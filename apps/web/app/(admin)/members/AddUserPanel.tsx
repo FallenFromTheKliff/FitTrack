@@ -5,11 +5,13 @@ import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
+  KeyRound,
   Lock,
   Mail,
   Phone,
   ShieldCheck,
   UserCog,
+  UserPlus,
   UserRound,
   Users
 } from "lucide-react";
@@ -24,9 +26,7 @@ import {
   normalizePhilippineMobileNumber,
   type AdminCreateUserData
 } from "@fittrack/validators";
-import { themes } from "@fittrack/ui/theme";
 import type { MemberRecord } from "@fittrack/types";
-import { getReadableTextColor } from "@fittrack/utils";
 
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
@@ -42,7 +42,7 @@ type Props = {
   onSubmit: (data: AdminCreateUserData) => Promise<void> | void;
 };
 
-type CreateRole = "admin" | "staff" | "member";
+type CreateRole = "admin" | "staff" | "member" | "coach";
 
 type AdminCreateUserFormValues = {
   firstName: string;
@@ -94,6 +94,17 @@ const ROLE_OPTIONS = [
     note: "Operational account with verification required before active use.",
   },
   {
+    value: "coach",
+    label: "Coach",
+    eyebrow: "OTP on create",
+    summary: "Starts pending until email verification.",
+    access: "Coach web profile access",
+    state: "Pending verification",
+    automation: "OTP email is sent automatically",
+    icon: UserRound,
+    note: "Coach account with verification required before active use.",
+  },
+  {
     value: "admin",
     label: "Admin",
     eyebrow: "OTP on create",
@@ -113,9 +124,9 @@ const ROLE_META = ROLE_OPTIONS.reduce<Record<CreateRole, RoleMeta>>((acc, option
 
 const FIELD_CARD_STYLE: CSSProperties = {
   display: "grid",
-  gap: 18,
-  padding: 20,
-  borderRadius: 22,
+  gap: 10,
+  padding: 12,
+  borderRadius: 8,
 };
 
 const PERSON_NAME_PATTERN = /^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
@@ -224,14 +235,10 @@ export default function AddUserPanel({
   onSubmit,
 }: Props) {
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, onBrandTextColor } = useTheme();
   const [reviewData, setReviewData] = useState<AdminCreateUserData | null>(null);
   const isStaffCreator = user?.role === "STAFF";
-  const primaryActionTextColor = getReadableTextColor(
-    colors.brandLight,
-    themes.sunlight.textPrimary,
-    colors.textPrimary,
-  );
+  const primaryActionTextColor = onBrandTextColor;
   const resolver = zodResolver(adminCreateUserSchema) as Resolver<AdminCreateUserFormValues>;
   const {
     control,
@@ -314,6 +321,12 @@ export default function AddUserPanel({
   );
 
   const liveSnapshotName = [firstNameValue.trim(), lastNameValue.trim()].filter(Boolean).join(" ");
+  const createAccountInitials =
+    [firstNameValue.trim(), lastNameValue.trim()]
+      .map((value) => value.charAt(0))
+      .filter(Boolean)
+      .join("")
+      .toUpperCase() || activeRoleMeta.label.slice(0, 2).toUpperCase();
   const reviewRoleMeta = reviewData ? ROLE_META[reviewData.role] : activeRoleMeta;
   const reviewSnapshotName = reviewData
     ? [reviewData.firstName.trim(), reviewData.lastName.trim()].filter(Boolean).join(" ")
@@ -466,86 +479,15 @@ export default function AddUserPanel({
     <div
       className="add-user-panel"
       style={{
-        borderRadius: 28,
-        border: `1px solid ${colors.border}`,
-        background: `linear-gradient(180deg, ${colors.surfaceRaised} 0%, ${colors.surface} 100%)`,
-        padding: 24,
+        borderRadius: 8,
+        border: "none",
+        background: "transparent",
+        padding: 0,
         display: "grid",
-        gap: 22,
-        boxShadow: "0 24px 54px rgba(0,0,0,0.2)",
+        gap: 0,
+        boxShadow: "none",
       }}
     >
-      <div
-        className="add-user-header"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 14,
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitButton
-            type="button"
-            variant="ghost"
-            label={isReviewStep ? "Back to editing" : "Back to accounts"}
-            icon={ArrowLeft}
-            iconSize={15}
-            onClick={() => {
-              if (isReviewStep) {
-                setReviewData(null);
-                return;
-              }
-
-              onBack();
-            }}
-            disabled={submitting}
-            style={{
-              minHeight: 40,
-              paddingInline: 14,
-              borderRadius: 14,
-            }}
-          />
-          <div style={{ display: "grid", gap: 4 }}>
-            <FitText style={{ fontSize: 24, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.05 }}>
-              {isReviewStep ? "Review account" : "Create account"}
-            </FitText>
-            <FitText as="p" style={{ fontSize: 12, lineHeight: 1.45, color: colors.textSecondary, maxWidth: 420 }}>
-              {isReviewStep
-                ? "Check the snapshot and temporary sign-in details before the account is created."
-                : "Create the account from one workspace, validate the fields inline, and review everything before confirming."}
-            </FitText>
-          </div>
-        </div>
-        <div
-          className="add-user-header-status"
-          style={{
-            display: "grid",
-            gap: 4,
-            minWidth: 180,
-            padding: "12px 14px",
-            borderRadius: 18,
-            border: `1px solid ${colors.border}`,
-            backgroundColor: `${colors.surface}d8`,
-          }}
-        >
-          <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
-            {isReviewStep ? "Review status" : "Selected account type"}
-          </FitText>
-          <FitText style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>
-            {isReviewStep ? "Awaiting confirmation" : activeRoleMeta.label}
-          </FitText>
-        </div>
-      </div>
-
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -557,7 +499,7 @@ export default function AddUserPanel({
 
           openReviewStep();
         }}
-        style={{ display: "grid", gap: 20 }}
+        style={{ display: "grid", gap: 10 }}
       >
         <input type="hidden" {...register("role")} />
 
@@ -682,11 +624,13 @@ export default function AddUserPanel({
                       type="submit"
                       variant="primary"
                       label={submitting ? loadingLabel : "Create account"}
+                      icon={UserPlus}
+                      iconSize={14}
                       disabled={submitting}
                       style={{
-                        backgroundColor: colors.brandLight,
+                        backgroundColor: colors.brand,
                         color: primaryActionTextColor,
-                        border: `1px solid ${colors.brand}33`,
+                        border: `1px solid ${colors.brand}`,
                         boxShadow: `0 18px 34px -26px ${colors.brand}`,
                       }}
                       textStyle={{ color: primaryActionTextColor }}
@@ -708,10 +652,10 @@ export default function AddUserPanel({
             <div
               className="add-user-role-shell"
               style={{
-                display: "grid",
+                display: "none",
                 gap: 10,
                 padding: 18,
-                borderRadius: 22,
+                borderRadius: 8,
                 border: `1px solid ${roleError ? colors.danger : colors.border}`,
                 backgroundColor: `${colors.surface}c7`,
               }}
@@ -752,12 +696,12 @@ export default function AddUserPanel({
                       }}
                       className="add-user-role-option"
                       style={{
-                        borderRadius: 20,
+                        borderRadius: 8,
                         border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
                         background: isActive
                           ? `linear-gradient(180deg, ${colors.brand}20 0%, ${colors.surfaceRaised} 100%)`
                           : `${colors.surfaceRaised}cc`,
-                        padding: 16,
+                        padding: 12,
                         display: "grid",
                         gap: 10,
                         textAlign: "left",
@@ -772,7 +716,7 @@ export default function AddUserPanel({
                           style={{
                             width: 38,
                             height: 38,
-                            borderRadius: 14,
+                            borderRadius: 8,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -817,26 +761,229 @@ export default function AddUserPanel({
               className="add-user-workspace"
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr)",
-                gap: 20,
-                alignItems: "start",
-                padding: 20,
-                borderRadius: 28,
+                gridTemplateColumns: "minmax(260px, 0.76fr) minmax(0, 1.24fr)",
+                gap: 12,
+                alignItems: "stretch",
+                padding: 12,
+                borderRadius: 8,
                 border: `1px solid ${colors.border}`,
-                backgroundColor: `${colors.surfaceRaised}d8`,
+                backgroundColor: colors.surfaceRaised,
               }}
             >
-              <div className="add-user-form-column" style={{ display: "grid", gap: 16 }}>
+              <div
+                className="create-account-card"
+                style={{
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surface,
+                  padding: 12,
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 10,
+                  alignItems: "start",
+                  justifyItems: "center",
+                  textAlign: "center",
+                  alignSelf: "stretch",
+                }}
+              >
+                <FitButton
+                  type="button"
+                  variant="ghost"
+                  label={isReviewStep ? "Back to editing" : "Back to accounts"}
+                  icon={ArrowLeft}
+                  iconSize={15}
+                  onClick={() => {
+                    if (isReviewStep) {
+                      setReviewData(null);
+                      return;
+                    }
+
+                    onBack();
+                  }}
+                  disabled={submitting}
+                  style={{
+                    justifySelf: "start",
+                    minHeight: 34,
+                    paddingInline: 11,
+                    borderRadius: 8,
+                  }}
+                  textStyle={{ fontSize: 11.5, fontWeight: 800 }}
+                />
+                <div
+                  aria-hidden
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 8,
+                    border: `1px solid ${colors.brand}55`,
+                    backgroundColor: colors.brand,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: primaryActionTextColor,
+                  }}
+                >
+                  <FitText style={{ fontSize: 21, fontWeight: 850, color: primaryActionTextColor }}>
+                    {createAccountInitials}
+                  </FitText>
+                </div>
+                <div style={{ display: "grid", gap: 8, minWidth: 0, width: "100%" }}>
+                  <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                    <FitText
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: colors.textMuted,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Create Account Card
+                    </FitText>
+                    <FitText
+                      style={{
+                        fontSize: 19,
+                        fontWeight: 850,
+                        color: colors.textPrimary,
+                        lineHeight: 1.1,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {liveSnapshotName || "New account"}
+                    </FitText>
+                    <FitText
+                      style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {normalizedEmail || "Email pending"}
+                    </FitText>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: 5,
+                    }}
+                  >
+                    {[
+                      ["Access", activeRoleMeta.access],
+                      ["State", activeRoleMeta.state],
+                      ["Automation", activeRoleMeta.automation],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        style={{
+                          display: "grid",
+                          gap: 5,
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          backgroundColor: colors.surfaceRaised,
+                          padding: "9px 10px",
+                          minWidth: 0,
+                          textAlign: "left",
+                        }}
+                      >
+                        <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                          {label}
+                        </FitText>
+                        <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary, overflowWrap: "anywhere" }}>
+                          {value}
+                        </FitText>
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    className="create-account-role-stack"
+                    role="tablist"
+                    aria-label="Create account role selector"
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      width: "100%",
+                    }}
+                  >
+                    {availableRoleOptions.map((option) => {
+                      const Icon = option.icon;
+                      const isActive = activeRole === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() => {
+                            setValue("role", option.value, {
+                              shouldDirty: true,
+                              shouldTouch: true,
+                              shouldValidate: true,
+                            });
+                          }}
+                          disabled={submitting}
+                          style={{
+                            width: "100%",
+                            minHeight: 42,
+                            borderRadius: 8,
+                            border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
+                            backgroundColor: isActive ? `${colors.brand}16` : colors.surfaceRaised,
+                            color: isActive ? colors.brand : colors.textPrimary,
+                            display: "grid",
+                            gridTemplateColumns: "32px minmax(0, 1fr)",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "7px 9px",
+                            textAlign: "left",
+                            cursor: submitting ? "not-allowed" : "pointer",
+                            opacity: submitting ? 0.72 : 1,
+                          }}
+                        >
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 8,
+                              border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
+                              backgroundColor: isActive ? `${colors.brand}18` : colors.surface,
+                              display: "grid",
+                              placeItems: "center",
+                            }}
+                          >
+                            <Icon size={16} strokeWidth={2.2} />
+                          </span>
+                          <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
+                            <FitText style={{ fontSize: 12.5, fontWeight: 850, color: isActive ? colors.brand : colors.textPrimary }}>
+                              {option.label}
+                            </FitText>
+                            <FitText style={{ fontSize: 10.5, color: colors.textMuted, lineHeight: 1.3, overflowWrap: "anywhere" }}>
+                              {option.summary}
+                            </FitText>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <FitText style={{ fontSize: 11.5, lineHeight: 1.45, color: roleError ? colors.danger : colors.textMuted, textAlign: "left" }}>
+                    {roleError ?? (isStaffCreator
+                      ? `${activeRoleMeta.note} Staff can create staff and member accounts only.`
+                      : activeRoleMeta.note)}
+                  </FitText>
+                </div>
+              </div>
+              <div className="add-user-form-column" style={{ display: "grid", gap: 12 }}>
                 <div
                   className="add-user-card"
                   style={{
                     ...FIELD_CARD_STYLE,
+                    borderRadius: 8,
                     border: `1px solid ${colors.border}`,
-                    backgroundColor: `${colors.surface}d8`,
+                    backgroundColor: colors.surface,
                   }}
                 >
                   <div style={{ display: "grid", gap: 4 }}>
-                    <FitText style={{ fontSize: 18, fontWeight: 800, color: colors.textPrimary }}>
+                    <FitText style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary }}>
                       Profile details
                     </FitText>
                     <FitText style={{ fontSize: 12, lineHeight: 1.45, color: colors.textSecondary }}>
@@ -846,7 +993,7 @@ export default function AddUserPanel({
                   <div
                     style={{
                       display: "grid",
-                      gap: 14,
+                      gap: 10,
                       gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     }}
                   >
@@ -952,12 +1099,13 @@ export default function AddUserPanel({
                   className="add-user-card"
                   style={{
                     ...FIELD_CARD_STYLE,
+                    borderRadius: 8,
                     border: `1px solid ${colors.border}`,
-                    backgroundColor: `${colors.surface}d8`,
+                    backgroundColor: colors.surface,
                   }}
                 >
                   <div style={{ display: "grid", gap: 4 }}>
-                    <FitText style={{ fontSize: 18, fontWeight: 800, color: colors.textPrimary }}>
+                    <FitText style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary }}>
                       Sign-in details
                     </FitText>
                     <FitText style={{ fontSize: 12, lineHeight: 1.45, color: colors.textSecondary }}>
@@ -968,7 +1116,7 @@ export default function AddUserPanel({
                     className="add-user-password-shell"
                     style={{
                       display: "grid",
-                      gap: 12,
+                      gap: 10,
                       gridTemplateColumns: "minmax(0, 1fr) auto",
                       alignItems: "end",
                     }}
@@ -988,18 +1136,20 @@ export default function AddUserPanel({
                     />
                     <FitButton
                       type="button"
-                      variant="ghost"
+                      variant="primary"
                       label="Generate password"
+                      icon={KeyRound}
+                      iconSize={14}
                       onClick={handleGeneratePassword}
                       disabled={submitting}
                       style={{
                         minHeight: 44,
-                        borderRadius: 14,
+                        borderRadius: 8,
                         paddingInline: 14,
-                        border: `1px solid ${colors.brand}26`,
-                        backgroundColor: `${colors.brand}10`,
+                        border: `1px solid ${colors.brand}`,
+                        backgroundColor: colors.brand,
                       }}
-                      textStyle={{ color: colors.brand, fontWeight: 700 }}
+                      textStyle={{ color: primaryActionTextColor, fontWeight: 800 }}
                     />
                   </div>
                   <div style={{ display: "grid", gap: 4 }}>
@@ -1016,12 +1166,13 @@ export default function AddUserPanel({
                   className="add-user-card"
                   style={{
                     ...FIELD_CARD_STYLE,
+                    borderRadius: 8,
                     border: `1px solid ${reviewBlockers.length ? `${colors.warning}55` : `${colors.success}45`}`,
                     backgroundColor: reviewBlockers.length ? `${colors.warning}10` : `${colors.success}10`,
                   }}
                 >
                   <div style={{ display: "grid", gap: 4 }}>
-                    <FitText style={{ fontSize: 18, fontWeight: 800, color: colors.textPrimary }}>
+                    <FitText style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary }}>
                       {reviewBlockers.length ? "Still blocking review" : "Ready for review"}
                     </FitText>
                     <FitText style={{ fontSize: 12, lineHeight: 1.5, color: colors.textSecondary }}>
@@ -1031,7 +1182,13 @@ export default function AddUserPanel({
                     </FitText>
                   </div>
                   {reviewBlockers.length ? (
-                    <div style={{ display: "grid", gap: 8 }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: 8,
+                      }}
+                    >
                       {reviewBlockers.map((item) => (
                         <div
                           key={item}
@@ -1039,8 +1196,8 @@ export default function AddUserPanel({
                             display: "flex",
                             alignItems: "flex-start",
                             gap: 8,
-                            padding: "10px 12px",
-                            borderRadius: 14,
+                            padding: "9px 11px",
+                            borderRadius: 8,
                             border: `1px solid ${colors.border}`,
                             backgroundColor: `${colors.surface}da`,
                           }}
@@ -1064,27 +1221,25 @@ export default function AddUserPanel({
         {!isReviewStep ? (
           <div
             className="add-user-footer"
-            style={{
-              position: "sticky",
-              bottom: 0,
+                style={{
+                  position: "static",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 14,
               flexWrap: "wrap",
-              padding: "16px 18px",
-              borderRadius: 22,
+              padding: "10px 12px",
+              borderRadius: 8,
               border: `1px solid ${colors.border}`,
-              backgroundColor: `${colors.surfaceRaised}ee`,
-              boxShadow: "0 -16px 34px rgba(0,0,0,0.18)",
-              backdropFilter: "blur(14px)",
+              backgroundColor: colors.surface,
+              boxShadow: "none",
             }}
           >
-            <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+            <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
               <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
                 Ready to review
               </FitText>
-              <FitText style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary }}>
+              <FitText style={{ fontSize: 12.5, fontWeight: 700, color: colors.textPrimary }}>
                 {formReadyForReview
                   ? "Create account now opens the review step before anything is submitted."
                   : "Check the alert above to see exactly what is still blocking review."}
@@ -1102,12 +1257,14 @@ export default function AddUserPanel({
                 type="button"
                 variant="primary"
                 label="Create account"
+                icon={UserPlus}
+                iconSize={14}
                 onClick={openReviewStep}
                 disabled={submitting || !formReadyForReview}
                 style={{
-                  backgroundColor: colors.brandLight,
+                  backgroundColor: colors.brand,
                   color: primaryActionTextColor,
-                  border: `1px solid ${colors.brand}33`,
+                  border: `1px solid ${colors.brand}`,
                   boxShadow: `0 18px 34px -26px ${colors.brand}`,
                 }}
                 textStyle={{ color: primaryActionTextColor }}
@@ -1124,18 +1281,9 @@ export default function AddUserPanel({
         .add-user-role-option,
         .add-user-card,
         .add-user-summary-card,
-        .add-user-footer,
-        .add-user-header-status {
-          transition: transform 140ms ease-out, box-shadow 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out;
-        }
-
-        .add-user-role-option:hover,
-        .add-user-role-option:focus-visible,
-        .add-user-card:hover,
-        .add-user-summary-card:hover,
-        .add-user-header-status:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 18px 30px rgba(0, 0, 0, 0.18);
+        .create-account-card,
+        .add-user-footer {
+          transition: border-color 140ms ease-out, background-color 140ms ease-out;
         }
 
         .add-user-role-option:focus-visible {
@@ -1168,17 +1316,24 @@ export default function AddUserPanel({
 
         @media (max-width: 760px) {
           .add-user-panel {
-            padding: 18px !important;
+            padding: 0 !important;
           }
 
           .add-user-role-grid,
           .add-user-policy-column,
+          .create-account-card,
           .add-user-password-shell {
             grid-template-columns: 1fr !important;
           }
 
-          .add-user-header {
-            align-items: flex-start !important;
+          .create-account-card {
+            justify-items: center !important;
+            text-align: center !important;
+            position: static !important;
+          }
+
+          .create-account-card > div:last-child > div:last-child {
+            grid-template-columns: 1fr !important;
           }
 
           .add-user-footer {
@@ -1194,8 +1349,8 @@ export default function AddUserPanel({
           .add-user-role-option,
           .add-user-card,
           .add-user-summary-card,
-          .add-user-footer,
-          .add-user-header-status {
+          .create-account-card,
+          .add-user-footer {
             transition: none !important;
           }
         }

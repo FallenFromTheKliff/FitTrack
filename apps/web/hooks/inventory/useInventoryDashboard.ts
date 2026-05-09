@@ -531,7 +531,7 @@ export function useInventoryDashboard() {
     const productId = searchParams.get("productId");
     const equipmentId = searchParams.get("equipmentId");
     const normalizedTab: InventoryTab | null =
-      tabParam === "retail" || tabParam === "equipment" || tabParam === "analytics"
+      tabParam === "retail" || tabParam === "equipment"
         ? tabParam
         : null;
 
@@ -575,7 +575,7 @@ export function useInventoryDashboard() {
   };
 
   const openRetailDetails = (productId: string) => {
-    setSelectedRetailId(productId);
+    setSelectedRetailId((current) => (current === productId ? null : productId));
   };
 
   const openRetailRestock = (productId: string) => {
@@ -592,7 +592,9 @@ export function useInventoryDashboard() {
   };
 
   const openEquipmentDetails = (equipmentId: string) => {
-    setSelectedEquipmentId(equipmentId);
+    setSelectedEquipmentId((current) =>
+      current === equipmentId ? null : equipmentId,
+    );
   };
 
   const openEquipmentWriteOff = (equipmentId: string) => {

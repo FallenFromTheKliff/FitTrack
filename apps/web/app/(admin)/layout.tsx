@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { type PageKey } from "@fittrack/app-config";
 
@@ -7,16 +7,30 @@ import { useAuth } from "@/contexts/AuthContext";
 import { MemberProvider } from "@/contexts/MemberContext";
 import { ScheduleProvider } from "@/contexts/ScheduleContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useDebounce } from "@fittrack/hooks";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { canAccessWebPage, isWebPortalRole } from "@/lib/portal-access";
+import {
+  canAccessWebPage,
+  getWebPortalFallbackPath,
+  isWebPortalRole,
+} from "@/lib/portal-access";
 import { SIDEBAR_WIDTH, layoutStyles } from "@/styles/layoutStyles";
 
 import { AnalyticsSectionFilterProvider } from "@/contexts/AnalyticsSectionFilterContext";
+import { FitText } from "@/components/fit/FitText";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import { getBrowserViewportState } from "@/utils/browserViewport";
 
 function getPageKey(pathname: string): PageKey {
+  if (pathname.startsWith("/member/facilities")) return "member-facilities";
+  if (pathname.startsWith("/member/bookings")) return "member-bookings";
+  if (pathname.startsWith("/member/nutrition")) return "member-nutrition";
+  if (pathname.startsWith("/member/mastery")) return "member-mastery";
+  if (pathname.startsWith("/member/ai")) return "member-ai";
+  if (pathname.startsWith("/member/profile")) return "member-profile";
+  if (pathname.startsWith("/member/settings")) return "member-settings";
+  if (pathname.startsWith("/member/home")) return "member-home";
+  if (pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/memberships-promos")) return "memberships-promos";
   if (pathname.startsWith("/members")) return "members";
   if (pathname.startsWith("/schedule")) return "schedule";
@@ -36,6 +50,24 @@ const BACKGROUND_LINES = Array.from({ length: 4 }, (_, index) => index);
 const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
   index % 2 === 0 ? "FITTRACK" : "SERTFIT",
 );
+const SIGN_OUT_BOTTOM_GAP = 10;
+const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
+  "profile",
+  "members",
+  "schedule",
+  "facilities",
+  "inventory",
+  "exercise-lab",
+  "ai",
+  "member-home",
+  "member-facilities",
+  "member-bookings",
+  "member-nutrition",
+  "member-mastery",
+  "member-ai",
+  "member-profile",
+  "member-settings",
+]);
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -45,15 +77,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const s = layoutStyles(colors, activeThemeKey);
   const themeTransition = useThemeTransition();
   const pageKey = getPageKey(pathname);
+  const fallbackPath = getWebPortalFallbackPath(user?.role);
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const mobileSidebarRef = useRef<HTMLDivElement | null>(null);
-  const [viewportWidth, setViewportWidth] = useState(0);
-  const debouncedViewportWidth = useDebounce(viewportWidth, 120);
-  const isHalfScreenOrLess = useMemo(() => {
-    if (!debouncedViewportWidth) return false;
-    return debouncedViewportWidth < 1260;
-  }, [debouncedViewportWidth]);
+  const scrollIdleTimerRef = useRef<number | null>(null);
+  const [isHamburgerMode, setIsHamburgerMode] = useState(false);
+  const [isBodyScrolling, setIsBodyScrolling] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
@@ -66,17 +96,32 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       return;
     }
     if (!canAccessWebPage(user.role, pageKey)) {
-      router.replace("/dashboard");
+      router.replace(fallbackPath);
     }
-  }, [isLoading, isAuthenticated, pageKey, router, user?.role]);
+  }, [fallbackPath, isLoading, isAuthenticated, pageKey, router, user?.role]);
 
   useEffect(() => {
     const evaluateViewportMode = () => {
-      setViewportWidth(window.outerWidth || window.innerWidth);
+      const { isBrowserWindowResized, viewportWidth } =
+        getBrowserViewportState();
+
+      setIsHamburgerMode(isBrowserWindowResized || viewportWidth < 1024);
     };
     evaluateViewportMode();
     window.addEventListener("resize", evaluateViewportMode);
-    return () => window.removeEventListener("resize", evaluateViewportMode);
+    window.visualViewport?.addEventListener("resize", evaluateViewportMode);
+    return () => {
+      window.removeEventListener("resize", evaluateViewportMode);
+      window.visualViewport?.removeEventListener("resize", evaluateViewportMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current) {
+        window.clearTimeout(scrollIdleTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -89,7 +134,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [isMobileOpen]);
 
   useEffect(() => {
-    if (!isMobileOpen || !isHalfScreenOrLess) return;
+    if (!isMobileOpen || !isHamburgerMode) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (
@@ -103,15 +148,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [isMobileOpen, isHalfScreenOrLess]);
+  }, [isMobileOpen, isHamburgerMode]);
 
   useEffect(() => {
-    if (!isHalfScreenOrLess && isMobileOpen) setIsMobileOpen(false);
-  }, [isHalfScreenOrLess, isMobileOpen]);
+    if (!isHamburgerMode && isMobileOpen) setIsMobileOpen(false);
+  }, [isHamburgerMode, isMobileOpen]);
+
+  const handleContentScroll = () => {
+    setIsBodyScrolling(true);
+    if (scrollIdleTimerRef.current) {
+      window.clearTimeout(scrollIdleTimerRef.current);
+    }
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      setIsBodyScrolling(false);
+    }, 5000);
+  };
 
   if (isLoading || !isAuthenticated) return null;
   if (!isWebPortalRole(user?.role) || !canAccessWebPage(user.role, pageKey))
     return null;
+
+  const locksToSignOutBoundary =
+    !isHamburgerMode && FIXED_HEIGHT_PAGE_KEYS.has(pageKey);
 
   let content = (
     <div className={themeTransition} style={s.root}>
@@ -127,9 +185,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             style={s.backgroundLine(line)}
           >
             {BACKGROUND_WORDS.map((word, index) => (
-              <span key={`${line}-${index}`} style={s.backgroundWord(index)}>
+              <FitText
+                key={`${line}-${index}`}
+                as="span"
+                style={s.backgroundWord(index)}
+                excludeGlobalScale
+              >
                 {word}
-              </span>
+              </FitText>
             ))}
           </div>
         ))}
@@ -142,7 +205,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           style={s.backgroundFadeRight}
         />
       </div>
-      {!isHalfScreenOrLess ? (
+      {!isHamburgerMode ? (
         <div
           style={{
             ...s.desktopSidebarWrap,
@@ -157,14 +220,36 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <main style={s.content}>
             <Header
               onMenuToggle={() => setIsMobileOpen((v) => !v)}
-              showMenuButton={isHalfScreenOrLess}
+              showMenuButton={isHamburgerMode}
               pageKey={pageKey}
             />
-            <div style={s.contentBody}>{children}</div>
+            <div
+              className={
+                isBodyScrolling
+                  ? "fit-browser-scrollpane fit-browser-scrollpane-active"
+                  : "fit-browser-scrollpane"
+              }
+              data-fit-fixed-height={locksToSignOutBoundary ? pageKey : undefined}
+              style={{
+                ...s.contentBody,
+                ...(locksToSignOutBoundary
+                  ? {
+                      display: "flex",
+                      flexDirection: "column",
+                      marginBottom: SIGN_OUT_BOTTOM_GAP,
+                      overflowY: "hidden",
+                      paddingBottom: 0,
+                    }
+                  : null),
+              }}
+              onScroll={handleContentScroll}
+            >
+              {children}
+            </div>
           </main>
         </AnalyticsSectionFilterProvider>
       </div>
-      {isHalfScreenOrLess ? (
+      {isHamburgerMode ? (
         <>
           <div
             className="fixed inset-0"

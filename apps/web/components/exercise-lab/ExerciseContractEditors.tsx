@@ -37,6 +37,7 @@ import {
   normalizeExerciseMovementProfile,
   normalizeExerciseMuscleTargets,
 } from "@fittrack/utils";
+import { ConfirmModal } from "@/components/modals";
 
 type EditorColors = {
   background: string;
@@ -1200,6 +1201,8 @@ export function MovementProfileEditor({
   const [previewMotion, setPreviewMotion] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<RigTemplateKey | null>(null);
+  const [regenerateConfirmTemplate, setRegenerateConfirmTemplate] =
+    useState<RigTemplateKey | "generated" | null>(null);
   const [spatialPresetOverride, setSpatialPresetOverride] =
     useState<SpatialRulePreset | null>(null);
   const [viewTransform, setViewTransform] = useState<RigViewTransform>("front");
@@ -1318,18 +1321,11 @@ export function MovementProfileEditor({
     onChange(nextProfile ? normalizeExerciseMovementProfile(nextProfile) : null);
   };
 
-  const createGeneratedProfile = (template?: RigTemplateKey) => {
+  const applyGeneratedProfile = (template?: RigTemplateKey) => {
     const sourceContract = template
       ? getTemplateContract(template)
       : generatedContract;
     if (!sourceContract) return;
-    if (
-      rig &&
-      typeof window !== "undefined" &&
-      !window.confirm("Regenerate this rig? Manual keyframe edits will be overwritten.")
-    ) {
-      return;
-    }
     const nextMode = inferMovementMode(sourceContract);
     const baseContract = patchContractForMode(sourceContract, nextMode);
     const nextPreset = template
@@ -1373,6 +1369,24 @@ export function MovementProfileEditor({
         ],
       }),
     );
+  };
+
+  const createGeneratedProfile = (template?: RigTemplateKey) => {
+    if (rig) {
+      setRegenerateConfirmTemplate(template ?? "generated");
+      return;
+    }
+
+    applyGeneratedProfile(template);
+  };
+
+  const handleConfirmRegenerate = () => {
+    const template =
+      regenerateConfirmTemplate === "generated"
+        ? undefined
+        : regenerateConfirmTemplate ?? undefined;
+    setRegenerateConfirmTemplate(null);
+    applyGeneratedProfile(template);
   };
 
   const patchMovementContract = (
@@ -1570,6 +1584,7 @@ export function MovementProfileEditor({
   };
 
   return (
+    <>
     <section style={panelStyle(colors)}>
       <div>
         <strong style={{ color: colors.text }}>Visual movement editor</strong>
@@ -2472,6 +2487,16 @@ export function MovementProfileEditor({
         </div>
       ) : null}
     </section>
+    <ConfirmModal
+      isOpen={regenerateConfirmTemplate !== null}
+      title="Regenerate Rig"
+      message="Regenerate this rig? Manual keyframe edits will be overwritten."
+      confirmLabel="REGENERATE RIG"
+      isDanger
+      onConfirm={handleConfirmRegenerate}
+      onCancel={() => setRegenerateConfirmTemplate(null)}
+    />
+    </>
   );
 }
 

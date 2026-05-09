@@ -1,213 +1,183 @@
-# Styling & Design Rules
+# Styling And Design Rules
 
-## Shared Principles (Both Apps)
+## Shared Principles
 
-- No hardcoded color hex values in component code. Use the token system (`colors.*` from `useTheme()`).
-- No comments in source files.
-- Compact spacing: no excessive blank lines, no vertical alignment, no trailing commas.
-- Closing `}` must not be followed by a blank line before the next statement or EOF.
+- Use FitTrack theme tokens instead of hardcoded color hex values in component code.
+- Keep spacing compact and intentional.
+- Avoid excessive blank lines, vertical alignment, and unused imports.
+- Use app-local Fit primitives before creating one-off UI controls.
+- Keep the two frontend surfaces visually related without leaking platform-specific styling across apps.
 
----
-
-## Mobile (Expo / React Native)
+## Mobile Styling
 
 ### Factory Pattern
-Every component uses a `makeXxxStyles(colors: ThemeColors)` factory returning a `StyleSheet.create({})` object. Factories live in:
-- `apps/mobile/styles/components/FitStyles.ts` — Fit component styles
-- `apps/mobile/styles/shared/ScreenStyles.ts` — screen-level styles
-- `apps/mobile/styles/shared/LayoutStyles.ts` — Header, Sidebar layout
-- `apps/mobile/styles/modals/XxxStyles.ts` — one file per modal (PascalCase)
 
-Consume factories inside `useMemo`:
+Mobile components use `makeXxxStyles(colors: ThemeColors)` factories that return `StyleSheet.create({})` objects.
+
+Common locations:
+
+- `apps/mobile/styles/components/FitStyles.ts`
+- `apps/mobile/styles/shared/ScreenStyles.ts`
+- `apps/mobile/styles/shared/LayoutStyles.ts`
+- `apps/mobile/styles/modals/XxxStyles.ts`
+
+Consume factories with `useMemo`:
+
 ```ts
 const s = useMemo(() => makeXxxStyles(colors), [colors]);
 ```
+
 Never call a style factory naked in the render body.
 
-### Theme-Aware Animated Styles
-For values that animate during theme transitions, use `useThemeTransitionAnim()` to get the `ic` object, consumed inside `useAnimatedStyle`:
-```ts
-const { ic } = useThemeTransitionAnim();
-const cardStyle = useAnimatedStyle(() => ({
-  backgroundColor: ic.surface.value,
-  borderColor: ic.border.value
-}));
-```
-Do not call `useThemeTransitionAnim` in components that only need static colors.
+### Theme-Aware Animation
 
-### Fit Components
-- `FitText` / `AnimatedFitText` — all text
-- `FitButton` — all interactive buttons
-- `FitCard` — list rows, stat tiles, selection cards
-- `FitSection` — section containers
-- `FitSearch` — search input
-- `FitFilter` — animated filter panel
-- `FitInputField` — form fields (use `compact` prop in tight modal layouts)
-- `FitTextInput` — bare text input without form wiring
+- Use `useThemeTransitionAnim()` only when values animate during theme transitions.
+- Consume animated colors inside `useAnimatedStyle`.
+- Do not call `useThemeTransitionAnim()` in components that only need static colors.
+- Use Reanimated for native animations. Do not import `Animated` from `react-native`.
 
-### Deprecated Native Props
-- `shadow*` props are deprecated. Use `boxShadow` string + `elevation` for cross-platform shadow.
-- `pointerEvents` must be in `style`, not as a JSX prop.
+### Mobile Fit Components
 
-### Animations
-- `react-native-reanimated` only. Never import `Animated` from `react-native`.
+Use current app-local primitives from `apps/mobile/components/fit`:
 
----
+- `FitAvatarImage`
+- `FitButton`
+- `FitCard`
+- `FitFAB`
+- `FitFABMenu`
+- `FitFilter`
+- `FitInputField`
+- `FitSearch`
+- `FitSection`
+- `FitSquareToggle`
+- `FitText`
 
-## Web (Next.js / React) — CSS Variables + Tailwind System
+Raw React Native primitives are acceptable for layout wrappers, custom camera/canvas surfaces, animated wrappers, and cases with no Fit equivalent.
 
-### Overview
-The web app uses a two-layer styling system:
+## Web Styling
 
-1. **`CSSProperties` factory objects** for page-level and layout-level styles.
-2. **Tailwind utility classes via `cn()`** for component-level and interactive styles, consuming CSS variable tokens.
+The web app uses two styling layers:
 
-`ThemeContext` bridges the two layers by injecting `--fit-*` CSS custom properties onto `document.documentElement` on every theme change.
+1. `CSSProperties` style factories for page and layout surfaces.
+2. Tailwind utility classes composed through `cn()` inside reusable component primitives.
 
----
+### Style Factories
 
-### Layer 1 — Style Factory Functions (Page & Layout)
+Style factories live in `apps/web/styles/`:
 
-`makeXxxStyles(colors: ThemeColors)` functions return plain `CSSProperties` objects. Applied via `style={{}}` on HTML elements:
+- `authStyles.ts`
+- `fitStyles.ts`
+- `layoutStyles.ts`
+- `modalStyles.ts`
+- `pageStyles.ts`
+
+Use them once near the top of the component:
 
 ```ts
-export function makeDashboardStyles(colors: ThemeColors) {
-  return {
-    pageHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      marginBottom: 20
-    } as CSSProperties,
-    kpiCard: {
-      backgroundColor: colors.surface,
-      border: `1px solid ${colors.border}`,
-      borderRadius: 12,
-      padding: 16
-    } as CSSProperties
-  };
-}
+const s = useMemo(() => makeDashboardStyles(colors), [colors]);
 ```
+
+Then apply by key:
 
 ```tsx
-const s = useMemo(() => makeDashboardStyles(colors), [colors]);
 return <div style={s.pageHeader}>...</div>;
 ```
 
-Style files live in `apps/web/styles/`:
-- `AuthStyles.ts` — login/locked page styles
-- `FitStyles.ts` — Fit component style factories
-- `LayoutStyles.ts` — `makeHeaderStyles`, `makeSidebarStyles`, `makeLayoutStyles`
-- `ModalStyles.ts` — `makeModalStyles` for all modals
-- `PageStyles.ts` — `makeDashboardStyles`, `makeProfileStyles` for admin pages
+Avoid Tailwind class piles directly on page-level layout `div`s when a style factory exists for that surface.
 
-**Rule:** Do not apply Tailwind utility classes directly on page-level `div` layout elements. Those must use style factory objects.
+### Tailwind And `cn()`
 
----
-
-### Layer 2 — Tailwind + `cn()` (Component-Level)
-
-Fit components (`FitButton`, `FitText`, `FitInputField`, etc.) and their interactive states use Tailwind utility classes composed with `cn()` from `utils/cn.ts`:
+Web Fit components use tokenized Tailwind classes and `cn()` for conditional class composition:
 
 ```ts
-import { cn } from "@/utils/cn";
-
 const base = cn(
-  "inline-flex items-center gap-2 rounded-lg transition-colors",
+  "inline-flex items-center gap-2 transition-colors",
   fullWidth && "w-full",
   className
 );
 ```
 
-**Tailwind token classes** map to CSS variables injected by `ThemeContext`:
-```
-bg-brand          → var(--fit-brand)
-bg-surface        → var(--fit-surface)
-bg-surface-raised → var(--fit-surface-raised)
-bg-base           → var(--fit-base)
-bg-field-bg       → var(--fit-field-bg)
-text-text-primary → var(--fit-text-primary)
-text-text-muted   → var(--fit-text-muted)
-border-border     → var(--fit-border)
-border-brand      → var(--fit-brand)
-text-success      → var(--fit-success)
-text-warning      → var(--fit-warning)
-text-danger       → var(--fit-danger)
-```
+Prefer token classes such as `bg-surface`, `bg-surface-raised`, `bg-base`, `text-text-primary`, `text-text-muted`, `border-border`, `bg-brand`, `text-success`, `text-warning`, and `text-danger`.
 
-**`globals.css` component classes** (defined with `@apply`) for recurring patterns:
-```css
-.fit-card          { @apply bg-surface border border-border rounded-xl overflow-hidden; }
-.fit-kpi-card      { @apply bg-surface border border-border rounded-xl p-4; }
-.fit-status-pill   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border; }
-.fit-section-heading { @apply text-[11px] font-bold tracking-widest uppercase text-text-muted; }
-.fit-table-head    { @apply text-left text-[11px] font-semibold tracking-wide uppercase text-text-muted px-4 py-3 border-b border-border; }
-.fit-table-row     { @apply border-b border-border last:border-b-0 hover:bg-surface-raised transition-colors duration-100; }
-.fit-table-cell    { @apply px-4 py-3 text-sm text-text-primary; }
-.fit-table-cell-muted { @apply px-4 py-3 text-sm text-text-muted; }
-```
+### Web Fit Components
 
----
+Use current app-local primitives from `apps/web/components/fit`:
 
-### ThemeContext Integration
-`ThemeContext` injects CSS custom properties:
-```css
---fit-brand: #E87722;
---fit-surface: #FFFFFF;
---fit-border: #E5E7EB;
-```
-These are set via `document.documentElement.style.setProperty(cssKey, v)` in a `useEffect` that fires whenever `activeThemeKey` changes — including during live theme preview.
+- `FitButton`
+- `FitCard`
+- `FitChartContainer`
+- `FitFilter`
+- `FitInputField`
+- `FitPagination`
+- `FitPill`
+- `FitSearch`
+- `FitSection`
+- `FitTable`
+- `FitText`
 
-In style factories, use `colors.*` runtime values:
+Use `FitTable`, `FitPagination`, and `FitPill` before inventing custom table/status/pagination patterns.
+
+### Theme Integration
+
+`ThemeContext` injects CSS variables onto `document.documentElement`. Style factories use runtime `colors.*`; Tailwind consumes mapped `--fit-*` variables.
+
+Use `colors.*` in factory objects:
+
 ```ts
 backgroundColor: colors.surface,
-border: `1px solid ${colors.border}`,
+border: `1px solid ${colors.border}`
 ```
-In Tailwind component classes, use the mapped token names:
+
+Use token classes in components:
+
 ```tsx
 className="bg-surface border border-border text-text-primary"
 ```
-Never use raw hex values in either system.
 
----
+Never hardcode raw hex values in app UI code unless defining theme tokens themselves.
 
-### `useThemeTransition` — Returns Class String
+### Raw Visual Exceptions
 
-The `useThemeTransition` hook returns a **Tailwind class string** (not a `CSSProperties` object):
+Hardcoded visual values are acceptable only when they are deliberately outside the runtime theme layer:
+
+- app manifest/icon/background metadata
+- generated export HTML, email-like markup, PDF snapshots, or image previews
+- QR, camera, pose, chart, map, and sensor overlays where contrast has to remain stable over live media
+- `rgba()` shadows, scrims, and alpha overlays that cannot be expressed by current tokens
+- named feature-local visual constants while waiting for a shared token decision
+
+New exceptions should be named semantically, kept near the feature or export helper that owns them, and avoided in ordinary page/component JSX.
+
+### `useThemeTransition`
+
+`apps/web/hooks/animations/useThemeTransition.ts` returns a Tailwind class string:
+
 ```ts
-export function useThemeTransition(): string {
-  const { settings } = useTheme();
-  if (settings.animationLevel !== "full") return "";
-  return "transition-colors duration-[280ms] ease-linear";
-}
+const themeTransition = useThemeTransition();
 ```
-Apply it as: `className={cn("...", themeTransition)}` — not as a `style` spread.
 
----
+Apply it through `cn()`, not as a style object:
 
-### "use client" Directive
-Any web file using `useTheme()`, `useAuth()`, `useState`, `useEffect`, `useRef`, `useCallback`, or any event handler must have `"use client"` as the absolute first line.
+```tsx
+<div className={cn("bg-surface", themeTransition)} />
+```
 
-### Animation
-- `useFadeIn({ fromY, duration })` — returns `CSSProperties` for CSS opacity + translateY entrance.
-- `useThemeTransition()` — returns a Tailwind class string for theme-change transitions.
-- No `react-native-reanimated`. No `react-native` anything.
+### `"use client"`
 
----
+Any web file using hooks, browser APIs, refs, state, callbacks, effects, TanStack Query hooks, or event handlers must have `"use client"` as the first line.
 
-## Shared Design Token Mapping
+## Shared Token Layer
 
-| Token | Mobile (runtime) | Web (factory) | Web (Tailwind) |
+`@fittrack/ui` exports tokens, themes, font maps, radii, max widths, and style constants. App-local Fit components consume this shared layer, but component implementations live in each app.
+
+| Token | Mobile | Web Factory | Web Tailwind |
 |---|---|---|---|
-| Brand color | `colors.brand` | `colors.brand` | `text-brand`, `bg-brand` |
+| Brand | `colors.brand` | `colors.brand` | `bg-brand`, `text-brand` |
 | Surface | `colors.surface` | `colors.surface` | `bg-surface` |
 | Surface raised | `colors.surfaceRaised` | `colors.surfaceRaised` | `bg-surface-raised` |
 | Border | `colors.border` | `colors.border` | `border-border` |
 | Text primary | `colors.textPrimary` | `colors.textPrimary` | `text-text-primary` |
 | Text muted | `colors.textMuted` | `colors.textMuted` | `text-text-muted` |
-| Field bg | `colors.fieldBg` | `colors.fieldBg` | `bg-field-bg` |
 | Danger | `colors.danger` | `colors.danger` | `text-danger` |
 | Success | `colors.success` | `colors.success` | `text-success` |
 | Warning | `colors.warning` | `colors.warning` | `text-warning` |
-| Radius input | `R.input` (px) | `BORDER_RADIUS.input` | `rounded-lg` |
-| Radius card | `R.card` (px) | `BORDER_RADIUS.card` | `rounded-xl` |
-| Radius modal | `R.modal` (px) | `BORDER_RADIUS.modal` | `rounded-2xl` |

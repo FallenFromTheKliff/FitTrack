@@ -28,6 +28,9 @@ type Props = {
   hideCloseButton?: boolean;
   headerStyle?: CSSProperties;
   footerStyle?: CSSProperties;
+  overlayStyle?: CSSProperties;
+  containerStyle?: CSSProperties;
+  contentStyle?: CSSProperties;
 };
 
 export default function FitModal({
@@ -49,11 +52,13 @@ export default function FitModal({
   hideHeaderText = false,
   hideCloseButton = false,
   headerStyle,
-  footerStyle
+  footerStyle,
+  overlayStyle,
+  containerStyle,
+  contentStyle
 }: Props) {
-  const { colors, settings, onBrandTextColor } = useTheme();
+  const { colors, onBrandTextColor } = useTheme();
   const s = modalStyles(colors);
-  const shouldAnimate = settings.animationLevel !== "none";
   const [visible, setVisible] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -133,83 +138,124 @@ export default function FitModal({
   if ((!isOpen && !visible) || !portalRoot) return null;
 
   return createPortal(
-    <div
-      style={{
-        ...s.overlay,
-        opacity: visible ? 1 : 0,
-        pointerEvents: isOpen && visible ? "auto" : "none",
-        transition: shouldAnimate ? "opacity 180ms ease" : "none"
-      }}
-      onClick={onClose}
-    >
+    <>
+      <style>
+        {`
+          @keyframes fit-modal-zoom-in {
+            from {
+              opacity: 0;
+              transform: scale(0.92);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            [data-fit-modal-container="true"] {
+              animation: none !important;
+              transition: none !important;
+              transform: scale(1) !important;
+            }
+          }
+        `}
+      </style>
       <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={hideHeaderText ? undefined : titleId}
-        aria-describedby={subtitle && !hideHeaderText ? subtitleId : undefined}
-        aria-label={hideHeaderText ? title : undefined}
-        tabIndex={-1}
         style={{
-          ...s.container,
-          maxWidth,
-          transform: visible ? "scale(1)" : "scale(0.96)",
+          ...s.overlay,
           opacity: visible ? 1 : 0,
           pointerEvents: isOpen && visible ? "auto" : "none",
-          transition: shouldAnimate ? "transform 180ms ease, opacity 180ms ease" : "none"
+          transition: "opacity 180ms ease",
+          ...overlayStyle
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={onClose}
       >
         <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={hideHeaderText ? undefined : titleId}
+          aria-describedby={subtitle && !hideHeaderText ? subtitleId : undefined}
+          aria-label={hideHeaderText ? title : undefined}
+          tabIndex={-1}
           style={{
-            ...s.header,
-            ...(hideHeaderDivider ? { borderBottom: "none" } : {}),
-            ...headerStyle
+            ...s.container,
+            maxWidth,
+            ...containerStyle,
+            transformOrigin: "center",
+            transform: visible ? "scale(1)" : "scale(0.92)",
+            opacity: visible ? 1 : 0,
+            pointerEvents: isOpen && visible ? "auto" : "none",
+            transition: "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
+            animation: visible ? "fit-modal-zoom-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both" : undefined,
+            willChange: "transform, opacity"
           }}
+          data-fit-modal-container="true"
+          onClick={(e) => e.stopPropagation()}
         >
-          <div style={s.headerLeft}>
-            {(iconNode || icon) && (
-              <div style={s.headerIconWrap}>
-                {iconNode ?? (Icon ? <Icon size={15} color={onBrandTextColor} strokeWidth={2} /> : null)}
-              </div>
-            )}
-            {!hideHeaderText && (
-              <div style={s.headerText}>
-                <FitText id={titleId} style={{ ...s.title, ...titleStyle }}>{title}</FitText>
-                {subtitle ? (
-                  <FitText id={subtitleId} as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
-                ) : null}
-              </div>
-            )}
-          </div>
-          {!hideCloseButton ? (
-            <FitButton
-              variant="ghost"
-              iconOnly
-              icon={X}
-              iconSize={20}
-              onClick={onClose}
-              style={s.closeBtn}
-              aria-label={closeAriaLabel ?? "Close modal"}
-            />
-          ) : null}
-        </div>
-        <div style={noScroll ? s.content : { ...s.content, overflowY: "auto" as const, maxHeight: "60vh" }}>
-          {children}
-        </div>
-        {footer && (
           <div
             style={{
-              ...s.footer,
-              ...(hideFooterDivider ? { borderTop: "none" } : {}),
-              ...footerStyle
+              ...s.header,
+              ...(hideHeaderDivider ? { borderBottom: "none" } : {}),
+              ...headerStyle
             }}
           >
-            {footer}
+            <div style={s.headerLeft}>
+              {(iconNode || icon) && (
+                <div style={s.headerIconWrap}>
+                  {iconNode ?? (Icon ? <Icon size={15} color={onBrandTextColor} strokeWidth={2} /> : null)}
+                </div>
+              )}
+              {!hideHeaderText && (
+                <div style={s.headerText}>
+                  <FitText id={titleId} style={{ ...s.title, ...titleStyle }}>{title}</FitText>
+                  {subtitle ? (
+                    <FitText id={subtitleId} as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            {!hideCloseButton ? (
+              <FitButton
+                variant="ghost"
+                iconOnly
+                icon={X}
+                iconSize={20}
+                onClick={onClose}
+                style={s.closeBtn}
+                aria-label={closeAriaLabel ?? "Close modal"}
+              />
+            ) : null}
           </div>
-        )}
+          <div
+            style={
+              noScroll
+                ? { ...s.content, ...contentStyle }
+                : {
+                    ...s.content,
+                    overflowY: "auto" as const,
+                    maxHeight: "60vh",
+                    ...contentStyle
+                  }
+            }
+          >
+            {children}
+          </div>
+          {footer && (
+            <div
+              style={{
+                ...s.footer,
+                ...(hideFooterDivider ? { borderTop: "none" } : {}),
+                ...footerStyle
+              }}
+            >
+              {footer}
+            </div>
+          )}
+        </div>
       </div>
-    </div>,
+    </>,
     portalRoot
   );
 }

@@ -3,11 +3,11 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { CalendarPlus, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import type {
@@ -31,7 +31,7 @@ import {
   FitTextArea,
   FitTextInput,
 } from "@/components/fit";
-import { CalendarModal } from "@/components/modals";
+import { CalendarModal, ConfirmModal, FitModal } from "@/components/modals";
 
 type AvailabilitySlotDraft = {
   dayOfWeek: number;
@@ -69,6 +69,13 @@ type SelectOption = {
   hourlyRate?: number | null;
   label: string;
   value: string;
+};
+type OverlayConfirmation = {
+  confirmLabel: string;
+  isDanger?: boolean;
+  message: string;
+  onConfirm: () => void;
+  title: string;
 };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -286,7 +293,7 @@ function buildStatusTone(
     case "pending":
       return {
         bg: colors.brand,
-        color: colors.onBrand ?? "#120e0b",
+        color: colors.onBrand,
         label:
           status === "pending_coach"
             ? "Pending coach"
@@ -295,13 +302,13 @@ function buildStatusTone(
     case "pending_payment":
       return {
         bg: colors.warning,
-        color: colors.onBrand ?? "#120e0b",
+        color: colors.onBrand,
         label: "Pending payment",
       };
     case "balance_pending":
       return {
         bg: colors.warning,
-        color: colors.onBrand ?? "#120e0b",
+        color: colors.onBrand,
         label: "Pending full payment",
       };
     case "confirmed":
@@ -413,79 +420,46 @@ function actionPillStyle(
   };
 }
 
-function usePortalRoot() {
-  const [root, setRoot] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setRoot(document.body);
-  }, []);
-
-  return root;
-}
-
 function OverlayFrame({
   children,
   isOpen,
+  maxWidth = 820,
   onClose,
+  subtitle = "Review or schedule coaching operations.",
+  title = "Gym Operations",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   isOpen: boolean;
+  maxWidth?: number;
   onClose: () => void;
+  subtitle?: string;
+  title?: string;
 }) {
-  const { colors, settings } = useTheme();
-  const portalRoot = usePortalRoot();
-  const [visible, setVisible] = useState(false);
-  const rafRef = useRef<number | null>(null);
-  const shouldAnimate = settings.animationLevel !== "none";
-
-  useEffect(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    if (isOpen) {
-      rafRef.current = requestAnimationFrame(() => {
-        setVisible(true);
-        rafRef.current = null;
-      });
-      return;
-    }
-
-    setVisible(false);
-  }, [isOpen]);
-
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    },
-    [],
-  );
-
-  if ((!isOpen && !visible) || !portalRoot) return null;
-
-  return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 70,
-        display: "flex",
-        alignItems: "stretch",
-        justifyContent: "center",
+  return (
+    <FitModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      maxWidth={maxWidth}
+      overlayStyle={{
+        alignItems: "center",
         padding: 24,
-        backgroundColor: colors.overlay,
-        opacity: visible ? 1 : 0,
-        pointerEvents: isOpen && visible ? "auto" : "none",
-        transition: shouldAnimate ? "opacity 180ms ease" : "none",
+      }}
+      containerStyle={{
+        width: `min(${maxWidth}px, calc(100vw - 48px))`,
+        maxWidth: "calc(100vw - 48px)",
+        maxHeight: "calc(100vh - 48px)",
+        borderRadius: 8,
+      }}
+      contentStyle={{
+        maxHeight: "calc(100vh - 180px)",
+        overflowY: "auto",
+        padding: 20,
       }}
     >
       {children}
-    </div>,
-    portalRoot,
+    </FitModal>
   );
 }
 
@@ -586,21 +560,21 @@ export function GymOperationsCoachAppointmentModal({
   const tone = canCollectBalance
     ? {
         bg: colors.warning,
-        color: colors.onBrand ?? "#120e0b",
+        color: colors.onBrand,
         label: "Pending full payment",
       }
     : status === "pending_payment" &&
         appointment?.activePaymentStage === "full"
       ? {
           bg: colors.warning,
-          color: colors.onBrand ?? "#120e0b",
+          color: colors.onBrand,
           label: "Pending full payment",
         }
       : status === "pending_payment" &&
           appointment?.activePaymentStage === "downpayment"
         ? {
             bg: colors.brand,
-            color: colors.onBrand ?? "#120e0b",
+            color: colors.onBrand,
             label: "Pending downpayment",
           }
         : buildStatusTone(status, colors);
@@ -741,24 +715,30 @@ export function GymOperationsCoachAppointmentModal({
       !onCollectInitialPayment);
 
   return (
-    <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
+    <OverlayFrame
+      isOpen={isOpen}
+      maxWidth={760}
+      onClose={isSubmitting ? () => {} : onClose}
+      subtitle={description}
+      title={title}
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 720,
-          maxWidth: "min(720px, calc(100vw - 48px))",
-          maxHeight: "min(740px, calc(100vh - 48px))",
-          overflow: "auto",
-          margin: "auto",
-          padding: 40,
-          borderRadius: 26,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
+          width: "100%",
+          maxWidth: "none",
+          maxHeight: "none",
+          overflow: "visible",
+          margin: 0,
+          padding: 0,
+          borderRadius: 0,
+          border: "none",
+          backgroundColor: "transparent",
           display: "grid",
-          gap: 20,
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
-          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
-          transition: shouldAnimate ? "transform 180ms ease" : "none",
+          gap: 14,
+          boxShadow: "none",
+          transform: "none",
+          transition: shouldAnimate ? "opacity 160ms ease" : "none",
         }}
       >
         <div
@@ -780,31 +760,6 @@ export function GymOperationsCoachAppointmentModal({
             {tone.label}
           </FitText>
         </div>
-        <div style={{ display: "grid", gap: 10 }}>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 30,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              lineHeight: 1.12,
-            }}
-          >
-            {title}
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 14,
-              color: colors.textMuted,
-              lineHeight: 1.32,
-              maxWidth: 520,
-            }}
-          >
-            {description}
-          </FitText>
-        </div>
-
         <div style={{ ...overlaySurfaceStyle(colors), gap: 8 }}>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}
@@ -1408,10 +1363,10 @@ export function GymOperationsAvailabilityDrawer({
           maxWidth: "min(760px, calc(100vw - 48px))",
           maxHeight: "min(820px, calc(100vh - 48px))",
           overflow: "auto",
-          borderRadius: 26,
+          borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
-          padding: 40,
+          padding: 24,
           display: "grid",
           gap: 20,
           transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
@@ -1721,6 +1676,8 @@ export function GymOperationsVenueBookingModal({
   const { colors, settings } = useTheme();
   const [decision, setDecision] = useState<VenueDecision>("approve");
   const [note, setNote] = useState("");
+  const [decisionConfirm, setDecisionConfirm] =
+    useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
   const windowSummary = booking
     ? formatVenueWindow(booking)
@@ -1741,13 +1698,13 @@ export function GymOperationsVenueBookingModal({
   const tone = isPendingFullPayment
     ? {
         bg: colors.warning,
-        color: colors.onBrand ?? "#120e0b",
+        color: colors.onBrand,
         label: "Pending full payment",
       }
     : isPendingInitialFullPayment
       ? {
           bg: colors.warning,
-          color: colors.onBrand ?? "#120e0b",
+          color: colors.onBrand,
           label: "Pending payment",
         }
     : buildStatusTone(booking?.status ?? "pending", colors);
@@ -1782,30 +1739,11 @@ export function GymOperationsVenueBookingModal({
           : "approve",
     );
     setNote("");
+    setDecisionConfirm(null);
   }, [isOpen, booking?.id, canCollectBalance, isConfirmedSettled]);
 
-  const handleSave = () => {
+  const applyDecision = () => {
     const trimmed = note.trim();
-    const confirmationMessage =
-      decision === "approve"
-        ? "Approve this venue booking now?"
-        : decision === "collect_cash_balance"
-          ? "Accept this venue booking cash balance now?"
-          : decision === "paymongo_balance"
-            ? "Open PayMongo balance collection for this venue booking?"
-        : decision === "mark_complete"
-          ? "Mark this confirmed venue booking complete?"
-        : decision === "no_show"
-          ? "Mark this confirmed venue booking as no-show?"
-        : decision === "cancel"
-          ? "Cancel this venue booking now?"
-        : decision === "reject"
-          ? "Reject this venue booking now?"
-          : "Submit this venue booking decision now?";
-
-    if (typeof window !== "undefined" && !window.confirm(confirmationMessage)) {
-      return;
-    }
 
     if (decision === "approve") {
       onApprove(trimmed);
@@ -1836,7 +1774,38 @@ export function GymOperationsVenueBookingModal({
     }
   };
 
+  const handleSave = () => {
+    const confirmationMessage =
+      decision === "approve"
+        ? "Approve this venue booking now?"
+        : decision === "collect_cash_balance"
+          ? "Accept this venue booking cash balance now?"
+          : decision === "paymongo_balance"
+            ? "Open PayMongo balance collection for this venue booking?"
+        : decision === "mark_complete"
+          ? "Mark this confirmed venue booking complete?"
+        : decision === "no_show"
+          ? "Mark this confirmed venue booking as no-show?"
+        : decision === "cancel"
+          ? "Cancel this venue booking now?"
+        : decision === "reject"
+          ? "Reject this venue booking now?"
+          : "Submit this venue booking decision now?";
+
+    setDecisionConfirm({
+      confirmLabel: decision === "paymongo_balance" ? "OPEN PAYMONGO" : "SAVE",
+      isDanger:
+        decision === "cancel" ||
+        decision === "reject" ||
+        decision === "no_show",
+      message: confirmationMessage,
+      onConfirm: applyDecision,
+      title: "Confirm venue decision",
+    });
+  };
+
   return (
+    <>
     <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
@@ -1846,8 +1815,8 @@ export function GymOperationsVenueBookingModal({
           maxHeight: "min(776px, calc(100vh - 48px))",
           overflow: "auto",
           margin: "auto",
-          padding: 40,
-          borderRadius: 26,
+          padding: 24,
+          borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
           display: "grid",
@@ -2181,6 +2150,22 @@ export function GymOperationsVenueBookingModal({
         </div>
       </div>
     </OverlayFrame>
+    <ConfirmModal
+      isOpen={!!decisionConfirm}
+      title={decisionConfirm?.title ?? "Confirm venue decision"}
+      message={decisionConfirm?.message ?? ""}
+      confirmLabel={decisionConfirm?.confirmLabel ?? "SAVE"}
+      loadingLabel={decisionConfirm?.confirmLabel ?? "SAVE"}
+      isDanger={decisionConfirm?.isDanger}
+      isLoading={isSubmitting}
+      onConfirm={() => {
+        const nextAction = decisionConfirm?.onConfirm;
+        setDecisionConfirm(null);
+        nextAction?.();
+      }}
+      onCancel={() => setDecisionConfirm(null)}
+    />
+    </>
   );
 }
 
@@ -2221,6 +2206,8 @@ export function GymOperationsCreateVenueBookingModal({
   const [paymentStage, setPaymentStage] =
     useState<StaffInitialPaymentStage>("full");
   const [errorText, setErrorText] = useState("");
+  const [createConfirm, setCreateConfirm] =
+    useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
   const inputStyle = modalFieldStyle(colors);
   const textAreaStyle = modalTextAreaStyle(colors);
@@ -2245,6 +2232,7 @@ export function GymOperationsCreateVenueBookingModal({
     setNote("");
     setPaymentStage("full");
     setErrorText("");
+    setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions, venueOptions]);
 
   const venueStartOptions = useMemo(
@@ -2308,6 +2296,18 @@ export function GymOperationsCreateVenueBookingModal({
     endTime > startTime &&
     !hasConflict;
 
+  const submitVenueBooking = () => {
+    onCreate({
+      amenityId: venueId,
+      ...(coachId ? { coachId } : {}),
+      endsAt: toIsoString(date, endTime),
+      memberId,
+      ...(note.trim() ? { notes: note.trim() } : {}),
+      paymentStage,
+      startsAt: toIsoString(date, startTime),
+    });
+  };
+
   const handleCreate = () => {
     setErrorText("");
     if (!memberId) {
@@ -2328,27 +2328,17 @@ export function GymOperationsCreateVenueBookingModal({
       );
       return;
     }
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Create this manual venue booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
-      )
-    ) {
-      return;
-    }
 
-    onCreate({
-      amenityId: venueId,
-      ...(coachId ? { coachId } : {}),
-      endsAt: toIsoString(date, endTime),
-      memberId,
-      ...(note.trim() ? { notes: note.trim() } : {}),
-      paymentStage,
-      startsAt: toIsoString(date, startTime),
+    setCreateConfirm({
+      confirmLabel: "CREATE BOOKING",
+      message: `Create this manual venue booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
+      onConfirm: submitVenueBooking,
+      title: "Confirm venue booking",
     });
   };
 
   return (
+    <>
     <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
@@ -2358,8 +2348,8 @@ export function GymOperationsCreateVenueBookingModal({
           maxHeight: "min(760px, calc(100vh - 48px))",
           overflow: "auto",
           margin: "auto",
-          padding: 40,
-          borderRadius: 26,
+          padding: 24,
+          borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
           display: "grid",
@@ -2736,6 +2726,8 @@ export function GymOperationsCreateVenueBookingModal({
           <FitButton
             variant="primary"
             label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
+            icon={CalendarPlus}
+            iconSize={15}
             onClick={handleCreate}
             disabled={!canSubmit || isSubmitting}
             style={actionPillStyle(colors, true)}
@@ -2752,6 +2744,22 @@ export function GymOperationsCreateVenueBookingModal({
         />
       </div>
     </OverlayFrame>
+    <ConfirmModal
+      isOpen={!!createConfirm}
+      title={createConfirm?.title ?? "Confirm venue booking"}
+      message={createConfirm?.message ?? ""}
+      confirmLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+      loadingLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+      isDanger={createConfirm?.isDanger}
+      isLoading={isSubmitting}
+      onConfirm={() => {
+        const nextAction = createConfirm?.onConfirm;
+        setCreateConfirm(null);
+        nextAction?.();
+      }}
+      onCancel={() => setCreateConfirm(null)}
+    />
+    </>
   );
 }
 
@@ -2787,6 +2795,8 @@ export function GymOperationsCreateCoachBookingModal({
   const [paymentStage, setPaymentStage] =
     useState<StaffInitialPaymentStage>("full");
   const [errorText, setErrorText] = useState("");
+  const [createConfirm, setCreateConfirm] =
+    useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
   const inputStyle = modalFieldStyle(colors);
   const textAreaStyle = modalTextAreaStyle(colors);
@@ -2809,6 +2819,7 @@ export function GymOperationsCreateCoachBookingModal({
     setNote("");
     setPaymentStage("full");
     setErrorText("");
+    setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions]);
 
   const slotOptions = useMemo(() => {
@@ -2859,6 +2870,17 @@ export function GymOperationsCreateCoachBookingModal({
     Boolean(date) &&
     Boolean(selectedSlot);
 
+  const submitCoachBooking = () => {
+    onCreate({
+      coachId,
+      durationMinutes: selectedSlot?.durationMinutes ?? 0,
+      memberId,
+      ...(note.trim() ? { memberNotes: note.trim() } : {}),
+      paymentStage,
+      scheduledAt: toIsoString(date, selectedSlot?.startTime ?? "00:00"),
+    });
+  };
+
   const handleCreate = () => {
     setErrorText("");
     if (!memberId) {
@@ -2879,73 +2901,43 @@ export function GymOperationsCreateCoachBookingModal({
       );
       return;
     }
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Create this manual coach booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
-      )
-    ) {
-      return;
-    }
 
-    onCreate({
-      coachId,
-      durationMinutes: selectedSlot?.durationMinutes ?? 0,
-      memberId,
-      ...(note.trim() ? { memberNotes: note.trim() } : {}),
-      paymentStage,
-      scheduledAt: toIsoString(date, selectedSlot?.startTime ?? "00:00"),
+    setCreateConfirm({
+      confirmLabel: "CREATE BOOKING",
+      message: `Create this manual coach booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
+      onConfirm: submitCoachBooking,
+      title: "Confirm coach booking",
     });
   };
 
   return (
-    <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
+    <>
+    <OverlayFrame
+      isOpen={isOpen}
+      maxWidth={780}
+      onClose={isSubmitting ? () => {} : onClose}
+      subtitle="Create a front-desk coaching session without leaving the shared schedule."
+      title="Create coach booking"
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 760,
-          maxWidth: "min(760px, calc(100vw - 48px))",
-          maxHeight: "min(760px, calc(100vh - 48px))",
-          overflow: "auto",
-          margin: "auto",
-          padding: 40,
-          borderRadius: 26,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
+          width: "100%",
+          maxWidth: "none",
+          maxHeight: "none",
+          overflow: "visible",
+          margin: 0,
+          padding: 0,
+          borderRadius: 0,
+          border: "none",
+          backgroundColor: "transparent",
           display: "grid",
-          gap: 20,
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
-          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
-          transition: shouldAnimate ? "transform 180ms ease" : "none",
+          gap: 14,
+          boxShadow: "none",
+          transform: "none",
+          transition: shouldAnimate ? "opacity 160ms ease" : "none",
         }}
       >
-        <div style={{ display: "grid", gap: 10 }}>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 30,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              lineHeight: 1.12,
-            }}
-          >
-            Create coach booking
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 14,
-              color: colors.textMuted,
-              lineHeight: 1.32,
-              maxWidth: 560,
-            }}
-          >
-            Use this for a front-desk or operator-created coaching session. The
-            appointment is persisted immediately into the shared coaching
-            schedule.
-          </FitText>
-        </div>
-
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
@@ -3279,6 +3271,8 @@ export function GymOperationsCreateCoachBookingModal({
           <FitButton
             variant="primary"
             label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
+            icon={CalendarPlus}
+            iconSize={15}
             onClick={handleCreate}
             disabled={!canSubmit || isSubmitting}
             style={actionPillStyle(colors, true)}
@@ -3295,6 +3289,22 @@ export function GymOperationsCreateCoachBookingModal({
         />
       </div>
     </OverlayFrame>
+    <ConfirmModal
+      isOpen={!!createConfirm}
+      title={createConfirm?.title ?? "Confirm coach booking"}
+      message={createConfirm?.message ?? ""}
+      confirmLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+      loadingLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+      isDanger={createConfirm?.isDanger}
+      isLoading={isSubmitting}
+      onConfirm={() => {
+        const nextAction = createConfirm?.onConfirm;
+        setCreateConfirm(null);
+        nextAction?.();
+      }}
+      onCancel={() => setCreateConfirm(null)}
+    />
+    </>
   );
 }
 
@@ -3328,6 +3338,8 @@ export function GymOperationsCreateCoachModal({
   const [isAvailableForBooking, setIsAvailableForBooking] = useState("active");
   const [bio, setBio] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [createConfirm, setCreateConfirm] =
+    useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
   const inputStyle = modalFieldStyle(colors);
   const textAreaStyle = modalTextAreaStyle(colors);
@@ -3343,6 +3355,7 @@ export function GymOperationsCreateCoachModal({
     setIsAvailableForBooking("active");
     setBio("");
     setErrors({});
+    setCreateConfirm(null);
   }, [isOpen]);
 
   const specialtiesList = useMemo(
@@ -3400,15 +3413,7 @@ export function GymOperationsCreateCoachModal({
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleCreate = () => {
-    if (!validateCoach()) return;
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm("Create this standalone coach now?")
-    ) {
-      return;
-    }
-
+  const submitCoach = () => {
     onCreate({
       ...(bio.trim() ? { bio: bio.trim() } : {}),
       ...(certificationsList.length > 0
@@ -3423,7 +3428,19 @@ export function GymOperationsCreateCoachModal({
     });
   };
 
+  const handleCreate = () => {
+    if (!validateCoach()) return;
+
+    setCreateConfirm({
+      confirmLabel: "CREATE COACH",
+      message: "Create this standalone coach now?",
+      onConfirm: submitCoach,
+      title: "Confirm coach profile",
+    });
+  };
+
   return (
+    <>
     <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
@@ -3433,8 +3450,8 @@ export function GymOperationsCreateCoachModal({
           maxHeight: "min(760px, calc(100vh - 48px))",
           overflow: "auto",
           margin: "auto",
-          padding: 40,
-          borderRadius: 26,
+          padding: 24,
+          borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
           display: "grid",
@@ -3708,6 +3725,8 @@ export function GymOperationsCreateCoachModal({
           <FitButton
             variant="primary"
             label={isSubmitting ? "CREATING..." : "CREATE COACH"}
+            icon={UserPlus}
+            iconSize={15}
             onClick={handleCreate}
             disabled={!canSubmit || isSubmitting}
             style={actionPillStyle(colors, true)}
@@ -3716,5 +3735,21 @@ export function GymOperationsCreateCoachModal({
         </div>
       </div>
     </OverlayFrame>
+    <ConfirmModal
+      isOpen={!!createConfirm}
+      title={createConfirm?.title ?? "Confirm coach profile"}
+      message={createConfirm?.message ?? ""}
+      confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
+      loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
+      isDanger={createConfirm?.isDanger}
+      isLoading={isSubmitting}
+      onConfirm={() => {
+        const nextAction = createConfirm?.onConfirm;
+        setCreateConfirm(null);
+        nextAction?.();
+      }}
+      onCancel={() => setCreateConfirm(null)}
+    />
+    </>
   );
 }

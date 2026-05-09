@@ -11,6 +11,8 @@ type Props = {
   totalPages: number;
   onPageChange: (page: number) => void;
   ariaLabel?: string;
+  maxVisiblePages?: number;
+  showSinglePage?: boolean;
 };
 
 type PaginationItem = number | "start-ellipsis" | "end-ellipsis";
@@ -18,10 +20,10 @@ type PaginationItem = number | "start-ellipsis" | "end-ellipsis";
 function buildPaginationItems(
   currentPage: number,
   totalPages: number,
-  siblingCount: number,
-  boundaryCount: number
+  maxVisiblePages: number,
 ): PaginationItem[] {
   if (totalPages <= 0) return [];
+  const visiblePages = Math.max(1, maxVisiblePages);
 
   const range = (start: number, end: number) => {
     const values: number[] = [];
@@ -29,32 +31,29 @@ function buildPaginationItems(
     return values;
   };
 
-  const totalPageNumbers = boundaryCount * 2 + siblingCount * 2 + 3;
-  if (totalPages <= totalPageNumbers) {
+  if (totalPages <= visiblePages) {
     return range(1, totalPages);
   }
 
-  const leftSiblingIndex = Math.max(currentPage - siblingCount, boundaryCount + 2);
-  const rightSiblingIndex = Math.min(currentPage + siblingCount, totalPages - boundaryCount - 1);
+  const halfWindow = Math.floor(visiblePages / 2);
+  let startPage = currentPage - halfWindow;
+  let endPage = startPage + visiblePages - 1;
 
-  const showLeftEllipsis = leftSiblingIndex > boundaryCount + 2;
-  const showRightEllipsis = rightSiblingIndex < totalPages - boundaryCount - 1;
-
-  const startPages = range(1, boundaryCount);
-  const endPages = range(totalPages - boundaryCount + 1, totalPages);
-
-  if (!showLeftEllipsis) {
-    const leftRange = range(1, boundaryCount + siblingCount * 2 + 2);
-    return [...leftRange, "end-ellipsis", ...endPages];
+  if (startPage < 1) {
+    startPage = 1;
+    endPage = visiblePages;
   }
 
-  if (!showRightEllipsis) {
-    const rightRange = range(totalPages - (boundaryCount + siblingCount * 2 + 1), totalPages);
-    return [...startPages, "start-ellipsis", ...rightRange];
+  if (endPage > totalPages) {
+    endPage = totalPages;
+    startPage = totalPages - visiblePages + 1;
   }
 
-  const middleRange = range(leftSiblingIndex, rightSiblingIndex);
-  return [...startPages, "start-ellipsis", ...middleRange, "end-ellipsis", ...endPages];
+  return [
+    ...(startPage > 1 ? (["start-ellipsis"] as const) : []),
+    ...range(startPage, endPage),
+    ...(endPage < totalPages ? (["end-ellipsis"] as const) : []),
+  ];
 }
 
 export default function FitPagination({
@@ -62,6 +61,8 @@ export default function FitPagination({
   totalPages,
   onPageChange,
   ariaLabel = "Pagination navigation",
+  maxVisiblePages = 3,
+  showSinglePage = false,
 }: Props) {
   const { colors } = useTheme();
   const [isCompact, setIsCompact] = useState(false);
@@ -84,11 +85,11 @@ export default function FitPagination({
   }, []);
 
   const items = useMemo(
-    () => buildPaginationItems(currentPage, totalPages, isCompact ? 0 : 1, 1),
-    [currentPage, isCompact, totalPages]
+    () => buildPaginationItems(currentPage, totalPages, isCompact ? 1 : maxVisiblePages),
+    [currentPage, isCompact, maxVisiblePages, totalPages]
   );
 
-  if (totalPages <= 1) return null;
+  if (totalPages <= 1 && !showSinglePage) return null;
 
   return (
     <nav
@@ -218,17 +219,9 @@ export default function FitPagination({
       <style>{`
         .fit-pagination-button {
           transition:
-            transform 180ms ease,
             border-color 180ms ease,
-            box-shadow 180ms ease,
             background-color 180ms ease,
             color 180ms ease;
-        }
-
-        .fit-pagination-button:hover:not(:disabled),
-        .fit-pagination-button:focus-visible {
-          transform: translateY(-1px);
-          box-shadow: 0 14px 26px rgba(0, 0, 0, 0.16);
         }
 
         .fit-pagination-button:focus-visible {

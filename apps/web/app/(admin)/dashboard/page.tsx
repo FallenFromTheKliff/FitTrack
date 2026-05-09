@@ -17,7 +17,7 @@ export default function DashboardPage() {
       return;
     }
 
-    router.replace("/schedule");
+    router.replace("/members");
   }, [isLoading, router, user?.role]);
 
   return null;

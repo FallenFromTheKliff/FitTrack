@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -17,26 +18,24 @@ import BufferPage from "@/components/loading/BufferPage";
 import { ForgotPasswordModal, OTPModal } from "@/components/modals";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import {
-  type LoginHeroStat,
-  LOGIN_BACKGROUND_IMAGE_URL,
-} from "@/data/auth/auth";
+import { LOGIN_BACKGROUND_IMAGE_URL } from "@/data/auth/auth";
 import { useAuthEntrance } from "@/hooks/animations/useAuthEntrance";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { authStyles } from "@/styles/authStyles";
 
 const PAGE_COPY = {
-  badge: "Admin & Staff Portal",
-  heroAccent: "MANAGEMENT.",
+  badge: "FitTrack Portal",
+  heroAccent: "FITTRACK.",
   subtitle:
-    "Full gym management. Members, schedules, inventory, and more - all in one place.",
-  emailPlaceholder: "sertfitadmin@gmail.com",
+    "Sign in with your FitTrack account for the portal experience assigned to your role.",
+  emailPlaceholder: "account@fittrack.com",
 };
 
 function getPortalLandingPath(role?: string) {
-  if (role === "STAFF") return "/schedule";
   if (role === "ADMIN") return "/analytics";
-  return "/dashboard";
+  if (role === "STAFF") return "/members";
+  if (role === "USER" || role === "COACH") return "/profile";
+  return "/profile";
 }
 
 function getLoginItemTransition(shouldAnimate: boolean, index: number) {
@@ -51,11 +50,7 @@ function getLoginItemTransition(shouldAnimate: boolean, index: number) {
   };
 }
 
-type AdminLoginPageProps = {
-  heroStats: LoginHeroStat[];
-};
-
-export function AdminLoginPage({ heroStats }: AdminLoginPageProps) {
+export function AdminLoginPage() {
   const { commitLogin, login } = useAuth();
   const { colors, onBrandTextColor, settings } = useTheme();
   const router = useRouter();
@@ -67,7 +62,7 @@ export function AdminLoginPage({ heroStats }: AdminLoginPageProps) {
   const [errorMsg, setErrorMsg] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [landingPath, setLandingPath] = useState("/dashboard");
+  const [landingPath, setLandingPath] = useState("/analytics");
   const [mounted, setMounted] = useState(false);
   const [showBuffer, setShowBuffer] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
@@ -158,23 +153,24 @@ export function AdminLoginPage({ heroStats }: AdminLoginPageProps) {
             <FitText as="p" style={styles.heroSubtitle}>
               {PAGE_COPY.subtitle}
             </FitText>
-            <div style={styles.heroStatsRow}>
-              {heroStats.map((stat) => (
-                <div key={stat.label} style={styles.heroStatItem}>
-                  <FitText as="span" style={styles.heroStatValue}>
-                    {stat.value}
-                  </FitText>
-                  <FitText as="span" style={styles.heroStatLabel}>
-                    {stat.label}
-                  </FitText>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
         <div className="login-card" style={styles.card}>
           <div style={styles.cardInner}>
+            <Link
+              href="/"
+              style={{
+                alignSelf: "flex-start",
+                color: colors.textMuted,
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 18,
+                textDecoration: "none",
+              }}
+            >
+              Back to FitTrack
+            </Link>
             <div style={styles.cardHeader}>
               <motion.div
                 animate={{ opacity: 1, y: 0 }}
@@ -206,7 +202,7 @@ export function AdminLoginPage({ heroStats }: AdminLoginPageProps) {
                 transition={itemTransition(1)}
               >
                 <FitText as="p" style={styles.subtitle}>
-                  Gym Management System
+                  Gym Access Portal
                 </FitText>
               </motion.div>
 

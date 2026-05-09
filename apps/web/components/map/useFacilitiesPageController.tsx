@@ -18,11 +18,12 @@ import { adminBookingsQueryOptions } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
-import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
+import { useSectionTransition } from "@/hooks/animations/useSectionTransition";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { FitText } from "@/components/fit/FitText";
 import { facilitiesMapStyles } from "@/styles/pageStyles";
 import { webApiClient } from "@/lib/api-client";
+import { getBrowserViewportState } from "@/utils/browserViewport";
 import { sleep } from "@/utils/sleep";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import type { ScheduleResource } from "@/data/facilities/resources";
@@ -30,11 +31,9 @@ import {
   buildVenueInitialValues,
   createScheduleResourceId,
   getDefaultResourceDraft,
-  isCompactViewport,
 } from "@/app/(admin)/facilities/helpers";
 import {
   EquipmentPanel,
-  EquipmentManagementTable,
   FloorPlanPanel,
   LayoutEditorPanel,
   LayoutStatusPanel,
@@ -100,17 +99,13 @@ export function useFacilitiesPageController() {
   const [activeTab, setActiveTab] = useState<"equipment" | "floor" | "venues">(
     "floor",
   );
-  const [viewMotionKey, setViewMotionKey] = useState(0);
-  const [viewMotionDirection, setViewMotionDirection] = useState<
-    "left" | "right"
-  >("right");
   const { message, showMessage } = useTimedMessage(
     FEEDBACK_DURATION_MS.standard,
   );
-  const { style: viewSlideStyle } = usePowerSlide(
-    viewMotionKey,
-    viewMotionDirection,
-  );
+  const { style: viewSlideStyle } = useSectionTransition(activeTab, {
+    duration: 110,
+    fromY: 0,
+  });
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(
     null,
   );
@@ -180,6 +175,9 @@ export function useFacilitiesPageController() {
   const [venueEditorMode, setVenueEditorMode] = useState<
     "create" | "edit" | null
   >(null);
+  const [venueEditorReturnTab, setVenueEditorReturnTab] = useState<
+    "equipment" | "floor" | "venues"
+  >("venues");
   const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(
     null,
   );
@@ -234,17 +232,31 @@ export function useFacilitiesPageController() {
       bookings.filter((booking) => booking.status === "confirmed"),
   });
 
-  const [rawViewportWidth, setRawViewportWidth] = useState(0);
-  const debouncedViewportWidth = useDebounce(rawViewportWidth, 120);
-  const isCompact = isCompactViewport(debouncedViewportWidth);
+  const [rawViewportMode, setRawViewportMode] = useState({
+    isHamburgerMode: false,
+    width: 0,
+  });
+  const debouncedViewportMode = useDebounce(rawViewportMode, 120);
+  const isCompact = debouncedViewportMode.isHamburgerMode;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {
-    const evaluate = () =>
-      setRawViewportWidth(window.outerWidth || window.innerWidth);
+    const evaluate = () => {
+      const { isBrowserWindowResized, viewportWidth } =
+        getBrowserViewportState();
+
+      setRawViewportMode({
+        isHamburgerMode: isBrowserWindowResized || viewportWidth < 1024,
+        width: viewportWidth,
+      });
+    };
     evaluate();
     window.addEventListener("resize", evaluate);
-    return () => window.removeEventListener("resize", evaluate);
+    window.visualViewport?.addEventListener("resize", evaluate);
+    return () => {
+      window.removeEventListener("resize", evaluate);
+      window.visualViewport?.removeEventListener("resize", evaluate);
+    };
   }, []);
 
   useEffect(() => {
@@ -368,6 +380,22 @@ export function useFacilitiesPageController() {
       gridColumn: placement.gridColumn,
       gridRow: placement.gridRow,
     });
+  };
+
+  const handleAssignEquipmentFromCanvas = (
+    equipmentId: string,
+    venueMapId: string,
+  ) => {
+    setQuickPlacementTemplateKey(null);
+    setSelectedEquipmentId(equipmentId);
+    void assignEquipmentToVenue(equipmentId, venueMapId);
+  };
+
+  const handleCreateQuickFloorRegionAtFromCanvas = (
+    template: QuickFloorRegionTemplate,
+    placement: { gridColumn: number; gridRow: number },
+  ) => {
+    void handleCreateQuickFloorRegionAt(template, activeFloor, placement);
   };
 
   const handleNudgeRegionByMapId = (
@@ -547,8 +575,6 @@ export function useFacilitiesPageController() {
   };
 
   const handleOpenEquipmentManager = () => {
-    setViewMotionDirection("right");
-    setViewMotionKey((prev) => prev + 1);
     setActiveTab("equipment");
     setVenueEditorMode(null);
     setVenueEditTarget(null);
@@ -558,8 +584,6 @@ export function useFacilitiesPageController() {
     setQuickPlacementTemplateKey(null);
     setSelectedEquipmentId(equipmentId);
     setSelectedFloorVenue(null);
-    setViewMotionDirection("left");
-    setViewMotionKey((prev) => prev + 1);
     setActiveTab("floor");
     if (!isEditMode) {
       handleToggleEditMode();
@@ -616,8 +640,6 @@ export function useFacilitiesPageController() {
       onOpenEquipment={handleOpenEquipmentManager}
       onSelectVenue={setSelectedFloorVenue}
       onOpenVenues={() => {
-        setViewMotionDirection("right");
-        setViewMotionKey((prev) => prev + 1);
         setActiveTab("venues");
       }}
       onUploadFloorImage={handleUploadFloorPlanImage}
@@ -647,8 +669,6 @@ export function useFacilitiesPageController() {
         );
       }}
       onOpenVenueManager={() => {
-        setViewMotionDirection("right");
-        setViewMotionKey((prev) => prev + 1);
         setActiveTab("venues");
       }}
     />
@@ -678,8 +698,6 @@ export function useFacilitiesPageController() {
         );
       }}
       onOpenVenueManager={() => {
-        setViewMotionDirection("right");
-        setViewMotionKey((prev) => prev + 1);
         setActiveTab("venues");
       }}
     />
@@ -691,8 +709,6 @@ export function useFacilitiesPageController() {
       authoredRegionCount={authoredRegionCount}
       selectedRegionName={selectedFloorVenue?.name ?? null}
       onOpenVenueManager={() => {
-        setViewMotionDirection("right");
-        setViewMotionKey((prev) => prev + 1);
         setActiveTab("venues");
       }}
       footerNode={
@@ -743,39 +759,27 @@ export function useFacilitiesPageController() {
   const venueInitialValues = buildVenueInitialValues(venueEditTarget);
   const combinedMessage = message || layoutMessage || venueMessage;
   const isVenueEditorOpen = activeTab === "venues" && venueEditorMode !== null;
-  const equipmentManagementNode = (
-    <EquipmentManagementTable
-      colors={colors}
-      equipment={availableEquipment}
-      equipmentRemainingById={equipmentRemainingById}
-      onPlaceEquipment={handlePlaceEquipmentFromManager}
-    />
-  );
-
   const handleCloseVenueEditor = () => {
     if (isVenueSubmitting) {
       return;
     }
-    setViewMotionDirection("left");
-    setViewMotionKey((prev) => prev + 1);
     setVenueEditorMode(null);
     setVenueEditTarget(null);
+    setActiveTab(venueEditorReturnTab);
   };
 
   const handleOpenVenueEditor = (
     mode: "create" | "edit",
     venue: VenueRecord | null = null,
   ) => {
-    setViewMotionDirection("right");
-    setViewMotionKey((prev) => prev + 1);
+    setVenueEditorReturnTab(activeTab);
+    setActiveTab("venues");
     setVenueEditTarget(venue);
     setVenueEditorMode(mode);
   };
 
   const handleOpenMap = () => {
     setSelectedFloorVenue(null);
-    setViewMotionDirection("left");
-    setViewMotionKey((prev) => prev + 1);
     setActiveTab("floor");
     setVenueEditorMode(null);
     setVenueEditTarget(null);
@@ -783,7 +787,11 @@ export function useFacilitiesPageController() {
 
   return {
     activeTab,
+    activeFloor,
+    activeFloorConfig,
+    activeFloorImageUrl,
     activeFloorLabel,
+    activeFloorVenues,
     archivedEquipment,
     archivedEquipmentLoading,
     archivedVenues,
@@ -792,6 +800,8 @@ export function useFacilitiesPageController() {
     archiveModalOpen,
     combinedMessage,
     colors,
+    assignedCount,
+    assignedEquipment,
     clearFloorConfirmOpen,
     deleteHasReservations,
     deleteEquipmentMutation,
@@ -800,8 +810,10 @@ export function useFacilitiesPageController() {
     deleteVenueMutation,
     drawerButtonWidth,
     editorNode,
+    equipmentById,
+    equipmentRemainingById,
     equipmentPanelNode,
-    equipmentManagementNode,
+    availableEquipment,
     fadeIn,
     floorPlanNode,
     fs,
@@ -813,12 +825,18 @@ export function useFacilitiesPageController() {
     handleDeleteVenueRequest,
     handleDragEnd,
     handleDragStart,
+    handleAssignEquipmentFromCanvas,
+    handleCreateQuickFloorRegionAtFromCanvas,
+    handleOpenEquipmentManager,
     handleOpenMap,
     handleOpenVenueEditor,
+    handlePlaceEquipmentFromManager,
+    handleMoveVenueFromCanvas,
     handleRestoreEquipment,
     handleRestoreVenue,
     handleSaveAndExit,
     handleVenueSubmit,
+    handleUploadFloorPlanImage,
     handleUploadVenueImage,
     handleToggleEditMode,
     hasUnsavedChanges,
@@ -830,15 +848,19 @@ export function useFacilitiesPageController() {
     layoutName,
     layoutStatusNode,
     layoutType,
+    quickPlacementTemplate,
     quickRegionNode,
     resourceDraft,
     resourceLoading,
     resourceLoadingLabel,
     resourceModalOpen,
     scheduleResources,
+    selectedEquipmentId,
+    selectedEquipmentName,
     selectedFloorVenue,
     sensors,
     setActiveTab,
+    setActiveFloor,
     setArchiveFilter,
     setArchiveModalOpen,
     setClearFloorConfirmOpen,
@@ -847,6 +869,7 @@ export function useFacilitiesPageController() {
     setIsDrawerOpen,
     setResourceDraft,
     setResourceModalOpen,
+    setSelectedEquipmentId,
     setSelectedFloorVenue,
     setShowUnsavedConfirm,
     showMessage,
@@ -855,8 +878,10 @@ export function useFacilitiesPageController() {
     themeTransition,
     restoreEquipmentMutation,
     restoreVenueMutation,
+    updateFloorPlanMediaMutation,
     venueDeleteTarget,
     venueEditTarget,
+    venueEditorReturnTab,
     venueInitialValues,
     venueSavingLabel,
     venues,

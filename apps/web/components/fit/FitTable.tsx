@@ -42,7 +42,9 @@ type Props<T> = {
   loadingMessage?: string;
   overflowX?: boolean;
   maxHeight?: number | null;
+  compact?: boolean;
   style?: CSSProperties;
+  tableStyle?: CSSProperties;
 };
 
 export default function FitTable<T>({
@@ -58,7 +60,9 @@ export default function FitTable<T>({
   loadingMessage = "Loading...",
   overflowX = true,
   maxHeight,
-  style
+  compact = false,
+  style,
+  tableStyle
 }: Props<T>) {
   const { colors } = useTheme();
   const getColumnAlignment = (column: FitTableColumn<T>) => {
@@ -73,7 +77,7 @@ export default function FitTable<T>({
     fontSize: 11,
     fontWeight: 700,
     color: colors.textSecondary,
-    padding: "16px 14px",
+    padding: compact ? "8px 10px" : "16px 14px",
     textAlign: "left",
     borderBottom: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
@@ -81,8 +85,8 @@ export default function FitTable<T>({
   };
 
   const cellStyle: CSSProperties = {
-    padding: "16px 14px",
-    fontSize: 14,
+    padding: compact ? "8px 10px" : "16px 14px",
+    fontSize: compact ? 13 : 14,
     color: colors.textPrimary,
     borderBottom: `1px solid ${colors.border}`,
     verticalAlign: "middle"
@@ -102,7 +106,7 @@ export default function FitTable<T>({
             ...style
           }}
       >
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", ...tableStyle }}>
           <thead>
           <tr>
             {columns.map((col) => (

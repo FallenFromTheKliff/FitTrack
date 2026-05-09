@@ -61,6 +61,37 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--fit-border); border-radius: 3px; }
 
+.fit-browser-scrollpane {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 900ms ease;
+}
+
+.fit-browser-scrollpane.fit-browser-scrollpane-active {
+  scrollbar-color: var(--fit-border) transparent;
+}
+
+.fit-browser-scrollpane::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.fit-browser-scrollpane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.fit-browser-scrollpane::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  transition: background-color 900ms ease;
+}
+
+.fit-browser-scrollpane.fit-browser-scrollpane-active::-webkit-scrollbar-thumb {
+  background-color: var(--fit-border);
+}
+
 .fit-card {
   border: 1px solid var(--fit-border);
   border-radius: 0.75rem;
@@ -107,10 +138,6 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
 .fit-table-row {
   border-bottom: 1px solid var(--fit-border);
   transition: background-color 100ms;
-}
-
-.fit-table-row:hover {
-  background-color: var(--fit-surface-raised);
 }
 
 .fit-table-row:last-child {

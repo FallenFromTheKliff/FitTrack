@@ -70,9 +70,7 @@ import {
   makeWorkoutStyles,
 } from "@/styles/shared/ScreenStyles";
 import {
-  MOBILE_API_BASE_URL,
   mobileApiClient,
-  mobileSessionStore,
 } from "@/lib/api-client";
 import {
   createBrowserPoseAnalyzer,
@@ -665,58 +663,6 @@ function toPoseCameraFacingMode(cameraFacing: CameraType) {
   return cameraFacing === "front" ? "user" : "environment";
 }
 
-type PoseEquipmentDetectionApiBoxRecord = {
-  confidence?: number | null;
-  height?: number | null;
-  label?: string | null;
-  width?: number | null;
-  x?: number | null;
-  y?: number | null;
-};
-
-type PoseEquipmentDetectionApiRecord = {
-  equipment_confidence?: number | null;
-  equipment_conflicts?: string[];
-  equipment_context?: PoseEquipmentContext | null;
-  equipment_detections?: PoseEquipmentDetectionApiBoxRecord[];
-  equipment_source?: PoseEquipmentSource | null;
-  provider_enabled?: boolean;
-};
-
-function toFiniteOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function toStringOrNull(value: unknown) {
-  return typeof value === "string" ? value : null;
-}
-
-function mapNativeEquipmentDetection(
-  value: PoseEquipmentDetectionApiRecord,
-): PoseEquipmentDetectionRecord {
-  return {
-    equipmentConfidence: toFiniteOrNull(value.equipment_confidence),
-    equipmentConflicts: Array.isArray(value.equipment_conflicts)
-      ? value.equipment_conflicts.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : [],
-    equipmentContext: value.equipment_context ?? null,
-    equipmentDetections: Array.isArray(value.equipment_detections)
-      ? value.equipment_detections.map((detection) => ({
-          confidence: toFiniteOrNull(detection.confidence),
-          height: toFiniteOrNull(detection.height),
-          label: toStringOrNull(detection.label),
-          width: toFiniteOrNull(detection.width),
-          x: toFiniteOrNull(detection.x),
-          y: toFiniteOrNull(detection.y),
-        }))
-      : [],
-    equipmentSource: value.equipment_source ?? null,
-    providerEnabled: value.provider_enabled !== false,
-  };
-}
-
 type EquipmentDetectionSample = {
   confidence: number;
   context: PoseEquipmentContext;
@@ -933,37 +879,6 @@ function getHeldEquipmentDetectionAfterFailure(
   return null;
 }
 
-function readNativeEquipmentErrorMessage(
-  value: unknown,
-  fallback = "Native equipment detection failed.",
-) {
-  if (!value || typeof value !== "object") return fallback;
-  const detail = (value as { detail?: unknown }).detail;
-  if (typeof detail === "string" && detail.trim()) return detail.trim();
-  const message = (value as { message?: unknown }).message;
-  if (typeof message === "string" && message.trim()) return message.trim();
-  if (Array.isArray(message)) {
-    const joined = message
-      .filter(
-        (item): item is string => typeof item === "string" && !!item.trim(),
-      )
-      .join(" ");
-    if (joined) return joined;
-  }
-  const title = (value as { title?: unknown }).title;
-  return typeof title === "string" && title.trim() ? title.trim() : fallback;
-}
-
-async function parseJsonResponse(response: Response) {
-  const text = await response.text();
-  if (!text.trim()) return null;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return text;
-  }
-}
-
 async function readNativeEquipmentFrameBase64(frameUri: string) {
   try {
     return await FileSystem.readAsStringAsync(frameUri, {
@@ -986,62 +901,13 @@ async function detectNativeEquipmentSnapshot(input: {
   exerciseHint: string | null | undefined;
   frameUri: string;
 }) {
-  const accessToken = await mobileSessionStore.getAccessToken();
   const frameBase64 = await readNativeEquipmentFrameBase64(input.frameUri);
 
-  let response: Response;
-  try {
-    response = await fetch(`${MOBILE_API_BASE_URL}/workout/equipment/detect`, {
-      body: JSON.stringify({
-        camera_facing_mode: input.cameraFacingMode,
-        ...(input.exerciseHint !== undefined && input.exerciseHint !== null
-          ? { exercise_hint: input.exerciseHint }
-          : {}),
-        frame_b64: frameBase64,
-      }),
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      method: "POST",
-    });
-  } catch (error) {
-    throw new ApiClientError({
-      kind: "network",
-      message:
-        error instanceof Error
-          ? `Equipment detection network failure: ${error.message}`
-          : "Equipment detection network failure.",
-      raw: error,
-    });
-  }
-
-  const parsed = await parseJsonResponse(response);
-  if (!response.ok) {
-    throw new ApiClientError({
-      details: parsed,
-      kind: "http",
-      message: readNativeEquipmentErrorMessage(parsed),
-      raw: parsed,
-      status: response.status,
-    });
-  }
-
-  const data =
-    parsed && typeof parsed === "object" && "data" in parsed
-      ? (parsed as { data?: PoseEquipmentDetectionApiRecord }).data
-      : (parsed as PoseEquipmentDetectionApiRecord | null);
-  if (!data || typeof data !== "object") {
-    throw new ApiClientError({
-      details: parsed,
-      kind: "unknown",
-      message: "Equipment detection returned an invalid response.",
-      raw: parsed,
-    });
-  }
-
-  return mapNativeEquipmentDetection(data);
+  return mobileApiClient.fitness.detectPoseEquipment({
+    cameraFacingMode: input.cameraFacingMode,
+    exerciseHint: input.exerciseHint,
+    frameBase64,
+  });
 }
 
 function inferExerciseEquipmentContext(

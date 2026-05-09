@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { X } from "lucide-react";
 import type { NotificationRecord } from "@fittrack/types";
 
@@ -6,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { layoutStyles } from "@/styles/layoutStyles";
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import { ConfirmModal, FitModal } from "@/components/modals";
 
 type NotificationsPanelProps = {
   isBusy: boolean;
@@ -53,34 +55,50 @@ export default function NotificationsPanel({
 }: NotificationsPanelProps) {
   const { colors } = useTheme();
   const s = layoutStyles(colors);
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
 
   if (!isOpen) return null;
 
   const handleDeleteAll = () => {
     if (notifications.length === 0 || isBusy) return;
-    const confirmed = window.confirm(
-      "Delete all notifications from this inbox?",
-    );
-
-    if (!confirmed) return;
-    void onDeleteAll();
+    setDeleteAllConfirmOpen(true);
   };
 
   return (
     <>
-      <div
-        style={{
-          ...s.notificationsBackdrop
+      <FitModal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Notifications panel"
+        maxWidth={420}
+        noScroll
+        hideHeaderText
+        hideCloseButton
+        hideHeaderDivider
+        headerStyle={{ display: "none" }}
+        overlayStyle={{
+          ...s.notificationsBackdrop,
+          alignItems: "stretch",
+          justifyContent: "flex-end",
+          padding: 0,
         }}
-        onClick={onClose}
-      />
-      <div
-        style={{
-          ...s.notificationsPanel
+        containerStyle={{
+          width: "min(420px, 92vw)",
+          maxWidth: "min(420px, 92vw)",
+          height: "100vh",
+          maxHeight: "100vh",
+          borderRadius: 0,
+          borderLeft: `1px solid ${colors.border}`,
+          backgroundColor: colors.surface,
+          color: colors.textPrimary,
+          boxShadow: "none",
         }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Notifications panel"
+        contentStyle={{
+          padding: 0,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         <div style={s.notificationsPanelHeader}>
           <div>
@@ -166,7 +184,19 @@ export default function NotificationsPanel({
             ))
           )}
         </div>
-      </div>
+      </FitModal>
+      <ConfirmModal
+        isOpen={deleteAllConfirmOpen}
+        title="Delete notifications"
+        message="Delete all notifications from this inbox?"
+        confirmLabel="DELETE ALL"
+        isDanger
+        onCancel={() => setDeleteAllConfirmOpen(false)}
+        onConfirm={() => {
+          setDeleteAllConfirmOpen(false);
+          void onDeleteAll();
+        }}
+      />
     </>
   );
 }

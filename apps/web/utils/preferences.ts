@@ -1,3 +1,5 @@
+"use client";
+
 import { createLegacyThemePreferenceKey, createThemePreferenceKey } from "@fittrack/app-core";
 import type { ThemeSettings } from "@fittrack/types";
 

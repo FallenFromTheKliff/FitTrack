@@ -69,24 +69,48 @@ function CurvyToggle({
 
 export default function AppearanceSettingsSection() {
   const { colors, settings, saveAllAppearance, previewTheme, previewFont } = useTheme();
+  const [committedAppearance, setCommittedAppearance] = useState({
+    animationLevel: settings.animationLevel,
+    fontKey: settings.fontKey,
+    themeKey: settings.themeKey,
+  });
   const [pendingTheme, setPendingTheme] = useState<ThemeKey>(settings.themeKey);
   const [pendingFont, setPendingFont] = useState<FontKey>(settings.fontKey);
   const [pendingAnimLevel, setPendingAnimLevel] = useState(settings.animationLevel);
-  const initialThemeRef = useRef(settings.themeKey);
-  const initialFontRef = useRef(settings.fontKey);
+  const committedAppearanceRef = useRef(committedAppearance);
+  const hasUnsavedPreviewRef = useRef(false);
 
   useEffect(() => {
+    committedAppearanceRef.current = committedAppearance;
+  }, [committedAppearance]);
+
+  useEffect(() => {
+    if (hasUnsavedPreviewRef.current) return;
+    const nextCommitted = {
+      animationLevel: settings.animationLevel,
+      fontKey: settings.fontKey,
+      themeKey: settings.themeKey,
+    };
+    setCommittedAppearance(nextCommitted);
     setPendingTheme(settings.themeKey);
     setPendingFont(settings.fontKey);
     setPendingAnimLevel(settings.animationLevel);
-    initialThemeRef.current = settings.themeKey;
-    initialFontRef.current = settings.fontKey;
   }, [settings.animationLevel, settings.fontKey, settings.themeKey]);
 
+  useEffect(
+    () => () => {
+      if (!hasUnsavedPreviewRef.current) return;
+      previewTheme(committedAppearanceRef.current.themeKey);
+      previewFont(committedAppearanceRef.current.fontKey);
+      hasUnsavedPreviewRef.current = false;
+    },
+    [previewFont, previewTheme],
+  );
+
   const hasAppearanceChanges =
-    pendingTheme !== settings.themeKey ||
-    pendingFont !== settings.fontKey ||
-    pendingAnimLevel !== settings.animationLevel;
+    pendingTheme !== committedAppearance.themeKey ||
+    pendingFont !== committedAppearance.fontKey ||
+    pendingAnimLevel !== committedAppearance.animationLevel;
 
   return (
     <FitSection heading="Appearance" headingStyle={{ fontSize: 13 }} action={<Palette size={13} color={colors.brand} />}>
@@ -103,6 +127,7 @@ export default function AppearanceSettingsSection() {
               <FitButton
                 key={key}
                 onClick={() => {
+                  hasUnsavedPreviewRef.current = true;
                   setPendingTheme(key);
                   previewTheme(key);
                 }}
@@ -129,6 +154,7 @@ export default function AppearanceSettingsSection() {
               <FitButton
                 key={key}
                 onClick={() => {
+                  hasUnsavedPreviewRef.current = true;
                   setPendingFont(key);
                   previewFont(key);
                 }}
@@ -168,11 +194,12 @@ export default function AppearanceSettingsSection() {
             variant="ghost"
             label="CANCEL"
             onClick={() => {
-              setPendingTheme(initialThemeRef.current);
-              setPendingFont(initialFontRef.current);
-              setPendingAnimLevel(settings.animationLevel);
-              previewTheme(initialThemeRef.current);
-              previewFont(initialFontRef.current);
+              hasUnsavedPreviewRef.current = false;
+              setPendingTheme(committedAppearance.themeKey);
+              setPendingFont(committedAppearance.fontKey);
+              setPendingAnimLevel(committedAppearance.animationLevel);
+              previewTheme(committedAppearance.themeKey);
+              previewFont(committedAppearance.fontKey);
             }}
             disabled={!hasAppearanceChanges}
             style={{ flex: 1, fontSize: 15 }}
@@ -180,7 +207,16 @@ export default function AppearanceSettingsSection() {
           <FitButton
             variant="primary"
             label="SAVE"
-            onClick={() => saveAllAppearance(pendingTheme, pendingFont, pendingAnimLevel)}
+            onClick={() => {
+              const nextCommitted = {
+                animationLevel: pendingAnimLevel,
+                fontKey: pendingFont,
+                themeKey: pendingTheme,
+              };
+              hasUnsavedPreviewRef.current = false;
+              setCommittedAppearance(nextCommitted);
+              saveAllAppearance(pendingTheme, pendingFont, pendingAnimLevel);
+            }}
             disabled={!hasAppearanceChanges}
             style={{ flex: 1, fontSize: 15 }}
           />

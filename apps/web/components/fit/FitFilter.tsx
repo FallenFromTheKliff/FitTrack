@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { CalendarCheck, CalendarDays, RotateCcw } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/utils/cn";
@@ -46,7 +47,7 @@ export default function FitFilter({
   className
 }: FitFilterProps) {
   const { colors, settings } = useTheme();
-  const s = makeFitFilterStyles(colors);
+  const s = useMemo(() => makeFitFilterStyles(colors), [colors]);
   const canAnimate = settings.animationLevel === "full";
 
   if (!isOpen) return null;
@@ -146,7 +147,7 @@ export function FitInlineFilterChips({
   maxWidth = 420
 }: FitInlineFilterChipsProps) {
   const { colors, settings } = useTheme();
-  const s = makeFitFilterStyles(colors);
+  const s = useMemo(() => makeFitFilterStyles(colors), [colors]);
   const canAnimate = settings.animationLevel === "full";
 
   return (

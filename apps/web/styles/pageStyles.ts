@@ -317,13 +317,13 @@ export function facilitiesMapStyles(colors: ThemeColors) {
         panel: {
             backgroundColor: colors.surface,
             border: `1px solid ${colors.border}`,
-            borderRadius: 12,
+            borderRadius: 8,
             padding: 14
         } as CSSProperties,
         mapCard: {
             backgroundColor: colors.surface,
             border: `1px solid ${colors.border}`,
-            borderRadius: 16,
+            borderRadius: 8,
             padding: 16
         } as CSSProperties
     };

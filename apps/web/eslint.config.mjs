@@ -6,7 +6,15 @@ import tailwindPlugin from "eslint-plugin-tailwindcss";
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "out/**", "build/**", "node_modules/**", "next-env.d.ts"]
+    ignores: [
+      ".next/**",
+      ".next-runtime/**",
+      "out/**",
+      "build/**",
+      "node_modules/**",
+      "public/vendor/**",
+      "next-env.d.ts"
+    ]
   },
   {
     files: ["**/*.{ts,tsx}"]

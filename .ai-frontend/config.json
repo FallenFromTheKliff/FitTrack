@@ -3,15 +3,15 @@
   "frameworks": ["nextjs", "expo"],
   "monorepo": "turborepo",
   "rules": [
-    ".ai/agent.md",
-    ".ai/AI_CONTEXT.md",
-    ".ai/monorepo.md",
-    ".ai/style.md",
-    ".ai/context-protection.md",
-    ".ai/component-rules.md",
-    ".ai/performance.md"
+    ".ai-frontend/agent.md",
+    ".ai-frontend/AI_CONTEXT.md",
+    ".ai-frontend/monorepo.md",
+    ".ai-frontend/style.md",
+    ".ai-frontend/context-protection.md",
+    ".ai-frontend/component-rules.md",
+    ".ai-frontend/performance.md"
   ],
-  "tools": ["filesystem", "git", "search"],
+  "tools": ["filesystem", "git", "search", "serena", "context7", "playwright", "notion"],
   "apps": {
     "mobile": {
       "path": "apps/mobile",
@@ -28,10 +28,14 @@
       "devPort": 8080
     }
   },
+  "contractSources": {
+    "primary": ["packages/api-client", "packages/query", "packages/app-core", "packages/types", "packages/validators"],
+    "supporting": ["Notion FITTRACK: Backup Log", "Swagger MCP when runtime API truth is needed"],
+    "backendEdits": "forbidden unless explicitly requested"
+  },
   "restrictions": {
     "backend_changes": false,
     "context_crud_modification": false,
-    "ui_redesign": false,
     "javascript_files": false,
     "performance_regression": false,
     "cross_app_style_bleed": false

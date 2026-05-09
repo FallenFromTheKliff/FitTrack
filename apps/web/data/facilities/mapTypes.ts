@@ -4,8 +4,7 @@ import {
   GYM_LAYOUT_GRID_COLUMNS,
   GYM_LAYOUT_GRID_ROWS,
   normalizeVenueIconKey,
-  type VenueIconKey,
-  type VenueRecord
+  type VenueIconKey
 } from "@fittrack/types";
 import type { LucideIcon } from "lucide-react";
 import { Activity, Bike, CircleDot, ConciergeBell, Dribbble, Dumbbell, Flame, Square, Swords, Timer, Volleyball, Waves } from "lucide-react";

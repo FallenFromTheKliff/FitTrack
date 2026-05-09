@@ -1,6 +1,6 @@
-import { MessageSquarePlus } from "lucide-react";
+"use client";
 
-import { FitButton, FitText } from "@/components/fit";
+import { FitText } from "@/components/fit";
 
 type AiPageHeaderProps = {
   dangerColor: string;
@@ -14,11 +14,12 @@ export default function AiPageHeader({
   dangerColor,
   lastError,
   message,
-  mutedColor,
-  onStartFresh
+  mutedColor
 }: AiPageHeaderProps) {
+  if (!lastError && !message) return null;
+
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-2 flex min-h-[22px] flex-wrap items-center gap-3">
       <div style={{ minHeight: 22 }}>
         {lastError ? (
           <FitText as="p" style={{ fontSize: 12, color: dangerColor, margin: 0 }}>
@@ -30,9 +31,6 @@ export default function AiPageHeader({
             {message}
           </FitText>
         ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <FitButton variant="ghost" icon={MessageSquarePlus} label="New Chat" onClick={onStartFresh} />
       </div>
     </div>
   );

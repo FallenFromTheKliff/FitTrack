@@ -10,7 +10,7 @@ function isLocalhostHost(hostname: string) {
 }
 
 function normalizeNext(nextValue: string | null) {
-  if (!nextValue || !nextValue.startsWith("/")) return "/dashboard";
+  if (!nextValue || !nextValue.startsWith("/")) return "/analytics";
   return nextValue;
 }
 
@@ -50,10 +50,10 @@ export default function DevAuthBridgePage() {
 
   if (status === "blocked") {
     return (
-      <main className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-6">
-        <div className="max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
+      <main className="min-h-screen bg-base text-text-primary flex items-center justify-center px-6">
+        <div className="max-w-md rounded-3xl border border-border bg-surface-raised p-8">
           <h1 className="text-2xl font-semibold">Dev auth bridge unavailable</h1>
-          <p className="mt-3 text-sm text-white/70">
+          <p className="mt-3 text-sm text-text-muted">
             This helper only works on localhost development hosts.
           </p>
         </div>
@@ -63,13 +63,13 @@ export default function DevAuthBridgePage() {
 
   if (status === "missing") {
     return (
-      <main className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-6">
-        <div className="max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
+      <main className="min-h-screen bg-base text-text-primary flex items-center justify-center px-6">
+        <div className="max-w-md rounded-3xl border border-border bg-surface-raised p-8">
           <h1 className="text-2xl font-semibold">Missing token</h1>
-          <p className="mt-3 text-sm text-white/70">
+          <p className="mt-3 text-sm text-text-muted">
             Provide an <code>access_token</code> query parameter to seed the local session.
           </p>
-          <Link className="mt-5 inline-block text-sm text-[#E87722]" href="/login">
+          <Link className="mt-5 inline-block text-sm text-brand" href="/login">
             Back to login
           </Link>
         </div>
@@ -78,10 +78,10 @@ export default function DevAuthBridgePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#111111] text-white flex items-center justify-center px-6">
-      <div className="max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
+    <main className="min-h-screen bg-base text-text-primary flex items-center justify-center px-6">
+      <div className="max-w-md rounded-3xl border border-border bg-surface-raised p-8">
         <h1 className="text-2xl font-semibold">Seeding dev session</h1>
-        <p className="mt-3 text-sm text-white/70">
+        <p className="mt-3 text-sm text-text-muted">
           Writing local auth tokens and redirecting to <code>{nextPath}</code>.
         </p>
       </div>

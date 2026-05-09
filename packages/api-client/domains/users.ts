@@ -105,6 +105,8 @@ function normalizeRole(value: Role | string | null | undefined): Role | undefine
       return "ADMIN";
     case "staff":
       return "STAFF";
+    case "coach":
+      return "COACH";
     case "member":
     case "user":
       return "USER";

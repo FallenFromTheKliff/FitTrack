@@ -1,125 +1,102 @@
-# Performance Optimization Rules
+# Performance Rules
 
 ## Guiding Principle
 
-Every change must be evaluated not only for correctness and visual fidelity but also for its impact on render performance, memory pressure, and JS thread load. A feature that works but causes perceptible lag during inspection or on low-end devices is considered incomplete.
+Every change must be evaluated for correctness, visual fidelity, render cost, memory pressure, network churn, and JS thread load. A feature that works but causes perceptible lag during normal use is incomplete.
 
----
-
-## Mobile Performance (`apps/mobile`)
+## Mobile Performance
 
 ### Reanimated
 
-- Never read `sharedValue.value` during the render phase. Access `.value` only inside `useAnimatedStyle`, `useDerivedValue`, `useAnimatedReaction`, or `runOnUI` callbacks — not in `useCallback`, `useMemo`, `useEffect` deps, or the component body.
-- Use `useDerivedValue` for derived animated values instead of computing inside `useAnimatedStyle`. Offloads computation to the UI thread and avoids redundant recalculation.
-- Wrap `useThemeTransitionAnim` output in `useMemo` keyed on `[prevThemeKey, colors]` to prevent reconstructing the `ic` object on every render.
-- Do not call `useThemeTransitionAnim` in components that do not theme-transition. If a component only uses static colors from `useTheme().colors`, do not import or call `useThemeTransitionAnim`.
+- Never read `sharedValue.value` during render.
+- Access `.value` only inside Reanimated worklets such as `useAnimatedStyle`, `useDerivedValue`, `useAnimatedReaction`, or `runOnUI`.
+- Use `useDerivedValue` for derived animated values when the computation can live on the UI thread.
+- Do not call `useThemeTransitionAnim()` in components that do not animate theme values.
 
 ### Style Factories
 
-- All `makeXxxStyles(colors)` calls must be wrapped in `useMemo(() => makeXxxStyles(colors), [colors])`. Never call naked in the render body — it recreates the `StyleSheet` object on every render.
-- When a factory accepts additional parameters (e.g. `makeFitInputFieldStyles(colors, compact)`), include all parameters in the `useMemo` dep array: `useMemo(() => makeFitInputFieldStyles(colors, compact), [colors, compact])`.
+- Wrap `makeXxxStyles(colors)` calls in `useMemo`.
+- Include all factory parameters in the dependency array.
+- Avoid anonymous object creation in frequently rendered JSX style props.
 
-### TanStack Query (Mobile)
+### Query And API
 
-- Use `useQuery` for all API-sourced data. Do not fetch inside `useEffect` with manual `useState` loading/error state — that pattern is deprecated in this codebase.
-- Set `enabled: !!userId` or similar guards on queries that depend on auth state to prevent fetching before a user is loaded.
-- Use `queryClient.invalidateQueries({ queryKey: ['bookings'] })` inside `useMutation` `onSuccess` callbacks instead of the `bookingRefreshTick` counter pattern in `FABStateContext`.
-- Do not call `refetch()` manually in response to user navigation — rely on `staleTime` and focus-based invalidation.
+- Use `@fittrack/query` and `mobileApiClient` from `apps/mobile/lib/api-client.ts` for API-sourced data.
+- Use `useQuery` for API reads and `useMutation` for writes.
+- Guard auth-dependent queries with `enabled`.
+- Invalidate or patch cache through `@fittrack/query` helpers after mutations where available.
+- Do not refetch manually on ordinary navigation when stale time, focus behavior, or explicit invalidation is sufficient.
 
-### BlurView (`expo-blur`)
+### Lists And Heavy Views
 
-- Gate `BlurView` on a boolean condition so it unmounts when not visible. Never keep a `BlurView` permanently mounted with `opacity: 0` — it continues to consume GPU resources while hidden.
-- For overlay dimming that does not require blur, use a plain `View` with `backgroundColor: "rgba(0,0,0,0.35)"`. Reserve `BlurView` only where the blur effect is visually significant.
+- Use `FlatList` or `SectionList` for long lists.
+- Keep ordinary tab screens mounted. Use focus to pause heavy work, not to unmount the whole screen tree.
+- Reserve blur-time teardown for heavy resources such as camera, pose tracking, streaming, or sensors.
+- Conditionally render expensive modals and camera/pose surfaces when not visible.
 
-### Conditional Rendering
+### Blur And Overlays
 
-- Conditionally render expensive components (modals, heavy lists) rather than keeping them mounted with `display: none` or `opacity: 0`.
-- Use `React.memo` on pure presentational components that receive stable props.
-- Avoid anonymous object creation in JSX `style` props. Move static styles to `StyleSheet.create` or a factory.
+- Unmount `BlurView` when hidden.
+- Use plain dim overlays when blur is not visually important.
 
-### StyleSheet and Deprecated Props
+### Hooks And Callbacks
 
-- `shadow*` props are deprecated on React Native Web. Use `boxShadow` string + `elevation` for cross-platform shadow.
-- `pointerEvents` must be in `style`, not as a JSX prop.
+- Wrap callbacks passed to memoized children in `useCallback`.
+- Wrap `useFocusEffect` callbacks in `useCallback`.
+- Keep FAB menu arrays and expensive derived UI in `useMemo`.
+- Import `useDebounce`, `useLoadingText`, and `useTimedMessage` from `@fittrack/hooks`.
 
-### Lists and Scrollables
-
-- Use `FlatList` or `SectionList` for lists with more than ~10 items. `ScrollView` renders all children at once — use it only for short, bounded content.
-- Set `removeClippedSubviews` on `FlatList` when the list is long.
-- Avoid `useAnimatedScrollHandler` on every screen unless scroll-driven animations are actually needed. Plain `onScroll` with `scrollEventThrottle={16}` is sufficient for FAB hide/show.
-
-### Callbacks and Memos
-
-- Wrap all callbacks passed as props to child components in `useCallback` to prevent unnecessary re-renders of memoized children.
-- `useFocusEffect` callbacks must be wrapped in `useCallback` with correct deps.
-- `menuItems` arrays in FAB-enabled screens must be inside `useMemo`.
-
-### Shared Hooks from `@fittrack/hooks`
-
-- `useDebounce`, `useLoadingText`, `useTimedMessage` must be imported from `@fittrack/hooks`. Local copies in `apps/mobile/hooks/` are deprecated — the agent must update import paths when touching files that use them.
-
-### General
-
-- No `console.log` in production paths. Use `if (__DEV__) console.log(...)`.
-- Minimize `useEffect` dependency arrays. Overly broad arrays cause effects to re-run on unrelated state changes.
-
----
-
-## Web Performance (`apps/web`)
+## Web Performance
 
 ### Style Factories
 
-- `makeXxxStyles(colors)` returns a plain object of `CSSProperties`. Call it once outside JSX or memoize if the component re-renders frequently: `const s = useMemo(() => makeDashboardStyles(colors), [colors])`.
-- Do not call style factory functions inside JSX expressions — call once at the top of the component and reference by key.
+- Call `makeXxxStyles(colors)` once per component render, preferably memoized for frequently-rendering surfaces.
+- Do not call style factories inside JSX expressions.
+- Keep page shells thin; move repeated view logic into focused components or hooks.
 
-### TanStack Query (Web)
+### Query And API
 
-- Use `useQuery` and `useMutation` for all server state. Do not fetch inside `useEffect` with manual `useState` loading/error state — that pattern is not permitted for new code.
-- Query keys follow the convention `['resource']` or `['resource', id]`. Examples: `['members']`, `['deletion-requests']`, `['bookings']`, `['venues']`, `['coaches']`.
-- Always call `queryClient.invalidateQueries({ queryKey: ['resource'] })` inside `useMutation` `onSuccess` to keep cache fresh after mutations.
-- Use `select` option on `useQuery` to derive filtered/transformed data rather than computing in the component body with `useMemo`.
-- Set `staleTime` on infrequently-changing data (e.g. venues, coaches) to avoid unnecessary refetches: `staleTime: 5 * 60_000`.
+- Use `@fittrack/query` and `webApiClient` from `apps/web/lib/api-client.ts` for API-sourced data.
+- Use exported query option factories, mutation option factories, query keys, and invalidation helpers from `@fittrack/query`.
+- Avoid raw request calls inside `useEffect` for new work.
+- Server-only Next route fetches may exist for auth/bootstrap work when they use `cache: "no-store"` and do not duplicate a reusable shared client path.
+- Use `select` or controller/helper transforms when the same derivation is reused or expensive.
+- Set appropriate `staleTime` for infrequently changing data.
+- User-triggered refresh controls may call `refetch()` when they represent an explicit Retry/Refresh action. Avoid hidden or navigation-driven manual refetch loops.
 
-### "use client" Boundary Size
+### Client Boundaries
 
-- Keep client component files small and focused. Split large page files into smaller sub-components.
-- Do not mark an entire layout or provider wrapper `"use client"` if only a leaf node needs it — though the dashboard layout is already `"use client"` due to auth/resize logic.
+- Keep client components focused.
+- Do not mark a broad layout or provider client-only if a leaf component can own the browser behavior, except where the existing shell already needs auth/theme/resize state.
+- Split oversized route files by section, controller hook, modal flow, or overlay manager.
 
-### Recharts
+### Charts
 
-- All Recharts charts must be wrapped in `<ResponsiveContainer>` with explicit `height`.
-- Do not render chart components in SSR context — they are always inside `"use client"` pages so this is handled automatically.
-- For large datasets, memoize chart data with `useMemo` before passing as `data` prop.
+- Wrap Recharts in `FitChartContainer` or a container with stable explicit dimensions.
+- Memoize large chart datasets.
+- Avoid rendering charts before the container has a meaningful size.
 
-### framer-motion
+### Motion
 
-- Use `motion` components and `animate`/`useMotionValue` only for entrance animations and directional slides where CSS transitions are insufficient.
-- Do not use framer-motion for theme-change color transitions — those are handled by `useThemeTransition()` returning a CSS transition class string.
-- Wrap framer-motion animation definitions in `useMemo` when they depend on props or state to avoid object recreation on every render.
+- Use `useThemeTransition()` for theme-change color transitions.
+- Use `framer-motion` for meaningful entrance, directional, or state transitions only after layout and data behavior are settled.
+- Memoize reusable animation definitions when they depend on props/state.
 
-### Image Optimization
+### Images
 
-- Use `next/image` for all images. Never use raw `<img>` tags.
-- Set `width`, `height`, or `fill` on every `<Image>` to avoid layout shift (CLS).
+- Use `next/image` for app images where possible.
+- Provide stable `width`, `height`, or `fill` constraints to avoid layout shift.
 
-### Shared Hooks from `@fittrack/hooks`
+### Hooks And Controllers
 
-- `useDebounce`, `useLoadingText`, `useTimedMessage` must be imported from `@fittrack/hooks`. Local copies in `apps/web/hooks/` are deprecated — the agent must update import paths when touching files that use them. The `"use client"` directive is not needed in the shared package versions.
-
-### Tailwind Purging
-
-- The `content` array in `tailwind.config.ts` covers `./app/**/*.{ts,tsx}`, `./components/**/*.{ts,tsx}`, `./contexts/**/*.{ts,tsx}`. Do not create Tailwind class strings via runtime string concatenation — Tailwind's purge cannot detect dynamically built class names. Use `cn()` with static class strings.
-
-### Callbacks and Memos
-
-- Wrap stable callbacks with `useCallback` when passed to memoized children.
-- Memoize expensive computed values with `useMemo`.
-- Use `useCallback` for event handlers that are passed to deeply nested components (e.g. Sidebar toggle, header search handler).
+- Import shared hooks from `@fittrack/hooks`.
+- Prefer `@fittrack/app-core` controllers/transforms for repeated action orchestration instead of duplicating async flow helpers inside route components.
+- Wrap event handlers passed deeply or to memoized children in `useCallback`.
+- Memoize expensive derived values.
 
 ### General
 
-- No `console.log` in production. Use `if (process.env.NODE_ENV === "development") console.log(...)`.
-- Avoid `useEffect` with broad dep arrays.
-- Do not import entire icon libraries — import lucide icons individually: `import { Bell } from "lucide-react"`.
-- Use `Suspense` and `loading.tsx` boundaries for any future async page segments.
+- Avoid production `console.log`.
+- Avoid broad effect dependency arrays that rerun unrelated work.
+- Import lucide icons individually.
+- Use loading boundaries or route-local loading states for future async segments where appropriate.

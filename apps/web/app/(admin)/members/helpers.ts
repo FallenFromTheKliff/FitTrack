@@ -29,7 +29,7 @@ export function isArchivedMember(
 export function getDirectoryMemberStatus(
   member: MemberRecord,
   pendingRequestsByUserId: Map<string, DeletionRequest>
-): MemberStatusTab {
+): Exclude<MemberStatusTab, "All"> {
   if (pendingRequestsByUserId.has(member.id)) return "Termination Requests";
   return isArchivedMember(member, pendingRequestsByUserId) ? "Archived" : "Active";
 }
@@ -47,7 +47,9 @@ export function filterMembers(
     const matchesSearch =
       name.includes(normalizedQuery) || member.email.toLowerCase().includes(normalizedQuery);
     const role = member.role?.name ?? "USER";
-    const matchesStatus = getDirectoryMemberStatus(member, pendingRequestsByUserId) === activeStatus;
+    const matchesStatus =
+      activeStatus === "All" ||
+      getDirectoryMemberStatus(member, pendingRequestsByUserId) === activeStatus;
     const matchesChip =
       activeStatus === "Termination Requests"
         ? role === "USER"

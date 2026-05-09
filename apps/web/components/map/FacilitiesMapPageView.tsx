@@ -1,33 +1,892 @@
 "use client";
 
-import { DndContext } from "@dnd-kit/core";
-import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
+import { useMemo, useState, type CSSProperties } from "react";
+import {
+  ArchiveRestore,
+  Dumbbell,
+  Grid2X2,
+  Lock,
+  LockOpen,
+  MapPinned,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+  SquarePen,
+  Table2,
+} from "lucide-react";
 
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
 import {
   SCHEDULE_EMOJI_OPTIONS,
   type ScheduleResource,
 } from "@/data/facilities/resources";
+import {
+  FACILITY_FLOORS,
+  type FacilityFloorId,
+  type FloorVenueRecord,
+} from "@/data/facilities/floorPlans";
 
-import { FitText, FitTextInput } from "@/components/fit/FitText";
+import { FitDropdown, FitText, FitTextInput } from "@/components/fit";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
 import { ConfirmModal, FitModal, VenueDetailsModal } from "@/components/modals";
 
 import {
-  CompactFloorLayout,
+  EquipmentManagementTable,
   EditVenueModal,
   VenueManagementTable,
 } from "@/components/map";
 import { FacilitiesArchiveModal } from "@/components/map/FacilitiesArchiveModal";
 import type { FacilitiesPageController } from "@/components/map/useFacilitiesPageController";
 
+const FacilitiesKonvaMap = dynamic(() => import("./FacilitiesKonvaMap"), {
+  ssr: false,
+});
+
 type Props = {
   controller: FacilitiesPageController;
 };
 
+const ZOOM_OPTIONS = [
+  { label: "75%", value: "0.75" },
+  { label: "85%", value: "0.85" },
+  { label: "90%", value: "0.9" },
+  { label: "100%", value: "1" },
+  { label: "125%", value: "1.25" },
+];
+
+function getVenueSizeLabel(venue: FloorVenueRecord | null) {
+  if (!venue) return "-";
+  const width = Math.max(1, venue.gridWidth ?? 1) * 4;
+  const height = Math.max(1, venue.gridHeight ?? 1) * 4;
+  return `${width}m x ${height}m`;
+}
+
+function getVenueTypeLabel(venue: FloorVenueRecord | null) {
+  if (!venue) return "-";
+  return venue.isReservable === false ? "Support" : "Venue";
+}
+
 export default function FacilitiesMapPageView({ controller }: Props) {
+  const [zoom, setZoom] = useState("1");
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [layoutModalVenue, setLayoutModalVenue] =
+    useState<FloorVenueRecord | null>(null);
+  const [selectedManagementEquipmentId, setSelectedManagementEquipmentId] =
+    useState<string | null>(null);
+  const selectedVenue = useMemo(
+    () => controller.selectedFloorVenue,
+    [controller.selectedFloorVenue],
+  );
+  const selectedManagementEquipment = useMemo(
+    () =>
+      controller.availableEquipment.find(
+        (item) => item.id === selectedManagementEquipmentId,
+      ) ?? null,
+    [controller.availableEquipment, selectedManagementEquipmentId],
+  );
+  const activeZoom = Number(zoom);
+  const mapZoom = activeZoom * 0.82;
+  const topGrid = controller.isCompact
+    ? "minmax(0, 1fr)"
+    : "minmax(260px, 1fr) 150px auto";
+
+  const handleFloorChange = (value: string) => {
+    controller.setActiveFloor(value as FacilityFloorId);
+    controller.setSelectedFloorVenue(null);
+    setSelectedManagementEquipmentId(null);
+    setLayoutModalVenue(null);
+    setPan({ x: 0, y: 0 });
+    setZoom("1");
+  };
+
+  const handleSelectMapVenue = (venue: FloorVenueRecord) => {
+    controller.setSelectedFloorVenue(venue);
+    setLayoutModalVenue(controller.isCompact ? venue : null);
+  };
+
+  const modeButtonStyle = (mode: typeof controller.activeTab) => ({
+    borderColor:
+      controller.activeTab === mode ? controller.colors.brand : controller.colors.border,
+    backgroundColor:
+      controller.activeTab === mode
+        ? `${controller.colors.brand}18`
+        : controller.colors.surfaceRaised,
+    color:
+      controller.activeTab === mode
+        ? controller.colors.brand
+        : controller.colors.textSecondary,
+  });
+
+  const renderTopBar = () => (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: topGrid,
+        gap: 10,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 12,
+            border: `1px solid ${controller.colors.border}`,
+            backgroundColor: `${controller.colors.brand}18`,
+            display: "grid",
+            placeItems: "center",
+            flex: "0 0 auto",
+          }}
+        >
+          <Grid2X2 size={27} color={controller.colors.brand} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <FitText
+            style={{
+              color: controller.colors.textPrimary,
+              display: "block",
+              fontSize: 18,
+              fontWeight: 800,
+              lineHeight: 1.1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {controller.activeFloorLabel} Layout
+          </FitText>
+          <FitText
+            style={{
+              color: controller.colors.textSecondary,
+              display: "block",
+              fontSize: 13,
+              marginTop: 4,
+            }}
+          >
+            {controller.activeFloorConfig.subtitle}
+          </FitText>
+        </div>
+      </div>
+
+      <FitDropdown
+        ariaLabel="Facilities floor selector"
+        value={controller.activeFloor}
+        options={FACILITY_FLOORS.map((floor) => ({
+          label: floor.label,
+          value: floor.id,
+        }))}
+        onChange={handleFloorChange}
+        style={{ minWidth: controller.isCompact ? "100%" : 120 }}
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: controller.isCompact
+            ? "repeat(3, minmax(0, 1fr))"
+            : "repeat(3, auto)",
+          gap: 6,
+          border: `1px solid ${controller.colors.border}`,
+          borderRadius: 10,
+          padding: 4,
+          backgroundColor: controller.colors.surfaceRaised,
+        }}
+      >
+        <FitButton
+          variant="ghost"
+          label="Layout"
+          icon={Grid2X2}
+          onClick={() => controller.setActiveTab("floor")}
+          style={modeButtonStyle("floor")}
+        />
+        <FitButton
+          variant="ghost"
+          label="Venues"
+          icon={MapPinned}
+          onClick={() => controller.setActiveTab("venues")}
+          style={modeButtonStyle("venues")}
+        />
+        <FitButton
+          variant="ghost"
+          label="Equipment"
+          icon={SlidersHorizontal}
+          onClick={() => controller.setActiveTab("equipment")}
+          style={modeButtonStyle("equipment")}
+        />
+      </div>
+
+    </div>
+  );
+
+  const renderMapView = () => (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: controller.isCompact
+          ? "minmax(0, 1fr)"
+          : "minmax(0, 1fr) minmax(360px, 400px)",
+        gap: 12,
+        minHeight: 0,
+        height: controller.isCompact ? "auto" : "100%",
+      }}
+    >
+      <div
+        style={{
+          minWidth: 0,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateRows: "minmax(0, 1fr) auto",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            minHeight: controller.isCompact ? 430 : 0,
+            border: `1px solid ${controller.colors.border}`,
+            borderRadius: 10,
+            overflow: "hidden",
+            position: "relative",
+            backgroundColor: controller.colors.base,
+            boxShadow: `inset 0 0 0 1px ${controller.colors.surfaceRaised}`,
+          }}
+        >
+          <FacilitiesKonvaMap
+            assignedEquipment={controller.assignedEquipment}
+            colors={controller.colors}
+            equipmentById={controller.equipmentById}
+            floorImageUrl={controller.activeFloorImageUrl}
+            isEditMode={controller.isEditMode}
+            onAssignEquipmentToVenue={controller.handleAssignEquipmentFromCanvas}
+            onMoveVenue={controller.handleMoveVenueFromCanvas}
+            onPanChange={setPan}
+            onPlaceQuickRegionAtCell={
+              controller.handleCreateQuickFloorRegionAtFromCanvas
+            }
+            onSelectVenue={handleSelectMapVenue}
+            pan={pan}
+            quickRegionTemplate={controller.quickPlacementTemplate}
+            selectedEquipmentId={controller.selectedEquipmentId}
+            selectedVenueMapId={selectedVenue?.mapId}
+            venues={controller.activeFloorVenues}
+            zoom={mapZoom}
+          />
+          <div
+            style={{
+              alignItems: "center",
+              bottom: 12,
+              display: "flex",
+              gap: 6,
+              position: "absolute",
+              right: 12,
+              zIndex: 3,
+            }}
+          >
+            <FitButton
+              aria-label="Zoom out"
+              variant="ghost"
+              icon={Minus}
+              iconOnly
+              onClick={() =>
+                setZoom((current) => String(Math.max(0.75, Number(current) - 0.15)))
+              }
+              style={{ width: 34, height: 34, minHeight: 34, padding: 0 }}
+            />
+            <FitDropdown
+              ariaLabel="Facilities map zoom"
+              value={zoom}
+              options={ZOOM_OPTIONS}
+              onChange={(value) => setZoom(value)}
+              style={{ minWidth: 82 }}
+            />
+            <FitButton
+              aria-label="Zoom in"
+              variant="ghost"
+              icon={Plus}
+              iconOnly
+              onClick={() =>
+                setZoom((current) => String(Math.min(1.25, Number(current) + 0.15)))
+              }
+              style={{ width: 34, height: 34, minHeight: 34, padding: 0 }}
+            />
+            <FitButton
+              variant={controller.isEditMode ? "primary" : "ghost"}
+              label={controller.isEditMode ? "Edit Mode: On" : "Edit Mode: Off"}
+              icon={controller.isEditMode ? LockOpen : Lock}
+              onClick={controller.handleToggleEditMode}
+              style={{ height: 34, minHeight: 34, minWidth: 148 }}
+              textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
+            />
+          </div>
+        </div>
+        <div
+          style={{
+            alignItems: "center",
+            border: `1px solid ${controller.colors.border}`,
+            borderRadius: 8,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            justifyContent: "space-between",
+            padding: "10px 14px",
+            backgroundColor: controller.colors.surfaceRaised,
+          }}
+        >
+          <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
+            Tip: select a region to inspect details, switch modes for table management, or enable edit mode to move regions.
+          </FitText>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {[
+              ["Available", controller.colors.success],
+              ["Reservable", controller.colors.brand],
+              ["Equipment Zone", controller.colors.brandLight],
+              ["Support Zone", controller.colors.warning],
+            ].map(([label, color]) => (
+              <span
+                key={label}
+                style={{
+                  alignItems: "center",
+                  color: controller.colors.textSecondary,
+                  display: "inline-flex",
+                  fontSize: 11,
+                  gap: 6,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: 3,
+                    backgroundColor: color,
+                    display: "inline-block",
+                  }}
+                />
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {renderLayoutRail()}
+    </div>
+  );
+
+  const rightRailStyle: CSSProperties = {
+    border: `1px solid ${controller.colors.border}`,
+    borderRadius: 10,
+    backgroundColor: controller.colors.surfaceRaised,
+    minHeight: 0,
+    overflow: controller.isCompact ? "visible" : "hidden",
+    padding: 10,
+    display: "grid",
+    gap: 10,
+    height: controller.isCompact ? "auto" : "100%",
+    alignContent: "start",
+  };
+
+  const detailCardStyle: CSSProperties = {
+    border: `1px solid ${controller.colors.border}`,
+    borderRadius: 9,
+    padding: 12,
+    backgroundColor: controller.colors.surface,
+  };
+
+  const renderEmptyRightCard = (title: string, copy: string) => (
+    <aside
+      style={{
+        ...rightRailStyle,
+        alignContent: "center",
+        justifyItems: "center",
+        padding: 18,
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 270,
+          textAlign: "center",
+        }}
+      >
+        <MapPinned size={28} color={controller.colors.textMuted} />
+        <FitText
+          style={{
+            display: "block",
+            fontSize: 16,
+            fontWeight: 850,
+            marginTop: 12,
+          }}
+        >
+          {title}
+        </FitText>
+        <FitText
+          style={{
+            color: controller.colors.textSecondary,
+            display: "block",
+            fontSize: 13,
+            lineHeight: 1.5,
+            marginTop: 6,
+          }}
+        >
+          {copy}
+        </FitText>
+      </div>
+    </aside>
+  );
+
+  const renderLayoutRail = () => {
+    if (!controller.isEditMode) {
+      if (selectedVenue && !controller.isCompact) {
+        return renderVenueDetailCard();
+      }
+
+      return renderEmptyRightCard(
+        "No venue selected",
+        "Select a venue on the map to review its details here. Hamburger mode opens the same details in a modal.",
+      );
+    }
+
+    return (
+      <aside
+        style={{
+          ...rightRailStyle,
+          gridTemplateRows: controller.isCompact ? undefined : "auto minmax(0, 1fr)",
+        }}
+      >
+      <div
+        style={{
+          ...detailCardStyle,
+          display: "grid",
+          gap: 6,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        <FitText style={{ display: "block", fontSize: 13, fontWeight: 800 }}>
+          Quick Actions
+        </FitText>
+        <FitButton
+          variant="ghost"
+          label="Edit Region"
+          icon={SquarePen}
+          fullWidth
+          disabled={!selectedVenue}
+          style={{ height: 30, minHeight: 30 }}
+          textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
+          onClick={() => {
+            if (!selectedVenue) return;
+            controller.handleOpenVenueEditor("edit", selectedVenue);
+          }}
+        />
+        <FitButton
+          variant="ghost"
+          label="Open Venue Management"
+          icon={Table2}
+          fullWidth
+          style={{ height: 30, minHeight: 30 }}
+          textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
+          onClick={() => controller.setActiveTab("venues")}
+        />
+        <FitButton
+          variant="ghost"
+          label="Assign Equipment"
+          icon={Dumbbell}
+          fullWidth
+          style={{ height: 30, minHeight: 30 }}
+          textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
+          onClick={() => controller.setActiveTab("equipment")}
+        />
+      </div>
+
+      <div
+        style={{
+          ...detailCardStyle,
+          display: "grid",
+          gap: 7,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
+          Available Equipment
+        </FitText>
+        {controller.availableEquipment.slice(0, 4).map((item) => {
+          const Icon = item.icon;
+          const remaining = controller.equipmentRemainingById[item.id];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => controller.handlePlaceEquipmentFromManager(item.id)}
+              style={{
+                alignItems: "center",
+                backgroundColor:
+                  controller.selectedEquipmentId === item.id
+                    ? `${controller.colors.brand}18`
+                    : controller.colors.surfaceRaised,
+                border: `1px solid ${controller.selectedEquipmentId === item.id ? controller.colors.brand : controller.colors.border}`,
+                borderRadius: 8,
+                color: controller.colors.textPrimary,
+                cursor: "pointer",
+                display: "grid",
+                gap: 7,
+                gridTemplateColumns: "22px minmax(0, 1fr) auto",
+                minHeight: 43,
+                padding: "5px 8px",
+                textAlign: "left",
+              }}
+            >
+              <Icon size={16} color={item.color} />
+              <span style={{ minWidth: 0 }}>
+                <FitText
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {item.name}
+                </FitText>
+                <FitText
+                  style={{
+                    color: controller.colors.textSecondary,
+                    display: "block",
+                    fontSize: 9,
+                  }}
+                >
+                  {item.category}
+                </FitText>
+              </span>
+              <span style={{ textAlign: "right" }}>
+                <FitText style={{ display: "block", fontSize: 11, fontWeight: 800 }}>
+                  {remaining ?? "-"}
+                </FitText>
+                <FitText
+                  style={{
+                    color: controller.colors.textSecondary,
+                    display: "block",
+                    fontSize: 8,
+                  }}
+                >
+                  Remaining
+                </FitText>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </aside>
+    );
+  };
+
+  const renderVenueDetailCard = () => {
+    if (!selectedVenue) {
+      return renderEmptyRightCard(
+        "No venue selected",
+        "Select a venue from the table to review its details here.",
+      );
+    }
+
+    return (
+      <aside style={rightRailStyle}>
+        <div style={detailCardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
+              <MapPinned size={22} color={controller.colors.brand} />
+              <div style={{ minWidth: 0 }}>
+                <FitText style={{ display: "block", fontSize: 16, fontWeight: 850 }}>
+                  {selectedVenue.name}
+                </FitText>
+                <FitText
+                  style={{
+                    color: controller.colors.textSecondary,
+                    display: "block",
+                    fontSize: 12,
+                    marginTop: 3,
+                  }}
+                >
+                  {selectedVenue.isReservable === false ? "Support zone" : "Reservable venue"}
+                </FitText>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+            {[
+              ["Type", getVenueTypeLabel(selectedVenue)],
+              ["Floor", controller.activeFloorLabel],
+              ["Capacity", String(selectedVenue.capacity ?? 0)],
+              ["Size", getVenueSizeLabel(selectedVenue)],
+              ["Status", selectedVenue.isActive === false ? "Inactive" : "Active"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
+              >
+                <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
+                  {label}
+                </FitText>
+                <FitText style={{ fontSize: 12, fontWeight: 750, textAlign: "right" }}>
+                  {value}
+                </FitText>
+              </div>
+            ))}
+          </div>
+          <FitButton
+            variant="primary"
+            label="Edit Venue"
+            icon={SquarePen}
+            fullWidth
+            style={{ marginTop: 16 }}
+            onClick={() => controller.handleOpenVenueEditor("edit", selectedVenue)}
+          />
+        </div>
+      </aside>
+    );
+  };
+
+  const renderEquipmentDetailCard = () => {
+    if (!selectedManagementEquipment) {
+      return renderEmptyRightCard(
+        "No equipment selected",
+        "Select an equipment row to review placement availability and source details.",
+      );
+    }
+
+    const Icon = selectedManagementEquipment.icon;
+    const remaining =
+      controller.equipmentRemainingById[selectedManagementEquipment.id] ?? null;
+    const total = selectedManagementEquipment.quantityAvailable ?? null;
+
+    return (
+      <aside style={rightRailStyle}>
+        <div style={detailCardStyle}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <span
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 9,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: `${controller.colors.brand}18`,
+              }}
+            >
+              <Icon size={21} color={selectedManagementEquipment.color} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <FitText style={{ display: "block", fontSize: 16, fontWeight: 850 }}>
+                {selectedManagementEquipment.name}
+              </FitText>
+              <FitText
+                style={{
+                  color: controller.colors.textSecondary,
+                  display: "block",
+                  fontSize: 12,
+                  marginTop: 3,
+                }}
+              >
+                {selectedManagementEquipment.category}
+              </FitText>
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+            {[
+              ["Source", selectedManagementEquipment.sourceLabel === "inventory" ? "Inventory" : "Map palette"],
+              ["Available", remaining === null ? "Palette item" : String(remaining)],
+              ["Total", total === null ? "-" : String(total)],
+              ["Status", remaining !== null && remaining <= 0 ? "Fully placed" : "Placeable"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
+              >
+                <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
+                  {label}
+                </FitText>
+                <FitText style={{ fontSize: 12, fontWeight: 750, textAlign: "right" }}>
+                  {value}
+                </FitText>
+              </div>
+            ))}
+          </div>
+          <FitButton
+            variant="primary"
+            label="Place Equipment"
+            icon={Dumbbell}
+            fullWidth
+            disabled={remaining !== null && remaining <= 0}
+            style={{ marginTop: 16 }}
+            onClick={() =>
+              controller.handlePlaceEquipmentFromManager(selectedManagementEquipment.id)
+            }
+          />
+        </div>
+      </aside>
+    );
+  };
+
+  const renderVenuesView = () => (
+    <div
+      style={{
+        display: "grid",
+        gap: 12,
+        gridTemplateRows: controller.isCompact ? undefined : "auto minmax(0, 1fr)",
+        height: controller.isCompact ? "auto" : "100%",
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: 10,
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
+        <FitText style={{ color: controller.colors.textSecondary, fontSize: 13 }}>
+          Venue records for {controller.activeFloorLabel}. Selection and edits stay backed by the venue API.
+        </FitText>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <FitButton
+            variant="ghost"
+            label="Manage Archive"
+            icon={ArchiveRestore}
+            onClick={() => controller.setArchiveModalOpen(true)}
+          />
+          <FitButton
+            variant="primary"
+            label="Add Venue"
+            icon={Plus}
+            onClick={() => controller.handleOpenVenueEditor("create")}
+          />
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: controller.isCompact
+            ? "minmax(0, 1fr)"
+            : "minmax(0, 1fr) minmax(340px, 380px)",
+          minHeight: 0,
+          height: controller.isCompact ? "auto" : "100%",
+        }}
+      >
+        <VenueManagementTable
+          colors={controller.colors}
+          venues={controller.activeFloorVenues}
+          isLoading={controller.venuesLoading}
+          embedded
+          onEditVenue={(venue) => controller.handleOpenVenueEditor("edit", venue)}
+          onSelectVenue={(venue) =>
+            controller.setSelectedFloorVenue((current) =>
+              current?.id === venue.id ? null : venue,
+            )
+          }
+          selectedVenueId={selectedVenue?.id}
+        />
+        {renderVenueDetailCard()}
+      </div>
+    </div>
+  );
+
+  const renderEquipmentView = () => (
+    <div
+      style={{
+        display: "grid",
+        gap: 12,
+        gridTemplateRows: controller.isCompact ? undefined : "auto minmax(0, 1fr)",
+        height: controller.isCompact ? "auto" : "100%",
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: 10,
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
+        <FitText style={{ color: controller.colors.textSecondary, fontSize: 13 }}>
+          Equipment placement uses live inventory-backed availability and saves into the floor layout.
+        </FitText>
+        <FitButton
+          variant="ghost"
+          label="Manage Archive"
+          icon={ArchiveRestore}
+          onClick={() => controller.setArchiveModalOpen(true)}
+        />
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: controller.isCompact
+            ? "minmax(0, 1fr)"
+            : "minmax(0, 1fr) minmax(340px, 380px)",
+          minHeight: 0,
+          height: controller.isCompact ? "auto" : "100%",
+        }}
+      >
+        <EquipmentManagementTable
+          colors={controller.colors}
+          equipment={controller.availableEquipment}
+          equipmentRemainingById={controller.equipmentRemainingById}
+          embedded
+          onPlaceEquipment={controller.handlePlaceEquipmentFromManager}
+          onSelectEquipment={(equipment) =>
+            setSelectedManagementEquipmentId((current) =>
+              current === equipment.id ? null : equipment.id,
+            )
+          }
+          selectedEquipmentId={selectedManagementEquipmentId}
+        />
+        {renderEquipmentDetailCard()}
+      </div>
+    </div>
+  );
+
+  const renderVenueEditorSurface = () => (
+    <EditVenueModal
+      isVisible={controller.isVenueEditorOpen}
+      editTarget={controller.venueEditTarget}
+      initialValues={controller.venueInitialValues}
+      submitLabel={
+        controller.isVenueSubmitting
+          ? controller.venueSavingLabel
+          : "SAVE VENUE"
+      }
+      isLoading={controller.isVenueSubmitting}
+      backLabel={
+        controller.venueEditorReturnTab === "floor"
+          ? "Back to Layout"
+          : controller.venueEditorReturnTab === "equipment"
+            ? "Back to Equipment"
+            : "Back to Venues"
+      }
+      onUploadImage={controller.handleUploadVenueImage}
+      onSubmit={(data) =>
+        controller.handleVenueSubmit(
+          data,
+          controller.venueEditTarget,
+          controller.handleCloseVenueEditor,
+        )
+      }
+      onDelete={() => {
+        if (!controller.venueEditTarget) return;
+        controller.handleCloseVenueEditor();
+        controller.handleDeleteVenueRequest(controller.venueEditTarget);
+      }}
+      onBack={controller.handleCloseVenueEditor}
+    />
+  );
+
   return (
     <FitSection
       as="section"
@@ -36,142 +895,62 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       bare
       noPadding
       className={controller.themeTransition}
-      style={controller.fadeIn}
+      style={{
+        ...controller.fadeIn,
+        height: controller.isCompact ? "auto" : "100%",
+        marginBottom: 0,
+        minHeight: 0,
+        overflow: controller.isCompact ? "visible" : "hidden",
+      }}
     >
-      <div style={{ ...controller.fs.mapCard, marginBottom: 12 }}>
-        {controller.activeTab === "venues" ||
-        controller.activeTab === "equipment" ? (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: controller.isVenueEditorOpen
+            ? "minmax(0, 1fr)"
+            : "auto minmax(0, 1fr)",
+          gap: 12,
+          height: controller.isCompact ? "auto" : "100%",
+          minHeight: 0,
+          overflow: controller.isCompact ? "visible" : "hidden",
+        }}
+      >
+        {!controller.isVenueEditorOpen ? (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 14,
-              flexWrap: "wrap",
+              ...controller.fs.mapCard,
+              padding: controller.isCompact ? 12 : 14,
             }}
           >
-            <FitButton
-              variant="ghost"
-              label="< FACILITIES MAP"
-              onClick={controller.handleOpenMap}
-            />
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {controller.activeTab === "venues" &&
-              controller.isVenueEditorOpen ? (
-                <FitButton
-                  variant="ghost"
-                  label="BACK TO VENUES"
-                  onClick={controller.handleCloseVenueEditor}
-                />
-              ) : null}
-              <FitButton
-                variant="ghost"
-                label="MANAGE ARCHIVE"
-                onClick={() => controller.setArchiveModalOpen(true)}
-              />
-              {controller.activeTab === "venues" ? (
-                <FitButton
-                  variant="primary"
-                  label="ADD VENUE"
-                  onClick={() => controller.handleOpenVenueEditor("create")}
-                />
-              ) : null}
-            </div>
+            {renderTopBar()}
           </div>
         ) : null}
-        <motion.div style={controller.viewSlideStyle}>
-          {controller.activeTab === "venues" ? (
-            controller.isVenueEditorOpen ? (
-              <EditVenueModal
-                isVisible={controller.isVenueEditorOpen}
-                editTarget={controller.venueEditTarget}
-                initialValues={controller.venueInitialValues}
-                submitLabel={
-                  controller.isVenueSubmitting
-                    ? controller.venueSavingLabel
-                    : "SAVE VENUE"
-                }
-                isLoading={controller.isVenueSubmitting}
-                onUploadImage={controller.handleUploadVenueImage}
-                onSubmit={(data) =>
-                  controller.handleVenueSubmit(
-                    data,
-                    controller.venueEditTarget,
-                    controller.handleCloseVenueEditor,
-                  )
-                }
-                onDelete={() => {
-                  if (!controller.venueEditTarget) return;
-                  controller.handleCloseVenueEditor();
-                  controller.handleDeleteVenueRequest(
-                    controller.venueEditTarget,
-                  );
-                }}
-              />
-            ) : (
-              <VenueManagementTable
-                colors={controller.colors}
-                venues={controller.venues}
-                isLoading={controller.venuesLoading}
-                onEditVenue={(venue) =>
-                  controller.handleOpenVenueEditor("edit", venue)
-                }
-              />
-            )
-          ) : controller.activeTab === "equipment" ? (
-            controller.equipmentManagementNode
-          ) : (
-            <DndContext
-              sensors={controller.sensors}
-              onDragStart={controller.handleDragStart}
-              onDragEnd={controller.handleDragEnd}
-            >
-              {controller.isCompact ? (
-                <CompactFloorLayout
-                  colors={controller.colors}
-                  isDrawerOpen={controller.isDrawerOpen}
-                  drawerButtonWidth={controller.drawerButtonWidth}
-                  onToggleDrawer={() =>
-                    controller.setIsDrawerOpen((prev) => !prev)
-                  }
-                  floorPlanNode={controller.floorPlanNode}
-                  drawerNode={
-                    <>
-                      {controller.equipmentPanelNode}
-                      {controller.layoutStatusNode}
-                    </>
-                  }
-                  quickRegionNode={controller.quickRegionNode}
-                  editorNode={controller.editorNode}
-                />
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 360px)",
-                    gap: 12,
-                    alignItems: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      backgroundColor: controller.colors.border,
-                      borderRadius: 12,
-                      padding: 14,
-                      minWidth: 0,
-                    }}
-                  >
-                    {controller.floorPlanNode}
-                  </div>
-                  <div style={{ alignSelf: "start", minWidth: 0 }}>
-                    {controller.editorNode}
-                  </div>
-                </div>
-              )}
-            </DndContext>
-          )}
-        </motion.div>
+        <div
+          style={{
+            ...controller.fs.mapCard,
+            display: "grid",
+            gridTemplateRows: "minmax(0, 1fr)",
+            minHeight: 0,
+            overflow: controller.isCompact ? "visible" : "hidden",
+            padding: controller.isCompact ? 12 : 14,
+          }}
+        >
+          <div
+            style={{
+              height: controller.isCompact ? "auto" : "100%",
+              minHeight: 0,
+              overflow: controller.isCompact ? "visible" : "hidden",
+            }}
+          >
+            {controller.activeTab === "venues"
+              ? controller.isVenueEditorOpen
+                ? renderVenueEditorSurface()
+                : renderVenuesView()
+              : controller.activeTab === "equipment"
+                ? renderEquipmentView()
+                : renderMapView()}
+          </div>
+        </div>
       </div>
 
       {controller.combinedMessage && (
@@ -186,9 +965,15 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         </FitText>
       )}
       <VenueDetailsModal
-        venue={controller.selectedFloorVenue}
-        isOpen={!!controller.selectedFloorVenue && !controller.isEditMode}
-        onClose={() => controller.setSelectedFloorVenue(null)}
+        venue={layoutModalVenue}
+        isOpen={
+          !!layoutModalVenue &&
+          controller.activeTab === "floor" &&
+          controller.isCompact
+        }
+        onClose={() => {
+          setLayoutModalVenue(null);
+        }}
       />
       <FacilitiesArchiveModal
         archivedEquipment={controller.archivedEquipment}

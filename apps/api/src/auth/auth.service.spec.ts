@@ -21,6 +21,7 @@ describe('AuthService', () => {
 
   const repo = {
     findIdentity: jest.fn(),
+    createCoachProfile: jest.fn(),
     createUserWithProfile: jest.fn(),
     updateUser: jest.fn(),
     markEmailIdentityVerified: jest.fn(),
@@ -736,6 +737,44 @@ describe('AuthService', () => {
         targetRole: 'member',
         targetUserId: 'member-1',
       }),
+    );
+  });
+
+  it('creates coach accounts with a coach profile and registration OTP', async () => {
+    repo.findIdentity.mockResolvedValue(null);
+    repo.createUserWithProfile.mockResolvedValue({ id: 'coach-1' });
+    repo.createCoachProfile.mockResolvedValue({ id: 'coach-profile-1' });
+
+    const result = await service.adminCreateUser(
+      {
+        email: 'coach@example.com',
+        password: 'Password1!',
+        first_name: 'Coach',
+        last_name: 'One',
+        role: 'coach',
+      },
+      'admin-1',
+      UserRole.admin,
+      '127.0.0.1',
+    );
+
+    expect(result).toEqual({
+      user_id: 'coach-1',
+      email: 'coach@example.com',
+      role: 'coach',
+    });
+    expect(repo.createUserWithProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: UserRole.coach,
+        status: UserStatus.pending,
+      }),
+    );
+    expect(repo.createCoachProfile).toHaveBeenCalledWith('coach-1');
+    expect(otpService.issueOtp).toHaveBeenCalledWith(
+      'coach-1',
+      'registration',
+      'email',
+      'coach@example.com',
     );
   });
 

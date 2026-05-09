@@ -1,5 +1,6 @@
 "use client";
 import type { CSSProperties, ReactNode, SelectHTMLAttributes } from "react";
+import { useMemo } from "react";
 import { ChevronRight, ChevronDown, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -61,7 +62,7 @@ export default function FitCard({
   contentStyle
 }: FitCardProps) {
   const { colors } = useTheme();
-  const s = makeFitCardStyles(colors);
+  const s = useMemo(() => makeFitCardStyles(colors), [colors]);
 
   if (statMode) {
     return (
@@ -203,7 +204,7 @@ type FitSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> 
 export function FitSelect({ options, placeholder, compact = false, fullWidth = false, className, style, value, defaultValue, ...props }: FitSelectProps) {
   const { colors } = useTheme();
   const fontClass = useFontClass();
-  const s = makeFitCardStyles(colors);
+  const s = useMemo(() => makeFitCardStyles(colors), [colors]);
   const controlStyle = s.selectControl(compact, fullWidth, !!props.disabled);
   const hasPlaceholder = Boolean(placeholder);
   const selectedValue = typeof value === "string" ? value : undefined;

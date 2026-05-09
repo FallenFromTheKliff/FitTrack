@@ -30,6 +30,15 @@ export function makeFitButtonVariants(
       fontWeight: 700,
       borderRadius: BORDER_RADIUS.input
     },
+    positive: {
+      backgroundColor: isDisabled ? colors.textDisabled : colors.success,
+      color: onBrand,
+      padding: iconOnly ? "8px" : "11px 18px",
+      border: `1px solid ${isDisabled ? colors.textDisabled : colors.success}`,
+      fontSize: 15,
+      fontWeight: 700,
+      borderRadius: BORDER_RADIUS.input
+    },
     ghost: {
       backgroundColor: colors.surfaceRaised,
       color: colors.textSecondary,
@@ -40,12 +49,12 @@ export function makeFitButtonVariants(
       borderRadius: BORDER_RADIUS.input
     },
     danger: {
-      backgroundColor: colors.surfaceRaised,
-      color: colors.danger,
+      backgroundColor: isDisabled ? colors.textDisabled : colors.danger,
+      color: onBrand,
       padding: iconOnly ? "8px" : "10px 18px",
-      border: `1px solid ${colors.danger}`,
+      border: `1px solid ${isDisabled ? colors.textDisabled : colors.danger}`,
       fontSize: 15,
-      fontWeight: 600,
+      fontWeight: 700,
       borderRadius: BORDER_RADIUS.input
     },
     link: {
