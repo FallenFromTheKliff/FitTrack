@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowUp, Bot, ChevronLeft } from "lucide-react";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -43,6 +43,7 @@ export default function ChatPanel({
   const { colors, onBrandTextColor } = useTheme();
   const s = chatbotStyles(colors);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,6 +52,42 @@ export default function ChatPanel({
   useEffect(() => {
     scrollToBottom();
   }, [isLoading, messages, scrollToBottom]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+
+    const syncKeyboardOffset = () => {
+      const activeElement = document.activeElement;
+      const isTyping =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement;
+
+      if (!isTyping || !viewport) {
+        setKeyboardOffset(0);
+        return;
+      }
+
+      const overlap = Math.max(
+        0,
+        Math.round(window.innerHeight - viewport.height - viewport.offsetTop),
+      );
+      setKeyboardOffset(overlap > 80 ? overlap : 0);
+    };
+
+    const clearKeyboardOffset = () => setKeyboardOffset(0);
+
+    window.addEventListener("focusin", syncKeyboardOffset);
+    window.addEventListener("focusout", clearKeyboardOffset);
+    viewport?.addEventListener("resize", syncKeyboardOffset);
+    viewport?.addEventListener("scroll", syncKeyboardOffset);
+
+    return () => {
+      window.removeEventListener("focusin", syncKeyboardOffset);
+      window.removeEventListener("focusout", clearKeyboardOffset);
+      viewport?.removeEventListener("resize", syncKeyboardOffset);
+      viewport?.removeEventListener("scroll", syncKeyboardOffset);
+    };
+  }, []);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -64,16 +101,16 @@ export default function ChatPanel({
   );
 
   const canSend = !disabled && !isLoading && !isReadOnly && !!input.trim();
+  const keyboardAwarePanelStyle = {
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+    height: "100%",
+    "--brodigy-keyboard-offset": `${keyboardOffset}px`,
+  } as CSSProperties;
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-        height: "100%",
-      }}
-    >
+    <div style={keyboardAwarePanelStyle}>
       <div style={s.panelHeader}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {showBackButton && onBack ? (
@@ -99,7 +136,12 @@ export default function ChatPanel({
           </FitText>
         </div>
       </div>
-      <div style={s.messagesArea}>
+      <div
+        style={{
+          ...s.messagesArea,
+          paddingBottom: keyboardOffset ? keyboardOffset + 24 : undefined,
+        }}
+      >
         <div style={s.chatWallpaper} aria-hidden="true">
           <Bot
             size={180}
@@ -167,7 +209,18 @@ export default function ChatPanel({
         ) : null}
         <div ref={bottomRef} />
       </div>
-      <div style={s.inputBar}>
+      <div
+        style={{
+          ...s.inputBar,
+          paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+          position: "relative",
+          transform: keyboardOffset
+            ? "translateY(calc(-1 * var(--brodigy-keyboard-offset)))"
+            : undefined,
+          transition: "transform 180ms ease",
+          zIndex: 3,
+        }}
+      >
         <div style={s.inputWrap}>
           <FitTextArea
             value={input}

@@ -1,22 +1,29 @@
 # Component Patterns
 
-This repo favors thin route files, focused feature hooks, app-local Fit primitives, and reusable helpers that keep JSX trees small.
+This repo favors body-owning but thin route or screen files, focused feature hooks, app-local Fit primitives, and reusable helpers that keep JSX trees small.
 
-## 1. Thin route wrappers
+## 1. Thin route or screen body composition
 
-Representative file:
+Representative files:
 
-- `apps/web/app/(auth)/login/page.tsx`
+- `apps/web/app/**/page.tsx`
+- `apps/mobile/app/(auth)/**` and `apps/mobile/app/(tabs)/**`
 
 Pattern:
 
-- route file is often just a wrapper or assembly point
-- heavy behavior lives in components, hooks, controller helpers, or focused mini-functions
+- route or screen file owns the visible body assembly
+- header, primary regions, state branches, section order, and overlay or modal mount points remain readable at the route level
+- heavy behavior lives in hooks, controller helpers, query helpers, shared packages, or focused mini-functions
+- components stay bounded: Fit primitives, sections, panels, tables, forms, modals, drawers, overlays, and page-specific slices
 
 Use this when:
 
-- a page only needs to select the correct feature component
-- routing concerns are simple and the feature logic belongs elsewhere
+- a page or screen can be assembled from precise pieces
+- behavior and data shaping belong elsewhere but the surface body should still be visible in `page.tsx` or the screen file
+
+Avoid:
+
+- making the route return only `XxxPageContent`, `XxxDashboard`, `XxxScreenContent`, or `XxxShell` when that child owns the full page or screen body
 
 ## 2. Feature hook or controller owns behavior
 
@@ -35,12 +42,12 @@ Pattern:
 Default split:
 
 ```text
-route or screen
-  -> feature page or screen component
-    -> feature hook or controller
-      -> query and mutation options
-      -> helper functions or mappers
-      -> app-local Fit sections, cards, modals, tables
+page.tsx or Expo Router screen body
+  -> feature hook or controller
+    -> query and mutation options
+    -> helper functions or mappers
+  -> app-local Fit primitives
+  -> focused feature sections, cards, panels, modals, tables, forms, overlays
 ```
 
 ## 3. Helpers and mini-functions are reusable surface area too
@@ -99,5 +106,6 @@ To reduce surface complexity without hiding logic:
 - move data shaping into hooks or query helpers
 - move action flows into controller helpers or dedicated handlers
 - split modals, panels, and sections by responsibility
+- keep the page or screen body assembled in the route file instead of moving it into one full-surface component
 - reuse Fit form inputs, cards, buttons, search, filters, and sections instead of rebuilding layout primitives per page
 - extract mini-functions when they remove repeated noise from JSX or controller bodies

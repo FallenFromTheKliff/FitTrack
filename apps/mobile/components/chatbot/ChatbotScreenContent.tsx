@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { ArrowUp } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { makeBrodigyStyles } from "@/styles/shared/ScreenStyles";
@@ -45,6 +46,7 @@ export default function ChatbotScreenContent({
   styles
 }: ChatbotScreenContentProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
@@ -55,8 +57,8 @@ export default function ChatbotScreenContent({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
+      keyboardVerticalOffset={0}
     >
       <ScrollView
         ref={scrollRef}
@@ -128,7 +130,7 @@ export default function ChatbotScreenContent({
           </>
         )}
       </ScrollView>
-      <View style={styles.inputBar}>
+      <View style={[styles.inputBar, { paddingBottom: Math.max(14, insets.bottom + 10) }]}>
         <View style={styles.inputWrap}>
           <FitTextInput
             placeholder={isFrozen ? "Account frozen" : isMemberLocked ? "Membership card required" : isSessionDeleted ? "Restore this chat to continue" : "Type a message"}

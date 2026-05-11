@@ -32,6 +32,8 @@ function toFrontendRole(role: UserRole) {
       return { id: 1, name: 'ADMIN' as const };
     case UserRole.staff:
       return { id: 2, name: 'STAFF' as const };
+    case UserRole.coach:
+      return { id: 3, name: 'COACH' as const };
     case UserRole.member:
     default:
       return { id: 4, name: 'USER' as const };
@@ -132,8 +134,10 @@ export class AdminUsersService {
     private readonly eventEmitter?: EventEmitter2,
   ) {}
 
-  async getAll() {
+  async getAll(actingRole?: UserRole) {
     const users = await this.prisma.user.findMany({
+      where:
+        actingRole === UserRole.coach ? { role: UserRole.member } : undefined,
       include: {
         auth_identities: {
           select: {

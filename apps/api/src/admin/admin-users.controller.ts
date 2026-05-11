@@ -21,7 +21,7 @@ import { AdminUsersService } from './admin-users.service';
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.admin, UserRole.staff)
+@Roles(UserRole.admin, UserRole.staff, UserRole.coach)
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
@@ -31,8 +31,8 @@ export class AdminUsersController {
     summary:
       'List member and staff directory records for the admin members screen.',
   })
-  getAllUsers() {
-    return this.adminUsersService.getAll();
+  getAllUsers(@CurrentUser() user: JwtPayload) {
+    return this.adminUsersService.getAll(user.role);
   }
 
   @Delete(':id')

@@ -8,6 +8,17 @@
 - Identical logic can move to `@fittrack/app-core`, `@fittrack/utils`, `@fittrack/hooks`, or `@fittrack/query` when it is genuinely shared.
 - Identical visual vocabulary should still be implemented with app-local rendering primitives unless a real shared package already owns it.
 - Forms use `react-hook-form` and shared Zod schemas when available.
+- Do not over-extract a one-off component that appears only once, but it must still follow FitTrack design and contract rules.
+- Fit primitives should replace redundant static controls where a local primitive already covers the behavior.
+
+## Page And Screen Body Ownership
+
+- Web `page.tsx` files and mobile Expo Router screen files must own the body composition of their respective page or screen.
+- Do not move the whole body into a single route surrogate component such as `XxxPageContent`, `XxxDashboard`, `XxxScreenContent`, or `XxxShell` just so the route file can return one child.
+- Route and screen files should visibly assemble the header, primary regions, state branches, section order, and overlay or modal mount points for that surface.
+- Components are building blocks. They should be precise and bounded like Fit primitives, feature sections, cards, controls, tables, forms, modals, drawers, overlay frames, or page-specific panels.
+- Page-specific components are allowed when they own a surgical slice of the surface. They should not become the hidden owner of the entire page or screen.
+- Hooks and controllers own behavior; route and screen files own body assembly; components own reusable or page-local pieces.
 
 ## Mobile Components
 
@@ -62,10 +73,10 @@ Use web Fit components where they exist:
 
 | Type | Location |
 |---|---|
-| Admin routes | `apps/web/app/(admin)/` |
-| Auth routes | `apps/web/app/(auth)/` |
-| Dev-only routes | `apps/web/app/dev/` |
-| Payment status routes | `apps/web/app/payments/` |
+| Public/landing routes | `apps/web/app/(land)/` |
+| Authenticated portal routes | `apps/web/app/(auth)/` |
+| Dev-only routes | `apps/web/app/(land)/dev/` |
+| Payment status routes | `apps/web/app/(land)/payments/` |
 | Fit primitives | `apps/web/components/fit/` |
 | Layout components | `apps/web/components/layout/` |
 | Feature components | `apps/web/components/{feature}/` |

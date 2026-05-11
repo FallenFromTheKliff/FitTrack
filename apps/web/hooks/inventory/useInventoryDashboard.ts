@@ -48,7 +48,7 @@ import {
   filterRetailProducts,
   getEquipmentAvailabilityStatus,
   getRetailInventoryStatus,
-} from "@/app/(admin)/inventory/helpers";
+} from "@/app/(auth)/inventory/helpers";
 
 const INVENTORY_LIST_PARAMS = { limit: 100, page: 1 } as const;
 const EMPTY_META = { page: 1, limit: 0, total: 0, total_pages: 0 } as const;

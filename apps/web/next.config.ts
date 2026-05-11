@@ -31,6 +31,115 @@ const nextConfig: NextConfig = {
       }
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/members",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/members/:path*",
+        destination: "/accounts/:path*",
+        permanent: false
+      },
+      {
+        source: "/member/home",
+        destination: "/dashboard",
+        permanent: false
+      },
+      {
+        source: "/member/facilities",
+        destination: "/facilities",
+        permanent: false
+      },
+      {
+        source: "/member/bookings",
+        destination: "/bookings",
+        permanent: false
+      },
+      {
+        source: "/member/nutrition",
+        destination: "/nutrition",
+        permanent: false
+      },
+      {
+        source: "/member/mastery",
+        destination: "/mastery",
+        permanent: false
+      },
+      {
+        source: "/member/workout",
+        destination: "/workout",
+        permanent: false
+      },
+      {
+        source: "/member/ai",
+        destination: "/ai",
+        permanent: false
+      },
+      {
+        source: "/member/profile",
+        destination: "/profile",
+        permanent: false
+      },
+      {
+        source: "/member/settings",
+        destination: "/settings",
+        permanent: false
+      },
+      {
+        source: "/coach",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/coach/dashboard",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/coach/clients",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/coach/sessions",
+        destination: "/schedule",
+        permanent: false
+      },
+      {
+        source: "/coach/schedule",
+        destination: "/schedule",
+        permanent: false
+      },
+      {
+        source: "/coach/earnings",
+        destination: "/schedule",
+        permanent: false
+      },
+      {
+        source: "/coach/gamification",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/coach/exercise-lab",
+        destination: "/schedule",
+        permanent: false
+      },
+      {
+        source: "/coach/ai",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/coach/settings",
+        destination: "/profile",
+        permanent: false
+      }
+    ];
+  },
   devIndicators: false,
   turbopack: {
     root: path.resolve(__dirname, "../..")

@@ -37,6 +37,7 @@ export {
   analyticsOverviewQueryOptions,
   analyticsRevenueQueryOptions,
   analyticsSnapshotQueryOptions,
+  exportAnalyticsPdfMutationOptions,
   generateAnalyticsInsightMutationOptions,
 } from "./analytics";
 export { auditLogsQueryOptions } from "./audit";
@@ -180,7 +181,9 @@ export {
 export {
   createGymPromotionMutationOptions,
   deactivateGymPromotionMutationOptions,
+  gymProfileQueryOptions,
   gymPromotionsQueryOptions,
+  updateGymProfileMutationOptions,
 } from "./gym-knowledge";
 export {
   createNutritionLogMutationOptions,

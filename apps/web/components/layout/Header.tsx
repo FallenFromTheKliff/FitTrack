@@ -45,7 +45,7 @@ export default function Header({
 
   return (
     <>
-    <header style={s.header}>
+    <header className="fit-app-header" style={s.header}>
       <div style={s.leftSection}>
         {showMenuButton ? (
           <FitButton

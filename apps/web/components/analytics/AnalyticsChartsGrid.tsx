@@ -10,7 +10,7 @@ import type {
 import FitChartContainer from "@/components/fit/FitChartContainer";
 import FitSection from "@/components/fit/FitSection";
 import { FitText } from "@/components/fit/FitText";
-import { formatCompactMoney, getAnalyticsPieColors } from "@/app/(admin)/analytics/helpers";
+import { formatCompactMoney, getAnalyticsPieColors } from "@/app/(auth)/analytics/helpers";
 
 type AnalyticsPieEntry = {
   name: string;

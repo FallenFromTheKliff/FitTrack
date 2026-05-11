@@ -9,7 +9,7 @@ import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
 import { dashboardStyles } from "@/styles/pageStyles";
-import { formatCompactMoney } from "@/app/(admin)/analytics/helpers";
+import { formatCompactMoney } from "@/app/(auth)/analytics/helpers";
 
 type AnalyticsHeaderSectionProps = {
   colors: IThemeContext["colors"];

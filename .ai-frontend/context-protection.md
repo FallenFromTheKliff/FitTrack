@@ -57,5 +57,5 @@ Context and shared-client files are high blast-radius surfaces. Read them when n
 ## Backend Boundary
 
 - Backend edits are outside frontend-agent scope unless explicitly requested.
-- Backend reads should be rare and used only when contract truth cannot be resolved through shared packages, current frontend usage, Swagger, or Notion.
+- Backend reads should be rare and used only when contract truth cannot be resolved through shared packages, current frontend usage, Swagger, or explicitly requested Notion notes.
 - Never copy secrets from `.env`, Notion, logs, or config into docs or chat responses.

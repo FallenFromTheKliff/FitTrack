@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   Bot,
@@ -9,11 +9,14 @@ import {
   ChevronRight,
   Dumbbell,
   HeartPulse,
+  LogIn,
   MapPinned,
+  Menu,
   MessageCircle,
   QrCode,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -273,6 +276,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
 export default function FitTrackLandingPage() {
   const { colors, onBrandTextColor } = useTheme();
   const [activeSection, setActiveSection] = useState<LandingSection>("home");
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { renderedValue: renderedSection, style: sectionTransitionStyle } =
     useSectionTransition(activeSection, { duration: 920, fromY: 0 });
   const hero = HERO_CONTENT[renderedSection];
@@ -286,6 +290,26 @@ export default function FitTrackLandingPage() {
     }),
     [colors.border, colors.surface],
   );
+
+  useEffect(() => {
+    if (!isMobileSidebarOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMobileSidebarOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isMobileSidebarOpen]);
+
+  const handleSectionSelect = (section: LandingSection) => {
+    setActiveSection(section);
+    setIsMobileSidebarOpen(false);
+  };
 
   return (
     <main
@@ -308,6 +332,7 @@ export default function FitTrackLandingPage() {
         }}
       >
         <header
+          className="landing-header"
           style={{
             position: "absolute",
             top: 0,
@@ -326,7 +351,7 @@ export default function FitTrackLandingPage() {
         >
           <button
             type="button"
-            onClick={() => setActiveSection("home")}
+            onClick={() => handleSectionSelect("home")}
             style={{
               alignItems: "center",
               background: "transparent",
@@ -354,6 +379,7 @@ export default function FitTrackLandingPage() {
           </button>
 
           <nav
+            className="landing-desktop-nav"
             style={{
               alignItems: "center",
               display: "flex",
@@ -368,7 +394,7 @@ export default function FitTrackLandingPage() {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => setActiveSection(item.value)}
+                  onClick={() => handleSectionSelect(item.value)}
                   style={{
                     backgroundColor: "transparent",
                     border: "1px solid transparent",
@@ -400,7 +426,175 @@ export default function FitTrackLandingPage() {
               Log In
             </Link>
           </nav>
+          <button
+            type="button"
+            className="landing-mobile-menu-button"
+            aria-label="Open landing navigation"
+            aria-expanded={isMobileSidebarOpen}
+            onClick={() => setIsMobileSidebarOpen(true)}
+            style={{
+              alignItems: "center",
+              backgroundColor: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.22)",
+              borderRadius: 8,
+              color: "#fff",
+              cursor: "pointer",
+              display: "none",
+              height: 40,
+              justifyContent: "center",
+              width: 40,
+            }}
+          >
+            <Menu size={21} strokeWidth={2.25} />
+          </button>
         </header>
+        <div
+          className="landing-mobile-sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => setIsMobileSidebarOpen(false)}
+          style={{
+            backgroundColor: "rgba(0,0,0,0.62)",
+            inset: 0,
+            opacity: isMobileSidebarOpen ? 1 : 0,
+            pointerEvents: isMobileSidebarOpen ? "auto" : "none",
+            position: "fixed",
+            transition: "opacity 200ms ease",
+            zIndex: 55,
+          }}
+        />
+        <aside
+          className="landing-mobile-sidebar"
+          aria-label="Landing navigation"
+          style={{
+            backgroundColor: colors.surfaceRaised,
+            borderRight: `1px solid ${colors.border}`,
+            bottom: 0,
+            color: colors.textPrimary,
+            display: "flex",
+            flexDirection: "column",
+            left: 0,
+            padding: "14px 16px 18px",
+            position: "fixed",
+            top: 0,
+            transform: isMobileSidebarOpen ? "translateX(0)" : "translateX(-100%)",
+            transition: "transform 240ms ease",
+            width: "min(84vw, 320px)",
+            zIndex: 60,
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: 10,
+              minHeight: 56,
+              paddingBottom: 14,
+            }}
+          >
+            <span
+              style={{
+                alignItems: "center",
+                backgroundColor: colors.brand,
+                borderRadius: 10,
+                display: "inline-flex",
+                height: 42,
+                justifyContent: "center",
+                width: 42,
+              }}
+            >
+              <Dumbbell size={22} color={onBrandTextColor} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <FitText style={{ color: colors.textPrimary, display: "block", fontSize: 22, fontWeight: 900 }}>
+                FitTrack
+              </FitText>
+              <FitText as="p" style={{ color: colors.textMuted, display: "block", fontSize: 12, margin: "1px 0 0" }}>
+                Public Site
+              </FitText>
+            </div>
+            <button
+              type="button"
+              aria-label="Close landing navigation"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              style={{
+                alignItems: "center",
+                backgroundColor: colors.surface,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 8,
+                color: colors.textPrimary,
+                cursor: "pointer",
+                display: "inline-flex",
+                height: 36,
+                justifyContent: "center",
+                width: 36,
+              }}
+            >
+              <X size={18} strokeWidth={2.25} />
+            </button>
+          </div>
+          <div style={{ backgroundColor: colors.border, height: 1, marginBottom: 12 }} />
+          <nav
+            style={{
+              display: "flex",
+              flex: 1,
+              flexDirection: "column",
+              gap: 6,
+              overflowY: "auto",
+              padding: "2px 0 12px",
+            }}
+          >
+            {NAV_ITEMS.map((item) => {
+              const isActive = activeSection === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => handleSectionSelect(item.value)}
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: isActive ? colors.brand : "transparent",
+                    border: 0,
+                    borderRadius: 12,
+                    color: isActive ? onBrandTextColor : colors.textSecondary,
+                    cursor: "pointer",
+                    display: "flex",
+                    fontSize: 16,
+                    fontWeight: isActive ? 800 : 650,
+                    justifyContent: "space-between",
+                    minHeight: 46,
+                    padding: "0 12px",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                >
+                  {item.label}
+                  {isActive ? <ChevronRight size={18} strokeWidth={2.3} /> : null}
+                </button>
+              );
+            })}
+          </nav>
+          <div style={{ backgroundColor: colors.border, height: 1, marginBottom: 12 }} />
+          <Link
+            href="/login"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.brand,
+              borderRadius: 12,
+              color: onBrandTextColor,
+              display: "flex",
+              fontSize: 16,
+              fontWeight: 900,
+              gap: 10,
+              justifyContent: "center",
+              minHeight: 48,
+              textDecoration: "none",
+            }}
+          >
+            <LogIn size={18} strokeWidth={2.25} />
+            Log In
+          </Link>
+        </aside>
 
         <div
           style={{
@@ -516,7 +710,7 @@ export default function FitTrackLandingPage() {
             </Link>
             <button
               type="button"
-              onClick={() => setActiveSection(hero.secondaryTarget)}
+              onClick={() => handleSectionSelect(hero.secondaryTarget)}
               style={{
                 alignItems: "center",
                 backgroundColor: "rgba(255,255,255,0.07)",
@@ -632,13 +826,19 @@ export default function FitTrackLandingPage() {
 
       <style>{`
         @media (max-width: 860px) {
-          header {
-            align-items: flex-start !important;
-            flex-direction: column !important;
+          .landing-header {
+            align-items: center !important;
+            flex-direction: row !important;
+            min-height: 74px !important;
           }
 
-          nav {
-            justify-content: flex-start !important;
+          .landing-desktop-nav {
+            display: none !important;
+          }
+
+          .landing-mobile-menu-button {
+            display: inline-flex !important;
+            flex-shrink: 0;
           }
 
           .landing-feature-grid {

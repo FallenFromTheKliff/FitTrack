@@ -20,7 +20,8 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
   const isStaff = user?.role === "STAFF";
-  const canInspectAccounts = isAdmin || isStaff;
+  const isCoach = user?.role === "COACH";
+  const canInspectAccounts = isAdmin || isStaff || isCoach;
   const queryClient = useQueryClient();
   const controller = useMemo(() => createMemberController(), []);
 

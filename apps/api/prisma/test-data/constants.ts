@@ -51,9 +51,9 @@ export const TEST_ACCOUNTS: readonly TestAccount[] = [
     key: 'coach',
     label: 'Seed Coach',
     role: UserRole.coach,
-    email: `seed.coach@${TEST_DATA_EMAIL_DOMAIN}`,
+    email: `seed.coach.ridge@${TEST_DATA_EMAIL_DOMAIN}`,
     password: 'SeedCoach!2026',
-    firstName: 'Mia',
+    firstName: 'Ridge',
     lastName: 'Coach',
     phone: '+639110000003',
   },
@@ -156,11 +156,11 @@ export const MANUAL_TEST_PATHS: readonly ManualTestPath[] = [
       'Confirm the web shell authenticates the member and shows only Profile plus Sign Out in the sidebar.',
   },
   {
-    area: 'web-coach-profile-only',
+    area: 'web-coach-dashboard',
     credentialKey: 'coach',
-    route: '/profile',
+    route: '/coach/dashboard',
     expected:
-      'Confirm the web shell authenticates the coach and shows only Profile plus Sign Out in the sidebar.',
+      'Confirm the web shell authenticates the coach and shows the Coach Portal navigation with empty dedicated pages.',
   },
   {
     area: 'mobile-bookings',

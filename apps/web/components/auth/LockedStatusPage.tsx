@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Lock } from "lucide-react";
 
-import { LOCKED_PAGE_COPY } from "@/app/(auth)/locked/helpers";
+import { LOCKED_PAGE_COPY } from "@/app/(land)/locked/helpers";
 
 import { AuthStatusPage } from "./AuthStatusPage";
 

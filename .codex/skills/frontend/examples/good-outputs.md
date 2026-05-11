@@ -2,14 +2,19 @@
 
 Use these repo patterns as the default target shape.
 
-## 1. Thin route wrapper
+## 1. Body-owning route or screen composition
 
-Reference: `apps/web/app/(auth)/login/page.tsx`
+Good shape:
+
+- `page.tsx` or the Expo Router screen file assembles the page or screen body
+- hooks/controllers own behavior and data shaping
+- focused components own bounded sections, panels, forms, tables, modals, overlays, and Fit primitive composition
 
 Why it is good:
 
-- route file stays tiny
-- feature ownership lives in reusable components instead of the route shell
+- the route or screen stays readable without becoming a command center
+- the actual body is not hidden behind one full-page surrogate component
+- reusable pieces stay precise enough to be upgraded or reused safely
 
 ## 2. Feature hook owns orchestration
 
@@ -28,7 +33,7 @@ Reference: `apps/mobile/hooks/profile/useProfileScreen.ts`
 Why it is good:
 
 - query wiring, modal state, derived labels, and mutation flows are centralized
-- screen components can compose sections and modals instead of owning every branch
+- screen files can compose sections and modals without owning every behavior branch or delegating the whole body to one child
 
 ## 4. Shared auth orchestration
 

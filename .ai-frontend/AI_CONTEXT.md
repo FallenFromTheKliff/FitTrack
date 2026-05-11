@@ -9,6 +9,13 @@ FitTrack is a Turborepo monorepo for SertFit Gym with two frontend surfaces:
 
 Frontend code acknowledges backend capabilities through the shared client and query packages. Backend implementation is not frontend-owned unless explicitly requested.
 
+## Page And Screen Body Convention
+
+- Web `page.tsx` files and mobile Expo Router screen files own the visible body composition for the route or screen.
+- Thin route files are still assembly points: they should show the header, main regions, state branches, section ordering, and overlay or modal mounts.
+- Do not hide an entire page or screen behind one full-surface component returned from `page.tsx` or a mobile screen file.
+- Components should stay precise building blocks, similar to the app-local Fit primitives. Feature-specific components are fine when they own a bounded section, panel, form, table, modal, or interaction.
+
 ## Current Shared Contract Layer
 
 Use these packages before reading backend source:
@@ -70,28 +77,34 @@ Use these packages before reading backend source:
 
 ```text
 apps/web/app/
-  (admin)/
+  (auth)/
+    accounts/
     ai/
     analytics/
+    bookings/
     dashboard/
     exercise-lab/
     facilities/
     gamification/
     gym-actions/
     inventory/
-    members/
+    mastery/
     memberships-promos/
+    nutrition/
     profile/
     schedule/
     settings/
-  (auth)/
+    workout/
+  (land)/
+    (home)/
+      page.tsx
     locked/
     login/
-  dev/
-    auth-bridge/
-  payments/
-    cancel/
-    success/
+    dev/
+      auth-bridge/
+    payments/
+      cancel/
+      success/
 ```
 
 ### Current Local Areas
@@ -124,7 +137,8 @@ Do not assume an endpoint is missing because older docs said it was. Check `@fit
 
 ## Design And Notes Sources
 
+- `.ai-frontend/ui-ux-workflow.md` contains the migrated local rules from the Notion `FitTrack - UI/UX Enhancements` sections `THINGS TO NOTE:` and `CODE RULES:`.
 - `.ai-frontend/style.md` and `.ai-frontend/performance.md` define local implementation guardrails.
-- Notion `FITTRACK: Backup Log` contains project notes, commands, UI/UX guidance, and copied environment/context pages.
-- Notion notes can guide intent, but current source files decide what exists and how it is wired.
+- Notion `FITTRACK: Backup Log` contains project notes, commands, UI/UX guidance, and copied environment/context pages, but Notion is explicit-only context.
+- Notion notes can guide intent when explicitly requested, but current source files and shared contract packages decide what exists and how it is wired.
 - Avoid repeating secrets from Notion or `.env` files in chat or docs.

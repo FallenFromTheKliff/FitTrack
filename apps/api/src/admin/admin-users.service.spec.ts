@@ -194,6 +194,18 @@ describe('AdminUsersService', () => {
     ]);
   });
 
+  it('limits coach directory reads to member accounts', async () => {
+    prisma.user.findMany.mockResolvedValue([]);
+
+    await service.getAll(UserRole.coach);
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { role: UserRole.member },
+      }),
+    );
+  });
+
   it('keeps QR unavailable when the membership card is pending or revoked', async () => {
     prisma.user.findMany.mockResolvedValue(
       ['pending_verification', 'revoked'].map((status, index) => ({

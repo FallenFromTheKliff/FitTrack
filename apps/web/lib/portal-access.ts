@@ -10,7 +10,12 @@ export const WEB_PORTAL_ALLOWED_ROLES = [
   "COACH",
 ] as const satisfies readonly WebPortalRole[];
 
-const WEB_MANAGEMENT_ROLES = ["ADMIN", "STAFF"] as const satisfies readonly WebPortalRole[];
+const WEB_MANAGEMENT_ROLES = [
+  "ADMIN",
+  "STAFF",
+] as const satisfies readonly WebPortalRole[];
+const WEB_COACH_ROLES = ["COACH"] as const satisfies readonly WebPortalRole[];
+const WEB_MEMBER_ROLES = ["USER"] as const satisfies readonly WebPortalRole[];
 
 export const WEB_ROLE_GATE = {
   allowedRoles: WEB_PORTAL_ALLOWED_ROLES,
@@ -20,26 +25,27 @@ export const WEB_ROLE_GATE = {
 export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
   {
     dashboard: WEB_MANAGEMENT_ROLES,
-    members: ["ADMIN", "STAFF"],
+    accounts: ["ADMIN", "STAFF"],
     schedule: WEB_MANAGEMENT_ROLES,
     "exercise-lab": WEB_MANAGEMENT_ROLES,
     gamification: ["ADMIN"],
     "gym-actions": WEB_MANAGEMENT_ROLES,
     "memberships-promos": WEB_MANAGEMENT_ROLES,
-    ai: ["ADMIN"],
+    ai: WEB_PORTAL_ALLOWED_ROLES,
     facilities: ["ADMIN"],
     inventory: ["ADMIN", "STAFF"],
     analytics: ["ADMIN"],
-    settings: WEB_MANAGEMENT_ROLES,
+    settings: WEB_PORTAL_ALLOWED_ROLES,
     profile: ["ADMIN", "STAFF", "COACH"],
-    "member-home": ["USER"],
-    "member-facilities": ["USER"],
-    "member-bookings": ["USER"],
-    "member-nutrition": ["USER"],
-    "member-mastery": ["USER"],
-    "member-ai": ["USER"],
-    "member-profile": ["USER"],
-    "member-settings": ["USER"],
+    "coach-clients": WEB_COACH_ROLES,
+    "coach-sessions": WEB_COACH_ROLES,
+    "member-home": WEB_MEMBER_ROLES,
+    "member-facilities": WEB_MEMBER_ROLES,
+    "member-bookings": WEB_MEMBER_ROLES,
+    "member-nutrition": WEB_MEMBER_ROLES,
+    "member-mastery": WEB_MEMBER_ROLES,
+    "member-workout": WEB_MEMBER_ROLES,
+    "member-profile": WEB_MEMBER_ROLES,
   };
 
 export function isWebPortalRole(
@@ -75,11 +81,11 @@ export function getWebPortalFallbackPath(role: Role | null | undefined) {
     case "ADMIN":
       return "/analytics";
     case "STAFF":
-      return "/members";
+      return "/accounts";
     case "USER":
-      return "/member/home";
+      return "/dashboard";
     case "COACH":
-      return "/profile";
+      return "/accounts";
     default:
       return "/login";
   }

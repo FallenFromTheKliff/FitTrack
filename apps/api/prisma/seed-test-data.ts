@@ -90,6 +90,10 @@ const TEST_MANUAL_PATHS = [
 
 const LEGACY_COACH_SEED_ACCOUNTS = [
   {
+    email: 'seed.coach@fittrack.com',
+    key: 'coach',
+  },
+  {
     email: 'seed.coach.mia@fittrack.com',
     key: 'coach-mia',
   },
@@ -800,11 +804,11 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
     },
     {
       accountKey: 'coach',
-      contactEmail: 'seed.coach@fittrack.com',
+      contactEmail: 'seed.coach.ridge@fittrack.com',
       contactPhone: '+639110000003',
-      displayName: 'Coach Mia',
+      displayName: 'Coach Ridge',
       averageRating: new Prisma.Decimal('4.88'),
-      bio: 'Seeded coach-role profile used to verify that coach login and Gym Operations coach records share the same account role.',
+      bio: 'Seeded coach-role profile used to verify that the Coach Portal and Gym Operations records share one account role.',
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('875'),
       isAvailableForBooking: true,

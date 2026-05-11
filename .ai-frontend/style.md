@@ -7,6 +7,10 @@
 - Avoid excessive blank lines, vertical alignment, and unused imports.
 - Use app-local Fit primitives before creating one-off UI controls.
 - Keep the two frontend surfaces visually related without leaking platform-specific styling across apps.
+- Keep FitTrack geometry mostly box/rectangle based with subtle corner radii. Avoid exaggerated rounded containers unless an existing component pattern requires it.
+- Preserve each theme's identity while keeping foreground/background contrast clear.
+- Use success/green treatment for positive actions and danger/red treatment for destructive actions regardless of theme.
+- Dark surfaces need light readable content; light surfaces need darker readable content.
 
 ## Mobile Styling
 

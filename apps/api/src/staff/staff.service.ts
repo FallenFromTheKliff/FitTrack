@@ -21,9 +21,11 @@ function toFrontendRole(role: UserRole) {
       return { id: 1, name: 'ADMIN' as const };
     case UserRole.staff:
       return { id: 2, name: 'STAFF' as const };
+    case UserRole.coach:
+      return { id: 3, name: 'COACH' as const };
     case UserRole.member:
     default:
-      return { id: 3, name: 'USER' as const };
+      return { id: 4, name: 'USER' as const };
   }
 }
 

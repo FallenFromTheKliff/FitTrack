@@ -9,6 +9,7 @@ import { AlertCircle, Dumbbell, Lock, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { useLoadingText } from "@fittrack/hooks";
+import type { Role } from "@fittrack/types";
 import { loginSchema, type LoginData } from "@fittrack/validators";
 
 import FitButton from "@/components/fit/FitButton";
@@ -21,6 +22,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { LOGIN_BACKGROUND_IMAGE_URL } from "@/data/auth/auth";
 import { useAuthEntrance } from "@/hooks/animations/useAuthEntrance";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
+import { getWebPortalFallbackPath } from "@/lib/portal-access";
 import { authStyles } from "@/styles/authStyles";
 
 const PAGE_COPY = {
@@ -31,11 +33,8 @@ const PAGE_COPY = {
   emailPlaceholder: "account@fittrack.com",
 };
 
-function getPortalLandingPath(role?: string) {
-  if (role === "ADMIN") return "/analytics";
-  if (role === "STAFF") return "/members";
-  if (role === "USER" || role === "COACH") return "/profile";
-  return "/profile";
+function getPortalLandingPath(role?: Role) {
+  return getWebPortalFallbackPath(role);
 }
 
 function getLoginItemTransition(shouldAnimate: boolean, index: number) {

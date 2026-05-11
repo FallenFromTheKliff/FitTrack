@@ -3,6 +3,7 @@ import type {
   AnalyticsQueryParams,
   ApiClient,
   BusinessInsightHistoryParams,
+  ExportAnalyticsPdfInput,
   GenerateBusinessInsightInput
 } from "@fittrack/api-client";
 import { invalidateAnalyticsQueries } from "./cache";
@@ -100,5 +101,14 @@ export function generateAnalyticsInsightMutationOptions(
     onSuccess: async () => {
       await invalidateAnalyticsQueries(queryClient);
     }
+  });
+}
+
+export function exportAnalyticsPdfMutationOptions(
+  client: Pick<ApiClient, "analytics">,
+) {
+  return mutationOptions({
+    mutationFn: (input?: ExportAnalyticsPdfInput) =>
+      client.analytics.exportPdf(input),
   });
 }

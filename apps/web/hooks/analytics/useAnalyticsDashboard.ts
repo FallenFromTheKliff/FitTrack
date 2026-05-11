@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adminDeletionRequestsQueryOptions,
+  adminMembersQueryOptions,
   analyticsAttendanceQueryOptions,
   analyticsInsightDetailQueryOptions,
   analyticsInsightsQueryOptions,
   analyticsRevenueQueryOptions,
   analyticsSnapshotQueryOptions,
+  exportAnalyticsPdfMutationOptions,
   generateAnalyticsInsightMutationOptions,
 } from "@fittrack/query";
 import type {
@@ -31,7 +33,7 @@ import {
   toRevenueChartSeries,
   toRevenueWindow,
   type AnalyticsAttendanceFilter,
-} from "@/app/(admin)/analytics/helpers";
+} from "@/app/(auth)/analytics/helpers";
 
 type AttendanceDrilldownSelection = {
   bucketStart: string;
@@ -102,8 +104,7 @@ export function useAnalyticsDashboard() {
     gcTime: 300_000,
   });
   const directoryMembersQuery = useQuery({
-    queryKey: ["analytics", "directory-members"],
-    queryFn: () => webApiClient.admin.listMembers(),
+    ...adminMembersQueryOptions(webApiClient),
     refetchOnMount: "always",
     staleTime: 60_000,
     gcTime: 300_000,
@@ -152,6 +153,9 @@ export function useAnalyticsDashboard() {
   });
   const generateInsightMutation = useMutation(
     generateAnalyticsInsightMutationOptions(webApiClient, queryClient),
+  );
+  const exportPdfMutation = useMutation(
+    exportAnalyticsPdfMutationOptions(webApiClient),
   );
 
   const snapshot = snapshotQuery.data;
@@ -214,7 +218,7 @@ export function useAnalyticsDashboard() {
     setIsExportingPdf(true);
 
     try {
-      const result = await webApiClient.analytics.exportPdf({
+      const result = await exportPdfMutation.mutateAsync({
         attendanceEndDate: attendanceWindow.endDate,
         attendancePeriod: attendanceWindow.period,
         attendanceStartDate: attendanceWindow.startDate,
@@ -273,7 +277,7 @@ export function useAnalyticsDashboard() {
     handleExportPdf,
     handleGenerateInsight,
     handleSelectAttendancePoint,
-    isExportingPdf,
+    isExportingPdf: isExportingPdf || exportPdfMutation.isPending,
     isGeneratingInsight: generateInsightMutation.isPending,
     latestInsight,
     latestInsightIsFallback,

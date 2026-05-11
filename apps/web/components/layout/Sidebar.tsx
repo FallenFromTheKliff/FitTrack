@@ -9,7 +9,6 @@ import {
   Dumbbell,
   Home,
   MessageCircle,
-  User,
   Users,
   CalendarDays,
   Grid2X2,
@@ -46,7 +45,12 @@ type NavItem = {
   pageKey: PageKey;
 };
 
-const MANAGEMENT_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+const MANAGEMENT_NAV_SECTIONS: NavSection[] = [
   {
     label: "Main",
     items: [
@@ -56,7 +60,7 @@ const MANAGEMENT_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
         icon: BarChart2,
         pageKey: "analytics",
       },
-      { href: "/members", label: "Accounts", icon: Users, pageKey: "members" },
+      { href: "/accounts", label: "Accounts", icon: Users, pageKey: "accounts" },
       {
         href: "/schedule",
         label: "Gym Operations",
@@ -120,19 +124,51 @@ const MANAGEMENT_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-const MEMBER_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+const COACH_NAV_SECTIONS: NavSection[] = [
   {
     label: "Main",
     items: [
-      { href: "/member/home", label: "Home", icon: Home, pageKey: "member-home" },
       {
-        href: "/member/facilities",
+        href: "/accounts",
+        label: "Clients",
+        icon: Users,
+        pageKey: "coach-clients",
+      },
+      {
+        href: "/schedule",
+        label: "Sessions",
+        icon: ClipboardList,
+        pageKey: "coach-sessions",
+      },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        pageKey: "settings",
+      },
+    ],
+  },
+];
+
+const MEMBER_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Main",
+    items: [
+      { href: "/dashboard", label: "Home", icon: Home, pageKey: "member-home" },
+      {
+        href: "/facilities",
         label: "Gym Facilities",
         icon: Building2,
         pageKey: "member-facilities",
       },
       {
-        href: "/member/bookings",
+        href: "/bookings",
         label: "Bookings",
         icon: CalendarCheck,
         pageKey: "member-bookings",
@@ -143,22 +179,28 @@ const MEMBER_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: "Fitness Ops",
     items: [
       {
-        href: "/member/nutrition",
+        href: "/nutrition",
         label: "Nutrition",
         icon: Apple,
         pageKey: "member-nutrition",
       },
       {
-        href: "/member/mastery",
+        href: "/mastery",
         label: "Muscle Mastery",
         icon: Trophy,
         pageKey: "member-mastery",
       },
       {
-        href: "/member/ai",
+        href: "/workout",
+        label: "Workout",
+        icon: Dumbbell,
+        pageKey: "member-workout",
+      },
+      {
+        href: "/ai",
         label: "BrodigyAI",
         icon: MessageCircle,
-        pageKey: "member-ai",
+        pageKey: "ai",
       },
     ],
   },
@@ -166,20 +208,20 @@ const MEMBER_NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: "System",
     items: [
       {
-        href: "/member/profile",
-        label: "Profile",
-        icon: User,
-        pageKey: "member-profile",
-      },
-      {
-        href: "/member/settings",
+        href: "/settings",
         label: "Settings",
         icon: Settings,
-        pageKey: "member-settings",
+        pageKey: "settings",
       },
     ],
   },
 ];
+
+function getNavSectionsForRole(role: string | null | undefined) {
+  if (role === "USER") return MEMBER_NAV_SECTIONS;
+  if (role === "COACH") return COACH_NAV_SECTIONS;
+  return MANAGEMENT_NAV_SECTIONS;
+}
 
 function isRouteMatch(path: string, href: string) {
   return path === href || path.startsWith(`${href}/`);
@@ -206,19 +248,21 @@ export default function Sidebar({
   const s = sidebarStyles(colors, activeThemeKey);
   const initials =
     user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
-  const isMember = user?.role === "USER";
-  const profileHref = isMember ? "/member/profile" : "/profile";
+  const isCoach = user?.role === "COACH";
+  const profileHref = "/profile";
   const isProfileActive = isRouteMatch(path, profileHref);
   const portalLabel = getWebPortalLabel(user?.role);
   const visibleNavSections = useMemo(
     () =>
-      (isMember ? MEMBER_NAV_SECTIONS : MANAGEMENT_NAV_SECTIONS).map((section) => ({
-        ...section,
-        items: section.items.filter((item) =>
-          canAccessWebPage(user?.role, item.pageKey),
-        ),
-      })).filter((section) => section.items.length > 0),
-    [isMember, user?.role],
+      getNavSectionsForRole(user?.role)
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) =>
+            canAccessWebPage(user?.role, item.pageKey),
+          ),
+        }))
+        .filter((section) => section.items.length > 0),
+    [user?.role],
   );
 
   const handleLogout = async () => {
@@ -302,7 +346,7 @@ export default function Sidebar({
               }}
               excludeGlobalScale
             >
-              {user?.name ?? "Admin"}
+              {user?.name ?? (isCoach ? "Coach" : "Admin")}
             </FitText>
             <div style={s.profileManageWrap}>
               <Settings size={12} strokeWidth={2} style={{ flexShrink: 0 }} />

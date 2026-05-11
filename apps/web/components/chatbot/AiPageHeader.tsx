@@ -7,14 +7,13 @@ type AiPageHeaderProps = {
   lastError: string;
   message: string;
   mutedColor: string;
-  onStartFresh: () => void;
 };
 
 export default function AiPageHeader({
   dangerColor,
   lastError,
   message,
-  mutedColor
+  mutedColor,
 }: AiPageHeaderProps) {
   if (!lastError && !message) return null;
 

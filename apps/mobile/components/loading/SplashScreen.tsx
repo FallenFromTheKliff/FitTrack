@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-import Animated, { createAnimatedComponent, useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, Easing, runOnJS } from "react-native-reanimated";
+import Animated, { createAnimatedComponent, useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withSequence, Easing, runOnJS } from "react-native-reanimated";
 import { Dumbbell } from "lucide-react-native";
 import { useTypewriter } from "@fittrack/hooks";
 
@@ -11,8 +11,10 @@ import { R } from "@fittrack/ui/tokens";
 const ReanimatedText = createAnimatedComponent(Text);
 
 const APP_NAME = "FitTrack";
-const CHAR_INTERVAL = 45;
-const POST_TYPE_HOLD = 300;
+const SPLASH_DURATION_MS = 1500;
+const EXIT_FADE_MS = 200;
+const TYPEWRITER_DURATION_MS = SPLASH_DURATION_MS - EXIT_FADE_MS;
+const CHAR_INTERVAL = TYPEWRITER_DURATION_MS / APP_NAME.length;
 
 const s = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -41,7 +43,7 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
   const completedRef = useRef(false);
   const onBrand = colors.onBrand ?? "#FFFFFF";
 
-  const iconScale = useSharedValue(0.4);
+  const iconScale = useSharedValue(0.52);
   const contentOpacity = useSharedValue(0);
   const doneSignal = useSharedValue(0);
 
@@ -78,30 +80,40 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
   );
 
   useEffect(() => {
-    iconScale.value = withTiming(1, {
-      duration: 140,
-      easing: Easing.out(Easing.cubic)
-    });
+    iconScale.value = withSequence(
+      withTiming(1.12, {
+        duration: 420,
+        easing: Easing.out(Easing.cubic)
+      }),
+      withTiming(1, {
+        duration: 160,
+        easing: Easing.out(Easing.quad)
+      })
+    );
     contentOpacity.value = withTiming(1, { duration: 200 });
-  }, []);
+  }, [contentOpacity, iconScale]);
+
+  const handleTypingDone = useCallback(() => {
+    if (fontsReady) {
+      setTypingDone(true);
+    }
+  }, [fontsReady]);
 
   const { typed } = useTypewriter({
     text: APP_NAME,
     isActive: fontsReady,
     intervalMs: CHAR_INTERVAL,
-    onDone: () => setTypingDone(true)
+    onDone: handleTypingDone
   });
 
   useEffect(() => {
     if (!typingDone) return;
-    const hold = setTimeout(() => {
-      contentOpacity.value = withTiming(0, { duration: 200 });
-      setTimeout(() => {
-        doneSignal.value = 1;
-      }, 200);
-    }, POST_TYPE_HOLD);
-    return () => clearTimeout(hold);
-  }, [typingDone]);
+    contentOpacity.value = withTiming(0, { duration: EXIT_FADE_MS });
+    const doneTimer = setTimeout(() => {
+      doneSignal.value = 1;
+    }, EXIT_FADE_MS);
+    return () => clearTimeout(doneTimer);
+  }, [contentOpacity, doneSignal, typingDone]);
 
   return (
     <Animated.View style={[s.container, containerStyle]}>
@@ -113,7 +125,7 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
           <ReanimatedText
             style={[s.title, titleStyle, { fontFamily: FONT_FAMILIES[activeFont] }]}
           >
-            {typed}
+            {fontsReady ? typed : ""}
           </ReanimatedText>
         </Animated.View>
       </Animated.View>

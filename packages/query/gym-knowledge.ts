@@ -2,10 +2,34 @@ import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react
 import type {
   ApiClient,
   CreateGymPromotionInput,
+  GymProfileRecord,
   GymKnowledgePaginationParams,
+  UpdateGymProfileInput,
 } from "@fittrack/api-client";
 
 import { queryKeys } from "./query-keys";
+
+export function gymProfileQueryOptions(
+  client: Pick<ApiClient, "gymKnowledge">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.gymKnowledgeProfile(),
+    queryFn: () => client.gymKnowledge.getProfile(),
+  });
+}
+
+export function updateGymProfileMutationOptions(
+  client: Pick<ApiClient, "gymKnowledge">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions<GymProfileRecord, unknown, UpdateGymProfileInput>({
+    mutationFn: (payload: UpdateGymProfileInput) =>
+      client.gymKnowledge.updateProfile(payload),
+    onSuccess: (profile: GymProfileRecord) => {
+      queryClient.setQueryData(queryKeys.gymKnowledgeProfile(), profile);
+    },
+  });
+}
 
 export function gymPromotionsQueryOptions(
   client: Pick<ApiClient, "gymKnowledge">,

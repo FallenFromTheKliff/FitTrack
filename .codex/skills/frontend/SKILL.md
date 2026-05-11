@@ -9,6 +9,7 @@ Use this skill when adding or refactoring web or mobile UI in the FitTrack monor
 
 ## Changelog
 
+- 2026-05-11: clarified page and mobile screen body ownership so `page.tsx` and Expo Router screens assemble their own bodies while components stay surgical building blocks.
 - 2026-04-13: expanded dynamic reusability across components, hooks, helpers, controllers, query helpers, and mini-functions; added runtime polish defaults and auth-role verification guidance.
 - 2026-04-20: added scaffold-faithful implementation rules for premium pages and major modals so structural drift must go back through Figma instead of being improvised in JSX.
 - 2026-04-14: added UI-first handoff defaults, revision-heavy safety guidance, shared-client compatibility checks, and clearer MCP expectations for bounded frontend work.
@@ -118,24 +119,26 @@ Use this skill when adding or refactoring web or mobile UI in the FitTrack monor
 ## Page architecture rule
 
 - Use this shape by default:
-  - route or screen
-  - feature page shell
-  - sections or focused panels
+  - route or screen body in `page.tsx` or the Expo Router screen file
+  - focused sections, panels, modals, overlays, tables, forms, and feature slices
   - hook or controller
   - query shapers, helpers, and pure mappers
   - Fit primitives
-- Route or screen files should mostly assemble sections and hand off behavior.
+- Route or screen files should own the visible body assembly: page or screen header, primary regions, state branches, section order, and overlay or modal mount points.
+- Thin does not mean empty. Do not make `page.tsx` or a mobile screen simply return one full-surface surrogate such as `XxxPageContent`, `XxxDashboard`, `XxxScreenContent`, or `XxxShell`.
+- Components should be surgical building blocks. Page-specific components are allowed when they own a bounded section, panel, control group, modal body, drawer, table, form, or interaction slice, not the whole page or screen.
 - Multi-responsibility files that own large JSX trees, many local states, several modals, and multiple mutation flows at once are structural failures, not just untidy code.
 - Split by section, modal flow, or controller seam before the page becomes a giant local command center.
 - For route-wide rebuilds, split by route state first and then by section or overlay inside that state.
 
 ## Thin surface rule
 
-- Keep route or screen files thin.
+- Keep route or screen files thin enough to read, but keep them as the body assembly point.
 - Move orchestration into feature hooks, contexts, controller helpers, or focused feature helpers.
 - Keep data shaping near query or controller helpers instead of inside large JSX trees.
 - Promote repetitive inline conditions, formatters, mappers, and action handlers into reusable mini-functions when they are likely to recur.
 - Compose UI through app-local `Fit*` primitives and focused feature components.
+- Do not extract a full-page or full-screen component only to hide the route body. Extract precise sections, panels, modals, forms, tables, overlays, and helpers instead.
 - Do not pretend `@fittrack/ui` is a full shared component library. In this repo it is mainly tokens, theme helpers, and shared styling primitives.
 - Thin wrappers are not enough on their own; the surface must still feel complete and believable.
 
@@ -273,7 +276,7 @@ Use this skill when adding or refactoring web or mobile UI in the FitTrack monor
 
 ## Output defaults
 
-- Favor thin wrappers, feature hooks, controller helpers, focused feature components, and small helper functions over huge route files.
+- Favor body-owning route or screen composition, feature hooks, controller helpers, focused feature components, and small helper functions over huge route files or full-page surrogate components.
 - Keep loading, error, empty, pending, and success states explicit for async UI.
 - Keep shared contract transforms near the API or query layer instead of scattering field remaps across screens.
 - Fix decision-safe completion gaps on the touched surface before treating the page as finished.

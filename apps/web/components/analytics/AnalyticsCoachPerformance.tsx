@@ -4,7 +4,7 @@ import type { AnalyticsCoachBreakdownRecord, IThemeContext } from "@fittrack/typ
 
 import { FitText } from "@/components/fit/FitText";
 import FitSection from "@/components/fit/FitSection";
-import { formatCompactMoney } from "@/app/(admin)/analytics/helpers";
+import { formatCompactMoney } from "@/app/(auth)/analytics/helpers";
 
 type AnalyticsCoachPerformanceProps = {
   coachRows: AnalyticsCoachBreakdownRecord[];

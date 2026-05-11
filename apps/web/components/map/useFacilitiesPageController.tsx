@@ -31,7 +31,7 @@ import {
   buildVenueInitialValues,
   createScheduleResourceId,
   getDefaultResourceDraft,
-} from "@/app/(admin)/facilities/helpers";
+} from "@/app/(auth)/facilities/helpers";
 import {
   EquipmentPanel,
   FloorPlanPanel,

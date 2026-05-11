@@ -12,6 +12,19 @@ Why to avoid it:
 
 - the repo already favors hooks, controller helpers, focused sections, and small helper functions
 
+## Whole page hidden behind one component
+
+Bad shape:
+
+- `page.tsx` returns only `XxxDashboard`, `XxxPageContent`, or `XxxShell`
+- a mobile screen returns only `XxxScreenContent`
+- that child owns the header, body sections, state branches, modal mounts, and all visible composition
+
+Why to avoid it:
+
+- `page.tsx` and mobile screen files should be the readable body assembly point
+- components should stay precise building blocks, not alternate homes for the entire page or screen
+
 ## Ad hoc data access in components
 
 Bad shape:

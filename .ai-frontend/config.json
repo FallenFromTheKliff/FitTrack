@@ -4,14 +4,41 @@
   "monorepo": "turborepo",
   "rules": [
     ".ai-frontend/agent.md",
+    ".ai-frontend/goals-mode.md",
+    ".ai-frontend/context-recovery.md",
     ".ai-frontend/AI_CONTEXT.md",
     ".ai-frontend/monorepo.md",
+    ".ai-frontend/ui-ux-workflow.md",
     ".ai-frontend/style.md",
     ".ai-frontend/context-protection.md",
     ".ai-frontend/component-rules.md",
     ".ai-frontend/performance.md"
   ],
-  "tools": ["filesystem", "git", "search", "serena", "context7", "playwright", "notion"],
+  "tools": ["filesystem", "git", "search", "serena", "context7", "playwright", "chrome-devtools", "figma", "notion", "github", "swagger"],
+  "toolPolicy": {
+    "defaultAllowed": ["filesystem", "git", "search"],
+    "conditional": ["context7", "swagger"],
+    "explicitOnly": ["serena", "playwright", "chrome-devtools", "figma", "notion", "github"],
+    "forbiddenDuringRuleEditing": ["docker", "dev-server", "android-emulator", "browser-screenshots"]
+  },
+  "mcpPrecision": {
+    "default": "local-static-first",
+    "requireNamedQuestionBeforeMcp": true,
+    "maxHeavyMcpLanesPerPhase": 1,
+    "stopMcpAfterQuestionAnswered": true,
+    "neverUseMcpForFileOnlyAudits": true,
+    "preferFocusedTargets": true
+  },
+  "runtimeBudget": {
+    "maxActiveAppSurfaces": 1,
+    "maxVerificationIterations": 3,
+    "maxScreenshotsPerIteration": 1,
+    "allowAndroidEmulatorByDefault": false,
+    "allowFullMonorepoBuildByDefault": false,
+    "allowDockerByDefault": false,
+    "preferFocusedCommands": true,
+    "cleanupStartedProcesses": true
+  },
   "apps": {
     "mobile": {
       "path": "apps/mobile",
@@ -30,7 +57,7 @@
   },
   "contractSources": {
     "primary": ["packages/api-client", "packages/query", "packages/app-core", "packages/types", "packages/validators"],
-    "supporting": ["Notion FITTRACK: Backup Log", "Swagger MCP when runtime API truth is needed"],
+    "supporting": ["Notion FITTRACK: Backup Log when explicitly requested", "Swagger MCP when runtime API truth is needed"],
     "backendEdits": "forbidden unless explicitly requested"
   },
   "restrictions": {

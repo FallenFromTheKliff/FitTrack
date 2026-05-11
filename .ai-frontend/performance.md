@@ -4,6 +4,22 @@
 
 Every change must be evaluated for correctness, visual fidelity, render cost, memory pressure, network churn, and JS thread load. A feature that works but causes perceptible lag during normal use is incomplete.
 
+## Agent Runtime Performance
+
+- On a 16 GB RAM machine, avoid running Docker, web, mobile, browser automation, and semantic indexing together.
+- Use local static evidence first: file reads, `rg`, git diff/status, focused type/lint/test commands, and existing package contracts.
+- Treat MCPs as precision tools, not default discovery. Each MCP call should answer a named question that local static evidence cannot answer efficiently.
+- Keep at most one heavy tool lane active per phase, such as Browser/Playwright, ChromeDevTools, Figma, Notion, Swagger, Docker, emulator, or semantic indexing.
+- Do not launch a dev server, browser session, emulator, Docker service, or MCP workflow for rule edits, file-only audits, or documentation-only tasks.
+- Prefer focused static checks before runtime checks.
+- Avoid full monorepo builds unless explicitly requested.
+- Avoid navigation-driven or hidden verification loops.
+- Never use repeated screenshots as the main reasoning loop.
+- For mobile work, do not launch Android Emulator unless explicitly requested.
+- For web work, prefer one browser verification pass only after code changes.
+- For backend contract checks, prefer shared packages and frontend usage before reading backend source.
+- If resource pressure is suspected, stop and report instead of continuing.
+
 ## Mobile Performance
 
 ### Reanimated
@@ -52,7 +68,7 @@ Every change must be evaluated for correctness, visual fidelity, render cost, me
 
 - Call `makeXxxStyles(colors)` once per component render, preferably memoized for frequently-rendering surfaces.
 - Do not call style factories inside JSX expressions.
-- Keep page shells thin; move repeated view logic into focused components or hooks.
+- Keep page shells thin but body-owning; move repeated view logic into focused components or hooks without hiding the whole page behind one child component.
 
 ### Query And API
 
@@ -68,7 +84,7 @@ Every change must be evaluated for correctness, visual fidelity, render cost, me
 
 - Keep client components focused.
 - Do not mark a broad layout or provider client-only if a leaf component can own the browser behavior, except where the existing shell already needs auth/theme/resize state.
-- Split oversized route files by section, controller hook, modal flow, or overlay manager.
+- Split oversized route files by section, controller hook, modal flow, or overlay manager, not by replacing the route body with one full-page surrogate component.
 
 ### Charts
 
