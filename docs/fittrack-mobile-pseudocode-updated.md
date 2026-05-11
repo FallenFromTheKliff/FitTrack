@@ -1,796 +1,514 @@
-# FitTrack Mobile - UI / Section / Buttons / Primary Use
+# FitTrack Mobile - Current Pseudocode
 
-This version is aligned to the current mobile codebase. It is written for UI walkthrough and feature understanding first.
+Updated against the current Expo Router app, mobile web launcher, auth gate, shared client packages, and local dev-stack scripts.
 
 ---
 
-## ROLE ACCESS MATRIX
+## Runtime And Data Source
 
-### Allowed app roles
+```text
+Native mobile dev:
+  pnpm dev:mobile
+  runs apps/mobile/scripts/start-dev.cjs
+  starts Expo on port 8081
+  exports EXPO_PUBLIC_API_URL=http://127.0.0.1:3001/v1 unless FITTRACK_LOCAL_API_URL overrides it
+  primes adb reverse for 3001 and 8081 when a USB Android device is available
+
+Mobile web dev:
+  pnpm dev:mobile:web
+  runs apps/mobile/scripts/start-web.cjs
+  starts Expo web on port 8081
+  exports EXPO_PUBLIC_API_URL=http://127.0.0.1:3001/v1 unless FITTRACK_LOCAL_API_URL overrides it
+
+Full local stack:
+  pnpm dev:stack:web starts API, web, and mobile Expo web
+  pnpm dev:stack:web:ai also starts AI
+  pnpm dev:stack and pnpm dev:stack:ai start native mobile after API/web bootstrap
+
+Data source:
+  mobile calls the local API
+  local API uses root DATABASE_URL
+  root DATABASE_URL points at Docker PostgreSQL on localhost:5433/fittrackdb
+```
+
+The mobile client does not connect to PostgreSQL directly. It calls the API through `mobileApiClient`.
+
+---
+
+## API Base URL Resolution
+
+```text
+DEFAULT_MOBILE_API_BASE_URL = http://127.0.0.1:3001/v1
+
+resolveMobileApiBaseUrl:
+  read EXPO_PUBLIC_API_URL
+  normalize through resolveApiBaseUrl
+
+IF native:
+  inspect Metro bundle hostname from NativeModules.SourceCode.scriptURL
+  IF configured API host is local/private:
+    replace API hostname with Metro host
+    keep port 3001 and path /v1
+  ELSE:
+    keep configured API URL
+
+IF web:
+  inspect window.location.hostname
+  IF page host and configured API host are local/private:
+    replace API hostname with page host
+    keep port 3001 and path /v1
+  ELSE:
+    keep configured API URL
+```
+
+The dev launcher now sets `EXPO_PUBLIC_API_URL` before Expo loads `.env.local`, so a local ignored env file cannot silently send development traffic to the live API.
+
+---
+
+## Root Composition
+
+```text
+RootLayout:
+  load fonts
+  show SplashScreen while fonts and auth hydrate
+  mount QueryClientProvider
+  mount ThemeProvider
+  mount AuthProvider
+  mount app routes
+
+AuthProvider:
+  uses createAuthController
+  uses mobileSessionStore backed by AsyncStorage
+  roleGate.allowedRoles = ["USER"]
+  hydrates deletion-request status for members
+  clears tokens on auth failure
+```
+
+---
+
+## Mobile Role Gate
+
+### Current allowed mobile role
+
 - `USER`
-- `COACH`
 
-### Not allowed in the mobile member app
+### Current blocked roles
+
 - `ADMIN`
 - `STAFF`
+- `COACH`
 
-### Core access rules
-- IF auth is still loading -> render nothing
-- IF user is not authenticated -> redirect to login
-- IF role is not `USER` or `COACH` -> redirect to login
+Current note: coach-specific mobile profile components still exist in the codebase, but the active mobile auth gate rejects non-`USER` roles before protected tabs render.
 
-### Global gate rules
-- `Frozen account`
-  - reduces or blocks actions across member-facing flows
-- `Membership card access`
-  - unlocks or blocks:
-    - BrodigyAI
-    - Muscle Mastery
-    - Workout
-    - premium nutrition actions
-    - attendance QR
+```text
+IF auth is loading:
+  render nothing or splash/loading state
 
----
+IF unauthenticated:
+  redirect to /(auth)/login
 
-## GLOBAL MOBILE SHELL
-
-### Splash Screen
-- Buttons inside:
-  - none
-- Primary use:
-  - hold the app while auth hydration and fonts finish loading
-
-### Header
-- Buttons inside:
-  - `Menu` -> opens sidebar
-  - `Back` -> shown on chatbot screen only; returns to chat history
-- Primary use:
-  - global top navigation and active-screen framing
-
-### Sidebar
-- Buttons inside:
-  - navigation items
-  - `Logout` -> closes sidebar, then opens logout confirmation
-- Primary use:
-  - tab navigation and account exit
-
-### Floating Action Button
-- Buttons inside:
-  - screen-specific quick actions from the active screen
-- Primary use:
-  - expose the most important shortcuts for the active screen
-
-### Global Logout Confirmation
-- Buttons inside:
-  - `Sign Out`
-  - `Cancel`
-- Primary use:
-  - safely confirm logout
-
-### Shared Reservation Modal
-- Buttons inside:
-  - modal-owned booking fields and submit/cancel actions
-- Primary use:
-  - allow venue reservation from multiple screens
+IF user.role is not USER:
+  clear/reject session through role gate
+  redirect to /(auth)/login
+```
 
 ---
 
-## LOGIN SCREEN
+## Mobile Shell
 
-### Branding / Hero Section
-- Buttons inside:
-  - none
-- Primary use:
-  - identify the app and member portal
+```text
+TabsLayout:
+  require authenticated USER
+  define hidden Expo tabs:
+    index
+    home
+    facilities
+    bookings
+    nutrition
+    mastery
+    workout
+    chathistory
+    chatbot
+    profile
+    settings
+  render Header
+  render Sidebar modal
+  render FitFAB and FitFABMenu from FABStateContext
+  render shared ReservationModal when requested
+  render logout confirmation modal
 
-### Login Form
-- Buttons inside:
-  - `Sign In` -> submit login credentials
-  - `Forgot Password?` -> open forgot-password modal
-- Primary use:
-  - authenticate an existing user
+Header:
+  show menu button
+  show active tab title/subtitle from @fittrack/app-config
+  show back button only on chatbot screen
 
-### Footer Action
-- Buttons inside:
-  - `Create Account` -> go to registration
-- Primary use:
-  - move a new user into signup
-
-### Forgot Password Modal
-- Buttons inside:
-  - `CANCEL` on the email step
-  - `BACK` on later steps
-  - `SEND CODE`
-  - `VERIFY CODE`
-  - `Resend`
-  - `RESET PASSWORD`
-- Primary use:
-  - begin password recovery without leaving login
-
-### Logic notes
-- IF login returns a normal error -> show status text
-- IF login returns locked-account state -> keep the message visible longer
-- IF login requires OTP -> show verification-sent status
-- IF login succeeds -> show buffer screen -> commit login -> enter app
-
----
-
-## REGISTRATION SCREEN
-
-### Back Action
-- Buttons inside:
-  - `Back` -> return to login
-- Primary use:
-  - leave registration safely
-
-### Registration Form
-- Buttons inside:
-  - `Create Account` -> submit registration
-- Primary use:
-  - create a new mobile member account
-
-### Password Requirements Panel
-- Buttons inside:
-  - none
-- Primary use:
-  - explain password rules while the user types
-
-### OTP Modal
-- Buttons inside:
-  - `VERIFY CODE`
-  - `Resend`
-  - dismiss / close action
-- Primary use:
-  - verify the new account before login completes
-
-### Logic notes
-- phone input supports PH formats and is normalized before submit
-- IF registration succeeds -> open OTP modal
-- IF OTP succeeds -> show buffer -> commit login -> enter app
+Sidebar:
+  show profile card
+  show member navigation:
+    Home
+    Bookings
+    Facilities
+    Nutrition
+    Muscle Mastery
+    Workout
+    BrodigyAI
+    Settings
+  expose Sign Out
+```
 
 ---
 
-## HOME SCREEN
+## Shared Mobile Data Layer
 
-### Greeting Header
-- Buttons inside:
-  - none
-- Primary use:
-  - show current user name, current date, and current time
+```text
+mobileApiClient:
+  baseURL = MOBILE_API_BASE_URL
+  tokenStore = AsyncStorage plus in-memory cache
+  onAuthFailure:
+    clear tokens
+    notify AuthContext
 
-### Stat Cards
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize key metrics based on role and access state
+TanStack Query:
+  configured through apps/mobile/lib/queryClient.tsx
+  uses @fittrack/query option helpers where available
+  invalidates shared query keys after mutations
 
-### Schedule For Today
-- Buttons inside:
-  - booking cards -> open booking detail modal
-  - `Book Now` -> shown when there is no booking and the user is not a coach
-- Primary use:
-  - show immediate schedule context
-
-### Live Snapshot
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize nutrition, streak, mastery, and access state
-
-### Workout Suggestions / Quick Actions
-- Buttons inside:
-  - dynamic actions depending on user state, including:
-    - `Book Now`
-    - `View Bookings`
-    - `View Schedule`
-    - `Set Nutrition Goal`
-    - `Start Workout`
-    - `Continue Workout`
-    - `Open Facilities`
-    - `View Coach Schedule`
-    - `Unlock Member Access`
-- Primary use:
-  - route the user to the best next action
-
-### Pinned Goal Banner
-- Buttons inside:
-  - none
-- Primary use:
-  - show the single most relevant next focus for the user
-
-### Booking Detail Modal
-- Buttons inside:
-  - close action
-  - modal-owned booking actions
-- Primary use:
-  - inspect a selected booking from the home schedule
+Shared controllers:
+  createAuthController handles login, registration, OTP, token persistence, and role rejection
+  shared API domains provide auth, users, bookings, venues, nutrition, membership, fitness, AI, files, and notifications
+```
 
 ---
 
-## BOOKINGS SCREEN
+## Auth Screens
 
-### Search Row
-- Buttons inside:
-  - filter icon button -> open or close the filter panel
-- Primary use:
-  - search bookings and reveal filters
+### Login
 
-### Filter Panel
-- Buttons inside:
-  - top chips:
-    - `Reservations`
-    - `Appointments`
-    - `Coach Schedule` for coach users
-  - status chips
-  - start date button
-  - end date button
-  - start date reset
-  - end date reset
-- Primary use:
-  - control which booking records are visible
+```text
+/(auth)/login:
+  collect email and password
+  call AuthContext.login
 
-### Date-Grouped Booking List
-- Buttons inside:
-  - booking cards -> open booking detail modal
-- Primary use:
-  - show reservations, appointments, or coach schedule grouped by date
+IF login returns ACCOUNT_LOCKED:
+  show locked-account status
 
-### Floating Actions
-- Buttons inside:
-  - `Make Reservation`
-  - `Book a Trainer`
-- Primary use:
-  - start the two main member booking flows
+IF login requires OTP:
+  show OTP status/modal path
 
-### Booking Detail Modal
-- Buttons inside:
-  - dynamic action buttons from the selected booking:
-    - `Cancel Reservation`
-    - `Pay with PayMongo`
-    - `Cancel Appointment`
-    - `Confirm`
-    - `Decline`
-    - `Mark Complete`
-  - `Close`
-- Primary use:
-  - apply status-changing actions to the selected booking
+IF login succeeds:
+  show BufferScreen
+  commit login
+  router.replace("/(tabs)/home")
 
-### Appointment Modal
-- Buttons inside:
-  - coach cards / coach selection actions
-  - date picker trigger
-  - time picker trigger
-  - `Cancel` on first step
-  - `Back` on later step
-  - `Continue`
-  - final appointment-booking action
-- Primary use:
-  - book a trainer appointment
+Create Account:
+  router.push("/(auth)/register")
+```
 
-### Reservation Modal
-- Buttons inside:
-  - date picker trigger
-  - venue cards
-  - duration / slot selection controls
-  - add note action
-  - remove note action
-  - `Cancel`
-  - final reservation or payment action
-- Primary use:
-  - create a venue reservation
+### Register
 
-### Calendar Modals
-- Buttons inside:
-  - previous month
-  - next month
-  - view toggles
-  - day buttons
-  - month buttons
-  - year buttons
-  - `Cancel`
-  - `Clear` when empty values are allowed
-  - `Today`
-- Primary use:
-  - set date-range filters and date choices
+```text
+/(auth)/register:
+  collect first name, last name, email, phone, password
+  normalize supported Philippine phone numbers
+  validate password requirements
+  call AuthContext.register
 
-### Logic notes
-- IF role is `COACH` -> visible section is forced to coach schedule
-- IF `openReservation=true` is passed and the user is eligible -> reservation modal opens automatically
-- IF PayMongo returns a checkout URL -> mobile opens the external checkout page
+IF registration succeeds:
+  open OTP modal
+
+IF OTP succeeds:
+  route back to login or commit the verified flow depending on modal path
+```
 
 ---
 
-## FACILITIES SCREEN
+## Home
 
-### Header Row
-- Buttons inside:
-  - refresh icon button -> reload facility data
-- Primary use:
-  - title the page and refresh the latest venue map state
+```text
+/(tabs)/home:
+  query venues
+  query bookings
+  query active nutrition target
+  query nutrition summary
+  query mastery snapshot
+  query leaderboard/session data
+  compute schedule, live snapshot, and next actions
+```
 
-### Floor Toggle
-- Buttons inside:
-  - floor buttons for each level
-- Primary use:
-  - switch between available floors
+Primary surfaces:
 
-### Floor Snapshot Card
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize mapped zones and facility mix on the active floor
-
-### Floor Blueprint / Map Canvas
-- Buttons inside:
-  - venue/zone tiles -> open details modal
-  - empty-floor jump action when another floor has published zones
-- Primary use:
-  - let the user explore the facility layout spatially
-
-### Legend
-- Buttons inside:
-  - none
-- Primary use:
-  - explain icons and zone names on the map
-
-### Floating Actions
-- Buttons inside:
-  - `Chat with BrodigyAI`
-  - `Make Reservation`
-- Primary use:
-  - connect facility browsing with support and booking
-
-### Venue Details Modal
-- Buttons inside:
-  - `Close`
-  - `Reserve Now` when reservation is allowed
-- Primary use:
-  - show the selected venue's details
+- Greeting header with date/time.
+- Stat cards based on membership and activity.
+- Today schedule and booking detail modal.
+- Nutrition, mastery, streak, and access snapshot.
+- Dynamic quick actions into bookings, nutrition, workout, facilities, coach schedule, or profile.
 
 ---
 
-## NUTRITION SCREEN
+## Bookings
 
-### Calories Summary Card
-- Buttons inside:
-  - `Set Nutrition Target` when no active target is available
-- Primary use:
-  - compare today's calories against the active goal
+```text
+/(tabs)/bookings:
+  maintain search, section, status, and date filters
+  debounce search input
+  query reservations
+  query appointments
+  query coach schedule data where needed
+  group records by date
+```
 
-### Macro Breakdown
-- Buttons inside:
-  - none
-- Primary use:
-  - compare protein, carbs, and fats to target values
+Primary flows:
 
-### Coaching Signals
-- Buttons inside:
-  - none
-- Primary use:
-  - explain the most important current nutrition guidance
-
-### Recommended Next Bites
-- Buttons inside:
-  - none
-- Primary use:
-  - suggest foods that help close remaining nutrition gaps
-
-### Curated Food Catalog
-- Buttons inside:
-  - none
-- Primary use:
-  - expose the seeded food list for quick nutrition understanding
-
-### Today's Nutrition Log
-- Buttons inside:
-  - `Log Meal` when premium nutrition is available and the account is not frozen
-- Primary use:
-  - review or create meal log entries
-
-### Nutrition Snapshot
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize live TDEE/BMR/target backend data
-
-### Floating Actions
-- Buttons inside:
-  - `Create Nutrition Goal` or `Recalculate Nutrition Target`
-  - `Launch BrodigyAI Mini-Chat`
-  - profile redirect action instead of AI when member-card access is locked
-- Primary use:
-  - expose the strongest nutrition-related next steps
-
-### Goals Modal
-- Buttons inside:
-  - calorie date picker trigger
-  - gender choice buttons
-  - activity-level choice buttons
-  - fitness-goal choice buttons
-  - `Cancel`
-  - `Save Target`
-- Primary use:
-  - create or update nutrition targets
-
-### Nutrition Log Modal
-- Buttons inside:
-  - meal-picker triggers
-  - unit-picker triggers
-  - calorie date picker trigger
-  - picker modal `Done`
-  - `Cancel`
-  - `Save Log`
-- Primary use:
-  - add a meal log entry
-
-### Logic notes
-- IF premium nutrition is locked -> meal-log area shows a premium gate instead of interactive logging
-- the shared FAB system can signal this page to open the goals modal automatically
+- Filter reservations, appointments, and eligible coach schedule.
+- Open booking detail modal.
+- Create reservation through ReservationModal.
+- Book a trainer through AppointmentModal.
+- Cancel reservation.
+- Cancel appointment.
+- Confirm, decline, or mark appointment complete where action is exposed.
+- Open PayMongo checkout when backend returns a checkout URL.
 
 ---
 
-## MUSCLE MASTERY SCREEN
+## Facilities
 
-### Hero Card
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize season status, current streak, and top mastery context
+```text
+/(tabs)/facilities:
+  query venues through venuesQueryOptions
+  group mapped venues by floor
+  allow refresh through queryClient/refetch
+  open venue detail modal from map tile
+```
 
-### Quick Links
-- Buttons inside:
-  - `Open Workout`
-  - `Open Nutrition`
-  - `Ask BrodigyAI`
-- Primary use:
-  - send the user to the most relevant connected modules
+Primary flows:
 
-### Access Gate
-- Buttons inside:
-  - `Open Membership Details` when access is locked
-- Primary use:
-  - explain why mastery is unavailable and route the user to profile
-
-### Loading / Error / Empty States
-- Buttons inside:
-  - `Retry`
-  - `Start First Workout`
-- Primary use:
-  - recover from failed loads or start progression if there is no data yet
-
-### Progress Status
-- Buttons inside:
-  - none
-- Primary use:
-  - surface integrity review states when present
-
-### Snapshot
-- Buttons inside:
-  - none
-- Primary use:
-  - show top-level mastery, streak, and season metrics
-
-### Season and Privacy
-- Buttons inside:
-  - `Public`
-  - `Anonymous`
-  - `Private`
-- Primary use:
-  - control how the user appears in leaderboards
-
-### Milestone Progress
-- Buttons inside:
-  - none
-- Primary use:
-  - show active milestone progress
-
-### Recent Unlocks
-- Buttons inside:
-  - none
-- Primary use:
-  - show the latest unlocked or claimed milestones
-
-### Top Muscle Groups
-- Buttons inside:
-  - none
-- Primary use:
-  - rank muscle groups by EXP and total tracked work
-
-### Gym Leaderboard
-- Buttons inside:
-  - none
-- Primary use:
-  - show current gym ranking standings when visibility allows
-
-### Achievement Highlights
-- Buttons inside:
-  - none
-- Primary use:
-  - show milestone-backed achievement cards
+- Switch floors.
+- Inspect floor snapshot and map tiles.
+- Open venue details.
+- Start reservation if venue is reservable.
+- Jump to BrodigyAI with facilities context.
 
 ---
 
-## WORKOUT SCREEN
+## Nutrition
 
-### Membership Gate
-- Buttons inside:
-  - `Open Membership Details`
-- Primary use:
-  - block non-member workout access and route the user to profile
+```text
+/(tabs)/nutrition:
+  query active nutrition target
+  query daily summary
+  query nutrition logs
+  query nutrition history
+  compute premium access and frozen-account gates
+```
 
-### Live Workout Surface
-- Buttons inside:
-  - `Initialize Camera`
-  - `Toggle Camera Facing`
-  - `Start Recording`
-  - `Pause`
-  - `Resume`
-  - `Stop`
-  - `Open Exercise References`
-  - `Use Auto Detection`
-  - `Toggle Subject Lock`
-  - exercise reference selection actions
-  - exercise confirmation actions
-- Primary use:
-  - run live tracked workout sessions using camera and pose analysis
+Primary flows:
 
-### Exercise Selection / Confirmation Modal Layer
-- Buttons inside:
-  - `Use plan exercise`
-  - candidate exercise chips
-  - exercise list actions
-  - `Use` for custom label
-  - `Keep Paused`
-  - `Auto Detect`
-  - `Close`
-- Primary use:
-  - stabilize the tracked exercise label for rep counting and set logging
-
-### Finish Confirmation
-- Buttons inside:
-  - finish confirm action
-  - finish cancel action
-- Primary use:
-  - safely finalize and save the current workout
-
-### Logic notes
-- before recording, the screen makes sure camera access, pose runtime, and workout session state exist
-- on finish, it finalizes pose data, logs the set, completes the workout session, and resets runtime state
+- View calories, macros, coaching signals, recommendations, catalog, logs, and backend nutrition snapshot.
+- Create or recalculate target through GoalsModal.
+- Log meal through NutritionLogModal when access allows it.
+- Launch BrodigyAI with nutrition context.
+- Route to profile when membership access is locked.
 
 ---
 
-## CHAT HISTORY SCREEN
+## Muscle Mastery
 
-### Search Row
-- Buttons inside:
-  - filter button
-- Primary use:
-  - search chat history and reveal filters
+```text
+/(tabs)/mastery:
+  render MuscleMasteryScreenContent
+  require membership-card access for full content
+  show loading, error, empty, and gated states
+```
 
-### Filter Panel
-- Buttons inside:
-  - start date selector
-  - end date selector
-  - status chips:
-    - `Active`
-    - `All`
-    - `Deleted`
-- Primary use:
-  - narrow which sessions are shown
+Primary flows:
 
-### Session List
-- Buttons inside:
-  - active session cards -> open that conversation
-  - deleted session `Restore` button
-- Primary use:
-  - browse saved BrodigyAI sessions grouped by date
-
-### Floating Actions
-- Buttons inside:
-  - `New Chat`
-  - `Delete Conversation` when not in deleted filter
-- Primary use:
-  - start a new chat or enter archive-selection mode
-
-### Delete Selection Footer
-- Buttons inside:
-  - `Cancel`
-  - `Delete (count)`
-- Primary use:
-  - finish or leave delete mode
-
-### Confirm Modals
-- Buttons inside:
-  - delete confirmation actions
-  - restore confirmation actions
-- Primary use:
-  - confirm archive and restore operations
-
-### Logic notes
-- IF member-card access is locked -> the page shows a membership gate
-- delete mode archives conversations instead of hard-deleting them
+- View season, streak, EXP, standing, milestone, unlock, muscle group, leaderboard, and achievement summaries.
+- Change leaderboard visibility.
+- Jump to Workout, Nutrition, BrodigyAI, or Profile depending on access state.
 
 ---
 
-## CHATBOT SCREEN
+## Workout
 
-### Session Title / Status Area
-- Buttons inside:
-  - none
-- Primary use:
-  - show current conversation title and inline status/error text
+```text
+/(tabs)/workout:
+  require USER role
+  require active membership-card access
+  render WorkoutLiveScreen when allowed
+```
 
-### Message Feed
-- Buttons inside:
-  - none directly
-- Primary use:
-  - show AI and user messages, including pending send state
+Primary flows:
 
-### Composer Bar
-- Buttons inside:
-  - send arrow button
-- Primary use:
-  - send a new message into the current or new chat session
+- Initialize camera.
+- Toggle camera facing.
+- Start, pause, resume, and stop recording.
+- Use auto detection or manual exercise selection.
+- Toggle subject lock.
+- Confirm exercise label.
+- Finalize pose data, log set, complete session, and reset runtime.
 
-### Locked / Deleted / Pending States
-- Buttons inside:
-  - none directly on the route wrapper
-- Primary use:
-  - block sending when the account is frozen, member access is locked, or the session is deleted
+Native-specific pieces:
 
-### Logic notes
-- IF `sessionId` is `new` -> this is a draft conversation
-- IF `from=nutrition` -> the AI context switches to nutrition
-- IF the backend returns a new session id -> the screen replaces the route with the real session
+- NativeVisionPoseCamera
+- browser/native pose analyzer helpers
+- poseRepEngine
+- workout modals for exercise selection, confirmation, and review
 
 ---
 
-## PROFILE SCREEN
+## BrodigyAI History
 
-### Profile Header
-- Buttons inside:
-  - none
-- Primary use:
-  - show avatar, name, email, and member-since metadata
+```text
+/(tabs)/chathistory:
+  query AI chat sessions
+  maintain search, status, date filters, and delete-selection mode
+  archive and restore sessions through mutations
+```
 
-### Member - Fitness Summary
-- Buttons inside:
-  - `Retry Fitness Summary` when query fails
-  - `Open Muscle Mastery`
-  - `Open Workout`
-- Primary use:
-  - summarize badge, standing, and health state
+Primary flows:
 
-### Member - Account Section
-- Buttons inside:
-  - `Edit Profile`
-  - `Attendance QR`
-  - `Pay Online`
-  - `Pay in Cash`
-- Primary use:
-  - manage profile info, attendance access, and membership-card purchase
+- Search and filter sessions.
+- Open active conversation.
+- Restore deleted conversation.
+- Start new chat.
+- Select and archive conversations.
 
-### Member - Loaded Plan / Payment History
-- Buttons inside:
-  - none
-- Primary use:
-  - display membership plan and payment summary
+Access gate:
 
-### Member - Termination Action
-- Buttons inside:
-  - `Request Account Termination`
-  - `Cancel Termination Request`
-- Primary use:
-  - manage deletion-request lifecycle
-
-### Coach Summary
-- Buttons inside:
-  - none
-- Primary use:
-  - summarize hourly rate and active slots
-
-### Coach Profile
-- Buttons inside:
-  - `Edit Coach Profile`
-- Primary use:
-  - open coach profile editing
-
-### Coach Availability
-- Buttons inside:
-  - availability cards -> open slot editor
-  - `Add Availability Slot`
-  - weekday buttons
-  - `Start Time`
-  - `End Time`
-  - `Cancel`
-  - `Delete` for existing slots
-  - `Save` or `Update`
-- Primary use:
-  - create, edit, or delete coach availability slots
-
-### Termination Confirmations
-- Buttons inside:
-  - `Request Termination`
-  - `Cancel`
-  - `Cancel Request`
-  - `Go Back`
-- Primary use:
-  - confirm deletion-request actions
-
-### Attendance QR Modal
-- Buttons inside:
-  - `Copy QR Value`
-  - refresh-status action
-  - `Close`
-- Primary use:
-  - show the current attendance QR and allow safe refresh/copy behavior
-
-### Availability Delete Confirmation
-- Buttons inside:
-  - `Delete`
-  - `Keep Slot`
-- Primary use:
-  - confirm slot removal
-
-### Edit Profile Modal
-- Buttons inside:
-  - `Personal`
-  - `Fitness`
-  - avatar image picker action
-  - date-of-birth picker trigger
-  - `Cancel`
-  - `Save`
-- Primary use:
-  - update member or coach profile details
-
-### Time Slot Modal
-- Buttons inside:
-  - time-slot buttons
-  - `Cancel`
-- Primary use:
-  - set start/end times for coach availability
-
-### Logic notes
-- IF membership-card purchase returns a checkout URL -> mobile opens the external payment page
-- IF termination is requested -> mobile account state becomes pending/frozen
+```text
+IF membership-card access is locked:
+  show membership gate
+  route action to profile
+```
 
 ---
 
-## SETTINGS SCREEN
+## BrodigyAI Chat
 
-### Preferences Section
-- Buttons inside:
-  - `Notifications`
-  - `Appearance`
-- Primary use:
-  - open the two main preference panels
+```text
+/(tabs)/chatbot:
+  read sessionId and from params
+  render ChatbotScreenContent
+  send messages through AI domain
 
-### Security Section
-- Buttons inside:
-  - `Change Password`
-  - `Privacy Settings`
-- Primary use:
-  - open security-related controls
+IF sessionId is "new":
+  draft conversation mode
 
-### Support Section
-- Buttons inside:
-  - `Help Center`
-  - `Terms & Conditions`
-- Primary use:
-  - open support and policy content
+IF backend returns a real session id:
+  replace route with returned session id
 
-### Settings Modal
-- Buttons inside:
-  - close action
-  - panel-owned controls in the selected panel
-- Primary use:
-  - host the selected settings panel
+IF from=nutrition:
+  use nutrition context
+```
 
-### Panel Mapping
-- `Notifications` -> notification preference panel
-- `Appearance` -> appearance panel
-- `Change Password` -> password panel
-- `Privacy Settings` -> privacy panel
-- `Help Center` -> help panel
-- `Terms & Conditions` -> terms panel
+Sending is blocked when account state or membership access disallows it.
 
+---
+
+## Profile
+
+```text
+/(tabs)/profile:
+  render ProfileHeader
+  render MemberProfileSections for current USER
+  render ProfileModals
+```
+
+Primary member flows:
+
+- View avatar, identity, member-since data, plan, payment history, and fitness summary.
+- Edit profile through EditProfileModal.
+- Upload avatar.
+- Update phone/profile fields.
+- Show attendance QR.
+- Copy QR value.
+- Pay online or pay cash for membership card.
+- Request or cancel account termination.
+- Open Muscle Mastery or Workout from fitness summary.
+
+Current note: `CoachProfileSections` and `CoachAvailabilitySection` exist, but the mobile gate blocks coach sessions before this route is reachable.
+
+---
+
+## Settings
+
+```text
+/(tabs)/settings:
+  render SettingsSections
+  open SettingsModalContent for selected panel
+```
+
+Panels:
+
+- Notifications
+- Appearance
+- Change Password
+- Privacy Settings
+- Help Center
+- Terms & Conditions
+
+Primary flows:
+
+- Update notification preferences.
+- Change appearance settings.
+- Change password.
+- Review privacy/support/legal content.
+
+---
+
+## Global Modals And Cross-Screen State
+
+```text
+FABStateContext:
+  owns current FAB menu
+  owns sidebar open state
+  owns shared reservation modal open state
+  broadcasts booking refresh after reservation success
+  tracks camera-active state to suppress sidebar/FAB conflicts
+
+Shared modals:
+  ConfirmModal
+  CalendarModal
+  TimeSlotModal
+  NoticeModal
+  ReservationModal
+  AppointmentModal
+  BookingDetailModal
+  GoalsModal
+  NutritionLogModal
+  OTPModal
+  ForgotPasswordModal
+  AttendanceQrModal
+  EditProfileModal
+  Workout exercise modals
+```
+
+---
+
+## Current Mobile Pseudocode Summary
+
+```text
+START MOBILE APP
+  launcher exports local EXPO_PUBLIC_API_URL
+  RootLayout loads fonts, query, theme, auth
+  AuthProvider hydrates tokens from AsyncStorage
+  AuthProvider loads current user from local API
+
+IF public auth route:
+  render login/register
+ELSE:
+  require authenticated USER
+  render mobile shell
+  render selected tab screen
+
+FOR data:
+  screen calls TanStack Query or mutation
+  query helper calls mobileApiClient
+  mobileApiClient calls local API
+  local API reads/writes Docker PostgreSQL
+
+FOR access:
+  role gate blocks non-USER roles
+  membership card gate blocks premium member features
+  frozen/pending termination states reduce sensitive actions
+```

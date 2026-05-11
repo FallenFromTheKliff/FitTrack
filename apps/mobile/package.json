@@ -7,7 +7,7 @@
     "dev:prime-android": "node ./scripts/prime-android-dev.cjs",
     "android": "node ./scripts/run-android.cjs",
     "ios": "node ./node_modules/expo/bin/cli run:ios",
-    "web": "node ./node_modules/expo/bin/cli start --web",
+    "web": "node ./scripts/start-web.cjs",
     "lint": "..\\web\\node_modules\\.bin\\eslint.cmd . --ext .ts,.tsx --config ..\\web\\eslint.config.mjs --rule no-empty:warn --rule @typescript-eslint/no-unused-expressions:warn --rule @typescript-eslint/no-require-imports:off",
     "typecheck": "tsc --noEmit"
   },
