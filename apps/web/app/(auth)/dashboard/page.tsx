@@ -7,9 +7,11 @@ import {
   CalendarDays,
   Dumbbell,
   Flame,
+  LineChart,
   Lock,
   Sparkles,
   Trophy,
+  Users,
   Zap,
 } from "lucide-react";
 import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
@@ -76,6 +78,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isLoading) return;
     if (user?.role === "USER") return;
+    if (user?.role === "COACH") return;
 
     if (user?.role === "ADMIN") {
       router.replace("/analytics");
@@ -84,6 +87,72 @@ export default function DashboardPage() {
 
     router.replace("/accounts");
   }, [isLoading, router, user?.role]);
+
+  if (user?.role === "COACH") {
+    return (
+      <MemberOnlyScreen>
+        <MemberText as="h1" variant="title">
+          Coach Dashboard
+        </MemberText>
+        <MemberText as="p" variant="subtitle">
+          Hi {firstName}. Your coach portal keeps clients, sessions, earnings, gamification, and training references one click away.
+        </MemberText>
+
+        <MemberGrid columns={4} compactPair>
+          <StatTile icon={Users} label="Clients" value="Open" />
+          <StatTile icon={CalendarDays} label="Sessions" value="Live" tone="success" />
+          <StatTile icon={LineChart} label="Earnings" value="Track" tone="warning" />
+          <StatTile icon={Dumbbell} label="Exercise Lab" value="Ready" tone="brand" />
+        </MemberGrid>
+
+        <MemberSection heading="Coach actions">
+          <MemberSurface>
+            {[
+              {
+                icon: Users,
+                label: "Clients",
+                path: "/accounts",
+                subtitle: "Review member profiles and client readiness.",
+              },
+              {
+                icon: CalendarCheck,
+                label: "Sessions",
+                path: "/schedule",
+                subtitle: "Track coaching appointments and session status.",
+              },
+              {
+                icon: LineChart,
+                label: "Earnings",
+                path: "/analytics",
+                subtitle: "Review completed coaching work and expected earnings.",
+              },
+              {
+                icon: Trophy,
+                label: "Gamification",
+                path: "/gamification",
+                subtitle: "Follow member progress signals and ranking context.",
+              },
+              {
+                icon: Dumbbell,
+                label: "Exercise Lab",
+                path: "/exercise-lab",
+                subtitle: "Use exercise references while preparing sessions.",
+              },
+            ].map((item, index, items) => (
+              <MemberCard
+                key={item.path}
+                hasBorder={index < items.length - 1}
+                icon={item.icon}
+                label={item.label}
+                subtitle={item.subtitle}
+                onClick={() => router.push(item.path)}
+              />
+            ))}
+          </MemberSurface>
+        </MemberSection>
+      </MemberOnlyScreen>
+    );
+  }
 
   if (user?.role === "USER") {
     return (

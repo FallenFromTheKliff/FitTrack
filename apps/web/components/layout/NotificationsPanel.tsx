@@ -76,6 +76,7 @@ export default function NotificationsPanel({
         hideCloseButton
         hideHeaderDivider
         headerStyle={{ display: "none" }}
+        motionPreset="slide-right"
         overlayStyle={{
           ...s.notificationsBackdrop,
           alignItems: "stretch",

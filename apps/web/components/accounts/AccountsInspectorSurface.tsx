@@ -576,19 +576,26 @@ export function AccountInspectorBody() {
 }
 
 export default function AccountsInspectorSurface() {
+  const { canManageAccounts, isCoach } = useAccountsPage();
+
   return (
     <div
       className="members-directory-inspector"
       style={{
         display: "grid",
-        gridTemplateRows: "auto minmax(0, 1fr)",
-        gap: 10,
+        gridTemplateRows: canManageAccounts
+          ? "auto minmax(0, 1fr)"
+          : "minmax(0, 1fr)",
+        gap: canManageAccounts ? 10 : 0,
         height: "100%",
         minHeight: 0,
       }}
     >
-      <AccountInspectorCommandRow />
-      <MemberInspectorPanel ariaLabel="Account details" footer={<AccountInspectorFooter />}>
+      {canManageAccounts ? <AccountInspectorCommandRow /> : null}
+      <MemberInspectorPanel
+        ariaLabel={isCoach ? "Client details" : "Account details"}
+        footer={<AccountInspectorFooter />}
+      >
         <AccountInspectorBody />
       </MemberInspectorPanel>
     </div>

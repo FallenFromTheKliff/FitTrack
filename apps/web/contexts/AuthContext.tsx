@@ -243,15 +243,14 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       setUser(null);
       return;
     }
-    try {
-      const hydratedUser = await controller.loadCurrentUser();
-      const nextUser = hydratedUser ?? authUser;
-      setUser(nextUser);
-      return nextUser;
-    } catch {
-      setUser(authUser);
-      return authUser;
-    }
+    setUser(authUser);
+    void controller
+      .loadCurrentUser()
+      .then((hydratedUser) => {
+        if (hydratedUser !== undefined) setUser(hydratedUser);
+      })
+      .catch(() => {});
+    return authUser;
   }, [controller, setUser]);
 
   return (

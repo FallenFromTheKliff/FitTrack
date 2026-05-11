@@ -9,13 +9,12 @@ import { AlertCircle, Dumbbell, Lock, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { useLoadingText } from "@fittrack/hooks";
-import type { AuthUser, Role } from "@fittrack/types";
+import type { Role } from "@fittrack/types";
 import { loginSchema, type LoginData } from "@fittrack/validators";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
 import FitInputField from "@/components/fit/FitInputField";
-import BufferPage from "@/components/loading/BufferPage";
 import { ForgotPasswordModal, OTPModal } from "@/components/modals";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -61,9 +60,7 @@ export function AdminLoginPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [landingPath, setLandingPath] = useState("/analytics");
   const [mounted, setMounted] = useState(false);
-  const [showBuffer, setShowBuffer] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
 
   const signInLabel = useLoadingText("SIGNING IN", loading);
@@ -113,30 +110,18 @@ export function AdminLoginPage() {
       return;
     }
 
-    setLandingPath(getPortalLandingPath(result.user?.role));
-    setShowBuffer(true);
+    const committedUser = await commitLogin();
+    if (!committedUser) {
+      setLoading(false);
+      setErrorMsg("Unable to prepare your authenticated portal. Please sign in again.");
+      return;
+    }
+
+    router.replace(getPortalLandingPath(committedUser.role ?? result.user?.role));
   };
 
   if (!mounted) {
     return null;
-  }
-
-  if (showBuffer) {
-    return (
-      <BufferPage
-        onCommit={commitLogin}
-        onDone={(result) => {
-          const committedUser = result as AuthUser | null | undefined;
-          if (!committedUser) {
-            setShowBuffer(false);
-            setLoading(false);
-            setErrorMsg("Unable to prepare your authenticated portal. Please sign in again.");
-            return;
-          }
-          router.replace(getPortalLandingPath(committedUser.role) || landingPath);
-        }}
-      />
-    );
   }
 
   return (
@@ -325,9 +310,16 @@ export function AdminLoginPage() {
           setShowOTP(false);
           setErrorMsg("Verification cancelled.");
         }}
-        onSuccess={() => {
+        onSuccess={async () => {
           setShowOTP(false);
-          setShowBuffer(true);
+          setLoading(true);
+          const committedUser = await commitLogin();
+          if (!committedUser) {
+            setLoading(false);
+            setErrorMsg("Unable to prepare your authenticated portal. Please sign in again.");
+            return;
+          }
+          router.replace(getPortalLandingPath(committedUser.role));
         }}
       />
 

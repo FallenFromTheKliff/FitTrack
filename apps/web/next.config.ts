@@ -44,6 +44,26 @@ const nextConfig: NextConfig = {
         permanent: false
       },
       {
+        source: "/admin",
+        destination: "/analytics",
+        permanent: false
+      },
+      {
+        source: "/admin/dashboard",
+        destination: "/analytics",
+        permanent: false
+      },
+      {
+        source: "/staff",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
+        source: "/staff/dashboard",
+        destination: "/accounts",
+        permanent: false
+      },
+      {
         source: "/member/home",
         destination: "/dashboard",
         permanent: false
@@ -90,12 +110,12 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/coach",
-        destination: "/accounts",
+        destination: "/dashboard",
         permanent: false
       },
       {
         source: "/coach/dashboard",
-        destination: "/accounts",
+        destination: "/dashboard",
         permanent: false
       },
       {
@@ -115,27 +135,27 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/coach/earnings",
-        destination: "/schedule",
+        destination: "/analytics",
         permanent: false
       },
       {
         source: "/coach/gamification",
-        destination: "/accounts",
+        destination: "/gamification",
         permanent: false
       },
       {
         source: "/coach/exercise-lab",
-        destination: "/schedule",
+        destination: "/exercise-lab",
         permanent: false
       },
       {
         source: "/coach/ai",
-        destination: "/accounts",
+        destination: "/ai",
         permanent: false
       },
       {
         source: "/coach/settings",
-        destination: "/profile",
+        destination: "/settings",
         permanent: false
       }
     ];

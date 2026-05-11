@@ -251,10 +251,6 @@ export function useAiPageController() {
     handleSend,
     handleStartFresh,
     input,
-    isPageLoading:
-      sessionsQuery.isLoading ||
-      sessionQuery.isLoading ||
-      messagesQuery.isLoading,
     isSelectedSessionDeleted: selectedSession
       ? !selectedSession.is_active
       : false,

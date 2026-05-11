@@ -1,6 +1,10 @@
 "use client";
 
-import { FitSection, FitText } from "@/components/fit";
+import { useRouter } from "next/navigation";
+import { Activity, Dumbbell, Trophy } from "lucide-react";
+import type { CSSProperties } from "react";
+
+import { FitButton, FitSection, FitText } from "@/components/fit";
 import { ExerciseLabLibrarySurface } from "@/components/exercise-lab/ExerciseLabLibrarySurface";
 import { ExerciseLabMilestoneSurface } from "@/components/exercise-lab/ExerciseLabMilestoneSurface";
 import { ExerciseLabModalLayer } from "@/components/exercise-lab/ExerciseLabModalLayer";
@@ -10,15 +14,201 @@ import {
   useExerciseLabPage,
 } from "@/components/exercise-lab/ExerciseLabPageContext";
 import { ExerciseLabReviewSurface } from "@/components/exercise-lab/ExerciseLabReviewSurface";
-import PageLoadingState from "@/components/loading/PageLoadingState";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useFadeIn } from "@/hooks/animations/useFadeIn";
+import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 
 export const dynamic = "force-dynamic";
 
 export default function ExerciseLabPage() {
+  const { user } = useAuth();
+
+  if (user?.role === "COACH") {
+    return <CoachExerciseLabPage />;
+  }
+
+  return <AdminExerciseLabPage />;
+}
+
+function AdminExerciseLabPage() {
   return (
     <ExerciseLabPageProvider>
       <ExerciseLabPageBody />
     </ExerciseLabPageProvider>
+  );
+}
+
+function CoachExerciseLabPage() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const fadeIn = useFadeIn({ duration: 180 });
+  const themeTransition = useThemeTransition();
+  const cardStyle: CSSProperties = {
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    display: "grid",
+    gap: 8,
+    minHeight: 132,
+    padding: 16,
+  };
+  const resources = [
+    {
+      icon: Dumbbell,
+      label: "Exercise Library",
+      value: "Cues",
+      helper: "Movement references for client session planning.",
+    },
+    {
+      icon: Activity,
+      label: "Progress Signals",
+      value: "Context",
+      helper: "Use training history to tune coaching emphasis.",
+    },
+    {
+      icon: Trophy,
+      label: "Milestones",
+      value: "Review",
+      helper: "Connect goals back to sessions without admin tooling.",
+    },
+  ];
+
+  return (
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={themeTransition}
+      style={fadeIn}
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            justifyContent: "space-between",
+            padding: 16,
+          }}
+        >
+          <div>
+            <FitText
+              style={{
+                color: colors.textPrimary,
+                fontSize: 20,
+                fontWeight: 900,
+              }}
+            >
+              Coach Exercise Lab
+            </FitText>
+            <FitText
+              as="p"
+              style={{
+                color: colors.textSecondary,
+                fontSize: 13,
+                marginTop: 4,
+              }}
+            >
+              Training references for safer client sessions.
+            </FitText>
+          </div>
+          <FitButton
+            variant="primary"
+            label="OPEN SESSIONS"
+            onClick={() => router.push("/schedule")}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          }}
+        >
+          {resources.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={cardStyle}>
+                <Icon size={18} color={colors.brand} />
+                <FitText
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: 850,
+                  }}
+                >
+                  {item.label}
+                </FitText>
+                <FitText
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: 900,
+                  }}
+                >
+                  {item.value}
+                </FitText>
+                <FitText
+                  as="p"
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {item.helper}
+                </FitText>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            ...cardStyle,
+            alignItems: "center",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            minHeight: 0,
+          }}
+        >
+          <div>
+            <FitText
+              style={{
+                color: colors.textPrimary,
+                fontSize: 16,
+                fontWeight: 850,
+              }}
+            >
+              Client planning
+            </FitText>
+            <FitText
+              as="p"
+              style={{
+                color: colors.textSecondary,
+                fontSize: 13,
+                marginTop: 4,
+              }}
+            >
+              Review the matching client records before adjusting the next
+              program.
+            </FitText>
+          </div>
+          <FitButton
+            variant="ghost"
+            label="OPEN CLIENTS"
+            onClick={() => router.push("/accounts")}
+          />
+        </div>
+      </div>
+    </FitSection>
   );
 }
 
@@ -35,7 +225,6 @@ function ExerciseLabPageBody() {
     handleMilestoneScopeChange,
     handleOpenClosedMilestones,
     isCompact,
-    isPageLoading,
     milestoneNotes,
     milestoneScope,
     milestoneWorkbenchMotionKey,
@@ -74,7 +263,6 @@ function ExerciseLabPageBody() {
           position: "relative",
         }}
       >
-        <PageLoadingState isLoading={isPageLoading} pageName="Exercise Lab" />
         {feedbackMessage ? (
           <div
             role="status"

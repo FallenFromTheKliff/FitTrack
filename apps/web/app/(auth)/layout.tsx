@@ -34,8 +34,12 @@ function getPageKey(pathname: string, role: Role | null | undefined): PageKey {
   }
 
   if (role === "COACH") {
+    if (pathname.startsWith("/dashboard")) return "coach-dashboard";
     if (pathname.startsWith("/accounts")) return "coach-clients";
     if (pathname.startsWith("/schedule")) return "coach-sessions";
+    if (pathname.startsWith("/analytics")) return "coach-earnings";
+    if (pathname.startsWith("/gamification")) return "coach-gamification";
+    if (pathname.startsWith("/exercise-lab")) return "coach-exercise-lab";
   }
 
   if (pathname.startsWith("/bookings")) return "member-bookings";
@@ -65,6 +69,7 @@ const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
 const SIGN_OUT_BOTTOM_GAP = 10;
 const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
   "profile",
+  "coach-dashboard",
   "accounts",
   "schedule",
   "facilities",
@@ -73,6 +78,9 @@ const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
   "ai",
   "coach-clients",
   "coach-sessions",
+  "coach-earnings",
+  "coach-gamification",
+  "coach-exercise-lab",
   "member-home",
   "member-facilities",
   "member-bookings",

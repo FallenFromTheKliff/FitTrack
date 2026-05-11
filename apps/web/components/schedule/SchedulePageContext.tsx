@@ -238,12 +238,12 @@ function useGymOperationsPageState() {
   const [paymentConfirm, setPaymentConfirm] =
     useState<PaymentConfirmState | null>(null);
 
-  const { data: staffCoachProfiles = [], isLoading: staffCoachProfilesLoading } = useQuery({
+  const { data: staffCoachProfiles = [] } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
-  const { data: coachSelfProfile = null, isLoading: coachSelfProfileLoading } = useQuery({
+  const { data: coachSelfProfile = null } = useQuery({
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
     enabled: isCoach && Boolean(user?.id),
     staleTime: 60_000,
@@ -257,12 +257,12 @@ function useGymOperationsPageState() {
         : staffCoachProfiles,
     [coachSelfProfile, isCoach, staffCoachProfiles],
   );
-  const { data: staffUsers = [], isLoading: staffUsersLoading } = useQuery({
+  const { data: staffUsers = [] } = useQuery({
     ...staffUsersQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
-  const { data: venues = [], isLoading: venuesLoading } = useQuery({
+  const { data: venues = [] } = useQuery({
     ...venuesQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
@@ -338,12 +338,6 @@ function useGymOperationsPageState() {
   const appointmentsLoading = isCoach
     ? coachScheduleLoading
     : staffAppointmentsLoading;
-  const isPageLoading =
-    scheduleLoading ||
-    appointmentsLoading ||
-    (canManageCoaching &&
-      (staffCoachProfilesLoading || staffUsersLoading || venuesLoading)) ||
-    (isCoach && coachSelfProfileLoading);
 
   const replaceAvailabilityMutation = useMutation(
     replaceStaffCoachAvailabilityMutationOptions(webApiClient, queryClient),
@@ -1911,7 +1905,7 @@ function useGymOperationsPageState() {
     handlePreviewRecurringPlan, handleRecurringFutureUpdate, handleRecurringPlanCancel,
     handleRecurringSessionReschedule, handleRecurringSessionSkip, handleRejectAppointment,
     handleRejectVenueBooking, handleSaveAvailability, handleSaveCoachProfile,
-    handleSetCoachBookingVisibility, handleStaffClick, isPageLoading,
+    handleSetCoachBookingVisibility, handleStaffClick,
     leftRailRef, memberOptions, nextWeek, payAppointmentInitialMutation,
     paymentConfirm, paymentConfirmLoading, payRecurringCycleMutation,
     prevWeek, processAppointmentBalanceMutation, processBookingBalanceMutation,

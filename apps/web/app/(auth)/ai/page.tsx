@@ -14,7 +14,6 @@ import AiPageHeader from "@/components/chatbot/AiPageHeader";
 import { useAiPageController } from "@/hooks/ai/useAiPageController";
 import { ConfirmModal } from "@/components/modals";
 import { FitButton } from "@/components/fit";
-import PageLoadingState from "@/components/loading/PageLoadingState";
 
 export default function AiPage() {
   const { user } = useAuth();
@@ -46,7 +45,6 @@ function BrodigyAiPageBody() {
     handleSend,
     handleStartFresh,
     input,
-    isPageLoading,
     isSelectedSessionDeleted,
     lastError,
     message,
@@ -154,7 +152,6 @@ function BrodigyAiPageBody() {
           position: "relative",
         }}
       >
-        <PageLoadingState isLoading={isPageLoading} pageName="BrodigyAI" />
         <div className="brodigy-mobile-panel brodigy-history-panel" style={{ ...s.panel, minHeight: 0 }}>
           <div className="brodigy-compact-new-chat">
             <FitButton

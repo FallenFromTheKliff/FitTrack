@@ -21,6 +21,7 @@ import {
   BadgePercent,
   ClipboardList,
   Trophy,
+  WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PageKey } from "@fittrack/app-config";
@@ -129,6 +130,12 @@ const COACH_NAV_SECTIONS: NavSection[] = [
     label: "Main",
     items: [
       {
+        href: "/dashboard",
+        label: "Dashboard",
+        icon: Home,
+        pageKey: "coach-dashboard",
+      },
+      {
         href: "/accounts",
         label: "Clients",
         icon: Users,
@@ -139,6 +146,29 @@ const COACH_NAV_SECTIONS: NavSection[] = [
         label: "Sessions",
         icon: ClipboardList,
         pageKey: "coach-sessions",
+      },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
+      {
+        href: "/analytics",
+        label: "Earnings",
+        icon: WalletCards,
+        pageKey: "coach-earnings",
+      },
+      {
+        href: "/gamification",
+        label: "Gamification",
+        icon: Trophy,
+        pageKey: "coach-gamification",
+      },
+      {
+        href: "/exercise-lab",
+        label: "Exercise Lab",
+        icon: Dumbbell,
+        pageKey: "coach-exercise-lab",
       },
     ],
   },

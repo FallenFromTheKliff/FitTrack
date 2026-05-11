@@ -31,6 +31,7 @@ type Props = {
   overlayStyle?: CSSProperties;
   containerStyle?: CSSProperties;
   contentStyle?: CSSProperties;
+  motionPreset?: "slide-right" | "zoom";
 };
 
 export default function FitModal({
@@ -55,7 +56,8 @@ export default function FitModal({
   footerStyle,
   overlayStyle,
   containerStyle,
-  contentStyle
+  contentStyle,
+  motionPreset = "zoom"
 }: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const s = modalStyles(colors);
@@ -68,6 +70,7 @@ export default function FitModal({
   const titleId = useId();
   const subtitleId = useId();
   const Icon = icon;
+  const isSlideRight = motionPreset === "slide-right";
 
   useEffect(() => {
     setPortalRoot(document.body);
@@ -183,12 +186,18 @@ export default function FitModal({
             ...s.container,
             maxWidth,
             ...containerStyle,
-            transformOrigin: "center",
-            transform: visible ? "scale(1)" : "scale(0.92)",
+            transformOrigin: isSlideRight ? "right center" : "center",
+            transform: isSlideRight
+              ? `translateX(${visible ? "0" : "100%"})`
+              : visible
+                ? "scale(1)"
+                : "scale(0.92)",
             opacity: visible ? 1 : 0,
             pointerEvents: isOpen && visible ? "auto" : "none",
-            transition: "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
-            animation: visible ? "fit-modal-zoom-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both" : undefined,
+            transition: isSlideRight
+              ? "transform 220ms ease-out, opacity 160ms ease"
+              : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
+            animation: visible && !isSlideRight ? "fit-modal-zoom-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both" : undefined,
             willChange: "transform, opacity"
           }}
           data-fit-modal-container="true"

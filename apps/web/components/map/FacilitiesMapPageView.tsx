@@ -31,7 +31,6 @@ import { FitDropdown, FitText, FitTextInput } from "@/components/fit";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
-import PageLoadingState from "@/components/loading/PageLoadingState";
 import { ConfirmModal, FitModal, VenueDetailsContent, VenueDetailsModal } from "@/components/modals";
 
 import {
@@ -952,7 +951,6 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             position: "relative",
           }}
         >
-          <PageLoadingState isLoading={controller.isPageLoading} pageName="Facilities" />
           <div
             style={{
               height: controller.isCompact ? "auto" : "100%",

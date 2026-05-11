@@ -332,12 +332,14 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            flexShrink: 0
+            flexShrink: 0,
+            width: 46,
+            height: 72
         } as CSSProperties,
         unreadBadge: {
             position: "absolute",
-            top: -4,
-            right: -6,
+            top: 18,
+            right: 4,
             minWidth: 22,
             height: 22,
             borderRadius: 999,

@@ -37,8 +37,12 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     analytics: ["ADMIN"],
     settings: WEB_PORTAL_ALLOWED_ROLES,
     profile: ["ADMIN", "STAFF", "COACH"],
+    "coach-dashboard": WEB_COACH_ROLES,
     "coach-clients": WEB_COACH_ROLES,
     "coach-sessions": WEB_COACH_ROLES,
+    "coach-earnings": WEB_COACH_ROLES,
+    "coach-gamification": WEB_COACH_ROLES,
+    "coach-exercise-lab": WEB_COACH_ROLES,
     "member-home": WEB_MEMBER_ROLES,
     "member-facilities": WEB_MEMBER_ROLES,
     "member-bookings": WEB_MEMBER_ROLES,
@@ -85,7 +89,7 @@ export function getWebPortalFallbackPath(role: Role | null | undefined) {
     case "USER":
       return "/dashboard";
     case "COACH":
-      return "/accounts";
+      return "/dashboard";
     default:
       return "/login";
   }

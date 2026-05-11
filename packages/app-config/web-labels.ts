@@ -12,8 +12,12 @@ export type PageKey =
   | "analytics"
   | "settings"
   | "profile"
+  | "coach-dashboard"
   | "coach-clients"
   | "coach-sessions"
+  | "coach-earnings"
+  | "coach-gamification"
+  | "coach-exercise-lab"
   | "member-home"
   | "member-facilities"
   | "member-bookings"
@@ -36,8 +40,12 @@ export const PAGE_NAMES: Record<PageKey, string> = {
   analytics: "Data Analytics",
   settings: "Settings",
   profile: "Profile Settings",
+  "coach-dashboard": "Dashboard",
   "coach-clients": "Clients",
   "coach-sessions": "Sessions",
+  "coach-earnings": "Earnings",
+  "coach-gamification": "Gamification",
+  "coach-exercise-lab": "Exercise Lab",
   "member-home": "Home",
   "member-facilities": "Gym Facilities",
   "member-bookings": "Bookings",
@@ -61,8 +69,12 @@ export const PAGE_SUBTITLES: Record<PageKey, string> = {
   analytics: "Monitor business performance, revenue, attendance, and AI insights.",
   settings: "Tune your portal preferences, notifications, and security.",
   profile: "Keep your portal profile fit, secure, and locked in!",
+  "coach-dashboard": "Review your client work, coaching sessions, earnings, and training tools.",
   "coach-clients": "Keep every lifter's goals, check-ins, and next push locked in.",
   "coach-sessions": "Track the coaching blocks where cues, reps, and effort turn into progress.",
+  "coach-earnings": "Track completed coaching work and expected session revenue.",
+  "coach-gamification": "Follow member progress signals without opening admin governance controls.",
+  "coach-exercise-lab": "Review exercise references and coaching cues for safer sessions.",
   "member-home": "Check out your progress!",
   "member-facilities": "Explore the gym floor!",
   "member-bookings": "Stay on top of your schedule!",

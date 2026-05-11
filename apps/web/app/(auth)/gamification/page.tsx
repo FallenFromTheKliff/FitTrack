@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { useSearchParams } from "next/navigation";
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   Archive,
@@ -38,6 +38,7 @@ import {
 } from "@fittrack/query";
 
 import { webApiClient } from "@/lib/api-client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -161,6 +162,190 @@ type RankingStateDraftMap = Record<
 >;
 
 export default function GamificationPage() {
+  const { user } = useAuth();
+
+  if (user?.role === "COACH") {
+    return <CoachGamificationPage />;
+  }
+
+  return <AdminGamificationPage />;
+}
+
+function CoachGamificationPage() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const fadeIn = useFadeIn({ duration: 180 });
+  const themeTransition = useThemeTransition();
+  const cardStyle: CSSProperties = {
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    display: "grid",
+    gap: 8,
+    minHeight: 132,
+    padding: 16,
+  };
+
+  const coachSignals = [
+    {
+      icon: Trophy,
+      label: "Client Progress",
+      value: "Rankings",
+      helper: "Review motivation signals without admin override controls.",
+    },
+    {
+      icon: Activity,
+      label: "Muscle Mastery",
+      value: "Trends",
+      helper: "Use progression context when planning session work.",
+    },
+    {
+      icon: ShieldCheck,
+      label: "Integrity Notes",
+      value: "Read-only",
+      helper: "Keep coaching guidance separate from governance actions.",
+    },
+  ];
+
+  return (
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={themeTransition}
+      style={fadeIn}
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "flex",
+            gap: 12,
+            justifyContent: "space-between",
+            padding: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <FitText
+              style={{
+                color: colors.textPrimary,
+                fontSize: 20,
+                fontWeight: 900,
+              }}
+            >
+              Coach Gamification
+            </FitText>
+            <FitText
+              as="p"
+              style={{
+                color: colors.textSecondary,
+                fontSize: 13,
+                marginTop: 4,
+              }}
+            >
+              Member progress context for coaching decisions.
+            </FitText>
+          </div>
+          <FitButton
+            variant="primary"
+            label="OPEN CLIENTS"
+            onClick={() => router.push("/accounts")}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          }}
+        >
+          {coachSignals.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={cardStyle}>
+                <Icon size={18} color={colors.brand} />
+                <FitText
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: 850,
+                  }}
+                >
+                  {item.label}
+                </FitText>
+                <FitText
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: 900,
+                  }}
+                >
+                  {item.value}
+                </FitText>
+                <FitText
+                  as="p"
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {item.helper}
+                </FitText>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            ...cardStyle,
+            alignItems: "center",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            minHeight: 0,
+          }}
+        >
+          <div>
+            <FitText
+              style={{
+                color: colors.textPrimary,
+                fontSize: 16,
+                fontWeight: 850,
+              }}
+            >
+              Exercise references
+            </FitText>
+            <FitText
+              as="p"
+              style={{
+                color: colors.textSecondary,
+                fontSize: 13,
+                marginTop: 4,
+              }}
+            >
+              Pair progression context with movement cues before the next
+              session.
+            </FitText>
+          </div>
+          <FitButton
+            variant="ghost"
+            label="OPEN LAB"
+            onClick={() => router.push("/exercise-lab")}
+          />
+        </div>
+      </div>
+    </FitSection>
+  );
+}
+
+function AdminGamificationPage() {
   const { colors } = useTheme();
   const fadeIn = useFadeIn({ duration: 240 });
   const themeTransition = useThemeTransition();

@@ -283,12 +283,11 @@ export default function FitTrackLandingPage() {
   const heroBackgroundImage = `linear-gradient(90deg, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.72) 48%, rgba(0,0,0,0.48) 100%), ${LANDING_BACKGROUND_IMAGES[renderedSection]}`;
   const sectionStyle = useMemo<CSSProperties>(
     () => ({
-      borderTop: `1px solid ${colors.border}`,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.base,
       minHeight: 360,
       padding: "34px clamp(18px, 5vw, 72px)",
     }),
-    [colors.border, colors.surface],
+    [colors.base],
   );
 
   useEffect(() => {
@@ -658,11 +657,7 @@ export default function FitTrackLandingPage() {
               <div
                 key={`${renderedSection}-${metric.label}`}
                 style={{
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  borderRadius: 8,
-                  backgroundColor: "rgba(255,255,255,0.07)",
-                  padding: "10px 12px",
-                  backdropFilter: "blur(8px)",
+                  padding: "0 6px 0 0",
                 }}
               >
                 <FitText
@@ -862,12 +857,9 @@ function LandingSnapshotSection({ section }: { section: LandingSection }) {
   return (
     <div
       style={{
-        border: `1px solid ${colors.border}`,
-        borderRadius: 8,
-        backgroundColor: colors.surfaceRaised,
         display: "grid",
-        gap: 16,
-        padding: 18,
+        gap: 18,
+        padding: "18px 0 0",
       }}
     >
       <div style={{ maxWidth: 820 }}>
@@ -921,13 +913,10 @@ function LandingSnapshotSection({ section }: { section: LandingSection }) {
           <article
             key={`${section}-${item.title}`}
             style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
-              backgroundColor: colors.surface,
               display: "grid",
               gap: 10,
-              minHeight: 138,
-              padding: 16,
+              minHeight: 0,
+              padding: "6px 0 0",
             }}
           >
             <span
@@ -1012,21 +1001,18 @@ function LandingPanel({
         className="landing-feature-grid"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "22px clamp(18px, 4vw, 42px)",
         }}
       >
         {features.map((feature) => (
           <article
             key={feature.title}
             style={{
-              backgroundColor: colors.surfaceRaised,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
               display: "grid",
               gap: 12,
-              minHeight: 180,
-              padding: 18,
+              minHeight: 0,
+              padding: 0,
             }}
           >
             <feature.icon size={23} color={colors.brand} />

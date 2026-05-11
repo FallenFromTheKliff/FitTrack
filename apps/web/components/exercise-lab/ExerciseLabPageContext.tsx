@@ -407,11 +407,6 @@ function useExerciseLabPageState() {
   const libraryItems = libraryQuery.data?.data ?? EMPTY_LIBRARY_EXERCISES;
   const libraryMeta = libraryQuery.data?.meta;
   const muscleDefinitions = muscleDefinitionsQuery.data ?? [];
-  const isPageLoading =
-    reviewQueueQuery.isLoading ||
-    reviewLibraryQuery.isLoading ||
-    libraryQuery.isLoading ||
-    muscleDefinitionsQuery.isLoading;
   const muscleTotalPages = Math.max(
     1,
     Math.ceil(muscleDefinitions.length / MUSCLE_LIBRARY_PAGE_SIZE),
@@ -1370,7 +1365,6 @@ function useExerciseLabPageState() {
     handleSaveMuscleDefinition,
     handleSheetSubmit,
     isCompact,
-    isPageLoading,
     libraryCategory,
     libraryItems,
     libraryMeta,

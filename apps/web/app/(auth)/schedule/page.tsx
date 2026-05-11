@@ -66,7 +66,6 @@ import {
   GymOperationsPageProvider,
   useGymOperationsPage,
 } from "@/components/schedule/SchedulePageContext";
-import PageLoadingState from "@/components/loading/PageLoadingState";
 export default function GymOperationsPage() {
   return (
     <GymOperationsPageProvider>
@@ -152,7 +151,6 @@ function GymOperationsPageBody() {
     handleSaveCoachProfile,
     handleSetCoachBookingVisibility,
     handleStaffClick,
-    isPageLoading,
     leftRailRef,
     memberOptions,
     nextWeek,
@@ -434,10 +432,6 @@ function GymOperationsPageBody() {
           </div>
         </div>
         <div style={{ minHeight: 180, position: "relative" }}>
-          <PageLoadingState
-            isLoading={isPageLoading}
-            pageName="Gym Operations"
-          />
         {activeOperationsTab === "schedule" ? (
           <div style={{ display: "grid", gap: 12 }}>
             {activeScheduleSurfaceTab === "coach-schedule" ? (

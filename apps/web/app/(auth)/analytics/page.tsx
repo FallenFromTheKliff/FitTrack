@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -24,7 +25,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { StaffAppointmentRecord } from "@fittrack/api-client";
+import { coachScheduleQueryOptions } from "@fittrack/query";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -48,6 +52,7 @@ import {
   useAnalyticsSectionFilter,
 } from "@/contexts/AnalyticsSectionFilterContext";
 import { useAnalyticsDashboard } from "@/hooks/analytics/useAnalyticsDashboard";
+import { webApiClient } from "@/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +102,236 @@ function getAlertLaneLabel(kind: string) {
   return kind === "maintenance_due" ? "Equipment warning" : "Inventory warning";
 }
 
+function getAppointmentAmount(appointment: StaffAppointmentRecord) {
+  const amount = Number(
+    appointment.totalAmount ??
+      (appointment.coach?.hourlyRate ?? 0) * (appointment.duration || 1),
+  );
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function CoachEarningsPage() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { colors } = useTheme();
+  const fadeIn = useFadeIn({ duration: 180 });
+  const themeTransition = useThemeTransition();
+  const appointmentsQuery = useQuery({
+    ...coachScheduleQueryOptions<StaffAppointmentRecord>(webApiClient, user?.id),
+    enabled: Boolean(user?.id),
+    staleTime: 30_000,
+  });
+  const appointments = appointmentsQuery.data ?? [];
+  const completedAppointments = appointments.filter(
+    (appointment) => appointment.status === "completed",
+  );
+  const upcomingAppointments = appointments.filter(
+    (appointment) =>
+      appointment.status !== "cancelled" &&
+      appointment.status !== "completed",
+  );
+  const earnedTotal = completedAppointments.reduce(
+    (sum, appointment) => sum + getAppointmentAmount(appointment),
+    0,
+  );
+
+  const cardStyle: CSSProperties = {
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    display: "grid",
+    gap: 8,
+    minHeight: 112,
+    padding: 16,
+  };
+
+  return (
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={themeTransition}
+      style={fadeIn}
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          }}
+        >
+          {[
+            {
+              label: "Completed Sessions",
+              value: String(completedAppointments.length),
+              helper: "Sessions marked complete.",
+            },
+            {
+              label: "Expected Earnings",
+              value: formatCompactMoney(earnedTotal),
+              helper: "Based on completed coaching sessions.",
+            },
+            {
+              label: "Upcoming Work",
+              value: String(upcomingAppointments.length),
+              helper: "Confirmed or pending sessions still ahead.",
+            },
+          ].map((item) => (
+            <div key={item.label} style={cardStyle}>
+              <FitText
+                style={{
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {item.label}
+              </FitText>
+              <FitText
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 28,
+                  fontWeight: 900,
+                }}
+              >
+                {appointmentsQuery.isLoading ? "--" : item.value}
+              </FitText>
+              <FitText
+                as="p"
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                }}
+              >
+                {item.helper}
+              </FitText>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            ...cardStyle,
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: 12,
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <FitText style={{ fontSize: 18, fontWeight: 850 }}>
+                Coaching earnings
+              </FitText>
+              <FitText
+                as="p"
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                  marginTop: 4,
+                }}
+              >
+                This coach view stays scoped to your own session records.
+              </FitText>
+            </div>
+            <FitButton
+              variant="primary"
+              label="OPEN SESSIONS"
+              onClick={() => router.push("/schedule")}
+            />
+          </div>
+          <div style={{ display: "grid", gap: 0 }}>
+            {completedAppointments.slice(0, 6).map((appointment) => (
+              <div
+                key={appointment.id}
+                style={{
+                  alignItems: "center",
+                  borderTop: `1px solid ${colors.border}`,
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  minHeight: 54,
+                  padding: "10px 0",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <FitText
+                    style={{
+                      display: "block",
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {new Date(appointment.scheduledAt).toLocaleDateString("en-PH", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </FitText>
+                  <FitText
+                    as="p"
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 12.5,
+                      marginTop: 2,
+                    }}
+                  >
+                    {appointment.user?.email ?? "Client session"}
+                  </FitText>
+                </div>
+                <FitText
+                  style={{
+                    color: colors.brand,
+                    fontSize: 13.5,
+                    fontWeight: 900,
+                  }}
+                >
+                  {formatCompactMoney(getAppointmentAmount(appointment))}
+                </FitText>
+              </div>
+            ))}
+            {!appointmentsQuery.isLoading && completedAppointments.length === 0 ? (
+              <FitText
+                as="p"
+                style={{
+                  borderTop: `1px solid ${colors.border}`,
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  margin: 0,
+                  paddingTop: 14,
+                }}
+              >
+                Completed coaching sessions will appear here after they are closed.
+              </FitText>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </FitSection>
+  );
+}
+
 export default function AnalyticsPage() {
+  const { user } = useAuth();
+
+  if (user?.role === "COACH") {
+    return <CoachEarningsPage />;
+  }
+
+  return <AdminAnalyticsPage />;
+}
+
+function AdminAnalyticsPage() {
   const router = useRouter();
   const { colors, activeThemeKey } = useTheme();
   const panelRadius = 8;
