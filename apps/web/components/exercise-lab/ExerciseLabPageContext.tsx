@@ -407,6 +407,11 @@ function useExerciseLabPageState() {
   const libraryItems = libraryQuery.data?.data ?? EMPTY_LIBRARY_EXERCISES;
   const libraryMeta = libraryQuery.data?.meta;
   const muscleDefinitions = muscleDefinitionsQuery.data ?? [];
+  const isPageLoading =
+    reviewQueueQuery.isLoading ||
+    reviewLibraryQuery.isLoading ||
+    libraryQuery.isLoading ||
+    muscleDefinitionsQuery.isLoading;
   const muscleTotalPages = Math.max(
     1,
     Math.ceil(muscleDefinitions.length / MUSCLE_LIBRARY_PAGE_SIZE),
@@ -979,6 +984,7 @@ function useExerciseLabPageState() {
       {
         key: "submission",
         heading: "Submission",
+        align: "left",
         render: (candidate) => (
           <div style={{ display: "grid", gap: 5, minWidth: 180 }}>
             <FitText style={{ fontSize: 14, fontWeight: 800 }}>
@@ -1000,6 +1006,7 @@ function useExerciseLabPageState() {
       {
         key: "creator",
         heading: "Creator",
+        align: "left",
         render: (candidate) => {
           const tone = getCreatorStateTone(candidate.creatorState);
           const toneColor =
@@ -1034,6 +1041,7 @@ function useExerciseLabPageState() {
       {
         key: "movement",
         heading: "Movement",
+        align: "left",
         render: (candidate) => (
           <div style={{ display: "grid", gap: 3 }}>
             <FitText style={{ fontSize: 13, fontWeight: 800 }}>
@@ -1048,6 +1056,7 @@ function useExerciseLabPageState() {
       {
         key: "match",
         heading: "Match",
+        align: "left",
         render: (candidate) => {
           const match = reviewMatchByCandidateId.get(candidate.id);
           return (
@@ -1065,6 +1074,7 @@ function useExerciseLabPageState() {
       {
         key: "evidence",
         heading: "Evidence",
+        align: "left",
         render: (candidate) => (
           <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
             <FitText style={{ fontSize: 13, fontWeight: 800 }}>
@@ -1079,6 +1089,7 @@ function useExerciseLabPageState() {
       {
         key: "submitted",
         heading: "Submitted",
+        align: "left",
         render: (candidate) => (
           <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>
             {formatDate(candidate.createdAt)}
@@ -1107,6 +1118,7 @@ function useExerciseLabPageState() {
     {
       key: "name",
       heading: "Exercise",
+      align: "left",
       render: (exercise, c) => (
         <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
           <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
@@ -1121,6 +1133,7 @@ function useExerciseLabPageState() {
     {
       key: "category",
       heading: "Category",
+      align: "left",
       render: (exercise, c) => (
         <FitPill
           mode="status"
@@ -1133,6 +1146,7 @@ function useExerciseLabPageState() {
     {
       key: "muscle",
       heading: "Muscle",
+      align: "left",
       render: (exercise, c) => (
         <FitText style={{ fontSize: 13, fontWeight: 800, color: c.textPrimary }}>
           {toTitleCase(exercise.muscleGroup)}
@@ -1142,6 +1156,7 @@ function useExerciseLabPageState() {
     {
       key: "status",
       heading: "Status",
+      align: "left",
       render: (exercise, c) => (
         <FitPill
           mode="status"
@@ -1154,6 +1169,7 @@ function useExerciseLabPageState() {
     {
       key: "updated",
       heading: "Updated",
+      align: "left",
       render: (exercise, c) => (
         <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
           {formatDate(exercise.updatedAt)}
@@ -1199,6 +1215,7 @@ function useExerciseLabPageState() {
     {
       key: "name",
       heading: "Muscle",
+      align: "left",
       render: (definition, c) => (
         <div style={{ display: "grid", gap: 3, minWidth: 180 }}>
           <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
@@ -1213,6 +1230,7 @@ function useExerciseLabPageState() {
     {
       key: "region",
       heading: "Region",
+      align: "left",
       render: (definition, c) => (
         <FitText style={{ fontSize: 13, fontWeight: 800, color: c.textPrimary }}>
           {toTitleCase(definition.bodyRegion)}
@@ -1222,6 +1240,7 @@ function useExerciseLabPageState() {
     {
       key: "aliases",
       heading: "Aliases",
+      align: "left",
       render: (definition, c) => (
         <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
           {definition.aliases.length ? definition.aliases.join(", ") : "None"}
@@ -1231,6 +1250,7 @@ function useExerciseLabPageState() {
     {
       key: "sort",
       heading: "Sort",
+      align: "left",
       render: (definition, c) => (
         <FitText style={{ fontSize: 13, color: c.textSecondary }}>
           {definition.sortOrder}
@@ -1350,6 +1370,7 @@ function useExerciseLabPageState() {
     handleSaveMuscleDefinition,
     handleSheetSubmit,
     isCompact,
+    isPageLoading,
     libraryCategory,
     libraryItems,
     libraryMeta,

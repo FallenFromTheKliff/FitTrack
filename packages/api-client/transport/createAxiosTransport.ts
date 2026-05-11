@@ -72,7 +72,8 @@ export function createAxiosTransport({
   const resolvedBaseURL = resolveApiBaseUrl(baseURL);
   const transport = axios.create({
     baseURL: resolvedBaseURL,
-    headers: normalizeRequestHeaders(headers)
+    headers: normalizeRequestHeaders(headers),
+    withCredentials: true
   });
 
   let hydrationPromise: Promise<void> | null = null;
@@ -98,7 +99,8 @@ export function createAxiosTransport({
       `${resolvedBaseURL}${refreshPath}`,
       { refresh_token: refreshToken },
       {
-        headers: normalizeRequestHeaders(headers)
+        headers: normalizeRequestHeaders(headers),
+        withCredentials: true
       }
     );
     const nextTokens = extractTokenSet(response.data);

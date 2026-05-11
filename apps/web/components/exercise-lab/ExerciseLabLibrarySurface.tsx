@@ -139,6 +139,7 @@ export function ExerciseLabLibrarySurface() {
                 </div>
               ) : (
                 <div
+                  className="exercise-lab-table-shell"
                   style={{
                     minHeight: 0,
                     overflow: "hidden",
@@ -192,5 +193,15 @@ export function ExerciseLabLibrarySurface() {
                 />
               </div>
             ) : null}
+            <style>{`
+              .exercise-lab-table-shell table th,
+              .exercise-lab-table-shell table td {
+                text-align: left !important;
+              }
+
+              .exercise-lab-table-shell table td:last-child > div {
+                justify-content: flex-start !important;
+              }
+            `}</style>
           </section>  );
 }

@@ -31,7 +31,7 @@ Default `/goals` tool budget:
 
 - Local filesystem/search: allowed.
 - Git diff/status: allowed.
-- Context7: allowed only for uncertain or version-sensitive framework/library behavior.
+- Exa: allowed only for docs fetching, uncertain or version-sensitive framework/library behavior, or focused external reference checks.
 - Swagger: allowed only for API contract truth after frontend shared packages and current usage are insufficient.
 - Notion: disabled by default; use only when the user explicitly asks for Notion notes.
 - Serena: disabled by default; use only after local search fails or for targeted symbol navigation.

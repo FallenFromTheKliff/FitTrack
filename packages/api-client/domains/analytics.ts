@@ -490,6 +490,9 @@ function toExportPdfPayload(input?: ExportAnalyticsPdfInput) {
     ...(input?.attendancePeriod
       ? { attendance_period: input.attendancePeriod }
       : {}),
+    ...(input?.selectedSections?.length
+      ? { selected_sections: input.selectedSections }
+      : {}),
   };
 }
 

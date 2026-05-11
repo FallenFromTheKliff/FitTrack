@@ -85,4 +85,17 @@ export class AdminUsersController {
   ) {
     return this.adminUsersService.updateMembershipCard(id, dto, user.sub);
   }
+
+  @Patch(':id/verify-non-member')
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({
+    summary:
+      'Promote a pending member account to verified non-member without granting membership-card access.',
+  })
+  verifyNonMember(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.adminUsersService.verifyNonMember(id, user.sub, user.role);
+  }
 }

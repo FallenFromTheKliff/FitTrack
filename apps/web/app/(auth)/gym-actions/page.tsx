@@ -39,6 +39,7 @@ export const dynamic = "force-dynamic";
 
 type TransactionKind = "all" | "payment" | "sale" | "booking" | "coaching";
 type AuditKind = "all" | "User" | "MembershipCard" | "Equipment" | "Payment";
+type GymActionSectionFilter = "all" | "transactions" | "audit" | "recent";
 
 type TransactionRow = {
   actor: string;
@@ -52,6 +53,15 @@ type TransactionRow = {
 };
 
 const PAGE_SIZE = 6;
+const GYM_ACTION_SECTION_OPTIONS: Array<{
+  key: GymActionSectionFilter;
+  label: string;
+}> = [
+  { key: "all", label: "All" },
+  { key: "transactions", label: "Transaction History" },
+  { key: "audit", label: "Audit Log" },
+  { key: "recent", label: "Recent Activity" },
+];
 
 function formatDateTime(value?: string | null) {
   if (!value) return "No timestamp";
@@ -133,6 +143,8 @@ export default function GymActionsPage() {
   const [auditKind, setAuditKind] = useState<AuditKind>("all");
   const [auditPage, setAuditPage] = useState(1);
   const [recentPage, setRecentPage] = useState(1);
+  const [sectionFilter, setSectionFilter] =
+    useState<GymActionSectionFilter>("all");
 
   const snapshotQuery = useQuery(analyticsSnapshotQueryOptions(webApiClient));
   const auditQuery = useQuery(auditLogsQueryOptions(webApiClient, { limit: 100, page: 1 }));
@@ -252,6 +264,8 @@ export default function GymActionsPage() {
     gap: 12,
     paddingBottom: 32,
   };
+  const shouldShowSection = (section: Exclude<GymActionSectionFilter, "all">) =>
+    sectionFilter === "all" || sectionFilter === section;
 
   const transactionColumns: FitTableColumn<TransactionRow>[] = [
     {
@@ -381,7 +395,35 @@ export default function GymActionsPage() {
 
   return (
     <main className={themeTransition} style={shell}>
+      <div
+        className="gym-actions-section-filter"
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 8,
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+          order: 0,
+          padding: "10px 12px",
+        }}
+      >
+        <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 850 }}>
+          Section
+        </FitText>
+        <FitPill
+          mode="toggle"
+          active={sectionFilter}
+          options={GYM_ACTION_SECTION_OPTIONS}
+          onChange={setSectionFilter}
+          style={{ flexWrap: "wrap" }}
+        />
+      </div>
+
+      {shouldShowSection("transactions") ? (
       <ActionTableSection
+        className="gym-actions-transactions-section"
         colors={colors}
         heading="Transaction History"
         action={
@@ -405,6 +447,7 @@ export default function GymActionsPage() {
       >
         <div style={{ display: "grid", gap: 0 }}>
           <div
+            className="gym-actions-filter-row"
             style={{
               display: "grid",
               gap: 10,
@@ -471,8 +514,11 @@ export default function GymActionsPage() {
           </div>
         </div>
       </ActionTableSection>
+      ) : null}
 
+      {shouldShowSection("audit") ? (
       <ActionTableSection
+        className="gym-actions-audit-section"
         colors={colors}
         heading="Audit Log"
         action={
@@ -486,6 +532,7 @@ export default function GymActionsPage() {
       >
         <div style={{ display: "grid", gap: 0 }}>
           <div
+            className="gym-actions-filter-row"
             style={{
               display: "grid",
               gap: 10,
@@ -552,7 +599,9 @@ export default function GymActionsPage() {
           </div>
         </div>
       </ActionTableSection>
+      ) : null}
 
+      {shouldShowSection("recent") ? (
       <RecentActivitySection
         activities={recentRows}
         columns={recentColumns}
@@ -563,11 +612,36 @@ export default function GymActionsPage() {
         setPage={setRecentPage}
         totalPages={recentTotalPages}
       />
+      ) : null}
 
       <style>{`
+        .gym-actions-recent-section {
+          order: 1;
+        }
+
+        .gym-actions-audit-section {
+          order: 2;
+        }
+
+        .gym-actions-transactions-section {
+          order: 3;
+        }
+
         @media (max-width: 980px) {
-          main > section:first-child,
-          main [style*="grid-template-columns"] {
+          .gym-actions-section-filter,
+          .gym-actions-filter-row {
+            align-items: stretch !important;
+            flex-direction: column !important;
+            grid-template-columns: 1fr !important;
+          }
+
+          .gym-actions-section-filter > div {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .gym-actions-filter-row {
             grid-template-columns: 1fr !important;
           }
         }
@@ -599,6 +673,7 @@ function RecentActivitySection({
     <ActionTableSection
       colors={colors}
       heading="Recent Activity"
+      className="gym-actions-recent-section"
       action={
         <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
           <Activity size={15} color={colors.brand} />
@@ -638,16 +713,19 @@ function RecentActivitySection({
 function ActionTableSection({
   action,
   children,
+  className,
   colors,
   heading,
 }: {
   action: ReactNode;
   children: ReactNode;
+  className?: string;
   colors: ReturnType<typeof useTheme>["colors"];
   heading: string;
 }) {
   return (
     <section
+      className={className}
       style={{
         backgroundColor: colors.surface,
         border: `1px solid ${colors.border}`,

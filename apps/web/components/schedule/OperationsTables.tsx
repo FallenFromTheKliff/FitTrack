@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type RefObject } from "react";
-import { ChevronLeft, ChevronRight, UsersRound } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, UsersRound } from "lucide-react";
 import type { StaffAppointmentRecord } from "@fittrack/api-client";
 import type { ThemeColors } from "@fittrack/types";
 
@@ -483,10 +483,34 @@ export function CoachIconRail({
   const coachRailPageSize = isRow ? 8 : 6;
   const [coachRailPage, setCoachRailPage] = useState(1);
   const coachRailTotalPages = Math.max(1, Math.ceil(filteredStaff.length / coachRailPageSize));
+  const showCoachRailPagination = coachRailTotalPages > 1;
+  const coachRailPageNumbers = Array.from(
+    { length: coachRailTotalPages },
+    (_, index) => index + 1,
+  );
   const paginatedStaff = filteredStaff.slice(
     (coachRailPage - 1) * coachRailPageSize,
     coachRailPage * coachRailPageSize,
   );
+  const paginationArrowStyle = {
+    minHeight: 36,
+    minWidth: 36,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    padding: 0,
+  };
+  const paginationPageStyle = (isActive: boolean) => ({
+    minHeight: 36,
+    minWidth: 36,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    padding: 0,
+    border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
+    backgroundColor: isActive ? `${colors.brand}18` : colors.surfaceRaised,
+    color: isActive ? colors.brand : colors.textSecondary,
+  });
 
   useEffect(() => {
     if (coachRailPage <= coachRailTotalPages) return;
@@ -504,8 +528,16 @@ export function CoachIconRail({
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
         display: "grid",
-        gridTemplateRows: isRow ? "auto" : "auto minmax(0, 1fr) auto",
-        gridTemplateColumns: isRow ? "56px minmax(0, 1fr) auto" : undefined,
+        gridTemplateRows: isRow
+          ? showCoachRailPagination
+            ? "auto auto"
+            : "auto"
+          : showCoachRailPagination
+            ? "auto minmax(0, 1fr) auto"
+            : "auto minmax(0, 1fr)",
+        gridTemplateColumns: isRow
+          ? "56px minmax(0, 1fr)"
+          : undefined,
         overflow: "hidden",
       }}
       aria-label="Coach icon rail"
@@ -616,52 +648,80 @@ export function CoachIconRail({
           </FitText>
         )}
       </div>
-      <div
-        style={{
-          padding: 8,
-          borderTop: isRow ? "none" : `1px solid ${colors.border}`,
-          borderLeft: isRow ? `1px solid ${colors.border}` : "none",
-          backgroundColor: colors.surfaceRaised,
-          display: "grid",
-          gridTemplateColumns: isRow ? "26px" : "26px minmax(0, 1fr) 26px",
-          gridTemplateRows: isRow ? "26px auto 26px" : undefined,
-          alignItems: "center",
-          gap: 4,
-        }}
-      >
-        <FitButton
-          variant="ghost"
-          iconOnly
-          icon={ChevronLeft}
-          iconSize={14}
-          disabled={coachRailPage === 1}
-          onClick={() => setCoachRailPage((page) => Math.max(1, page - 1))}
-          aria-label="Previous coach page"
-          style={{ minHeight: 26, width: 26, borderRadius: 7, padding: 0 }}
-        />
-        <FitText
-          excludeGlobalScale
+      {showCoachRailPagination ? (
+        <div
           style={{
-            fontSize: 10,
-            fontWeight: 800,
-            color: colors.textMuted,
-            textAlign: "center",
-            writingMode: isRow ? "vertical-rl" : undefined,
+            padding: 8,
+            gridColumn: isRow ? "1 / -1" : undefined,
+            borderTop: isRow ? "none" : `1px solid ${colors.border}`,
+            borderLeft: "none",
+            borderBottom: isRow ? `1px solid ${colors.border}` : "none",
+            backgroundColor: colors.surfaceRaised,
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
           }}
         >
-          {coachRailPage}/{coachRailTotalPages}
-        </FitText>
-        <FitButton
-          variant="ghost"
-          iconOnly
-          icon={ChevronRight}
-          iconSize={14}
-          disabled={coachRailPage === coachRailTotalPages}
-          onClick={() => setCoachRailPage((page) => Math.min(coachRailTotalPages, page + 1))}
-          aria-label="Next coach page"
-          style={{ minHeight: 26, width: 26, borderRadius: 7, padding: 0 }}
-        />
-      </div>
+          <FitButton
+            variant="ghost"
+            iconOnly
+            icon={isRow ? ChevronLeft : ChevronUp}
+            iconSize={15}
+            disabled={coachRailPage === 1}
+            onClick={() => setCoachRailPage((page) => Math.max(1, page - 1))}
+            aria-label="Previous coach page"
+            style={paginationArrowStyle}
+          />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            {coachRailPageNumbers.map((page) => {
+              const isActive = page === coachRailPage;
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={`Go to coach page ${page}`}
+                  onClick={() => setCoachRailPage(page)}
+                  className="fit-pagination-button"
+                  style={paginationPageStyle(isActive)}
+                >
+                  <FitText
+                    as="span"
+                    excludeGlobalScale
+                    style={{
+                      color: "inherit",
+                      fontSize: 12,
+                      fontWeight: isActive ? 800 : 700,
+                    }}
+                  >
+                    {page}
+                  </FitText>
+                </button>
+              );
+            })}
+          </div>
+          <FitButton
+            variant="ghost"
+            iconOnly
+            icon={isRow ? ChevronRight : ChevronDown}
+            iconSize={15}
+            disabled={coachRailPage === coachRailTotalPages}
+            onClick={() => setCoachRailPage((page) => Math.min(coachRailTotalPages, page + 1))}
+            aria-label="Next coach page"
+            style={paginationArrowStyle}
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }

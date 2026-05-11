@@ -10,4 +10,5 @@ export { default as OTPModal } from "./OTPModal";
 export { default as SecurityModal } from "./SecurityModal";
 export { default as StaffDetailsModal } from "./StaffDetailsModal";
 export { default as VenueDetailsModal } from "./VenueDetailsModal";
+export { VenueDetailsContent } from "./VenueDetailsModal";
 export type { FieldConfig } from "./DetailsModal";

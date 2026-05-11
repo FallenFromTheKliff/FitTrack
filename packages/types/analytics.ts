@@ -35,6 +35,16 @@ export type GenerateBusinessInsightInput = {
   startDate?: string;
 };
 
+export type AnalyticsPdfSection =
+  | "activities"
+  | "alerts"
+  | "attendance"
+  | "daily"
+  | "inventory"
+  | "kpis"
+  | "recommendations"
+  | "revenue";
+
 export type ExportAnalyticsPdfInput = {
   attendanceEndDate?: string;
   attendancePeriod?: AnalyticsPeriod;
@@ -42,6 +52,7 @@ export type ExportAnalyticsPdfInput = {
   revenueEndDate?: string;
   revenuePeriod?: AnalyticsPeriod;
   revenueStartDate?: string;
+  selectedSections?: AnalyticsPdfSection[];
 };
 
 export type AnalyticsPdfExportResult = {

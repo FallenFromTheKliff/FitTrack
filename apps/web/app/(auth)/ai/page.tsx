@@ -14,6 +14,7 @@ import AiPageHeader from "@/components/chatbot/AiPageHeader";
 import { useAiPageController } from "@/hooks/ai/useAiPageController";
 import { ConfirmModal } from "@/components/modals";
 import { FitButton } from "@/components/fit";
+import PageLoadingState from "@/components/loading/PageLoadingState";
 
 export default function AiPage() {
   const { user } = useAuth();
@@ -45,6 +46,7 @@ function BrodigyAiPageBody() {
     handleSend,
     handleStartFresh,
     input,
+    isPageLoading,
     isSelectedSessionDeleted,
     lastError,
     message,
@@ -124,13 +126,14 @@ function BrodigyAiPageBody() {
   const pageStyle = useMemo(
     () => ({
       ...s.page,
+      height: "calc(100vh - 154px)",
       ...fadeIn
     }),
     [fadeIn, s.page]
   );
 
   return (
-    <div className={themeTransition} style={pageStyle}>
+    <div className={themeTransition} data-brodigy-page="true" style={pageStyle}>
       <AiPageHeader
         dangerColor={colors.danger}
         lastError={lastError}
@@ -146,10 +149,12 @@ function BrodigyAiPageBody() {
           flex: 1,
           gap: 16,
           gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
-          minHeight: "calc(100vh - 154px)",
+          minHeight: 0,
           minWidth: 0,
+          position: "relative",
         }}
       >
+        <PageLoadingState isLoading={isPageLoading} pageName="BrodigyAI" />
         <div className="brodigy-mobile-panel brodigy-history-panel" style={{ ...s.panel, minHeight: 0 }}>
           <div className="brodigy-compact-new-chat">
             <FitButton
@@ -209,8 +214,8 @@ function BrodigyAiPageBody() {
         @media (max-width: 980px) {
           [data-brodigy-grid="true"] {
             grid-template-columns: 1fr !important;
-            height: calc(100dvh - 142px) !important;
-            min-height: min(620px, calc(100dvh - 142px)) !important;
+            height: 100% !important;
+            min-height: 0 !important;
             overflow: hidden;
             position: relative;
           }

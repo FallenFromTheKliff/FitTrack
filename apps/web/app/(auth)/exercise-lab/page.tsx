@@ -10,6 +10,7 @@ import {
   useExerciseLabPage,
 } from "@/components/exercise-lab/ExerciseLabPageContext";
 import { ExerciseLabReviewSurface } from "@/components/exercise-lab/ExerciseLabReviewSurface";
+import PageLoadingState from "@/components/loading/PageLoadingState";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ function ExerciseLabPageBody() {
     handleMilestoneScopeChange,
     handleOpenClosedMilestones,
     isCompact,
+    isPageLoading,
     milestoneNotes,
     milestoneScope,
     milestoneWorkbenchMotionKey,
@@ -56,7 +58,7 @@ function ExerciseLabPageBody() {
       className={themeTransition}
       style={{
         ...fadeIn,
-        height: isCompact ? "auto" : "100%",
+        height: isCompact ? "auto" : "calc(100vh - 154px)",
         marginBottom: 0,
         minHeight: 0,
         overflow: isCompact ? "visible" : "hidden",
@@ -65,12 +67,14 @@ function ExerciseLabPageBody() {
       <div
         style={{
           display: "grid",
-          gap: 10,
+          gap: 14,
           height: isCompact ? "auto" : "100%",
           minHeight: 0,
           overflow: isCompact ? "visible" : "hidden",
+          position: "relative",
         }}
       >
+        <PageLoadingState isLoading={isPageLoading} pageName="Exercise Lab" />
         {feedbackMessage ? (
           <div
             role="status"

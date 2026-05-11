@@ -97,17 +97,27 @@ export type RegisterResponse = {
   user_id?: string;
 };
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export function createAuthApi(transport: ApiTransport) {
   return {
     login(credentials: LoginCredentials) {
       return unwrapResponse<LoginSuccessResponse | LoginOtpResponse>(
-        transport.post("/auth/login", credentials),
+        transport.post("/auth/login", {
+          ...credentials,
+          email: normalizeEmail(credentials.email)
+        }),
         "Login failed."
       );
     },
     register(payload: RegisterPayload) {
       return unwrapResponse<RegisterResponse>(
-        transport.post("/auth/register", payload),
+        transport.post("/auth/register", {
+          ...payload,
+          email: normalizeEmail(payload.email)
+        }),
         "Registration failed."
       );
     },
@@ -147,19 +157,28 @@ export function createAuthApi(transport: ApiTransport) {
     },
     forgotPassword(payload: ForgotPasswordPayload) {
       return unwrapResponse<{ message?: string }>(
-        transport.post("/auth/forgot-password", payload),
+        transport.post("/auth/forgot-password", {
+          ...payload,
+          email: normalizeEmail(payload.email)
+        }),
         "Unable to send verification code."
       );
     },
     verifyResetOtp(payload: VerifyResetOtpPayload) {
       return unwrapResponse<{ verified?: boolean }>(
-        transport.post("/auth/verify-reset-otp", payload),
+        transport.post("/auth/verify-reset-otp", {
+          ...payload,
+          email: normalizeEmail(payload.email)
+        }),
         "Unable to verify reset code."
       );
     },
     resetPassword(payload: ResetPasswordPayload) {
       return unwrapResponse<{ message?: string }>(
-        transport.post("/auth/reset-password", payload),
+        transport.post("/auth/reset-password", {
+          ...payload,
+          email: normalizeEmail(payload.email)
+        }),
         "Unable to reset password."
       );
     }

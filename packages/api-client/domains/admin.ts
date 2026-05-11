@@ -72,6 +72,10 @@ export type ManualAttendanceCheckInInput =
 export type ScanAttendanceQrInput =
   import("@fittrack/types").ScanAttendanceQrInput;
 export type RestoreUserResult = RestoreUserResultType;
+export type VerifyNonMemberResult = {
+  message: string;
+  user: Pick<MemberRecord, "emailVerified" | "id" | "status">;
+};
 
 type AdminGamificationOverviewApiRecord = {
   active_season: {
@@ -489,6 +493,12 @@ export function createAdminApi(transport: ApiTransport) {
           ...(payload.source !== undefined ? { source: payload.source } : {}),
         }),
         "Unable to update membership card access.",
+      );
+    },
+    verifyNonMember(id: string) {
+      return unwrapResponse<VerifyNonMemberResult>(
+        transport.patch(`/admin/users/${id}/verify-non-member`, {}),
+        "Unable to promote this account.",
       );
     },
     deleteUser(id: string) {

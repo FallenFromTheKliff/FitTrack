@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Bell, ListFilter, Menu } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 import { type PageKey } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -9,12 +9,6 @@ import { headerStyles } from "@/styles/layoutStyles";
 import HeaderMessage from "@/components/layout/HeaderMessage";
 import NotificationsPanel from "@/components/layout/NotificationsPanel";
 import FitButton from "@/components/fit/FitButton";
-import { FitSelect } from "@/components/fit";
-import {
-  ANALYTICS_SECTION_FILTER_OPTIONS,
-  useAnalyticsSectionFilter,
-  type AnalyticsSectionFilter,
-} from "@/contexts/AnalyticsSectionFilterContext";
 
 type Props = {
   onMenuToggle: () => void;
@@ -31,7 +25,6 @@ export default function Header({
   const s = headerStyles(colors, activeThemeKey);
   const [notifOpen, setNotifOpen] = useState(false);
   const [isNotifHovered, setIsNotifHovered] = useState(false);
-  const { sectionFilter, setSectionFilter } = useAnalyticsSectionFilter();
   const {
     isBusy,
     notifications,
@@ -53,6 +46,7 @@ export default function Header({
             iconOnly
             icon={Menu}
             iconSize={23}
+            className="fit-header-menu-button"
             onClick={onMenuToggle}
             style={s.iconBtn}
             aria-label="Open sidebar"
@@ -61,33 +55,13 @@ export default function Header({
         <HeaderMessage pageKey={pageKey} />
       </div>
       <div style={s.rightSection}>
-        {pageKey === "analytics" ? (
-          <div style={s.analyticsHeaderFilterWrap}>
-            <ListFilter
-              size={16}
-              strokeWidth={2}
-              style={s.analyticsHeaderFilterIcon}
-              aria-hidden="true"
-            />
-            <FitSelect
-              compact
-              value={sectionFilter}
-              onChange={(event) =>
-                setSectionFilter(event.target.value as AnalyticsSectionFilter)
-              }
-              options={[...ANALYTICS_SECTION_FILTER_OPTIONS]}
-              name="analyticsHeaderSectionFilter"
-              aria-label="Filter Data Analytics sections"
-              style={s.analyticsHeaderFilter}
-            />
-          </div>
-        ) : null}
         <div style={s.notificationButtonWrap}>
           <FitButton
             variant="iconClear"
             iconOnly
             icon={Bell}
             iconSize={23}
+            className="fit-header-notification-button"
             onClick={() => setNotifOpen((value) => !value)}
             onMouseEnter={() => setIsNotifHovered(true)}
             onMouseLeave={() => setIsNotifHovered(false)}

@@ -116,11 +116,11 @@ function endOfUtcYear(value: Date) {
 }
 
 export function formatCompactMoney(value: number) {
-  return `PHP ${value.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+  return `₱${value.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 }
 
 export function formatFullMoney(value: number) {
-  return `PHP ${value.toLocaleString("en-PH", {
+  return `₱${value.toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`;
@@ -145,12 +145,13 @@ export function buildAnalyticsQuickAnalysisPrompt(
   insight?: BusinessInsightRunDetailRecord
 ) {
   if (!insight) {
-    return `Create a quick FitTrack analytics readout for ${periodLabel.toLowerCase()}. Summarize revenue movement, membership growth, check-in momentum, coach performance, anomalies, risks, and the 3 most important actions to take next.`;
+    return `Create a quick FitTrack analytics readout for ${periodLabel.toLowerCase()}. Use Philippine Peso (₱) for every money value. Summarize revenue movement, membership growth, check-in momentum, coach performance, anomalies, risks, and the 3 most important actions to take next.`;
   }
 
   const promptParts = [
     `You are helping a FitTrack admin review analytics for ${periodLabel.toLowerCase()}.`,
     "Use the business insight below as the source of truth and turn it into a short operator-friendly briefing.",
+    "Use Philippine Peso (₱) for every money value.",
     `Insight summary: ${insight.summary}`,
     insight.highlights?.length ? `Highlights: ${insight.highlights.join(" | ")}` : "",
     insight.risks?.length ? `Risks: ${insight.risks.join(" | ")}` : "",

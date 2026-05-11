@@ -30,6 +30,10 @@ function isLoginSuccess(
   return "access_token" in value;
 }
 
+function normalizeAuthEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export function createAuthController({
   client,
   onUserCleared,
@@ -95,16 +99,17 @@ export function createAuthController({
       options?: { placeholderRole?: AuthUser["role"] },
     ) {
       try {
-        const data = await client.auth.login({ email, password });
+        const normalizedEmail = normalizeAuthEmail(email);
+        const data = await client.auth.login({ email: normalizedEmail, password });
         if ("otpRequired" in data && data.otpRequired) {
           const placeholder: AuthUser = {
             id: "",
-            email,
+            email: normalizedEmail,
             role: options?.placeholderRole ?? "USER",
           };
           pending.setPendingUser(placeholder);
-          pending.setPendingEmail(email);
-          pending.setPendingCredentials({ email, password });
+          pending.setPendingEmail(normalizedEmail);
+          pending.setPendingCredentials({ email: normalizedEmail, password });
           return {
             success: true as const,
             otpRequired: true as const,
@@ -118,7 +123,7 @@ export function createAuthController({
             error: "Invalid login response.",
           };
         }
-        const authUser = mapLoginSuccessUser(data, email);
+        const authUser = mapLoginSuccessUser(data, normalizedEmail);
         if (await shouldRejectRole(authUser)) {
           return {
             success: false as const,
@@ -133,7 +138,7 @@ export function createAuthController({
         });
         pending.setPendingUser(authUser);
         pending.setPendingEmail(authUser.email);
-        pending.setPendingCredentials({ email, password });
+        pending.setPendingCredentials({ email: normalizedEmail, password });
         return {
           success: true as const,
           otpRequired: false as const,
@@ -156,17 +161,21 @@ export function createAuthController({
       payload: RegisterPayload,
       options?: { placeholderRole?: AuthUser["role"] },
     ) {
-      const data = await client.auth.register(payload);
+      const normalizedPayload = {
+        ...payload,
+        email: normalizeAuthEmail(payload.email),
+      };
+      const data = await client.auth.register(normalizedPayload);
       if (!data.user_id) {
         return { success: false as const, error: "Registration failed." };
       }
       const placeholder: AuthUser = {
         id: data.user_id,
-        email: payload.email,
+        email: normalizedPayload.email,
         role: options?.placeholderRole ?? "USER",
       };
       pending.setPendingUser(placeholder);
-      pending.setPendingEmail(payload.email);
+      pending.setPendingEmail(normalizedPayload.email);
       pending.clearCredentials();
       return {
         success: true as const,

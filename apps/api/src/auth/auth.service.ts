@@ -72,10 +72,8 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDTO): Promise<{ user_id: string }> {
-    const existing = await this.repo.findIdentity(
-      AuthProvider.email,
-      dto.email,
-    );
+    const email = this.normalizeLoginEmail(dto.email);
+    const existing = await this.repo.findIdentity(AuthProvider.email, email);
     if (existing) {
       throw new ConflictException({
         type: 'CONFLICT',
@@ -93,7 +91,7 @@ export class AuthService {
     const user = await this.repo.createUserWithProfile({
       role: UserRole.member,
       status: UserStatus.pending,
-      email: dto.email,
+      email,
       credentialHash,
       firstName: dto.first_name,
       lastName: dto.last_name,
@@ -104,7 +102,7 @@ export class AuthService {
       user.id,
       OtpPurpose.registration,
       OtpChannel.email,
-      dto.email,
+      email,
     );
 
     return { user_id: user.id };
@@ -149,7 +147,7 @@ export class AuthService {
 
     const identity = await this.repo.findIdentity(
       AuthProvider.email,
-      dto.email,
+      normalizedEmail,
     );
     if (!identity || !identity.credential_hash) {
       return this.throwInvalidCredentials(normalizedEmail);
@@ -327,17 +325,15 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDTO): Promise<void> {
-    const identity = await this.repo.findIdentity(
-      AuthProvider.email,
-      dto.email,
-    );
+    const email = this.normalizeLoginEmail(dto.email);
+    const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) return;
 
     await this.otpService.issueOtp(
       identity.user_id,
       OtpPurpose.password_reset,
       OtpChannel.email,
-      dto.email,
+      email,
     );
   }
 
@@ -364,10 +360,8 @@ export class AuthService {
   }
 
   async verifyResetOtp(dto: VerifyResetOtpDTO): Promise<boolean> {
-    const identity = await this.repo.findIdentity(
-      AuthProvider.email,
-      dto.email,
-    );
+    const email = this.normalizeLoginEmail(dto.email);
+    const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) {
       throw new NotFoundException({
         type: 'NOT_FOUND',
@@ -387,10 +381,8 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDTO): Promise<void> {
-    const identity = await this.repo.findIdentity(
-      AuthProvider.email,
-      dto.email,
-    );
+    const email = this.normalizeLoginEmail(dto.email);
+    const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) {
       throw new NotFoundException({
         type: 'NOT_FOUND',
@@ -532,6 +524,7 @@ export class AuthService {
     actorRole: UserRole,
     ip: string,
   ): Promise<{ user_id: string; email: string; role: string }> {
+    const email = this.normalizeLoginEmail(dto.email);
     if (actorRole === UserRole.staff && dto.role === 'admin') {
       throw new ForbiddenException({
         type: 'FORBIDDEN',
@@ -541,10 +534,7 @@ export class AuthService {
       });
     }
 
-    const existing = await this.repo.findIdentity(
-      AuthProvider.email,
-      dto.email,
-    );
+    const existing = await this.repo.findIdentity(AuthProvider.email, email);
     if (existing) {
       throw new ConflictException({
         type: 'CONFLICT',
@@ -562,7 +552,7 @@ export class AuthService {
     const user = await this.repo.createUserWithProfile({
       role: dto.role as UserRole,
       status: UserStatus.pending,
-      email: dto.email,
+      email,
       credentialHash,
       firstName: dto.first_name,
       lastName: dto.last_name,
@@ -577,7 +567,7 @@ export class AuthService {
       user.id,
       OtpPurpose.registration,
       OtpChannel.email,
-      dto.email,
+      email,
     );
 
     this.emitAudit({
@@ -585,7 +575,7 @@ export class AuthService {
       action: AuditAction.USER_CREATED,
       entity: 'User',
       entityId: user.id,
-      after: { email: dto.email, role: dto.role, createdBy: actorId },
+      after: { email, role: dto.role, createdBy: actorId },
       ipAddress: ip,
     });
 
@@ -593,7 +583,7 @@ export class AuthService {
       action: 'account_created',
       actorId,
       occurredAt: new Date().toISOString(),
-      targetEmail: dto.email,
+      targetEmail: email,
       targetName: [dto.first_name, dto.last_name]
         .map((part) => part?.trim() ?? '')
         .filter(Boolean)
@@ -602,7 +592,7 @@ export class AuthService {
       targetUserId: user.id,
     });
 
-    return { user_id: user.id, email: dto.email, role: dto.role };
+    return { user_id: user.id, email, role: dto.role };
   }
 
   async issueTokenPair(

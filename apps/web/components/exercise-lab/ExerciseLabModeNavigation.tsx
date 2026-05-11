@@ -9,7 +9,10 @@ export function ExerciseLabModeNavigation() {
   const { handleModeChange, mode } = useExerciseLabPage();
 
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    <div
+      className="exercise-lab-mode-navigation"
+      style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+    >
       {SURFACE_MODE_OPTIONS.map((option) => {
         const isActive = mode === option.value;
 
@@ -20,7 +23,8 @@ export function ExerciseLabModeNavigation() {
             label={option.label}
             variant={isActive ? "primary" : "ghost"}
             onClick={() => handleModeChange(option.value)}
-            style={{ minWidth: 72, minHeight: 34, borderRadius: 8 }}
+            style={{ minWidth: 76, minHeight: 34, borderRadius: 8, paddingInline: 10 }}
+            textStyle={{ fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}
           />
         );
       })}

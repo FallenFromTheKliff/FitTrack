@@ -1,6 +1,7 @@
 import type {
   AnalyticsAttendanceResponseDTO,
   AnalyticsDailyInsightsTrendResponseDTO,
+  AnalyticsPdfSection,
   AnalyticsRevenueResponseDTO,
   AnalyticsSnapshotResponseDTO,
 } from './dto/analytics.dto';
@@ -62,6 +63,7 @@ type BuildAnalyticsPdfArgs = {
     systemAlerts: AnalyticsPdfInsightBlock;
   };
   revenue: AnalyticsRevenueResponseDTO;
+  sections: AnalyticsPdfSection[];
   snapshot: AnalyticsSnapshotResponseDTO;
 };
 
@@ -111,7 +113,7 @@ const BAR_COLORS = [
 
 function formatMoney(value: string) {
   const amount = Number(value);
-  return `PHP ${amount.toLocaleString('en-PH', {
+  return `₱${amount.toLocaleString('en-PH', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -491,15 +493,19 @@ class AnalyticsPdfComposer {
   private cursorY = PAGE_MARGIN_TOP;
 
   build(args: BuildAnalyticsPdfArgs) {
+    const sections = new Set(args.sections);
+
     this.drawHeader(args.generatedAt);
-    this.drawDailyInsightsSection(args);
-    this.drawPerformanceSection(args);
-    this.drawRevenueSection(args);
-    this.drawInventorySection(args);
-    this.drawAttendanceSection(args);
-    this.drawSystemAlertsSection(args);
-    this.drawRecentActivitiesSection(args);
-    this.drawRecommendationsSection(args.insights.recommendations);
+    if (sections.has('daily')) this.drawDailyInsightsSection(args);
+    if (sections.has('kpis')) this.drawPerformanceSection(args);
+    if (sections.has('revenue')) this.drawRevenueSection(args);
+    if (sections.has('inventory')) this.drawInventorySection(args);
+    if (sections.has('attendance')) this.drawAttendanceSection(args);
+    if (sections.has('alerts')) this.drawSystemAlertsSection(args);
+    if (sections.has('activities')) this.drawRecentActivitiesSection(args);
+    if (sections.has('recommendations')) {
+      this.drawRecommendationsSection(args.insights.recommendations);
+    }
 
     return this.document.toBuffer();
   }
@@ -1241,7 +1247,7 @@ class AnalyticsPdfComposer {
       frameTop: top + 38,
       frameWidth: rightWidth - 28,
       frameHeight: 188,
-      yValueFormatter: (value) => `PHP ${value.toLocaleString('en-PH')}`,
+      yValueFormatter: (value) => `₱${value.toLocaleString('en-PH')}`,
     });
 
     this.cursorY += cardHeight + 14;

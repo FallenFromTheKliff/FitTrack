@@ -5,7 +5,7 @@ import { fullName } from "@fittrack/utils";
 
 import AttendanceScanModal from "@/components/accounts/AttendanceScanModal";
 import MemberInspectorPanel from "@/components/accounts/MemberInspectorPanel";
-import { FitText } from "@/components/fit";
+import { FitButton, FitText } from "@/components/fit";
 import { ConfirmModal, DetailsModal, FitModal } from "@/components/modals";
 import { useTheme } from "@/contexts/ThemeContext";
 import { EDIT_MEMBER_FIELDS } from "@/data/members/members";
@@ -48,6 +48,7 @@ export default function AccountsModalLayer() {
     handleRejectMembershipPayment,
     handleRestoreMember,
     handleRevokeMembershipCard,
+    handleVerifyNonMember,
     isAccountsHamburgerMode,
     isAdmin,
     isApproveDeletionPending,
@@ -56,6 +57,7 @@ export default function AccountsModalLayer() {
     isScanAttendancePending,
     membershipCardLoadingLabel,
     mobileInspectorOpen,
+    noticeModal,
     paymentReviewAction,
     paymentReviewLoadingLabel,
     pendingEditSubmission,
@@ -74,12 +76,15 @@ export default function AccountsModalLayer() {
     setEditDraft,
     setEditModalOpen,
     setGrantCardTarget,
+    setNoticeModal,
     setPaymentReviewAction,
     setPendingEditSubmission,
     setRestoreTarget,
     setRevokeCardTarget,
+    setVerifyNonMemberTarget,
     setScanFeedback,
     setScanOpen,
+    verifyNonMemberTarget,
   } = useAccountsPage();
 
   return (
@@ -251,6 +256,30 @@ export default function AccountsModalLayer() {
           onSubmitToken={handleAttendanceScan}
         />
       ) : null}
+      <FitModal
+        isOpen={noticeModal !== null}
+        title={noticeModal?.title ?? "Account Notice"}
+        subtitle={noticeModal?.tone === "error" ? "Action needs attention" : undefined}
+        onClose={() => setNoticeModal(null)}
+        footer={
+          <FitButton
+            label="OK"
+            onClick={() => setNoticeModal(null)}
+            style={{ minHeight: 34 }}
+          />
+        }
+      >
+        <FitText
+          as="p"
+          style={{
+            color: noticeModal?.tone === "error" ? colors.danger : colors.textSecondary,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {noticeModal?.description ?? "The account action has completed."}
+        </FitText>
+      </FitModal>
       {canManageMemberCard ? (
         <ConfirmModal
           isOpen={!!grantCardTarget}
@@ -292,6 +321,20 @@ export default function AccountsModalLayer() {
           isLoading={isMembershipCardPending}
           onConfirm={handleRevokeMembershipCard}
           onCancel={() => setRevokeCardTarget(null)}
+        />
+      ) : null}
+      {verifyNonMemberTarget ? (
+        <ConfirmModal
+          isOpen={!!verifyNonMemberTarget}
+          title="Verify Non-Member"
+          message={`Promote ${
+            verifyNonMemberTarget?.email ?? "this account"
+          } from Pending Verification to Verified Non-Member? This verifies account access without granting membership-card access.`}
+          confirmLabel="VERIFY NON-MEMBER"
+          confirmIcon={BadgeCheck}
+          isLoading={false}
+          onConfirm={handleVerifyNonMember}
+          onCancel={() => setVerifyNonMemberTarget(null)}
         />
       ) : null}
       {canInspectAccounts ? (

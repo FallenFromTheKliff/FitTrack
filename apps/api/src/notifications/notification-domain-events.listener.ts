@@ -199,6 +199,8 @@ export class NotificationDomainEventsListener {
         return `Account created: ${target}`;
       case 'account_updated':
         return `Account updated: ${target}`;
+      case 'account_verified_non_member':
+        return `Account verified: ${target}`;
       case 'account_archived':
         return `Account archived: ${target}`;
       case 'account_restored':
@@ -231,6 +233,8 @@ export class NotificationDomainEventsListener {
         return `${target}${role} was created from the Account Module.`;
       case 'account_updated':
         return `${target}${role} had profile details updated from the Account Module.`;
+      case 'account_verified_non_member':
+        return `${target}${role} was verified as a non-member from the Account Module.`;
       case 'account_archived':
         return `${target}${role} was archived and moved out of the active account directory.`;
       case 'account_restored':

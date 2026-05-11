@@ -136,11 +136,16 @@ export class BusinessAnalyticsInsightService {
     };
   }
 
-  private toInsightPayload(value: Prisma.JsonValue): BusinessAnalyticsInsightResponse {
+  private toInsightPayload(
+    value: Prisma.JsonValue,
+  ): BusinessAnalyticsInsightResponse {
     const payload = this.toJsonObject(value);
 
     return {
-      summary: this.toStringValue(payload.summary, 'No insight summary recorded.'),
+      summary: this.toStringValue(
+        payload.summary,
+        'No insight summary recorded.',
+      ),
       highlights: this.toStringArray(payload.highlights),
       risks: this.toStringArray(payload.risks),
       opportunities: this.toStringArray(payload.opportunities),
@@ -202,6 +207,9 @@ export class BusinessAnalyticsInsightService {
     grounding: BusinessAnalyticsGroundingPayload,
   ): BusinessAnalyticsInsightResponse {
     const totalRevenue = this.toMoneyNumber(grounding.overview.total_revenue);
+    const totalRevenueLabel = this.formatMoney(
+      grounding.overview.total_revenue,
+    );
     const anomalyFlags = this.detectGroundingAnomalies(grounding);
     const topPlan = grounding.membership.top_plans[0] ?? null;
     const topCoach = grounding.coaching.coaches[0] ?? null;
@@ -210,7 +218,7 @@ export class BusinessAnalyticsInsightService {
     const peakHour = grounding.attendance.peak_hours[0] ?? null;
 
     const highlights = [
-      `Fallback insight: ${grounding.window.period} revenue reached ${grounding.overview.total_revenue}.`,
+      `Fallback insight: ${grounding.window.period} revenue reached ${totalRevenueLabel}.`,
       `Attendance recorded ${grounding.overview.total_check_ins} check-ins across ${grounding.membership.active_members} active members.`,
       ...(topPlan
         ? [
@@ -287,7 +295,7 @@ export class BusinessAnalyticsInsightService {
 
     return {
       summary:
-        `Fallback insight: revenue is ${grounding.overview.total_revenue}, ` +
+        `Fallback insight: revenue is ${totalRevenueLabel}, ` +
         `attendance is ${grounding.overview.total_check_ins} check-ins, and ` +
         `active membership is ${grounding.membership.active_members} for the selected window.`,
       highlights: this.toUniqueStrings(highlights),
@@ -379,6 +387,13 @@ export class BusinessAnalyticsInsightService {
   private toMoneyNumber(value: string): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private formatMoney(value: string): string {
+    return `₱${this.toMoneyNumber(value).toLocaleString('en-PH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   }
 
   private toDateOnlyString(value: Date): string {

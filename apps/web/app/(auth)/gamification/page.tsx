@@ -392,7 +392,7 @@ export default function GamificationPage() {
       hideHeading
       bare
       noPadding
-      className={themeTransition}
+      className={`${themeTransition} gamification-admin-shell`}
       style={{
         ...fadeIn,
         height: "100%",
@@ -410,6 +410,7 @@ export default function GamificationPage() {
         }}
       >
         <div
+          className="gamification-governance-header"
           style={{
             border: `1px solid ${colors.border}`,
             borderRadius: 8,
@@ -443,6 +444,7 @@ export default function GamificationPage() {
             </FitText>
             {overview?.activeSeason ? (
               <div
+                className="gamification-active-season-panel"
                 style={{
                   ...subPanelStyle,
                   display: "grid",
@@ -484,7 +486,10 @@ export default function GamificationPage() {
                   placeholder="Lifecycle rationale"
                   style={{ minHeight: 38 }}
                 />
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <div
+                  className="gamification-active-season-actions"
+                  style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+                >
                   {activeSeasonActions.map((status) => (
                     <FitButton
                       key={status}
@@ -537,6 +542,7 @@ export default function GamificationPage() {
             )}
           </div>
           <div
+            className="gamification-sync-card"
             style={{
               ...panelStyle,
               padding: 6,
@@ -612,6 +618,7 @@ export default function GamificationPage() {
 
         {activeTab === "overview" ? (
           <div
+            className="gamification-overview-grid"
             style={{
               display: "grid",
               gridTemplateRows: "auto minmax(430px, auto) minmax(250px, auto)",
@@ -644,6 +651,7 @@ export default function GamificationPage() {
             </div>
 
         <div
+          className="gamification-bottom-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
@@ -874,6 +882,48 @@ export default function GamificationPage() {
           />
         )}
       </div>
+      <style>{`
+        @media (max-width: 1180px) {
+          .gamification-governance-header {
+            grid-template-columns: minmax(0, 1fr) !important;
+            align-items: stretch !important;
+          }
+
+          .gamification-active-season-panel {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .gamification-active-season-actions {
+            justify-content: flex-start !important;
+            flex-wrap: wrap !important;
+          }
+
+          .gamification-sync-card {
+            grid-template-columns: minmax(0, 1fr) auto !important;
+            align-items: center !important;
+          }
+        }
+
+        @media (max-width: 960px) {
+          .gamification-admin-shell {
+            padding-right: 0 !important;
+          }
+
+          .gamification-overview-grid {
+            grid-template-rows: auto !important;
+          }
+
+          .gamification-bottom-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .gamification-sync-card {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
       <ConfirmModal
         isOpen={confirmationState !== null}
         title={confirmationState?.title ?? "Confirm action"}

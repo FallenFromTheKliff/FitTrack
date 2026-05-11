@@ -149,7 +149,7 @@ function getRetailColumns(
     {
       key: "stockQuantity",
       heading: "Stock",
-      align: "right",
+      align: "left",
       headingStyle: { width: 92 },
       render: (product) => (
         <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
@@ -160,7 +160,7 @@ function getRetailColumns(
     {
       key: "reorderThreshold",
       heading: "Reorder",
-      align: "right",
+      align: "left",
       headingStyle: { width: 96 },
       render: (product) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -171,10 +171,10 @@ function getRetailColumns(
     {
       key: "status",
       heading: "Status",
-      align: "center",
+      align: "left",
       headingStyle: { width: 150 },
       render: (product) => (
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
           <FitPill
             mode="status"
             label={product.status}
@@ -187,7 +187,7 @@ function getRetailColumns(
     {
       key: "price",
       heading: "Price",
-      align: "right",
+      align: "left",
       headingStyle: { width: 138 },
       render: (product) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -202,7 +202,7 @@ function getRetailColumns(
     {
       key: "totalValue",
       heading: "Value",
-      align: "right",
+      align: "left",
       headingStyle: { width: 148 },
       render: (product) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -293,7 +293,7 @@ function getEquipmentColumns(
     {
       key: "quantityCurrent",
       heading: "Current",
-      align: "right",
+      align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
         <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
@@ -304,7 +304,7 @@ function getEquipmentColumns(
     {
       key: "quantityTotal",
       heading: "Total",
-      align: "right",
+      align: "left",
       headingStyle: { width: 88 },
       render: (equipment) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -315,7 +315,7 @@ function getEquipmentColumns(
     {
       key: "missingCount",
       heading: "Missing",
-      align: "right",
+      align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -326,7 +326,7 @@ function getEquipmentColumns(
     {
       key: "unit",
       heading: "Unit",
-      align: "center",
+      align: "left",
       headingStyle: { width: 100 },
       render: (equipment) => (
         <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
@@ -337,10 +337,10 @@ function getEquipmentColumns(
     {
       key: "status",
       heading: "Status",
-      align: "center",
+      align: "left",
       headingStyle: { width: 150 },
       render: (equipment) => (
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
           <FitPill
             mode="status"
             label={equipment.status}
@@ -479,6 +479,7 @@ export function InventoryMainPanel({
 
         {inventory.showFilters ? (
           <div
+            className="inventory-filter-grid"
             style={{
               display: "grid",
               gap: 10,
@@ -715,7 +716,7 @@ export function InventoryMainPanel({
 
         @media (max-width: 760px) {
           .inventory-workbench,
-          section[style*="grid-template-columns"] {
+          .inventory-filter-grid {
             grid-template-columns: 1fr !important;
           }
         }

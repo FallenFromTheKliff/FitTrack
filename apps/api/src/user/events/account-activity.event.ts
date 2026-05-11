@@ -3,6 +3,7 @@ export const ACCOUNT_ACTIVITY_EVENT = 'account.activity';
 export type AccountActivityAction =
   | 'account_created'
   | 'account_updated'
+  | 'account_verified_non_member'
   | 'account_archived'
   | 'account_restored'
   | 'coach_upgraded'

@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Dumbbell, Lock, Mail, Phone, User } from "lucide-react-native";
+import { ArrowLeft, Dumbbell, Lock, Mail, Phone, ShieldCheck, User } from "lucide-react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -25,6 +25,7 @@ import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
 import OTPModal from "@/components/modals/auth/OTPModal";
+import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
 
 const PASS_REQ_HEIGHT = 210;
@@ -46,6 +47,8 @@ export default function RegisterScreen() {
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [hasAcceptedRegistrationTerms, setHasAcceptedRegistrationTerms] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [statusTone, setStatusTone] = useState<"danger" | "brand">("brand");
   const [phonePrefixMode, setPhonePrefixMode] = useState<PhonePrefixMode>("+63");
@@ -94,19 +97,20 @@ export default function RegisterScreen() {
     visible: showReqs
   });
 
-  const onSubmit = async (data: RegisterData) => {
+  const createAccount = async (data: RegisterData) => {
     if (isLoading) return;
     setIsLoading(true);
     const normalizedPhone = normalizeAuthPhilippineMobileNumber(data.phone);
+    const normalizedEmail = data.email.trim();
     const result = await register({
       firstName: data.firstName,
       lastName: data.lastName,
-      email: data.email,
+      email: normalizedEmail,
       phone: normalizedPhone || undefined,
       password: data.password
     });
     if ("user" in result) {
-      setPendingEmail(data.email);
+      setPendingEmail(normalizedEmail);
       setShowOTP(true);
       setIsLoading(false);
       return;
@@ -114,6 +118,21 @@ export default function RegisterScreen() {
     setStatusTone("danger");
     showStatus(result.error);
     setIsLoading(false);
+  };
+
+  const requestRegistration = (data: RegisterData) => {
+    if (!hasAcceptedRegistrationTerms) {
+      setShowTermsModal(true);
+      return;
+    }
+
+    void createAccount(data);
+  };
+
+  const handleAcceptTerms = () => {
+    setHasAcceptedRegistrationTerms(true);
+    setShowTermsModal(false);
+    void createAccount(getValues());
   };
 
   const handleOTPSuccess = async () => {
@@ -157,7 +176,7 @@ export default function RegisterScreen() {
     height: reqHeight.value,
     opacity: reqOpacity.value
   }));
-  const submitRegistration = handleSubmit(onSubmit);
+  const submitRegistration = handleSubmit(requestRegistration);
   const FormShell = (Platform.OS === "web" ? "form" : View) as ElementType;
   const formShellProps = Platform.OS === "web"
     ? {
@@ -324,6 +343,20 @@ export default function RegisterScreen() {
         onResend={handleOTPResend}
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}
+      />
+      <ConfirmModal
+        isVisible={showTermsModal}
+        title="Accept Terms and Privacy Policy?"
+        message="Before creating your account, review and accept SertFit Gym's account creation terms and data privacy policy. FitTrack stores registration details, contact information, verification status, and app activity needed to run your gym account."
+        yesLabel="I AGREE"
+        noLabel="NOT NOW"
+        yesIcon={ShieldCheck}
+        onNo={() => {
+          setShowTermsModal(false);
+          setStatusTone("danger");
+          showStatus("Accept the terms and privacy policy before creating an account.");
+        }}
+        onYes={handleAcceptTerms}
       />
     </>
   );

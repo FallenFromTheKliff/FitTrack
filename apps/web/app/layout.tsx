@@ -5,7 +5,6 @@ import "./globals.css";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import Providers from "@/components/Providers";
 import RootLayoutClient from "@/components/RootLayoutClient";
-import { Toaster } from "sonner";
 
 const blrrpix = localFont({
   src: "../assets/fonts/blrrpixs016.ttf",
@@ -37,7 +36,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Providers>
             <RootLayoutClient />
             {children}
-            <Toaster theme="dark" position="top-right" richColors />
           </Providers>
         </ThemeProvider>
       </body>

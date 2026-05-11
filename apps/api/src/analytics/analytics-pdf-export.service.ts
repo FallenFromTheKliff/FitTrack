@@ -9,6 +9,7 @@ import {
 import { AnalyticsService } from './analytics.service';
 import { BusinessAnalyticsInsightService } from './business-analytics-insight.service';
 import {
+  ANALYTICS_PDF_SECTIONS,
   type AnalyticsPeriod,
   type AnalyticsQueryDTO,
   ExportAnalyticsPdfDTO,
@@ -24,6 +25,10 @@ export class AnalyticsPdfExportService {
 
   async exportPdf(dto: ExportAnalyticsPdfDTO) {
     const generatedAt = new Date();
+    const selectedSections =
+      dto.selected_sections && dto.selected_sections.length > 0
+        ? dto.selected_sections
+        : [...ANALYTICS_PDF_SECTIONS];
     const revenueQuery = this.toQueryWindow({
       end_date: dto.revenue_end_date,
       period: dto.revenue_period,
@@ -114,6 +119,7 @@ export class AnalyticsPdfExportService {
       insights,
       inventory,
       revenue,
+      sections: selectedSections,
       snapshot,
     });
 
@@ -550,7 +556,7 @@ export class AnalyticsPdfExportService {
 
   private formatMoney(value: string) {
     const amount = Number(value);
-    return `PHP ${amount.toLocaleString('en-PH', {
+    return `₱${amount.toLocaleString('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;

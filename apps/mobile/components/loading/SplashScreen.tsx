@@ -11,7 +11,7 @@ import { R } from "@fittrack/ui/tokens";
 const ReanimatedText = createAnimatedComponent(Text);
 
 const APP_NAME = "FitTrack";
-const SPLASH_DURATION_MS = 1500;
+const SPLASH_DURATION_MS = 800;
 const EXIT_FADE_MS = 200;
 const TYPEWRITER_DURATION_MS = SPLASH_DURATION_MS - EXIT_FADE_MS;
 const CHAR_INTERVAL = TYPEWRITER_DURATION_MS / APP_NAME.length;

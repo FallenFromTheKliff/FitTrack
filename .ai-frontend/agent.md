@@ -96,7 +96,7 @@ Do not create ad hoc `fetch` or one-off axios clients inside pages/components. W
 - Use one heavy MCP lane per phase. Do not combine browser/runtime/design/remote MCPs unless the user explicitly asks or the first tool proves insufficient.
 - Stop using an MCP once the named question is answered. Do not keep it in the loop for reassurance, broad browsing, or repeated checks.
 - Serena is only for targeted semantic or symbol navigation when local search is insufficient, or when a coding tool requirement explicitly needs its project instructions.
-- Context7 is for uncertain framework/library APIs, version-sensitive behavior, or unfamiliar components that cannot be answered from the repo or lockfiles.
+- Exa is for docs fetching, unfamiliar framework/library APIs, version-sensitive behavior, or focused external reference checks that cannot be answered from the repo or lockfiles.
 - Notion is allowed only when the user explicitly asks for project notes such as `FITTRACK: Backup Log`; source files remain implementation truth.
 - Playwright is for requested runtime verification or visual checks after changes; do not open the app for file-only audits.
 - ChromeDevTools is for requested or evidence-backed console, network, hydration, or performance debugging, not ordinary visual review.

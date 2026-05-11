@@ -14,10 +14,10 @@
     ".ai-frontend/component-rules.md",
     ".ai-frontend/performance.md"
   ],
-  "tools": ["filesystem", "git", "search", "serena", "context7", "playwright", "chrome-devtools", "figma", "notion", "github", "swagger"],
+  "tools": ["filesystem", "git", "search", "serena", "exa", "playwright", "chrome-devtools", "figma", "notion", "github", "swagger"],
   "toolPolicy": {
     "defaultAllowed": ["filesystem", "git", "search"],
-    "conditional": ["context7", "swagger"],
+    "conditional": ["exa", "swagger"],
     "explicitOnly": ["serena", "playwright", "chrome-devtools", "figma", "notion", "github"],
     "forbiddenDuringRuleEditing": ["docker", "dev-server", "android-emulator", "browser-screenshots"]
   },

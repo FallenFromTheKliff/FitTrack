@@ -1,4 +1,4 @@
-import { IsIn, IsISO8601, IsOptional } from 'class-validator';
+import { IsArray, IsIn, IsISO8601, IsOptional } from 'class-validator';
 import {
   ApiProperty,
   ApiPropertyOptional,
@@ -16,6 +16,19 @@ export const ANALYTICS_PERIODS = [
 ] as const;
 
 export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
+
+export const ANALYTICS_PDF_SECTIONS = [
+  'activities',
+  'alerts',
+  'attendance',
+  'daily',
+  'inventory',
+  'kpis',
+  'recommendations',
+  'revenue',
+] as const;
+
+export type AnalyticsPdfSection = (typeof ANALYTICS_PDF_SECTIONS)[number];
 
 export class AnalyticsQueryDTO {
   @ApiPropertyOptional({ example: '2025-01-01' })
@@ -111,6 +124,19 @@ export class ExportAnalyticsPdfDTO {
     message: `attendance_period must be one of: ${ANALYTICS_PERIODS.join(', ')}`,
   })
   attendance_period?: AnalyticsPeriod = 'daily';
+
+  @ApiPropertyOptional({
+    enum: ANALYTICS_PDF_SECTIONS,
+    example: ['daily', 'revenue', 'attendance'],
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray({ message: 'selected_sections must be an array' })
+  @IsIn(ANALYTICS_PDF_SECTIONS, {
+    each: true,
+    message: `selected_sections entries must be one of: ${ANALYTICS_PDF_SECTIONS.join(', ')}`,
+  })
+  selected_sections?: AnalyticsPdfSection[];
 }
 
 export class AnalyticsRevenueTotalsDTO {

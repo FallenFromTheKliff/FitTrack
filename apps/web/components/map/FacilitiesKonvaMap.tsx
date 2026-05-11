@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from "react-konva";
+import { Group, Image as KonvaImage, Layer, Path, Rect, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import type { ThemeColors } from "@fittrack/types";
 
@@ -138,6 +138,30 @@ export default function FacilitiesKonvaMap({
   const planY = (height - planHeight) / 2 + pan.y;
   const cellWidth = planWidth / COLS;
   const cellHeight = planHeight / ROWS;
+  const blockX = planX + cellWidth * 0.08;
+  const blockY = planY + cellHeight * 0.08;
+  const blockWidth = cellWidth * 13.9;
+  const blockHeight = cellHeight * 9.56;
+  const floorBlockPath = [
+    `M ${blockX + blockWidth * 0.08} ${blockY}`,
+    `L ${blockX + blockWidth * 0.56} ${blockY}`,
+    `L ${blockX + blockWidth * 0.6} ${blockY}`,
+    `L ${blockX + blockWidth * 0.6} ${blockY + blockHeight * 0.08}`,
+    `L ${blockX + blockWidth * 0.78} ${blockY + blockHeight * 0.08}`,
+    `L ${blockX + blockWidth * 0.78} ${blockY + blockHeight * 0.16}`,
+    `L ${blockX + blockWidth} ${blockY + blockHeight * 0.16}`,
+    `L ${blockX + blockWidth} ${blockY + blockHeight * 0.62}`,
+    `L ${blockX + blockWidth * 0.94} ${blockY + blockHeight * 0.62}`,
+    `L ${blockX + blockWidth * 0.94} ${blockY + blockHeight * 0.84}`,
+    `L ${blockX + blockWidth * 0.86} ${blockY + blockHeight * 0.84}`,
+    `L ${blockX + blockWidth * 0.86} ${blockY + blockHeight}`,
+    `L ${blockX + blockWidth * 0.22} ${blockY + blockHeight}`,
+    `L ${blockX + blockWidth * 0.22} ${blockY + blockHeight * 0.92}`,
+    `L ${blockX + blockWidth * 0.02} ${blockY + blockHeight * 0.92}`,
+    `L ${blockX + blockWidth * 0.02} ${blockY + blockHeight * 0.28}`,
+    `L ${blockX + blockWidth * 0.08} ${blockY + blockHeight * 0.28}`,
+    "Z",
+  ].join(" ");
   const [hoverCell, setHoverCell] = useState<{ gridColumn: number; gridRow: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{
@@ -421,15 +445,15 @@ export default function FacilitiesKonvaMap({
               opacity={0.16}
             />
           ) : null}
-          <Rect
-            x={planX + cellWidth * 0.55}
-            y={planY + cellHeight * 0.55}
-            width={cellWidth * 12.9}
-            height={cellHeight * 8.65}
-            cornerRadius={32}
+          <Path
+            data={floorBlockPath}
             fill={`${colors.surfaceRaised}70`}
             stroke={`${colors.textMuted}55`}
             strokeWidth={3}
+            lineJoin="round"
+            shadowColor={colors.textMuted}
+            shadowBlur={16}
+            shadowOpacity={0.08}
           />
           {Array.from({ length: COLS + 1 }).map((_, index) => (
             <Rect

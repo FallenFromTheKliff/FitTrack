@@ -9,7 +9,7 @@ import { AlertCircle, Dumbbell, Lock, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { useLoadingText } from "@fittrack/hooks";
-import type { Role } from "@fittrack/types";
+import type { AuthUser, Role } from "@fittrack/types";
 import { loginSchema, type LoginData } from "@fittrack/validators";
 
 import FitButton from "@/components/fit/FitButton";
@@ -94,10 +94,10 @@ export function AdminLoginPage() {
     setLoading(true);
     setErrorMsg("");
 
-    const result = await login(data.email, data.password);
-    setLoading(false);
+    const result = await login(data.email.trim(), data.password);
 
     if (!result.success) {
+      setLoading(false);
       if (result.reason === "ACCOUNT_LOCKED") {
         router.replace("/locked");
         return;
@@ -108,6 +108,7 @@ export function AdminLoginPage() {
     }
 
     if (result.otpRequired) {
+      setLoading(false);
       setShowOTP(true);
       return;
     }
@@ -124,9 +125,15 @@ export function AdminLoginPage() {
     return (
       <BufferPage
         onCommit={commitLogin}
-        onDone={() => {
-          setShowBuffer(false);
-          router.replace(landingPath);
+        onDone={(result) => {
+          const committedUser = result as AuthUser | null | undefined;
+          if (!committedUser) {
+            setShowBuffer(false);
+            setLoading(false);
+            setErrorMsg("Unable to prepare your authenticated portal. Please sign in again.");
+            return;
+          }
+          router.replace(getPortalLandingPath(committedUser.role) || landingPath);
         }}
       />
     );

@@ -176,7 +176,7 @@ export class UserRepository extends BaseRepository {
       id,
       deletedAt: null,
       role: UserRole.member,
-      status: { in: [UserStatus.active, UserStatus.pending] },
+      status: UserStatus.active,
     });
 
     if (!user) {

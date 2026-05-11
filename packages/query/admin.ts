@@ -320,6 +320,22 @@ export function updateAdminMembershipCardMutationOptions(
   });
 }
 
+export function verifyNonMemberMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (id: string) => client.admin.verifyNonMember(id),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers() }),
+      ]);
+    },
+  });
+}
+
 export function scanAttendanceQrMutationOptions(
   client: Pick<ApiClient, "admin">,
   queryClient: QueryClient,

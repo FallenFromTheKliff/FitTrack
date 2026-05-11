@@ -31,7 +31,8 @@ import { FitDropdown, FitText, FitTextInput } from "@/components/fit";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitSelect } from "@/components/fit/FitCard";
-import { ConfirmModal, FitModal, VenueDetailsModal } from "@/components/modals";
+import PageLoadingState from "@/components/loading/PageLoadingState";
+import { ConfirmModal, FitModal, VenueDetailsContent, VenueDetailsModal } from "@/components/modals";
 
 import {
   EquipmentManagementTable,
@@ -57,18 +58,6 @@ const ZOOM_OPTIONS = [
   { label: "125%", value: "1.25" },
 ];
 
-function getVenueSizeLabel(venue: FloorVenueRecord | null) {
-  if (!venue) return "-";
-  const width = Math.max(1, venue.gridWidth ?? 1) * 4;
-  const height = Math.max(1, venue.gridHeight ?? 1) * 4;
-  return `${width}m x ${height}m`;
-}
-
-function getVenueTypeLabel(venue: FloorVenueRecord | null) {
-  if (!venue) return "-";
-  return venue.isReservable === false ? "Support" : "Venue";
-}
-
 export default function FacilitiesMapPageView({ controller }: Props) {
   const [zoom, setZoom] = useState("1");
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -76,6 +65,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     useState<FloorVenueRecord | null>(null);
   const [selectedManagementEquipmentId, setSelectedManagementEquipmentId] =
     useState<string | null>(null);
+  const [equipmentModalOpen, setEquipmentModalOpen] = useState(false);
   const selectedVenue = useMemo(
     () => controller.selectedFloorVenue,
     [controller.selectedFloorVenue],
@@ -103,8 +93,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   };
 
   const handleSelectMapVenue = (venue: FloorVenueRecord) => {
-    controller.setSelectedFloorVenue(venue);
-    setLayoutModalVenue(controller.isCompact ? venue : null);
+    const isSelectedAgain = selectedVenue?.mapId === venue.mapId;
+    controller.setSelectedFloorVenue(isSelectedAgain ? null : venue);
+    setLayoutModalVenue(!isSelectedAgain && controller.isCompact ? venue : null);
   };
 
   const modeButtonStyle = (mode: typeof controller.activeTab) => ({
@@ -369,7 +360,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           </div>
         </div>
       </div>
-      {renderLayoutRail()}
+      {!controller.isCompact || controller.isEditMode ? renderLayoutRail() : null}
     </div>
   );
 
@@ -378,7 +369,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     borderRadius: 10,
     backgroundColor: controller.colors.surfaceRaised,
     minHeight: 0,
-    overflow: controller.isCompact ? "visible" : "hidden",
+    overflow: "hidden",
     padding: 10,
     display: "grid",
     gap: 10,
@@ -591,59 +582,139 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     }
 
     return (
-      <aside style={rightRailStyle}>
-        <div style={detailCardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
-              <MapPinned size={22} color={controller.colors.brand} />
-              <div style={{ minWidth: 0 }}>
-                <FitText style={{ display: "block", fontSize: 16, fontWeight: 850 }}>
-                  {selectedVenue.name}
-                </FitText>
-                <FitText
-                  style={{
-                    color: controller.colors.textSecondary,
-                    display: "block",
-                    fontSize: 12,
-                    marginTop: 3,
-                  }}
-                >
-                  {selectedVenue.isReservable === false ? "Support zone" : "Reservable venue"}
-                </FitText>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-            {[
-              ["Type", getVenueTypeLabel(selectedVenue)],
-              ["Floor", controller.activeFloorLabel],
-              ["Capacity", String(selectedVenue.capacity ?? 0)],
-              ["Size", getVenueSizeLabel(selectedVenue)],
-              ["Status", selectedVenue.isActive === false ? "Inactive" : "Active"],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-              >
-                <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
-                  {label}
-                </FitText>
-                <FitText style={{ fontSize: 12, fontWeight: 750, textAlign: "right" }}>
-                  {value}
-                </FitText>
-              </div>
-            ))}
-          </div>
+      <aside
+        style={{
+          ...rightRailStyle,
+          alignContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            minHeight: 0,
+          }}
+        >
+          <VenueDetailsContent venue={selectedVenue} variant="rail" />
           <FitButton
             variant="primary"
             label="Edit Venue"
             icon={SquarePen}
             fullWidth
-            style={{ marginTop: 16 }}
+            style={{ minHeight: 36 }}
+            textStyle={{ fontSize: 12, fontWeight: 800 }}
             onClick={() => controller.handleOpenVenueEditor("edit", selectedVenue)}
           />
         </div>
       </aside>
+    );
+  };
+
+  const renderEquipmentDetailsContent = (
+    equipment: NonNullable<typeof selectedManagementEquipment>,
+    compact = false,
+  ) => {
+    const Icon = equipment.icon;
+    const remaining = controller.equipmentRemainingById[equipment.id] ?? null;
+    const total = equipment.quantityAvailable ?? null;
+    const details = [
+      ["Source", equipment.sourceLabel === "inventory" ? "Inventory" : "Map palette"],
+      ["Available", remaining === null ? "Palette item" : String(remaining)],
+      ["Total", total === null ? "-" : String(total)],
+      ["Status", remaining !== null && remaining <= 0 ? "Fully placed" : "Placeable"],
+    ];
+
+    return (
+      <div
+        style={{
+          alignContent: compact ? "center" : undefined,
+          display: "grid",
+          gap: compact ? 10 : 14,
+          justifyItems: compact ? "center" : undefined,
+          minWidth: 0,
+          textAlign: compact ? "center" : "left",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: compact ? "grid" : "flex",
+            gap: compact ? 8 : 12,
+            justifyItems: compact ? "center" : undefined,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              width: compact ? 46 : 42,
+              height: compact ? 46 : 42,
+              borderRadius: 9,
+              display: "grid",
+              placeItems: "center",
+              backgroundColor: `${controller.colors.brand}18`,
+            }}
+          >
+            <Icon size={compact ? 22 : 21} color={equipment.color} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <FitText style={{ display: "block", fontSize: compact ? 16 : 16, fontWeight: 850 }}>
+              {equipment.name}
+            </FitText>
+            <FitText
+              style={{
+                color: controller.colors.textSecondary,
+                display: "block",
+                fontSize: 12,
+                marginTop: 3,
+              }}
+            >
+              {equipment.category}
+            </FitText>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: compact ? 7 : 8,
+            gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : undefined,
+            width: "100%",
+          }}
+        >
+          {details.map(([label, value]) => (
+            <div
+              key={label}
+              style={{
+                border: compact ? `1px solid ${controller.colors.border}` : undefined,
+                borderRadius: compact ? 8 : undefined,
+                backgroundColor: compact ? controller.colors.surfaceRaised : undefined,
+                display: compact ? "grid" : "flex",
+                gap: compact ? 3 : 10,
+                justifyContent: compact ? "center" : "space-between",
+                minWidth: 0,
+                padding: compact ? "8px 9px" : undefined,
+              }}
+            >
+              <FitText style={{ color: controller.colors.textSecondary, fontSize: compact ? 9.5 : 12 }}>
+                {label}
+              </FitText>
+              <FitText style={{ fontSize: compact ? 12 : 12, fontWeight: 750, textAlign: compact ? "center" : "right" }}>
+                {value}
+              </FitText>
+            </div>
+          ))}
+        </div>
+        <FitButton
+          variant="primary"
+          label="Place Equipment"
+          icon={Dumbbell}
+          fullWidth
+          disabled={remaining !== null && remaining <= 0}
+          style={{ minHeight: compact ? 36 : 40 }}
+          textStyle={{ fontSize: 12, fontWeight: 800 }}
+          onClick={() => controller.handlePlaceEquipmentFromManager(equipment.id)}
+        />
+      </div>
     );
   };
 
@@ -655,74 +726,16 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       );
     }
 
-    const Icon = selectedManagementEquipment.icon;
-    const remaining =
-      controller.equipmentRemainingById[selectedManagementEquipment.id] ?? null;
-    const total = selectedManagementEquipment.quantityAvailable ?? null;
-
     return (
-      <aside style={rightRailStyle}>
-        <div style={detailCardStyle}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <span
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 9,
-                display: "grid",
-                placeItems: "center",
-                backgroundColor: `${controller.colors.brand}18`,
-              }}
-            >
-              <Icon size={21} color={selectedManagementEquipment.color} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <FitText style={{ display: "block", fontSize: 16, fontWeight: 850 }}>
-                {selectedManagementEquipment.name}
-              </FitText>
-              <FitText
-                style={{
-                  color: controller.colors.textSecondary,
-                  display: "block",
-                  fontSize: 12,
-                  marginTop: 3,
-                }}
-              >
-                {selectedManagementEquipment.category}
-              </FitText>
-            </div>
-          </div>
-          <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-            {[
-              ["Source", selectedManagementEquipment.sourceLabel === "inventory" ? "Inventory" : "Map palette"],
-              ["Available", remaining === null ? "Palette item" : String(remaining)],
-              ["Total", total === null ? "-" : String(total)],
-              ["Status", remaining !== null && remaining <= 0 ? "Fully placed" : "Placeable"],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-              >
-                <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
-                  {label}
-                </FitText>
-                <FitText style={{ fontSize: 12, fontWeight: 750, textAlign: "right" }}>
-                  {value}
-                </FitText>
-              </div>
-            ))}
-          </div>
-          <FitButton
-            variant="primary"
-            label="Place Equipment"
-            icon={Dumbbell}
-            fullWidth
-            disabled={remaining !== null && remaining <= 0}
-            style={{ marginTop: 16 }}
-            onClick={() =>
-              controller.handlePlaceEquipmentFromManager(selectedManagementEquipment.id)
-            }
-          />
+      <aside
+        style={{
+          ...rightRailStyle,
+          alignContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ ...detailCardStyle, display: "grid", gap: 10 }}>
+          {renderEquipmentDetailsContent(selectedManagementEquipment, true)}
         </div>
       </aside>
     );
@@ -783,13 +796,15 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           embedded
           onEditVenue={(venue) => controller.handleOpenVenueEditor("edit", venue)}
           onSelectVenue={(venue) =>
-            controller.setSelectedFloorVenue((current) =>
-              current?.id === venue.id ? null : venue,
-            )
+            {
+              const isSelectedAgain = selectedVenue?.id === venue.id;
+              controller.setSelectedFloorVenue(isSelectedAgain ? null : venue);
+              setLayoutModalVenue(!isSelectedAgain && controller.isCompact ? venue : null);
+            }
           }
           selectedVenueId={selectedVenue?.id}
         />
-        {renderVenueDetailCard()}
+        {controller.isCompact ? null : renderVenueDetailCard()}
       </div>
     </div>
   );
@@ -840,14 +855,15 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           equipmentRemainingById={controller.equipmentRemainingById}
           embedded
           onPlaceEquipment={controller.handlePlaceEquipmentFromManager}
-          onSelectEquipment={(equipment) =>
-            setSelectedManagementEquipmentId((current) =>
-              current === equipment.id ? null : equipment.id,
-            )
-          }
+          onSelectEquipment={(equipment) => {
+            const nextId =
+              selectedManagementEquipmentId === equipment.id ? null : equipment.id;
+            setSelectedManagementEquipmentId(nextId);
+            setEquipmentModalOpen(Boolean(nextId && controller.isCompact));
+          }}
           selectedEquipmentId={selectedManagementEquipmentId}
         />
-        {renderEquipmentDetailCard()}
+        {controller.isCompact ? null : renderEquipmentDetailCard()}
       </div>
     </div>
   );
@@ -897,7 +913,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       className={controller.themeTransition}
       style={{
         ...controller.fadeIn,
-        height: controller.isCompact ? "auto" : "100%",
+        height: controller.isCompact ? "auto" : "calc(100vh - 154px)",
         marginBottom: 0,
         minHeight: 0,
         overflow: controller.isCompact ? "visible" : "hidden",
@@ -933,8 +949,10 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             minHeight: 0,
             overflow: controller.isCompact ? "visible" : "hidden",
             padding: controller.isCompact ? 12 : 14,
+            position: "relative",
           }}
         >
+          <PageLoadingState isLoading={controller.isPageLoading} pageName="Facilities" />
           <div
             style={{
               height: controller.isCompact ? "auto" : "100%",
@@ -968,13 +986,25 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         venue={layoutModalVenue}
         isOpen={
           !!layoutModalVenue &&
-          controller.activeTab === "floor" &&
+          (controller.activeTab === "floor" || controller.activeTab === "venues") &&
           controller.isCompact
         }
         onClose={() => {
           setLayoutModalVenue(null);
         }}
       />
+      <FitModal
+        isOpen={equipmentModalOpen && controller.isCompact && !!selectedManagementEquipment}
+        onClose={() => setEquipmentModalOpen(false)}
+        title={selectedManagementEquipment?.name ?? "Equipment details"}
+        subtitle={selectedManagementEquipment?.category ?? "Placement details"}
+        maxWidth={460}
+        closeAriaLabel="Close equipment details"
+      >
+        {selectedManagementEquipment
+          ? renderEquipmentDetailsContent(selectedManagementEquipment)
+          : null}
+      </FitModal>
       <FacilitiesArchiveModal
         archivedEquipment={controller.archivedEquipment}
         archivedVenues={controller.archivedVenues}

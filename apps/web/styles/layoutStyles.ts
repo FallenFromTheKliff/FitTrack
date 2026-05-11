@@ -28,6 +28,7 @@ function getSidebarBackground(colors: ThemeColors, activeThemeKey?: ThemeKey): s
 export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
     const layoutBg = getLayoutBackground(colors);
     const backgroundClusterColors = [colors.border, colors.surfaceRaised] as const;
+    const backgroundBaseOpacity = activeThemeKey === "sunlight" || activeThemeKey === "light" ? 0.056 : 0.07;
 
     return {
         root: {
@@ -53,10 +54,10 @@ export function layoutStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
                 transform: "rotate(-3deg)",
                 gap: 0,
                 padding: "14px 0 16px",
-                borderTop: `7px solid ${clusterColor}`,
-                borderBottom: `7px solid ${clusterColor}`,
+                borderTop: `8px solid ${clusterColor}`,
+                borderBottom: `8px solid ${clusterColor}`,
                 color: clusterColor,
-                opacity: activeThemeKey === "sunlight" || activeThemeKey === "light" ? 0.056 : 0.07,
+                opacity: clusterIndex === 0 ? backgroundBaseOpacity + 0.02 : backgroundBaseOpacity,
                 filter: "blur(1px)",
                 fontSize: clusterIndex === 0 ? 192 : 176,
                 lineHeight: 0.9,
@@ -261,33 +262,14 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
         rightSection: {
             flex: "0 0 auto",
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "flex-end",
             gap: 10,
-            padding: "4px 0 0",
+            padding: 0,
             position: "relative",
             backgroundColor: "transparent",
             borderLeft: "none",
             overflow: "visible"
-        } as CSSProperties,
-        analyticsHeaderFilterWrap: {
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-            flexShrink: 0
-        } as CSSProperties,
-        analyticsHeaderFilterIcon: {
-            color: colors.textSecondary,
-            flexShrink: 0
-        } as CSSProperties,
-        analyticsHeaderFilter: {
-            minWidth: 154,
-            height: 32,
-            backgroundColor: colors.surfaceRaised,
-            border: `1px solid ${colors.border}`,
-            color: colors.textPrimary,
-            fontSize: 12
         } as CSSProperties,
         messageWrap: {
             display: "flex",
@@ -317,8 +299,9 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             overflowWrap: "break-word"
         } as CSSProperties,
         iconBtn: {
-            width: 40,
-            height: 40,
+            width: 46,
+            height: 72,
+            minHeight: 72,
             borderRadius: 8,
             background: "none",
             border: "none",
@@ -334,8 +317,10 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
-            minWidth: 36,
-            minHeight: 36,
+            width: 46,
+            minWidth: 46,
+            height: 72,
+            minHeight: 72,
             backgroundColor: "transparent",
             border: "none",
             boxShadow: "none",

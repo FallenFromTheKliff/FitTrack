@@ -108,7 +108,7 @@ export default function LoginScreen() {
       return;
     }
     setIsLoading(true);
-    const result = await login(data.email, data.password);
+    const result = await login(data.email.trim(), data.password);
     setIsLoading(false);
     if ("error" in result) {
       setStatusTone("danger");

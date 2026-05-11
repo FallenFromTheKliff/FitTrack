@@ -293,6 +293,19 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
     padding-right: 18px !important;
   }
 
+  .fit-header-menu-button {
+    width: 40px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+  }
+
+  .fit-header-notification-button {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+  }
+
   .fit-header-title {
     font-size: 20px !important;
     font-weight: 700 !important;

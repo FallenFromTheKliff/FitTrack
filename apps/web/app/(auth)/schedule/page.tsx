@@ -25,6 +25,7 @@ import {
   CalendarModal,
   ConfirmModal,
   DetailsModal,
+  FitModal,
   StaffDetailsModal,
 } from "@/components/modals";
 import {
@@ -65,6 +66,7 @@ import {
   GymOperationsPageProvider,
   useGymOperationsPage,
 } from "@/components/schedule/SchedulePageContext";
+import PageLoadingState from "@/components/loading/PageLoadingState";
 export default function GymOperationsPage() {
   return (
     <GymOperationsPageProvider>
@@ -116,6 +118,7 @@ function GymOperationsPageBody() {
     draggingBooking,
     draggingCoach,
     fadeIn,
+    feedbackModal,
     filteredStaff,
     filteredVenueBookings,
     focusedCoachId,
@@ -149,6 +152,7 @@ function GymOperationsPageBody() {
     handleSaveCoachProfile,
     handleSetCoachBookingVisibility,
     handleStaffClick,
+    isPageLoading,
     leftRailRef,
     memberOptions,
     nextWeek,
@@ -208,6 +212,7 @@ function GymOperationsPageBody() {
     setCreateCoachBookingOpen,
     setCreateCoachOpen,
     setCreateVenueBookingOpen,
+    setFeedbackModal,
     setPaymentConfirm,
     setProfileEditorCoachId,
     setRecurringActionCoachId,
@@ -428,6 +433,11 @@ function GymOperationsPageBody() {
             )}
           </div>
         </div>
+        <div style={{ minHeight: 180, position: "relative" }}>
+          <PageLoadingState
+            isLoading={isPageLoading}
+            pageName="Gym Operations"
+          />
         {activeOperationsTab === "schedule" ? (
           <div style={{ display: "grid", gap: 12 }}>
             {activeScheduleSurfaceTab === "coach-schedule" ? (
@@ -1538,6 +1548,7 @@ function GymOperationsPageBody() {
             </div>
           </div>
         ) : null}
+        </div>
 
         <StaffDetailsModal
           isOpen={coachDetailsOpen && canManageCoaching}
@@ -1795,6 +1806,30 @@ function GymOperationsPageBody() {
           }}
           onCancel={() => setPaymentConfirm(null)}
         />
+        <FitModal
+          isOpen={feedbackModal !== null}
+          title={feedbackModal?.tone === "danger" ? "Schedule Action Failed" : "Schedule Updated"}
+          subtitle={feedbackModal?.tone === "danger" ? "Review the message before trying again" : undefined}
+          onClose={() => setFeedbackModal(null)}
+          footer={
+            <FitButton
+              label="OK"
+              onClick={() => setFeedbackModal(null)}
+              style={{ minHeight: 34 }}
+            />
+          }
+        >
+          <FitText
+            as="p"
+            style={{
+              color: feedbackModal?.tone === "danger" ? colors.danger : colors.textSecondary,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {feedbackModal?.message ?? "The schedule action has completed."}
+          </FitText>
+        </FitModal>
         <DetailsModal
           isOpen={!!profileEditorCoach}
           title={

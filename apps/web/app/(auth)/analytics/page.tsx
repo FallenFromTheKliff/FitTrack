@@ -37,12 +37,16 @@ import {
 import {
   FitButton,
   FitChartContainer,
+  FitPill,
   FitSection,
   FitSelect,
   FitText,
 } from "@/components/fit";
 import { FitModal } from "@/components/modals";
-import { useAnalyticsSectionFilter } from "@/contexts/AnalyticsSectionFilterContext";
+import {
+  ANALYTICS_SECTION_FILTER_OPTIONS,
+  useAnalyticsSectionFilter,
+} from "@/contexts/AnalyticsSectionFilterContext";
 import { useAnalyticsDashboard } from "@/hooks/analytics/useAnalyticsDashboard";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +65,13 @@ const REVENUE_SOURCE_FILTER_OPTIONS = [
   { label: "Retail Product", value: "products" },
   { label: "Coaching Gym Share", value: "coaching" },
 ] as const;
+
+const ANALYTICS_PAGE_SECTION_OPTIONS = ANALYTICS_SECTION_FILTER_OPTIONS.map(
+  (option) => ({
+    key: option.value,
+    label: option.value === "all" ? "All" : option.label,
+  }),
+);
 
 const REVENUE_SOURCE_SERIES_KEY: Record<
   RevenueSourceFilter,
@@ -94,7 +105,8 @@ export default function AnalyticsPage() {
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const analytics = useAnalyticsDashboard();
-  const { sectionFilter, shouldShowSection } = useAnalyticsSectionFilter();
+  const { sectionFilter, setSectionFilter, shouldShowSection } =
+    useAnalyticsSectionFilter();
   const [revenueSourceFilter, setRevenueSourceFilter] =
     useState<RevenueSourceFilter>("all");
 
@@ -240,6 +252,32 @@ export default function AnalyticsPage() {
       ) : null}
 
       <div className={`analytics-shell analytics-shell--${sectionFilter}`}>
+        <div
+          className="analytics-section-filter"
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "flex",
+            gap: 12,
+            gridColumn: "1 / -1",
+            justifyContent: "space-between",
+            padding: "10px 12px",
+          }}
+        >
+          <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 850 }}>
+            Section
+          </FitText>
+          <FitPill
+            mode="toggle"
+            active={sectionFilter}
+            options={ANALYTICS_PAGE_SECTION_OPTIONS}
+            onChange={setSectionFilter}
+            style={{ flexWrap: "wrap" }}
+          />
+        </div>
+
         {shouldShowSection("insights") ? (
         <div id="analytics-insights" className="analytics-anchor-section">
           <FitSection
@@ -333,6 +371,63 @@ export default function AnalyticsPage() {
                     style={{ minHeight: 34, borderRadius: 8, paddingInline: 12 }}
                     textStyle={{ fontSize: 11.5 }}
                   />
+                </div>
+              </div>
+
+              <div
+                className="analytics-export-section-picker"
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: controlRadius,
+                  display: "grid",
+                  gap: 8,
+                  padding: 10,
+                }}
+              >
+                <FitText
+                  as="p"
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  PDF Sections
+                </FitText>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  }}
+                >
+                  {analytics.pdfExportSectionOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      style={{
+                        alignItems: "center",
+                        color: colors.textSecondary,
+                        display: "flex",
+                        fontSize: 12,
+                        fontWeight: 650,
+                        gap: 8,
+                        minHeight: 26,
+                      }}
+                    >
+                      <input
+                        checked={analytics.selectedPdfSections.includes(
+                          option.value,
+                        )}
+                        onChange={() => {
+                          analytics.handleTogglePdfSection(option.value);
+                        }}
+                        style={{ accentColor: colors.brand }}
+                        type="checkbox"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -1257,33 +1352,33 @@ export default function AnalyticsPage() {
 
         .analytics-shell--all #analytics-insights {
           grid-column: 1 / -1;
-          grid-row: 1;
+          grid-row: 2;
         }
 
         .analytics-shell--all #analytics-alerts {
           grid-column: 1 / -1;
-          grid-row: 2;
+          grid-row: 3;
           align-self: start;
         }
 
         .analytics-shell--all #analytics-daily {
           grid-column: 1 / -1;
-          grid-row: 3;
+          grid-row: 4;
         }
 
         .analytics-shell--all #analytics-kpis {
           grid-column: 1 / -1;
-          grid-row: 4;
+          grid-row: 5;
         }
 
         .analytics-shell--all #analytics-revenue {
           grid-column: 1 / -1;
-          grid-row: 5;
+          grid-row: 6;
         }
 
         .analytics-shell--all #analytics-attendance {
           grid-column: 1 / -1;
-          grid-row: 6;
+          grid-row: 7;
         }
 
         .analytics-shell:not(.analytics-shell--all) {
@@ -1511,6 +1606,15 @@ export default function AnalyticsPage() {
         @media (max-width: 1180px) {
           .analytics-shell {
             grid-template-columns: 1fr;
+          }
+
+          .analytics-section-filter {
+            align-items: stretch !important;
+            flex-direction: column !important;
+          }
+
+          .analytics-section-filter > div {
+            width: 100%;
           }
 
           #analytics-insights,

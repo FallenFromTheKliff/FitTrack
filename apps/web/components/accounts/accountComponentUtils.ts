@@ -231,6 +231,9 @@ export function getDirectoryAccessLabel(
 
   if (directoryStatus === "Archived") return "Archived";
   if (member.role?.name !== "USER") return `${roleLabel} access`;
+  if (member.status === "active" && accessLabel === "Non-member") {
+    return "Verified Non-Member";
+  }
 
   return accessLabel;
 }
@@ -249,7 +252,6 @@ export function getDirectoryStatusLabel(
   if (member.status === "banned") return "Banned";
   if (
     accessLabel === "Pending verification" ||
-    accessLabel === "Non-member" ||
     accessLabel === "Revoked"
   )
     return "Pending";

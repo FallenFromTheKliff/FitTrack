@@ -14,7 +14,6 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import type {
   RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanPreviewResult,
@@ -103,6 +102,10 @@ function useGymOperationsPageState() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const [feedbackModal, setFeedbackModal] = useState<{
+    message: string;
+    tone: "danger" | "success";
+  } | null>(null);
   const isAdmin = user?.role === "ADMIN";
   const isCoach = user?.role === "COACH";
   const canManageCoaching = isAdmin || user?.role === "STAFF";
@@ -122,11 +125,7 @@ function useGymOperationsPageState() {
     nextMessage: string,
     tone: "danger" | "success" = "success",
   ) => {
-    if (tone === "danger") {
-      toast.error(nextMessage);
-      return;
-    }
-    toast.success(nextMessage);
+    setFeedbackModal({ message: nextMessage, tone });
   };
 
   const refreshGymOperationsData = async () => {
@@ -239,12 +238,12 @@ function useGymOperationsPageState() {
   const [paymentConfirm, setPaymentConfirm] =
     useState<PaymentConfirmState | null>(null);
 
-  const { data: staffCoachProfiles = [] } = useQuery({
+  const { data: staffCoachProfiles = [], isLoading: staffCoachProfilesLoading } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
-  const { data: coachSelfProfile = null } = useQuery({
+  const { data: coachSelfProfile = null, isLoading: coachSelfProfileLoading } = useQuery({
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
     enabled: isCoach && Boolean(user?.id),
     staleTime: 60_000,
@@ -258,12 +257,12 @@ function useGymOperationsPageState() {
         : staffCoachProfiles,
     [coachSelfProfile, isCoach, staffCoachProfiles],
   );
-  const { data: staffUsers = [] } = useQuery({
+  const { data: staffUsers = [], isLoading: staffUsersLoading } = useQuery({
     ...staffUsersQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
   });
-  const { data: venues = [] } = useQuery({
+  const { data: venues = [], isLoading: venuesLoading } = useQuery({
     ...venuesQueryOptions(webApiClient),
     enabled: canManageCoaching,
     staleTime: 60_000,
@@ -339,6 +338,12 @@ function useGymOperationsPageState() {
   const appointmentsLoading = isCoach
     ? coachScheduleLoading
     : staffAppointmentsLoading;
+  const isPageLoading =
+    scheduleLoading ||
+    appointmentsLoading ||
+    (canManageCoaching &&
+      (staffCoachProfilesLoading || staffUsersLoading || venuesLoading)) ||
+    (isCoach && coachSelfProfileLoading);
 
   const replaceAvailabilityMutation = useMutation(
     replaceStaffCoachAvailabilityMutationOptions(webApiClient, queryClient),
@@ -624,13 +629,27 @@ function useGymOperationsPageState() {
   );
 
   useEffect(() => {
-    setRecurringPlanForm((current) => ({
-      ...current,
-      coachId: coachOptions.some((coach) => coach.value === current.coachId)
+    setRecurringPlanForm((current) => {
+      const nextCoachId = coachOptions.some(
+        (coach) => coach.value === current.coachId,
+      )
         ? current.coachId
-        : coachOptions[0]?.value || "",
-      memberId: current.memberId || memberOptions[0]?.value || "",
-    }));
+        : coachOptions[0]?.value || "";
+      const nextMemberId = current.memberId || memberOptions[0]?.value || "";
+
+      if (
+        current.coachId === nextCoachId &&
+        current.memberId === nextMemberId
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        coachId: nextCoachId,
+        memberId: nextMemberId,
+      };
+    });
   }, [coachOptions, memberOptions]);
 
   useEffect(() => {
@@ -1881,7 +1900,7 @@ function useGymOperationsPageState() {
     completeAppointmentMutation, createCoachBookingMutation, createCoachBookingOpen,
     createCoachMutation, createCoachOpen, createRecurringPlanMutation,
     createVenueBookingMutation, createVenueBookingOpen, draggingBooking,
-    draggingCoach, fadeIn, filteredStaff,
+    draggingCoach, fadeIn, feedbackModal, filteredStaff,
     filteredVenueBookings, focusedCoachId, focusedCoachScheduleBookings,
     handleApproveVenueBooking, handleBlockClick, handleBlockDelete,
     handleBlockSave, handleCancelAppointment, handleCancelVenueBooking,
@@ -1892,8 +1911,8 @@ function useGymOperationsPageState() {
     handlePreviewRecurringPlan, handleRecurringFutureUpdate, handleRecurringPlanCancel,
     handleRecurringSessionReschedule, handleRecurringSessionSkip, handleRejectAppointment,
     handleRejectVenueBooking, handleSaveAvailability, handleSaveCoachProfile,
-    handleSetCoachBookingVisibility, handleStaffClick, leftRailRef,
-    memberOptions, nextWeek, payAppointmentInitialMutation,
+    handleSetCoachBookingVisibility, handleStaffClick, isPageLoading,
+    leftRailRef, memberOptions, nextWeek, payAppointmentInitialMutation,
     paymentConfirm, paymentConfirmLoading, payRecurringCycleMutation,
     prevWeek, processAppointmentBalanceMutation, processBookingBalanceMutation,
     profileEditorCoach, recurringActionBusy, recurringActionCoachId,
@@ -1912,7 +1931,7 @@ function useGymOperationsPageState() {
     setAppointmentStatusFilter, setAvailabilityEditorCoachId, setBlockDetailOpen,
     setCalendarOpen, setCoachDetailsOpen, setCoachFilterId,
     setCoachVisibilityScope, setCreateCoachBookingOpen, setCreateCoachOpen,
-    setCreateVenueBookingOpen, setPaymentConfirm, setProfileEditorCoachId,
+    setCreateVenueBookingOpen, setFeedbackModal, setPaymentConfirm, setProfileEditorCoachId,
     setRecurringActionCoachId, setRecurringActionDate, setRecurringActionReason,
     setRecurringActionTime, setRecurringPlanAction, setRecurringPlanForm,
     setRecurringPlanOpen, setRecurringPlanPreview, setScheduleDayPart,

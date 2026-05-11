@@ -336,6 +336,7 @@ export function useFacilitiesPageController() {
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorLabel = activeFloorConfig.label;
   const activeFloorVenues = floorVenues[activeFloor];
+  const isPageLoading = venuesLoading;
   const authoredRegionCount = activeFloorVenues.filter(
     (venue) => venue.isReservable === false && !venue.isSystem,
   ).length;
@@ -843,6 +844,7 @@ export function useFacilitiesPageController() {
     isCompact,
     isDrawerOpen,
     isEditMode,
+    isPageLoading,
     isVenueEditorOpen,
     isVenueSubmitting,
     layoutName,

@@ -105,6 +105,7 @@ export {
   updateAdminGamificationSeasonStatusMutationOptions,
   updateAdminMembershipCardMutationOptions,
   upgradeToCoachMutationOptions,
+  verifyNonMemberMutationOptions,
 } from "./admin";
 export {
   bookingsQueryOptions,

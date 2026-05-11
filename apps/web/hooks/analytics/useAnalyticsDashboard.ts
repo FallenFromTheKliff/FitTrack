@@ -15,6 +15,7 @@ import {
 } from "@fittrack/query";
 import type {
   AnalyticsAttendanceRecord,
+  AnalyticsPdfSection,
   BusinessInsightRunDetailRecord,
   MemberRecord,
 } from "@fittrack/types";
@@ -39,6 +40,24 @@ type AttendanceDrilldownSelection = {
   bucketStart: string;
   label: string;
 };
+
+const PDF_EXPORT_SECTION_OPTIONS: Array<{
+  label: string;
+  value: AnalyticsPdfSection;
+}> = [
+  { label: "Daily Insights", value: "daily" },
+  { label: "Performance KPIs", value: "kpis" },
+  { label: "Revenue", value: "revenue" },
+  { label: "Inventory", value: "inventory" },
+  { label: "Attendance", value: "attendance" },
+  { label: "System Alerts", value: "alerts" },
+  { label: "Recent Activities", value: "activities" },
+  { label: "Recommendations", value: "recommendations" },
+];
+
+const DEFAULT_PDF_EXPORT_SECTIONS = PDF_EXPORT_SECTION_OPTIONS.map(
+  (option) => option.value,
+);
 
 function isFallbackBusinessInsight(
   insight: BusinessInsightRunDetailRecord | null | undefined,
@@ -77,6 +96,9 @@ export function useAnalyticsDashboard() {
   const [generatedInsight, setGeneratedInsight] =
     useState<BusinessInsightRunDetailRecord | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [selectedPdfSections, setSelectedPdfSections] = useState<
+    AnalyticsPdfSection[]
+  >(DEFAULT_PDF_EXPORT_SECTIONS);
 
   const revenueWindow = useMemo(
     () => toRevenueWindow(revenueWindowFilter),
@@ -215,6 +237,11 @@ export function useAnalyticsDashboard() {
   };
 
   const handleExportPdf = async () => {
+    if (selectedPdfSections.length === 0) {
+      showMessage("Choose at least one analytics section to export.");
+      return;
+    }
+
     setIsExportingPdf(true);
 
     try {
@@ -225,6 +252,7 @@ export function useAnalyticsDashboard() {
         revenueEndDate: revenueWindow.endDate,
         revenuePeriod: revenueWindow.period,
         revenueStartDate: revenueWindow.startDate,
+        selectedSections: selectedPdfSections,
       });
 
       const blob = new Blob([result.bytes], {
@@ -245,6 +273,14 @@ export function useAnalyticsDashboard() {
     } finally {
       setIsExportingPdf(false);
     }
+  };
+
+  const handleTogglePdfSection = (section: AnalyticsPdfSection) => {
+    setSelectedPdfSections((current) =>
+      current.includes(section)
+        ? current.filter((item) => item !== section)
+        : [...current, section],
+    );
   };
 
   const handleSelectAttendancePoint = (bucketStart: string, label: string) => {
@@ -277,6 +313,7 @@ export function useAnalyticsDashboard() {
     handleExportPdf,
     handleGenerateInsight,
     handleSelectAttendancePoint,
+    handleTogglePdfSection,
     isExportingPdf: isExportingPdf || exportPdfMutation.isPending,
     isGeneratingInsight: generateInsightMutation.isPending,
     latestInsight,
@@ -284,6 +321,7 @@ export function useAnalyticsDashboard() {
     latestInsightLoading:
       insightHistoryQuery.isLoading || latestInsightQuery.isLoading,
     message,
+    pdfExportSectionOptions: PDF_EXPORT_SECTION_OPTIONS,
     revenueWindowFilter,
     revenueWindowFilterOptions: ANALYTICS_REVENUE_WINDOW_OPTIONS,
     visibleActiveMemberCount,
@@ -292,6 +330,7 @@ export function useAnalyticsDashboard() {
     revenueSeries,
     revenueWindow,
     selectedDrilldown,
+    selectedPdfSections,
     setAttendanceFilter,
     setRevenueWindowFilter,
     snapshot,

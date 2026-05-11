@@ -11,7 +11,6 @@ import {
   type SetStateAction,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   adminDeletionRequestsQueryOptions,
   approveDeletionRequestMutationOptions,
@@ -21,6 +20,7 @@ import {
   scanAttendanceQrMutationOptions,
   updateAdminMembershipCardMutationOptions,
   verifyMembershipPaymentMutationOptions,
+  verifyNonMemberMutationOptions,
 } from "@fittrack/query";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import type { AttendanceCheckInRecord, MemberRecord, MembershipCardRecord } from "@fittrack/types";
@@ -60,6 +60,11 @@ import {
 
 type ToastTone = "success" | "error" | "info" | "warning";
 type SelectOption = { label: string; value: string };
+type NoticeModalState = {
+  description?: string;
+  title: string;
+  tone: ToastTone;
+} | null;
 type PaymentReviewAction = "approve" | "reject" | null;
 type PendingMembershipPayment = {
   id: string;
@@ -86,6 +91,7 @@ type AccountsPageContextValue = {
   canManageMemberCard: boolean;
   canManualCheckInTarget: boolean;
   canRestoreEditTarget: boolean;
+  canVerifyNonMemberTarget: boolean;
   canTerminateEditTarget: boolean;
   closeInspector: () => void;
   contentMode: ContentMode;
@@ -115,6 +121,7 @@ type AccountsPageContextValue = {
   handleRejectMembershipPayment: () => Promise<void>;
   handleRestoreMember: () => Promise<void>;
   handleRevokeMembershipCard: () => Promise<void>;
+  handleVerifyNonMember: () => Promise<void>;
   isAccountsHamburgerMode: boolean;
   isAdmin: boolean;
   isApproveDeletionPending: boolean;
@@ -133,6 +140,7 @@ type AccountsPageContextValue = {
   members: MemberRecord[];
   membershipCardLoadingLabel: string;
   mobileInspectorOpen: boolean;
+  noticeModal: NoticeModalState;
   openEditModal: () => void;
   openInspector: (member: MemberRecord) => void;
   page: number;
@@ -149,6 +157,7 @@ type AccountsPageContextValue = {
   restoreLoading: boolean;
   restoreLoadingLabel: string;
   restoreTarget: MemberRecord | null;
+  verifyNonMemberTarget: MemberRecord | null;
   revokeCardTarget: MemberRecord | null;
   roleSelectOptions: SelectOption[];
   scanFeedback: AttendanceScanFeedback | null;
@@ -162,11 +171,13 @@ type AccountsPageContextValue = {
   setEditDraft: Dispatch<SetStateAction<Record<string, string>>>;
   setEditModalOpen: Dispatch<SetStateAction<boolean>>;
   setGrantCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setNoticeModal: Dispatch<SetStateAction<NoticeModalState>>;
   setPage: Dispatch<SetStateAction<number>>;
   setPaymentReviewAction: Dispatch<SetStateAction<PaymentReviewAction>>;
   setPendingEditSubmission: Dispatch<SetStateAction<Record<string, string> | null>>;
   setQ: Dispatch<SetStateAction<string>>;
   setRestoreTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setVerifyNonMemberTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setRevokeCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setScanFeedback: Dispatch<SetStateAction<AttendanceScanFeedback | null>>;
   setScanOpen: Dispatch<SetStateAction<boolean>>;
@@ -177,31 +188,6 @@ type AccountsPageContextValue = {
 };
 
 const AccountsPageContext = createContext<AccountsPageContextValue | null>(null);
-
-function notify(tone: ToastTone, title: string, description?: string) {
-  const options = description ? { description } : undefined;
-
-  if (tone === "success") {
-    toast.success(title, options);
-    return;
-  }
-
-  if (tone === "error") {
-    toast.error(title, options);
-    return;
-  }
-
-  if (tone === "warning") {
-    toast.warning(title, options);
-    return;
-  }
-
-  toast.info(title, options);
-}
-
-function notifyActionError(title: string, error: unknown, fallback: string) {
-  notify("error", title, getActionErrorMessage(error, fallback));
-}
 
 export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -222,6 +208,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const canManageAccounts = isAdmin || isStaff;
   const canInspectAccounts = canManageAccounts || isCoach;
   const [q, setQ] = useState("");
+  const [noticeModal, setNoticeModal] = useState<NoticeModalState>(null);
   const debouncedQ = useDebounce(q, 250);
   const [activeChip, setActiveChip] = useState("all");
   const [activeStatus, setActiveStatus] = useState<MemberStatusTab>("All");
@@ -240,6 +227,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const [deleteTarget, setDeleteTarget] = useState<MemberRecord | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<MemberRecord | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<MemberRecord | null>(null);
+  const [verifyNonMemberTarget, setVerifyNonMemberTarget] = useState<MemberRecord | null>(null);
   const [grantCardTarget, setGrantCardTarget] = useState<MemberRecord | null>(null);
   const [revokeCardTarget, setRevokeCardTarget] = useState<MemberRecord | null>(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
@@ -249,6 +237,12 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [isAccountsHamburgerMode, setIsAccountsHamburgerMode] = useState(false);
   const [paymentReviewAction, setPaymentReviewAction] = useState<PaymentReviewAction>(null);
+  const notify = (tone: ToastTone, title: string, description?: string) => {
+    setNoticeModal({ description, title, tone });
+  };
+  const notifyActionError = (title: string, error: unknown, fallback: string) => {
+    notify("error", title, getActionErrorMessage(error, fallback));
+  };
   const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
     enabled: canManageAccounts,
@@ -458,6 +452,16 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       editTarget &&
       !isSelfEdit &&
       editTarget.role?.name !== "ADMIN" &&
+      editTarget.status !== "pending" &&
+      !editPendingRequest &&
+      !isEditTargetArchived,
+  );
+  const canVerifyNonMemberTarget = Boolean(
+    canManageAccounts &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name === "USER" &&
+      editTarget.status === "pending" &&
       !editPendingRequest &&
       !isEditTargetArchived,
   );
@@ -475,12 +479,16 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       editTarget &&
       !isSelfEdit &&
       editTarget.role?.name === "USER" &&
-      (editTarget.status === "active" || editTarget.status === "pending") &&
+      editTarget.status === "active" &&
       !editPendingRequest &&
       !isEditTargetArchived,
   );
   const canManageMemberCard = Boolean(
-    canManageAccounts && editTarget && !isSelfEdit && editTarget.role?.name === "USER",
+    canManageAccounts &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name === "USER" &&
+      editTarget.status !== "pending",
   );
 
   const approveDeletionMutation = useMutation(
@@ -495,6 +503,9 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   );
   const membershipCardMutation = useMutation(
     updateAdminMembershipCardMutationOptions(webApiClient, queryClient),
+  );
+  const verifyNonMemberMutation = useMutation(
+    verifyNonMemberMutationOptions(webApiClient, queryClient),
   );
   const scanAttendanceMutation = useMutation(scanAttendanceQrMutationOptions(webApiClient, queryClient));
   const manualAttendanceMutation = useMutation(
@@ -573,6 +584,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     setRevokeCardTarget(null);
     setArchiveTarget(null);
     setRestoreTarget(null);
+    setVerifyNonMemberTarget(null);
     setEditTarget(null);
     setMobileInspectorOpen(false);
   };
@@ -712,6 +724,27 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       notify("success", "Member access updated", result.message);
     } catch (error) {
       notifyActionError("Could not update member access", error, "Failed to revoke membership-card access.");
+    }
+  };
+
+  const handleVerifyNonMember = async () => {
+    const target = verifyNonMemberTarget ?? editTarget;
+    if (!target || target.role?.name !== "USER") return;
+
+    try {
+      const result = await verifyNonMemberMutation.mutateAsync(target.id);
+      patchOpenMember(target.id, {
+        emailVerified: true,
+        status: result.user.status ?? "active",
+      });
+      setVerifyNonMemberTarget(null);
+      notify("success", "Account verified", result.message);
+    } catch (error) {
+      notifyActionError(
+        "Could not verify this account",
+        error,
+        "Failed to promote this account to verified non-member.",
+      );
     }
   };
 
@@ -958,6 +991,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         canManageMemberCard,
         canManualCheckInTarget,
         canRestoreEditTarget,
+        canVerifyNonMemberTarget,
         canTerminateEditTarget,
         closeInspector,
         contentMode,
@@ -987,6 +1021,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         handleRejectMembershipPayment,
         handleRestoreMember,
         handleRevokeMembershipCard,
+        handleVerifyNonMember,
         isAccountsHamburgerMode,
         isAdmin,
         isApproveDeletionPending: approveDeletionMutation.isPending,
@@ -1005,6 +1040,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         members,
         membershipCardLoadingLabel,
         mobileInspectorOpen,
+        noticeModal,
         openEditModal,
         openInspector,
         page,
@@ -1021,6 +1057,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         restoreLoading,
         restoreLoadingLabel,
         restoreTarget,
+        verifyNonMemberTarget,
         revokeCardTarget,
         roleSelectOptions,
         scanFeedback,
@@ -1034,11 +1071,13 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         setEditDraft,
         setEditModalOpen,
         setGrantCardTarget,
+        setNoticeModal,
         setPage,
         setPaymentReviewAction,
         setPendingEditSubmission,
         setQ,
         setRestoreTarget,
+        setVerifyNonMemberTarget,
         setRevokeCardTarget,
         setScanFeedback,
         setScanOpen,

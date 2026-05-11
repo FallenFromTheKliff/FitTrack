@@ -151,6 +151,7 @@ export default function MembersDirectoryPanel({
                     }
                     onClick={() => onRowClick(member)}
                     onKeyDown={(event) => handleRowKeyDown(event, member)}
+                    style={{ cursor: "pointer" }}
                   >
                     {card}
                   </div>
@@ -337,6 +338,7 @@ export default function MembersDirectoryPanel({
               }
               onClick={() => onRowClick(member)}
               onKeyDown={(event) => handleRowKeyDown(event, member)}
+              style={{ cursor: "pointer" }}
             >
               {renderMobileCard(member)}
             </div>
@@ -418,7 +420,13 @@ export default function MembersDirectoryPanel({
         }
 
         .members-directory-panel__row {
-          transition: border-color 120ms ease, background-color 120ms ease;
+          transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+
+        .members-directory-panel__row:hover {
+          background-color: ${colors.brand}0d !important;
+          box-shadow: 3px 0 0 ${colors.brand}66 inset;
+          transform: translateX(1px);
         }
 
         .members-directory-panel__cell,
@@ -452,7 +460,21 @@ export default function MembersDirectoryPanel({
 
         .members-directory-panel__grid-card,
         .members-directory-panel__mobile-card {
+          cursor: pointer;
           outline: none;
+          transition: filter 140ms ease, transform 140ms ease;
+        }
+
+        .members-directory-panel__grid-card:hover,
+        .members-directory-panel__mobile-card:hover {
+          filter: brightness(1.02);
+          transform: translateY(-1px);
+        }
+
+        .members-directory-panel__grid-card:hover > .members-grid-card,
+        .members-directory-panel__mobile-card:hover > .members-account-card {
+          border-color: ${colors.brand}44 !important;
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.11) !important;
         }
 
         .members-directory-panel__grid-card-active > .members-grid-card,

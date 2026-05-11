@@ -1,7 +1,7 @@
 "use client";
 
-import { Archive, CreditCard, Pencil, ScanLine, UserPlus } from "lucide-react";
-import type { CSSProperties } from "react";
+import { Archive, ChevronUp, CreditCard, LogIn, Pencil, ScanLine, UserCheck, UserPlus } from "lucide-react";
+import { useId, useState, type CSSProperties } from "react";
 import { fullName } from "@fittrack/utils";
 
 import { FitButton, FitPill, FitText } from "@/components/fit";
@@ -132,19 +132,27 @@ function AccountInspectorCommandRow() {
 
 export function AccountInspectorFooter() {
   const { colors } = useTheme();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsPanelId = useId();
   const {
     canEditTargetDetails,
     canManageMemberCard,
+    canManualCheckInTarget,
     canRestoreEditTarget,
     canArchiveEditTarget,
+    canVerifyNonMemberTarget,
     editTarget,
+    handleManualCheckIn,
     isMembershipCardPending,
+    isManualAttendancePending,
     membershipCardLoadingLabel,
+    manualCheckInLoadingLabel,
     openEditModal,
     setArchiveTarget,
     setGrantCardTarget,
     setRestoreTarget,
     setRevokeCardTarget,
+    setVerifyNonMemberTarget,
   } = useAccountsPage();
   const {
     accountLifecycleActionColor,
@@ -180,62 +188,178 @@ export function AccountInspectorFooter() {
           };
   const accountActionLabel = canRestoreEditTarget ? "Restore Account" : "Archive Account";
   const canRunAccountArchiveAction = canArchiveEditTarget || canRestoreEditTarget;
+  const compactActionStyle: CSSProperties = {
+    minHeight: 36,
+    paddingInline: 8,
+  };
+  const compactTextStyle: CSSProperties = {
+    fontSize: 10.5,
+    fontWeight: 800,
+    lineHeight: 1.1,
+    whiteSpace: "normal",
+    textAlign: "center",
+  };
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <FitButton
-        variant="primary"
-        label="Edit Details"
-        icon={Pencil}
-        iconSize={14}
-        disabled={!editTarget || !canEditTargetDetails}
-        onClick={editTarget && canEditTargetDetails ? openEditModal : undefined}
-        style={primaryActionStyle}
-        textStyle={{ color: primaryCommandTextColor, fontWeight: 800 }}
-      />
-      <FitButton
-        variant="ghost"
-        label={editTarget ? memberCardActionLabel : "Manage Membership"}
-        icon={CreditCard}
-        iconSize={14}
-        disabled={!editTarget || !canManageMemberCard || isMembershipCardPending}
-        onClick={() => {
-          if (!editTarget || !canManageMemberCard) return;
-          if (getMembershipFieldValue(editTarget) === "active") {
-            setRevokeCardTarget(editTarget);
-            return;
-          }
-          setGrantCardTarget(editTarget);
-        }}
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        id={actionsPanelId}
+        aria-hidden={!actionsOpen}
         style={{
-          ...secondaryActionStyle,
-          border: membershipActionTone.border,
-          backgroundColor: membershipActionTone.backgroundColor,
+          display: "grid",
+          gap: 8,
+          maxHeight: actionsOpen ? 260 : 0,
+          opacity: actionsOpen ? 1 : 0,
+          overflow: "hidden",
+          pointerEvents: actionsOpen ? "auto" : "none",
+          transform: actionsOpen ? "translateY(0)" : "translateY(12px)",
+          transformOrigin: "bottom center",
+          transition: `max-height 240ms ease, opacity 180ms ease, transform 240ms ease, visibility 0ms linear ${
+            actionsOpen ? "0ms" : "240ms"
+          }`,
+          visibility: actionsOpen ? "visible" : "hidden",
         }}
-        textStyle={{ color: membershipActionTone.color, fontWeight: 800 }}
-      />
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          <FitButton
+            variant="primary"
+            label="Edit Details"
+            icon={Pencil}
+            iconSize={13}
+            fullWidth
+            disabled={!editTarget || !canEditTargetDetails}
+            onClick={editTarget && canEditTargetDetails ? openEditModal : undefined}
+            style={{ ...primaryActionStyle, ...compactActionStyle }}
+            textStyle={{ ...compactTextStyle, color: primaryCommandTextColor }}
+          />
+          <FitButton
+            variant="ghost"
+            label={editTarget ? memberCardActionLabel : "Manage Membership"}
+            icon={CreditCard}
+            iconSize={13}
+            fullWidth
+            disabled={!editTarget || !canManageMemberCard || isMembershipCardPending}
+            onClick={() => {
+              if (!editTarget || !canManageMemberCard) return;
+              if (getMembershipFieldValue(editTarget) === "active") {
+                setRevokeCardTarget(editTarget);
+                return;
+              }
+              setGrantCardTarget(editTarget);
+            }}
+            style={{
+              ...secondaryActionStyle,
+              ...compactActionStyle,
+              border: membershipActionTone.border,
+              backgroundColor: membershipActionTone.backgroundColor,
+            }}
+            textStyle={{ ...compactTextStyle, color: membershipActionTone.color }}
+          />
+          <FitButton
+            variant="ghost"
+            label="Verify Non-Member"
+            icon={UserCheck}
+            iconSize={13}
+            fullWidth
+            disabled={!editTarget || !canVerifyNonMemberTarget}
+            onClick={() => {
+              if (!editTarget || !canVerifyNonMemberTarget) return;
+              setVerifyNonMemberTarget(editTarget);
+            }}
+            style={{
+              ...secondaryActionStyle,
+              ...compactActionStyle,
+              border: `1px solid ${colors.brand}42`,
+              backgroundColor: canVerifyNonMemberTarget ? `${colors.brand}10` : colors.surfaceRaised,
+            }}
+            textStyle={{ ...compactTextStyle, color: colors.brand }}
+          />
+          <FitButton
+            variant="ghost"
+            label="Check In"
+            icon={LogIn}
+            iconSize={13}
+            fullWidth
+            disabled={!editTarget || !canManualCheckInTarget || isManualAttendancePending}
+            onClick={() => {
+              if (!editTarget || !canManualCheckInTarget) return;
+              void handleManualCheckIn(editTarget);
+            }}
+            style={{ ...secondaryActionStyle, ...compactActionStyle }}
+            textStyle={{ ...compactTextStyle, color: colors.textPrimary }}
+          />
+          <FitButton
+            variant="ghost"
+            label={editTarget ? accountActionLabel : "Archive Account"}
+            icon={Archive}
+            iconSize={13}
+            fullWidth
+            disabled={!editTarget || !canRunAccountArchiveAction}
+            onClick={() => {
+              if (!editTarget) return;
+              if (canRestoreEditTarget) {
+                setRestoreTarget(editTarget);
+                return;
+              }
+              if (canArchiveEditTarget) {
+                setArchiveTarget(editTarget);
+              }
+            }}
+            style={{
+              ...accountLifecycleActionStyle,
+              ...compactActionStyle,
+              gridColumn: "1 / -1",
+            }}
+            textStyle={{ ...compactTextStyle, color: accountLifecycleActionColor }}
+          />
+        </div>
+        {isMembershipCardPending ? (
+          <FitText style={{ fontSize: 11, color: colors.textMuted }}>{membershipCardLoadingLabel}</FitText>
+        ) : null}
+        {isManualAttendancePending ? (
+          <FitText style={{ fontSize: 11, color: colors.textMuted }}>{manualCheckInLoadingLabel}</FitText>
+        ) : null}
+      </div>
       <FitButton
         variant="ghost"
-        label={editTarget ? accountActionLabel : "Archive Account"}
-        icon={Archive}
-        iconSize={14}
-        disabled={!editTarget || !canRunAccountArchiveAction}
-        onClick={() => {
-          if (!editTarget) return;
-          if (canRestoreEditTarget) {
-            setRestoreTarget(editTarget);
-            return;
-          }
-          if (canArchiveEditTarget) {
-            setArchiveTarget(editTarget);
-          }
+        aria-controls={actionsPanelId}
+        aria-expanded={actionsOpen}
+        onClick={() => setActionsOpen((current) => !current)}
+        style={{
+          border: `1px solid ${actionsOpen ? colors.brand : colors.border}`,
+          backgroundColor: actionsOpen ? `${colors.brand}12` : colors.surface,
+          color: colors.brand,
+          minHeight: 44,
+          borderRadius: 8,
         }}
-        style={accountLifecycleActionStyle}
-        textStyle={{ color: accountLifecycleActionColor, fontWeight: 800 }}
-      />
-      {isMembershipCardPending ? (
-        <FitText style={{ fontSize: 11, color: colors.textMuted }}>{membershipCardLoadingLabel}</FitText>
-      ) : null}
+        textStyle={{ color: colors.brand, fontWeight: 850, letterSpacing: "0.04em" }}
+      >
+        <span
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: 8,
+            justifyContent: "center",
+            lineHeight: 1,
+          }}
+        >
+          <span>{actionsOpen ? "CLOSE ACTIONS" : "OPEN ACTIONS"}</span>
+          <ChevronUp
+            size={15}
+            strokeWidth={2.4}
+            style={{
+              transform: actionsOpen ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 180ms ease",
+            }}
+          />
+        </span>
+      </FitButton>
     </div>
   );
 }

@@ -49,7 +49,9 @@ export function ExerciseLabReviewSurface() {
     visibleReviewCandidates,
   } = useExerciseLabPage();
 
-  return (    <FitSection
+  return (
+    <FitSection
+      className="exercise-review-surface"
       heading=""
       hideHeading
       noPadding
@@ -58,7 +60,7 @@ export function ExerciseLabReviewSurface() {
         backgroundColor: colors.surfaceRaised,
         borderRadius: 8,
         marginBottom: 0,
-        padding: 10,
+        padding: 14,
         height: isCompact ? "auto" : "100%",
         overflow: isCompact ? "visible" : "hidden",
       }}
@@ -66,20 +68,20 @@ export function ExerciseLabReviewSurface() {
       <div
         style={{
           display: "grid",
-          gap: 10,
+          gap: 14,
           gridTemplateRows: isCompact ? undefined : "auto minmax(0, 1fr) auto",
           height: isCompact ? "auto" : "100%",
           minHeight: 0,
         }}
       >
-        <div style={surfaceTopRowStyle}>
-          <div style={surfaceTitleNavStyle}>
+        <div className="exercise-review-top-row" style={surfaceTopRowStyle}>
+          <div className="exercise-review-title-nav" style={surfaceTitleNavStyle}>
             <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
               Review Queue
             </FitText>
             <ExerciseLabModeNavigation />
           </div>
-          <div style={surfaceControlsStyle}>
+          <div className="exercise-review-controls" style={surfaceControlsStyle}>
             <FitSearch
               ariaLabel="Search exercise review queue"
               compact
@@ -136,6 +138,7 @@ export function ExerciseLabReviewSurface() {
         </div>
 
         <div
+          className="exercise-review-table-shell"
           style={{
             minHeight: 0,
             overflow: "hidden",
@@ -210,6 +213,75 @@ export function ExerciseLabReviewSurface() {
             />
           </div>
         ) : null}
+        <style>{`
+          .exercise-review-top-row {
+            grid-template-columns: minmax(360px, max-content) minmax(0, 1fr) !important;
+          }
+
+          .exercise-review-title-nav {
+            min-width: 0;
+          }
+
+          .exercise-review-controls {
+            grid-template-columns:
+              minmax(150px, 1fr)
+              minmax(102px, 0.55fr)
+              minmax(112px, 0.58fr)
+              minmax(94px, 0.46fr)
+              auto !important;
+          }
+
+          .exercise-review-table-shell {
+            display: grid;
+            grid-template-rows: minmax(0, 1fr);
+            min-height: 0;
+          }
+
+          .exercise-review-table-shell table th,
+          .exercise-review-table-shell table td {
+            text-align: left !important;
+          }
+
+          .exercise-review-table-shell table td:last-child > div {
+            justify-content: flex-start !important;
+          }
+
+          @media (max-width: 1420px) {
+            .exercise-review-top-row {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .exercise-review-controls {
+              grid-template-columns:
+                minmax(180px, 1fr)
+                minmax(110px, 0.62fr)
+                minmax(120px, 0.66fr)
+                minmax(110px, 0.58fr)
+                auto !important;
+            }
+
+            .exercise-review-controls > span {
+              justify-self: start;
+            }
+          }
+
+          @media (max-width: 1160px) {
+            .exercise-review-controls {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+          }
+
+          @media (max-width: 680px) {
+            .exercise-review-controls {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .exercise-lab-mode-navigation {
+              width: 100%;
+            }
+          }
+        `}</style>
       </div>
-    </FitSection>  );
+    </FitSection>
+  );
 }

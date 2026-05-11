@@ -144,7 +144,7 @@ export default function ChatPanel({
       >
         <div style={s.chatWallpaper} aria-hidden="true">
           <Bot
-            size={180}
+            size={360}
             color={colors.brand}
             strokeWidth={1.1}
             style={{ opacity: 0.08 }}

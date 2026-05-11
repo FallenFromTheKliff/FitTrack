@@ -67,18 +67,6 @@ export default function HistoryPanel({
     return groupItemsByDate(datedSessions, "desc");
   }, [sessions]);
 
-  const selectedTitle = selectedSession
-    ? getAiSessionDisplayTitle(selectedSession)
-    : "No chat selected";
-  const selectedContext = selectedSession
-    ? getAiContextLabel(selectedSession.context_type)
-    : "Pick a chat to manage it here.";
-  const selectedStatus = selectedSession
-    ? selectedSession.is_active
-      ? "Active chat"
-      : "Archived chat"
-    : null;
-
   return (
     <div
       style={{
@@ -89,15 +77,55 @@ export default function HistoryPanel({
       }}
     >
       <div style={s.panelHeader}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <FitText style={{ fontSize: 14, fontWeight: 700 }}>
             Chat History
           </FitText>
+        </div>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            minWidth: 0,
+          }}
+        >
           <FitText
-            style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
           >
             {sessions.length} {sessions.length === 1 ? "chat" : "chats"}
           </FitText>
+          {selectedSession ? (
+            selectedSession.is_active ? (
+              <FitButton
+                variant="danger"
+                icon={Trash2}
+                iconOnly
+                aria-label="Archive chat"
+                onClick={onRequestDelete}
+                loading={isDeleting}
+                loadingLabel="Deleting"
+                style={{ flexShrink: 0, width: 34, height: 34, padding: 0 }}
+              />
+            ) : (
+              <FitButton
+                variant="danger"
+                icon={RotateCcw}
+                iconOnly
+                aria-label="Restore chat"
+                onClick={onRestore}
+                loading={isRestoring}
+                loadingLabel="Restoring"
+                style={{ flexShrink: 0, width: 34, height: 34, padding: 0 }}
+              />
+            )
+          ) : null}
         </div>
       </div>
       <div
@@ -105,7 +133,7 @@ export default function HistoryPanel({
           display: "flex",
           flexWrap: "wrap",
           gap: 8,
-          padding: "0 12px 12px",
+          padding: "14px 12px 12px",
         }}
       >
         {filterOptions.map((option) => (
@@ -117,132 +145,6 @@ export default function HistoryPanel({
             onClick={() => onStatusFilterChange(option.value)}
           />
         ))}
-      </div>
-      <div
-        style={{
-          margin: "0 12px 12px",
-          padding: 14,
-          borderRadius: 16,
-          border: `1px solid ${selectedSession?.is_active === false ? `${colors.danger}30` : colors.border}`,
-          backgroundColor: colors.surfaceRaised,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: colors.textMuted,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            display: "block",
-          }}
-        >
-          Selected chat
-        </FitText>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <FitText
-              as="p"
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                lineHeight: 1.25,
-                display: "block",
-                margin: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {selectedTitle}
-            </FitText>
-            <FitText
-              style={{
-                fontSize: 11,
-                color: colors.textMuted,
-                marginTop: 4,
-                display: "block",
-              }}
-            >
-              {selectedSession
-                ? `Last active ${timeAgo(selectedSession.last_activity_at)}`
-                : "Select a chat to manage it."}
-            </FitText>
-          </div>
-          {selectedSession ? (
-            selectedSession.is_active ? (
-              <FitButton
-                variant="danger"
-                icon={Trash2}
-                iconOnly
-                aria-label="Archive chat"
-                onClick={onRequestDelete}
-                loading={isDeleting}
-                loadingLabel="Deleting"
-                style={{ flexShrink: 0, width: 38, height: 38, padding: 0 }}
-              />
-            ) : (
-              <FitButton
-                variant="danger"
-                icon={RotateCcw}
-                iconOnly
-                aria-label="Restore chat"
-                onClick={onRestore}
-                loading={isRestoring}
-                loadingLabel="Restoring"
-                style={{ flexShrink: 0, width: 38, height: 38, padding: 0 }}
-              />
-            )
-          ) : null}
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <FitText
-            as="span"
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: colors.textMuted,
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surface,
-            }}
-          >
-            {selectedContext}
-          </FitText>
-          {selectedStatus ? (
-            <FitText
-              as="span"
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: selectedSession?.is_active
-                  ? colors.brand
-                  : colors.danger,
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: `1px solid ${selectedSession?.is_active ? `${colors.brand}33` : `${colors.danger}33`}`,
-                backgroundColor: selectedSession?.is_active
-                  ? `${colors.brand}14`
-                  : `${colors.danger}14`,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              {selectedStatus}
-            </FitText>
-          ) : null}
-        </div>
       </div>
       <div style={s.sessionList}>
         {grouped.length === 0 ? (

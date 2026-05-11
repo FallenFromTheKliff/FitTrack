@@ -5,12 +5,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AccountDeletionRequestStatus,
   AuthProvider,
   MembershipCardSource,
+  NotificationType,
   PayableType,
   PaymentProvider,
   PaymentStage,
@@ -21,6 +23,8 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from 'prisma/prisma.service';
+import { AuditAction, type AuditEvent } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 import { UpdateMembershipCardDto, UpgradeToCoachDto } from './dto/admin.dto';
 
@@ -132,6 +136,8 @@ export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter?: EventEmitter2,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async getAll(actingRole?: UserRole) {
@@ -279,6 +285,12 @@ export class AdminUsersService {
     if (user.role !== UserRole.member) {
       throw new BadRequestException(
         'Membership cards only apply to member accounts',
+      );
+    }
+
+    if (user.status === UserStatus.pending) {
+      throw new BadRequestException(
+        'Pending verification accounts must be verified as non-members before membership-card access can be changed',
       );
     }
 
@@ -454,6 +466,7 @@ export class AdminUsersService {
       select: {
         id: true,
         role: true,
+        status: true,
         deletedAt: true,
         membership_card: {
           select: {
@@ -494,6 +507,12 @@ export class AdminUsersService {
     if (user.role === UserRole.admin) {
       throw new BadRequestException(
         'Admin accounts cannot be archived from the members directory',
+      );
+    }
+
+    if (user.status === UserStatus.pending) {
+      throw new BadRequestException(
+        'Pending verification accounts must be verified before they can be archived',
       );
     }
 
@@ -743,10 +762,154 @@ export class AdminUsersService {
     );
   }
 
+  async verifyNonMember(
+    userId: string,
+    actingUserId: string,
+    actingRole: UserRole,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        auth_identities: {
+          select: {
+            identifier: true,
+            is_primary: true,
+            provider: true,
+          },
+        },
+        deletedAt: true,
+        email_verified_at: true,
+        membership_card: {
+          select: {
+            status: true,
+          },
+        },
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
+        role: true,
+        status: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.deletedAt) {
+      throw new BadRequestException('Archived users cannot be promoted');
+    }
+
+    if (user.role !== UserRole.member) {
+      throw new BadRequestException(
+        'Only member accounts can be promoted to verified non-member',
+      );
+    }
+
+    if (actingRole === UserRole.staff && user.role !== UserRole.member) {
+      throw new ForbiddenException('Staff accounts can only verify members');
+    }
+
+    if (user.status !== UserStatus.pending) {
+      throw new BadRequestException(
+        'Only pending verification accounts can be promoted',
+      );
+    }
+
+    if (user.membership_card?.status === 'active') {
+      throw new BadRequestException(
+        'This account already has active membership-card access',
+      );
+    }
+
+    const now = new Date();
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: {
+          email_verified_at: user.email_verified_at ?? now,
+          status: UserStatus.active,
+        },
+        select: {
+          email_verified_at: true,
+          id: true,
+          status: true,
+        },
+      });
+
+      await tx.authIdentity.updateMany({
+        where: {
+          provider: AuthProvider.email,
+          user_id: userId,
+          verified_at: null,
+        },
+        data: { verified_at: now },
+      });
+
+      return updated;
+    });
+
+    this.emitAudit({
+      userId: actingUserId,
+      action: AuditAction.USER_STATUS_CHANGED,
+      entity: 'User',
+      entityId: userId,
+      before: {
+        email_verified_at: user.email_verified_at?.toISOString() ?? null,
+        status: user.status,
+      },
+      after: {
+        email_verified_at: updatedUser.email_verified_at?.toISOString() ?? null,
+        status: updatedUser.status,
+        tier: 'verified_non_member',
+      },
+    });
+
+    await this.emitAccountActivity({
+      action: 'account_verified_non_member',
+      actorId: actingUserId,
+      targetEmail: getPreferredAccountEmail(user.auth_identities),
+      targetName: getProfileDisplayName(user.profile),
+      targetRole: user.role,
+      targetUserId: user.id,
+    });
+
+    await this.notificationsService?.dispatch(
+      user.id,
+      NotificationType.system,
+      {
+        title: 'Account verified',
+        body: 'Your FitTrack account is verified. You can sign in as a non-member and subscribe when you are ready.',
+        data: {
+          kind: 'account_verified_non_member',
+          verified_at: now.toISOString(),
+        },
+        email: {
+          subject: 'Your FitTrack account is verified',
+          html: '<p>Your FitTrack account is verified. You can sign in as a non-member and subscribe when you are ready.</p>',
+        },
+      },
+    );
+
+    return {
+      message: 'Account promoted to verified non-member.',
+      user: {
+        emailVerified: true,
+        id: updatedUser.id,
+        status: updatedUser.status,
+      },
+    };
+  }
+
   private async emitAccountActivity(event: {
     action:
       | 'account_archived'
       | 'account_restored'
+      | 'account_verified_non_member'
       | 'coach_upgraded'
       | 'membership_card_granted'
       | 'membership_card_revoked'
@@ -763,6 +926,10 @@ export class AdminUsersService {
       ...event,
       occurredAt: event.occurredAt ?? new Date().toISOString(),
     });
+  }
+
+  private emitAudit(event: AuditEvent): void {
+    this.eventEmitter?.emit('audit.log', event);
   }
 
   private async getLatestAccountActivityTimestampsByUserId(
