@@ -14,6 +14,10 @@ node_modules
 **/.vscode
 .next
 **/.next
+.next-dev
+**/.next-dev
+.next-runtime
+**/.next-runtime
 dist
 **/dist
 .turbo

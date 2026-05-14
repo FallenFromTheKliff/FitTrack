@@ -25,6 +25,7 @@
     "db:push": "pnpm --filter @fittrack/api exec npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
     "db:bootstrap": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/bootstrap-defaults.ts",
     "db:migrate": "pnpm --filter @fittrack/api exec npx prisma migrate dev",
+    "db:migrate:generate": "pnpm db:migrate && pnpm db:generate",
     "db:seed": "pnpm --filter @fittrack/api exec npx prisma db seed",
     "db:seed:realistic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-realistic-data.ts",
     "db:seed:test": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=reset",
@@ -35,7 +36,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "clean": "pnpm -r exec rm -rf .next .expo .turbo node_modules dist"
+    "clean": "node tasks/clean-workspaces.mjs",
+    "refresh:packages-db-client": "pnpm clean && pnpm install && pnpm db:migrate:generate"
   },
   "devDependencies": {
     "@playwright/mcp": "^0.0.68",

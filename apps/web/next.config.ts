@@ -1,38 +1,43 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import path from "path";
 
 const apiInternalOrigin =
   process.env.API_INTERNAL_ORIGIN?.replace(/\/+$/, "") ??
   "http://api.railway.internal:3001";
 
-const nextConfig: NextConfig = {
-  distDir: ".next-runtime",
-  typescript: {
-    ignoreBuildErrors: true
-  },
-  experimental: {
-    cpus: 1,
-    webpackBuildWorker: false,
-    workerThreads: true
-  },
-  transpilePackages: [
-    "@fittrack/types",
-    "@fittrack/validators",
-    "@fittrack/utils",
-    "@fittrack/ui",
-    "@fittrack/query"
-  ],
-  output: "standalone",
-  async rewrites() {
-    return [
-      {
-        source: "/v1/:path*",
-        destination: `${apiInternalOrigin}/v1/:path*`
-      }
-    ];
-  },
-  async redirects() {
-    return [
+function createNextConfig(phase?: string): NextConfig {
+  const isDevelopmentServer = phase === PHASE_DEVELOPMENT_SERVER;
+
+  return {
+    distDir: isDevelopmentServer ? ".next-dev" : ".next-runtime",
+    typescript: {
+      ignoreBuildErrors: true
+    },
+    experimental: {
+      cpus: 1,
+      webpackBuildWorker: false,
+      webpackMemoryOptimizations: true,
+      workerThreads: false
+    },
+    transpilePackages: [
+      "@fittrack/types",
+      "@fittrack/validators",
+      "@fittrack/utils",
+      "@fittrack/ui",
+      "@fittrack/query"
+    ],
+    output: "standalone",
+    async rewrites() {
+      return [
+        {
+          source: "/v1/:path*",
+          destination: `${apiInternalOrigin}/v1/:path*`
+        }
+      ];
+    },
+    async redirects() {
+      return [
       {
         source: "/members",
         destination: "/accounts",
@@ -158,12 +163,13 @@ const nextConfig: NextConfig = {
         destination: "/settings",
         permanent: false
       }
-    ];
-  },
-  devIndicators: false,
-  turbopack: {
-    root: path.resolve(__dirname, "../..")
-  }
-};
+      ];
+    },
+    devIndicators: false,
+    turbopack: {
+      root: path.resolve(__dirname, "../..")
+    }
+  };
+}
 
-export default nextConfig;
+export default createNextConfig;
