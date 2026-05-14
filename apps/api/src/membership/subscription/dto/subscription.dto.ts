@@ -255,3 +255,67 @@ export class CurrentSubscriptionResponseDTO {
   @ApiProperty({ type: MembershipPlanResponseDTO })
   plan: MembershipPlanResponseDTO;
 }
+
+export class MembershipOperationsDashboardItemDTO {
+  @ApiProperty({ example: '66666666-6666-4666-8666-666666666666' })
+  id: string;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  user_id: string;
+
+  @ApiProperty({ example: 'Casey Reyes' })
+  member_name: string;
+
+  @ApiProperty({ example: 'Monthly Membership' })
+  plan_name: string;
+
+  @ApiProperty({ enum: SubscriptionStatus, example: SubscriptionStatus.active })
+  status: SubscriptionStatus;
+
+  @ApiPropertyOptional({
+    example: '2026-05-10T00:00:00.000Z',
+    nullable: true,
+  })
+  starts_at: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-06-09T00:00:00.000Z',
+    nullable: true,
+  })
+  expires_at: string | null;
+}
+
+export class MembershipOperationsDashboardResponseDTO {
+  @ApiProperty({ example: '2026-05-13T00:00:00.000Z' })
+  generated_at: string;
+
+  @ApiProperty({ example: 284 })
+  total_active_members_count: number;
+
+  @ApiProperty({ example: 12 })
+  recently_activated_count: number;
+
+  @ApiProperty({ type: MembershipOperationsDashboardItemDTO, isArray: true })
+  recently_activated: MembershipOperationsDashboardItemDTO[];
+
+  @ApiProperty({ example: 9 })
+  expiring_membership_count: number;
+
+  @ApiProperty({ type: MembershipOperationsDashboardItemDTO, isArray: true })
+  expiring_memberships: MembershipOperationsDashboardItemDTO[];
+}
+
+export class MembershipCatalogSettingsResponseDTO {
+  @ApiProperty({ example: '400.00' })
+  membership_card_price: string;
+
+  @ApiProperty({ example: '2026-05-14T12:00:00.000Z' })
+  updated_at: string;
+}
+
+export class UpdateMembershipCatalogSettingsDTO {
+  @ApiProperty({ example: 400 })
+  @IsNumber({}, { message: 'membership_card_price must be a number' })
+  @IsPositive({ message: 'membership_card_price must be a positive number' })
+  membership_card_price: number;
+}

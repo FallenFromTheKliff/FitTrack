@@ -16,7 +16,8 @@ function getGuardMetadata(
     | 'cancelAppointment'
     | 'initiateDownpayment'
     | 'processBalance'
-    | 'completeAppointment',
+    | 'completeAppointment'
+    | 'submitCoachFeedback',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
     GUARDS_METADATA,
@@ -30,7 +31,8 @@ function getRolesMetadata(
     | 'getCoachAppointments'
     | 'respondToAppointment'
     | 'processBalance'
-    | 'completeAppointment',
+    | 'completeAppointment'
+    | 'submitCoachFeedback',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -41,12 +43,14 @@ function getRolesMetadata(
 describe('AppointmentController', () => {
   const appointmentService = {
     createAppointment: jest.fn(),
+    getCoachAppointments: jest.fn(),
     getMyAppointments: jest.fn(),
     respondToAppointment: jest.fn(),
     respondToAppointmentAsStaff: jest.fn(),
     cancelAppointment: jest.fn(),
     initiateDownpayment: jest.fn(),
     processBalance: jest.fn(),
+    submitCoachFeedback: jest.fn(),
     completeAppointment: jest.fn(),
     completeAppointmentAsStaff: jest.fn(),
   };
@@ -110,33 +114,41 @@ describe('AppointmentController', () => {
     expect(getGuardMetadata('getMyAppointments')).toEqual([JwtAuthGuard]);
   });
 
-  it('marks coach-user schedule loading as gone', () => {
-    expect(() => controller.getCoachAppointments()).toThrow(
-      'Coach user schedule endpoints are no longer supported.',
+  it('loads the authenticated coach schedule for coach users', async () => {
+    appointmentService.getCoachAppointments.mockResolvedValue({
+      data: [],
+      meta: {},
+    });
+
+    await controller.getCoachAppointments(
+      { sub: 'coach-user-1' } as never,
+      { limit: 20 },
+    );
+
+    expect(appointmentService.getCoachAppointments).toHaveBeenCalledWith(
+      'coach-user-1',
+      { limit: 20 },
     );
     expect(getGuardMetadata('getCoachAppointments')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('getCoachAppointments')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('getCoachAppointments')).toEqual([UserRole.coach]);
   });
 
-  it('locks appointment responses to staff and admin users', async () => {
-    appointmentService.respondToAppointmentAsStaff.mockResolvedValue({
+  it('locks appointment responses to coach users', async () => {
+    appointmentService.respondToAppointment.mockResolvedValue({
       id: 'appt-1',
     });
 
     await controller.respondToAppointment(
       'appt-1',
-      { sub: 'staff-1' } as never,
+      { sub: 'coach-user-1' } as never,
       { accepted: true },
     );
 
-    expect(appointmentService.respondToAppointmentAsStaff).toHaveBeenCalledWith(
-      'staff-1',
+    expect(appointmentService.respondToAppointment).toHaveBeenCalledWith(
+      'coach-user-1',
       'appt-1',
       { accepted: true },
     );
@@ -144,10 +156,7 @@ describe('AppointmentController', () => {
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('respondToAppointment')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('respondToAppointment')).toEqual([UserRole.coach]);
   });
 
   it('returns a non-refundable message after cancelling an appointment', async () => {
@@ -223,19 +232,19 @@ describe('AppointmentController', () => {
     ]);
   });
 
-  it('locks appointment completion to staff and admin users', async () => {
-    appointmentService.completeAppointmentAsStaff.mockResolvedValue({
+  it('locks appointment completion to coach users', async () => {
+    appointmentService.completeAppointment.mockResolvedValue({
       id: 'appt-1',
     });
 
     await controller.completeAppointment(
       'appt-1',
-      { sub: 'staff-1' } as never,
+      { sub: 'coach-user-1' } as never,
       { session_notes: 'Strong lower-body session.' },
     );
 
-    expect(appointmentService.completeAppointmentAsStaff).toHaveBeenCalledWith(
-      'staff-1',
+    expect(appointmentService.completeAppointment).toHaveBeenCalledWith(
+      'coach-user-1',
       'appt-1',
       { session_notes: 'Strong lower-body session.' },
     );
@@ -243,9 +252,27 @@ describe('AppointmentController', () => {
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('completeAppointment')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
+    expect(getRolesMetadata('completeAppointment')).toEqual([UserRole.coach]);
+  });
+
+  it('submits coach feedback through coach-owned appointment endpoint', async () => {
+    appointmentService.submitCoachFeedback.mockResolvedValue({ id: 'appt-1' });
+
+    await controller.submitCoachFeedback(
+      'appt-1',
+      { sub: 'coach-user-1' } as never,
+      { coach_feedback: 'Keep tempo steady.' },
+    );
+
+    expect(appointmentService.submitCoachFeedback).toHaveBeenCalledWith(
+      'coach-user-1',
+      'appt-1',
+      { coach_feedback: 'Keep tempo steady.' },
+    );
+    expect(getGuardMetadata('submitCoachFeedback')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
     ]);
+    expect(getRolesMetadata('submitCoachFeedback')).toEqual([UserRole.coach]);
   });
 });

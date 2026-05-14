@@ -146,6 +146,12 @@ export type AnalyticsSystemAlertRow = {
   title: string;
 };
 
+export type AnalyticsFeedbackMetricsRow = {
+  app_feedback_submissions: number;
+  coach_satisfaction_rating: Prisma.Decimal | number | null;
+  venue_feedback_rating: Prisma.Decimal | number | null;
+};
+
 export type AnalyticsRecentActivityRow = {
   actor_name: string;
   description: string;
@@ -600,6 +606,29 @@ export class AnalyticsRepository extends BaseRepository {
     });
   }
 
+  async getFeedbackMetrics(): Promise<AnalyticsFeedbackMetricsRow> {
+    const [appFeedbackSubmissions, coachReviews, amenityFeedback] =
+      await Promise.all([
+        this.count(this.prisma.appFeedback, {}),
+        this.prisma.coachReview.aggregate({
+          _avg: {
+            rating: true,
+          },
+        }),
+        this.prisma.amenityFeedback.aggregate({
+          _avg: {
+            rating: true,
+          },
+        }),
+      ]);
+
+    return {
+      app_feedback_submissions: appFeedbackSubmissions,
+      coach_satisfaction_rating: coachReviews._avg.rating ?? 0,
+      venue_feedback_rating: amenityFeedback._avg.rating ?? 0,
+    };
+  }
+
   async getRecentActivityCountSince(since: Date): Promise<number> {
     const [attendanceCount, bookingCount, coachingCount, saleCount] =
       await Promise.all([
@@ -1043,24 +1072,35 @@ export class AnalyticsRepository extends BaseRepository {
   ): Promise<CoachingRevenueSummaryRow> {
     const rows = await this.queryRaw<CoachingRevenueSummaryRow[]>`
       WITH coaching_payment_rows AS (
-        SELECT COALESCE(
-          SUM(payments.amount),
-          0
-        ) AS coaching_gym_revenue
-        FROM payments
-        LEFT JOIN coach_appointments
-          ON payments.payable_type = 'coaching'
-         AND coach_appointments.id = payments.payable_id
-        LEFT JOIN recurring_coaching_billing_cycles
-          ON payments.payable_type = 'recurring_coaching'
-         AND recurring_coaching_billing_cycles.id = payments.payable_id
-        LEFT JOIN recurring_coaching_plans
-          ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
-        JOIN coach_profiles
-          ON coach_profiles.id = COALESCE(coach_appointments.coach_id, recurring_coaching_plans.coach_id)
-        WHERE payments.payable_type IN ('coaching', 'recurring_coaching')
-          AND payments.status = 'completed'
-          AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+        SELECT COALESCE(SUM(gym_share), 0) AS coaching_gym_revenue
+        FROM (
+          SELECT
+            payments.amount * (
+              COALESCE(coach_appointments.gym_revenue, 0) /
+              NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+            ) AS gym_share
+          FROM payments
+          JOIN coach_appointments
+            ON payments.payable_type = 'coaching'
+           AND coach_appointments.id = payments.payable_id
+          WHERE payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+
+          UNION ALL
+
+          SELECT
+            payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100) AS gym_share
+          FROM payments
+          JOIN recurring_coaching_billing_cycles
+            ON payments.payable_type = 'recurring_coaching'
+           AND recurring_coaching_billing_cycles.id = payments.payable_id
+          JOIN recurring_coaching_plans
+            ON recurring_coaching_plans.id = recurring_coaching_billing_cycles.recurring_plan_id
+          JOIN coach_profiles
+            ON coach_profiles.id = recurring_coaching_plans.coach_id
+          WHERE payments.status = 'completed'
+            AND COALESCE(payments.verified_at, payments.created_at) BETWEEN ${start} AND ${end}
+        ) coaching_gym_share_rows
       ),
       completed_session_rows AS (
         SELECT COUNT(*) AS completed_coaching_sessions
@@ -1393,7 +1433,18 @@ export class AnalyticsRepository extends BaseRepository {
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
             date_trunc('hour', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
-            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+            COALESCE(SUM(
+              CASE
+                WHEN payments.payable_type = 'coaching' THEN
+                  payments.amount * (
+                    COALESCE(coach_appointments.gym_revenue, 0) /
+                    NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+                  )
+                WHEN payments.payable_type = 'recurring_coaching' THEN
+                  payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100)
+                ELSE 0
+              END
+            ), 0) AS coaching_gym_revenue
           FROM payments
           LEFT JOIN coach_appointments
             ON payments.payable_type = 'coaching'
@@ -1415,7 +1466,18 @@ export class AnalyticsRepository extends BaseRepository {
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
             date_trunc('day', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
-            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+            COALESCE(SUM(
+              CASE
+                WHEN payments.payable_type = 'coaching' THEN
+                  payments.amount * (
+                    COALESCE(coach_appointments.gym_revenue, 0) /
+                    NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+                  )
+                WHEN payments.payable_type = 'recurring_coaching' THEN
+                  payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100)
+                ELSE 0
+              END
+            ), 0) AS coaching_gym_revenue
           FROM payments
           LEFT JOIN coach_appointments
             ON payments.payable_type = 'coaching'
@@ -1437,7 +1499,18 @@ export class AnalyticsRepository extends BaseRepository {
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
             date_trunc('week', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
-            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+            COALESCE(SUM(
+              CASE
+                WHEN payments.payable_type = 'coaching' THEN
+                  payments.amount * (
+                    COALESCE(coach_appointments.gym_revenue, 0) /
+                    NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+                  )
+                WHEN payments.payable_type = 'recurring_coaching' THEN
+                  payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100)
+                ELSE 0
+              END
+            ), 0) AS coaching_gym_revenue
           FROM payments
           LEFT JOIN coach_appointments
             ON payments.payable_type = 'coaching'
@@ -1459,7 +1532,18 @@ export class AnalyticsRepository extends BaseRepository {
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
             date_trunc('year', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
-            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+            COALESCE(SUM(
+              CASE
+                WHEN payments.payable_type = 'coaching' THEN
+                  payments.amount * (
+                    COALESCE(coach_appointments.gym_revenue, 0) /
+                    NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+                  )
+                WHEN payments.payable_type = 'recurring_coaching' THEN
+                  payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100)
+                ELSE 0
+              END
+            ), 0) AS coaching_gym_revenue
           FROM payments
           LEFT JOIN coach_appointments
             ON payments.payable_type = 'coaching'
@@ -1482,7 +1566,18 @@ export class AnalyticsRepository extends BaseRepository {
         return this.queryRaw<CoachingRevenueSeriesRow[]>`
           SELECT
             date_trunc('month', COALESCE(payments.verified_at, payments.created_at)) AS bucket_start,
-            COALESCE(SUM(payments.amount), 0) AS coaching_gym_revenue
+            COALESCE(SUM(
+              CASE
+                WHEN payments.payable_type = 'coaching' THEN
+                  payments.amount * (
+                    COALESCE(coach_appointments.gym_revenue, 0) /
+                    NULLIF(COALESCE(coach_appointments.total_amount, 0), 0)
+                  )
+                WHEN payments.payable_type = 'recurring_coaching' THEN
+                  payments.amount * (COALESCE(coach_profiles.gym_commission_pct, 0) / 100)
+                ELSE 0
+              END
+            ), 0) AS coaching_gym_revenue
           FROM payments
           LEFT JOIN coach_appointments
             ON payments.payable_type = 'coaching'
@@ -1608,7 +1703,7 @@ export class AnalyticsRepository extends BaseRepository {
         user_profiles.first_name,
         user_profiles.last_name,
         COALESCE(SUM(coach_appointments.total_amount), 0) AS total_billed,
-        COALESCE(SUM(coach_appointments.total_amount), 0) AS gym_cut,
+        COALESCE(SUM(coach_appointments.gym_revenue), 0) AS gym_cut,
         COALESCE(SUM(coach_appointments.coach_earnings), 0) AS coach_payout,
         COUNT(*) AS completed_sessions
       FROM coach_appointments

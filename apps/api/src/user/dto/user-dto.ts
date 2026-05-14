@@ -107,7 +107,11 @@ export class UpdateProfileDTO {
   @Max(300, { message: 'height_cm must not exceed 300' })
   height_cm?: number;
 
-  @ApiPropertyOptional({ enum: ActivityLevel })
+  @ApiPropertyOptional({
+    enum: ActivityLevel,
+    description:
+      'Manual overrides are accepted, but this value is overwritten on the next activity-level recalculation.',
+  })
   @IsOptional()
   @IsEnum(ActivityLevel, {
     message: `activity_level must be one of: ${Object.values(ActivityLevel).join(', ')}`,
@@ -126,6 +130,29 @@ export class UpdatePhoneDTO {
   @ApiProperty({ example: '+639171234567' })
   @IsPhilippineMobileNumber('phone_number')
   phone_number: string;
+}
+
+export class CreateAppFeedbackDTO {
+  @ApiPropertyOptional({
+    enum: ['bug_report', 'feature_request', 'general_feedback'],
+    example: 'general_feedback',
+  })
+  @IsOptional()
+  @IsIn(['bug_report', 'feature_request', 'general_feedback'], {
+    message:
+      'category must be one of: bug_report, feature_request, general_feedback',
+  })
+  category?: 'bug_report' | 'feature_request' | 'general_feedback';
+
+  @ApiProperty({
+    example:
+      'The booking timeline feels clear, but the venue search can be faster.',
+  })
+  @TrimString()
+  @IsString({ message: 'message must be a string' })
+  @IsNotEmpty({ message: 'message is required' })
+  @MaxLength(1500, { message: 'message must not exceed 1500 characters' })
+  message: string;
 }
 
 export class LogProgressDTO {

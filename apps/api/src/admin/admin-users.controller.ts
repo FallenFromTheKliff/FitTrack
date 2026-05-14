@@ -7,6 +7,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -15,7 +16,11 @@ import { UserRole } from '@prisma/client';
 import { CurrentUser, Roles } from '../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import { UpdateMembershipCardDto, UpgradeToCoachDto } from './dto/admin.dto';
+import {
+  AdminUserFilterDto,
+  UpdateMembershipCardDto,
+  UpgradeToCoachDto,
+} from './dto/admin.dto';
 import { AdminUsersService } from './admin-users.service';
 
 @ApiTags('Admin')
@@ -31,8 +36,11 @@ export class AdminUsersController {
     summary:
       'List member and staff directory records for the admin members screen.',
   })
-  getAllUsers(@CurrentUser() user: JwtPayload) {
-    return this.adminUsersService.getAll(user.role);
+  getAllUsers(
+    @CurrentUser() user: JwtPayload,
+    @Query() filters: AdminUserFilterDto,
+  ) {
+    return this.adminUsersService.getAll(user.role, filters, user.sub);
   }
 
   @Delete(':id')

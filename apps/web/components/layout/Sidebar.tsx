@@ -3,12 +3,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Apple,
   Building2,
   CalendarCheck,
   Dumbbell,
   Home,
-  MessageCircle,
   Users,
   CalendarDays,
   Grid2X2,
@@ -158,18 +156,6 @@ const COACH_NAV_SECTIONS: NavSection[] = [
         icon: WalletCards,
         pageKey: "coach-earnings",
       },
-      {
-        href: "/gamification",
-        label: "Gamification",
-        icon: Trophy,
-        pageKey: "coach-gamification",
-      },
-      {
-        href: "/exercise-lab",
-        label: "Exercise Lab",
-        icon: Dumbbell,
-        pageKey: "coach-exercise-lab",
-      },
     ],
   },
   {
@@ -202,35 +188,6 @@ const MEMBER_NAV_SECTIONS: NavSection[] = [
         label: "Bookings",
         icon: CalendarCheck,
         pageKey: "member-bookings",
-      },
-    ],
-  },
-  {
-    label: "Fitness Ops",
-    items: [
-      {
-        href: "/nutrition",
-        label: "Nutrition",
-        icon: Apple,
-        pageKey: "member-nutrition",
-      },
-      {
-        href: "/mastery",
-        label: "Muscle Mastery",
-        icon: Trophy,
-        pageKey: "member-mastery",
-      },
-      {
-        href: "/workout",
-        label: "Workout",
-        icon: Dumbbell,
-        pageKey: "member-workout",
-      },
-      {
-        href: "/ai",
-        label: "BrodigyAI",
-        icon: MessageCircle,
-        pageKey: "ai",
       },
     ],
   },

@@ -41,6 +41,16 @@ export function makePrefModalStyles(colors: ThemeColors) {
       marginRight: 10
     },
     headerTitle: { fontSize: 17, fontWeight: "700", color: colors.textPrimary, flex: 1 },
+    closeButton: {
+      alignItems: "center",
+      borderColor: colors.border,
+      borderRadius: R.md,
+      borderWidth: 1,
+      height: 32,
+      justifyContent: "center",
+      marginLeft: 10,
+      width: 32,
+    },
     body: {
       paddingHorizontal: 16,
       paddingTop: 16,

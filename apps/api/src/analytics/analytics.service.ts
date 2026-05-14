@@ -219,6 +219,7 @@ export class AnalyticsService {
       sessionsToday,
       venueBookings,
       coachingAppointments,
+      feedbackMetrics,
       recentActivityCount,
       systemAlerts,
       recentActivities,
@@ -228,6 +229,7 @@ export class AnalyticsService {
       this.repo.getCheckInCount(todayStart, now),
       this.repo.getVenueBookingCount(allTimeStart, now),
       this.repo.getCoachingAppointmentCount(allTimeStart, now),
+      this.repo.getFeedbackMetrics(),
       this.repo.getRecentActivityCountSince(recentSince),
       this.repo.listSystemAlerts(4),
       this.repo.listRecentActivities(8),
@@ -256,6 +258,28 @@ export class AnalyticsService {
         check_ins: this.toCount(overview.attendance.total_check_ins),
         coaching_sessions: this.toCount(
           overview.coaching.completed_coaching_sessions,
+        ),
+        active_members: activeMembers,
+        session_completion_rate:
+          coachingAppointments > 0
+            ? Number(
+                (
+                  (this.toCount(overview.coaching.completed_coaching_sessions) /
+                    coachingAppointments) *
+                  100
+                ).toFixed(1),
+              )
+            : 0,
+        coach_satisfaction_rating: Number(
+          this.toMoneyNumber(feedbackMetrics.coach_satisfaction_rating).toFixed(
+            1,
+          ),
+        ),
+        venue_feedback_rating: Number(
+          this.toMoneyNumber(feedbackMetrics.venue_feedback_rating).toFixed(1),
+        ),
+        app_feedback_submissions: this.toCount(
+          feedbackMetrics.app_feedback_submissions,
         ),
       },
       system_alerts: systemAlerts.map((alert) => this.toSystemAlert(alert)),

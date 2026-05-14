@@ -18,17 +18,39 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
+import FloatingHelpButton from "@/components/help/FloatingHelpButton";
 
 export const dynamic = "force-dynamic";
 
 export default function ExerciseLabPage() {
   const { user } = useAuth();
+  const help = (
+    <FloatingHelpButton
+      title="Exercise Lab"
+      description="This page manages exercise catalog entries, muscle maps, and review queues for movement data."
+      terms={[
+        { label: "Exercise library", value: "Approved movement records used by workout and coaching features." },
+        { label: "Review queue", value: "Submitted or detected movements that need staff review before publishing." },
+        { label: "Milestones", value: "Achievement records connected to member progression and ranking." },
+      ]}
+    />
+  );
 
   if (user?.role === "COACH") {
-    return <CoachExerciseLabPage />;
+    return (
+      <>
+        <CoachExerciseLabPage />
+        {help}
+      </>
+    );
   }
 
-  return <AdminExerciseLabPage />;
+  return (
+    <>
+      <AdminExerciseLabPage />
+      {help}
+    </>
+  );
 }
 
 function AdminExerciseLabPage() {

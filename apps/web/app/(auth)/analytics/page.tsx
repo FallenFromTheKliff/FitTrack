@@ -104,10 +104,25 @@ function getAlertLaneLabel(kind: string) {
 
 function getAppointmentAmount(appointment: StaffAppointmentRecord) {
   const amount = Number(
+    appointment.coachEarnings ??
+      appointment.totalAmount ??
+      (appointment.coach?.hourlyRate ?? 0) * (appointment.duration || 1),
+  );
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function getAppointmentGrossAmount(appointment: StaffAppointmentRecord) {
+  const amount = Number(
     appointment.totalAmount ??
       (appointment.coach?.hourlyRate ?? 0) * (appointment.duration || 1),
   );
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function getAppointmentMemberName(appointment: StaffAppointmentRecord) {
+  const firstName = appointment.user?.profile?.firstName?.trim() ?? "";
+  const lastName = appointment.user?.profile?.lastName?.trim() ?? "";
+  return `${firstName} ${lastName}`.trim() || appointment.user?.email || "Member";
 }
 
 function CoachEarningsPage() {
@@ -125,12 +140,23 @@ function CoachEarningsPage() {
   const completedAppointments = appointments.filter(
     (appointment) => appointment.status === "completed",
   );
+  const monthStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }, []);
+  const completedAppointmentsThisMonth = completedAppointments.filter(
+    (appointment) => new Date(appointment.scheduledAt) >= monthStart,
+  );
   const upcomingAppointments = appointments.filter(
     (appointment) =>
       appointment.status !== "cancelled" &&
       appointment.status !== "completed",
   );
   const earnedTotal = completedAppointments.reduce(
+    (sum, appointment) => sum + getAppointmentAmount(appointment),
+    0,
+  );
+  const earnedThisMonth = completedAppointmentsThisMonth.reduce(
     (sum, appointment) => sum + getAppointmentAmount(appointment),
     0,
   );
@@ -165,19 +191,19 @@ function CoachEarningsPage() {
         >
           {[
             {
-              label: "Completed Sessions",
-              value: String(completedAppointments.length),
-              helper: "Sessions marked complete.",
+              label: "Total Earnings This Month",
+              value: formatCompactMoney(earnedThisMonth),
+              helper: "Coach commission from completed sessions this month.",
             },
             {
-              label: "Expected Earnings",
+              label: "Total Earnings All Time",
               value: formatCompactMoney(earnedTotal),
-              helper: "Based on completed coaching sessions.",
+              helper: "Coach commission from all completed sessions.",
             },
             {
-              label: "Upcoming Work",
-              value: String(upcomingAppointments.length),
-              helper: "Confirmed or pending sessions still ahead.",
+              label: "Completed Sessions This Month",
+              value: String(completedAppointmentsThisMonth.length),
+              helper: `${upcomingAppointments.length} upcoming or pending session${upcomingAppointments.length === 1 ? "" : "s"}.`,
             },
           ].map((item) => (
             <div key={item.label} style={cardStyle}>
@@ -249,56 +275,81 @@ function CoachEarningsPage() {
               onClick={() => router.push("/schedule")}
             />
           </div>
-          <div style={{ display: "grid", gap: 0 }}>
-            {completedAppointments.slice(0, 6).map((appointment) => (
+          <div style={{ display: "grid", gap: 0, overflowX: "auto" }}>
+            {completedAppointments.length > 0 ? (
               <div
-                key={appointment.id}
                 style={{
-                  alignItems: "center",
                   borderTop: `1px solid ${colors.border}`,
                   display: "grid",
-                  gap: 10,
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
-                  minHeight: 54,
-                  padding: "10px 0",
+                  gap: 0,
+                  minWidth: 720,
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <FitText
-                    style={{
-                      display: "block",
-                      fontSize: 13.5,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {new Date(appointment.scheduledAt).toLocaleDateString("en-PH", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </FitText>
-                  <FitText
-                    as="p"
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 12.5,
-                      marginTop: 2,
-                    }}
-                  >
-                    {appointment.user?.email ?? "Client session"}
-                  </FitText>
-                </div>
-                <FitText
+                <div
                   style={{
-                    color: colors.brand,
-                    fontSize: 13.5,
-                    fontWeight: 900,
+                    color: colors.textMuted,
+                    display: "grid",
+                    fontSize: 11,
+                    fontWeight: 850,
+                    gap: 10,
+                    gridTemplateColumns: "1fr 1.3fr 1fr 0.8fr 0.9fr 0.8fr",
+                    letterSpacing: "0.06em",
+                    padding: "10px 0",
+                    textTransform: "uppercase",
                   }}
                 >
-                  {formatCompactMoney(getAppointmentAmount(appointment))}
-                </FitText>
+                  <span>Date</span>
+                  <span>Member Name</span>
+                  <span>Session Type</span>
+                  <span>Rate</span>
+                  <span>Commission</span>
+                  <span>Status</span>
+                </div>
+                {completedAppointments.map((appointment) => (
+                  <div
+                    key={appointment.id}
+                    style={{
+                      alignItems: "center",
+                      borderTop: `1px solid ${colors.border}`,
+                      display: "grid",
+                      gap: 10,
+                      gridTemplateColumns: "1fr 1.3fr 1fr 0.8fr 0.9fr 0.8fr",
+                      minHeight: 48,
+                      padding: "10px 0",
+                    }}
+                  >
+                    <FitText style={{ fontSize: 12.5, fontWeight: 750 }}>
+                      {new Date(appointment.scheduledAt).toLocaleDateString("en-PH", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </FitText>
+                    <FitText style={{ fontSize: 12.5, fontWeight: 750 }}>
+                      {getAppointmentMemberName(appointment)}
+                    </FitText>
+                    <FitText style={{ color: colors.textSecondary, fontSize: 12.5 }}>
+                      {`${appointment.duration} min coaching`}
+                    </FitText>
+                    <FitText style={{ color: colors.textSecondary, fontSize: 12.5 }}>
+                      {formatCompactMoney(getAppointmentGrossAmount(appointment))}
+                    </FitText>
+                    <FitText style={{ color: colors.brand, fontSize: 12.5, fontWeight: 900 }}>
+                      {formatCompactMoney(getAppointmentAmount(appointment))}
+                    </FitText>
+                    <FitText
+                      style={{
+                        color: appointment.coachPayoutPaidAt ? colors.success : colors.warning,
+                        fontSize: 12,
+                        fontWeight: 850,
+                      }}
+                    >
+                      {appointment.coachPayoutPaidAt ? "Paid" : "Pending"}
+                    </FitText>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : null}
             {!appointmentsQuery.isLoading && completedAppointments.length === 0 ? (
               <FitText
                 as="p"
@@ -393,6 +444,14 @@ function AdminAnalyticsPage() {
   const selectedRevenueSeriesKey =
     REVENUE_SOURCE_SERIES_KEY[revenueSourceFilter];
   const topRevenueSources = analytics.revenue?.topRevenueSources ?? [];
+  const coachingCommissionTotal =
+    analytics.revenue?.totals.coachingGymRevenue ?? 0;
+  const coachingPaymentsCollected =
+    analytics.revenue?.totals.coachingPaymentsCollected ?? 0;
+  const coachingCommissionRate =
+    coachingPaymentsCollected > 0
+      ? Number(((coachingCommissionTotal / coachingPaymentsCollected) * 100).toFixed(1))
+      : 0;
   const latestRecommendedActions =
     analytics.latestInsight?.recommendedActions ?? [];
   const analyticsSupportTextColor =
@@ -443,6 +502,11 @@ function AdminAnalyticsPage() {
     },
     {
       icon: Users,
+      label: "Total Active Members",
+      value: String(analytics.snapshot?.performanceKpis.activeMembers ?? 0),
+    },
+    {
+      icon: Users,
       label: "Members Added",
       value: String(analytics.snapshot?.performanceKpis.newMembers ?? 0),
     },
@@ -455,6 +519,33 @@ function AdminAnalyticsPage() {
       icon: Sparkles,
       label: "Completed Coaching Sessions",
       value: String(analytics.snapshot?.performanceKpis.coachingSessions ?? 0),
+    },
+    {
+      icon: TrendingUp,
+      label: "Coach Commission",
+      value: `${formatCompactMoney(coachingCommissionTotal)} / ${coachingCommissionRate}%`,
+    },
+    {
+      icon: TrendingUp,
+      label: "Session Completion Rate",
+      value: `${analytics.snapshot?.performanceKpis.sessionCompletionRate ?? 0}%`,
+    },
+    {
+      icon: Sparkles,
+      label: "Coach Satisfaction Rating",
+      value: `${analytics.snapshot?.performanceKpis.coachSatisfactionRating ?? 0}/5`,
+    },
+    {
+      icon: BarChart3,
+      label: "Venue Feedback Rating",
+      value: `${analytics.snapshot?.performanceKpis.venueFeedbackRating ?? 0}/5`,
+    },
+    {
+      icon: PackageSearch,
+      label: "App Feedback Submissions",
+      value: String(
+        analytics.snapshot?.performanceKpis.appFeedbackSubmissions ?? 0,
+      ),
     },
   ];
 
@@ -668,23 +759,51 @@ function AdminAnalyticsPage() {
               <div
                 className="analytics-ai-summary-row"
                 style={{
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surface,
+                  border: `1px solid ${
+                    analytics.latestInsightIsFallback
+                      ? colors.warning
+                      : colors.border
+                  }`,
+                  backgroundColor: analytics.latestInsightIsFallback
+                    ? `${colors.warning}14`
+                    : colors.surface,
                 }}
               >
                 <div style={{ display: "grid", gap: 6 }}>
                   {analytics.latestInsightIsFallback ? (
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        gap: 7,
+                      }}
+                    >
+                      <AlertTriangle size={13} color={colors.warning} />
+                      <FitText
+                        as="p"
+                        style={{
+                          fontSize: 11,
+                          color: colors.warning,
+                          fontWeight: 800,
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Grounded fallback mode
+                      </FitText>
+                    </div>
+                  ) : null}
+                  {analytics.latestInsightIsFallback ? (
                     <FitText
                       as="p"
                       style={{
-                        fontSize: 11,
+                        fontSize: 12,
                         color: colors.warning,
-                        fontWeight: 700,
-                        letterSpacing: "0.04em",
-                        textTransform: "uppercase",
+                        lineHeight: 1.45,
                       }}
                     >
-                      Fallback grounded insight
+                      The external AI provider was unavailable, so this panel is
+                      using deterministic analytics data instead.
                     </FitText>
                   ) : null}
                   {analytics.latestInsight ? (

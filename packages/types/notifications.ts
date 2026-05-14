@@ -9,9 +9,11 @@ export type NotificationType =
   | "appointment_cancelled"
   | "appointment_completed"
   | "appointment_confirmed"
+  | "appointment_reminder"
   | "booking_cancelled"
   | "booking_confirmed"
   | "booking_no_show"
+  | "booking_reminder"
   | "equipment_write_off"
   | "low_stock"
   | "payment_confirmed"
@@ -49,9 +51,11 @@ export type NotificationPreferencesRecord = {
   appointmentCancelledEmail: boolean;
   appointmentCompletedEmail: boolean;
   appointmentConfirmedEmail: boolean;
+  coachAppointmentReminderEmail: boolean;
   bookingCancelledEmail: boolean;
   bookingConfirmedEmail: boolean;
   bookingNoShowEmail: boolean;
+  venueBookingReminderEmail: boolean;
   paymentConfirmedEmail: boolean;
   paymentFailedEmail: boolean;
   rankUpEmail: boolean;
@@ -89,9 +93,11 @@ export const NOTIFICATION_PREFERENCE_GROUPS: NotificationPreferenceGroup[] = [
   {
     id: "bookings",
     label: "Booking Updates",
-    description: "Booking confirmations, cancellations, and no-show alerts.",
+    description:
+      "Booking confirmations, 24-hour reminders, cancellations, and no-show alerts.",
     fields: [
       "bookingConfirmedEmail",
+      "venueBookingReminderEmail",
       "bookingCancelledEmail",
       "bookingNoShowEmail",
     ],
@@ -99,9 +105,11 @@ export const NOTIFICATION_PREFERENCE_GROUPS: NotificationPreferenceGroup[] = [
   {
     id: "coaching",
     label: "Coaching Sessions",
-    description: "Coach appointment confirmations, completions, and changes.",
+    description:
+      "Coach appointment confirmations, 24-hour reminders, completions, and changes.",
     fields: [
       "appointmentConfirmedEmail",
+      "coachAppointmentReminderEmail",
       "appointmentCompletedEmail",
       "appointmentCancelledEmail",
     ],

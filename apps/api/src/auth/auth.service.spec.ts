@@ -318,6 +318,70 @@ describe('AuthService', () => {
     );
   });
 
+  it('rejects team-portal login attempts for member accounts with invalid-credential semantics', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: new Date('2026-03-28T08:00:00.000Z'),
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+
+    await expect(
+      service.login(
+        {
+          email: 'member@example.com',
+          password: 'Password1!',
+          portal: 'team',
+        },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+  });
+
+  it('rejects member-portal login attempts for team accounts with invalid-credential semantics', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.staff,
+      status: UserStatus.active,
+      email_verified_at: new Date('2026-03-28T08:00:00.000Z'),
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+
+    await expect(
+      service.login(
+        {
+          email: 'staff@example.com',
+          password: 'Password1!',
+          portal: 'member',
+        },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+  });
+
   it('preserves invalid-credential semantics for archived accounts', async () => {
     repo.findIdentity.mockResolvedValue({
       id: 'identity-1',
@@ -341,7 +405,7 @@ describe('AuthService', () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        detail: 'Incorrect email or password.',
+        detail: 'Invalid credentials.',
       },
     });
 

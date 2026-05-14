@@ -10,6 +10,7 @@ export type CoachRosterResource = Resource & {
   email: string;
   hourlyRate: number | null;
   isActive: boolean;
+  scheduleType: "full_time" | "part_time";
   specialties: string[];
 };
 
@@ -96,6 +97,7 @@ export function mapCoachesToRoster(
     specialties: coach.specialties ?? [],
     hourlyRate: coach.hourlyRate ?? null,
     isActive: coach.isActive ?? false,
+    scheduleType: coach.scheduleType ?? "part_time",
     email: isLegacySeedIdentityEmail(coach.contactEmail)
       ? ""
       : (coach.contactEmail ?? ""),

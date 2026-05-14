@@ -192,7 +192,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "FitTrack",
     copy:
       "Memberships, reservations, coaching, workouts, nutrition context, and support in one connected gym experience.",
-    ctaLabel: "Member / Team Login",
+    ctaLabel: "Member Login",
     secondaryLabel: "View Services",
     secondaryTarget: "services",
     metrics: [
@@ -206,7 +206,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "Services members actually use",
     copy:
       "FitTrack keeps the public promise concise: access, reservations, workout progress, and member-safe support.",
-    ctaLabel: "Open Portal",
+    ctaLabel: "Member Login",
     secondaryLabel: "See Facilities",
     secondaryTarget: "facilities",
     metrics: [
@@ -220,7 +220,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "Spaces, equipment, and reservations",
     copy:
       "Members see the spaces they can use, the activities each area supports, and the booking path that fits their visit.",
-    ctaLabel: "Log In",
+    ctaLabel: "Member Login",
     secondaryLabel: "Meet Staff",
     secondaryTarget: "staff",
     metrics: [
@@ -234,7 +234,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "A better handoff between members and the gym team",
     copy:
       "Front desk and coaching teams stay close to member needs without turning the public page into an internal dashboard.",
-    ctaLabel: "Log In",
+    ctaLabel: "Member Login",
     secondaryLabel: "About FitTrack",
     secondaryTarget: "about",
     metrics: [
@@ -248,7 +248,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "FitTrack connects the public gym journey",
     copy:
       "The platform is built around the daily gym relationship: access, guidance, reservations, workouts, and answers.",
-    ctaLabel: "Open Portal",
+    ctaLabel: "Member Login",
     secondaryLabel: "Contact",
     secondaryTarget: "contact",
     metrics: [
@@ -262,7 +262,7 @@ const HERO_CONTENT: Record<LandingSection, HeroSection> = {
     title: "Questions about FitTrack access?",
     copy:
       "Use the portal if you already have an account. For memberships, bookings, and facility support, contact your gym team.",
-    ctaLabel: "Log In",
+    ctaLabel: "Member Login",
     secondaryLabel: "Back Home",
     secondaryTarget: "home",
     metrics: [
@@ -411,7 +411,7 @@ export default function FitTrackLandingPage() {
               );
             })}
             <Link
-              href="/login"
+              href="/member-login"
               style={{
                 backgroundColor: colors.brand,
                 borderRadius: 8,
@@ -422,7 +422,21 @@ export default function FitTrackLandingPage() {
                 textDecoration: "none",
               }}
             >
-              Log In
+              Member Login
+            </Link>
+            <Link
+              href="/login"
+              style={{
+                border: "1px solid rgba(255,255,255,0.24)",
+                borderRadius: 8,
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 900,
+                padding: "10px 14px",
+                textDecoration: "none",
+              }}
+            >
+              Team Login
             </Link>
           </nav>
           <button
@@ -574,7 +588,7 @@ export default function FitTrackLandingPage() {
           </nav>
           <div style={{ backgroundColor: colors.border, height: 1, marginBottom: 12 }} />
           <Link
-            href="/login"
+            href="/member-login"
             onClick={() => setIsMobileSidebarOpen(false)}
             style={{
               alignItems: "center",
@@ -591,7 +605,28 @@ export default function FitTrackLandingPage() {
             }}
           >
             <LogIn size={18} strokeWidth={2.25} />
-            Log In
+            Member Login
+          </Link>
+          <Link
+            href="/login"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            style={{
+              alignItems: "center",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              color: colors.textPrimary,
+              display: "flex",
+              fontSize: 16,
+              fontWeight: 900,
+              gap: 10,
+              justifyContent: "center",
+              marginTop: 10,
+              minHeight: 48,
+              textDecoration: "none",
+            }}
+          >
+            <LogIn size={18} strokeWidth={2.25} />
+            Team Login
           </Link>
         </aside>
 
@@ -687,7 +722,7 @@ export default function FitTrackLandingPage() {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 30 }}>
             <Link
-              href="/login"
+              href="/member-login"
               style={{
                 alignItems: "center",
                 backgroundColor: colors.brand,

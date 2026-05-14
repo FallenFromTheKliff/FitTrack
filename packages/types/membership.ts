@@ -84,6 +84,25 @@ export type MembershipSubscriptionRecord = {
   warned_7d_at: string | null;
 };
 
+export type MembershipOperationsDashboardItemRecord = {
+  expiresAt: string | null;
+  id: string;
+  memberName: string;
+  planName: string;
+  startsAt: string | null;
+  status: MembershipSubscriptionStatus;
+  userId: string;
+};
+
+export type MembershipOperationsDashboardRecord = {
+  expiringMembershipCount: number;
+  expiringMemberships: MembershipOperationsDashboardItemRecord[];
+  generatedAt: string;
+  recentlyActivated: MembershipOperationsDashboardItemRecord[];
+  recentlyActivatedCount: number;
+  totalActiveMembersCount: number;
+};
+
 export type MembershipCheckoutRecord = {
   checkout_url: string;
 };
@@ -149,6 +168,15 @@ export type MembershipPaymentActorSummaryRecord = {
 export type MembershipPaymentDetailsRecord = MembershipPaymentRecord & {
   user?: MembershipPaymentActorSummaryRecord | null;
   verifier?: MembershipPaymentActorSummaryRecord | null;
+};
+
+export type MembershipCatalogSettingsRecord = {
+  membership_card_price: string;
+  updated_at: string;
+};
+
+export type UpdateMembershipCatalogSettingsInput = {
+  membershipCardPrice: number;
 };
 
 export type SubscribeToMembershipInput = {

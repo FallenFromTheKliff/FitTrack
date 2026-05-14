@@ -4,13 +4,14 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { hydrateMobileApiAuth } from "@/lib/api-client";
 import { QueryProvider } from "@/lib/queryClient";
 import { FitnessProvider, useFitness } from "@/contexts/FitnessContext";
 import { MAX_WIDTH } from "@fittrack/ui/tokens";
 
 import SplashScreen from "@/components/loading/SplashScreen";
+import FirstLoginPrivacyGate from "@/components/modals/settings/FirstLoginPrivacyGate";
 
 const s = StyleSheet.create({
   inner: { width: "100%", maxWidth: MAX_WIDTH, flex: 1 }
@@ -54,8 +55,24 @@ function AppProvidersInner({ children }: { children: ReactNode }) {
       onUserLoaded={handleUserLoaded}
       onUserCleared={handleUserCleared}
     >
-      <QueryProvider>{children}</QueryProvider>
+      <QueryProvider>
+        {children}
+        <PrivacyGateHost />
+      </QueryProvider>
     </AuthProvider>
+  );
+}
+
+function PrivacyGateHost() {
+  const { acceptPrivacyPolicy, isAuthenticated, user } = useAuth();
+  const shouldShowPrivacyGate =
+    isAuthenticated && user?.hasAcceptedPrivacy === false;
+
+  return (
+    <FirstLoginPrivacyGate
+      isVisible={shouldShowPrivacyGate}
+      onAccept={acceptPrivacyPolicy}
+    />
   );
 }
 function AppProviders({ children }: { children: ReactNode }) {

@@ -29,9 +29,11 @@ import {
   ManualAttendanceCheckInDTO,
   AttendanceFilterDTO,
   UpdatePhoneDTO,
+  CreateAppFeedbackDTO,
 } from './dto/user-dto';
 import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
 import { ACCOUNT_ACTIVITY_EVENT } from './events/account-activity.event';
+import { ActivityLevelService } from './activity-level.service';
 
 const PROFILE_DIRECT_FIELDS = [
   'first_name',
@@ -71,6 +73,14 @@ function getAttendanceQrRefreshAvailableAt(rotatedAt: Date | null | undefined) {
 
 function toIsoStringOrNull(value: Date | null | undefined) {
   return value ? value.toISOString() : null;
+}
+
+function getUserDisplayName(profile?: {
+  first_name?: string | null;
+  last_name?: string | null;
+} | null) {
+  const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();
+  return name || 'Unknown user';
 }
 
 export interface GamificationParticipantProfile {
@@ -154,6 +164,8 @@ export class UserService {
       email,
       phone,
       phone_no: phone,
+      hasAcceptedPrivacy: user.has_accepted_privacy,
+      privacyAcceptedAt: user.privacy_accepted_at?.toISOString() ?? null,
       qrCodeReady,
       attendanceQrReady,
       emailVerified:
@@ -171,6 +183,46 @@ export class UserService {
   async updateMyProfile(userId: string, dto: UpdateProfileDTO) {
     await this.repo.findUserByIdOrThrow(userId);
     return this.updateExistingUserProfile(userId, dto);
+  }
+
+  async acceptPrivacyPolicy(userId: string) {
+    const acceptedAt = new Date();
+    const user = await this.repo.updateUser(userId, {
+      has_accepted_privacy: true,
+      privacy_accepted_at: acceptedAt,
+    });
+
+    return {
+      hasAcceptedPrivacy: user.has_accepted_privacy,
+      privacyAcceptedAt: user.privacy_accepted_at?.toISOString() ?? null,
+    };
+  }
+
+  async submitAppFeedback(userId: string, dto: CreateAppFeedbackDTO) {
+    await this.repo.findUserByIdOrThrow(userId);
+
+    return this.repo.createAppFeedback({
+      user: { connect: { id: userId } },
+      category: dto.category ?? 'general_feedback',
+      message: dto.message,
+    });
+  }
+
+  async listAppFeedback() {
+    const feedback = await this.repo.listAppFeedback();
+
+    return feedback.map((entry) => ({
+      created_at: entry.created_at.toISOString(),
+      category: entry.category,
+      id: entry.id,
+      message: entry.message,
+      submitted_by: {
+        id: entry.user.id,
+        name: getUserDisplayName(entry.user.profile),
+        role: entry.user.role,
+      },
+      updated_at: entry.updated_at.toISOString(),
+    }));
   }
 
   async getDeletionRequestStatus(userId: string) {
@@ -552,6 +604,7 @@ export class AttendanceService {
   constructor(
     private readonly repo: UserRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly activityLevelService: ActivityLevelService,
   ) {}
 
   async scanQr(scannerUserId: string | null, dto: ScanQrDTO) {
@@ -643,6 +696,7 @@ export class AttendanceService {
       targetRole: target.role,
       targetUserId: userId,
     });
+    await this.activityLevelService.recalculateForUser(userId);
 
     return {
       attendance_id: log.id,
@@ -664,7 +718,9 @@ export class AttendanceService {
         HttpStatus.CONFLICT,
       );
     }
-    return this.repo.checkoutAttendance(attendanceId);
+    const updated = await this.repo.checkoutAttendance(attendanceId);
+    await this.activityLevelService.recalculateForUser(updated.user_id);
+    return updated;
   }
 
   getAttendanceLogs(dto: AttendanceFilterDTO) {

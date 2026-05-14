@@ -10,6 +10,7 @@ export type UpdateCoachProfilePayload = {
   displayName?: string;
   hourlyRate?: number;
   isAvailableForBooking?: boolean;
+  scheduleType?: "full_time" | "part_time";
   specialties?: string[];
   yearsExperience?: number;
 };
@@ -19,6 +20,46 @@ export type UpsertCoachAvailabilityPayload = {
   endTime: string;
   isAvailable?: boolean;
   startTime: string;
+};
+
+export type ReplaceCoachAvailabilityPayload = {
+  slots: Array<{
+    dayOfWeek: number;
+    endTime: string;
+    startTime: string;
+  }>;
+};
+
+export type SubmitCoachReviewPayload = {
+  appointmentId: string;
+  comment?: string;
+  rating: number;
+};
+
+export type CreateCoachManagedAppointmentPayload = {
+  durationMinutes: number;
+  memberId: string;
+  memberNotes?: string;
+  scheduledAt: string;
+};
+
+export type SubmitCoachAppointmentFeedbackPayload = {
+  assessmentReport?: string;
+  coachFeedback: string;
+};
+
+export type CoachReceivedReviewRecord = {
+  appointment_id: string;
+  comment?: string | null;
+  created_at: string;
+  id: string;
+  rating: number;
+  reviewer: {
+    id: string;
+    name: string;
+  };
+  scheduled_at: string;
+  updated_at: string;
 };
 
 export type CoachAvailabilitySlot = {
@@ -32,6 +73,56 @@ export type CoachAvailabilityResponse = {
   availability: CoachAvailabilitySlot[];
   bookedDates: string[];
   coachId: string;
+  scheduleType: "full_time" | "part_time";
+};
+
+export type CoachAppointmentScheduleRecord = {
+  activePaymentStage?: null;
+  amountDueNow?: null;
+  assessmentReport?: string | null;
+  balancePaidAt?: string | null;
+  coach?: {
+    contactEmail?: string | null;
+    displayName?: string | null;
+    hourlyRate?: number | null;
+    id: string;
+    profile?: null;
+  };
+  coachEarnings?: number | null;
+  coachFeedback?: string | null;
+  coachId?: string;
+  completedAt?: string | null;
+  createdAt: string;
+  downpaymentPaidAt?: string | null;
+  duration: number;
+  gymRevenue?: number | null;
+  id: string;
+  notes?: string | null;
+  recurringPlanId?: string | null;
+  recurringState?: string | null;
+  remainingBalance?: number | null;
+  review?: {
+    comment?: string | null;
+    createdAt: string;
+    id: string;
+    rating: number;
+    updatedAt: string;
+  } | null;
+  scheduledAt: string;
+  sessionNotes?: string | null;
+  status?: string;
+  totalAmount?: number | null;
+  updatedAt: string;
+  user?: {
+    email?: string | null;
+    id: string;
+    profile?: {
+      avatarUrl?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
+  userId: string;
 };
 
 type CoachUserProfileApiRecord = {
@@ -66,18 +157,42 @@ type CoachApiRecord = {
   id: string;
   is_available_for_booking?: boolean;
   profile?: CoachUserProfileApiRecord | null;
+  schedule_type?: "full_time" | "part_time";
   specialization?: string | null;
   user?: CoachUserApiRecord | null;
 };
 
 type CoachScheduleApiRecord = {
+  balance_amount?: number | string | null;
+  balance_paid_at?: string | null;
+  coach_earnings?: number | string | null;
   coach_id?: string;
+  completed_at?: string | null;
+  created_at?: string;
+  downpayment_amount?: number | string | null;
+  downpayment_paid_at?: string | null;
   duration_minutes?: number;
+  gym_revenue?: number | string | null;
   id: string;
+  assessment_report?: string | null;
+  coach_feedback?: string | null;
   member_notes?: string | null;
+  recurring_plan_id?: string | null;
+  recurring_state?: string | null;
+  review?: {
+    comment?: string | null;
+    created_at?: string;
+    id: string;
+    rating: number;
+    updated_at?: string;
+  } | null;
   scheduled_at?: string;
+  session_notes?: string | null;
   status?: string;
+  total_amount?: number | string | null;
+  updated_at?: string;
   user?: CoachUserApiRecord | null;
+  user_id?: string;
 };
 
 type CoachAvailabilityDraft = {
@@ -177,6 +292,7 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
     hourlyRate: toNullableNumber(record.hourly_rate),
     id: record.id,
     isActive: record.is_available_for_booking ?? true,
+    scheduleType: record.schedule_type ?? "part_time",
     specialties: splitMultiValue(record.specialization),
     user: null,
     yearsExperience: null,
@@ -190,23 +306,62 @@ function mapCoachAvailability(
     availability: (record.availability_slots ?? []).map(mapAvailabilitySlot),
     bookedDates: record.booked_dates ?? [],
     coachId: record.id,
+    scheduleType: record.schedule_type ?? "part_time",
   };
 }
 
 function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
+  const totalAmount = toNullableNumber(record.total_amount);
+  const downpaymentAmount = toNullableNumber(record.downpayment_amount);
+  const remainingBalance = toNullableNumber(record.balance_amount);
+
   return {
+    activePaymentStage: null,
+    amountDueNow: null,
+    assessmentReport: record.assessment_report ?? null,
+    balancePaidAt: record.balance_paid_at ?? null,
+    coach: {
+      contactEmail: null,
+      displayName: null,
+      hourlyRate: null,
+      id: record.coach_id ?? "",
+      profile: null,
+    },
     coachId: record.coach_id,
+    coachEarnings: toNullableNumber(record.coach_earnings),
+    coachFeedback: record.coach_feedback ?? null,
+    createdAt: record.created_at ?? "",
     duration: record.duration_minutes ?? 0,
+    gymRevenue: toNullableNumber(record.gym_revenue),
     id: record.id,
     notes: record.member_notes ?? null,
+    recurringPlanId: record.recurring_plan_id ?? null,
+    recurringState: record.recurring_state ?? null,
+    remainingBalance,
+    review: record.review
+      ? {
+          comment: record.review.comment ?? null,
+          createdAt: record.review.created_at ?? "",
+          id: record.review.id,
+          rating: record.review.rating,
+          updatedAt: record.review.updated_at ?? "",
+        }
+      : null,
     scheduledAt: record.scheduled_at ?? "",
+    sessionNotes: record.session_notes ?? null,
     status: record.status,
+    totalAmount,
+    downpaymentPaidAt: record.downpayment_paid_at ?? null,
+    completedAt: record.completed_at ?? null,
+    updatedAt: record.updated_at ?? "",
     user: record.user
       ? {
           email: record.user.email ?? null,
+          id: record.user.id ?? record.user_id ?? "",
           profile: mapUserProfile(record.user.profile ?? null),
         }
       : null,
+    userId: record.user_id ?? record.user?.id ?? "",
   };
 }
 
@@ -218,7 +373,7 @@ export function createCoachesApi(transport: ApiTransport) {
     );
   }
 
-  async function replaceAvailability(
+  async function replaceCurrentAvailability(
     slots: Array<
       Pick<CoachAvailabilityDraft, "dayOfWeek" | "endTime" | "startTime">
     >,
@@ -249,7 +404,7 @@ export function createCoachesApi(transport: ApiTransport) {
       mapAvailabilityDraft,
     );
     const nextSlots = mutator(currentSlots);
-    return replaceAvailability(nextSlots, fallback);
+    return replaceCurrentAvailability(nextSlots, fallback);
   }
 
   return {
@@ -294,17 +449,60 @@ export function createCoachesApi(transport: ApiTransport) {
           ...(payload.certifications !== undefined
             ? { certification: payload.certifications.join(", ") }
             : {}),
+          ...(payload.contactEmail !== undefined
+            ? { contact_email: payload.contactEmail }
+            : {}),
+          ...(payload.contactPhone !== undefined
+            ? { contact_phone: payload.contactPhone }
+            : {}),
+          ...(payload.displayName !== undefined
+            ? { display_name: payload.displayName }
+            : {}),
           ...(payload.hourlyRate !== undefined
             ? { hourly_rate: payload.hourlyRate }
             : {}),
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
             : {}),
+          ...(payload.scheduleType !== undefined
+            ? { schedule_type: payload.scheduleType }
+            : {}),
           ...(payload.specialties !== undefined
             ? { specialization: payload.specialties.join(", ") }
             : {}),
         }),
         "Unable to update coach profile.",
+      );
+    },
+    createManagedAppointment(payload: CreateCoachManagedAppointmentPayload) {
+      return unwrapVoidResponse(
+        transport.post("/coaching/appointments/coach-managed", {
+          duration_minutes: payload.durationMinutes,
+          member_id: payload.memberId,
+          ...(payload.memberNotes ? { member_notes: payload.memberNotes } : {}),
+          scheduled_at: payload.scheduledAt,
+        }),
+        "Unable to create client appointment.",
+      );
+    },
+    submitAppointmentFeedback(
+      appointmentId: string,
+      payload: SubmitCoachAppointmentFeedbackPayload,
+    ) {
+      return unwrapVoidResponse(
+        transport.patch(`/coaching/appointments/${appointmentId}/feedback`, {
+          ...(payload.assessmentReport
+            ? { assessment_report: payload.assessmentReport }
+            : {}),
+          coach_feedback: payload.coachFeedback,
+        }),
+        "Unable to save client feedback.",
+      );
+    },
+    replaceAvailability(payload: ReplaceCoachAvailabilityPayload) {
+      return replaceCurrentAvailability(
+        payload.slots,
+        "Unable to update coach availability.",
       );
     },
     createAvailability(payload: UpsertCoachAvailabilityPayload) {
@@ -386,6 +584,22 @@ export function createCoachesApi(transport: ApiTransport) {
 
           return nextSlots;
         },
+      );
+    },
+    submitReview(coachId: string, payload: SubmitCoachReviewPayload) {
+      return unwrapVoidResponse(
+        transport.post(`/coaching/coaches/${coachId}/reviews`, {
+          appointment_id: payload.appointmentId,
+          rating: payload.rating,
+          ...(payload.comment ? { comment: payload.comment } : {}),
+        }),
+        "Unable to submit coach feedback.",
+      );
+    },
+    listReceivedReviews() {
+      return unwrapResponse<CoachReceivedReviewRecord[]>(
+        transport.get("/coaching/coaches/me/reviews"),
+        "Unable to load coach feedback.",
       );
     },
   };

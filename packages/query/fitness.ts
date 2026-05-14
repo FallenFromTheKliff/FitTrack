@@ -358,6 +358,15 @@ export function fitnessMilestonesQueryOptions(
   });
 }
 
+export function fitnessAchievementReviewsQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessAchievementReviews(),
+    queryFn: () => client.fitness.listAchievementReviews(),
+  });
+}
+
 export function claimFitnessMilestoneMutationOptions(
   client: Pick<ApiClient, "fitness">,
   queryClient: QueryClient,

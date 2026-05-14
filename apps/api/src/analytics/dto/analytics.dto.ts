@@ -248,6 +248,21 @@ export class AnalyticsPerformanceKpisDTO {
 
   @ApiProperty({ example: 24 })
   coaching_sessions: number;
+
+  @ApiProperty({ example: 124 })
+  active_members: number;
+
+  @ApiProperty({ example: 81.8 })
+  session_completion_rate: number;
+
+  @ApiProperty({ example: 4.7 })
+  coach_satisfaction_rating: number;
+
+  @ApiProperty({ example: 4.5 })
+  venue_feedback_rating: number;
+
+  @ApiProperty({ example: 12 })
+  app_feedback_submissions: number;
 }
 
 export class AnalyticsSystemAlertDTO {

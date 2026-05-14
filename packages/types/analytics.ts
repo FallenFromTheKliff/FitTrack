@@ -125,12 +125,17 @@ export type AnalyticsDailyInsightsRecord = {
 };
 
 export type AnalyticsPerformanceKpisRecord = {
+  activeMembers: number;
+  appFeedbackSubmissions: number;
   checkIns: number;
+  coachSatisfactionRating: number;
   coachingSessions: number;
   newMembers: number;
+  sessionCompletionRate: number;
   totalCoachingAppointments: number;
   totalRevenue: number;
   totalVenueBookings: number;
+  venueFeedbackRating: number;
 };
 
 export type AnalyticsSystemAlertRecord = {

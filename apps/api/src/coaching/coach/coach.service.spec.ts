@@ -195,7 +195,6 @@ describe('CoachService', () => {
       makeCoach({
         bio: 'Updated from schedule management.',
         certification: 'NASM-CPT, CPR',
-        hourly_rate: 1500,
         is_available_for_booking: false,
         specialization: 'Strength, Mobility',
       }),
@@ -205,7 +204,6 @@ describe('CoachService', () => {
       service.updateManagedProfile('coach-1', {
         bio: 'Updated from schedule management.',
         certification: 'NASM-CPT, CPR',
-        hourly_rate: 1500,
         is_available_for_booking: false,
         specialization: 'Strength, Mobility',
       }),
@@ -213,7 +211,6 @@ describe('CoachService', () => {
       expect.objectContaining({
         bio: 'Updated from schedule management.',
         certification: 'NASM-CPT, CPR',
-        hourly_rate: '1500',
         is_available_for_booking: false,
         specialization: 'Strength, Mobility',
       }),
@@ -222,11 +219,18 @@ describe('CoachService', () => {
     expect(repo.updateCoachById).toHaveBeenCalledWith('coach-1', {
       bio: 'Updated from schedule management.',
       certification: 'NASM-CPT, CPR',
-      hourly_rate: 1500,
       is_available_for_booking: false,
       specialization: 'Strength, Mobility',
     });
     expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects hourly rate updates from the staff-facing management flow', async () => {
+    await expect(
+      service.updateManagedProfile('coach-1', { hourly_rate: 1500 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(repo.updateCoachById).not.toHaveBeenCalled();
   });
 
   it('rejects gym commission updates from the staff-facing management flow', async () => {

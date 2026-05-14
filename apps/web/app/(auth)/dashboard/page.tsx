@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarCheck,
   CalendarDays,
@@ -9,12 +10,14 @@ import {
   Flame,
   LineChart,
   Lock,
-  Sparkles,
+  Map,
   Trophy,
   Users,
   Zap,
 } from "lucide-react";
 import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
+import type { StaffAppointmentRecord } from "@fittrack/api-client";
+import { coachScheduleQueryOptions } from "@fittrack/query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -23,7 +26,6 @@ import {
   MemberGrid,
   MemberOnlyScreen,
   MemberPanelHeader,
-  MemberProgressRow,
   MemberSection,
   MemberSurface,
   MemberText,
@@ -32,20 +34,16 @@ import {
   StatTile,
 } from "@/components/member-only/MemberOnlyPrimitives";
 import {
-  clampProgress,
   countCurrentStreakDays,
   countRecentActiveDays,
   countRecentCompletedSessions,
-  formatCalorieDelta,
-  formatCompactNumber,
-  formatGoalLabel,
   formatStatusLabel,
   getTodayString,
-  resolveHighestRank,
   toMemberBookings,
 } from "@/components/member-only/memberOnlyUtils";
 import { getStatusTone } from "@/components/member-only/MemberOnlyPageShared";
 import { useMemberOnlyAccess, useMemberOnlyHomeData } from "@/hooks/member-only/useMemberOnlyData";
+import { webApiClient } from "@/lib/api-client";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -56,19 +54,17 @@ export default function DashboardPage() {
   const firstName = user?.name?.split(" ")[0] ?? "Member";
   const memberUserId = user?.role === "USER" ? user.id : undefined;
   const data = useMemberOnlyHomeData({ hasMemberCardAccess: user?.role === "USER" && hasMemberCardAccess, todayString, userId: memberUserId });
+  const coachAppointmentsQuery = useQuery({
+    ...coachScheduleQueryOptions<StaffAppointmentRecord>(webApiClient, user?.id),
+    enabled: user?.role === "COACH" && Boolean(user?.id),
+    staleTime: 30_000,
+  });
 
   const venues = useMemo(() => data.venuesQuery.data ?? [], [data.venuesQuery.data]);
   const bookings = useMemo(() => toMemberBookings(data.bookingsQuery.data ?? [], venues), [data.bookingsQuery.data, venues]);
   const todayBookings = bookings.filter((booking) => booking.date === todayString && booking.status !== "cancelled");
-  const mastery = data.masteryQuery.data ?? [];
   const leaderboard = data.leaderboardQuery.data?.data ?? [];
   const sessions = data.sessionsQuery.data?.data ?? [];
-  const activeNutrition = data.nutritionTargetQuery.data ?? null;
-  const nutritionSummary = data.nutritionSummaryQuery.data ?? null;
-  const loggedCalories = nutritionSummary?.logged.calories ?? user?.currentCalories ?? 0;
-  const targetCalories = activeNutrition?.macros.targetCalories ?? nutritionSummary?.target?.calories ?? null;
-  const totalXp = mastery.reduce((sum, entry) => sum + entry.xpPoints, 0);
-  const highestRankEntry = resolveHighestRank(mastery);
   const leaderboardEntry = leaderboard.find((entry) => entry.userId === user?.id) ?? null;
   const activeDaysLast7Days = countRecentActiveDays(sessions);
   const currentStreakDays = countCurrentStreakDays(sessions);
@@ -89,20 +85,42 @@ export default function DashboardPage() {
   }, [isLoading, router, user?.role]);
 
   if (user?.role === "COACH") {
+    const coachAppointments = coachAppointmentsQuery.data ?? [];
+    const coachClientCount = new Set(
+      coachAppointments.map((appointment) => appointment.userId).filter(Boolean),
+    ).size;
+    const totalSessions = coachAppointments.length;
+    const totalEarnings = coachAppointments
+      .filter((appointment) => appointment.status === "completed")
+      .reduce((sum, appointment) => sum + Number(appointment.coachEarnings ?? 0), 0);
+
     return (
       <MemberOnlyScreen>
         <MemberText as="h1" variant="title">
           Coach Dashboard
         </MemberText>
         <MemberText as="p" variant="subtitle">
-          Hi {firstName}. Your coach portal keeps clients, sessions, earnings, gamification, and training references one click away.
+          Hi {firstName}. Your coach portal keeps clients, sessions, and earnings one click away.
         </MemberText>
 
-        <MemberGrid columns={4} compactPair>
-          <StatTile icon={Users} label="Clients" value="Open" />
-          <StatTile icon={CalendarDays} label="Sessions" value="Live" tone="success" />
-          <StatTile icon={LineChart} label="Earnings" value="Track" tone="warning" />
-          <StatTile icon={Dumbbell} label="Exercise Lab" value="Ready" tone="brand" />
+        <MemberGrid columns={3} compactPair>
+          <StatTile
+            icon={Users}
+            label="Clients"
+            value={coachAppointmentsQuery.isLoading ? "--" : String(coachClientCount)}
+          />
+          <StatTile
+            icon={CalendarDays}
+            label="Sessions"
+            value={coachAppointmentsQuery.isLoading ? "--" : String(totalSessions)}
+            tone="success"
+          />
+          <StatTile
+            icon={LineChart}
+            label="Earnings"
+            value={coachAppointmentsQuery.isLoading ? "--" : `₱${totalEarnings.toLocaleString("en-PH")}`}
+            tone="warning"
+          />
         </MemberGrid>
 
         <MemberSection heading="Coach actions">
@@ -125,18 +143,6 @@ export default function DashboardPage() {
                 label: "Earnings",
                 path: "/analytics",
                 subtitle: "Review completed coaching work and expected earnings.",
-              },
-              {
-                icon: Trophy,
-                label: "Gamification",
-                path: "/gamification",
-                subtitle: "Follow member progress signals and ranking context.",
-              },
-              {
-                icon: Dumbbell,
-                label: "Exercise Lab",
-                path: "/exercise-lab",
-                subtitle: "Use exercise references while preparing sessions.",
               },
             ].map((item, index, items) => (
               <MemberCard
@@ -161,14 +167,13 @@ export default function DashboardPage() {
           Hi {firstName}, {formatTodayLong()}
         </MemberText>
         <MemberText as="p" variant="subtitle">
-          Your web view reads the same member bookings, nutrition, workout, ranking, and AI records used by mobile.
+          Your web view keeps bookings, gym access, workouts, and account details in sync with FitTrack.
         </MemberText>
 
-        <MemberGrid columns={4} compactPair>
+        <MemberGrid columns={3} compactPair>
           <StatTile icon={CalendarDays} label="Today Bookings" value={String(todayBookings.length)} />
           <StatTile icon={Dumbbell} label="7 Day Activity" value={String(activeDaysLast7Days)} />
           <StatTile icon={Trophy} label="Gym Rank" value={leaderboardEntry ? `#${leaderboardEntry.rankPosition}` : "--"} />
-          <StatTile icon={Sparkles} label="Total EXP" value={formatCompactNumber(totalXp)} />
         </MemberGrid>
 
         {!hasMemberCardAccess ? (
@@ -183,25 +188,48 @@ export default function DashboardPage() {
         ) : null}
 
         <MemberSection heading="Snapshot">
-          <MemberGrid columns={2}>
-            <MemberToneSurface tone={statusTone}>
-              <MemberPanelHeader eyebrow="Access" title={access.statusLabel} />
-              <MemberText variant="muted">
-                {hasMemberCardAccess
-                  ? "Member-only web pages are unlocked for this account."
-                  : "Profile verification controls the same unlock state as mobile."}
-              </MemberText>
-            </MemberToneSurface>
-            <MemberSurface padded>
-              <MemberPanelHeader eyebrow="Nutrition" title={targetCalories ? `${loggedCalories} / ${targetCalories} kcal` : `${loggedCalories} kcal logged`} />
-              <MemberProgressRow
-                label={activeNutrition ? formatGoalLabel(activeNutrition.tdee.fitnessGoal) : "Daily target"}
-                progress={targetCalories ? clampProgress(loggedCalories / targetCalories) : 0}
-                value={targetCalories ? formatCalorieDelta(loggedCalories, targetCalories) : "Set a target on mobile or web"}
-                tone={targetCalories && loggedCalories > targetCalories ? "warning" : "success"}
+          <MemberToneSurface tone={statusTone}>
+            <MemberPanelHeader eyebrow="Access" title={access.statusLabel} />
+            <MemberText variant="muted">
+              {hasMemberCardAccess
+                ? "Member-only web pages are unlocked for this account."
+                : "Profile verification controls the same unlock state as mobile."}
+            </MemberText>
+          </MemberToneSurface>
+        </MemberSection>
+
+        <MemberSection heading="Quick Links">
+          <MemberSurface>
+            {[
+              {
+                icon: CalendarDays,
+                label: "Bookings",
+                path: "/bookings",
+                subtitle: "Open reservations and coaching appointments.",
+              },
+              {
+                icon: Map,
+                label: "Gym Map",
+                path: "/facilities",
+                subtitle: "Review the live facilities layout and available zones.",
+              },
+              {
+                icon: Users,
+                label: "Account Details",
+                path: "/profile",
+                subtitle: "Manage membership access, profile details, and QR tools.",
+              },
+            ].map((item, index, items) => (
+              <MemberCard
+                key={item.path}
+                hasBorder={index < items.length - 1}
+                icon={item.icon}
+                label={item.label}
+                subtitle={item.subtitle}
+                onClick={() => router.push(item.path)}
               />
-            </MemberSurface>
-          </MemberGrid>
+            ))}
+          </MemberSurface>
         </MemberSection>
 
         <MemberSection heading="Today">
@@ -226,10 +254,9 @@ export default function DashboardPage() {
         </MemberSection>
 
         <MemberSection heading="Training">
-          <MemberGrid columns={3}>
+          <MemberGrid columns={2}>
             <StatTile icon={Flame} label="Current Streak" value={`${currentStreakDays}d`} tone="warning" />
             <StatTile icon={Zap} label="Completed This Week" value={String(completedSessionsLast7Days)} tone="success" />
-            <StatTile icon={Trophy} label="Top Muscle" value={highestRankEntry?.muscleGroup ?? "Start"} tone="brand" />
           </MemberGrid>
         </MemberSection>
       </MemberOnlyScreen>

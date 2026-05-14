@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Amenity, Prisma } from '@prisma/client';
+import { Amenity, AmenityFeedback, Prisma } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -40,6 +40,69 @@ export class AmenityRepository extends BaseRepository {
 
   createAmenity(data: Prisma.AmenityCreateInput): Promise<Amenity> {
     return this.create<Amenity>(this.prisma.amenity, data);
+  }
+
+  createAmenityFeedback(
+    data: Prisma.AmenityFeedbackCreateInput,
+  ): Promise<AmenityFeedback> {
+    return this.create<AmenityFeedback>(this.prisma.amenityFeedback, data);
+  }
+
+  listAmenityFeedback(limit = 25) {
+    return this.prisma.amenityFeedback.findMany({
+      take: limit,
+      orderBy: [{ created_at: 'desc' }],
+      include: {
+        amenity: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            role: true,
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  listAmenityFeedbackForAmenity(amenityId: string, limit = 10) {
+    return this.prisma.amenityFeedback.findMany({
+      where: { amenity_id: amenityId },
+      take: limit,
+      orderBy: [{ created_at: 'desc' }],
+      include: {
+        amenity: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            role: true,
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   updateAmenity(id: string, data: Prisma.AmenityUpdateInput): Promise<Amenity> {

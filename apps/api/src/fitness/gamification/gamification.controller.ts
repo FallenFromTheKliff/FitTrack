@@ -16,13 +16,16 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser, Roles } from '../../common/decorators';
 import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
+  AchievementReviewResponseDTO,
   IntegritySummaryResponseDTO,
   LeaderboardEntryResponseDTO,
   MasteryFilterDTO,
@@ -73,6 +76,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 
 @ApiTags('Fitness')
 @ApiExtraModels(
+  AchievementReviewResponseDTO,
   MuscleMasteryResponseDTO,
   LeaderboardEntryResponseDTO,
   ProgressionProfileResponseDTO,
@@ -187,6 +191,22 @@ export class GamificationController {
   })
   getActiveSeasonStanding(@CurrentUser() user: JwtPayload) {
     return this.gamificationService.getActiveSeasonStanding(user.sub);
+  }
+
+  @Get('milestone-reviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List DB-backed achievement milestone reviews for operators.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone review records returned.',
+    schema: arrayEnvelopeSchema(getSchemaPath(AchievementReviewResponseDTO)),
+  })
+  listMilestoneReviews() {
+    return this.gamificationService.listAchievementReviews();
   }
 
   @Get('milestones')

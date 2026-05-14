@@ -27,6 +27,7 @@ import {
   fitnessLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
   fitnessRankingProfileQueryOptions,
+  membershipCatalogSettingsQueryOptions,
   membershipPaymentsQueryOptions,
   membershipPlansQueryOptions,
   purchaseMembershipCardMutationOptions,
@@ -280,6 +281,11 @@ export function useProfileScreen() {
     staleTime: 60_000,
     gcTime: 300_000
   });
+  const { data: membershipCatalogSettings = null } = useQuery({
+    ...membershipCatalogSettingsQueryOptions(mobileApiClient),
+    staleTime: 60_000,
+    gcTime: 300_000,
+  });
   const { data: membershipPayments = { data: [], meta: { page: 1, limit: 0, total: 0, total_pages: 0 } } } = useQuery({
     ...membershipPaymentsQueryOptions(mobileApiClient, user?.id, { limit: 5, page: 1 }),
     enabled: !!user?.id && isMember,
@@ -442,10 +448,13 @@ export function useProfileScreen() {
     : membershipScopedPayments.length > 0
       ? `${membershipScopedPayments.length} payment record${membershipScopedPayments.length === 1 ? "" : "s"}`
       : membershipCardHistoryLabel
-        ? `Membership card ${membershipCardHistoryLabel.toLowerCase()} | PHP 400${membershipCardPaidAt ? ` | ${membershipCardPaidAt}` : ""}`
+        ? `Membership card ${membershipCardHistoryLabel.toLowerCase()} | PHP ${Number(membershipCatalogSettings?.membership_card_price ?? 400).toLocaleString("en-PH")}${membershipCardPaidAt ? ` | ${membershipCardPaidAt}` : ""}`
       : hasMemberCardAccess
         ? "No card or plan payments recorded yet"
         : "Card and plan payments will appear here once available";
+  const membershipCardPriceLabel = `PHP ${Number(
+    membershipCatalogSettings?.membership_card_price ?? 400,
+  ).toLocaleString("en-PH")}`;
   const mastery = useMemo(
     () => [...(masteryQuery.data ?? [])].sort((left, right) => right.xpPoints - left.xpPoints),
     [masteryQuery.data]
@@ -778,6 +787,7 @@ export function useProfileScreen() {
   };
 
   const handleStartAvailabilityEditor = (slot?: CoachAvailabilityRecord) => {
+    if (coachProfile?.scheduleType === "full_time") return;
     setAvailabilityDraft(getInitialAvailabilityDraft(slot));
     setAvailabilityDeleteTarget(null);
     setIsAvailabilityEditorOpen(true);
@@ -796,6 +806,7 @@ export function useProfileScreen() {
 
   const handleSaveAvailability = async () => {
     if (!coachProfile) return;
+    if (coachProfile.scheduleType === "full_time") return;
     const parsed = coachAvailabilitySchema.safeParse({
       dayOfWeek: availabilityDraft.dayOfWeek,
       startTime: availabilityDraft.startTime,
@@ -835,6 +846,7 @@ export function useProfileScreen() {
 
   const handleDeleteAvailability = async () => {
     if (!availabilityDeleteTarget || !coachProfile) return;
+    if (coachProfile.scheduleType === "full_time") return;
     setIsAvailabilityDeleting(true);
     try {
       await deleteAvailabilityMutation.mutateAsync({
@@ -861,6 +873,7 @@ export function useProfileScreen() {
     availabilityDeleteTarget,
     availabilityDraft,
     availabilityEndSlots: buildEndSlots(availabilityDraft.startTime),
+    availabilityLocked: coachProfile?.scheduleType === "full_time",
     availabilitySlots: coachProfile?.availability ?? [],
     availabilityTimeTarget,
     avatarUri,
@@ -905,6 +918,7 @@ export function useProfileScreen() {
     memberAccessColor,
     memberAccessLabel,
     memberAccessSummary,
+    membershipCardPriceLabel,
     membershipCardPurchaseProvider,
     membershipAccessSummary: loadedPlanAccessSummary,
     membershipCard,

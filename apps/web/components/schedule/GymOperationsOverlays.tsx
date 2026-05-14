@@ -12,6 +12,7 @@ import {
   coachAvailabilityQueryOptions,
   venueAvailabilityQueryOptions,
 } from "@fittrack/query";
+import { expandCoachAvailabilitySlots } from "@fittrack/utils";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { webApiClient } from "@/lib/api-client";
@@ -35,7 +36,6 @@ import {
   formatPeso,
   formatSlotLabel,
   getDefaultDateInput,
-  getDurationMinutes,
   getInitialPaymentAmount,
   hasVenueWindowConflict,
   matchesDay,
@@ -51,7 +51,175 @@ import {
   type StaffInitialPaymentStage,
 } from "./GymOperationsOverlayShared";
 
+type SearchableScheduleSelectProps = {
+  disabled?: boolean;
+  emptyLabel: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  placeholder: string;
+  searchValue: string;
+  selectedValue: string;
+  setSearchValue: (value: string) => void;
+};
 
+function SearchableScheduleSelect({
+  disabled = false,
+  emptyLabel,
+  onChange,
+  options,
+  placeholder,
+  searchValue,
+  selectedValue,
+  setSearchValue,
+}: SearchableScheduleSelectProps) {
+  const { colors } = useTheme();
+  const normalizedSearch = searchValue.trim().toLowerCase();
+  const filteredOptions = options
+    .filter((option) => option.label.toLowerCase().includes(normalizedSearch))
+    .slice(0, 8);
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        style={{
+          ...modalFieldStyle(colors),
+          minHeight: 46,
+          padding: "0 12px",
+        }}
+      >
+        <FitTextInput
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          style={{ fontSize: 13, fontWeight: 700 }}
+        />
+      </div>
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: 14,
+          backgroundColor: colors.surfaceRaised,
+          display: "grid",
+          gap: 6,
+          maxHeight: 176,
+          overflowY: "auto",
+          padding: 8,
+        }}
+      >
+        {filteredOptions.length > 0 ? (
+          filteredOptions.map((option) => {
+            const isSelected = option.value === selectedValue;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  onChange(option.value);
+                  setSearchValue(option.label);
+                }}
+                style={{
+                  border: `1px solid ${isSelected ? colors.brand : colors.border}`,
+                  borderRadius: 10,
+                  backgroundColor: isSelected ? `${colors.brand}18` : colors.surface,
+                  color: isSelected ? colors.brand : colors.textPrimary,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  font: "inherit",
+                  minHeight: 38,
+                  padding: "8px 10px",
+                  textAlign: "left",
+                }}
+              >
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    color: isSelected ? colors.brand : colors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: isSelected ? 800 : 700,
+                  }}
+                >
+                  {option.label}
+                </FitText>
+              </button>
+            );
+          })
+        ) : (
+          <FitText
+            excludeGlobalScale
+            style={{ color: colors.textMuted, fontSize: 12, padding: 8 }}
+          >
+            {emptyLabel}
+          </FitText>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getDateInputOffset(offsetDays: number) {
+  const date = new Date(`${getDefaultDateInput()}T00:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function findNextCoachSlot(availability: CoachAvailabilityResponse | undefined) {
+  const slots = expandCoachAvailabilitySlots(
+    availability?.availability ?? [],
+    availability?.scheduleType ?? "part_time",
+  );
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  for (let offset = 0; offset <= 30; offset += 1) {
+    const candidateDate = getDateInputOffset(offset);
+    const dailySlots = slots
+      .filter((slot) => slot.isAvailable && matchesDay(candidateDate, slot.dayOfWeek))
+      .sort((left, right) => toMinutes(left.startTime) - toMinutes(right.startTime));
+
+    for (const slot of dailySlots) {
+      const durationMinutes = slot.durationMinutes;
+      if (durationMinutes <= 0) continue;
+      if (offset === 0 && toMinutes(slot.startTime) <= currentMinutes) continue;
+      return {
+        date: candidateDate,
+        slotValue: `${slot.startTime}|${durationMinutes}`,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getUpcomingCoachAvailableDates(
+  availability: CoachAvailabilityResponse | undefined,
+  windowDays = 30,
+) {
+  const slots = expandCoachAvailabilitySlots(
+    availability?.availability ?? [],
+    availability?.scheduleType ?? "part_time",
+  );
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const dates: string[] = [];
+
+  for (let offset = 0; offset <= windowDays; offset += 1) {
+    const candidateDate = getDateInputOffset(offset);
+    const hasAvailableSlot = slots.some((slot) => {
+      if (!slot.isAvailable || !matchesDay(candidateDate, slot.dayOfWeek)) {
+        return false;
+      }
+
+      return offset > 0 || toMinutes(slot.startTime) > currentMinutes;
+    });
+
+    if (hasAvailableSlot) {
+      dates.push(candidateDate);
+    }
+  }
+
+  return dates;
+}
 
 
 export function GymOperationsCreateVenueBookingModal({
@@ -551,6 +719,7 @@ export function GymOperationsCreateVenueBookingModal({
         </div>
         <CalendarModal
           isOpen={datePickerOpen}
+          minDate={getDefaultDateInput()}
           selectedDate={date}
           onClose={() => setDatePickerOpen(false)}
           onSelect={(nextDate) => {
@@ -603,6 +772,8 @@ export function GymOperationsCreateCoachBookingModal({
   const { colors, settings } = useTheme();
   const [memberId, setMemberId] = useState("");
   const [coachId, setCoachId] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [coachSearch, setCoachSearch] = useState("");
   const [date, setDate] = useState(getDefaultDateInput());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [slotValue, setSlotValue] = useState("");
@@ -626,8 +797,18 @@ export function GymOperationsCreateCoachBookingModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setMemberId((current) => current || memberOptions[0]?.value || "");
-    setCoachId((current) => current || coachOptions[0]?.value || "");
+    const defaultMemberId = memberOptions[0]?.value ?? "";
+    const defaultCoachId = coachOptions[0]?.value ?? "";
+    setMemberId((current) => current || defaultMemberId);
+    setCoachId((current) => current || defaultCoachId);
+    setMemberSearch(
+      memberOptions.find((option) => option.value === defaultMemberId)?.label ??
+        "",
+    );
+    setCoachSearch(
+      coachOptions.find((option) => option.value === defaultCoachId)?.label ??
+        "",
+    );
     setDate(getDefaultDateInput());
     setDatePickerOpen(false);
     setSlotValue("");
@@ -642,13 +823,13 @@ export function GymOperationsCreateCoachBookingModal({
       return [];
     }
 
-    return coachAvailability.availability
+    return expandCoachAvailabilitySlots(
+      coachAvailability.availability,
+      coachAvailability.scheduleType,
+    )
       .filter((slot) => slot.isAvailable && matchesDay(date, slot.dayOfWeek))
       .map((slot) => {
-        const durationMinutes = getDurationMinutes(
-          slot.startTime,
-          slot.endTime,
-        );
+        const durationMinutes = slot.durationMinutes;
         return {
           durationMinutes,
           label: `${formatSlotLabel(slot.startTime)} - ${formatDurationLabel(durationMinutes)}`,
@@ -656,7 +837,7 @@ export function GymOperationsCreateCoachBookingModal({
           value: `${slot.startTime}|${durationMinutes}`,
         };
       });
-  }, [coachAvailability?.availability, date]);
+  }, [coachAvailability?.availability, coachAvailability?.scheduleType, date]);
 
   useEffect(() => {
     if (!slotOptions.some((slot) => slot.value === slotValue)) {
@@ -666,8 +847,19 @@ export function GymOperationsCreateCoachBookingModal({
 
   const selectedSlot =
     slotOptions.find((slot) => slot.value === slotValue) ?? null;
+  const selectedMemberOption = memberOptions.find(
+    (option) => option.value === memberId,
+  );
   const selectedCoachOption = coachOptions.find(
     (option) => option.value === coachId,
+  );
+  const nextAvailableSlot = useMemo(
+    () => findNextCoachSlot(coachAvailability),
+    [coachAvailability],
+  );
+  const highlightedCoachDates = useMemo(
+    () => getUpcomingCoachAvailableDates(coachAvailability),
+    [coachAvailability],
   );
   const coachHourlyRate = selectedCoachOption?.hourlyRate ?? 0;
   const estimatedCoachTotal =
@@ -718,7 +910,7 @@ export function GymOperationsCreateCoachBookingModal({
     }
 
     setCreateConfirm({
-      confirmLabel: "CREATE BOOKING",
+      confirmLabel: "CREATE COACH BOOKING",
       message: `Create this manual coach booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
       onConfirm: submitCoachBooking,
       title: "Confirm coach booking",
@@ -768,12 +960,15 @@ export function GymOperationsCreateCoachBookingModal({
               >
                 Member
               </FitText>
-              <FitSelect
-                value={memberId}
-                onChange={(event) => setMemberId(event.target.value)}
+              <SearchableScheduleSelect
+                disabled={isSubmitting}
+                emptyLabel="No members found."
+                onChange={setMemberId}
                 options={memberOptions}
-                compact
-                fullWidth
+                placeholder={selectedMemberOption?.label ?? "Search members"}
+                searchValue={memberSearch}
+                selectedValue={memberId}
+                setSearchValue={setMemberSearch}
               />
             </div>
             <div style={{ display: "grid", gap: 6 }}>
@@ -787,12 +982,18 @@ export function GymOperationsCreateCoachBookingModal({
               >
                 Coach
               </FitText>
-              <FitSelect
-                value={coachId}
-                onChange={(event) => setCoachId(event.target.value)}
+              <SearchableScheduleSelect
+                disabled={isSubmitting}
+                emptyLabel="No coaches found."
+                onChange={(nextCoachId) => {
+                  setCoachId(nextCoachId);
+                  setSlotValue("");
+                }}
                 options={coachOptions}
-                compact
-                fullWidth
+                placeholder={selectedCoachOption?.label ?? "Search coaches"}
+                searchValue={coachSearch}
+                selectedValue={coachId}
+                setSearchValue={setCoachSearch}
               />
             </div>
           </div>
@@ -828,6 +1029,36 @@ export function GymOperationsCreateCoachBookingModal({
                     slotOptions.length > 0 ? colors.success : colors.border,
                 }}
                 textStyle={{ fontSize: 13, fontWeight: 700 }}
+              />
+              <FitButton
+                variant="primary"
+                label="NEXT AVAILABLE SLOT"
+                onClick={() => {
+                  setErrorText("");
+                  if (!coachId) {
+                    setErrorText("Select a coach before choosing the next available slot.");
+                    return;
+                  }
+                  if (!nextAvailableSlot) {
+                    setErrorText("No available coach slot was found in the next 30 days.");
+                    return;
+                  }
+                  setDate(nextAvailableSlot.date);
+                  setSlotValue(nextAvailableSlot.slotValue);
+                }}
+                disabled={
+                  isSubmitting ||
+                  coachAvailabilityLoading ||
+                  !coachId ||
+                  !nextAvailableSlot
+                }
+                style={{
+                  ...actionPillStyle(colors, true),
+                  minHeight: 40,
+                  padding: "0 12px",
+                  width: "100%",
+                }}
+                textStyle={{ fontSize: 12, fontWeight: 800 }}
               />
               <FitText
                 excludeGlobalScale
@@ -1018,7 +1249,7 @@ export function GymOperationsCreateCoachBookingModal({
           />
           <FitButton
             variant="primary"
-            label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
+            label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
             icon={CalendarPlus}
             iconSize={15}
             onClick={handleCreate}
@@ -1028,7 +1259,9 @@ export function GymOperationsCreateCoachBookingModal({
           />
         </div>
         <CalendarModal
+          highlightedDates={highlightedCoachDates}
           isOpen={datePickerOpen}
+          minDate={getDefaultDateInput()}
           selectedDate={date}
           onClose={() => setDatePickerOpen(false)}
           onSelect={(nextDate) => {
@@ -1041,8 +1274,8 @@ export function GymOperationsCreateCoachBookingModal({
       isOpen={!!createConfirm}
       title={createConfirm?.title ?? "Confirm coach booking"}
       message={createConfirm?.message ?? ""}
-      confirmLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
-      loadingLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+      confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
+      loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
       isDanger={createConfirm?.isDanger}
       isLoading={isSubmitting}
       onConfirm={() => {
@@ -1073,6 +1306,7 @@ export function GymOperationsCreateCoachModal({
     displayName: string;
     hourlyRate?: number;
     isAvailableForBooking?: boolean;
+    scheduleType?: "full_time" | "part_time";
     specialties?: string[];
   }) => void;
 }) {
@@ -1083,6 +1317,8 @@ export function GymOperationsCreateCoachModal({
   const [specialties, setSpecialties] = useState("");
   const [certifications, setCertifications] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
+  const [scheduleType, setScheduleType] =
+    useState<"full_time" | "part_time">("part_time");
   const [isAvailableForBooking, setIsAvailableForBooking] = useState("active");
   const [bio, setBio] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1100,6 +1336,7 @@ export function GymOperationsCreateCoachModal({
     setSpecialties("");
     setCertifications("");
     setHourlyRate("");
+    setScheduleType("part_time");
     setIsAvailableForBooking("active");
     setBio("");
     setErrors({});
@@ -1172,6 +1409,7 @@ export function GymOperationsCreateCoachModal({
       displayName: displayName.trim(),
       hourlyRate: hourlyRateValue,
       isAvailableForBooking: isAvailableForBooking === "active",
+      scheduleType,
       specialties: specialtiesList,
     });
   };
@@ -1410,23 +1648,61 @@ export function GymOperationsCreateCoachModal({
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Booking visibility
-            </FitText>
-            <FitSelect
-              value={isAvailableForBooking}
-              onChange={(event) => setIsAvailableForBooking(event.target.value)}
-              options={[
-                { label: "Visible to member booking", value: "active" },
-                { label: "Hidden until ready", value: "inactive" },
-              ]}
-              compact
-              fullWidth
-            />
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
+          >
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textMuted,
+                }}
+              >
+                Working schedule
+              </FitText>
+              <FitSelect
+                value={scheduleType}
+                onChange={(event) =>
+                  setScheduleType(
+                    event.target.value === "full_time"
+                      ? "full_time"
+                      : "part_time",
+                  )
+                }
+                options={[
+                  { label: "Full-time", value: "full_time" },
+                  { label: "Part-time", value: "part_time" },
+                ]}
+                compact
+                fullWidth
+              />
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textMuted,
+                }}
+              >
+                Booking visibility
+              </FitText>
+              <FitSelect
+                value={isAvailableForBooking}
+                onChange={(event) =>
+                  setIsAvailableForBooking(event.target.value)
+                }
+                options={[
+                  { label: "Visible to member booking", value: "active" },
+                  { label: "Hidden until ready", value: "inactive" },
+                ]}
+                compact
+                fullWidth
+              />
+            </div>
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>

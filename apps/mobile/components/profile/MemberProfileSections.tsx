@@ -43,7 +43,7 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
     ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
     : controller.memberAccessLabel === "Revoked"
       ? "Your membership access is revoked. Ask the front desk to restore it; the one-time card payment stays on record and does not need to be paid again."
-      : "Permanent PHP 400 membership card. Buy once, then load weekly, monthly, or multi-month plans whenever you need them.";
+      : `Permanent ${controller.membershipCardPriceLabel} membership card. Buy once, then load weekly, monthly, or multi-month plans whenever you need them.`;
   const gamificationMessage = controller.memberAccessLabel === "Pending verification"
     ? "Your membership card is waiting for verification. Fitness progress, badges, and achievement history unlock as soon as the card becomes active."
     : `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
@@ -196,7 +196,7 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
               icon={CreditCard}
               label="Membership Card Purchase"
               subtitle={membershipCardActionSubtitle}
-              trailingLabel={controller.canPurchaseMembershipCard ? "PHP 400" : undefined}
+              trailingLabel={controller.canPurchaseMembershipCard ? controller.membershipCardPriceLabel : undefined}
               trailingLabelColor={controller.canPurchaseMembershipCard ? controller.memberAccessColor : undefined}
               noChevron
             />

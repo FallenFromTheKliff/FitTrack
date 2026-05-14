@@ -124,10 +124,28 @@ export interface AttendanceCheckInRecord {
   member_name: string;
 }
 
+export type MemberDirectoryFilters = {
+  archived?: boolean;
+  role?: "admin" | "staff" | "member" | "coach";
+  search?: string;
+  activityLevel?: string;
+  membershipStatus?: "active" | "expired";
+  sessionStatus?: "has_upcoming" | "no_upcoming";
+  status?: "active" | "banned" | "pending" | "suspended";
+  tier?:
+    | "active_member"
+    | "pending_membership"
+    | "pending_verification"
+    | "revoked"
+    | "verified_non_member";
+};
+
 export interface IMemberContext {
   members: MemberRecord[];
   isLoading: boolean;
   error: string | null;
+  directoryFilters: MemberDirectoryFilters;
+  setDirectoryFilters: (filters: MemberDirectoryFilters) => void;
   fetchMembers: () => Promise<void>;
   createUser: (data: CreateUserInput) => Promise<{ success: boolean; error?: string }>;
   updateMember: (data: UpdateMemberInput) => Promise<{ success: boolean; error?: string }>;

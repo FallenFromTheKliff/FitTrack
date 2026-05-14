@@ -38,6 +38,7 @@ import {
   ManualAttendanceCheckInDTO,
   AttendanceFilterDTO,
   UpdatePhoneDTO,
+  CreateAppFeedbackDTO,
 } from './dto/user-dto';
 import { CreateDeletionRequestDto } from './dto/deletion-request.dto';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
@@ -65,6 +66,32 @@ export class UserController {
     @Body() dto: UpdateProfileDTO,
   ) {
     return this.usersService.updateMyProfile(user.sub, dto);
+  }
+
+  @Patch('me/privacy-acceptance')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept the data privacy policy.' })
+  acceptPrivacyPolicy(@CurrentUser() user: JwtPayload) {
+    return this.usersService.acceptPrivacyPolicy(user.sub);
+  }
+
+  @Post('app-feedback')
+  @ApiOperation({ summary: 'Submit authenticated app feedback.' })
+  @ApiResponse({ status: 201, description: 'App feedback submitted.' })
+  submitAppFeedback(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateAppFeedbackDTO,
+  ) {
+    return this.usersService.submitAppFeedback(user.sub, dto);
+  }
+
+  @Get('app-feedback')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiOperation({ summary: 'List submitted app feedback for operators.' })
+  @ApiResponse({ status: 200, description: 'App feedback returned.' })
+  listAppFeedback() {
+    return this.usersService.listAppFeedback();
   }
 
   @Get('deletion-request')

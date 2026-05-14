@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useCallback, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   adminMembersQueryOptions,
@@ -10,7 +10,12 @@ import {
   updateAdminMemberMutationOptions
 } from "@fittrack/query";
 import { createMemberController } from "@fittrack/app-core";
-import type { IMemberContext, CreateUserInput, UpdateMemberInput } from "@fittrack/types";
+import type {
+  CreateUserInput,
+  IMemberContext,
+  MemberDirectoryFilters,
+  UpdateMemberInput,
+} from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -24,13 +29,14 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const canInspectAccounts = isAdmin || isStaff || isCoach;
   const queryClient = useQueryClient();
   const controller = useMemo(() => createMemberController(), []);
+  const [directoryFilters, setDirectoryFilters] = useState<MemberDirectoryFilters>({});
 
   const {
     data: members = [],
     isLoading,
     error: queryError
   } = useQuery({
-    ...adminMembersQueryOptions(webApiClient),
+    ...adminMembersQueryOptions(webApiClient, directoryFilters),
     enabled: canInspectAccounts
   });
 
@@ -87,7 +93,20 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   }, [controller, restoreUserMutation]);
 
   return (
-    <MemberContext.Provider value={{ members, isLoading, error, fetchMembers, createUser, updateMember, deleteUser, restoreUser }}>
+    <MemberContext.Provider
+      value={{
+        members,
+        isLoading,
+        error,
+        directoryFilters,
+        setDirectoryFilters,
+        fetchMembers,
+        createUser,
+        updateMember,
+        deleteUser,
+        restoreUser,
+      }}
+    >
       {children}
     </MemberContext.Provider>
   );

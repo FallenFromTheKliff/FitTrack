@@ -5,6 +5,7 @@ import { unwrapResponse, unwrapVoidResponse } from "../request";
 export type LoginCredentials = {
   email: string;
   password: string;
+  portal?: "team" | "member";
 };
 
 export type RegisterPayload = {
@@ -56,6 +57,8 @@ export type LoginUserResponse = {
   email?: string;
   email_verified_at?: string | null;
   emailVerified?: boolean;
+  has_accepted_privacy?: boolean;
+  hasAcceptedPrivacy?: boolean;
   id: string;
   membership_card?: MembershipCardRecord | null;
   membershipCard?: MembershipCardRecord | null;
@@ -63,6 +66,8 @@ export type LoginUserResponse = {
   phone_no?: string | null;
   phone_verified_at?: string | null;
   phoneVerified?: boolean;
+  privacy_accepted_at?: string | null;
+  privacyAcceptedAt?: string | null;
   profile?: (MemberProfile & {
     activity_level?: string | null;
     avatar_url?: string | null;

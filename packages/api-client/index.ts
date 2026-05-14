@@ -94,6 +94,7 @@ export type {
 } from "./domains/auth";
 export type {
   AppointmentCheckoutResponse,
+  AppointmentReviewSummary,
   AppointmentRecord,
   AppointmentPaymentProvider,
   AppointmentPaymentStage,
@@ -106,8 +107,14 @@ export type {
   VenueBookingRecord,
 } from "./domains/bookings";
 export type {
+  CoachReceivedReviewRecord,
+  CoachAppointmentScheduleRecord,
   CoachAvailabilityResponse,
   CoachAvailabilitySlot,
+  CreateCoachManagedAppointmentPayload,
+  ReplaceCoachAvailabilityPayload,
+  SubmitCoachAppointmentFeedbackPayload,
+  SubmitCoachReviewPayload,
   UpdateCoachProfilePayload,
   UpsertCoachAvailabilityPayload,
 } from "./domains/coaches";
@@ -129,6 +136,7 @@ export type {
   ExerciseMuscleTargetRole,
   ExerciseRigKeyframeKind,
   FinalizePoseSessionInput,
+  FitnessAchievementReviewRecord,
   FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseListParams,
@@ -208,6 +216,7 @@ export type {
   MembershipCardPurchaseRecord,
   ManualMembershipPaymentInput,
   MembershipCheckoutRecord,
+  MembershipOperationsDashboardRecord,
   MembershipPaymentDetailsRecord,
   MembershipPaymentHistoryParams,
   MembershipPaymentRecord,
@@ -271,14 +280,19 @@ export type {
   StaffCoachAvailabilityPayload,
 } from "./domains/staff";
 export type {
+  AppFeedbackRecord,
   AttendanceQrCodeResponse,
+  PrivacyAcceptanceResponse,
+  SubmitAppFeedbackPayload,
   UpdateUserPhonePayload,
   UpdateUserProfilePayload,
   UploadUserAvatarResponse,
   UserProfileResponse,
 } from "./domains/users";
 export type {
+  SubmitVenueFeedbackPayload,
   VenueAvailabilityRecord,
+  VenueFeedbackRecord,
   VenueMutationPayload,
 } from "./domains/venues";
 export type {

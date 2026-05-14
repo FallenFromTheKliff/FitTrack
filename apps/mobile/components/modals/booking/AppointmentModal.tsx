@@ -26,8 +26,8 @@ import {
   payAppointmentDownpaymentMutationOptions,
 } from "@fittrack/query";
 import {
+  expandCoachAvailabilitySlots,
   formatBookingDate,
-  getDurationMinutes,
   to12HourLabel,
 } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -253,14 +253,17 @@ export default function AppointmentModal({
     if (bookedCoachDateSet.has(selectedDate)) {
       return [];
     }
-    return availability.availability
+    return expandCoachAvailabilitySlots(
+      availability.availability,
+      availability.scheduleType,
+    )
       .filter(
         (slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek),
       )
       .map((slot) => ({
         label: to12HourLabel(slot.startTime),
         startTime: slot.startTime,
-        durationMin: getDurationMinutes(slot.startTime, slot.endTime),
+        durationMin: slot.durationMinutes,
       }));
   }, [availability, bookedCoachDateSet, selectedDate]);
   const highlightedCoachDates = useMemo(

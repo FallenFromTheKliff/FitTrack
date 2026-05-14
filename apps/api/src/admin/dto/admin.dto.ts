@@ -1,4 +1,5 @@
 import { Transform } from 'class-transformer';
+import { ActivityLevel, UserRole, UserStatus } from '@prisma/client';
 import {
   IsEmail,
   IsString,
@@ -11,7 +12,81 @@ import {
   IsArray,
   IsOptional,
   IsBoolean,
+  IsEnum,
 } from 'class-validator';
+
+function transformBooleanInput(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return value;
+}
+
+export class AdminUserFilterDto {
+  @IsOptional()
+  @IsEnum(UserRole, {
+    message: `role must be one of: ${Object.values(UserRole).join(', ')}`,
+  })
+  role?: UserRole;
+
+  @IsOptional()
+  @IsEnum(UserStatus, {
+    message: `status must be one of: ${Object.values(UserStatus).join(', ')}`,
+  })
+  status?: UserStatus;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(
+    [
+      'active_member',
+      'pending_membership',
+      'pending_verification',
+      'revoked',
+      'verified_non_member',
+    ],
+    {
+      message:
+        'tier must be one of: active_member, pending_membership, pending_verification, revoked, verified_non_member',
+    },
+  )
+  tier?:
+    | 'active_member'
+    | 'pending_membership'
+    | 'pending_verification'
+    | 'revoked'
+    | 'verified_non_member';
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  archived?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(ActivityLevel, {
+    message: `activityLevel must be one of: ${Object.values(ActivityLevel).join(', ')}`,
+  })
+  activityLevel?: ActivityLevel;
+
+  @IsOptional()
+  @IsIn(['active', 'expired'], {
+    message: 'membershipStatus must be one of: active, expired',
+  })
+  membershipStatus?: 'active' | 'expired';
+
+  @IsOptional()
+  @IsIn(['has_upcoming', 'no_upcoming'], {
+    message: 'sessionStatus must be one of: has_upcoming, no_upcoming',
+  })
+  sessionStatus?: 'has_upcoming' | 'no_upcoming';
+}
 
 export class CreateAdminDto {
   @IsEmail({}, { message: 'Invalid email format' })

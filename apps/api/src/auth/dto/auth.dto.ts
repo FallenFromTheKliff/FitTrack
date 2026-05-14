@@ -75,6 +75,18 @@ export class LoginDTO {
   @IsNotEmpty({ message: 'password is required' })
   @MaxLength(255, { message: 'password must not exceed 255 characters' })
   password: string;
+
+  @ApiPropertyOptional({
+    enum: ['team', 'member'],
+    example: 'team',
+    description:
+      'Optional login portal context used to enforce role-based access at authentication time.',
+  })
+  @IsOptional()
+  @IsIn(['team', 'member'], {
+    message: 'portal must be one of: team, member',
+  })
+  portal?: 'team' | 'member';
 }
 
 export class ForgotPasswordDTO {

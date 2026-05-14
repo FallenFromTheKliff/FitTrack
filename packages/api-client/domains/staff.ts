@@ -24,6 +24,7 @@ export type StaffAppointmentListParams = {
 export type StaffAppointmentRecord = {
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
   amountDueNow?: number | null;
+  assessmentReport?: string | null;
   balancePaidAt?: string | null;
   coach: {
     contactEmail?: string | null;
@@ -37,18 +38,31 @@ export type StaffAppointmentRecord = {
     } | null;
   };
   coachId: string;
+  coachEarnings?: number | null;
+  coachFeedback?: string | null;
+  coachPayoutPaidAt?: string | null;
   createdAt: string;
   duration: number;
+  gymRevenue?: number | null;
   id: string;
   notes?: string | null;
   originalScheduledAt?: string | null;
   recurringPlanId?: string | null;
   recurringState?: string | null;
   remainingBalance?: number | null;
+  review?: {
+    comment?: string | null;
+    createdAt: string;
+    id: string;
+    rating: number;
+    updatedAt: string;
+  } | null;
   scheduledAt: string;
+  sessionNotes?: string | null;
   status?: string;
   totalAmount?: number | null;
   downpaymentPaidAt?: string | null;
+  completedAt?: string | null;
   updatedAt: string;
   user: {
     email?: string | null;
@@ -98,7 +112,14 @@ export type CreateStaffCoachPayload = {
   gymCommissionPct?: number;
   hourlyRate?: number;
   isAvailableForBooking?: boolean;
+  scheduleType?: "full_time" | "part_time";
   specialties?: string[];
+};
+
+export type CompleteStaffAppointmentPayload = {
+  assessmentReport?: string;
+  coachFeedback?: string;
+  sessionNotes?: string;
 };
 
 type StaffAppointmentProfileApiRecord = {
@@ -131,12 +152,26 @@ type StaffAppointmentApiRecord = {
   downpayment_amount?: number | string | null;
   downpayment_paid_at?: string | null;
   duration_minutes: number;
+  assessment_report?: string | null;
+  coach_earnings?: number | string | null;
+  coach_feedback?: string | null;
+  coach_payout_paid_at?: string | null;
+  completed_at?: string | null;
+  gym_revenue?: number | string | null;
   id: string;
   member_notes?: string | null;
   original_scheduled_at?: string | null;
   recurring_plan_id?: string | null;
   recurring_state?: string | null;
+  review?: {
+    comment?: string | null;
+    created_at?: string;
+    id: string;
+    rating: number;
+    updated_at?: string;
+  } | null;
   scheduled_at: string;
+  session_notes?: string | null;
   status?: string;
   total_amount?: number | string | null;
   updated_at: string;
@@ -167,6 +202,8 @@ type StaffCoachApiRecord = {
   is_active?: boolean | null;
   is_available_for_booking?: boolean | null;
   isActive?: boolean | null;
+  schedule_type?: "full_time" | "part_time";
+  scheduleType?: "full_time" | "part_time";
   specialization?: string | null;
   specialties?: string[] | null;
   user?: CoachProfileRecord["user"] | null;
@@ -270,6 +307,7 @@ function mapStaffCoach(
       record.is_active ??
       record.is_available_for_booking ??
       true,
+    scheduleType: record.scheduleType ?? record.schedule_type ?? "part_time",
     specialties: splitMultiValue(
       record.specialties ?? record.specialization ?? null,
     ),
@@ -298,9 +336,14 @@ function mapStaffAppointment(
     id: record.id,
     userId: record.user_id,
     coachId: record.coach_id,
+    coachEarnings: toNullableNumber(record.coach_earnings),
+    coachFeedback: record.coach_feedback ?? null,
+    coachPayoutPaidAt: record.coach_payout_paid_at ?? null,
     status: record.status,
     scheduledAt: record.scheduled_at,
     duration: record.duration_minutes,
+    assessmentReport: record.assessment_report ?? null,
+    gymRevenue: toNullableNumber(record.gym_revenue),
     totalAmount,
     amountDueNow: hasPaymentSummary
       ? isFullPaymentFlow
@@ -319,10 +362,21 @@ function mapStaffAppointment(
     downpaymentPaidAt: record.downpayment_paid_at ?? null,
     balancePaidAt: record.balance_paid_at ?? null,
     notes: record.member_notes ?? null,
+    sessionNotes: record.session_notes ?? null,
     originalScheduledAt: record.original_scheduled_at ?? null,
     recurringPlanId: record.recurring_plan_id ?? null,
     recurringState: record.recurring_state ?? null,
+    review: record.review
+      ? {
+          comment: record.review.comment ?? null,
+          createdAt: record.review.created_at ?? "",
+          id: record.review.id,
+          rating: record.review.rating,
+          updatedAt: record.review.updated_at ?? "",
+        }
+      : null,
     createdAt: record.created_at,
+    completedAt: record.completed_at ?? null,
     updatedAt: record.updated_at,
     user: {
       id: record.user.id,
@@ -428,6 +482,9 @@ export function createStaffApi(transport: ApiTransport) {
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
             : {}),
+          ...(payload.scheduleType !== undefined
+            ? { schedule_type: payload.scheduleType }
+            : {}),
           ...(payload.specialties !== undefined
             ? { specialization: payload.specialties.join(", ") }
             : {}),
@@ -457,6 +514,9 @@ export function createStaffApi(transport: ApiTransport) {
             : {}),
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
+            : {}),
+          ...(payload.scheduleType !== undefined
+            ? { schedule_type: payload.scheduleType }
             : {}),
           ...(payload.specialties !== undefined
             ? { specialization: payload.specialties.join(", ") }
@@ -541,12 +601,29 @@ export function createStaffApi(transport: ApiTransport) {
           : "Unable to reject coach appointment.",
       );
     },
-    completeAppointment(appointmentId: string, sessionNotes?: string) {
+    completeAppointment(
+      appointmentId: string,
+      payload?: CompleteStaffAppointmentPayload,
+    ) {
       return unwrapVoidResponse(
         transport.patch(`/staff/appointments/${appointmentId}/complete`, {
-          ...(sessionNotes ? { session_notes: sessionNotes } : {}),
+          ...(payload?.assessmentReport
+            ? { assessment_report: payload.assessmentReport }
+            : {}),
+          ...(payload?.coachFeedback
+            ? { coach_feedback: payload.coachFeedback }
+            : {}),
+          ...(payload?.sessionNotes
+            ? { session_notes: payload.sessionNotes }
+            : {}),
         }),
         "Unable to complete coach appointment.",
+      );
+    },
+    markCoachPayoutPaid(appointmentId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/staff/appointments/${appointmentId}/coach-payout`, {}),
+        "Unable to mark coach payout paid.",
       );
     },
     cancelAppointment(appointmentId: string, reason: string) {

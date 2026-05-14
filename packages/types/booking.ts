@@ -71,6 +71,7 @@ export interface CoachProfileRecord {
   certifications?: string[];
   yearsExperience?: number | null;
   hourlyRate?: number | null;
+  scheduleType?: "full_time" | "part_time";
   isActive?: boolean;
   availability?: CoachAvailabilityRecord[];
   bookedDates?: string[];

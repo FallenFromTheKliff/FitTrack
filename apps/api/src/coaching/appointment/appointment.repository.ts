@@ -34,6 +34,11 @@ type FreeAppointmentCleanupCandidate = Pick<
   'id' | 'user_id' | 'coach_id' | 'scheduled_at' | 'duration_minutes'
 >;
 
+type NoShowCleanupCandidate = Pick<
+  CoachAppointment,
+  'id' | 'scheduled_at' | 'duration_minutes'
+>;
+
 type AppointmentNotificationContext = Prisma.CoachAppointmentGetPayload<{
   include: {
     user: {
@@ -86,9 +91,52 @@ export type AppointmentLifecycleRecord = Prisma.CoachAppointmentGetPayload<{
   };
 }>;
 
+const memberAppointmentInclude = {
+  coach: {
+    select: {
+      id: true,
+      hourly_rate: true,
+      display_name: true,
+      contact_email: true,
+    },
+  },
+  review: {
+    select: {
+      id: true,
+      rating: true,
+      comment: true,
+      created_at: true,
+      updated_at: true,
+    },
+  },
+} satisfies Prisma.CoachAppointmentInclude;
+
+export type MemberAppointmentRecord = Prisma.CoachAppointmentGetPayload<{
+  include: typeof memberAppointmentInclude;
+}>;
+
 const coachScheduleInclude = {
+  review: {
+    select: {
+      id: true,
+      rating: true,
+      comment: true,
+      created_at: true,
+      updated_at: true,
+    },
+  },
   user: {
     include: {
+      auth_identities: {
+        where: { provider: { in: ['email', 'google'] } },
+        orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+        select: {
+          identifier: true,
+          provider: true,
+          is_primary: true,
+          verified_at: true,
+        },
+      },
       profile: true,
     },
   },
@@ -99,6 +147,15 @@ export type CoachScheduleRecord = Prisma.CoachAppointmentGetPayload<{
 }>;
 
 const staffAppointmentInclude = {
+  review: {
+    select: {
+      id: true,
+      rating: true,
+      comment: true,
+      created_at: true,
+      updated_at: true,
+    },
+  },
   user: {
     include: {
       auth_identities: {
@@ -446,7 +503,7 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   getMyAppointments(userId: string, dto: DateRangeDTO) {
-    return this.paginateByUserIdWithDateRange<CoachAppointment>(
+    return this.paginateByUserIdWithDateRange<MemberAppointmentRecord>(
       this.prisma.coachAppointment,
       userId,
       {
@@ -455,6 +512,7 @@ export class AppointmentRepository extends BaseRepository {
         dateField: 'scheduled_at',
       },
       {
+        include: memberAppointmentInclude,
         orderBy: { scheduled_at: 'desc' },
       },
       { page: dto.page, limit: dto.limit },
@@ -553,6 +611,25 @@ export class AppointmentRepository extends BaseRepository {
     });
 
     return result.count > 0;
+  }
+
+  findConfirmedAppointmentsPotentiallyNoShow(
+    scheduledBefore: Date,
+  ): Promise<NoShowCleanupCandidate[]> {
+    return this.findAll<NoShowCleanupCandidate>(
+      this.prisma.coachAppointment,
+      {
+        status: AppointmentStatus.confirmed,
+        scheduled_at: { lte: scheduledBefore },
+      },
+      undefined,
+      { scheduled_at: 'asc' },
+      {
+        id: true,
+        scheduled_at: true,
+        duration_minutes: true,
+      },
+    );
   }
 
   findFreeAppointmentsAwaitingCompletion(

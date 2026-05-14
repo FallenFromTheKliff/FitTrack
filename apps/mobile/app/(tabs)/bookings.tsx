@@ -1,5 +1,12 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Linking, Pressable, View } from "react-native";
+import {
+  Linking,
+  Modal,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -18,6 +25,7 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   CircleOff,
+  Star,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,6 +42,7 @@ import {
   cancelAppointmentMutationOptions,
   cancelBookingMutationOptions,
   payAppointmentDownpaymentMutationOptions,
+  submitCoachReviewMutationOptions,
   venuesQueryOptions,
 } from "@fittrack/query";
 import { normalizeBookingStatus, toDateTimeRange } from "@fittrack/app-core";
@@ -62,7 +71,7 @@ import {
 import { mobileApiClient } from "@/lib/api-client";
 import { toMobileBookings } from "@/utils/venueBookings";
 
-import { FitCard, FitFilter, FitSearch, FitText } from "@/components/fit";
+import { FitButton, FitCard, FitFilter, FitSearch, FitText } from "@/components/fit";
 import {
   AppointmentModal,
   BookingDetailModal,
@@ -157,6 +166,9 @@ export default function BookingsScreen() {
     useState<PendingAppointmentPayment | null>(null);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<DetailBooking | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
   const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
 
@@ -235,11 +247,17 @@ export default function BookingsScreen() {
                 : normalizeBookingStatus(appointment.status);
         return {
           amountDueNow: appointment.amountDueNow ?? undefined,
+          assessmentReport: appointment.assessmentReport,
           bookingType: appointment.recurringPlanId ? "recurring" : "single",
+          coachFeedback: appointment.coachFeedback,
+          coachId: appointment.coachId,
+          coachReviewComment: appointment.review?.comment ?? null,
+          coachReviewRating: appointment.review?.rating ?? null,
           id: appointment.id,
           nextPaymentDate: appointment.nextPaymentDate ?? undefined,
           paymentPlan: appointment.paymentPlan ?? undefined,
           remainingBalance: appointment.remainingBalance ?? undefined,
+          sessionNotes: appointment.sessionNotes,
           resourceId: appointment.coachId ?? "coach",
           resourceName: coachName,
           time: `${startLabel} - ${endLabel}`,
@@ -363,6 +381,9 @@ export default function BookingsScreen() {
   const payAppointmentMutation = useMutation(
     payAppointmentDownpaymentMutationOptions(mobileApiClient, queryClient),
   );
+  const submitCoachReviewMutation = useMutation(
+    submitCoachReviewMutationOptions(mobileApiClient, queryClient),
+  );
 
   const cancellingReservationLabel = useLoadingText(
     "CANCELLING",
@@ -477,6 +498,54 @@ export default function BookingsScreen() {
     }
     setPendingCancellation({ booking, type: "appointment" });
   }, []);
+
+  const handleOpenCoachReview = useCallback((booking: DetailBooking) => {
+    if (!booking.coachId || booking.coachReviewRating) return;
+    setReviewTarget(booking);
+    setReviewRating(5);
+    setReviewComment("");
+  }, []);
+
+  const handleCloseCoachReview = useCallback(() => {
+    if (submitCoachReviewMutation.isPending) return;
+    setReviewTarget(null);
+    setReviewRating(5);
+    setReviewComment("");
+  }, [submitCoachReviewMutation.isPending]);
+
+  const handleSubmitCoachReview = useCallback(async () => {
+    if (!reviewTarget?.coachId) return;
+    const comment = reviewComment.trim();
+
+    await submitCoachReviewMutation.mutateAsync({
+      coachId: reviewTarget.coachId,
+      payload: {
+        appointmentId: reviewTarget.id,
+        rating: reviewRating,
+        ...(comment ? { comment } : {}),
+      },
+      userId: user?.id,
+    });
+
+    setDetailBooking((current) =>
+      current?.id === reviewTarget.id
+        ? {
+            ...current,
+            coachReviewComment: comment || null,
+            coachReviewRating: reviewRating,
+          }
+        : current,
+    );
+    setReviewTarget(null);
+    setReviewRating(5);
+    setReviewComment("");
+  }, [
+    reviewComment,
+    reviewRating,
+    reviewTarget,
+    submitCoachReviewMutation,
+    user?.id,
+  ]);
 
   const activeItems = useMemo(() => {
     return activeSection === "bookings" ? reservations : appointments;
@@ -620,8 +689,24 @@ export default function BookingsScreen() {
         },
       ];
     }
-    return [
-      {
+    const actions = [];
+    if (
+      detailBooking.status === "completed" &&
+      detailBooking.coachId &&
+      !detailBooking.coachReviewRating
+    ) {
+      actions.push({
+        key: "leave-coach-review",
+        label: "Leave Feedback",
+        variant: "primary" as const,
+        icon: Star,
+        onPress: handleOpenCoachReview,
+        disabled: submitCoachReviewMutation.isPending,
+        loading: submitCoachReviewMutation.isPending,
+        loadingLabel: "SUBMITTING",
+      });
+    }
+    actions.push({
         key: "cancel-appointment",
         label: isCancelling ? cancellingAppointmentLabel : "Cancel Appointment",
         variant: "danger" as const,
@@ -631,11 +716,12 @@ export default function BookingsScreen() {
           isCancelling ||
           detailBooking.status === "cancelled" ||
           detailBooking.status === "completed" ||
-          detailBooking.status === "declined",
+          detailBooking.status === "declined" ||
+          detailBooking.status === "no_show",
         loading: isCancelling,
         loadingLabel: cancellingAppointmentLabel,
-      },
-    ];
+      });
+    return actions;
   }, [
     activeSection,
     cancellingAppointmentLabel,
@@ -643,9 +729,11 @@ export default function BookingsScreen() {
     detailBooking,
     handleCancelAppointment,
     handleCancelReservation,
+    handleOpenCoachReview,
     isCancelling,
     openingPaymongoLabel,
     payAppointmentMutation,
+    submitCoachReviewMutation.isPending,
     user?.id,
   ]);
 
@@ -811,6 +899,119 @@ export default function BookingsScreen() {
         onClose={() => setDetailBooking(null)}
         actions={detailActions}
       />
+      <Modal
+        visible={reviewTarget != null}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseCoachReview}
+      >
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "center",
+              padding: 20,
+            },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: 24,
+              borderWidth: 1,
+              gap: 14,
+              padding: 20,
+              width: "100%",
+            }}
+          >
+            <View style={{ gap: 4 }}>
+              <FitText
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: "800",
+                }}
+              >
+                Leave feedback for your coach
+              </FitText>
+              <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                {reviewTarget
+                  ? `${reviewTarget.resourceName} | ${formatBookingDate(reviewTarget.date)}`
+                  : "Completed coaching session"}
+              </FitText>
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <Pressable
+                  key={rating}
+                  onPress={() => setReviewRating(rating)}
+                  hitSlop={8}
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: colors.surfaceRaised,
+                    borderColor:
+                      rating <= reviewRating ? colors.warning : colors.border,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    height: 44,
+                    justifyContent: "center",
+                    width: 44,
+                  }}
+                >
+                  <Star
+                    size={20}
+                    color={
+                      rating <= reviewRating ? colors.warning : colors.textMuted
+                    }
+                    fill={rating <= reviewRating ? colors.warning : "none"}
+                    strokeWidth={2}
+                  />
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="Optional written review"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              style={{
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                borderRadius: 16,
+                borderWidth: 1,
+                color: colors.textPrimary,
+                minHeight: 112,
+                padding: 14,
+              }}
+            />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <FitButton
+                label="Cancel"
+                variant="ghost"
+                flex={1}
+                onPress={handleCloseCoachReview}
+                disabled={submitCoachReviewMutation.isPending}
+              />
+              <FitButton
+                label="Submit"
+                variant="primary"
+                flex={1}
+                onPress={() => void handleSubmitCoachReview()}
+                loading={submitCoachReviewMutation.isPending}
+                loadingLabel="SUBMITTING"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <ConfirmModal
         isVisible={pendingAppointmentPayment != null}
         title={

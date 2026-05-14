@@ -61,6 +61,15 @@ function normalizeAssetPathValue(value: string) {
     .replace(/^\/+/, "");
 }
 
+function isPlaceholderAssetUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname === "fittrack.dev" || parsed.hostname.endsWith(".fittrack.local");
+  } catch {
+    return false;
+  }
+}
+
 export function extractStorageObjectKey(
   assetUrl?: string | null,
   publicBaseUrl?: string | null
@@ -112,6 +121,10 @@ export function buildRenderableAssetUrl({
   const trimmedAssetUrl = assetUrl?.trim() ?? null;
   if (trimmedAssetUrl?.startsWith("blob:") || trimmedAssetUrl?.startsWith("data:")) {
     return trimmedAssetUrl;
+  }
+
+  if (trimmedAssetUrl && isPlaceholderAssetUrl(trimmedAssetUrl)) {
+    return null;
   }
 
   const normalizedApiBaseUrl = normalizeApiAssetBaseUrl(apiBaseUrl);

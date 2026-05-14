@@ -18,6 +18,7 @@ import type {
 export type MemberBookingItem = Booking & {
   amountDueNow?: number;
   bookingType?: "recurring" | "single";
+  coachId?: string;
   detailSubtitle?: string;
   detailTitle?: string;
   nextPaymentDate?: string;
@@ -381,6 +382,7 @@ export function toMemberAppointment(appointment: AppointmentLikeRecord): MemberB
   return {
     amountDueNow: appointment.amountDueNow ?? undefined,
     bookingType: appointment.recurringPlanId ? "recurring" : "single",
+    coachId: appointment.coachId ?? undefined,
     date,
     description: appointment.notes ?? undefined,
     detailSubtitle: appointment.recurringPlanId ? `${coachName} / Recurring` : coachName,

@@ -17,10 +17,16 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CreateAmenityDTO, UpdateAmenityDTO } from './dto/amenity.dto';
+import {
+  CreateAmenityDTO,
+  CreateAmenityFeedbackDTO,
+  UpdateAmenityDTO,
+} from './dto/amenity.dto';
 import { AmenityService } from './amenity.service';
 
 @ApiTags('Bookings')
@@ -43,6 +49,25 @@ export class AmenityController {
     return this.amenityService.listArchivedAmenities();
   }
 
+  @Get('amenities/feedback')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List submitted facility or venue feedback for operators.' })
+  @ApiResponse({ status: 200, description: 'Amenity feedback returned.' })
+  listAmenityFeedback() {
+    return this.amenityService.listFeedback();
+  }
+
+  @Get('amenities/:id/feedback')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List recent feedback for a facility or venue.' })
+  @ApiResponse({ status: 200, description: 'Amenity feedback returned.' })
+  listAmenityFeedbackForAmenity(@Param('id', ParseUUIDPipe) id: string) {
+    return this.amenityService.listFeedbackForAmenity(id);
+  }
+
   @Get('amenities/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -50,6 +75,19 @@ export class AmenityController {
   @ApiResponse({ status: 404, description: 'Amenity not found.' })
   getAmenityById(@Param('id', ParseUUIDPipe) id: string) {
     return this.amenityService.getAmenityById(id);
+  }
+
+  @Post('amenities/:id/feedback')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Submit feedback for a facility or venue.' })
+  @ApiResponse({ status: 201, description: 'Amenity feedback submitted.' })
+  submitAmenityFeedback(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateAmenityFeedbackDTO,
+  ) {
+    return this.amenityService.submitFeedback(id, user.sub, dto);
   }
 
   @Post('amenities')

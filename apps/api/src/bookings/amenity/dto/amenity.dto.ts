@@ -11,13 +11,41 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
   Min,
+  ValidateIf,
+  ValidationArguments,
+  ValidationOptions,
+  registerDecorator,
 } from 'class-validator';
 
 import { TrimString } from '../../../common/validators';
 
 const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
+
+function ReservableAmenityHourlyRate(validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string | symbol) => {
+    registerDecorator({
+      name: 'ReservableAmenityHourlyRate',
+      target: object.constructor,
+      propertyName: propertyName.toString(),
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args?: ValidationArguments): boolean {
+          const dto = args?.object as { is_reservable?: boolean } | undefined;
+          if (dto?.is_reservable !== true) return true;
+          return (
+            typeof value === 'number' && Number.isFinite(value) && value > 0
+          );
+        },
+        defaultMessage(): string {
+          return 'hourly_rate is required and must be greater than 0 when is_reservable is true';
+        },
+      },
+    });
+  };
+}
 
 export class CreateAmenityDTO {
   @ApiProperty({ example: 'Main Court' })
@@ -50,10 +78,14 @@ export class CreateAmenityDTO {
   capacity?: number;
 
   @ApiPropertyOptional({ example: 800, default: 0 })
-  @IsOptional()
+  @ValidateIf(
+    (dto: { is_reservable?: boolean }, value: unknown) =>
+      dto.is_reservable === true || value !== undefined,
+  )
   @Type(() => Number)
   @IsNumber({}, { message: 'hourly_rate must be a number' })
   @Min(0, { message: 'hourly_rate must be at least 0' })
+  @ReservableAmenityHourlyRate()
   hourly_rate?: number;
 
   @ApiPropertyOptional({ example: false, default: false })
@@ -170,10 +202,14 @@ export class UpdateAmenityDTO {
   capacity?: number;
 
   @ApiPropertyOptional({ example: 800 })
-  @IsOptional()
+  @ValidateIf(
+    (dto: { is_reservable?: boolean }, value: unknown) =>
+      dto.is_reservable === true || value !== undefined,
+  )
   @Type(() => Number)
   @IsNumber({}, { message: 'hourly_rate must be a number' })
   @Min(0, { message: 'hourly_rate must be at least 0' })
+  @ReservableAmenityHourlyRate()
   hourly_rate?: number;
 
   @ApiPropertyOptional({ example: false })
@@ -258,4 +294,23 @@ export class UpdateAmenityDTO {
     message: `floor_id must be one of: ${FACILITY_FLOOR_IDS.join(', ')}`,
   })
   floor_id?: (typeof FACILITY_FLOOR_IDS)[number];
+}
+
+export class CreateAmenityFeedbackDTO {
+  @ApiProperty({ example: 5 })
+  @Type(() => Number)
+  @IsInt({ message: 'rating must be an integer' })
+  @Min(1, { message: 'rating must be at least 1' })
+  @Max(5, { message: 'rating must not exceed 5' })
+  rating: number;
+
+  @ApiPropertyOptional({
+    example:
+      'The court lighting was great and the lane markings were easy to follow.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'comment must be a string' })
+  @MaxLength(1500, { message: 'comment must not exceed 1500 characters' })
+  comment?: string;
 }

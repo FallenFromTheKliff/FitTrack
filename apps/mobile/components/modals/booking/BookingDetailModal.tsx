@@ -18,11 +18,17 @@ import { FitButton, FitText } from "@/components/fit";
 
 export type DetailBooking = {
   amountDueNow?: number;
+  assessmentReport?: string | null;
   bookingType?: "recurring" | "single";
+  coachFeedback?: string | null;
+  coachId?: string;
+  coachReviewComment?: string | null;
+  coachReviewRating?: number | null;
   id: string;
   nextPaymentDate?: string;
   paymentPlan?: "downpayment" | "free" | "full";
   remainingBalance?: number;
+  sessionNotes?: string | null;
   resourceId?: string;
   resourceName: string;
   date: string;
@@ -331,6 +337,33 @@ export default function BookingDetailModal({
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>NOTES</FitText>
                 <FitText style={s.detailValue}>{booking.description}</FitText>
+              </View>
+            ) : null}
+
+            {booking.sessionNotes || booking.assessmentReport || booking.coachFeedback ? (
+              <View style={s.priceCard}>
+                <FitText style={s.detailLabel}>SESSION REPORT</FitText>
+                {booking.sessionNotes ? (
+                  <FitText style={s.priceSub}>Notes: {booking.sessionNotes}</FitText>
+                ) : null}
+                {booking.assessmentReport ? (
+                  <FitText style={s.priceSub}>Assessment: {booking.assessmentReport}</FitText>
+                ) : null}
+                {booking.coachFeedback ? (
+                  <FitText style={s.priceSub}>Coach feedback: {booking.coachFeedback}</FitText>
+                ) : null}
+              </View>
+            ) : null}
+
+            {booking.coachReviewRating ? (
+              <View style={s.priceCard}>
+                <FitText style={s.detailLabel}>YOUR COACH REVIEW</FitText>
+                <FitText style={s.detailValue}>{booking.coachReviewRating}/5 stars</FitText>
+                <FitText style={s.priceSub}>
+                  {booking.coachReviewComment?.trim()
+                    ? booking.coachReviewComment
+                    : "No written comment provided."}
+                </FitText>
               </View>
             ) : null}
 

@@ -35,7 +35,7 @@ type MembershipCardWithUserProfile = MembershipCard & {
   };
 };
 
-const MEMBERSHIP_CARD_PRICE = new Prisma.Decimal(400);
+const DEFAULT_MEMBERSHIP_CARD_PRICE = new Prisma.Decimal(400);
 const MEMBERSHIP_CARD_PAYABLE_TYPE =
   'membership_card' as unknown as Payment['payable_type'];
 
@@ -99,6 +99,11 @@ export class MembershipCardRepository extends BaseRepository {
   }): Promise<MembershipCardPurchaseRecord> {
     try {
       return await this.transaction(async (tx) => {
+        const catalogSettings = await tx.membershipCatalogSettings.findFirst({
+          select: { membership_card_price: true },
+        });
+        const membershipCardPrice =
+          catalogSettings?.membership_card_price ?? DEFAULT_MEMBERSHIP_CARD_PRICE;
         const existingCard = await tx.membershipCard.findUnique({
           where: { user_id: input.userId },
         });
@@ -113,6 +118,7 @@ export class MembershipCardRepository extends BaseRepository {
               where: { user_id: input.userId },
               data: {
                 activated_at: null,
+                price: membershipCardPrice,
                 purchased_at: purchasedAt,
                 revoke_reason: null,
                 revoked_at: null,
@@ -125,6 +131,7 @@ export class MembershipCardRepository extends BaseRepository {
             })
           : await tx.membershipCard.create({
               data: {
+                price: membershipCardPrice,
                 purchased_at: purchasedAt,
                 source: input.source,
                 status: MembershipCardStatus.pending_verification,
@@ -134,7 +141,7 @@ export class MembershipCardRepository extends BaseRepository {
 
         const payment = await tx.payment.create({
           data: {
-            amount: MEMBERSHIP_CARD_PRICE,
+            amount: membershipCardPrice,
             idempotency_key: input.idempotencyKey,
             payable_id: membershipCard.id,
             payable_type: MEMBERSHIP_CARD_PAYABLE_TYPE,

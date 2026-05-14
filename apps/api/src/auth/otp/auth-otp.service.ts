@@ -185,15 +185,37 @@ export class AuthOtpService {
     otp: string,
     purpose: OtpPurpose,
   ): Promise<void> {
-    await this.mailQueue.add(
-      'send-otp',
-      { to: destination, otp, purpose },
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true,
-      },
-    );
+    try {
+      await this.mailQueue.add(
+        'send-otp',
+        { to: destination, otp, purpose },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown mail queue error';
+
+      this.logger.error(
+        `Failed to enqueue email OTP for ${destination}: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new HttpException(
+        {
+          type: 'OTP_DELIVERY_QUEUE_UNAVAILABLE',
+          title: 'OTP Delivery Unavailable',
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          detail:
+            'Could not queue the OTP email for delivery. Please try again shortly.',
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   private generateOtp(): string {

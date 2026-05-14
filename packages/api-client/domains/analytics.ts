@@ -142,12 +142,17 @@ type AnalyticsDailyInsightsApiRecord = {
 };
 
 type AnalyticsPerformanceKpisApiRecord = {
+  active_members?: number;
+  app_feedback_submissions?: number;
   check_ins: number;
+  coach_satisfaction_rating?: number;
   coaching_sessions: number;
   new_members: number;
+  session_completion_rate?: number;
   total_coaching_appointments: number;
   total_revenue: string | number;
   total_venue_bookings: number;
+  venue_feedback_rating?: number;
 };
 
 type AnalyticsSystemAlertApiRecord = {
@@ -336,12 +341,17 @@ function mapPerformanceKpis(
   record: AnalyticsPerformanceKpisApiRecord,
 ): AnalyticsPerformanceKpisRecord {
   return {
+    activeMembers: record.active_members ?? 0,
+    appFeedbackSubmissions: record.app_feedback_submissions ?? 0,
     checkIns: record.check_ins,
+    coachSatisfactionRating: record.coach_satisfaction_rating ?? 0,
     coachingSessions: record.coaching_sessions,
     newMembers: record.new_members,
+    sessionCompletionRate: record.session_completion_rate ?? 0,
     totalCoachingAppointments: record.total_coaching_appointments,
     totalRevenue: toNumber(record.total_revenue),
     totalVenueBookings: record.total_venue_bookings,
+    venueFeedbackRating: record.venue_feedback_rating ?? 0,
   };
 }
 

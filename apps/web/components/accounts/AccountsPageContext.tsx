@@ -23,7 +23,12 @@ import {
   verifyNonMemberMutationOptions,
 } from "@fittrack/query";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
-import type { AttendanceCheckInRecord, MemberRecord, MembershipCardRecord } from "@fittrack/types";
+import type {
+  AttendanceCheckInRecord,
+  MemberDirectoryFilters,
+  MemberRecord,
+  MembershipCardRecord,
+} from "@fittrack/types";
 import type { AdminCreateUserData } from "@fittrack/validators";
 import { fullName } from "@fittrack/utils";
 
@@ -31,6 +36,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMembers } from "@/contexts/MemberContext";
 import {
   MEMBER_FILTER_OPTIONS,
+  MEMBER_TIER_FILTER_OPTIONS,
   MEMBER_STATUS_TABS,
   type DeletionRequest,
   type MemberStatusTab,
@@ -77,7 +83,11 @@ type PendingMembershipPayment = {
 
 type AccountsPageContextValue = {
   activeChip: string;
+  activeCoachActivityLevel: string;
+  activeCoachMembershipStatus: string;
+  activeCoachSessionStatus: string;
   activeStatus: MemberStatusTab;
+  activeTier: string;
   addLoading: boolean;
   addLoadingLabel: string;
   approveRequestLoadingLabel: string;
@@ -163,7 +173,11 @@ type AccountsPageContextValue = {
   scanFeedback: AttendanceScanFeedback | null;
   scanOpen: boolean;
   setActiveChip: Dispatch<SetStateAction<string>>;
+  setActiveCoachActivityLevel: Dispatch<SetStateAction<string>>;
+  setActiveCoachMembershipStatus: Dispatch<SetStateAction<string>>;
+  setActiveCoachSessionStatus: Dispatch<SetStateAction<string>>;
   setActiveStatus: Dispatch<SetStateAction<MemberStatusTab>>;
+  setActiveTier: Dispatch<SetStateAction<string>>;
   setArchiveTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setContentMode: Dispatch<SetStateAction<ContentMode>>;
   setDeleteTarget: Dispatch<SetStateAction<MemberRecord | null>>;
@@ -183,6 +197,7 @@ type AccountsPageContextValue = {
   setScanOpen: Dispatch<SetStateAction<boolean>>;
   setViewMode: Dispatch<SetStateAction<DirectoryViewMode>>;
   statusSelectOptions: SelectOption[];
+  tierSelectOptions: SelectOption[];
   totalPages: number;
   viewMode: DirectoryViewMode;
 };
@@ -200,6 +215,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     updateMember,
     deleteUser,
     restoreUser,
+    setDirectoryFilters,
   } = useMembers();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "ADMIN";
@@ -212,8 +228,70 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const debouncedQ = useDebounce(q, 250);
   const [activeChip, setActiveChip] = useState("all");
   const [activeStatus, setActiveStatus] = useState<MemberStatusTab>("All");
+  const [activeTier, setActiveTier] = useState("all");
+  const [activeCoachMembershipStatus, setActiveCoachMembershipStatus] =
+    useState("all");
+  const [activeCoachSessionStatus, setActiveCoachSessionStatus] =
+    useState("all");
+  const [activeCoachActivityLevel, setActiveCoachActivityLevel] =
+    useState("all");
   const [viewMode, setViewMode] = useState<DirectoryViewMode>("list");
   const isTerminationRequestsView = activeStatus === "Termination Requests";
+  const directoryServerFilters = useMemo<MemberDirectoryFilters>(() => {
+    const filters: MemberDirectoryFilters = {};
+    const search = debouncedQ.trim();
+
+    if (search) {
+      filters.search = search;
+    }
+
+    if (activeStatus === "Active" || activeStatus === "Termination Requests") {
+      filters.archived = false;
+    } else if (activeStatus === "Archived") {
+      filters.archived = true;
+    }
+
+    if (isCoach || activeStatus === "Termination Requests") {
+      filters.role = "member";
+    } else if (activeChip === "Admin") {
+      filters.role = "admin";
+    } else if (activeChip === "Staff") {
+      filters.role = "staff";
+    } else if (activeChip === "Coach") {
+      filters.role = "coach";
+    } else if (activeChip === "Member") {
+      filters.role = "member";
+    }
+
+    if (!isCoach && activeTier !== "all") {
+      filters.tier = activeTier as MemberDirectoryFilters["tier"];
+    }
+
+    if (isCoach && activeCoachMembershipStatus !== "all") {
+      filters.tier =
+        activeCoachMembershipStatus as MemberDirectoryFilters["tier"];
+    }
+
+    if (isCoach && activeCoachSessionStatus !== "all") {
+      filters.sessionStatus =
+        activeCoachSessionStatus as MemberDirectoryFilters["sessionStatus"];
+    }
+
+    if (isCoach && activeCoachActivityLevel !== "all") {
+      filters.activityLevel = activeCoachActivityLevel;
+    }
+
+    return filters;
+  }, [
+    activeChip,
+    activeCoachActivityLevel,
+    activeCoachMembershipStatus,
+    activeCoachSessionStatus,
+    activeStatus,
+    activeTier,
+    debouncedQ,
+    isCoach,
+  ]);
   const [addLoading, setAddLoading] = useState(false);
   const addLoadingLabel = useLoadingText("ADDING USER", addLoading);
   const [editTarget, setEditTarget] = useState<MemberRecord | null>(null);
@@ -259,12 +337,26 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       page: 1,
       status: "awaiting_verification",
     }),
-    enabled: isAdmin,
+    enabled: canManageAccounts,
   });
 
   useEffect(() => {
-    if (canInspectAccounts) void fetchMembers();
+    if (!canInspectAccounts) return;
+    void fetchMembers().catch((error: unknown) => {
+      notifyActionError("Could not refresh clients", error, "Failed to fetch members.");
+    });
   }, [canInspectAccounts, fetchMembers]);
+
+  useEffect(() => {
+    setDirectoryFilters(canInspectAccounts ? directoryServerFilters : {});
+  }, [canInspectAccounts, directoryServerFilters, setDirectoryFilters]);
+
+  useEffect(
+    () => () => {
+      setDirectoryFilters({});
+    },
+    [setDirectoryFilters],
+  );
 
   useEffect(() => {
     const evaluateViewportMode = () => {
@@ -302,13 +394,13 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   }, [canManageAccounts, deletionRequestsError]);
 
   useEffect(() => {
-    if (!pendingMembershipPaymentsError || !isAdmin) return;
+    if (!pendingMembershipPaymentsError || !canManageAccounts) return;
     notifyActionError(
       "Payment reviews could not be loaded",
       pendingMembershipPaymentsError,
       "Failed to load pending membership payment reviews.",
     );
-  }, [isAdmin, pendingMembershipPaymentsError]);
+  }, [canManageAccounts, pendingMembershipPaymentsError]);
 
   const roleScopedMembers = useMemo(() => {
     return members.filter((member) => {
@@ -358,15 +450,15 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     () =>
       filterMembers(
         roleScopedMembers,
-        debouncedQ,
+        "",
         activeChip,
         activeStatus,
         pendingRequestsByUserId,
       ),
-    [activeChip, activeStatus, debouncedQ, pendingRequestsByUserId, roleScopedMembers],
+    [activeChip, activeStatus, pendingRequestsByUserId, roleScopedMembers],
   );
 
-  useEffect(() => setPage(1), [debouncedQ, activeChip, activeStatus, viewMode]);
+  useEffect(() => setPage(1), [debouncedQ, activeChip, activeStatus, activeTier, viewMode]);
 
   useEffect(() => {
     if (isTerminationRequestsView && activeChip !== "Member") {
@@ -965,10 +1057,17 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     label: option.label,
     value: option.value,
   }));
+  const tierSelectOptions = MEMBER_TIER_FILTER_OPTIONS.map((option) => ({
+    label: option.label,
+    value: option.value,
+  }));
   const directoryEmptyMessage = isTerminationRequestsView
     ? "No termination requests match your current filters."
     : "No accounts match your current filters.";
-  const statusSelectOptions = MEMBER_STATUS_TABS.map((option) => ({
+  const coachVisibleStatusTabs = isCoach
+    ? MEMBER_STATUS_TABS.filter((option) => option.key !== "Termination Requests")
+    : MEMBER_STATUS_TABS;
+  const statusSelectOptions = coachVisibleStatusTabs.map((option) => ({
     label: option.key === "Termination Requests" ? "Requests" : option.label,
     value: option.key,
   }));
@@ -977,7 +1076,11 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     <AccountsPageContext.Provider
       value={{
         activeChip,
+        activeCoachActivityLevel,
+        activeCoachMembershipStatus,
+        activeCoachSessionStatus,
         activeStatus,
+        activeTier,
         addLoading,
         addLoadingLabel,
         approveRequestLoadingLabel,
@@ -1063,7 +1166,11 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         scanFeedback,
         scanOpen,
         setActiveChip,
+        setActiveCoachActivityLevel,
+        setActiveCoachMembershipStatus,
+        setActiveCoachSessionStatus,
         setActiveStatus,
+        setActiveTier,
         setArchiveTarget,
         setContentMode,
         setDeleteTarget,
@@ -1083,6 +1190,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         setScanOpen,
         setViewMode,
         statusSelectOptions,
+        tierSelectOptions,
         totalPages,
         viewMode,
       }}

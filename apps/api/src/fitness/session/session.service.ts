@@ -11,6 +11,7 @@ import { Prisma, SessionStatus } from '@prisma/client';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import { progressionSourceEventType } from '../progression-source.types';
 import { DateRangeDTO } from '../../user/dto/user-dto';
+import { ActivityLevelService } from '../../user/activity-level.service';
 import {
   ExerciseLogResponseDTO,
   LogExerciseSetDTO,
@@ -55,6 +56,7 @@ export class WorkoutSessionService {
   constructor(
     private readonly repo: WorkoutSessionRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly activityLevelService: ActivityLevelService,
   ) {}
 
   async listSessions(
@@ -247,6 +249,7 @@ export class WorkoutSessionService {
       validationState: validationSnapshot.validationState,
       validationMetadata: validationSnapshot.validationMetadata,
     });
+    await this.activityLevelService.recalculateForUser(userId);
 
     return this.toDetailResponse(updated);
   }

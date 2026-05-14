@@ -67,6 +67,7 @@ const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
   index % 2 === 0 ? "FITTRACK" : "SERTFIT",
 );
 const SIGN_OUT_BOTTOM_GAP = 10;
+const LOGOUT_REDIRECT_STORAGE_KEY = "fittrack.logoutRedirectPath";
 const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
   "profile",
   "coach-dashboard",
@@ -89,6 +90,14 @@ const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
   "member-workout",
   "member-profile",
 ]);
+
+function takePendingLogoutRedirectPath() {
+  if (typeof window === "undefined") return null;
+  const path = window.sessionStorage.getItem(LOGOUT_REDIRECT_STORAGE_KEY);
+  if (path !== "/login" && path !== "/member-login") return null;
+  window.sessionStorage.removeItem(LOGOUT_REDIRECT_STORAGE_KEY);
+  return path;
+}
 
 export default function AuthenticatedPortalLayout({
   children,
@@ -113,7 +122,7 @@ export default function AuthenticatedPortalLayout({
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      router.replace("/login");
+      router.replace(takePendingLogoutRedirectPath() ?? "/login");
       return;
     }
     if (!isWebPortalRole(user?.role)) {

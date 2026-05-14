@@ -171,7 +171,11 @@ export function mapProfileToAuthUser(profile: UserProfileResponse, status?: Auth
     role: resolvedRole,
     phone_no: profile.phone_no ?? profile.phone ?? null,
     emailVerified: profile.emailVerified ?? hasVerifiedTimestamp(profile.email_verified_at),
+    hasAcceptedPrivacy:
+      profile.hasAcceptedPrivacy ?? profile.has_accepted_privacy ?? true,
     phoneVerified: profile.phoneVerified ?? hasVerifiedTimestamp(profile.phone_verified_at),
+    privacyAcceptedAt:
+      profile.privacyAcceptedAt ?? profile.privacy_accepted_at ?? null,
     avatarInitials: buildAvatarInitials(name, profile.email),
     avatarUri: normalizedProfile?.avatarUrl ?? undefined,
     activityLevel: normalizedProfile?.activityLevel ?? undefined,
@@ -209,8 +213,12 @@ export function mapLoginSuccessUser(
     phone_no: payload.user.phone_no ?? payload.user.phone ?? null,
     emailVerified:
       payload.user.emailVerified ?? hasVerifiedTimestamp(payload.user.email_verified_at),
+    hasAcceptedPrivacy:
+      payload.user.hasAcceptedPrivacy ?? payload.user.has_accepted_privacy ?? true,
     phoneVerified:
       payload.user.phoneVerified ?? hasVerifiedTimestamp(payload.user.phone_verified_at),
+    privacyAcceptedAt:
+      payload.user.privacyAcceptedAt ?? payload.user.privacy_accepted_at ?? null,
     avatarInitials: buildAvatarInitials(name, email),
     avatarUri: normalizedProfile?.avatarUrl ?? undefined,
     activityLevel: normalizedProfile?.activityLevel ?? undefined,

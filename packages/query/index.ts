@@ -124,6 +124,7 @@ export {
   createMuscleDefinitionMutationOptions,
   claimFitnessMilestoneMutationOptions,
   detectPoseEquipmentMutationOptions,
+  fitnessAchievementReviewsQueryOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
   fitnessLeaderboardQueryOptions,
@@ -169,13 +170,16 @@ export {
 export {
   cancelMembershipMutationOptions,
   createMembershipPlanMutationOptions,
+  membershipCatalogSettingsQueryOptions,
   membershipCurrentSubscriptionQueryOptions,
+  membershipOperationsDashboardQueryOptions,
   membershipPaymentsQueryOptions,
   membershipPlansQueryOptions,
   purchaseMembershipCardMutationOptions,
   reviewMembershipPaymentsQueryOptions,
   submitManualMembershipPaymentMutationOptions,
   subscribeMembershipMutationOptions,
+  updateMembershipCatalogSettingsMutationOptions,
   updateMembershipPlanMutationOptions,
   verifyMembershipPaymentMutationOptions,
 } from "./membership";
@@ -203,6 +207,7 @@ export {
   coachSelfProfileQueryOptions,
   createCoachAvailabilityMutationOptions,
   deleteCoachAvailabilityMutationOptions,
+  submitCoachReviewMutationOptions,
   updateCoachAvailabilityMutationOptions,
   updateCoachProfileMutationOptions,
 } from "./coaches";
@@ -249,6 +254,7 @@ export {
   createStaffBookingMutationOptions,
   createStaffCoachMutationOptions,
   confirmStaffBookingMutationOptions,
+  markCoachPayoutPaidMutationOptions,
   noShowStaffBookingMutationOptions,
   replaceStaffCoachAvailabilityMutationOptions,
   respondToStaffAppointmentMutationOptions,
@@ -266,6 +272,8 @@ export {
   deleteVenueMutationOptions,
   restoreVenueMutationOptions,
   venueAvailabilityQueryOptions,
+  venueFeedbackQueryOptions,
+  submitVenueFeedbackMutationOptions,
   updateVenueMutationOptions,
   venuesQueryOptions,
 } from "./venues";
@@ -277,7 +285,9 @@ export {
 export {
   attendanceQrQueryOptions,
   cancelDeletionRequestMutationOptions,
+  invalidateAttendanceQrForUser,
   profileDeletionStatusQueryOptions,
   refreshAttendanceQrMutationOptions,
   requestDeletionMutationOptions,
+  submitAppFeedbackMutationOptions,
 } from "./users";

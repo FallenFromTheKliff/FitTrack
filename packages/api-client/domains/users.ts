@@ -12,6 +12,8 @@ export type UserProfileResponse = {
   email: string;
   email_verified_at?: string | null;
   emailVerified?: boolean;
+  has_accepted_privacy?: boolean;
+  hasAcceptedPrivacy?: boolean;
   id: string;
   membership_card?: MembershipCardRecord | null;
   membershipCard?: MembershipCardRecord | null;
@@ -19,6 +21,8 @@ export type UserProfileResponse = {
   phone_verified_at?: string | null;
   phoneVerified?: boolean;
   phone_no?: string | null;
+  privacy_accepted_at?: string | null;
+  privacyAcceptedAt?: string | null;
   profile?: (MemberProfile & {
     activity_level?: string | null;
     avatar_url?: string | null;
@@ -58,11 +62,33 @@ export type UpdateUserPhonePayload = {
   phone_number: string;
 };
 
+export type SubmitAppFeedbackPayload = {
+  category?: "bug_report" | "feature_request" | "general_feedback";
+  message: string;
+};
+
+export type AppFeedbackRecord = {
+  category: string;
+  created_at: string;
+  id: string;
+  message: string;
+  submitted_by: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  updated_at: string;
+};
+
 export type UploadUserAvatarResponse = {
   avatar_url: string;
 };
 
 export type AttendanceQrCodeResponse = AttendanceQrCodeRecord;
+export type PrivacyAcceptanceResponse = {
+  hasAcceptedPrivacy: boolean;
+  privacyAcceptedAt?: string | null;
+};
 
 type RawUserProfile = NonNullable<UserProfileResponse["profile"]>;
 
@@ -150,9 +176,11 @@ function normalizeUserProfileResponse(profile: UserProfileResponse): UserProfile
   return {
     ...profile,
     emailVerified: profile.emailVerified ?? hasVerifiedTimestamp(profile.email_verified_at),
+    hasAcceptedPrivacy: profile.hasAcceptedPrivacy ?? profile.has_accepted_privacy ?? true,
     membershipCard,
     phoneVerified: profile.phoneVerified ?? hasVerifiedTimestamp(profile.phone_verified_at),
     phone_no: profile.phone_no ?? profile.phone ?? null,
+    privacyAcceptedAt: profile.privacyAcceptedAt ?? profile.privacy_accepted_at ?? null,
     profile: normalizeProfile(profile.profile),
     qrCodeReady: profile.qrCodeReady ?? hasQrCodeToken(qrCodeToken),
     attendanceQrReady: profile.attendanceQrReady ?? (
@@ -208,6 +236,12 @@ export function createUsersApi(transport: ApiTransport) {
         "Unable to update profile."
       );
     },
+    acceptPrivacyPolicy() {
+      return unwrapResponse<PrivacyAcceptanceResponse>(
+        transport.patch("/users/me/privacy-acceptance", {}),
+        "Unable to save privacy policy acceptance."
+      );
+    },
     updatePhone(payload: UpdateUserPhonePayload) {
       return unwrapVoidResponse(
         transport.patch("/users/me/phone", payload),
@@ -224,6 +258,21 @@ export function createUsersApi(transport: ApiTransport) {
       return unwrapVoidResponse(
         transport.post("/users/request-deletion", reason ? { reason } : {}),
         "Unable to request account deletion."
+      );
+    },
+    submitAppFeedback(payload: SubmitAppFeedbackPayload) {
+      return unwrapVoidResponse(
+        transport.post("/users/app-feedback", {
+          ...(payload.category ? { category: payload.category } : {}),
+          message: payload.message,
+        }),
+        "Unable to send app feedback."
+      );
+    },
+    listAppFeedback() {
+      return unwrapResponse<AppFeedbackRecord[]>(
+        transport.get("/users/app-feedback"),
+        "Unable to load app feedback."
       );
     },
     cancelDeletionRequest() {

@@ -25,6 +25,62 @@ type Props = {
 };
 
 const REQUIRED_FIELDS = ["name", "capacity", "gridColumn", "gridRow", "gridWidth", "gridHeight"] as const;
+const DETAIL_REQUIRED_FIELDS = ["name", "capacity"] as const;
+
+function isVenueReservable(data: Record<string, string>) {
+  return (data.isReservable ?? "true") === "true";
+}
+
+function validateVenueField(
+  name: string,
+  value: string,
+  data: Record<string, string>,
+) {
+  if (
+    REQUIRED_FIELDS.includes(name as (typeof REQUIRED_FIELDS)[number]) &&
+    !value.trim()
+  ) {
+    return "Required";
+  }
+
+  if (name === "hourlyRate" && isVenueReservable(data)) {
+    const numericValue = Number(value.trim());
+
+    if (!value.trim() || !Number.isFinite(numericValue) || numericValue <= 0) {
+      return "Hourly rate is required for reservable venues.";
+    }
+  }
+
+  return "";
+}
+
+function validateVenueFields(
+  data: Record<string, string>,
+  fields: readonly string[] = REQUIRED_FIELDS,
+  options: { includeHourlyRate?: boolean } = {},
+) {
+  const nextErrors: Record<string, string> = {};
+
+  fields.forEach((field) => {
+    const error = validateVenueField(field, data[field] ?? "", data);
+    if (error) {
+      nextErrors[field] = error;
+    }
+  });
+
+  if (options.includeHourlyRate ?? true) {
+    const hourlyRateError = validateVenueField(
+      "hourlyRate",
+      data.hourlyRate ?? "",
+      data,
+    );
+    if (hourlyRateError) {
+      nextErrors.hourlyRate = hourlyRateError;
+    }
+  }
+
+  return nextErrors;
+}
 
 export function EditVenueModal({
   isVisible,
@@ -43,6 +99,7 @@ export function EditVenueModal({
   const [formData, setFormData] = useState<Record<string, string>>(initialValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<"details" | "placement">("details");
+  const isReservable = isVenueReservable(formData);
   const panelStyle = useMemo(() => ({
     border: `1px solid ${colors.border}`,
     borderRadius: 8,
@@ -67,19 +124,39 @@ export function EditVenueModal({
   }, [initialValues, isVisible]);
 
   const handleChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    const nextData = { ...formData, [name]: value };
+
+    setFormData(nextData);
+    setErrors((prev) => {
+      const nextErrors = { ...prev };
+      const fieldError = validateVenueField(name, value, nextData);
+
+      if (fieldError) {
+        nextErrors[name] = fieldError;
+      } else {
+        delete nextErrors[name];
+      }
+
+      if (name === "isReservable" || name === "hourlyRate") {
+        const hourlyRateError = validateVenueField(
+          "hourlyRate",
+          nextData.hourlyRate ?? "",
+          nextData,
+        );
+
+        if (hourlyRateError) {
+          nextErrors.hourlyRate = hourlyRateError;
+        } else {
+          delete nextErrors.hourlyRate;
+        }
+      }
+
+      return nextErrors;
+    });
   };
 
   const handleSubmit = () => {
-    const nextErrors: Record<string, string> = {};
-    REQUIRED_FIELDS.forEach((field) => {
-      if (!(formData[field] ?? "").trim()) {
-        nextErrors[field] = "Required";
-      }
-    });
+    const nextErrors = validateVenueFields(formData);
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -110,6 +187,17 @@ export function EditVenueModal({
 
   const handlePrimary = () => {
     if (step === "details") {
+      const detailErrors = validateVenueFields(
+        formData,
+        DETAIL_REQUIRED_FIELDS,
+        { includeHourlyRate: false },
+      );
+
+      if (Object.keys(detailErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...detailErrors }));
+        return;
+      }
+
       setStep("placement");
       return;
     }
@@ -287,7 +375,12 @@ export function EditVenueModal({
               {renderField({ name: "gridHeight", label: "Height", required: true, placeholder: "2" })}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-              {renderField({ name: "hourlyRate", label: "Hourly Rate", placeholder: "Optional" })}
+              {renderField({
+                name: "hourlyRate",
+                label: "Hourly Rate",
+                placeholder: isReservable ? "Required" : "Optional",
+                required: isReservable,
+              })}
               {renderField({ name: "minimumHours", label: "Minimum Hours", placeholder: "Default 1" })}
               {renderField({ name: "displayOrder", label: "Display Order", placeholder: "0" })}
             </div>

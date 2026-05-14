@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -15,6 +16,8 @@ from ..models.business_insights import (
     BusinessAnalyticsInsightResponse,
     GeneratedBusinessInsight,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BusinessInsightProvider(Protocol):
@@ -36,7 +39,8 @@ class OpenRouterInsightSettings:
 
 class OpenRouterBusinessInsightProvider:
     _DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-    _REQUEST_TIMEOUT_SECONDS = 10.0
+    _DEFAULT_REQUEST_TIMEOUT_SECONDS = 3.0
+    _DEFAULT_MAX_ATTEMPTS = 4
 
     def generate_business_insight(
         self,
@@ -153,7 +157,7 @@ class OpenRouterBusinessInsightProvider:
                 f"{settings.base_url.rstrip('/')}/chat/completions",
                 json=request_payload,
                 headers=self._build_headers(settings),
-                timeout=self._REQUEST_TIMEOUT_SECONDS,
+                timeout=self._request_timeout_seconds(),
             )
         except httpx.TimeoutException as exc:
             raise ServiceError(
@@ -180,7 +184,7 @@ class OpenRouterBusinessInsightProvider:
     ) -> tuple[GeneratedBusinessInsight, dict[str, object]]:
         last_response: httpx.Response | None = None
         last_error: ServiceError | None = None
-        for request_payload in payloads:
+        for request_payload in payloads[: self._max_attempts()]:
             try:
                 response = self._post_chat_completion(settings, request_payload)
             except ServiceError as exc:
@@ -308,6 +312,24 @@ class OpenRouterBusinessInsightProvider:
             if isinstance(detail, str) and detail.strip():
                 return detail.strip()
         return None
+
+    def _request_timeout_seconds(self) -> float:
+        raw_timeout = os.getenv("OPENROUTER_BUSINESS_INSIGHT_TIMEOUT_SECONDS", "")
+        try:
+            timeout = float(raw_timeout)
+        except ValueError:
+            return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
+
+        return min(max(timeout, 1.0), 15.0)
+
+    def _max_attempts(self) -> int:
+        raw_attempts = os.getenv("OPENROUTER_BUSINESS_INSIGHT_MAX_ATTEMPTS", "")
+        try:
+            attempts = int(raw_attempts)
+        except ValueError:
+            return self._DEFAULT_MAX_ATTEMPTS
+
+        return min(max(attempts, 1), 6)
 
     def _get_settings(self) -> OpenRouterInsightSettings:
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -534,18 +556,53 @@ class OpenRouterBusinessInsightProvider:
 
 class BusinessInsightService:
     def __init__(self, provider: BusinessInsightProvider | None = None) -> None:
+        self._uses_default_provider = provider is None
         self._provider = provider or OpenRouterBusinessInsightProvider()
 
     def generate_insight(
         self,
         payload: BusinessAnalyticsInsightRequest,
     ) -> BusinessAnalyticsInsightResponse:
+        missing_config = (
+            self._missing_provider_config() if self._uses_default_provider else []
+        )
+        if missing_config:
+            LOGGER.warning(
+                "OpenRouter business insight generation is not configured; "
+                "missing %s. Returning grounded fallback.",
+                ", ".join(missing_config),
+            )
+            return self.build_grounded_fallback(payload.grounding)
+
         try:
             return self._provider.generate_business_insight(payload)
         except ServiceError as exc:
             if exc.status not in {502, 503}:
                 raise
+            LOGGER.warning(
+                "OpenRouter business insight generation failed (%s): %s. "
+                "Returning grounded fallback.",
+                exc.title,
+                exc.detail,
+            )
             return self.build_grounded_fallback(payload.grounding)
+
+    @staticmethod
+    def _missing_provider_config() -> list[str]:
+        missing: list[str] = []
+
+        if not os.getenv("OPENROUTER_API_KEY", "").strip():
+            missing.append("OPENROUTER_API_KEY")
+
+        if not (
+            os.getenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "").strip()
+            or os.getenv("OPENROUTER_INSIGHT_MODEL", "").strip()
+        ):
+            missing.append(
+                "OPENROUTER_BUSINESS_INSIGHT_MODEL or OPENROUTER_INSIGHT_MODEL"
+            )
+
+        return missing
 
     @staticmethod
     def detect_anomalies(

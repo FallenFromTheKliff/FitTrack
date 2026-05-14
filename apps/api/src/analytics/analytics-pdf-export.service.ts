@@ -39,6 +39,22 @@ export class AnalyticsPdfExportService {
       period: dto.attendance_period,
       start_date: dto.attendance_start_date,
     });
+    const selectedSectionSet = new Set(selectedSections);
+    const needsOverviewInsight =
+      selectedSectionSet.has('daily') ||
+      selectedSectionSet.has('kpis') ||
+      selectedSectionSet.has('activities') ||
+      selectedSectionSet.has('recommendations');
+    const needsRevenueInsight =
+      selectedSectionSet.has('revenue') ||
+      selectedSectionSet.has('recommendations');
+    const needsAttendanceInsight =
+      selectedSectionSet.has('attendance') ||
+      selectedSectionSet.has('recommendations');
+    const needsInventoryInsight =
+      selectedSectionSet.has('inventory') ||
+      selectedSectionSet.has('alerts') ||
+      selectedSectionSet.has('recommendations');
 
     const [snapshot, revenue, attendance, dailyInsightsTrend, inventory] =
       await Promise.all([
@@ -55,26 +71,34 @@ export class AnalyticsPdfExportService {
       attendanceInsight,
       inventoryInsight,
     ] = await Promise.all([
-      this.generateInsight({
-        ...revenueQuery,
-        focus: InsightFocus.overview,
-        period: this.toInsightPeriod(revenueQuery.period),
-      }),
-      this.generateInsight({
-        ...revenueQuery,
-        focus: InsightFocus.revenue,
-        period: this.toInsightPeriod(revenueQuery.period),
-      }),
-      this.generateInsight({
-        ...attendanceQuery,
-        focus: InsightFocus.attendance,
-        period: this.toInsightPeriod(attendanceQuery.period),
-      }),
-      this.generateInsight({
-        ...revenueQuery,
-        focus: InsightFocus.inventory,
-        period: this.toInsightPeriod(revenueQuery.period),
-      }),
+      needsOverviewInsight
+        ? this.generateInsight({
+            ...revenueQuery,
+            focus: InsightFocus.overview,
+            period: this.toInsightPeriod(revenueQuery.period),
+          })
+        : Promise.resolve(null),
+      needsRevenueInsight
+        ? this.generateInsight({
+            ...revenueQuery,
+            focus: InsightFocus.revenue,
+            period: this.toInsightPeriod(revenueQuery.period),
+          })
+        : Promise.resolve(null),
+      needsAttendanceInsight
+        ? this.generateInsight({
+            ...attendanceQuery,
+            focus: InsightFocus.attendance,
+            period: this.toInsightPeriod(attendanceQuery.period),
+          })
+        : Promise.resolve(null),
+      needsInventoryInsight
+        ? this.generateInsight({
+            ...revenueQuery,
+            focus: InsightFocus.inventory,
+            period: this.toInsightPeriod(revenueQuery.period),
+          })
+        : Promise.resolve(null),
     ]);
 
     const insights = {

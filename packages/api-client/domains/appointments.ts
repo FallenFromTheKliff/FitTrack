@@ -14,24 +14,45 @@ export type AppointmentCoachSummary = {
   } | null;
 };
 
+export type AppointmentReviewSummary = {
+  comment?: string | null;
+  createdAt: string;
+  id: string;
+  rating: number;
+  updatedAt: string;
+};
+
 export type AppointmentRecord = {
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
   amountDueNow?: number | null;
+  assessmentReport?: string | null;
   balancePaidAt?: string | null;
   coach?: AppointmentCoachSummary | null;
   coachId?: string;
+  coachEarnings?: number | null;
+  coachFeedback?: string | null;
+  coachPayoutPaidAt?: string | null;
   downpaymentPaidAt?: string | null;
   duration: number;
+  gymRevenue?: number | null;
   id: string;
   nextPaymentDate?: string | null;
   notes?: string | null;
   paymentPlan?: "downpayment" | "free" | "full";
   remainingBalance?: number | null;
+  review?: AppointmentReviewSummary | null;
   recurringPlanId?: string | null;
   scheduledAt: string;
+  sessionNotes?: string | null;
   sessionType?: string | null;
   status?: string;
   totalAmount?: number | null;
+};
+
+export type CompleteAppointmentPayload = {
+  assessmentReport?: string;
+  coachFeedback?: string;
+  sessionNotes?: string;
 };
 
 export type CoachScheduleRecord = {
@@ -73,16 +94,29 @@ type AppointmentApiRecord = {
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach?: AppointmentCoachSummary | null;
+  coach_earnings?: number | string | null;
+  coach_feedback?: string | null;
+  coach_payout_paid_at?: string | null;
+  assessment_report?: string | null;
   coach_id?: string;
   downpayment_amount?: number | string | null;
   downpayment_paid_at?: string | null;
   duration_minutes?: number;
+  gym_revenue?: number | string | null;
   id: string;
   member_notes?: string | null;
   notes?: string | null;
+  review?: {
+    comment?: string | null;
+    created_at?: string;
+    id: string;
+    rating: number;
+    updated_at?: string;
+  } | null;
   recurring_plan_id?: string | null;
   scheduled_at?: string;
   scheduledAt?: string;
+  session_notes?: string | null;
   sessionType?: string | null;
   status?: string;
   total_amount?: number | string | null;
@@ -161,6 +195,20 @@ function mapAppointmentCoach(
   };
 }
 
+function mapAppointmentReview(
+  review?: AppointmentApiRecord["review"],
+): AppointmentReviewSummary | null {
+  if (!review) return null;
+
+  return {
+    comment: review.comment ?? null,
+    createdAt: review.created_at ?? "",
+    id: review.id,
+    rating: review.rating,
+    updatedAt: review.updated_at ?? "",
+  };
+}
+
 function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
   const totalAmount = toAmountNumber(record.total_amount);
   const downpaymentAmount = toAmountNumber(record.downpayment_amount);
@@ -187,10 +235,15 @@ function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
       : undefined,
     balancePaidAt: record.balance_paid_at ?? null,
     coach: mapAppointmentCoach(record.coach),
+    coachEarnings: toAmountNumber(record.coach_earnings),
+    coachFeedback: record.coach_feedback ?? null,
+    coachPayoutPaidAt: record.coach_payout_paid_at ?? null,
     coachId: record.coach_id,
     downpaymentPaidAt: record.downpayment_paid_at ?? null,
     duration: record.duration_minutes ?? 0,
+    gymRevenue: toAmountNumber(record.gym_revenue),
     id: record.id,
+    assessmentReport: record.assessment_report ?? null,
     nextPaymentDate:
       hasSplitPayment && !record.balance_paid_at ? scheduledAt : undefined,
     notes: record.member_notes ?? record.notes ?? null,
@@ -207,8 +260,10 @@ function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
         ? 0
         : remainingBalance
       : undefined,
+    review: mapAppointmentReview(record.review),
     recurringPlanId: record.recurring_plan_id ?? null,
     scheduledAt,
+    sessionNotes: record.session_notes ?? null,
     sessionType: record.sessionType ?? null,
     status,
     totalAmount: totalAmount > 0 ? totalAmount : undefined,
@@ -310,9 +365,22 @@ export function createAppointmentsApi(transport: ApiTransport) {
         "Unable to decline appointment.",
       );
     },
-    completeAsCoach(appointmentId: string) {
+    completeAsCoach(
+      appointmentId: string,
+      payload?: CompleteAppointmentPayload,
+    ) {
       return unwrapVoidResponse(
-        transport.patch(`/coaching/appointments/${appointmentId}/complete`, {}),
+        transport.patch(`/coaching/appointments/${appointmentId}/complete`, {
+          ...(payload?.assessmentReport
+            ? { assessment_report: payload.assessmentReport }
+            : {}),
+          ...(payload?.coachFeedback
+            ? { coach_feedback: payload.coachFeedback }
+            : {}),
+          ...(payload?.sessionNotes
+            ? { session_notes: payload.sessionNotes }
+            : {}),
+        }),
         "Unable to complete appointment.",
       );
     },

@@ -33,6 +33,7 @@ describe('AuthOtpService', () => {
 
     service = module.get<AuthOtpService>(AuthOtpService);
     jest.clearAllMocks();
+    mailQueue.add.mockResolvedValue(undefined);
   });
 
   it('issues an email OTP and enqueues the mail job', async () => {
@@ -60,6 +61,27 @@ describe('AuthOtpService', () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it('surfaces OTP email queue failures with an explicit service error', async () => {
+    repo.findLatestOtp.mockResolvedValue(null);
+    repo.createOtp.mockResolvedValue({ id: 'otp-1' });
+    mailQueue.add.mockRejectedValue(new Error('Redis unavailable'));
+
+    await expect(
+      service.issueOtp(
+        'user-1',
+        OtpPurpose.registration,
+        OtpChannel.email,
+        'member@example.com',
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        type: 'OTP_DELIVERY_QUEUE_UNAVAILABLE',
+        status: 503,
+      }),
+      status: 503,
+    });
   });
 
   it('rejects SMS OTP issuance because the feature has been removed', async () => {

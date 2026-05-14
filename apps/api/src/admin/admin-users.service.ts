@@ -26,7 +26,11 @@ import { PrismaService } from 'prisma/prisma.service';
 import { AuditAction, type AuditEvent } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
-import { UpdateMembershipCardDto, UpgradeToCoachDto } from './dto/admin.dto';
+import {
+  AdminUserFilterDto,
+  UpdateMembershipCardDto,
+  UpgradeToCoachDto,
+} from './dto/admin.dto';
 
 const MANUAL_MEMBERSHIP_GRANT_PRICE = new Prisma.Decimal(400);
 
@@ -140,10 +144,18 @@ export class AdminUsersService {
     private readonly notificationsService?: NotificationsService,
   ) {}
 
-  async getAll(actingRole?: UserRole) {
+  async getAll(
+    actingRole?: UserRole,
+    filters: AdminUserFilterDto = {},
+    actingUserId?: string,
+  ) {
+    const where = this.buildUserDirectoryWhere(
+      actingRole,
+      filters,
+      actingUserId,
+    );
     const users = await this.prisma.user.findMany({
-      where:
-        actingRole === UserRole.coach ? { role: UserRole.member } : undefined,
+      where,
       include: {
         auth_identities: {
           select: {
@@ -231,6 +243,171 @@ export class AdminUsersService {
           : null,
       };
     });
+  }
+
+  private buildUserDirectoryWhere(
+    actingRole: UserRole | undefined,
+    filters: AdminUserFilterDto,
+    actingUserId?: string,
+  ): Prisma.UserWhereInput {
+    const where: Prisma.UserWhereInput = {};
+    const andFilters: Prisma.UserWhereInput[] = [];
+    const requestedRole =
+      actingRole === UserRole.coach ? UserRole.member : filters.role;
+
+    if (requestedRole) {
+      where.role = requestedRole;
+    }
+
+    if (actingRole === UserRole.staff) {
+      andFilters.push({ role: { not: UserRole.admin } });
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.archived !== undefined) {
+      where.deletedAt = filters.archived ? { not: null } : null;
+    }
+
+    if (actingRole === UserRole.coach && actingUserId) {
+      andFilters.push({
+        member_appointments: {
+          some: {
+            coach: {
+              user_id: actingUserId,
+            },
+          },
+        },
+      });
+    }
+
+    if (filters.activityLevel) {
+      andFilters.push({
+        profile: {
+          is: {
+            activity_level: filters.activityLevel,
+          },
+        },
+      });
+    }
+
+    if (filters.membershipStatus === 'active') {
+      andFilters.push({
+        subscriptions: {
+          some: {
+            status: 'active',
+            OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+          },
+        },
+      });
+    } else if (filters.membershipStatus === 'expired') {
+      andFilters.push({
+        subscriptions: {
+          some: {
+            OR: [{ status: 'expired' }, { expires_at: { lt: new Date() } }],
+          },
+        },
+      });
+      andFilters.push({
+        subscriptions: {
+          none: {
+            status: 'active',
+            OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+          },
+        },
+      });
+    }
+
+    if (filters.sessionStatus === 'has_upcoming') {
+      andFilters.push({
+        member_appointments: {
+          some: {
+            ...(actingRole === UserRole.coach && actingUserId
+              ? { coach: { user_id: actingUserId } }
+              : {}),
+            scheduled_at: { gte: new Date() },
+            status: { in: ['pending_coach', 'pending_payment', 'confirmed'] },
+          },
+        },
+      });
+    } else if (filters.sessionStatus === 'no_upcoming') {
+      andFilters.push({
+        member_appointments: {
+          none: {
+            ...(actingRole === UserRole.coach && actingUserId
+              ? { coach: { user_id: actingUserId } }
+              : {}),
+            scheduled_at: { gte: new Date() },
+            status: { in: ['pending_coach', 'pending_payment', 'confirmed'] },
+          },
+        },
+      });
+    }
+
+    const search = filters.search?.trim();
+    if (search) {
+      where.OR = [
+        {
+          profile: {
+            first_name: { contains: search, mode: 'insensitive' },
+          },
+        },
+        {
+          profile: {
+            last_name: { contains: search, mode: 'insensitive' },
+          },
+        },
+        {
+          auth_identities: {
+            some: {
+              identifier: { contains: search, mode: 'insensitive' },
+            },
+          },
+        },
+        {
+          profile: {
+            phone: { contains: search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
+    switch (filters.tier) {
+      case 'active_member':
+        where.role = UserRole.member;
+        where.status = UserStatus.active;
+        where.membership_card = { is: { status: 'active' } };
+        break;
+      case 'pending_membership':
+        where.role = UserRole.member;
+        where.membership_card = {
+          is: { status: 'pending_verification' },
+        };
+        break;
+      case 'pending_verification':
+        where.role = UserRole.member;
+        where.status = UserStatus.pending;
+        break;
+      case 'revoked':
+        where.role = UserRole.member;
+        where.membership_card = { is: { status: 'revoked' } };
+        break;
+      case 'verified_non_member':
+        where.role = UserRole.member;
+        where.status = UserStatus.active;
+        where.membership_card = { is: null };
+        break;
+      default:
+        break;
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
+    }
+
+    return where;
   }
 
   async updateMembershipCard(

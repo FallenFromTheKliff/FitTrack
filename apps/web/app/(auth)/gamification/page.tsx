@@ -32,6 +32,7 @@ import {
   adminGamificationSeasonStandingsQueryOptions,
   adminGamificationSeasonsQueryOptions,
   adminGamificationOverviewQueryOptions,
+  fitnessAchievementReviewsQueryOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
   updateAdminGamificationRankingOverrideMutationOptions,
   updateAdminGamificationSeasonStatusMutationOptions,
@@ -57,7 +58,6 @@ import {
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import { ConfirmModal } from "@/components/modals";
 import {
-  ACHIEVEMENT_REVIEW_SEED,
   ACHIEVEMENT_REVIEW_STATUS_COLORS,
   type AchievementReviewRecord,
   type AchievementReviewStatus,
@@ -368,13 +368,11 @@ function AdminGamificationPage() {
   const [seasonIncludeArchived, setSeasonIncludeArchived] = useState(false);
   const [milestoneReviews, setMilestoneReviews] = useState<
     AchievementReviewRecord[]
-  >(ACHIEVEMENT_REVIEW_SEED);
+  >([]);
   const [milestoneStatus, setMilestoneStatus] =
     useState<AchievementReviewStatus | "all">("Pending");
   const [milestoneSearch, setMilestoneSearch] = useState("");
-  const [selectedMilestoneId, setSelectedMilestoneId] = useState(
-    ACHIEVEMENT_REVIEW_SEED[0]?.id ?? "",
-  );
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState("");
   const [milestoneNotes, setMilestoneNotes] = useState("");
   const [integrityNotes, setIntegrityNotes] = useState<DraftMap>({});
   const [rankingNotes, setRankingNotes] = useState<DraftMap>({});
@@ -422,6 +420,9 @@ function AdminGamificationPage() {
       seasonFilterParams,
     ),
   );
+  const milestoneReviewsQuery = useQuery(
+    fitnessAchievementReviewsQueryOptions(webApiClient),
+  );
   const seasonMutation = useMutation(
     updateAdminGamificationSeasonStatusMutationOptions(
       webApiClient,
@@ -447,6 +448,16 @@ function AdminGamificationPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    const reviews = milestoneReviewsQuery.data ?? [];
+    setMilestoneReviews(reviews);
+    setSelectedMilestoneId((current) =>
+      current && reviews.some((review) => review.id === current)
+        ? current
+        : (reviews[0]?.id ?? ""),
+    );
+  }, [milestoneReviewsQuery.data]);
+
+  useEffect(() => {
     setSeasonStandingPage(1);
   }, [
     seasonFilterId,
@@ -469,6 +480,7 @@ function AdminGamificationPage() {
     overviewQuery.error ??
     seasonsQuery.error ??
     seasonStandingsQuery.error ??
+    milestoneReviewsQuery.error ??
     seasonMutation.error ??
     integrityMutation.error ??
     rankingMutation.error;

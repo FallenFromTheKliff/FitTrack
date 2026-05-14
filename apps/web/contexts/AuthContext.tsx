@@ -6,6 +6,7 @@ import {
   useContext,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { RegisterPayload } from "@fittrack/api-client";
 import type { IAuthContext, AuthUser } from "@fittrack/types";
@@ -31,8 +32,15 @@ type Props = {
 };
 
 const AuthContext = createContext<IAuthContext | null>(null);
+const LOGOUT_REDIRECT_STORAGE_KEY = "fittrack.logoutRedirectPath";
+
+function getLogoutRedirectPath(role: AuthUser["role"] | null | undefined) {
+  return role === "USER" || !role ? "/member-login" : "/login";
+}
+
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const controller = useMemo(
     () =>
       createAuthController({
@@ -61,15 +69,23 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   );
 
   const loginMutation = useMutation(
-    loginActionMutationOptions((email, password) =>
-      controller.login(email, password),
+    loginActionMutationOptions((email, password, options) =>
+      controller.login(email, password, options),
     ),
   );
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (
+      email: string,
+      password: string,
+      options?: { portal?: "team" | "member" },
+    ) => {
       try {
-        const data = await loginMutation.mutateAsync({ email, password });
+        const data = await loginMutation.mutateAsync({
+          email,
+          password,
+          portal: options?.portal,
+        });
         if (!data.success) {
           return {
             success: false as const,
@@ -178,6 +194,8 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   );
 
   const logout = useCallback(async () => {
+    const redirectPath = getLogoutRedirectPath(user?.role);
+    window.sessionStorage.setItem(LOGOUT_REDIRECT_STORAGE_KEY, redirectPath);
     try {
       await logoutMutation.mutateAsync();
     } catch {
@@ -185,7 +203,8 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     }
     setUser(null);
     queryClient.clear();
-  }, [logoutMutation, queryClient, setUser]);
+    router.replace(redirectPath);
+  }, [logoutMutation, queryClient, router, setUser, user?.role]);
 
   const deleteUser = useCallback(async () => {
     await logout();

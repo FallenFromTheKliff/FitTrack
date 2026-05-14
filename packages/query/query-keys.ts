@@ -1,3 +1,5 @@
+import type { MemberDirectoryFilters } from "@fittrack/types";
+
 type BookingScope = "all" | "pending";
 type StaffAppointmentFilters = {
   coachId?: string;
@@ -18,7 +20,10 @@ type AiPaginationParams = {
 };
 
 const adminKeys = {
-  members: () => ["admin", "members"] as const,
+  members: (filters?: MemberDirectoryFilters) =>
+    filters
+      ? (["admin", "members", filters] as const)
+      : (["admin", "members"] as const),
   deletionRequests: () => ["admin", "deletion-requests"] as const,
   bookings: () => ["admin", "bookings"] as const,
   activeBookings: () => ["admin", "bookings", "active"] as const,
@@ -99,6 +104,8 @@ const memberKeys = {
     params
       ? (["membership", "plans", params] as const)
       : (["membership", "plans"] as const),
+  membershipOperationsDashboard: () =>
+    ["membership", "operations-dashboard"] as const,
   membershipCurrentSubscription: (userId?: string) =>
     userId
       ? (["membership", "current-subscription", userId] as const)
@@ -468,6 +475,7 @@ const fitnessKeys = {
       : params
         ? (["fitness", "milestones", params] as const)
         : (["fitness", "milestones"] as const),
+  achievementReviews: () => ["fitness", "achievement-reviews"] as const,
   integritySummary: (userId?: string) =>
     userId
       ? (["fitness", "integrity-summary", userId] as const)
@@ -527,6 +535,7 @@ export const queryKeys = {
   profileDeletionStatus: memberKeys.profileDeletionStatus,
   attendanceQr: memberKeys.attendanceQr,
   membershipPlans: memberKeys.membershipPlans,
+  membershipOperationsDashboard: memberKeys.membershipOperationsDashboard,
   membershipCurrentSubscription: memberKeys.membershipCurrentSubscription,
   membershipPayments: memberKeys.membershipPayments,
   membershipReviewPayments: memberKeys.membershipReviewPayments,
@@ -573,6 +582,7 @@ export const queryKeys = {
   fitnessRankingProfile: fitnessKeys.rankingProfile,
   fitnessSeasonStanding: fitnessKeys.seasonStanding,
   fitnessMilestones: fitnessKeys.milestones,
+  fitnessAchievementReviews: fitnessKeys.achievementReviews,
   fitnessIntegritySummary: fitnessKeys.integritySummary,
   fitnessPoseSession: fitnessKeys.poseSession,
   gymLayoutEquipment: gymLayoutKeys.equipment,

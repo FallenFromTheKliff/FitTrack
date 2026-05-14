@@ -9,7 +9,7 @@ import type {
   VerifyResetOtpPayload,
   VerifyEmailPayload
 } from "@fittrack/api-client";
-import type { AuthUser } from "@fittrack/types";
+import type { AuthUser, LoginPortal } from "@fittrack/types";
 import { queryKeys } from "./query-keys";
 
 export function authUserQueryOptions(client: Pick<ApiClient, "users">) {
@@ -85,9 +85,23 @@ export function resetPasswordMutationOptions(client: Pick<ApiClient, "auth">) {
   });
 }
 
-export function loginActionMutationOptions<TResult>(login: (email: string, password: string) => Promise<TResult>) {
+export function loginActionMutationOptions<TResult>(
+  login: (
+    email: string,
+    password: string,
+    options?: { portal?: LoginPortal }
+  ) => Promise<TResult>
+) {
   return mutationOptions({
-    mutationFn: ({ email, password }: { email: string; password: string }) => login(email, password)
+    mutationFn: ({
+      email,
+      password,
+      portal
+    }: {
+      email: string;
+      password: string;
+      portal?: LoginPortal;
+    }) => login(email, password, { portal })
   });
 }
 

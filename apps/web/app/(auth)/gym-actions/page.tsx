@@ -34,6 +34,7 @@ import {
   FitTextInput,
 } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
+import FloatingHelpButton from "@/components/help/FloatingHelpButton";
 
 export const dynamic = "force-dynamic";
 
@@ -394,6 +395,7 @@ export default function GymActionsPage() {
   ];
 
   return (
+    <>
     <main className={themeTransition} style={shell}>
       <div
         className="gym-actions-section-filter"
@@ -647,6 +649,16 @@ export default function GymActionsPage() {
         }
       `}</style>
     </main>
+    <FloatingHelpButton
+      title="Gym Actions"
+      description="This page reviews transactions, audit records, and recent operational activity across the gym."
+      terms={[
+        { label: "Transaction history", value: "Payments, sales, booking charges, and coaching revenue records." },
+        { label: "Audit log", value: "Tracked admin or staff changes made to operational records." },
+        { label: "Recent activity", value: "The latest system events used to understand what changed." },
+      ]}
+    />
+    </>
   );
 }
 

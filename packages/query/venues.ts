@@ -68,3 +68,33 @@ export function restoreVenueMutationOptions(client: Pick<ApiClient, "venues">, q
     }
   });
 }
+
+export function submitVenueFeedbackMutationOptions(client: Pick<ApiClient, "venues">) {
+  return mutationOptions({
+    mutationFn: ({
+      comment,
+      id,
+      rating,
+    }: {
+      comment?: string;
+      id: string | number;
+      rating: number;
+    }) => client.venues.submitFeedback(id, { comment, rating }),
+  });
+}
+
+export function venueFeedbackQueryOptions(
+  client: Pick<ApiClient, "venues">,
+  venueId?: string | number,
+) {
+  return queryOptions({
+    enabled: venueId !== undefined && venueId !== null,
+    queryKey: ["venues", "feedback", venueId],
+    queryFn: () => {
+      if (venueId === undefined || venueId === null) {
+        throw new Error("Venue id is required.");
+      }
+      return client.venues.listFeedbackForVenue(venueId);
+    },
+  });
+}

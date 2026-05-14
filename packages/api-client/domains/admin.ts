@@ -13,6 +13,7 @@ import type {
   AdminGamificationSeasonStatusInput,
   AttendanceCheckInRecord,
   CreateUserInput,
+  MemberDirectoryFilters,
   MemberRecord,
   RestoreUserResult as RestoreUserResultType,
   UpdateMembershipCardInput,
@@ -432,9 +433,9 @@ function mapAdminIntegrityCaseMutation(
 
 export function createAdminApi(transport: ApiTransport) {
   return {
-    listMembers() {
+    listMembers(params?: MemberDirectoryFilters) {
       return unwrapResponse<MemberRecord[]>(
-        transport.get("/admin/users"),
+        transport.get("/admin/users", { params }),
         "Unable to load members.",
       );
     },

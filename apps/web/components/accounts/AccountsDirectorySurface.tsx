@@ -1,13 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
 import { Filter, LayoutGrid, List } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { CoachAppointmentScheduleRecord } from "@fittrack/api-client";
+import { coachScheduleQueryOptions } from "@fittrack/query";
 import type { MemberRecord } from "@fittrack/types";
 import { fullName } from "@fittrack/utils";
 
 import MembersDirectoryPanel from "@/components/accounts/MembersDirectoryPanel";
 import { FitButton, FitPill, FitSearch, FitSelect, FitText } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { webApiClient } from "@/lib/api-client";
 import { MEMBERSHIP_CARD_STATUS_COLORS, type MemberStatusTab } from "@/data/members/members";
 import {
   formatLastCheckIn,
@@ -25,14 +31,20 @@ import { useAccountsPage } from "./AccountsPageContext";
 
 export default function AccountsDirectorySurface() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const {
     activeChip,
+    activeCoachActivityLevel,
+    activeCoachMembershipStatus,
+    activeCoachSessionStatus,
     activeStatus,
+    activeTier,
     directoryEmptyMessage,
     directoryPageSize,
     editTarget,
     filtered,
     isAdmin,
+    isCoach,
     isCreateMode,
     isTerminationRequestsView,
     openInspector,
@@ -43,16 +55,100 @@ export default function AccountsDirectorySurface() {
     q,
     roleSelectOptions,
     setActiveChip,
+    setActiveCoachActivityLevel,
+    setActiveCoachMembershipStatus,
+    setActiveCoachSessionStatus,
     setActiveStatus,
+    setActiveTier,
     setPage,
     setQ,
     setViewMode,
     statusSelectOptions,
+    tierSelectOptions,
     totalPages,
     viewMode,
   } = useAccountsPage();
 
+  const { data: coachAppointments = [] } = useQuery({
+    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(webApiClient, user?.id),
+    enabled: isCoach && Boolean(user?.id),
+  });
+  const coachClientSummary = useMemo(() => {
+    const now = Date.now();
+    const byClient = new Map<
+      string,
+      {
+        completed: number;
+        nextSessionLabel: string;
+        nextSessionTime: number | null;
+        notReviewed: number;
+        total: number;
+        upcoming: number;
+      }
+    >();
+
+    for (const appointment of coachAppointments) {
+      const userId = appointment.userId;
+      const current =
+        byClient.get(userId) ??
+        {
+          completed: 0,
+          nextSessionLabel: "None scheduled",
+          nextSessionTime: null,
+          notReviewed: 0,
+          total: 0,
+          upcoming: 0,
+        };
+      const status = appointment.status ?? "";
+      const isCompleted = status === "completed";
+      const isCancelled = status === "cancelled";
+      const scheduledTime = new Date(appointment.scheduledAt).getTime();
+
+      current.total += 1;
+      if (isCompleted) {
+        current.completed += 1;
+        if (!appointment.review) current.notReviewed += 1;
+      } else if (!isCancelled) {
+        current.upcoming += 1;
+        if (
+          Number.isFinite(scheduledTime) &&
+          scheduledTime >= now &&
+          (current.nextSessionTime == null || scheduledTime < current.nextSessionTime)
+        ) {
+          current.nextSessionTime = scheduledTime;
+          current.nextSessionLabel = new Intl.DateTimeFormat("en-PH", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(scheduledTime));
+        }
+      }
+
+      byClient.set(userId, current);
+    }
+
+    return byClient;
+  }, [coachAppointments]);
+
   if (isCreateMode) return null;
+
+  const coachMembershipStatusOptions = [
+    { label: "All Clients", value: "all" },
+    { label: "Members", value: "active_member" },
+    { label: "Non-members", value: "verified_non_member" },
+  ];
+  const coachSessionStatusOptions = [
+    { label: "All Sessions", value: "all" },
+    { label: "Has Upcoming", value: "has_upcoming" },
+    { label: "No Upcoming", value: "no_upcoming" },
+  ];
+  const coachActivityLevelOptions = [
+    { label: "All Activity", value: "all" },
+    { label: "Sedentary", value: "sedentary" },
+    { label: "Lightly Active", value: "light" },
+    { label: "Moderate", value: "moderate" },
+    { label: "Active", value: "active" },
+    { label: "Very Active", value: "very_active" },
+  ];
 
   const memberColumns: FitTableColumn<MemberRecord>[] = [
     {
@@ -199,6 +295,87 @@ export default function AccountsDirectorySurface() {
           {formatLastCheckIn(member.lastCheckInAt)}
         </FitText>
       ),
+    },
+  ];
+  const coachClientColumns: FitTableColumn<MemberRecord>[] = [
+    memberColumns[0],
+    {
+      key: "membership",
+      heading: "MEMBERSHIP",
+      render: (member, c) => (
+        <FitText
+          className="members-directory-panel__emphasis-text"
+          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+        >
+          {getDirectoryAccessLabel(member, pendingRequestsByUserId)}
+        </FitText>
+      ),
+    },
+    {
+      key: "activity",
+      heading: "ACTIVITY",
+      render: (member, c) => (
+        <FitText
+          className="members-directory-panel__emphasis-text"
+          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+        >
+          {member.profile?.activityLevel ?? "Not set"}
+        </FitText>
+      ),
+    },
+    {
+      key: "sessions",
+      heading: "SESSIONS",
+      render: (member, c) => {
+        const summary = coachClientSummary.get(member.id);
+
+        return (
+          <FitText
+            className="members-directory-panel__emphasis-text"
+            style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+          >
+            {summary
+              ? `${summary.completed}/${summary.total} done, ${summary.upcoming} upcoming`
+              : "No sessions"}
+          </FitText>
+        );
+      },
+    },
+    {
+      key: "reviewStatus",
+      heading: "NEXT / REVIEW",
+      render: (member, c) => {
+        const summary = coachClientSummary.get(member.id);
+        const reviewLabel = !summary?.completed
+          ? "No completed"
+          : summary.notReviewed > 0
+            ? `${summary.notReviewed} not reviewed`
+            : "Reviewed";
+        const reviewColor = !summary?.completed
+          ? c.textMuted
+          : summary.notReviewed > 0
+            ? c.warning
+            : c.success;
+
+        return (
+          <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
+            <FitText
+              className="members-directory-panel__emphasis-text"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: c.textPrimary,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {summary?.nextSessionLabel ?? "None scheduled"}
+            </FitText>
+            <FitPill mode="status" label={reviewLabel} color={reviewColor} fontSize={8.5} />
+          </div>
+        );
+      },
     },
   ];
 
@@ -576,78 +753,210 @@ export default function AccountsDirectorySurface() {
             style={{ minHeight: 31, width: 33, borderRadius: 7 }}
           />
         </div>
-        <div
-          className="members-toolbar-status-filter"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "14px minmax(96px, 124px)",
-            alignItems: "center",
-            gap: 6,
-            flex: "0 0 auto",
-            minWidth: 0,
-          }}
-        >
-          <Filter size={14} color={colors.textMuted} strokeWidth={2} />
-          <FitSelect
-            compact
-            fullWidth
-            aria-label="Filter accounts by status"
-            name="membersStatusFilter"
-            value={activeStatus}
-            options={statusSelectOptions}
-            onChange={(event) => {
-              const nextStatus = event.target.value as MemberStatusTab;
-              setActiveStatus(nextStatus);
-              if (nextStatus === "Termination Requests") {
-                setActiveChip("Member");
-              }
-            }}
-            style={{
-              width: "100%",
-              minWidth: 0,
-              height: 38,
-              borderRadius: 8,
-              paddingLeft: 8,
-              paddingRight: 22,
-              fontSize: 12,
-            }}
-          />
-        </div>
-        <div
-          className="members-toolbar-filters"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "14px minmax(82px, 102px)",
-            alignItems: "center",
-            gap: 6,
-            flex: "0 0 auto",
-            minWidth: 0,
-          }}
-        >
-          <Filter size={14} color={colors.textMuted} strokeWidth={2} />
-          <FitSelect
-            compact
-            fullWidth
-            aria-label="Filter accounts by role"
-            name="membersRoleFilter"
-            value={activeChip}
-            options={roleSelectOptions}
-            onChange={(event) => {
-              const nextRole = event.target.value;
-              if (isTerminationRequestsView && nextRole !== "Member") return;
-              setActiveChip(nextRole);
-            }}
-            style={{
-              width: "100%",
-              minWidth: 0,
-              height: 38,
-              borderRadius: 8,
-              paddingLeft: 8,
-              paddingRight: 22,
-              fontSize: 12,
-            }}
-          />
-        </div>
+        {!isCoach ? (
+          <>
+            <div
+              className="members-toolbar-status-filter"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(96px, 124px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter accounts by status"
+                name="membersStatusFilter"
+                value={activeStatus}
+                options={statusSelectOptions}
+                onChange={(event) => {
+                  const nextStatus = event.target.value as MemberStatusTab;
+                  setActiveStatus(nextStatus);
+                  if (nextStatus === "Termination Requests") {
+                    setActiveChip("Member");
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div
+              className="members-toolbar-filters"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(82px, 102px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter accounts by role"
+                name="membersRoleFilter"
+                value={activeChip}
+                options={roleSelectOptions}
+                onChange={(event) => {
+                  const nextRole = event.target.value;
+                  if (isTerminationRequestsView && nextRole !== "Member") return;
+                  setActiveChip(nextRole);
+                }}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div
+              className="members-toolbar-tier-filter"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(128px, 168px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter accounts by membership tier"
+                name="membersTierFilter"
+                value={activeTier}
+                options={tierSelectOptions}
+                onChange={(event) => setActiveTier(event.target.value)}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+          </>
+        ) : null}
+        {isCoach ? (
+          <>
+            <div
+              className="members-toolbar-coach-membership-filter"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(126px, 154px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter clients by member tier"
+                name="coachMembershipStatusFilter"
+                value={activeCoachMembershipStatus}
+                options={coachMembershipStatusOptions}
+                onChange={(event) => setActiveCoachMembershipStatus(event.target.value)}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div
+              className="members-toolbar-coach-session-filter"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(126px, 154px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter clients by session status"
+                name="coachSessionStatusFilter"
+                value={activeCoachSessionStatus}
+                options={coachSessionStatusOptions}
+                onChange={(event) => setActiveCoachSessionStatus(event.target.value)}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div
+              className="members-toolbar-coach-activity-filter"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "14px minmax(126px, 154px)",
+                alignItems: "center",
+                gap: 6,
+                flex: "0 0 auto",
+                minWidth: 0,
+              }}
+            >
+              <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+              <FitSelect
+                compact
+                fullWidth
+                aria-label="Filter clients by activity level"
+                name="coachActivityLevelFilter"
+                value={activeCoachActivityLevel}
+                options={coachActivityLevelOptions}
+                onChange={(event) => setActiveCoachActivityLevel(event.target.value)}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 8,
+                  paddingLeft: 8,
+                  paddingRight: 22,
+                  fontSize: 12,
+                }}
+              />
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -684,7 +993,7 @@ export default function AccountsDirectorySurface() {
         renderGridCard={renderGridCard}
         renderMobileCard={renderMobileCard}
         rows={paginatedRows}
-        tableColumns={memberColumns}
+        tableColumns={isCoach ? coachClientColumns : memberColumns}
         toolbar={directoryToolbar}
         totalPages={totalPages}
         viewMode={viewMode}

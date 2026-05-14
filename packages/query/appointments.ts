@@ -134,8 +134,23 @@ export function declineCoachAppointmentMutationOptions(client: Pick<ApiClient, "
 
 export function completeCoachAppointmentMutationOptions(client: Pick<ApiClient, "appointments">, queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: ({ appointmentId }: { appointmentId: string; userId?: string }) =>
-      client.appointments.completeAsCoach(appointmentId),
+    mutationFn: ({
+      appointmentId,
+      assessmentReport,
+      coachFeedback,
+      sessionNotes,
+    }: {
+      appointmentId: string;
+      assessmentReport?: string;
+      coachFeedback?: string;
+      sessionNotes?: string;
+      userId?: string;
+    }) =>
+      client.appointments.completeAsCoach(appointmentId, {
+        assessmentReport,
+        coachFeedback,
+        sessionNotes,
+      }),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateCoachScheduleQueries(queryClient, variables.userId),

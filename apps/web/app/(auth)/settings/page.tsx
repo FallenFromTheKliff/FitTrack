@@ -6,6 +6,8 @@ import FitSection from "@/components/fit/FitSection";
 import { useAuth } from "@/contexts/AuthContext";
 
 import AppearanceSettingsSection from "@/components/settings/AppearanceSettingsSection";
+import AppFeedbackSettingsSection from "@/components/settings/AppFeedbackSettingsSection";
+import FeedbackInboxSection from "@/components/settings/FeedbackInboxSection";
 import NotificationPreferencesSection from "@/components/settings/NotificationPreferencesSection";
 import SecuritySettingsSection from "@/components/settings/SecuritySettingsSection";
 
@@ -15,6 +17,7 @@ export default function GymSettingsPage() {
   const appearanceFade = useFadeIn({ fromY: 8, duration: 180 });
   const detailsFade = useFadeIn({ fromY: 12, duration: 220 });
   const notificationsFade = useFadeIn({ fromY: 16, duration: 260 });
+  const supportFade = useFadeIn({ fromY: 20, duration: 300 });
   const themeTransition = useThemeTransition();
 
   if (user?.role) {
@@ -28,6 +31,12 @@ export default function GymSettingsPage() {
         </div>
         <div style={notificationsFade}>
           <SecuritySettingsSection />
+        </div>
+        <div style={supportFade}>
+          <AppFeedbackSettingsSection />
+        </div>
+        <div style={supportFade}>
+          <FeedbackInboxSection />
         </div>
         <style>{`
           @media (max-width: 900px) {

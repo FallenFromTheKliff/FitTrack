@@ -18,6 +18,7 @@ import type {
   UpdateMembershipCardPayload,
   UpgradeToCoachPayload,
 } from "@fittrack/api-client";
+import type { MemberDirectoryFilters } from "@fittrack/types";
 import {
   invalidateAdminBookingsQuery,
   invalidateAdminDeletionRequestsQuery,
@@ -38,10 +39,13 @@ type CreateUserPayload = {
   phone_no?: string;
 };
 
-export function adminMembersQueryOptions(client: Pick<ApiClient, "admin">) {
+export function adminMembersQueryOptions(
+  client: Pick<ApiClient, "admin">,
+  filters?: MemberDirectoryFilters,
+) {
   return queryOptions({
-    queryKey: queryKeys.adminMembers(),
-    queryFn: () => client.admin.listMembers(),
+    queryKey: queryKeys.adminMembers(filters),
+    queryFn: () => client.admin.listMembers(filters),
   });
 }
 

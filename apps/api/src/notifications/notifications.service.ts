@@ -192,8 +192,12 @@ export class NotificationsService {
       subscription_expired_email: preferences.subscription_expired_email,
       booking_confirmed_email: preferences.booking_confirmed_email,
       booking_cancelled_email: preferences.booking_cancelled_email,
+      venue_booking_reminder_email:
+        preferences.venue_booking_reminder_email,
       booking_no_show_email: preferences.booking_no_show_email,
       appointment_confirmed_email: preferences.appointment_confirmed_email,
+      coach_appointment_reminder_email:
+        preferences.coach_appointment_reminder_email,
       appointment_completed_email: preferences.appointment_completed_email,
       appointment_cancelled_email: preferences.appointment_cancelled_email,
       rank_up_email: preferences.rank_up_email,
@@ -282,10 +286,14 @@ export class NotificationsService {
         return preferences.booking_confirmed_email;
       case NotificationType.booking_cancelled:
         return preferences.booking_cancelled_email;
+      case NotificationType.booking_reminder:
+        return preferences.venue_booking_reminder_email;
       case NotificationType.booking_no_show:
         return preferences.booking_no_show_email;
       case NotificationType.appointment_confirmed:
         return preferences.appointment_confirmed_email;
+      case NotificationType.appointment_reminder:
+        return preferences.coach_appointment_reminder_email;
       case NotificationType.appointment_completed:
         return preferences.appointment_completed_email;
       case NotificationType.appointment_cancelled:

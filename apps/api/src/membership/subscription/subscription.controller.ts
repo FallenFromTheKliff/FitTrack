@@ -30,9 +30,12 @@ import {
   CreateSubscriptionDTO,
   CreatePlanDTO,
   CurrentSubscriptionResponseDTO,
+  MembershipOperationsDashboardResponseDTO,
   MembershipPlanResponseDTO,
+  MembershipCatalogSettingsResponseDTO,
   PaginationDTO,
   SubscriptionCheckoutResponseDTO,
+  UpdateMembershipCatalogSettingsDTO,
   UpdatePlanDTO,
 } from './dto/subscription.dto';
 import { SubscriptionService } from './subscription.service';
@@ -75,7 +78,9 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 @ApiTags('Membership')
 @ApiExtraModels(
   MembershipPlanResponseDTO,
+  MembershipCatalogSettingsResponseDTO,
   CurrentSubscriptionResponseDTO,
+  MembershipOperationsDashboardResponseDTO,
   SubscriptionCheckoutResponseDTO,
 )
 @Controller('membership')
@@ -103,6 +108,39 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Membership plan not found.' })
   getPlanById(@Param('id', ParseUUIDPipe) id: string) {
     return this.subscriptionService.getPlanById(id);
+  }
+
+  @Get('catalog-settings')
+  @ApiOperation({
+    summary: 'Get live membership catalog settings for plan and card pricing.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Membership catalog settings returned.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(MembershipCatalogSettingsResponseDTO),
+    ),
+  })
+  getCatalogSettings() {
+    return this.subscriptionService.getCatalogSettings();
+  }
+
+  @Get('operations-dashboard')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get memberships operations dashboard metrics.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Membership operations dashboard returned.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(MembershipOperationsDashboardResponseDTO),
+    ),
+  })
+  getOperationsDashboard() {
+    return this.subscriptionService.getOperationsDashboard();
   }
 
   @Get('my-subscription')
@@ -196,5 +234,24 @@ export class SubscriptionController {
     @Body() dto: UpdatePlanDTO,
   ) {
     return this.subscriptionService.updatePlan(id, dto);
+  }
+
+  @Patch('catalog-settings')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Update shared membership catalog settings such as the membership-card price. Admin/Staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Membership catalog settings updated.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(MembershipCatalogSettingsResponseDTO),
+    ),
+  })
+  updateCatalogSettings(@Body() dto: UpdateMembershipCatalogSettingsDTO) {
+    return this.subscriptionService.updateCatalogSettings(dto);
   }
 }

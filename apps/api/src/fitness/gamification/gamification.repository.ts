@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AuthProvider,
   CreatorState,
   ExerciseReviewSubmissionStatus,
   IntegrityCaseStatus,
@@ -115,6 +116,18 @@ export type ActiveSeasonStandingRecord = Prisma.SeasonalStandingGetPayload<{
 export type MilestoneProgressRecord = Prisma.MilestoneDefinitionGetPayload<{
   include: {
     user_progress: true;
+  };
+}>;
+
+export type AchievementReviewRecord = Prisma.UserMilestoneProgressGetPayload<{
+  include: {
+    milestone_definition: true;
+    user: {
+      include: {
+        auth_identities: true;
+        profile: true;
+      };
+    };
   };
 }>;
 
@@ -1336,6 +1349,46 @@ export class GamificationRepository extends BaseRepository {
         },
       },
       orderBy: [{ is_hidden: 'asc' }, { created_at: 'asc' }],
+    });
+  }
+
+  listAchievementReviews(): Promise<AchievementReviewRecord[]> {
+    return this.prisma.userMilestoneProgress.findMany({
+      where: {
+        status: {
+          in: [
+            MilestoneProgressStatus.unlocked,
+            MilestoneProgressStatus.claimed,
+          ],
+        },
+        milestone_definition: {
+          is_active: true,
+          retired_at: null,
+        },
+        user: {
+          deletedAt: null,
+        },
+      },
+      include: {
+        milestone_definition: true,
+        user: {
+          include: {
+            auth_identities: {
+              where: {
+                provider: AuthProvider.email,
+              },
+              orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+            },
+            profile: true,
+          },
+        },
+      },
+      orderBy: [
+        { status: 'asc' },
+        { unlocked_at: 'desc' },
+        { updated_at: 'desc' },
+      ],
+      take: 50,
     });
   }
 

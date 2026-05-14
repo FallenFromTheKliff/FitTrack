@@ -29,6 +29,7 @@ export default function AccountsModalLayer() {
     archiveTarget,
     canEditTargetDetails,
     canInspectAccounts,
+    canManageAccounts,
     canManageMemberCard,
     closeInspector,
     deleteTarget,
@@ -211,7 +212,7 @@ export default function AccountsModalLayer() {
           }}
         />
       ) : null}
-      {isAdmin ? (
+      {canManageAccounts ? (
         <ConfirmModal
           isOpen={paymentReviewAction !== null && !!pendingMembershipPayment}
           title={paymentReviewAction === "reject" ? "Reject Payment Review" : "Approve Payment Review"}

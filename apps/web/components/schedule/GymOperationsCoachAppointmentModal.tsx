@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   RecurringCoachingBillingCycleRecord,
   StaffAppointmentRecord,
+  SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,11 +32,13 @@ export function GymOperationsCoachAppointmentModal({
   billingCycles = [],
   coachReadiness,
   isOpen,
+  isCoachView = false,
   isSubmitting = false,
   onCancelRecurringPlan,
   onCancelAppointment,
   onClose,
   onComplete,
+  onSaveFeedback,
   onEditRecurringFuture,
   onEditRecurringSession,
   onConfirm,
@@ -48,11 +51,17 @@ export function GymOperationsCoachAppointmentModal({
   billingCycles?: RecurringCoachingBillingCycleRecord[];
   coachReadiness: CoachReadinessSummary;
   isOpen: boolean;
+  isCoachView?: boolean;
   isSubmitting?: boolean;
   onCancelRecurringPlan?: () => void;
   onCancelAppointment: (note: string) => void;
   onClose: () => void;
-  onComplete: (note: string) => void;
+  onComplete: (payload: {
+    assessmentReport?: string;
+    coachFeedback?: string;
+    sessionNotes?: string;
+  }) => void;
+  onSaveFeedback?: (payload: SubmitCoachAppointmentFeedbackPayload) => void;
   onEditRecurringFuture?: () => void;
   onEditRecurringSession?: () => void;
   onConfirm: () => void;
@@ -69,6 +78,9 @@ export function GymOperationsCoachAppointmentModal({
 }) {
   const { colors, settings } = useTheme();
   const [note, setNote] = useState("");
+  const [assessmentReport, setAssessmentReport] = useState("");
+  const [coachFeedback, setCoachFeedback] = useState("");
+  const [sessionNotes, setSessionNotes] = useState("");
   const [coachDecision, setCoachDecision] = useState<CoachDecision>("confirm");
   const shouldAnimate = settings.animationLevel !== "none";
   const status = appointment?.status ?? "pending_coach";
@@ -154,19 +166,45 @@ export function GymOperationsCoachAppointmentModal({
   const scheduleWindow = appointment
     ? formatAppointmentWindow(appointment)
     : { dateLabel: "-", timeLabel: "-" };
+  const memberReview = appointment?.review ?? null;
+  const memberReviewLabel =
+    status === "completed"
+      ? memberReview
+        ? `Reviewed ${memberReview.rating}/5`
+        : "Not reviewed"
+      : "Review opens after completion";
+  const memberReviewTone =
+    status === "completed"
+      ? memberReview
+        ? colors.success
+        : colors.warning
+      : colors.textMuted;
 
   useEffect(() => {
     if (!isOpen) return;
     setNote("");
+    setAssessmentReport(appointment?.assessmentReport ?? "");
+    setCoachFeedback(appointment?.coachFeedback ?? "");
+    setSessionNotes(appointment?.sessionNotes ?? "");
   }, [isOpen, appointment?.id]);
 
-  const title = canConfirm
-    ? "Review coach appointment"
-    : "Coach appointment actions";
-  const description = canConfirm
-    ? "Confirm, reject, or keep the request pending without leaving Gym Operations."
-    : "Review the current session state and resolve the next action without leaving Gym Operations.";
+  const title = isCoachView
+    ? canConfirm
+      ? "Review coach appointment"
+      : "Coach appointment actions"
+    : "Review payment and appointment status";
+  const description = isCoachView
+    ? canConfirm
+      ? "Confirm, reject, or keep the request pending from your coach schedule."
+      : "Review the current session state and resolve your coach-side action."
+    : "Verify payment, booking status, and remaining balances without switching away from Gym Operations.";
   const coachDecisionOptions = useMemo<CoachDecision[]>(() => {
+    if (isCoachView) {
+      if (canConfirm) return ["confirm", "reject", "cancel"];
+      if (canComplete) return ["mark_complete", "cancel"];
+      if (status === "cancelled" || status === "completed" || status === "no_show") return [];
+      return ["cancel"];
+    }
     if (canConfirm) {
       const options: CoachDecision[] = [];
       if (
@@ -214,7 +252,7 @@ export function GymOperationsCoachAppointmentModal({
         "cancel",
       ];
     }
-    if (status === "cancelled") return [];
+    if (status === "cancelled" || status === "no_show") return [];
     return ["cancel"];
   }, [
     appointment?.activePaymentStage,
@@ -224,6 +262,7 @@ export function GymOperationsCoachAppointmentModal({
     canConfirm,
     canResolvePendingCoachPayment,
     status,
+    isCoachView,
   ]);
 
   useEffect(() => {
@@ -254,7 +293,11 @@ export function GymOperationsCoachAppointmentModal({
         onConfirm();
         return;
       case "mark_complete":
-        onComplete(note.trim());
+        onComplete({
+          assessmentReport: assessmentReport.trim() || undefined,
+          coachFeedback: coachFeedback.trim() || undefined,
+          sessionNotes: sessionNotes.trim() || undefined,
+        });
         return;
       case "reject":
         onReject(note.trim());
@@ -269,6 +312,7 @@ export function GymOperationsCoachAppointmentModal({
     isSubmitting ||
     coachDecisionOptions.length === 0 ||
     (coachDecision === "reject" && !note.trim()) ||
+    (coachDecision === "mark_complete" && !coachFeedback.trim()) ||
     ((coachDecision === "accept_cash_balance" ||
       coachDecision === "paymongo_balance") &&
       !onCollectBalance) ||
@@ -369,42 +413,70 @@ export function GymOperationsCoachAppointmentModal({
 
         <OverlayAmountGrid
           colors={colors}
-          items={[
-            {
-              label: "Booking type",
-              value: bookingTypeLabel,
-            },
-            {
-              label: "Coach rate",
-              value:
-                coachRate != null ? `${formatPeso(coachRate)}/hr` : "Not set",
-            },
-            {
-              label: displayTotalLabel,
-              value:
-                displayTotalAmount != null
-                  ? formatPeso(displayTotalAmount)
-                  : "Not set",
-            },
-            {
-              label: isRecurring ? "Cycle due now" : "Paid / due now",
-              value:
-                amountDueNow != null ? formatPeso(amountDueNow) : "Not set",
-            },
-            {
-              label: isRecurring ? "Cycle remaining" : "Remaining",
-              value:
-                remainingBalance != null
-                  ? formatPeso(remainingBalance)
-                  : "Not set",
-            },
-          ]}
+          items={
+            isCoachView
+              ? [
+                  {
+                    label: "Booking type",
+                    value: bookingTypeLabel,
+                  },
+                  {
+                    label: "Duration",
+                    value: `${appointment?.duration ?? 0} min`,
+                  },
+                  {
+                    label: "Status",
+                    value: tone.label,
+                  },
+                  {
+                    label: "Member review",
+                    value: memberReviewLabel,
+                  },
+                  {
+                    label: "Coach reply",
+                    value: appointment?.coachFeedback ? "Submitted" : "Not submitted",
+                  },
+                ]
+              : [
+                  {
+                    label: "Booking type",
+                    value: bookingTypeLabel,
+                  },
+                  {
+                    label: "Coach rate",
+                    value:
+                      coachRate != null ? `${formatPeso(coachRate)}/hr` : "Not set",
+                  },
+                  {
+                    label: displayTotalLabel,
+                    value:
+                      displayTotalAmount != null
+                        ? formatPeso(displayTotalAmount)
+                        : "Not set",
+                  },
+                  {
+                    label: isRecurring ? "Cycle due now" : "Paid / due now",
+                    value:
+                      amountDueNow != null ? formatPeso(amountDueNow) : "Not set",
+                  },
+                  {
+                    label: isRecurring ? "Cycle remaining" : "Remaining",
+                    value:
+                      remainingBalance != null
+                        ? formatPeso(remainingBalance)
+                        : "Not set",
+                  },
+                  {
+                    label: "Member review",
+                    value: memberReviewLabel,
+                  },
+                ]
+          }
         />
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}
-        >
-          <div style={overlaySurfaceStyle(colors)}>
+        {isCoachView ? (
+        <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <FitText
               excludeGlobalScale
               style={{
@@ -413,27 +485,100 @@ export function GymOperationsCoachAppointmentModal({
                 color: colors.textPrimary,
               }}
             >
-              Coach readiness
+              Client details and review status
             </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted }}
+            <span
+              style={{
+                borderRadius: 999,
+                border: `1px solid ${memberReviewTone}55`,
+                backgroundColor: `${memberReviewTone}18`,
+                color: memberReviewTone,
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "7px 10px",
+                whiteSpace: "nowrap",
+              }}
             >
-              Visibility: {coachReadiness.isVisible ? "visible" : "hidden"}
-            </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted }}
-            >
-              Peak slots open: {coachReadiness.openPeakSlots}
-            </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.success }}
-            >
-              Profile trust: {coachReadiness.trustLabel}
-            </FitText>
+              {memberReviewLabel}
+            </span>
           </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 10,
+            }}
+          >
+            <div style={overlaySurfaceStyle(colors)}>
+              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
+                Client
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 800, color: colors.textPrimary }}>
+                {memberName}
+              </FitText>
+            </div>
+            <div style={overlaySurfaceStyle(colors)}>
+              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
+                Status
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 800, color: colors.textPrimary }}>
+                {tone.label}
+              </FitText>
+            </div>
+            <div style={overlaySurfaceStyle(colors)}>
+              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
+                Member note
+              </FitText>
+              <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary }}>
+                {appointment?.notes?.trim() || "No member note provided."}
+              </FitText>
+            </div>
+          </div>
+          {memberReview ? (
+            <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary }}>
+              Member review: {memberReview.comment?.trim() || "Rating submitted without written feedback."}
+            </FitText>
+          ) : null}
+        </div>
+        ) : null}
+
+        <div
+          style={{ display: "grid", gridTemplateColumns: isCoachView ? "1fr 1fr" : "1fr", gap: 18 }}
+        >
+          {isCoachView ? (
+          <>
+            <div style={overlaySurfaceStyle(colors)}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: colors.textPrimary,
+                }}
+              >
+                Coach readiness
+              </FitText>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 12, color: colors.textMuted }}
+              >
+                Visibility: {coachReadiness.isVisible ? "visible" : "hidden"}
+              </FitText>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 12, color: colors.textMuted }}
+              >
+                Peak slots open: {coachReadiness.openPeakSlots}
+              </FitText>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 12, fontWeight: 700, color: colors.success }}
+              >
+                Profile trust: {coachReadiness.trustLabel}
+              </FitText>
+            </div>
+          </>
+          ) : null}
           <div style={overlaySurfaceStyle(colors)}>
             <FitText
               excludeGlobalScale
@@ -458,14 +603,182 @@ export function GymOperationsCoachAppointmentModal({
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={3}
-                placeholder="Optional note for front desk, coach, or audit trail..."
+                placeholder={
+                  isCoachView
+                    ? "Optional note for front desk, coach, or audit trail..."
+                    : "Optional payment or status note for the operations audit trail..."
+                }
                 style={{ fontSize: 12, lineHeight: 1.4 }}
               />
             </div>
           </div>
         </div>
 
-        {isRecurring ? (
+        {coachDecision === "mark_complete" ? (
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 12 }}>
+            <FitText
+              excludeGlobalScale
+              style={{
+                fontSize: 15,
+                fontWeight: 800,
+                color: colors.textPrimary,
+              }}
+            >
+              Session report
+            </FitText>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Client feedback
+                </FitText>
+                <FitTextArea
+                  value={coachFeedback}
+                  onChange={(event) => setCoachFeedback(event.target.value)}
+                  rows={3}
+                  placeholder="Feedback the member should see after this session..."
+                  style={{ fontSize: 12, lineHeight: 1.4 }}
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Assessment report
+                </FitText>
+                <FitTextArea
+                  value={assessmentReport}
+                  onChange={(event) => setAssessmentReport(event.target.value)}
+                  rows={3}
+                  placeholder="Progress, movement quality, next focus..."
+                  style={{ fontSize: 12, lineHeight: 1.4 }}
+                />
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: colors.textMuted,
+                }}
+              >
+                Private session notes
+              </FitText>
+              <FitTextArea
+                value={sessionNotes}
+                onChange={(event) => setSessionNotes(event.target.value)}
+                rows={3}
+                placeholder="Internal coaching notes for this appointment..."
+                style={{ fontSize: 12, lineHeight: 1.4 }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {isCoachView && status === "completed" ? (
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 12 }}>
+            <FitText
+              excludeGlobalScale
+              style={{
+                fontSize: 15,
+                fontWeight: 800,
+                color: colors.textPrimary,
+              }}
+            >
+              Coach reply and session report
+            </FitText>
+            <FitText
+              excludeGlobalScale
+              style={{ fontSize: 12, color: colors.textMuted }}
+            >
+              Update the feedback and report the member sees in Bookings and Assessments.
+            </FitText>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Coach feedback
+                </FitText>
+                <FitTextArea
+                  value={coachFeedback}
+                  onChange={(event) => setCoachFeedback(event.target.value)}
+                  rows={3}
+                  placeholder="Reply with coaching feedback the member should see..."
+                  style={{ fontSize: 12, lineHeight: 1.4 }}
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Assessment report
+                </FitText>
+                <FitTextArea
+                  value={assessmentReport}
+                  onChange={(event) => setAssessmentReport(event.target.value)}
+                  rows={3}
+                  placeholder="Optional assessment notes, progress, or next goal..."
+                  style={{ fontSize: 12, lineHeight: 1.4 }}
+                />
+              </div>
+            </div>
+            <FitButton
+              variant="primary"
+              label="SAVE COACH REPLY"
+              disabled={isSubmitting || !coachFeedback.trim() || !onSaveFeedback}
+              onClick={() =>
+                onSaveFeedback?.({
+                  assessmentReport: assessmentReport.trim() || undefined,
+                  coachFeedback: coachFeedback.trim(),
+                })
+              }
+              style={actionPillStyle(colors)}
+              textStyle={{
+                fontSize: 13,
+                fontWeight: 800,
+                color: colors.onBrand,
+              }}
+            />
+          </div>
+        ) : null}
+
+        {isRecurring && !isCoachView ? (
           <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
             <div style={{ display: "grid", gap: 4 }}>
               <FitText
@@ -763,19 +1076,21 @@ export function GymOperationsCoachAppointmentModal({
           </div>
         ) : null}
 
+        {coachDecisionOptions.length > 0 ? (
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
           <FitText
             excludeGlobalScale
             style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}
           >
-            Decision path
+            {isCoachView ? "Decision path" : "Payment / status decision"}
           </FitText>
           <FitText
             excludeGlobalScale
             style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}
           >
-            Select one action, then submit it. Payment, rejection, completion,
-            and cancellation no longer compete as separate decision buttons.
+            {isCoachView
+              ? "Select one action, then submit it. Payment, rejection, completion, and cancellation no longer compete as separate decision buttons."
+              : "Select the payment or status action that matches the member's verified booking state."}
           </FitText>
           <div
             style={{
@@ -815,6 +1130,30 @@ export function GymOperationsCoachAppointmentModal({
             />
           </div>
         </div>
+        ) : (
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
+            <FitText
+              excludeGlobalScale
+              style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}
+            >
+              No appointment decision needed
+            </FitText>
+            <FitText
+              excludeGlobalScale
+              style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}
+            >
+              This session is already resolved. Review the client details, member review, and coach reply above.
+            </FitText>
+            <FitButton
+              variant="ghost"
+              label="CLOSE"
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={actionPillStyle(colors)}
+              textStyle={{ fontSize: 13, fontWeight: 700 }}
+            />
+          </div>
+        )}
       </div>
     </OverlayFrame>
   );

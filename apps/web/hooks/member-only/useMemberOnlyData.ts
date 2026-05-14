@@ -24,6 +24,7 @@ import {
   nutritionHistoryQueryOptions,
   nutritionLogsQueryOptions,
   startWorkoutSessionMutationOptions,
+  submitCoachReviewMutationOptions,
   venuesQueryOptions,
 } from "@fittrack/query";
 import type {
@@ -67,18 +68,6 @@ export function useMemberOnlyHomeData({
     ...bookingsQueryOptions<VenueBookingRecord>(webApiClient, userId),
     enabled: !!userId,
   });
-  const nutritionTargetQuery = useQuery({
-    ...nutritionActiveTdeeQueryOptions<ActiveNutritionProfileRecord | null>(webApiClient, userId),
-    enabled: !!userId && hasMemberCardAccess,
-  });
-  const nutritionSummaryQuery = useQuery({
-    ...nutritionDailySummaryQueryOptions<DailyNutritionSummaryRecord>(webApiClient, userId, todayString),
-    enabled: !!userId && hasMemberCardAccess,
-  });
-  const masteryQuery = useQuery({
-    ...fitnessMasteryQueryOptions(webApiClient, userId),
-    enabled: !!userId && hasMemberCardAccess,
-  });
   const leaderboardQuery = useQuery({
     ...fitnessLeaderboardQueryOptions(webApiClient, userId, { limit: 5, page: 1 }),
     enabled: !!userId && hasMemberCardAccess,
@@ -91,9 +80,6 @@ export function useMemberOnlyHomeData({
   return {
     bookingsQuery,
     leaderboardQuery,
-    masteryQuery,
-    nutritionSummaryQuery,
-    nutritionTargetQuery,
     sessionsQuery,
     venuesQuery,
   };
@@ -126,6 +112,7 @@ export function useMemberOnlyBookingsData(userId?: string) {
     }),
     cancelAppointmentMutation: useMutation(cancelAppointmentMutationOptions(webApiClient, queryClient)),
     cancelBookingMutation: useMutation(cancelBookingMutationOptions(webApiClient, queryClient)),
+    submitCoachReviewMutation: useMutation(submitCoachReviewMutationOptions(webApiClient, queryClient)),
     venuesQuery: useQuery({ ...venuesQueryOptions(webApiClient, userId), enabled: !!userId }),
   };
 }

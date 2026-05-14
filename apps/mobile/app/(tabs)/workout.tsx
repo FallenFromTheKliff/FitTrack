@@ -37,7 +37,7 @@ export default function WorkoutsScreen() {
     ? "Your membership card payment is waiting for verification. Live workout tracking, auto reps, and pose guidance unlock as soon as staff confirms it."
     : membershipCardStatus === "revoked"
       ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this looks incorrect, or buy a new card from Profile."
-      : "Live workout tracking, auto reps, and pose guidance unlock once this account has an active membership card. Buy the permanent PHP 400 card from Profile, then load plans whenever you want.";
+      : "Live workout tracking, auto reps, and pose guidance unlock once this account has an active membership card. Buy the permanent membership card from Profile, then load plans whenever you want.";
 
   if (isWorkoutLocked) {
     return (

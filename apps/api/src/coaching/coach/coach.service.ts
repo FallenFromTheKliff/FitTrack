@@ -34,13 +34,14 @@ const COACH_SELF_UPDATE_FIELDS = [
   'specialization',
   'bio',
   'certification',
-  'hourly_rate',
   'is_available_for_booking',
 ] as const;
 
 const COACH_ADMIN_UPDATE_FIELDS = [
   ...COACH_SELF_UPDATE_FIELDS,
+  'hourly_rate',
   'gym_commission_pct',
+  'schedule_type',
 ] as const;
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
@@ -189,6 +190,7 @@ export class CoachService {
         certification: dto.certification ?? null,
         hourly_rate: dto.hourly_rate ?? 0,
         gym_commission_pct: dto.gym_commission_pct ?? 20,
+        schedule_type: dto.schedule_type ?? 'part_time',
         is_available_for_booking: dto.is_available_for_booking ?? true,
       }),
     );
@@ -259,6 +261,22 @@ export class CoachService {
         detail: 'Only admin users can update gym_commission_pct.',
       });
     }
+    if (dto.schedule_type !== undefined) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Schedule Type Update Forbidden',
+        status: 403,
+        detail: 'Only admin users can update a coach schedule_type.',
+      });
+    }
+    if (dto.hourly_rate !== undefined) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Rate Update Forbidden',
+        status: 403,
+        detail: 'Only admin users can update a coach hourly_rate.',
+      });
+    }
   }
 
   private toSelfUpdateInput(
@@ -290,6 +308,7 @@ export class CoachService {
       bio: coach.bio,
       certification: coach.certification,
       hourly_rate: coach.hourly_rate.toString(),
+      schedule_type: coach.schedule_type,
       average_rating: coach.average_rating?.toString() ?? null,
       rating_count: coach.rating_count,
       is_available_for_booking: coach.is_available_for_booking,

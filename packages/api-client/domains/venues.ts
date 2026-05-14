@@ -31,6 +31,29 @@ export type VenueAvailabilityRecord = {
   status: string;
 };
 
+export type SubmitVenueFeedbackPayload = {
+  comment?: string;
+  rating: number;
+};
+
+export type VenueFeedbackRecord = {
+  amenity: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  comment?: string | null;
+  created_at: string;
+  id: string;
+  rating: number;
+  submitted_by: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  updated_at: string;
+};
+
 type AmenityAvailabilitySlotApiRecord = {
   available: boolean;
   ends_at: string;
@@ -97,6 +120,26 @@ export function createVenuesApi(transport: ApiTransport) {
         "Unable to restore venue."
       );
       return mapAmenityToVenueRecord(restored);
+    },
+    submitFeedback(id: string | number, payload: SubmitVenueFeedbackPayload) {
+      const amenityId = requireAmenityId(id);
+      return unwrapVoidResponse(
+        transport.post(`/bookings/amenities/${amenityId}/feedback`, payload),
+        "Unable to submit venue feedback."
+      );
+    },
+    listFeedback() {
+      return unwrapResponse<VenueFeedbackRecord[]>(
+        transport.get("/bookings/amenities/feedback"),
+        "Unable to load venue feedback."
+      );
+    },
+    listFeedbackForVenue(id: string | number) {
+      const amenityId = requireAmenityId(id);
+      return unwrapResponse<VenueFeedbackRecord[]>(
+        transport.get(`/bookings/amenities/${amenityId}/feedback`),
+        "Unable to load venue feedback."
+      );
     }
   };
 }

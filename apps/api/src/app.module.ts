@@ -10,7 +10,7 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { QUEUE_MAIL } from './queue/queue.constants';
-import { localEnvFilePath } from '../env-path';
+import { localEnvFilePath } from './env-path';
 
 import {
   aiConfig,

@@ -9,6 +9,7 @@ export interface AuthUser {
   phone_no?: string | null;
   role?: Role;
   emailVerified?: boolean;
+  hasAcceptedPrivacy?: boolean;
   phoneVerified?: boolean;
   tier?: MemberTier;
   memberSince?: string;
@@ -27,6 +28,7 @@ export interface AuthUser {
   qrCodeReady?: boolean;
   attendanceQrReady?: boolean;
   qrCodeToken?: string | null;
+  privacyAcceptedAt?: string | null;
 }
 
 export interface User extends AuthUser {
@@ -35,6 +37,7 @@ export interface User extends AuthUser {
 }
 
 export type LoginFailureReason = "PORTAL_ROLE_MISMATCH" | "ACCOUNT_LOCKED";
+export type LoginPortal = "team" | "member";
 
 export interface IAuthContext {
   user: AuthUser | null;
@@ -43,6 +46,7 @@ export interface IAuthContext {
   login: (
     email: string,
     password: string,
+    options?: { portal?: LoginPortal },
   ) => Promise<{
     success: boolean;
     otpRequired?: boolean;
@@ -67,5 +71,6 @@ export interface IAuthContext {
     currentPassword: string,
     nextPassword: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  acceptPrivacyPolicy?: () => Promise<{ success: boolean; error?: string }>;
   commitLogin: () => Promise<AuthUser | null | undefined>;
 }

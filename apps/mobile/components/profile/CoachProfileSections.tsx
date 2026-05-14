@@ -61,8 +61,8 @@ export default function CoachProfileSections({ colors, controller, styles }: Coa
         <FitCard
           icon={CalendarDays}
           label="Availability Status"
-          subtitle={controller.coachProfile?.isActive === false ? "Coach profile is inactive" : "Coach profile is active"}
-          trailingLabel={controller.coachProfile?.isActive === false ? "Inactive" : "Active"}
+          subtitle={controller.availabilityLocked ? "Full-time schedule is admin controlled" : controller.coachProfile?.isActive === false ? "Coach profile is inactive" : "Coach profile is active"}
+          trailingLabel={controller.availabilityLocked ? "Full-Time" : controller.coachProfile?.isActive === false ? "Inactive" : "Active"}
           trailingLabelColor={controller.coachProfile?.isActive === false ? colors.warning : colors.success}
           noChevron
         />

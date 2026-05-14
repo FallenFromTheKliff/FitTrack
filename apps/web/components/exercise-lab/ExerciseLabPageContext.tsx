@@ -35,6 +35,7 @@ import {
   createFitnessExerciseMutationOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
+  fitnessAchievementReviewsQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
@@ -62,7 +63,6 @@ import type {
   FitTableColumn,
 } from "@/components/fit/FitTable";
 import {
-  ACHIEVEMENT_REVIEW_SEED,
   type AchievementReviewRecord,
   type AchievementReviewStatus,
 } from "@/data/progress/milestones";
@@ -156,12 +156,10 @@ function useExerciseLabPageState() {
   const [creatorGovernanceNote, setCreatorGovernanceNote] = useState("");
   const [milestoneReviews, setMilestoneReviews] = useState<
     AchievementReviewRecord[]
-  >(ACHIEVEMENT_REVIEW_SEED);
+  >([]);
   const [milestoneScope, setMilestoneScope] =
     useState<MilestoneScope>("pending");
-  const [selectedMilestoneId, setSelectedMilestoneId] = useState(
-    ACHIEVEMENT_REVIEW_SEED[0]?.id ?? "",
-  );
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState("");
   const [milestoneNotes, setMilestoneNotes] = useState("");
   const [isCompact, setIsCompact] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(900);
@@ -275,6 +273,19 @@ function useExerciseLabPageState() {
       ...(muscleSearch.trim() ? { search: muscleSearch.trim() } : {}),
     }),
   );
+  const milestoneReviewsQuery = useQuery(
+    fitnessAchievementReviewsQueryOptions(webApiClient),
+  );
+
+  useEffect(() => {
+    const reviews = milestoneReviewsQuery.data ?? [];
+    setMilestoneReviews(reviews);
+    setSelectedMilestoneId((current) =>
+      current && reviews.some((review) => review.id === current)
+        ? current
+        : (reviews[0]?.id ?? ""),
+    );
+  }, [milestoneReviewsQuery.data]);
 
   const createExerciseMutation = useMutation(
     createFitnessExerciseMutationOptions(webApiClient, queryClient),

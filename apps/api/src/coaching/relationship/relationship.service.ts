@@ -50,6 +50,14 @@ function pickDefined<T extends object, K extends keyof T>(
   return result;
 }
 
+function getReviewUserName(profile?: {
+  first_name?: string | null;
+  last_name?: string | null;
+} | null) {
+  const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();
+  return name || 'Unknown member';
+}
+
 @Injectable()
 export class RelationshipService {
   constructor(
@@ -193,6 +201,25 @@ export class RelationshipService {
       reviewWrite.averageRating,
       reviewWrite.ratingCount,
     );
+  }
+
+  async getMyReceivedReviews(coachUserId: string) {
+    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
+    const reviews = await this.repo.listCoachReviewsForCoach(coach.id);
+
+    return reviews.map((review) => ({
+      appointment_id: review.appointment_id,
+      comment: review.comment ?? null,
+      created_at: review.created_at.toISOString(),
+      id: review.id,
+      rating: review.rating,
+      reviewer: {
+        id: review.reviewer.id,
+        name: getReviewUserName(review.reviewer.profile),
+      },
+      scheduled_at: review.appointment.scheduled_at.toISOString(),
+      updated_at: review.updated_at.toISOString(),
+    }));
   }
 
   private assertRelationshipOwnership(

@@ -42,6 +42,7 @@ import {
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
+  AchievementReviewResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
@@ -75,6 +76,7 @@ import {
 } from './events/rank-up.event';
 import {
   type LeaderboardTotalRecord,
+  type AchievementReviewRecord,
   GamificationRepository,
   type ActiveSeasonStandingRecord,
   type AdminGamificationOverviewRecord,
@@ -391,6 +393,11 @@ export class GamificationService {
 
       return [this.toMilestoneProgressResponse(milestone)];
     });
+  }
+
+  async listAchievementReviews(): Promise<AchievementReviewResponseDTO[]> {
+    const reviews = await this.repo.listAchievementReviews();
+    return reviews.map((review) => this.toAchievementReviewResponse(review));
   }
 
   async claimMilestone(
@@ -853,6 +860,49 @@ export class GamificationService {
       unlocked_at: progress?.unlocked_at?.toISOString() ?? null,
       claimed_at: progress?.claimed_at?.toISOString() ?? null,
       updated_at: progress?.updated_at?.toISOString() ?? null,
+    };
+  }
+
+  private toAchievementReviewResponse(
+    record: AchievementReviewRecord,
+  ): AchievementReviewResponseDTO {
+    const memberName = this.formatUserName(record.user);
+    const memberInitials = this.buildInitials(memberName);
+    const memberEmail =
+      record.user.auth_identities.find((identity) => identity.is_primary)
+        ?.identifier ??
+      record.user.auth_identities[0]?.identifier ??
+      'No email on file';
+    const targetValue = this.readMilestoneTargetValue(
+      record.milestone_definition.condition_payload,
+    );
+    const progressValue =
+      record.status === MilestoneProgressStatus.unlocked ||
+      record.status === MilestoneProgressStatus.claimed
+        ? Math.max(record.progress_value, targetValue)
+        : record.progress_value;
+    const metric = this.readMilestoneMetric(
+      record.milestone_definition.trigger_type,
+      record.milestone_definition.condition_payload,
+    );
+    const isClaimed = record.status === MilestoneProgressStatus.claimed;
+
+    return {
+      id: record.id,
+      member_id: record.user_id,
+      member_name: memberName,
+      member_initials: memberInitials,
+      member_email: memberEmail,
+      badge_label: record.milestone_definition.title,
+      proof_caption: `Unlocked from ${progressValue}/${targetValue} ${metric} progress in the local database.`,
+      proof_image_url: this.buildMilestoneProofPreview(
+        memberInitials,
+        record.milestone_definition.title,
+      ),
+      status: isClaimed ? 'Approved' : 'Pending',
+      submitted_at: (record.unlocked_at ?? record.created_at).toISOString(),
+      reviewed_at: record.claimed_at?.toISOString(),
+      reviewer_notes: isClaimed ? 'Claimed by the member.' : '',
     };
   }
 
@@ -1570,6 +1620,32 @@ export class GamificationService {
     return [firstName, lastName].filter(Boolean).join(' ') || 'FitTrack member';
   }
 
+  private buildInitials(name: string): string {
+    const initials = name
+      .split(/\s+/g)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('');
+
+    return initials || 'FT';
+  }
+
+  private buildMilestoneProofPreview(initials: string, badgeLabel: string) {
+    const safeInitials = this.escapeSvgText(initials);
+    const safeBadgeLabel = this.escapeSvgText(badgeLabel);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200" fill="none"><rect width="320" height="200" rx="24" fill="#161616"/><rect x="18" y="18" width="284" height="164" rx="18" fill="#1F1F1F" stroke="#E87722" stroke-width="2"/><rect x="34" y="34" width="92" height="92" rx="20" fill="#E87722" opacity="0.22"/><text x="80" y="92" text-anchor="middle" fill="#E87722" font-size="28" font-family="Arial, sans-serif" font-weight="700">${safeInitials}</text><text x="34" y="152" fill="#FFFFFF" font-size="19" font-family="Arial, sans-serif" font-weight="700">${safeBadgeLabel}</text><text x="34" y="174" fill="#A1A1AA" font-size="12" font-family="Arial, sans-serif">Milestone proof generated from DB progress</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  private escapeSvgText(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   private resolveIntegrityCaseRisk(
     events: { risk_level: IntegrityRiskLevel }[],
   ): IntegrityRiskLevel {
@@ -1606,6 +1682,29 @@ export class GamificationService {
     }
 
     return Math.max(1, Math.floor(rawTarget));
+  }
+
+  private readMilestoneMetric(
+    triggerType: string,
+    value: Prisma.JsonValue | null,
+  ): string {
+    const payload = this.toJsonObject(value);
+    const metric = typeof payload?.metric === 'string' ? payload.metric : null;
+
+    if (metric) {
+      return metric;
+    }
+
+    switch (triggerType) {
+      case 'source_event':
+        return 'completed_workout_sessions';
+      case 'streak':
+        return 'current_streak';
+      case 'summary_threshold':
+        return 'total_xp';
+      default:
+        return 'milestone';
+    }
   }
 
   private toJsonObject(

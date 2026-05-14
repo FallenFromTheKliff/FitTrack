@@ -9,6 +9,7 @@ import type {
   ExerciseDraftProposalRecord,
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
+  FitnessAchievementReviewRecord,
   ExerciseLogRecord,
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
@@ -78,6 +79,7 @@ export type {
   ExerciseReviewSubmissionRecord,
   ExerciseReviewSubmissionStatus,
   ExerciseHandShapeProfileRecord,
+  FitnessAchievementReviewRecord,
   FitnessCreatorState,
   FitnessExerciseCategory,
   ExerciseMovementProfileRecord,
@@ -524,6 +526,21 @@ type MilestoneProgressApiRecord = {
   trigger_type: FitnessMilestoneProgressRecord["triggerType"];
   unlocked_at: string | null;
   updated_at: string | null;
+};
+
+type AchievementReviewApiRecord = {
+  badge_label: string;
+  id: string;
+  member_email: string;
+  member_id: string;
+  member_initials: string;
+  member_name: string;
+  proof_caption: string;
+  proof_image_url: string;
+  reviewed_at?: string;
+  reviewer_notes?: string;
+  status: FitnessAchievementReviewRecord["status"];
+  submitted_at: string;
 };
 
 type IntegrityCaseSummaryApiRecord = {
@@ -1102,6 +1119,25 @@ function mapMilestoneProgress(
   };
 }
 
+function mapAchievementReview(
+  record: AchievementReviewApiRecord,
+): FitnessAchievementReviewRecord {
+  return {
+    badgeLabel: record.badge_label,
+    id: record.id,
+    memberEmail: record.member_email,
+    memberId: record.member_id,
+    memberInitials: record.member_initials,
+    memberName: record.member_name,
+    proofCaption: record.proof_caption,
+    proofImageUrl: record.proof_image_url,
+    reviewedAt: record.reviewed_at,
+    reviewerNotes: record.reviewer_notes,
+    status: record.status,
+    submittedAt: record.submitted_at,
+  };
+}
+
 function mapIntegritySummary(
   record: IntegritySummaryApiRecord,
 ): FitnessIntegritySummaryRecord {
@@ -1615,6 +1651,14 @@ export function createFitnessApi(transport: ApiTransport) {
           "Unable to load milestone progress.",
         )
       ).map(mapMilestoneProgress);
+    },
+    async listAchievementReviews() {
+      return (
+        await unwrapResponse<AchievementReviewApiRecord[]>(
+          transport.get("/fitness/milestone-reviews"),
+          "Unable to load milestone review records.",
+        )
+      ).map(mapAchievementReview);
     },
     async claimMilestone(milestoneDefinitionId: string) {
       return mapMilestoneProgress(

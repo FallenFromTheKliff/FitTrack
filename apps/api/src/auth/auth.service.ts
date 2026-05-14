@@ -61,6 +61,8 @@ type AuthenticatedUser = Awaited<
   ReturnType<AuthRepository['findUserWithProfileOrThrow']>
 >;
 
+type LoginPortal = NonNullable<LoginDTO['portal']>;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -162,6 +164,9 @@ export class AuthService {
       identity.credential_hash,
     );
     if (!passwordMatch) {
+      return this.throwInvalidCredentials(normalizedEmail);
+    }
+    if (!this.isLoginPortalAllowed(dto.portal, user.role)) {
       return this.throwInvalidCredentials(normalizedEmail);
     }
 
@@ -645,6 +650,8 @@ export class AuthService {
         qr_code_token: user.qr_code_token ?? null,
         qrCodeReady,
         attendanceQrReady,
+        has_accepted_privacy: user.has_accepted_privacy,
+        privacy_accepted_at: user.privacy_accepted_at?.toISOString() ?? null,
         profile: {
           first_name: user.profile.first_name,
           last_name: user.profile.last_name,
@@ -662,7 +669,7 @@ export class AuthService {
         type: 'INVALID_CREDENTIALS',
         title: 'Invalid Credentials',
         status: 401,
-        detail: 'Account not found.',
+        detail: 'Invalid credentials.',
       });
     }
 
@@ -671,7 +678,7 @@ export class AuthService {
         type: 'INVALID_CREDENTIALS',
         title: 'Invalid Credentials',
         status: 401,
-        detail: 'Incorrect email or password.',
+        detail: 'Invalid credentials.',
       });
     }
 
@@ -773,6 +780,25 @@ export class AuthService {
     await this.redis.del(this.getLoginLockKey(email));
   }
 
+  private isLoginPortalAllowed(
+    portal: LoginPortal | undefined,
+    role: UserRole,
+  ) {
+    if (!portal) {
+      return true;
+    }
+
+    if (portal === 'team') {
+      return (
+        role === UserRole.admin ||
+        role === UserRole.staff ||
+        role === UserRole.coach
+      );
+    }
+
+    return role === UserRole.member;
+  }
+
   private async throwInvalidCredentials(email: string): Promise<never> {
     const { locked } = await this.recordFailedLoginAttempt(email);
 
@@ -792,7 +818,7 @@ export class AuthService {
       type: 'INVALID_CREDENTIALS',
       title: 'Invalid Credentials',
       status: 401,
-      detail: 'Email or password is incorrect.',
+      detail: 'Invalid credentials.',
     });
   }
 

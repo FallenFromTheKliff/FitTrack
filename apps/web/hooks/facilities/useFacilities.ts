@@ -422,9 +422,11 @@ export function useVenueMutations() {
     const gridHeight = Number(data.gridHeight ?? "");
     const displayOrder = Number(data.displayOrder ?? "");
     const floorId = (data.floorId ?? "").trim();
+    const isReservable = data.isReservable !== "false";
 
     if (!Number.isFinite(capacity) || capacity <= 0) return "Capacity must be greater than zero.";
     if (hourlyRate !== undefined && (!Number.isFinite(hourlyRate) || hourlyRate < 0)) return "Hourly rate must be zero or greater.";
+    if (isReservable && (hourlyRate === undefined || hourlyRate <= 0)) return "Reservable venues require an hourly rate greater than zero.";
     if (floorId !== "floor-1" && floorId !== "floor-2" && floorId !== "floor-3") return "Select a valid floor.";
     if (!Number.isFinite(gridColumn) || gridColumn < 1 || gridColumn > COLS) return `Grid column must be between 1 and ${COLS}.`;
     if (!Number.isFinite(gridRow) || gridRow < 1 || gridRow > ROWS) return `Grid row must be between 1 and ${ROWS}.`;
@@ -447,7 +449,7 @@ export function useVenueMutations() {
       gridRow,
       gridWidth,
       gridHeight,
-      isReservable: data.isReservable !== "false",
+      isReservable,
       displayOrder: Number.isFinite(displayOrder) ? displayOrder : 0
     };
   };

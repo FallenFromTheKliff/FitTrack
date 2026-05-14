@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Award,
   CreditCard,
@@ -15,7 +16,8 @@ import {
   User,
   UserCog,
 } from "lucide-react";
-import type { FitnessRankingVisibility } from "@fittrack/types";
+import type { CoachProfileRecord, FitnessRankingVisibility } from "@fittrack/types";
+import type { UpdateCoachProfilePayload } from "@fittrack/api-client";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,9 +56,71 @@ import {
   resolveHighestRank,
 } from "@/components/member-only/memberOnlyUtils";
 import { useMemberOnlyAccess, useMemberOnlyProfileData } from "@/hooks/member-only/useMemberOnlyData";
-import { WEB_API_BASE_URL } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { sanitizePhoneInput } from "./helpers";
 import GymProfileSection from "@/components/profile/GymProfileSection";
+import CoachReceivedReviewsPanel from "@/components/profile/CoachReceivedReviewsPanel";
+import {
+  coachSelfProfileQueryOptions,
+  invalidateCoachQueries,
+  updateCoachProfileMutationOptions,
+} from "@fittrack/query";
+
+const COACH_WEEKDAY_OPTIONS = [
+  { label: "Sun", value: 0 },
+  { label: "Mon", value: 1 },
+  { label: "Tue", value: 2 },
+  { label: "Wed", value: 3 },
+  { label: "Thu", value: 4 },
+  { label: "Fri", value: 5 },
+  { label: "Sat", value: 6 },
+];
+
+type CoachProfileFormState = {
+  bio: string;
+  displayName: string;
+  hourlyRate: string;
+  scheduleDays: number[];
+  scheduleEndTime: string;
+  scheduleStartTime: string;
+  scheduleType: "full_time" | "part_time";
+  skills: string;
+  specializations: string;
+};
+
+function joinCoachListInput(values?: string[] | null) {
+  return (values ?? []).join(", ");
+}
+
+function splitCoachListInput(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function createCoachProfileFormState(profile?: CoachProfileRecord | null): CoachProfileFormState {
+  const firstSlot = profile?.availability?.[0];
+  const scheduleDays = Array.from(
+    new Set(
+      (profile?.availability ?? [])
+        .map((slot) => Number(slot.dayOfWeek))
+        .filter((day) => Number.isInteger(day)),
+    ),
+  ).sort((left, right) => left - right);
+
+  return {
+    bio: profile?.bio ?? "",
+    displayName: profile?.displayName ?? "",
+    hourlyRate: profile?.hourlyRate != null ? String(profile.hourlyRate) : "",
+    scheduleDays,
+    scheduleEndTime: firstSlot?.endTime ?? "17:00",
+    scheduleStartTime: firstSlot?.startTime ?? "09:00",
+    scheduleType: profile?.scheduleType ?? "part_time",
+    skills: joinCoachListInput(profile?.certifications),
+    specializations: joinCoachListInput(profile?.specialties),
+  };
+}
 
 export default function ProfileSettingsPage() {
   const { user } = useAuth();
@@ -259,10 +323,9 @@ function MemberProfileBody() {
                   trailingLabel={healthSnapshot}
                 />
               </MemberSurface>
-              <div className="member-only-profile-actions">
-                <FitButton label="Open Muscle Mastery" icon={Trophy} onClick={() => router.push("/mastery")} fullWidth />
-                <FitButton label="Open Workout" icon={Dumbbell} onClick={() => router.push("/workout")} fullWidth variant="ghost" />
-              </div>
+            <div className="member-only-profile-actions">
+              <FitButton label="Open Muscle Mastery" icon={Trophy} onClick={() => router.push("/mastery")} fullWidth />
+            </div>
             </MemberStack>
           )}
         </MemberSection>
@@ -368,8 +431,263 @@ function MemberProfileBody() {
   );
 }
 
+function CoachProfileManagementPanel() {
+  const { colors } = useTheme();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<CoachProfileFormState>(() => createCoachProfileFormState());
+  const [message, setMessage] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
+  const { data: coachProfile = null, isPending } = useQuery({
+    ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
+    enabled: user?.role === "COACH" && Boolean(user?.id),
+    staleTime: 60_000,
+  });
+  const updateProfileMutation = useMutation(updateCoachProfileMutationOptions(webApiClient, queryClient));
+  const updateAvailabilityMutation = useMutation({
+    mutationFn: (payload: {
+      slots: Array<{ dayOfWeek: number; endTime: string; startTime: string }>;
+    }) => webApiClient.coaches.replaceAvailability(payload),
+    onSuccess: async () => {
+      await invalidateCoachQueries(queryClient, user?.id, coachProfile?.id);
+    },
+  });
+  const isSaving = updateProfileMutation.isPending || updateAvailabilityMutation.isPending;
+
+  useEffect(() => {
+    setForm(createCoachProfileFormState(coachProfile));
+  }, [coachProfile]);
+
+  const setField = <K extends keyof CoachProfileFormState>(
+    key: K,
+    value: CoachProfileFormState[K],
+  ) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+  const toggleScheduleDay = (day: number) => {
+    if (form.scheduleType === "full_time") return;
+    setForm((current) => {
+      const selected = current.scheduleDays.includes(day)
+        ? current.scheduleDays.filter((item) => item !== day)
+        : [...current.scheduleDays, day].sort((left, right) => left - right);
+      return { ...current, scheduleDays: selected };
+    });
+  };
+  const handleSaveCoachProfile = async () => {
+    if (!coachProfile || !user?.id) return;
+
+    const hourlyRate = Number(form.hourlyRate);
+    if (!form.displayName.trim()) {
+      setMessage({ tone: "danger", text: "Display name is required." });
+      return;
+    }
+    if (!Number.isFinite(hourlyRate) || hourlyRate < 0) {
+      setMessage({ tone: "danger", text: "Rate must be zero or greater." });
+      return;
+    }
+
+    const profilePayload: UpdateCoachProfilePayload = {
+      bio: form.bio,
+      certifications: splitCoachListInput(form.skills),
+      displayName: form.displayName.trim(),
+      hourlyRate,
+      isAvailableForBooking: coachProfile.isActive,
+      specialties: splitCoachListInput(form.specializations),
+    };
+    const availabilitySlots = form.scheduleDays.map((dayOfWeek) => ({
+      dayOfWeek,
+      endTime: form.scheduleEndTime,
+      startTime: form.scheduleStartTime,
+    }));
+
+    try {
+      await updateProfileMutation.mutateAsync({
+        coachId: coachProfile.id,
+        payload: profilePayload,
+        userId: user.id,
+      });
+      if (form.scheduleType !== "full_time") {
+        await updateAvailabilityMutation.mutateAsync({ slots: availabilitySlots });
+      }
+      setMessage({ tone: "success", text: "Coach profile updated." });
+    } catch (error) {
+      setMessage({
+        tone: "danger",
+        text: error instanceof Error ? error.message : "Unable to update coach profile.",
+      });
+    }
+  };
+
+  return (
+    <div
+      style={{
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 18,
+        padding: 20,
+      }}
+    >
+      <FitText style={{ fontSize: 19, fontWeight: 800, marginBottom: 8 }}>
+        Coach Profile
+      </FitText>
+      <FitText as="p" style={{ color: colors.textMuted, fontSize: 13, marginBottom: 14 }}>
+        Edit the same CoachProfile record shown to admin and staff.
+      </FitText>
+      {message ? (
+        <FitText
+          style={{
+            color: message.tone === "success" ? colors.success : colors.danger,
+            fontSize: 13,
+            fontWeight: 700,
+            marginBottom: 12,
+          }}
+        >
+          {message.text}
+        </FitText>
+      ) : null}
+      <div style={{ display: "grid", gap: 12 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Display Name</FitText>
+          <FitTextInput
+            value={form.displayName}
+            disabled={isPending || isSaving}
+            onChange={(event) => setField("displayName", event.target.value)}
+            style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+          />
+        </label>
+        <label style={{ display: "grid", gap: 6 }}>
+          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Skills</FitText>
+          <FitTextInput
+            value={form.skills}
+            placeholder="CPR, Olympic lifting, mobility coaching"
+            disabled={isPending || isSaving}
+            onChange={(event) => setField("skills", event.target.value)}
+            style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+          />
+        </label>
+        <label style={{ display: "grid", gap: 6 }}>
+          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Specializations</FitText>
+          <FitTextInput
+            value={form.specializations}
+            placeholder="Strength and Conditioning"
+            disabled={isPending || isSaving}
+            onChange={(event) => setField("specializations", event.target.value)}
+            style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+          />
+        </label>
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Rate</FitText>
+            <FitTextInput
+              type="number"
+              min="0"
+              value={form.hourlyRate}
+              disabled={isPending || isSaving}
+              onChange={(event) => setField("hourlyRate", event.target.value)}
+              style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+            />
+          </label>
+          <div style={{ display: "grid", gap: 6 }}>
+            <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Schedule Type</FitText>
+            <div
+              style={{
+                alignItems: "center",
+                backgroundColor: `${colors.brand}14`,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 12,
+                color: colors.brand,
+                display: "flex",
+                fontSize: 13,
+                fontWeight: 800,
+                justifyContent: "space-between",
+                padding: "12px 14px",
+              }}
+            >
+              <span>{form.scheduleType === "full_time" ? "Full-Time" : "Part-Time"}</span>
+              <span style={{ color: colors.textMuted, fontSize: 11 }}>Admin controlled</span>
+            </div>
+          </div>
+        </div>
+        <label style={{ display: "grid", gap: 6 }}>
+          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Bio</FitText>
+          <textarea
+            value={form.bio}
+            disabled={isPending || isSaving}
+            onChange={(event) => setField("bio", event.target.value)}
+            style={{
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              color: colors.textPrimary,
+              minHeight: 86,
+              padding: "12px 14px",
+              resize: "vertical",
+            }}
+          />
+        </label>
+        <div style={{ display: "grid", gap: 8 }}>
+          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>
+            Available Schedule Slots
+          </FitText>
+          {form.scheduleType === "full_time" ? (
+            <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 1.5 }}>
+              Full-time working days and hours are managed by admin. These windows generate hourly member booking slots automatically.
+            </FitText>
+          ) : null}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {COACH_WEEKDAY_OPTIONS.map((day) => (
+              <button
+                key={day.value}
+                type="button"
+                disabled={isPending || isSaving || form.scheduleType === "full_time"}
+                onClick={() => toggleScheduleDay(day.value)}
+                style={{
+                  backgroundColor: form.scheduleDays.includes(day.value) ? colors.brand : colors.surface,
+                  border: `1px solid ${form.scheduleDays.includes(day.value) ? colors.brand : colors.border}`,
+                  borderRadius: 999,
+                  color: form.scheduleDays.includes(day.value) ? colors.onBrand : colors.textPrimary,
+                  cursor: isPending || isSaving || form.scheduleType === "full_time" ? "not-allowed" : "pointer",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: "8px 12px",
+                }}
+              >
+                {day.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
+            <FitTextInput
+              type="time"
+              value={form.scheduleStartTime}
+              disabled={isPending || isSaving || form.scheduleType === "full_time"}
+              onChange={(event) => setField("scheduleStartTime", event.target.value)}
+              style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+            />
+            <FitTextInput
+              type="time"
+              value={form.scheduleEndTime}
+              disabled={isPending || isSaving || form.scheduleType === "full_time"}
+              onChange={(event) => setField("scheduleEndTime", event.target.value)}
+              style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
+            />
+          </div>
+        </div>
+        <FitButton
+          variant="primary"
+          label={isSaving ? "SAVING..." : "SAVE COACH PROFILE"}
+          loading={isSaving}
+          disabled={isPending || isSaving || !coachProfile}
+          onClick={handleSaveCoachProfile}
+          fullWidth
+        />
+      </div>
+    </div>
+  );
+}
+
 function OperationsProfileSettingsPage() {
   const { colors, onBrandTextColor } = useTheme();
+  const { user } = useAuth();
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const s = useMemo(() => profileStyles(colors), [colors]);
@@ -394,6 +712,7 @@ function OperationsProfileSettingsPage() {
     resetPersonalData
   } = useProfilePage();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const isCoach = user?.role === "COACH";
 
   const renderLabeledInput = ({
     label,
@@ -591,6 +910,8 @@ function OperationsProfileSettingsPage() {
                 </div>
               </div>
               <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+                {isCoach ? <CoachProfileManagementPanel /> : null}
+                {isCoach ? <CoachReceivedReviewsPanel /> : null}
                 <GymProfileSection canEdit={isAdmin} />
               </div>
             </div>
@@ -599,6 +920,7 @@ function OperationsProfileSettingsPage() {
       </div>
       <CalendarModal
         isOpen={showDobCalendar}
+        minDate={null}
         selectedDate={personalData.dateOfBirth}
         onSelect={(dateYmd) => setPersonalData((prev) => ({ ...prev, dateOfBirth: dateYmd }))}
         onClose={() => setShowDobCalendar(false)}

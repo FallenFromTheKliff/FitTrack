@@ -204,7 +204,10 @@ describe('AppointmentRepository', () => {
         },
       },
       orderBy: { scheduled_at: 'desc' },
-      include: undefined,
+      include: expect.objectContaining({
+        coach: expect.any(Object),
+        review: expect.any(Object),
+      }),
       select: undefined,
       skip: 5,
       take: 5,

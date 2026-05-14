@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck, CalendarDays, Dumbbell } from "lucide-react";
 import { formatBookingDate, formatGroupLabel, groupItemsByDate } from "@fittrack/utils";
 
 import FitButton from "@/components/fit/FitButton";
 import FitSearch from "@/components/fit/FitSearch";
+import { FitText, FitTextArea } from "@/components/fit/FitText";
 import { FilterChips } from "@/components/member-only/MemberOnlyPageControls";
 import {
   EmptyState,
@@ -30,14 +31,22 @@ import {
   type MemberBookingItem,
 } from "@/components/member-only/memberOnlyUtils";
 import { getStatusTone } from "@/components/member-only/MemberOnlyPageShared";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useMemberOnlyAccess, useMemberOnlyBookingsData } from "@/hooks/member-only/useMemberOnlyData";
 
 export default function BookingsPage() {
+  const { colors } = useTheme();
   const { user } = useMemberOnlyAccess("Bookings");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState<BookingSection>("bookings");
   const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("all");
   const [selectedBooking, setSelectedBooking] = useState<MemberBookingItem | null>(null);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewState, setReviewState] = useState<{
+    text: string;
+    tone: "danger" | "success";
+  } | null>(null);
   const data = useMemberOnlyBookingsData(user?.id);
   const reservations = useMemo(() => toMemberBookings(data.bookingsQuery.data ?? [], data.venuesQuery.data ?? []), [data.bookingsQuery.data, data.venuesQuery.data]);
   const appointments = useMemo(() => (data.appointmentsQuery.data ?? []).map(toMemberAppointment), [data.appointmentsQuery.data]);
@@ -56,8 +65,54 @@ export default function BookingsPage() {
     return matchesStatus && matchesSearch;
   });
   const grouped = groupItemsByDate(filtered);
-  const selected = selectedBooking ?? filtered[0] ?? null;
+  const selected = filtered.find((booking) => booking.id === selectedBooking?.id) ?? filtered[0] ?? null;
   const isLoading = data.bookingsQuery.isPending || data.appointmentsQuery.isPending;
+  const canReviewCoach =
+    activeSection === "appointments" &&
+    selected?.status === "completed" &&
+    typeof selected.coachId === "string" &&
+    selected.coachId.length > 0;
+
+  useEffect(() => {
+    setReviewComment("");
+    setReviewRating(5);
+    setReviewState(null);
+  }, [selected?.id]);
+
+  const handleCoachReviewSubmit = async () => {
+    if (!selected?.coachId) return;
+
+    const trimmedComment = reviewComment.trim();
+    if (!trimmedComment) {
+      setReviewState({
+        text: "Add a short note before submitting coach feedback.",
+        tone: "danger",
+      });
+      return;
+    }
+
+    try {
+      await data.submitCoachReviewMutation.mutateAsync({
+        coachId: selected.coachId,
+        payload: {
+          appointmentId: selected.id,
+          comment: trimmedComment,
+          rating: reviewRating,
+        },
+        userId: user?.id,
+      });
+      setReviewComment("");
+      setReviewState({
+        text: "Coach feedback submitted for this completed session.",
+        tone: "success",
+      });
+    } catch {
+      setReviewState({
+        text: "Coach feedback could not be submitted right now.",
+        tone: "danger",
+      });
+    }
+  };
 
   return (
     <MemberOnlyScreen>
@@ -135,6 +190,87 @@ export default function BookingsPage() {
                       }
                     }}
                   />
+                ) : null}
+                {canReviewCoach ? (
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 16,
+                      backgroundColor: colors.surface,
+                      display: "grid",
+                      gap: 12,
+                      marginTop: 16,
+                      padding: 16,
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <MemberText variant="brand">Coach Feedback</MemberText>
+                      <MemberText variant="subtitle">
+                        Share how this completed session went so staff and the coaching team can review it.
+                      </MemberText>
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <MemberText variant="subtitle">Session Rating</MemberText>
+                      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+                        {[1, 2, 3, 4, 5].map((value) => (
+                          <FitButton
+                            key={value}
+                            variant={reviewRating === value ? "primary" : "ghost"}
+                            label={`${value}`}
+                            onClick={() => setReviewRating(value)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <MemberText variant="subtitle">Comments</MemberText>
+                      <FitTextArea
+                        value={reviewComment}
+                        onChange={(event) => {
+                          setReviewComment(event.target.value);
+                          if (reviewState) {
+                            setReviewState(null);
+                          }
+                        }}
+                        placeholder="What stood out about the coaching, pace, or guidance?"
+                        rows={4}
+                        maxLength={1000}
+                        disabled={data.submitCoachReviewMutation.isPending}
+                      />
+                    </div>
+                    {reviewState ? (
+                      <FitText
+                        style={{
+                          color: reviewState.tone === "success" ? colors.success : colors.danger,
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {reviewState.text}
+                      </FitText>
+                    ) : null}
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <FitButton
+                        variant="ghost"
+                        label="Clear"
+                        flex={1}
+                        disabled={data.submitCoachReviewMutation.isPending && !reviewComment}
+                        onClick={() => {
+                          setReviewComment("");
+                          setReviewRating(5);
+                          setReviewState(null);
+                        }}
+                      />
+                      <FitButton
+                        variant="primary"
+                        label="Submit Feedback"
+                        loading={data.submitCoachReviewMutation.isPending}
+                        loadingLabel="Submitting Feedback"
+                        flex={1}
+                        onClick={() => void handleCoachReviewSubmit()}
+                      />
+                    </div>
+                  </div>
                 ) : null}
               </>
             ) : (

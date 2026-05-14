@@ -11,6 +11,7 @@ import {
   BOOKING_LIFECYCLE_TIMEZONE,
   BOOKING_NO_SHOW_JOB,
   BOOKING_PENDING_CLEANUP_JOB,
+  BOOKING_REMINDER_JOB,
 } from './booking.constants';
 import { BookingLifecycleService } from './booking-lifecycle.service';
 import { BOOKING_CANCELLED_EVENT } from './events/booking-cancelled.event';
@@ -87,9 +88,10 @@ describe('BookingLifecycleService', () => {
     );
   });
 
-  it('queues a no-show check and dispatches booking_confirmed when a booking is confirmed', async () => {
+  it('queues lifecycle checks and dispatches booking_confirmed when a booking is confirmed', async () => {
     repo.findBookingNotificationContextByIdOrThrow.mockResolvedValue({
       id: 'booking-1',
+      status: 'confirmed',
       starts_at: new Date('2099-03-24T10:00:00.000Z'),
       ends_at: new Date('2099-03-24T11:00:00.000Z'),
       amenity: { name: 'Main Court' },
@@ -101,6 +103,7 @@ describe('BookingLifecycleService', () => {
         notification_prefs: {
           booking_confirmed_email: true,
           booking_confirmed_sms: true,
+          venue_booking_reminder_email: true,
         },
         profile: {
           first_name: 'Jamie',
@@ -126,6 +129,14 @@ describe('BookingLifecycleService', () => {
         removeOnComplete: true,
       }),
     );
+    expect(lifecycleQueue.add).toHaveBeenCalledWith(
+      BOOKING_REMINDER_JOB,
+      { bookingId: 'booking-1' },
+      expect.objectContaining({
+        jobId: `${BOOKING_REMINDER_JOB}:booking-1`,
+        removeOnComplete: true,
+      }),
+    );
     const confirmedDispatchArgs = notificationsService.dispatch.mock
       .calls[0] as
       | [
@@ -148,6 +159,64 @@ describe('BookingLifecycleService', () => {
     expect(confirmedDispatchArgs?.[2].sms?.body).toContain(
       'Main Court booking is confirmed',
     );
+  });
+
+  it('dispatches booking_reminder for a future confirmed booking', async () => {
+    repo.findBookingNotificationContextByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
+      ends_at: new Date('2099-03-24T11:00:00.000Z'),
+      amenity: { name: 'Main Court' },
+      user: {
+        id: 'user-1',
+        auth_identities: [
+          { identifier: 'member@example.com', provider: 'email' },
+        ],
+        notification_prefs: {
+          venue_booking_reminder_email: true,
+        },
+        profile: {
+          first_name: 'Jamie',
+          last_name: 'Rivera',
+        },
+      },
+    });
+
+    await service.runBookingReminder('booking-1');
+
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
+      'user-1',
+      NotificationType.booking_reminder,
+      expect.objectContaining({
+        title: 'Booking reminder',
+      }),
+    );
+  });
+
+  it('skips booking_reminder for a cancelled booking', async () => {
+    repo.findBookingNotificationContextByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      status: 'cancelled',
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
+      ends_at: new Date('2099-03-24T11:00:00.000Z'),
+      amenity: { name: 'Main Court' },
+      user: {
+        id: 'user-1',
+        auth_identities: [],
+        notification_prefs: {
+          venue_booking_reminder_email: true,
+        },
+        profile: {
+          first_name: 'Jamie',
+          last_name: 'Rivera',
+        },
+      },
+    });
+
+    await service.runBookingReminder('booking-1');
+
+    expect(notificationsService.dispatch).not.toHaveBeenCalled();
   });
 
   it('dispatches booking_cancelled when a booking is cancelled', async () => {

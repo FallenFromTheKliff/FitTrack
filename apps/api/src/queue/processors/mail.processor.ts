@@ -69,6 +69,18 @@ export class MailProcessor {
       return;
     }
 
+    if (job.name === 'send-otp') {
+      const data = job.data as SendOtpJobData | undefined;
+
+      this.logger.error(
+        `Email OTP delivery failed for ${
+          data?.to ?? 'unknown recipient'
+        } after terminal queue retry: ${error.message}`,
+        error.stack,
+      );
+      return;
+    }
+
     const notification = (job.data as SendGenericMailJobData | undefined)
       ?.notification;
 

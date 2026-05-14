@@ -88,6 +88,22 @@ function resolveRedisConfig(): RedisRuntimeConfig {
   };
 }
 
+function requireEnvValue(...names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name];
+
+    if (value?.trim()) {
+      return value;
+    }
+  }
+
+  throw new Error(
+    `Missing mail configuration: set ${names.join(
+      ' or ',
+    )} before starting the API so email OTP delivery can run.`,
+  );
+}
+
 export const appConfig = registerAs('app', () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
@@ -108,8 +124,8 @@ export const redisConfig = registerAs('redis', () => resolveRedisConfig());
 export const mailConfig = registerAs('mail', () => ({
   host: process.env.MAIL_HOST || 'smtp.gmail.com',
   port: parseEnvInteger(process.env.MAIL_PORT, 587),
-  user: process.env.MAIL_USER || '',
-  appPassword: process.env.MAIL_APP_PASSWORD || '',
+  user: requireEnvValue('MAIL_USER'),
+  appPassword: requireEnvValue('MAIL_APP_PASSWORD', 'MAIL_PASSWORD'),
   fromName: process.env.MAIL_FROM_NAME || 'FitTrack',
   fromAddress: process.env.MAIL_FROM_ADDRESS || 'no-reply@fittrack.com',
 }));

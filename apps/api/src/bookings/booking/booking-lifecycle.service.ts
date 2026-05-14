@@ -1,7 +1,7 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { NotificationType } from '@prisma/client';
+import { BookingStatus, NotificationType } from '@prisma/client';
 import type { Queue } from 'bull';
 
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -14,6 +14,8 @@ import {
   BOOKING_NO_SHOW_JOB,
   BOOKING_PENDING_CLEANUP_JOB,
   BOOKING_PENDING_CLEANUP_WINDOW_MINUTES,
+  BOOKING_REMINDER_JOB,
+  BOOKING_REMINDER_OFFSET_HOURS,
 } from './booking.constants';
 import {
   BOOKING_CANCELLED_EVENT,
@@ -45,6 +47,7 @@ export class BookingLifecycleService implements OnModuleInit {
   @OnEvent(BOOKING_CONFIRMED_EVENT, { async: true })
   async handleBookingConfirmed(event: BookingConfirmedEvent): Promise<void> {
     await this.queueNoShowCheck(event.bookingId, new Date(event.startsAt));
+    await this.queueBookingReminder(event.bookingId, new Date(event.startsAt));
 
     const booking = await this.repo.findBookingNotificationContextByIdOrThrow(
       event.bookingId,
@@ -84,6 +87,38 @@ export class BookingLifecycleService implements OnModuleInit {
         email: {
           subject: `Booking cancelled for ${booking.amenity.name}`,
           html: this.buildBookingCancelledHtml(booking),
+        },
+      },
+    );
+  }
+
+  async runBookingReminder(bookingId: string): Promise<void> {
+    const booking =
+      await this.repo.findBookingNotificationContextByIdOrThrow(bookingId);
+
+    if (
+      booking.status !== BookingStatus.confirmed ||
+      booking.starts_at.getTime() <= Date.now()
+    ) {
+      return;
+    }
+
+    await this.notificationsService.dispatch(
+      booking.user.id,
+      NotificationType.booking_reminder,
+      {
+        title: 'Booking reminder',
+        body: this.buildBookingReminderBody(booking),
+        data: {
+          ...this.buildBookingNotificationData(booking),
+          reminder_offset_hours: BOOKING_REMINDER_OFFSET_HOURS,
+        },
+        email: {
+          subject: `Reminder: ${booking.amenity.name} booking tomorrow`,
+          html: this.buildBookingReminderHtml(booking),
+        },
+        sms: {
+          body: this.buildBookingReminderSms(booking),
         },
       },
     );
@@ -180,6 +215,28 @@ export class BookingLifecycleService implements OnModuleInit {
     );
   }
 
+  private async queueBookingReminder(
+    bookingId: string,
+    startsAt: Date,
+  ): Promise<void> {
+    const delay = Math.max(
+      0,
+      startsAt.getTime() -
+        BOOKING_REMINDER_OFFSET_HOURS * 60 * 60 * 1000 -
+        Date.now(),
+    );
+
+    await this.lifecycleQueue.add(
+      BOOKING_REMINDER_JOB,
+      { bookingId },
+      {
+        delay,
+        jobId: `${BOOKING_REMINDER_JOB}:${bookingId}`,
+        removeOnComplete: true,
+      },
+    );
+  }
+
   private async queueNoShowCheck(
     bookingId: string,
     startsAt: Date,
@@ -236,6 +293,21 @@ export class BookingLifecycleService implements OnModuleInit {
     `;
   }
 
+  private buildBookingReminderHtml(booking: BookingNotificationTarget): string {
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#1a1a1a">Booking reminder</h2>
+        <p style="color:#555">
+          Hi ${this.getDisplayName(booking)}, your booking for
+          <strong>${booking.amenity.name}</strong> starts in about 24 hours.
+        </p>
+        <p style="color:#555">${this.buildBookingWindowLabel(booking)}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin-top:24px"/>
+        <p style="color:#aaa;font-size:12px;text-align:center">FitTrack</p>
+      </div>
+    `;
+  }
+
   private buildBookingNoShowHtml(booking: BookingNotificationTarget): string {
     return `
       <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
@@ -255,10 +327,20 @@ export class BookingLifecycleService implements OnModuleInit {
     return `FitTrack: your ${booking.amenity.name} booking is confirmed. ${this.buildBookingWindowLabel(booking)}`;
   }
 
+  private buildBookingReminderSms(booking: BookingNotificationTarget): string {
+    return `FitTrack reminder: your ${booking.amenity.name} booking starts in about 24 hours. ${this.buildBookingWindowLabel(booking)}`;
+  }
+
   private buildBookingConfirmedBody(
     booking: BookingNotificationTarget,
   ): string {
     return `Your ${booking.amenity.name} booking is confirmed. ${this.buildBookingWindowLabel(booking)}`;
+  }
+
+  private buildBookingReminderBody(
+    booking: BookingNotificationTarget,
+  ): string {
+    return `Reminder: your ${booking.amenity.name} booking starts in about 24 hours. ${this.buildBookingWindowLabel(booking)}`;
   }
 
   private buildBookingCancelledBody(

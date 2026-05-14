@@ -1,6 +1,11 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ApiClient, UpdateCoachProfilePayload, UpsertCoachAvailabilityPayload } from "@fittrack/api-client";
-import { invalidateCoachQueries } from "./cache";
+import type {
+  ApiClient,
+  SubmitCoachReviewPayload,
+  UpdateCoachProfilePayload,
+  UpsertCoachAvailabilityPayload,
+} from "@fittrack/api-client";
+import { invalidateAppointmentQueries, invalidateCoachQueries } from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function activeCoachesQueryOptions<T>(client: Pick<ApiClient, "coaches">) {
@@ -79,5 +84,24 @@ export function deleteCoachAvailabilityMutationOptions(client: Pick<ApiClient, "
     onSuccess: async (_data, variables) => {
       await invalidateCoachQueries(queryClient, variables.userId, variables.coachId);
     }
+  });
+}
+
+export function submitCoachReviewMutationOptions(
+  client: Pick<ApiClient, "coaches">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      coachId,
+      payload,
+    }: {
+      coachId: string;
+      payload: SubmitCoachReviewPayload;
+      userId?: string;
+    }) => client.coaches.submitReview(coachId, payload),
+    onSuccess: async (_data, variables) => {
+      await invalidateAppointmentQueries(queryClient, variables.userId);
+    },
   });
 }

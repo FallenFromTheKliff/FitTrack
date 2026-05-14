@@ -93,6 +93,35 @@ export class CreateAppointmentDTO {
   member_notes?: string;
 }
 
+export class CreateCoachManagedAppointmentDTO {
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  @IsUUID('4', { message: 'member_id must be a valid UUID' })
+  member_id: string;
+
+  @ApiProperty({ example: '2026-04-01T08:00:00.000Z' })
+  @IsISO8601(
+    {},
+    { message: 'scheduled_at must be a valid ISO 8601 date string' },
+  )
+  scheduled_at: string;
+
+  @ApiProperty({ example: 60 })
+  @Type(() => Number)
+  @IsInt({ message: 'duration_minutes must be an integer' })
+  @Min(30, { message: 'duration_minutes must be at least 30' })
+  @Max(180, { message: 'duration_minutes must not exceed 180' })
+  duration_minutes: number;
+
+  @ApiPropertyOptional({
+    example: 'Coach scheduled a follow-up mobility and strength session.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'member_notes must be a string' })
+  @MaxLength(500, { message: 'member_notes must not exceed 500 characters' })
+  member_notes?: string;
+}
+
 export class RespondAppointmentDTO {
   @ApiProperty({ example: true })
   @IsBoolean({ message: 'accepted must be a boolean value' })
@@ -185,6 +214,48 @@ export class CompleteAppointmentDTO {
   @IsString({ message: 'session_notes must be a string' })
   @MaxLength(2000, { message: 'session_notes must not exceed 2000 characters' })
   session_notes?: string;
+
+  @ApiPropertyOptional({
+    example: 'Client held stable form on all working sets.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'coach_feedback must be a string' })
+  @MaxLength(2000, { message: 'coach_feedback must not exceed 2000 characters' })
+  coach_feedback?: string;
+
+  @ApiPropertyOptional({
+    example: 'Assessment: progressed from goblet squats to barbell back squats.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'assessment_report must be a string' })
+  @MaxLength(4000, {
+    message: 'assessment_report must not exceed 4000 characters',
+  })
+  assessment_report?: string;
+}
+
+export class SubmitCoachFeedbackDTO {
+  @ApiProperty({
+    example: 'Keep the same warm-up and add one mobility set next session.',
+  })
+  @TrimString()
+  @IsString({ message: 'coach_feedback must be a string' })
+  @IsNotEmpty({ message: 'coach_feedback is required' })
+  @MaxLength(2000, { message: 'coach_feedback must not exceed 2000 characters' })
+  coach_feedback: string;
+
+  @ApiPropertyOptional({
+    example: 'Session report: improved lower-body control and tempo.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'assessment_report must be a string' })
+  @MaxLength(4000, {
+    message: 'assessment_report must not exceed 4000 characters',
+  })
+  assessment_report?: string;
 }
 
 export class AppointmentCheckoutResponseDTO {
@@ -208,6 +279,37 @@ export class AppointmentCheckoutResponseDTO {
     nullable: true,
   })
   payment_id?: string | null;
+}
+
+export class AppointmentCoachResponseDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  id: string;
+
+  @ApiPropertyOptional({ example: '900.00', nullable: true })
+  hourly_rate: string | null;
+
+  @ApiPropertyOptional({ example: 'Morgan Cruz', nullable: true })
+  display_name: string | null;
+
+  @ApiPropertyOptional({ example: 'coach@fittrack.com', nullable: true })
+  contact_email: string | null;
+}
+
+export class AppointmentReviewResponseDTO {
+  @ApiProperty({ example: '66666666-6666-4666-8666-666666666666' })
+  id: string;
+
+  @ApiProperty({ example: 5 })
+  rating: number;
+
+  @ApiPropertyOptional({ example: 'Great coaching session.', nullable: true })
+  comment: string | null;
+
+  @ApiProperty({ example: '2026-04-01T10:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-04-01T10:00:00.000Z' })
+  updated_at: string;
 }
 
 export class AppointmentResponseDTO {
@@ -291,8 +393,23 @@ export class AppointmentResponseDTO {
   })
   session_notes: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Keep the same warm-up and add one mobility set next session.',
+    nullable: true,
+  })
+  coach_feedback: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Session report: improved lower-body control and tempo.',
+    nullable: true,
+  })
+  assessment_report: string | null;
+
   @ApiPropertyOptional({ example: '2026-04-01T09:00:00.000Z', nullable: true })
   completed_at: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-05T09:00:00.000Z', nullable: true })
+  coach_payout_paid_at?: string | null;
 
   @ApiPropertyOptional({ example: '2026-04-01T09:30:00.000Z', nullable: true })
   no_show_at: string | null;
@@ -305,6 +422,12 @@ export class AppointmentResponseDTO {
 
   @ApiPropertyOptional({ example: '2026-03-30T10:00:00.000Z', nullable: true })
   cancelled_at: string | null;
+
+  @ApiPropertyOptional({ type: AppointmentCoachResponseDTO, nullable: true })
+  coach?: AppointmentCoachResponseDTO | null;
+
+  @ApiPropertyOptional({ type: AppointmentReviewResponseDTO, nullable: true })
+  review?: AppointmentReviewResponseDTO | null;
 
   @ApiProperty({ example: '2026-03-25T10:00:00.000Z' })
   created_at: string;
@@ -330,6 +453,9 @@ export class CoachScheduleUserProfileResponseDTO {
 export class CoachScheduleUserResponseDTO {
   @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
   id: string;
+
+  @ApiPropertyOptional({ example: 'member@fittrack.test', nullable: true })
+  email: string | null;
 
   @ApiProperty({ type: CoachScheduleUserProfileResponseDTO })
   profile: CoachScheduleUserProfileResponseDTO;
@@ -366,6 +492,12 @@ export class CoachScheduleAppointmentResponseDTO {
   @ApiPropertyOptional({ example: '630.00', nullable: true })
   balance_amount?: string | null;
 
+  @ApiPropertyOptional({ example: '180.00', nullable: true })
+  gym_revenue?: string | null;
+
+  @ApiPropertyOptional({ example: '720.00', nullable: true })
+  coach_earnings?: string | null;
+
   @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
   downpayment_paid_at?: string | null;
 
@@ -377,6 +509,30 @@ export class CoachScheduleAppointmentResponseDTO {
     nullable: true,
   })
   member_notes: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Completed a full lower-body strength session.',
+    nullable: true,
+  })
+  session_notes: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Keep the same warm-up and add one mobility set next session.',
+    nullable: true,
+  })
+  coach_feedback: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Session report: improved lower-body control and tempo.',
+    nullable: true,
+  })
+  assessment_report: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T09:00:00.000Z', nullable: true })
+  completed_at: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-05T09:00:00.000Z', nullable: true })
+  coach_payout_paid_at?: string | null;
 
   @ApiPropertyOptional({
     example: '55555555-5555-4555-8555-555555555555',
@@ -395,6 +551,9 @@ export class CoachScheduleAppointmentResponseDTO {
 
   @ApiProperty({ type: CoachScheduleUserResponseDTO })
   user: CoachScheduleUserResponseDTO;
+
+  @ApiPropertyOptional({ type: AppointmentReviewResponseDTO, nullable: true })
+  review?: AppointmentReviewResponseDTO | null;
 
   @ApiProperty({ example: '2026-03-25T10:00:00.000Z' })
   created_at: string;
@@ -476,6 +635,12 @@ export class StaffAppointmentResponseDTO {
   @ApiPropertyOptional({ example: '630.00', nullable: true })
   balance_amount?: string | null;
 
+  @ApiPropertyOptional({ example: '180.00', nullable: true })
+  gym_revenue?: string | null;
+
+  @ApiPropertyOptional({ example: '720.00', nullable: true })
+  coach_earnings?: string | null;
+
   @ApiPropertyOptional({ example: '2026-05-01T10:00:00.000Z', nullable: true })
   downpayment_paid_at?: string | null;
 
@@ -497,6 +662,30 @@ export class StaffAppointmentResponseDTO {
   member_notes: string | null;
 
   @ApiPropertyOptional({
+    example: 'Completed a full lower-body strength session.',
+    nullable: true,
+  })
+  session_notes: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Keep the same warm-up and add one mobility set next session.',
+    nullable: true,
+  })
+  coach_feedback: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Session report: improved lower-body control and tempo.',
+    nullable: true,
+  })
+  assessment_report: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T09:00:00.000Z', nullable: true })
+  completed_at: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-05T09:00:00.000Z', nullable: true })
+  coach_payout_paid_at?: string | null;
+
+  @ApiPropertyOptional({
     example: '55555555-5555-4555-8555-555555555555',
     nullable: true,
   })
@@ -516,6 +705,9 @@ export class StaffAppointmentResponseDTO {
 
   @ApiProperty({ type: StaffAppointmentCoachResponseDTO })
   coach: StaffAppointmentCoachResponseDTO;
+
+  @ApiPropertyOptional({ type: AppointmentReviewResponseDTO, nullable: true })
+  review?: AppointmentReviewResponseDTO | null;
 
   @ApiProperty({ example: '2026-03-25T10:00:00.000Z' })
   created_at: string;

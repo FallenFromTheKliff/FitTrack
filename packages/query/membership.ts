@@ -9,6 +9,7 @@ import type {
   MembershipPlanListParams,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipCatalogSettingsInput,
   UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
@@ -26,6 +27,24 @@ export function membershipPlansQueryOptions(
   return queryOptions({
     queryKey: queryKeys.membershipPlans(params),
     queryFn: () => client.membership.listPlans(params)
+  });
+}
+
+export function membershipOperationsDashboardQueryOptions(
+  client: Pick<ApiClient, "membership">
+) {
+  return queryOptions({
+    queryKey: queryKeys.membershipOperationsDashboard(),
+    queryFn: () => client.membership.getOperationsDashboard()
+  });
+}
+
+export function membershipCatalogSettingsQueryOptions(
+  client: Pick<ApiClient, "membership">
+) {
+  return queryOptions({
+    queryKey: ["membership", "catalog-settings"],
+    queryFn: () => client.membership.getCatalogSettings()
   });
 }
 
@@ -56,6 +75,20 @@ export function updateMembershipPlanMutationOptions(
     }) => client.membership.updatePlan(planId, payload),
     onSuccess: async () => {
       await invalidateMembershipQueries(queryClient);
+    }
+  });
+}
+
+export function updateMembershipCatalogSettingsMutationOptions(
+  client: Pick<ApiClient, "membership">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: (payload: UpdateMembershipCatalogSettingsInput) =>
+      client.membership.updateCatalogSettings(payload),
+    onSuccess: async () => {
+      await invalidateMembershipQueries(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ["membership", "catalog-settings"] });
     }
   });
 }

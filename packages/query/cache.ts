@@ -112,6 +112,9 @@ export async function invalidateMembershipQueries(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.membershipPlans() }),
     queryClient.invalidateQueries({
+      queryKey: queryKeys.membershipOperationsDashboard(),
+    }),
+    queryClient.invalidateQueries({
       queryKey: queryKeys.membershipCurrentSubscription(userId),
     }),
     queryClient.invalidateQueries({

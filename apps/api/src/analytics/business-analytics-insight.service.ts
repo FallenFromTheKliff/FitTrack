@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 import {
@@ -23,6 +23,8 @@ import {
 
 @Injectable()
 export class BusinessAnalyticsInsightService {
+  private readonly logger = new Logger(BusinessAnalyticsInsightService.name);
+
   constructor(
     private readonly analyticsService: AnalyticsService,
     private readonly aiPythonClientService: AiPythonClientService,
@@ -198,9 +200,20 @@ export class BusinessAnalyticsInsightService {
   }): Promise<BusinessAnalyticsInsightResponse> {
     try {
       return await this.aiPythonClientService.generateBusinessInsight(input);
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `AI business insight generation failed; using grounded fallback. ${this.formatError(error)}`,
+      );
       return this.buildGroundedFallbackInsight(input.grounding);
     }
+  }
+
+  private formatError(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message;
+    }
+
+    return String(error);
   }
 
   private buildGroundedFallbackInsight(

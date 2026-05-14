@@ -5,6 +5,7 @@ import { MembershipModule } from '../membership/membership.module';
 import { UserController, AttendanceController } from './user.controller';
 import { UserService, AttendanceService } from './user.service';
 import { UserRepository } from './user.repository';
+import { ActivityLevelService } from './activity-level.service';
 
 @Module({
   imports: [
@@ -13,7 +14,12 @@ import { UserRepository } from './user.repository';
     FilesModule,
   ],
   controllers: [UserController, AttendanceController],
-  providers: [UserService, AttendanceService, UserRepository],
-  exports: [UserService],
+  providers: [
+    UserService,
+    AttendanceService,
+    UserRepository,
+    ActivityLevelService,
+  ],
+  exports: [UserService, ActivityLevelService],
 })
 export class UserModule {}

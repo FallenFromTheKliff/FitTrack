@@ -44,15 +44,18 @@ import {
   CancelAppointmentDTO,
   CoachScheduleAppointmentResponseDTO,
   CompleteAppointmentDTO,
+  CreateCoachManagedAppointmentDTO,
   CreateAppointmentDTO,
   InitiateAppointmentPaymentDTO,
   RespondAppointmentDTO,
   SetAvailabilityDTO,
   StaffAppointmentFilterDTO,
   StaffAppointmentResponseDTO,
+  SubmitCoachFeedbackDTO,
 } from './dto/appointment.dto';
 import {
   AppointmentLifecycleRecord,
+  MemberAppointmentRecord,
   AppointmentRepository,
   CoachScheduleRecord,
   StaffAppointmentRecord,
@@ -111,6 +114,12 @@ function findPrimaryIdentifier(
     identities?.[0]?.identifier ??
     null
   );
+}
+
+function toDecimalString(
+  value: { toString(): string } | number | string | null | undefined,
+) {
+  return value == null ? '0' : value.toString();
 }
 
 function normalizeStandaloneDisplayName(value?: string | null) {
@@ -220,6 +229,26 @@ export class AppointmentService {
     });
 
     return this.toAppointmentResponse(appointment);
+  }
+
+  async createCoachManagedAppointment(
+    coachUserId: string,
+    dto: CreateCoachManagedAppointmentDTO,
+  ): Promise<AppointmentResponseDTO> {
+    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
+
+    return this.createStaffManualAppointment(
+      dto.member_id,
+      {
+        coach_id: coach.id,
+        duration_minutes: dto.duration_minutes,
+        member_id: dto.member_id,
+        member_notes: dto.member_notes,
+        payment_stage: CreateStaffInitialPaymentStage.full,
+        scheduled_at: dto.scheduled_at,
+      },
+      coachUserId,
+    );
   }
 
   async createStaffManualAppointment(
@@ -626,6 +655,61 @@ export class AppointmentService {
     return this.applyAppointmentCompletion(appointment, dto);
   }
 
+  async submitCoachFeedback(
+    coachUserId: string,
+    appointmentId: string,
+    dto: SubmitCoachFeedbackDTO,
+  ): Promise<AppointmentResponseDTO> {
+    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
+    const appointment =
+      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
+
+    this.assertCoachOwnership(appointment, coach.id);
+
+    const updated = await this.repo.updateAppointment(appointment.id, {
+      coach_feedback: dto.coach_feedback,
+      assessment_report: dto.assessment_report ?? null,
+    });
+
+    return this.toAppointmentResponse(updated);
+  }
+
+  async markCoachPayoutPaid(
+    _actorId: string,
+    appointmentId: string,
+  ): Promise<AppointmentResponseDTO> {
+    const appointment =
+      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
+
+    if (appointment.status !== AppointmentStatus.completed) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Coach Payout Not Ready',
+          status: 422,
+          detail:
+            'Only completed coaching appointments can be marked as paid out.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (appointment.coach_payout_paid_at) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Coach Payout Already Marked Paid',
+        status: 409,
+        detail: 'This coach payout has already been marked paid.',
+      });
+    }
+
+    const updated = await this.repo.updateAppointment(appointment.id, {
+      coach_payout_paid_at: new Date(),
+    });
+
+    return this.toAppointmentResponse(updated);
+  }
+
   private async applyAppointmentResponse(
     actorId: string,
     appointment: AppointmentLifecycleRecord,
@@ -690,7 +774,10 @@ export class AppointmentService {
     const completedAt = new Date();
     const updated = await this.repo.updateAppointment(appointment.id, {
       status: AppointmentStatus.completed,
-      session_notes: dto.session_notes ?? null,
+      session_notes: dto.session_notes ?? appointment.session_notes ?? null,
+      coach_feedback: dto.coach_feedback ?? appointment.coach_feedback ?? null,
+      assessment_report:
+        dto.assessment_report ?? appointment.assessment_report ?? null,
       completed_at: completedAt,
       ...(appointment.recurring_plan_id
         ? { recurring_state: RecurringCoachingSessionState.completed }
@@ -753,10 +840,7 @@ export class AppointmentService {
       }
 
       const updated = await this.repo.updateAppointment(appointment.id, {
-        status:
-          appointment.status === AppointmentStatus.pending_payment
-            ? AppointmentStatus.confirmed
-            : appointment.status,
+        status: AppointmentStatus.confirmed,
         downpayment_paid_at: appointment.downpayment_paid_at ?? paidAt,
         balance_paid_at: appointment.balance_paid_at ?? paidAt,
       });
@@ -784,10 +868,7 @@ export class AppointmentService {
     }
 
     const updated = await this.repo.updateAppointment(appointment.id, {
-      status:
-        appointment.status === AppointmentStatus.pending_payment
-          ? AppointmentStatus.confirmed
-          : appointment.status,
+      status: AppointmentStatus.confirmed,
       downpayment_paid_at: paidAt,
     });
     if (updated.status === AppointmentStatus.confirmed) {
@@ -906,7 +987,7 @@ export class AppointmentService {
   }
 
   private toAppointmentResponse(
-    appointment: CoachAppointment,
+    appointment: CoachAppointment | MemberAppointmentRecord,
     activePaymentStage: PaymentStage | null = null,
   ): AppointmentResponseDTO {
     return {
@@ -920,8 +1001,8 @@ export class AppointmentService {
       total_amount: appointment.total_amount.toString(),
       downpayment_amount: appointment.downpayment_amount.toString(),
       balance_amount: appointment.balance_amount.toString(),
-      gym_revenue: appointment.gym_revenue.toString(),
-      coach_earnings: appointment.coach_earnings.toString(),
+      gym_revenue: toDecimalString(appointment.gym_revenue),
+      coach_earnings: toDecimalString(appointment.coach_earnings),
       member_notes: appointment.member_notes ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
@@ -932,10 +1013,35 @@ export class AppointmentService {
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
       active_payment_stage: activePaymentStage,
       session_notes: appointment.session_notes ?? null,
+      coach_feedback: appointment.coach_feedback ?? null,
+      assessment_report: appointment.assessment_report ?? null,
       completed_at: appointment.completed_at?.toISOString() ?? null,
+      coach_payout_paid_at:
+        appointment.coach_payout_paid_at?.toISOString() ?? null,
       no_show_at: appointment.no_show_at?.toISOString() ?? null,
       cancellation_reason: appointment.cancellation_reason ?? null,
       cancelled_at: appointment.cancelled_at?.toISOString() ?? null,
+      coach:
+        'coach' in appointment && appointment.coach
+          ? {
+              id: appointment.coach.id,
+              hourly_rate: appointment.coach.hourly_rate?.toString() ?? null,
+              display_name: normalizeStandaloneDisplayName(
+                appointment.coach.display_name,
+              ),
+              contact_email: appointment.coach.contact_email ?? null,
+            }
+          : null,
+      review:
+        'review' in appointment && appointment.review
+          ? {
+              id: appointment.review.id,
+              rating: appointment.review.rating,
+              comment: appointment.review.comment ?? null,
+              created_at: appointment.review.created_at.toISOString(),
+              updated_at: appointment.review.updated_at.toISOString(),
+            }
+          : null,
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };
@@ -954,22 +1060,41 @@ export class AppointmentService {
       total_amount: appointment.total_amount.toString(),
       downpayment_amount: appointment.downpayment_amount.toString(),
       balance_amount: appointment.balance_amount.toString(),
+      gym_revenue: toDecimalString(appointment.gym_revenue),
+      coach_earnings: toDecimalString(appointment.coach_earnings),
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
       member_notes: appointment.member_notes ?? null,
+      session_notes: appointment.session_notes ?? null,
+      coach_feedback: appointment.coach_feedback ?? null,
+      assessment_report: appointment.assessment_report ?? null,
+      completed_at: appointment.completed_at?.toISOString() ?? null,
+      coach_payout_paid_at:
+        appointment.coach_payout_paid_at?.toISOString() ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
       original_scheduled_at:
         appointment.original_scheduled_at?.toISOString() ?? null,
       user: {
         id: appointment.user.id,
+        email: findPrimaryIdentifier(appointment.user.auth_identities),
         profile: {
           first_name: appointment.user.profile?.first_name ?? null,
           last_name: appointment.user.profile?.last_name ?? null,
           avatar_url: appointment.user.profile?.avatar_url ?? null,
         },
       },
+      review:
+        appointment.review
+          ? {
+              id: appointment.review.id,
+              rating: appointment.review.rating,
+              comment: appointment.review.comment ?? null,
+              created_at: appointment.review.created_at.toISOString(),
+              updated_at: appointment.review.updated_at.toISOString(),
+            }
+          : null,
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };
@@ -989,11 +1114,19 @@ export class AppointmentService {
       total_amount: appointment.total_amount.toString(),
       downpayment_amount: appointment.downpayment_amount.toString(),
       balance_amount: appointment.balance_amount.toString(),
+      gym_revenue: toDecimalString(appointment.gym_revenue),
+      coach_earnings: toDecimalString(appointment.coach_earnings),
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
       active_payment_stage: activePaymentStage,
       member_notes: appointment.member_notes ?? null,
+      session_notes: appointment.session_notes ?? null,
+      coach_feedback: appointment.coach_feedback ?? null,
+      assessment_report: appointment.assessment_report ?? null,
+      completed_at: appointment.completed_at?.toISOString() ?? null,
+      coach_payout_paid_at:
+        appointment.coach_payout_paid_at?.toISOString() ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
       original_scheduled_at:
@@ -1020,6 +1153,16 @@ export class AppointmentService {
           avatar_url: null,
         },
       },
+      review:
+        appointment.review
+          ? {
+              id: appointment.review.id,
+              rating: appointment.review.rating,
+              comment: appointment.review.comment ?? null,
+              created_at: appointment.review.created_at.toISOString(),
+              updated_at: appointment.review.updated_at.toISOString(),
+            }
+          : null,
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };

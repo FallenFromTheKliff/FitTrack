@@ -1,7 +1,11 @@
 "use client";
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { gymLayoutEquipmentQueryOptions } from "@fittrack/query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  gymLayoutEquipmentQueryOptions,
+  submitVenueFeedbackMutationOptions,
+  venueFeedbackQueryOptions,
+} from "@fittrack/query";
 import { listVenueEquipment } from "@fittrack/types";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 
@@ -9,7 +13,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { FACILITY_FLOOR_MAP, type FloorVenueRecord } from "@/data/facilities/floorPlans";
 import { getVenueIcon } from "@/data/facilities/mapTypes";
-import { FitText } from "@/components/fit/FitText";
+import FitButton from "@/components/fit/FitButton";
+import { FitText, FitTextArea } from "@/components/fit/FitText";
 import FitModal from "@/components/modals/FitModal";
 
 type Props = {
@@ -72,10 +77,32 @@ export function VenueDetailsContent({
 }: VenueDetailsContentProps) {
   const { colors } = useTheme();
   const Icon = useMemo(() => getVenueIcon(venue?.iconKey), [venue?.iconKey]);
+  const feedbackQuery = useQuery({
+    ...venueFeedbackQueryOptions(webApiClient, venue?.id),
+    enabled: !!venue,
+  });
+  const feedbackMutation = useMutation({
+    ...submitVenueFeedbackMutationOptions(webApiClient),
+    onSuccess: async () => {
+      await feedbackQuery.refetch();
+    },
+  });
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackState, setFeedbackState] = useState<{
+    text: string;
+    tone: "danger" | "success";
+  } | null>(null);
   const { data: liveEquipment = [] } = useQuery({
     ...gymLayoutEquipmentQueryOptions(webApiClient),
     enabled: !!venue && equipmentQueryEnabled,
   });
+
+  useEffect(() => {
+    setFeedbackRating(5);
+    setFeedbackComment("");
+    setFeedbackState(null);
+  }, [variant, venue?.id]);
 
   if (!venue) return null;
 
@@ -86,10 +113,16 @@ export function VenueDetailsContent({
       assetUrl: venue.imageUrl ?? null,
     }) ?? buildHeroImage(venue.name, colors.brand, colors.surfaceRaised);
   const assignedEquipment = listVenueEquipment(liveEquipment, venue);
+  const venueFeedback = feedbackQuery.data ?? [];
+  const averageRating =
+    venueFeedback.length > 0
+      ? venueFeedback.reduce((sum, entry) => sum + entry.rating, 0) /
+        venueFeedback.length
+      : null;
   const infoItems = [
     { label: "Capacity", value: String(venue.capacity ?? "N/A") },
     { label: "Minimum Hours", value: `${venue.minimumHours ?? 1}` },
-    { label: "Rate", value: venue.hourlyRate ? `$${venue.hourlyRate}/hr` : "Facility only" },
+    { label: "Rate", value: venue.hourlyRate ? `PHP ${venue.hourlyRate}/hr` : "Facility only" },
     { label: "Grid Zone", value: `C${venue.gridColumn ?? 1} / R${venue.gridRow ?? 1}` },
   ];
 
@@ -254,6 +287,29 @@ export function VenueDetailsContent({
     );
   }
 
+  const handleFeedbackSubmit = async () => {
+    const trimmedComment = feedbackComment.trim();
+
+    try {
+      await feedbackMutation.mutateAsync({
+        id: venue.id,
+        comment: trimmedComment || undefined,
+        rating: feedbackRating,
+      });
+      setFeedbackComment("");
+      setFeedbackRating(5);
+      setFeedbackState({
+        text: "Venue feedback submitted.",
+        tone: "success",
+      });
+    } catch {
+      setFeedbackState({
+        text: "Venue feedback could not be sent right now.",
+        tone: "danger",
+      });
+    }
+  };
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div
@@ -376,6 +432,108 @@ export function VenueDetailsContent({
         <FitText style={{ fontSize: 14, lineHeight: 1.55 }}>
           {venue.description ?? "No description provided for this venue yet."}
         </FitText>
+      </div>
+      <div
+        style={{
+          borderRadius: 12,
+          border: `1px solid ${colors.border}`,
+          backgroundColor: colors.surfaceRaised,
+          padding: "14px 16px",
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <FitText style={{ fontSize: 12, color: colors.textMuted, fontWeight: 700 }}>
+          Venue Feedback
+        </FitText>
+        <FitText style={{ fontSize: 14, lineHeight: 1.55 }}>
+          Tell the team what worked well or what needs attention in this facility or venue.
+        </FitText>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 10,
+            display: "grid",
+            gap: 6,
+            padding: "10px 12px",
+          }}
+        >
+          <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+            Average rating: {averageRating ? `${averageRating.toFixed(1)}/5` : "No ratings yet"}
+          </FitText>
+          {venueFeedback.slice(0, 3).map((entry) => (
+            <FitText key={entry.id} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 1.45 }}>
+              {entry.rating}/5 - {entry.comment ?? "No written comment."}
+            </FitText>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[1, 2, 3, 4, 5].map((rating) => (
+            <button
+              key={rating}
+              type="button"
+              onClick={() => setFeedbackRating(rating)}
+              disabled={feedbackMutation.isPending}
+              aria-label={`Rate venue ${rating} star${rating === 1 ? "" : "s"}`}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                border: `1px solid ${rating <= feedbackRating ? colors.warning : colors.border}`,
+                background: colors.surface,
+                color: rating <= feedbackRating ? colors.warning : colors.textMuted,
+                cursor: feedbackMutation.isPending ? "not-allowed" : "pointer",
+                fontWeight: 900,
+              }}
+            >
+              *
+            </button>
+          ))}
+        </div>
+        <FitTextArea
+          value={feedbackComment}
+          onChange={(event) => {
+            setFeedbackComment(event.target.value);
+            if (feedbackState) {
+              setFeedbackState(null);
+            }
+          }}
+          placeholder="Share a quick note about the space, booking experience, or equipment condition."
+          rows={4}
+          maxLength={1500}
+          disabled={feedbackMutation.isPending}
+        />
+        {feedbackState ? (
+          <FitText
+            style={{
+              color: feedbackState.tone === "success" ? colors.success : colors.danger,
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {feedbackState.text}
+          </FitText>
+        ) : null}
+        <div style={{ display: "flex", gap: 10 }}>
+          <FitButton
+            variant="ghost"
+            label="Clear"
+            flex={1}
+            disabled={feedbackMutation.isPending && !feedbackComment}
+            onClick={() => {
+              setFeedbackComment("");
+              setFeedbackState(null);
+            }}
+          />
+          <FitButton
+            variant="primary"
+            label="Send Feedback"
+            loading={feedbackMutation.isPending}
+            loadingLabel="Sending Feedback"
+            flex={1}
+            onClick={() => void handleFeedbackSubmit()}
+          />
+        </div>
       </div>
     </div>
   );

@@ -87,14 +87,13 @@ function buildLinkedCoachIdentityValues(
 
 function normalizeStandaloneCoachDisplayName(
   value: string | null,
-  linkedIdentityValues: Set<string>,
+  _linkedIdentityValues: Set<string>,
   index: number,
 ) {
   const displayName = normalizeOptionalString(value);
   if (
     displayName &&
-    !EMAIL_LIKE_PATTERN.test(displayName) &&
-    !linkedIdentityValues.has(displayName.toLowerCase())
+    !EMAIL_LIKE_PATTERN.test(displayName)
   ) {
     return displayName;
   }
@@ -288,6 +287,7 @@ export class StaffService {
         certifications: splitDelimitedList(coach.certification),
         yearsExperience: null,
         hourlyRate: Number(coach.hourly_rate),
+        scheduleType: coach.schedule_type,
         isActive: coach.is_available_for_booking,
         availability: coach.availability_slots.map((slot) => ({
           id: slot.id,

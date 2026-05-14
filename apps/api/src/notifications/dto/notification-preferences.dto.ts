@@ -45,10 +45,16 @@ export class NotificationPreferencesResponseDTO {
   booking_cancelled_email: boolean;
 
   @ApiProperty()
+  venue_booking_reminder_email: boolean;
+
+  @ApiProperty()
   booking_no_show_email: boolean;
 
   @ApiProperty()
   appointment_confirmed_email: boolean;
+
+  @ApiProperty()
+  coach_appointment_reminder_email: boolean;
 
   @ApiProperty()
   appointment_completed_email: boolean;
@@ -100,6 +106,14 @@ export class UpdateNotificationPreferencesDTO {
   @ApiPropertyOptional()
   @IsOptional()
   @Transform((params) => transformBooleanInput(params))
+  @IsBoolean({
+    message: 'venue_booking_reminder_email must be a boolean value',
+  })
+  venue_booking_reminder_email?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform((params) => transformBooleanInput(params))
   @IsBoolean({ message: 'booking_no_show_email must be a boolean value' })
   booking_no_show_email?: boolean;
 
@@ -108,6 +122,14 @@ export class UpdateNotificationPreferencesDTO {
   @Transform((params) => transformBooleanInput(params))
   @IsBoolean({ message: 'appointment_confirmed_email must be a boolean value' })
   appointment_confirmed_email?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform((params) => transformBooleanInput(params))
+  @IsBoolean({
+    message: 'coach_appointment_reminder_email must be a boolean value',
+  })
+  coach_appointment_reminder_email?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

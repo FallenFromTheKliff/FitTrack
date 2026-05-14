@@ -25,6 +25,11 @@ type CoachAvailabilitySectionProps = {
 export default function CoachAvailabilitySection({ colors, controller, styles }: CoachAvailabilitySectionProps) {
   return (
     <FitSection heading="AVAILABILITY">
+      {controller.availabilityLocked ? (
+        <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 10 }}>
+          Full-time working days and hours are managed by admin. These windows generate hourly member booking slots automatically.
+        </FitText>
+      ) : null}
       {controller.availabilitySlots.map((slot, index) => (
         <FitCard
           key={slot.id}
@@ -34,15 +39,17 @@ export default function CoachAvailabilitySection({ colors, controller, styles }:
           trailingLabel="Active"
           trailingLabelColor={colors.success}
           hasBorder={index < controller.availabilitySlots.length - 1}
-          onPress={() => controller.handleStartAvailabilityEditor(slot)}
+          onPress={controller.availabilityLocked ? undefined : () => controller.handleStartAvailabilityEditor(slot)}
         />
       ))}
-      <FitButton
-        label="Add Availability Slot"
-        variant="primary"
-        onPress={() => controller.handleStartAvailabilityEditor()}
-        style={{ marginTop: 12 }}
-      />
+      {!controller.availabilityLocked ? (
+        <FitButton
+          label="Add Availability Slot"
+          variant="primary"
+          onPress={() => controller.handleStartAvailabilityEditor()}
+          style={{ marginTop: 12 }}
+        />
+      ) : null}
       {controller.isAvailabilityEditorOpen ? (
         <View
           style={{

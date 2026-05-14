@@ -18,18 +18,24 @@ import type {
   RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanPreviewResult,
   StaffAppointmentRecord,
+  SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
 import type { CoachProfileRecord, MemberRecord } from "@fittrack/types";
 import {
   bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelStaffAppointmentMutationOptions,
+  cancelAppointmentMutationOptions,
   cancelRecurringCoachingPlanMutationOptions,
   coachScheduleQueryOptions,
   coachSelfProfileQueryOptions,
+  completeCoachAppointmentMutationOptions,
   completeStaffAppointmentMutationOptions,
+  confirmCoachAppointmentMutationOptions,
   createStaffAppointmentMutationOptions,
   createStaffBookingMutationOptions,
   createStaffCoachMutationOptions,
+  declineCoachAppointmentMutationOptions,
+  markCoachPayoutPaidMutationOptions,
   payAppointmentDownpaymentMutationOptions,
   createRecurringCoachingPlanMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
@@ -43,6 +49,7 @@ import {
   staffAppointmentsQueryOptions,
   staffCoachesQueryOptions,
   staffUsersQueryOptions,
+  updateCoachProfileMutationOptions,
   updateRecurringCoachingSessionMutationOptions,
   updateStaffCoachProfileMutationOptions,
   venuesQueryOptions,
@@ -109,6 +116,7 @@ function useGymOperationsPageState() {
   const isAdmin = user?.role === "ADMIN";
   const isCoach = user?.role === "COACH";
   const canManageCoaching = isAdmin || user?.role === "STAFF";
+  const canViewVenueBookings = canManageCoaching;
   const {
     cancelBooking,
     completeBooking,
@@ -163,7 +171,10 @@ function useGymOperationsPageState() {
     );
   const [activeScheduleSurfaceTab, setActiveScheduleSurfaceTab] =
     useState<ScheduleSurfaceTab>(() =>
-      normalizeScheduleSurfaceTab(searchParams.get("schedule_view")),
+      normalizeScheduleSurfaceTab(
+        searchParams.get("schedule_view"),
+        canViewVenueBookings,
+      ),
     );
   const [scheduleDayPart, setScheduleDayPart] =
     useState<ScheduleDayPart>("morning");
@@ -345,14 +356,38 @@ function useGymOperationsPageState() {
   const respondAppointmentMutation = useMutation(
     respondToStaffAppointmentMutationOptions(webApiClient, queryClient),
   );
+  const confirmCoachAppointmentMutation = useMutation(
+    confirmCoachAppointmentMutationOptions(webApiClient, queryClient),
+  );
+  const declineCoachAppointmentMutation = useMutation(
+    declineCoachAppointmentMutationOptions(webApiClient, queryClient),
+  );
   const completeAppointmentMutation = useMutation(
     completeStaffAppointmentMutationOptions(webApiClient, queryClient),
   );
+  const completeCoachAppointmentMutation = useMutation(
+    completeCoachAppointmentMutationOptions(webApiClient, queryClient),
+  );
+  const saveCoachFeedbackMutation = useMutation({
+    mutationFn: ({
+      appointmentId,
+      payload,
+    }: {
+      appointmentId: string;
+      payload: SubmitCoachAppointmentFeedbackPayload;
+    }) => webApiClient.coaches.submitAppointmentFeedback(appointmentId, payload),
+  });
   const cancelAppointmentMutation = useMutation(
     cancelStaffAppointmentMutationOptions(webApiClient, queryClient),
   );
+  const cancelCoachAppointmentMutation = useMutation(
+    cancelAppointmentMutationOptions(webApiClient, queryClient),
+  );
   const updateCoachProfileMutation = useMutation(
     updateStaffCoachProfileMutationOptions(webApiClient, queryClient),
+  );
+  const updateCoachSelfProfileMutation = useMutation(
+    updateCoachProfileMutationOptions(webApiClient, queryClient),
   );
   const createVenueBookingMutation = useMutation(
     createStaffBookingMutationOptions(webApiClient, queryClient),
@@ -384,6 +419,9 @@ function useGymOperationsPageState() {
   const processAppointmentBalanceMutation = useMutation(
     processAppointmentBalanceMutationOptions(webApiClient, queryClient),
   );
+  const markCoachPayoutPaidMutation = useMutation(
+    markCoachPayoutPaidMutationOptions(webApiClient, queryClient),
+  );
   const processBookingBalanceMutation = useMutation(
     processBookingBalanceMutationOptions(webApiClient, queryClient),
   );
@@ -396,6 +434,19 @@ function useGymOperationsPageState() {
   const verifyPaymentMutation = useMutation(
     verifyMembershipPaymentMutationOptions(webApiClient, queryClient),
   );
+  const respondAppointmentPending =
+    respondAppointmentMutation.isPending ||
+    confirmCoachAppointmentMutation.isPending ||
+    declineCoachAppointmentMutation.isPending;
+  const completeAppointmentPending =
+    completeAppointmentMutation.isPending ||
+    completeCoachAppointmentMutation.isPending;
+  const cancelAppointmentPending =
+    cancelAppointmentMutation.isPending ||
+    cancelCoachAppointmentMutation.isPending;
+  const updateCoachProfilePending =
+    updateCoachProfileMutation.isPending ||
+    updateCoachSelfProfileMutation.isPending;
 
   const coachRoster = useMemo(
     () => mapCoachesToRoster(coachProfiles),
@@ -978,6 +1029,7 @@ function useGymOperationsPageState() {
     );
     const requestedScheduleSurface = normalizeScheduleSurfaceTab(
       searchParams.get("schedule_view"),
+      canViewVenueBookings,
     );
 
     setActiveOperationsTab((currentTab) =>
@@ -988,7 +1040,7 @@ function useGymOperationsPageState() {
         ? currentTab
         : requestedScheduleSurface,
     );
-  }, [canManageCoaching, searchParams]);
+  }, [canManageCoaching, canViewVenueBookings, searchParams]);
 
   useEffect(() => {
     const currentQueryTab = searchParams.get("tab");
@@ -1015,7 +1067,7 @@ function useGymOperationsPageState() {
   useEffect(() => {
     const currentSurfaceParam = searchParams.get("schedule_view");
     const normalizedSurfaceParam =
-      normalizeScheduleSurfaceTab(currentSurfaceParam);
+      normalizeScheduleSurfaceTab(currentSurfaceParam, canViewVenueBookings);
 
     if (activeScheduleSurfaceTab === normalizedSurfaceParam) return;
 
@@ -1030,7 +1082,7 @@ function useGymOperationsPageState() {
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
       scroll: false,
     });
-  }, [activeScheduleSurfaceTab, pathname, router, searchParams]);
+  }, [activeScheduleSurfaceTab, canViewVenueBookings, pathname, router, searchParams]);
 
   const toggleRecurringPlanDay = (day: number) => {
     setRecurringPlanPreview(null);
@@ -1244,11 +1296,18 @@ function useGymOperationsPageState() {
     if (!appointmentReviewTarget) return;
 
     try {
-      await respondAppointmentMutation.mutateAsync({
-        accepted: true,
-        appointmentId: appointmentReviewTarget.id,
-        coachId: appointmentReviewTarget.coachId,
-      });
+      if (isCoach) {
+        await confirmCoachAppointmentMutation.mutateAsync({
+          appointmentId: appointmentReviewTarget.id,
+          userId: user?.id,
+        });
+      } else {
+        await respondAppointmentMutation.mutateAsync({
+          accepted: true,
+          appointmentId: appointmentReviewTarget.id,
+          coachId: appointmentReviewTarget.coachId,
+        });
+      }
       showFeedback("Coach appointment confirmed.");
       setAppointmentReviewTarget(null);
     } catch (error) {
@@ -1264,12 +1323,20 @@ function useGymOperationsPageState() {
     value: string,
   ) => {
     try {
-      await respondAppointmentMutation.mutateAsync({
-        accepted: false,
-        appointmentId: appointment.id,
-        coachId: appointment.coachId,
-        reason: value,
-      });
+      if (isCoach) {
+        await declineCoachAppointmentMutation.mutateAsync({
+          appointmentId: appointment.id,
+          reason: value,
+          userId: user?.id,
+        });
+      } else {
+        await respondAppointmentMutation.mutateAsync({
+          accepted: false,
+          appointmentId: appointment.id,
+          coachId: appointment.coachId,
+          reason: value,
+        });
+      }
       showFeedback("Coach appointment rejected.");
       setAppointmentReviewTarget(null);
     } catch (error) {
@@ -1285,11 +1352,19 @@ function useGymOperationsPageState() {
     value: string,
   ) => {
     try {
-      await cancelAppointmentMutation.mutateAsync({
-        appointmentId: appointment.id,
-        coachId: appointment.coachId,
-        reason: value,
-      });
+      if (isCoach) {
+        await cancelCoachAppointmentMutation.mutateAsync({
+          appointmentId: appointment.id,
+          cancelReason: value,
+          userId: user?.id,
+        });
+      } else {
+        await cancelAppointmentMutation.mutateAsync({
+          appointmentId: appointment.id,
+          coachId: appointment.coachId,
+          reason: value,
+        });
+      }
       showFeedback("Coach appointment cancelled.");
       setAppointmentReviewTarget(null);
     } catch (error) {
@@ -1302,14 +1377,37 @@ function useGymOperationsPageState() {
 
   const handleCompleteAppointment = async (
     appointment: StaffAppointmentRecord,
-    value: string,
+    value:
+      | string
+      | {
+          assessmentReport?: string;
+          coachFeedback?: string;
+          sessionNotes?: string;
+        },
   ) => {
+    const payload =
+      typeof value === "string"
+        ? { sessionNotes: value || undefined }
+        : {
+            assessmentReport: value.assessmentReport || undefined,
+            coachFeedback: value.coachFeedback || undefined,
+            sessionNotes: value.sessionNotes || undefined,
+          };
+
     try {
-      await completeAppointmentMutation.mutateAsync({
-        appointmentId: appointment.id,
-        coachId: appointment.coachId,
-        sessionNotes: value || undefined,
-      });
+      if (isCoach) {
+        await completeCoachAppointmentMutation.mutateAsync({
+          appointmentId: appointment.id,
+          userId: user?.id,
+          ...payload,
+        });
+      } else {
+        await completeAppointmentMutation.mutateAsync({
+          appointmentId: appointment.id,
+          coachId: appointment.coachId,
+          ...payload,
+        });
+      }
       showFeedback("Coach appointment marked complete.");
       setAppointmentReviewTarget(null);
     } catch (error) {
@@ -1443,6 +1541,55 @@ function useGymOperationsPageState() {
       confirmLabel:
         provider === "cash" ? "ACCEPT CASH BALANCE" : "OPEN PAYMONGO",
     });
+  };
+
+  const handleSaveAppointmentFeedback = async (
+    appointment: StaffAppointmentRecord,
+    payload: SubmitCoachAppointmentFeedbackPayload,
+  ) => {
+    try {
+      await saveCoachFeedbackMutation.mutateAsync({
+        appointmentId: appointment.id,
+        payload,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staffAppointments() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.analyticsSnapshot() }),
+      ]);
+      showFeedback("Coach feedback saved for this session.");
+      setAppointmentReviewTarget((current) =>
+        current?.id === appointment.id
+          ? {
+              ...current,
+              assessmentReport: payload.assessmentReport ?? current.assessmentReport,
+              coachFeedback: payload.coachFeedback,
+            }
+          : current,
+      );
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to save coach feedback."),
+        "danger",
+      );
+    }
+  };
+
+  const handleMarkCoachPayoutPaid = async (
+    appointment: StaffAppointmentRecord,
+  ) => {
+    try {
+      await markCoachPayoutPaidMutation.mutateAsync({
+        appointmentId: appointment.id,
+        coachId: appointment.coachId,
+      });
+      showFeedback("Coach payout marked paid.");
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to mark coach payout paid."),
+        "danger",
+      );
+    }
   };
 
   const executeRecurringCyclePayment = async (
@@ -1590,20 +1737,37 @@ function useGymOperationsPageState() {
     }
 
     try {
-      await updateCoachProfileMutation.mutateAsync({
-        coachId: profileEditorCoach.id,
-        payload: {
-          bio: parsed.data.bio || undefined,
-          specialties: parsed.data.specialties,
-          certifications: parsed.data.certifications,
-          contactEmail: data.contactEmail?.trim() || null,
-          contactPhone: data.contactPhone?.trim() || null,
-          displayName,
-          hourlyRate: parsed.data.hourlyRate,
-          isAvailableForBooking:
-            (data.isAvailableForBooking ?? "active") === "active",
-        },
-      });
+      const scheduleTypeValue: "full_time" | "part_time" =
+        data.scheduleType === "full_time" ? "full_time" : "part_time";
+      const payload = {
+        bio: parsed.data.bio || undefined,
+        specialties: parsed.data.specialties,
+        certifications: parsed.data.certifications,
+        contactEmail: data.contactEmail?.trim() || null,
+        contactPhone: data.contactPhone?.trim() || null,
+        displayName,
+        hourlyRate: parsed.data.hourlyRate,
+        isAvailableForBooking:
+          (data.isAvailableForBooking ?? "active") === "active",
+        ...(isAdmin
+          ? {
+              scheduleType: scheduleTypeValue,
+            }
+          : {}),
+      } as const;
+
+      if (isCoach) {
+        await updateCoachSelfProfileMutation.mutateAsync({
+          coachId: profileEditorCoach.id,
+          payload,
+          userId: user?.id,
+        });
+      } else {
+        await updateCoachProfileMutation.mutateAsync({
+          coachId: profileEditorCoach.id,
+          payload,
+        });
+      }
       showFeedback("Coach profile updated.");
       setProfileEditorCoachId(null);
     } catch (error) {
@@ -1629,6 +1793,9 @@ function useGymOperationsPageState() {
           certifications: coach.certifications ?? [],
           hourlyRate: coach.hourlyRate ?? undefined,
           isAvailableForBooking: isVisibleForBooking,
+          ...(isAdmin
+            ? { scheduleType: coach.scheduleType ?? "part_time" }
+            : {}),
           specialties: coach.specialties ?? [],
         },
       });
@@ -1869,6 +2036,7 @@ function useGymOperationsPageState() {
     displayName: string;
     hourlyRate?: number;
     isAvailableForBooking?: boolean;
+    scheduleType?: "full_time" | "part_time";
     specialties?: string[];
   }) => {
     try {
@@ -1891,7 +2059,8 @@ function useGymOperationsPageState() {
     coachDetailsOpen, coachFilterId, coachOptions,
     coachProfiles, coachRailAsRow, coachRoster,
     coachRosterMaxHeight, coachVisibilityScope, colors,
-    completeAppointmentMutation, createCoachBookingMutation, createCoachBookingOpen,
+    cancelAppointmentPending, completeAppointmentMutation,
+    completeAppointmentPending, createCoachBookingMutation, createCoachBookingOpen,
     createCoachMutation, createCoachOpen, createRecurringPlanMutation,
     createVenueBookingMutation, createVenueBookingOpen, draggingBooking,
     draggingCoach, fadeIn, feedbackModal, filteredStaff,
@@ -1904,9 +2073,9 @@ function useGymOperationsPageState() {
     handleDragEnd, handleDragStart, handleNoShowVenueBooking,
     handlePreviewRecurringPlan, handleRecurringFutureUpdate, handleRecurringPlanCancel,
     handleRecurringSessionReschedule, handleRecurringSessionSkip, handleRejectAppointment,
-    handleRejectVenueBooking, handleSaveAvailability, handleSaveCoachProfile,
-    handleSetCoachBookingVisibility, handleStaffClick,
-    leftRailRef, memberOptions, nextWeek, payAppointmentInitialMutation,
+    handleRejectVenueBooking, handleSaveAppointmentFeedback, handleSaveAvailability, handleSaveCoachProfile,
+    handleMarkCoachPayoutPaid, handleSetCoachBookingVisibility, handleStaffClick,
+    leftRailRef, markCoachPayoutPaidMutation, memberOptions, nextWeek, payAppointmentInitialMutation,
     paymentConfirm, paymentConfirmLoading, payRecurringCycleMutation,
     prevWeek, processAppointmentBalanceMutation, processBookingBalanceMutation,
     profileEditorCoach, recurringActionBusy, recurringActionCoachId,
@@ -1916,10 +2085,12 @@ function useGymOperationsPageState() {
     recurringPlanOpen, recurringPlanPreview, recurringPlanSessions,
     recurringRemainingCount, refreshGymOperationsData, replaceAvailabilityMutation,
     requestCollectAppointmentBalance, requestCollectAppointmentInitialPayment, requestCollectVenueBalance,
-    requestRecurringCyclePayment, respondAppointmentMutation, rightScrollRef,
+    requestRecurringCyclePayment, respondAppointmentMutation,
+    respondAppointmentPending, rightScrollRef,
     rosterBookings, scheduleDayPart, scheduleLoading,
     scheduleRangeMode, scheduleRosterMaxHeight, scheduleTimelineMaxHeight,
     selectedCoachProfile, selectedCoachRoster, selectedVenueFilterLabel,
+    isAdmin, isCoach,
     sensors, setActiveBlock, setActiveCoachId,
     setActiveOperationsTab, setActiveScheduleSurfaceTab, setAppointmentReviewTarget,
     setAppointmentStatusFilter, setAvailabilityEditorCoachId, setBlockDetailOpen,
@@ -1932,7 +2103,8 @@ function useGymOperationsPageState() {
     setScheduleRangeMode, setSlideKey, setVenueFilterId,
     setVenueReviewTarget, setVenueStatusFilter, setWeekStart,
     slideStyle, themeTransition, toggleRecurringActionDay,
-    toggleRecurringPlanDay, updateCoachProfileMutation, updateRecurringSessionMutation,
+    toggleRecurringPlanDay, updateCoachProfileMutation,
+    updateCoachProfilePending, updateRecurringSessionMutation,
     venueBookingSummary, venueFilterId, venueFilterOptions,
     venueReviewTarget, venueStatusFilter, verifyPaymentMutation,
     visibleTimelineDays, visibleTimelineHours, weekStart,

@@ -16,6 +16,7 @@ import {
   UserRole,
 } from '@prisma/client';
 
+import { ActivityLevelService } from '../../user/activity-level.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import {
   ActiveExerciseGenerationRecord,
@@ -244,6 +245,7 @@ export class ExerciseService {
   constructor(
     private readonly repo: ExerciseRepository,
     private readonly config: ConfigService,
+    private readonly activityLevelService: ActivityLevelService,
   ) {}
 
   async listExercises(
@@ -394,6 +396,7 @@ export class ExerciseService {
     const creatorContextByUserId = await this.loadCreatorReviewContext([
       userId,
     ]);
+    await this.activityLevelService.recalculateForUser(userId);
 
     return this.toReviewSubmissionResponse(
       createdSubmission,
@@ -783,6 +786,9 @@ export class ExerciseService {
     const creatorContextByUserId = await this.loadCreatorReviewContext([
       updatedSubmission.user_id,
     ]);
+    await this.activityLevelService.recalculateForUser(
+      updatedSubmission.user_id,
+    );
 
     return this.toReviewSubmissionResponse(
       updatedSubmission,

@@ -214,8 +214,9 @@ export function normalizeOperationsTab(
 
 export function normalizeScheduleSurfaceTab(
   value: string | null,
+  canViewVenueBookings = true,
 ): ScheduleSurfaceTab {
-  if (value === "venues") return "venue-bookings";
+  if (canViewVenueBookings && value === "venues") return "venue-bookings";
   return "coach-schedule";
 }
 
@@ -269,6 +270,17 @@ export const COACH_PROFILE_FIELDS: FieldConfig[] = [
     required: true,
     placeholder: "e.g. 850",
     hint: "Use whole Philippine peso values only.",
+  },
+  {
+    name: "scheduleType",
+    label: "Working Schedule",
+    type: "select",
+    required: true,
+    hint: "Marks whether this coach is tracked as full-time or part-time.",
+    options: [
+      { label: "Full-time", value: "full_time" },
+      { label: "Part-time", value: "part_time" },
+    ],
   },
   {
     name: "isAvailableForBooking",

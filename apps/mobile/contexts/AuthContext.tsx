@@ -53,6 +53,7 @@ type AuthContextType = {
     currentPassword: string,
     nextPassword: string,
   ) => Promise<{ success: true } | { success: false; error: string }>;
+  acceptPrivacyPolicy: () => Promise<{ success: true } | { success: false; error: string }>;
 };
 
 type Props = {
@@ -207,6 +208,25 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
     });
   }, []);
 
+  const acceptPrivacyPolicy = useCallback(async () => {
+    try {
+      const result = await mobileApiClient.users.acceptPrivacyPolicy();
+      await updateUser({
+        hasAcceptedPrivacy: result.hasAcceptedPrivacy,
+        privacyAcceptedAt: result.privacyAcceptedAt ?? null,
+      });
+      return { success: true as const };
+    } catch (error: unknown) {
+      return {
+        success: false as const,
+        error: toActionErrorMessage(
+          error,
+          "Could not save privacy policy acceptance.",
+        ),
+      };
+    }
+  }, [updateUser]);
+
   const sendOTP = useCallback(
     async (_destination: string) => {
       try {
@@ -283,6 +303,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
         verifyOTP,
         verifyCurrentPassword,
         changePassword,
+        acceptPrivacyPolicy,
       }}
     >
       {children}

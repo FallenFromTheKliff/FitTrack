@@ -23,7 +23,15 @@ import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
 import { AnimatedFitText, FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 
-export default function NotificationsPreferencesPanel({ onClose }: { onClose: () => void }) {
+type NotificationsPreferencesPanelProps = {
+  onClose: () => void;
+  showPreferences?: boolean;
+};
+
+export default function NotificationsPreferencesPanel({
+  onClose,
+  showPreferences = true
+}: NotificationsPreferencesPanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { colors, settings } = useTheme();
@@ -33,10 +41,10 @@ export default function NotificationsPreferencesPanel({ onClose }: { onClose: ()
 
   const preferencesQuery = useQuery({
     ...notificationPreferencesQueryOptions(mobileApiClient, userId),
-    enabled: Boolean(userId)
+    enabled: Boolean(userId) && showPreferences
   });
   const inboxQuery = useQuery({
-    ...notificationInboxQueryOptions(mobileApiClient, userId, { limit: 5, page: 1 }),
+    ...notificationInboxQueryOptions(mobileApiClient, userId, { limit: 20, page: 1 }),
     enabled: Boolean(userId)
   });
   const updatePreferencesMutation = useMutation(
@@ -48,39 +56,43 @@ export default function NotificationsPreferencesPanel({ onClose }: { onClose: ()
 
   return (
     <Animated.View style={[s.body, surfaceStyle]}>
-      <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>ALERTS</AnimatedFitText>
-      <View style={s.infoCard}>
-        {NOTIFICATION_PREFERENCE_GROUPS.map((group, index) => {
-          const enabled = preferencesQuery.data
-            ? isNotificationPreferenceGroupEnabled(preferencesQuery.data, group)
-            : false;
+      {showPreferences ? (
+        <>
+          <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>ALERTS</AnimatedFitText>
+          <View style={s.infoCard}>
+            {NOTIFICATION_PREFERENCE_GROUPS.map((group, index) => {
+              const enabled = preferencesQuery.data
+                ? isNotificationPreferenceGroupEnabled(preferencesQuery.data, group)
+                : false;
 
-          return (
-            <View key={group.id}>
-              <View style={s.toggleRow}>
-                <View style={s.toggleInfo}>
-                  <FitText style={s.toggleLabel}>{group.label}</FitText>
-                  <FitText style={s.toggleHint}>{group.description}</FitText>
+              return (
+                <View key={group.id}>
+                  <View style={s.toggleRow}>
+                    <View style={s.toggleInfo}>
+                      <FitText style={s.toggleLabel}>{group.label}</FitText>
+                      <FitText style={s.toggleHint}>{group.description}</FitText>
+                    </View>
+                    <FitSquareToggle
+                      value={enabled}
+                      onValueChange={(next) => {
+                        void updatePreferencesMutation.mutateAsync(
+                          buildNotificationPreferenceGroupPatch(group.fields, next)
+                        );
+                      }}
+                      activeColor={colors.brand}
+                      inactiveColor={colors.border}
+                      useAnimations={settings.animationLevel === "full"}
+                    />
+                  </View>
+                  {index < NOTIFICATION_PREFERENCE_GROUPS.length - 1 ? (
+                    <View style={s.infoCardDivider} />
+                  ) : null}
                 </View>
-                <FitSquareToggle
-                  value={enabled}
-                  onValueChange={(next) => {
-                    void updatePreferencesMutation.mutateAsync(
-                      buildNotificationPreferenceGroupPatch(group.fields, next)
-                    );
-                  }}
-                  activeColor={colors.brand}
-                  inactiveColor={colors.border}
-                  useAnimations={settings.animationLevel === "full"}
-                />
-              </View>
-              {index < NOTIFICATION_PREFERENCE_GROUPS.length - 1 ? (
-                <View style={s.infoCardDivider} />
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <View>
         <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>

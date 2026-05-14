@@ -8,6 +8,7 @@ export default function RootLayoutClient() {
   const pathname = usePathname() ?? "/";
   const isAuthRoute =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/member-login") ||
     pathname.startsWith("/locked") ||
     pathname.startsWith("/payments/");
 

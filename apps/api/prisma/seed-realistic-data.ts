@@ -7,6 +7,7 @@ import {
   BookingStatus,
   ChatContext,
   ChatRole,
+  CoachScheduleType,
   CreatorState,
   EquipmentStatus,
   ExerciseCategory,
@@ -66,10 +67,7 @@ import { config } from 'dotenv';
 
 import { localEnvFilePath } from '../env-path';
 import { bootstrapDefaults } from './defaults';
-import {
-  TEST_DATA_EMAIL_DOMAIN,
-  seedId,
-} from './test-data/constants';
+import { TEST_DATA_EMAIL_DOMAIN, seedId } from './test-data/constants';
 
 config(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 
@@ -77,7 +75,12 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 const PASSWORD_HASH_ROUNDS = 12;
-const REALISTIC_PASSWORD = 'Realistic!2026';
+const BULK_PASSWORDS = {
+  admin: 'FitTrack@Leadership1',
+  staff: 'FitTrack@StaffOps1',
+  coach: 'FitTrack@CoachBench1',
+  member: 'FitTrack@Community1',
+} as const;
 
 function id(key: string) {
   return seedId(`realistic:${key}`);
@@ -112,81 +115,550 @@ function tokenHash(value: string) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function yearsAgo(years: number) {
+  return dateOnly(-(365 * years));
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+}
+
+type MemberTierSeed =
+  | 'active_member'
+  | 'verified_non_member'
+  | 'pending_verification'
+  | 'pending_membership'
+  | 'revoked'
+  | 'archived';
+
 type RealisticAccount = {
   key: string;
   email: string;
   firstName: string;
   lastName: string;
   phone: string;
+  password: string;
   role: UserRole;
   status?: UserStatus;
   deletedAt?: Date | null;
+  memberTier?: MemberTierSeed;
+  dateOfBirth?: Date | null;
+  gender?: Gender | null;
+  weightKg?: number | null;
+  heightCm?: number | null;
+  activityLevel?: ActivityLevel | null;
+  fitnessGoal?: FitnessGoal | null;
+  hasAcceptedPrivacy?: boolean;
+  coachSpecialization?: string | null;
+  coachScheduleType?: CoachScheduleType;
+  coachHourlyRate?: number | null;
+  coachBio?: string | null;
+  coachCertification?: string | null;
 };
 
-const ACCOUNTS: readonly RealisticAccount[] = [
+const FIRST_NAME_POOL = [
+  'Adrian',
+  'Bianca',
+  'Carlo',
+  'Danica',
+  'Elijah',
+  'Frances',
+  'Gabriel',
+  'Hannah',
+  'Isabel',
+  'Jared',
+  'Kiara',
+  'Luis',
+  'Mika',
+  'Noel',
+  'Olivia',
+  'Paolo',
+  'Quinn',
+  'Rafael',
+  'Samantha',
+  'Theo',
+  'Uma',
+  'Vincent',
+  'Ysabel',
+  'Zion',
+] as const;
+
+const LAST_NAME_POOL = [
+  'Aquino',
+  'Bernardo',
+  'Castillo',
+  'Domingo',
+  'Evangelista',
+  'Fernandez',
+  'Gutierrez',
+  'Hernandez',
+  'Ignacio',
+  'Jimenez',
+  'Katigbak',
+  'Lopez',
+  'Mendoza',
+  'Navarro',
+  'Ortega',
+  'Pascual',
+  'Quinto',
+  'Rosario',
+  'Soriano',
+  'Torres',
+  'Umali',
+  'Valencia',
+  'Wong',
+  'Yap',
+] as const;
+
+const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'admin',
-    email: `real.admin@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Mara',
-    lastName: 'Santos',
+    email: `admin@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Alex',
+    lastName: 'Rivera',
     phone: '+639170010001',
+    password: 'FitTrack@Admin1',
     role: UserRole.admin,
+    dateOfBirth: yearsAgo(38),
+    gender: Gender.other,
+    hasAcceptedPrivacy: true,
   },
   {
     key: 'staff',
-    email: `real.staff@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Nico',
-    lastName: 'Reyes',
+    email: `staff@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Jamie',
+    lastName: 'Santos',
     phone: '+639170010002',
+    password: 'FitTrack@Staff1',
     role: UserRole.staff,
+    dateOfBirth: yearsAgo(31),
+    gender: Gender.other,
+    hasAcceptedPrivacy: true,
+  },
+  {
+    key: 'coach',
+    email: `coach@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Morgan',
+    lastName: 'Cruz',
+    phone: '+639170010003',
+    password: 'FitTrack@Coach1',
+    role: UserRole.coach,
+    dateOfBirth: yearsAgo(34),
+    gender: Gender.other,
+    weightKg: 78,
+    heightCm: 178,
+    activityLevel: ActivityLevel.very_active,
+    fitnessGoal: FitnessGoal.sport_specific,
+    hasAcceptedPrivacy: true,
+    coachSpecialization: 'Strength and Conditioning',
+    coachScheduleType: CoachScheduleType.full_time,
+    coachHourlyRate: 650,
+    coachBio:
+      'Head coach for strength and conditioning blocks, barbell technique, and athlete return-to-play progressions.',
+    coachCertification: 'NSCA-CSCS',
   },
   {
     key: 'member-active',
-    email: `real.member.active@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Kara',
-    lastName: 'Lim',
-    phone: '+639170010003',
+    email: `member.active@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Casey',
+    lastName: 'Reyes',
+    phone: '+639170010004',
+    password: 'FitTrack@Member1',
     role: UserRole.member,
+    memberTier: 'active_member',
+    dateOfBirth: yearsAgo(27),
+    gender: Gender.other,
+    weightKg: 68,
+    heightCm: 170,
+    activityLevel: ActivityLevel.active,
+    fitnessGoal: FitnessGoal.maintenance,
+    hasAcceptedPrivacy: true,
   },
   {
     key: 'member-premium',
-    email: `real.member.premium@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Dino',
-    lastName: 'Cruz',
-    phone: '+639170010004',
+    email: `member.coaching@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Sky',
+    lastName: 'Villanueva',
+    phone: '+639170010005',
+    password: 'FitTrack@Member5',
     role: UserRole.member,
+    memberTier: 'active_member',
+    dateOfBirth: yearsAgo(29),
+    gender: Gender.other,
+    weightKg: 74,
+    heightCm: 175,
+    activityLevel: ActivityLevel.active,
+    fitnessGoal: FitnessGoal.bulking,
+    hasAcceptedPrivacy: true,
+  },
+  {
+    key: 'member-verified-non-member',
+    email: `nonmember.verified@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Dana',
+    lastName: 'Lim',
+    phone: '+639170010006',
+    password: 'FitTrack@Member2',
+    role: UserRole.member,
+    memberTier: 'verified_non_member',
+    dateOfBirth: yearsAgo(26),
+    gender: Gender.other,
+    weightKg: 61,
+    heightCm: 163,
+    activityLevel: ActivityLevel.light,
+    fitnessGoal: FitnessGoal.maintenance,
+    hasAcceptedPrivacy: true,
   },
   {
     key: 'member-pending',
-    email: `real.member.pending@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Ella',
+    email: `member.pending@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Riley',
     lastName: 'Tan',
-    phone: '+639170010005',
+    phone: '+639170010007',
+    password: 'FitTrack@Member3',
     role: UserRole.member,
     status: UserStatus.pending,
+    memberTier: 'pending_verification',
+    dateOfBirth: yearsAgo(24),
+    gender: Gender.other,
+    weightKg: 58,
+    heightCm: 161,
+    activityLevel: ActivityLevel.sedentary,
+    fitnessGoal: FitnessGoal.maintenance,
+    hasAcceptedPrivacy: false,
   },
   {
     key: 'member-archived',
-    email: `real.member.archived@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Joel',
-    lastName: 'Bautista',
-    phone: '+639170010006',
+    email: `member.archived@${TEST_DATA_EMAIL_DOMAIN}`,
+    firstName: 'Jordan',
+    lastName: 'Dela Cruz',
+    phone: '+639170010008',
+    password: 'FitTrack@Member4',
     role: UserRole.member,
+    memberTier: 'archived',
     deletedAt: nowPlusDays(-15, 18),
+    dateOfBirth: yearsAgo(35),
+    gender: Gender.other,
+    weightKg: 72,
+    heightCm: 172,
+    activityLevel: ActivityLevel.light,
+    fitnessGoal: FitnessGoal.maintenance,
+    hasAcceptedPrivacy: true,
   },
+];
+
+function buildBulkAccounts(): RealisticAccount[] {
+  const namePool: Array<{ firstName: string; lastName: string }> = [];
+  const reservedNames = new Set(
+    CORE_ACCOUNTS.map((account) =>
+      `${account.firstName}|${account.lastName}`.toLowerCase(),
+    ),
+  );
+  const reservedEmails = new Set(
+    CORE_ACCOUNTS.map((account) => account.email.toLowerCase()),
+  );
+
+  for (const firstName of FIRST_NAME_POOL) {
+    for (const lastName of LAST_NAME_POOL) {
+      const key = `${firstName}|${lastName}`.toLowerCase();
+      if (!reservedNames.has(key)) {
+        namePool.push({ firstName, lastName });
+      }
+    }
+  }
+
+  let nameIndex = 0;
+  let phoneIndex = 9000001;
+
+  const nextIdentity = (role: UserRole) => {
+    const identity = namePool[nameIndex];
+    if (!identity) {
+      throw new Error('Bulk realistic account pool exhausted.');
+    }
+    nameIndex += 1;
+    let email = `${slugify(identity.firstName)}.${slugify(identity.lastName)}@${TEST_DATA_EMAIL_DOMAIN}`;
+    if (reservedEmails.has(email)) {
+      email = `${slugify(identity.firstName)}.${slugify(identity.lastName)}.${role}@${TEST_DATA_EMAIL_DOMAIN}`;
+    }
+    reservedEmails.add(email);
+    const phone = `+63918${String(phoneIndex).padStart(7, '0')}`;
+    phoneIndex += 1;
+    return { ...identity, email, phone };
+  };
+
+  const accounts: RealisticAccount[] = [];
+
+  const pushRoleAccounts = (
+    role: UserRole,
+    count: number,
+    buildAccount: (
+      identity: ReturnType<typeof nextIdentity>,
+      index: number,
+    ) => RealisticAccount,
+  ) => {
+    for (let index = 0; index < count; index += 1) {
+      accounts.push(buildAccount(nextIdentity(role), index));
+    }
+  };
+
+  pushRoleAccounts(UserRole.admin, 3, (identity, index) => ({
+    key: `admin-ops-${index + 1}`,
+    password: BULK_PASSWORDS.admin,
+    role: UserRole.admin,
+    dateOfBirth: yearsAgo(33 + (index % 8)),
+    gender: Gender.other,
+    hasAcceptedPrivacy: true,
+    ...identity,
+  }));
+
+  pushRoleAccounts(UserRole.staff, 8, (identity, index) => ({
+    key: `staff-ops-${index + 1}`,
+    password: BULK_PASSWORDS.staff,
+    role: UserRole.staff,
+    dateOfBirth: yearsAgo(24 + (index % 10)),
+    gender: Gender.other,
+    hasAcceptedPrivacy: true,
+    ...identity,
+  }));
+
+  pushRoleAccounts(UserRole.coach, 11, (identity, index) => ({
+    key: `coach-team-${index + 1}`,
+    password: BULK_PASSWORDS.coach,
+    role: UserRole.coach,
+    dateOfBirth: yearsAgo(28 + (index % 10)),
+    gender: Gender.other,
+    weightKg: 67 + (index % 16),
+    heightCm: 165 + (index % 15),
+    activityLevel:
+      index % 3 === 0 ? ActivityLevel.very_active : ActivityLevel.active,
+    fitnessGoal: FitnessGoal.sport_specific,
+    hasAcceptedPrivacy: true,
+    coachSpecialization:
+      index % 2 === 0 ? 'Strength and Conditioning' : 'Mobility and Recovery',
+    coachScheduleType:
+      index % 3 === 0
+        ? CoachScheduleType.full_time
+        : CoachScheduleType.part_time,
+    coachHourlyRate: 420 + index * 15,
+    coachBio:
+      index % 2 === 0
+        ? 'Supports strength blocks, member assessments, and performance coaching.'
+        : 'Focuses on mobility, conditioning, and sustainable training return plans.',
+    coachCertification:
+      index % 2 === 0 ? 'NASM-CPT' : 'ACE-CPT, Functional Training Specialist',
+    ...identity,
+  }));
+
+  const memberGroups: Array<{
+    count: number;
+    keyPrefix: string;
+    memberTier: MemberTierSeed;
+  }> = [
+    {
+      keyPrefix: 'member-active-bulk',
+      memberTier: 'active_member',
+      count: 280,
+    },
+    {
+      keyPrefix: 'member-verified-non-member-bulk',
+      memberTier: 'verified_non_member',
+      count: 90,
+    },
+    {
+      keyPrefix: 'member-pending-verification-bulk',
+      memberTier: 'pending_verification',
+      count: 45,
+    },
+    {
+      keyPrefix: 'member-pending-membership-bulk',
+      memberTier: 'pending_membership',
+      count: 25,
+    },
+    { keyPrefix: 'member-revoked-bulk', memberTier: 'revoked', count: 20 },
+    { keyPrefix: 'member-archived-bulk', memberTier: 'archived', count: 15 },
+  ];
+
+  for (const group of memberGroups) {
+    for (let index = 0; index < group.count; index += 1) {
+      const identity = nextIdentity(UserRole.member);
+      const age = 20 + ((accounts.length + index) % 22);
+      const isPending = group.memberTier === 'pending_verification';
+      const isArchived = group.memberTier === 'archived';
+      accounts.push({
+        key: `${group.keyPrefix}-${String(index + 1).padStart(3, '0')}`,
+        password: BULK_PASSWORDS.member,
+        role: UserRole.member,
+        memberTier: group.memberTier,
+        status: isPending ? UserStatus.pending : UserStatus.active,
+        deletedAt: isArchived ? nowPlusDays(-(7 + (index % 20)), 18) : null,
+        dateOfBirth: yearsAgo(age),
+        gender: Gender.other,
+        weightKg: 52 + ((index * 3) % 32),
+        heightCm: 150 + ((index * 2) % 35),
+        activityLevel:
+          group.memberTier === 'active_member'
+            ? index % 4 === 0
+              ? ActivityLevel.very_active
+              : ActivityLevel.active
+            : group.memberTier === 'verified_non_member'
+              ? ActivityLevel.light
+              : ActivityLevel.sedentary,
+        fitnessGoal:
+          group.memberTier === 'active_member'
+            ? index % 3 === 0
+              ? FitnessGoal.bulking
+              : index % 3 === 1
+                ? FitnessGoal.cutting
+                : FitnessGoal.maintenance
+            : FitnessGoal.maintenance,
+        hasAcceptedPrivacy: !isPending,
+        ...identity,
+      });
+    }
+  }
+
+  return accounts;
+}
+
+const ACCOUNTS: readonly RealisticAccount[] = [
+  ...CORE_ACCOUNTS,
+  ...buildBulkAccounts(),
 ];
 
 const accountId = Object.fromEntries(
   ACCOUNTS.map((account) => [account.key, id(`user:${account.key}`)]),
-) as Record<(typeof ACCOUNTS)[number]['key'], string>;
+) as Record<string, string>;
+const coachAccountKeys = ACCOUNTS.filter(
+  (account) => account.role === UserRole.coach,
+).map((account) => account.key);
+
+const credentialHashCache = new Map<string, Promise<string>>();
+
+function defaultActivityLevelForAccount(
+  account: RealisticAccount,
+): ActivityLevel | null {
+  if (account.activityLevel !== undefined) {
+    return account.activityLevel;
+  }
+  if (account.role === UserRole.coach) {
+    return ActivityLevel.very_active;
+  }
+  if (account.role !== UserRole.member) {
+    return null;
+  }
+  switch (account.memberTier) {
+    case 'active_member':
+      return ActivityLevel.active;
+    case 'verified_non_member':
+      return ActivityLevel.light;
+    default:
+      return ActivityLevel.sedentary;
+  }
+}
+
+function defaultFitnessGoalForAccount(
+  account: RealisticAccount,
+): FitnessGoal | null {
+  if (account.fitnessGoal !== undefined) {
+    return account.fitnessGoal;
+  }
+  if (account.role === UserRole.coach) {
+    return FitnessGoal.sport_specific;
+  }
+  if (account.role === UserRole.member) {
+    return FitnessGoal.maintenance;
+  }
+  return null;
+}
+
+function defaultDateOfBirthForAccount(account: RealisticAccount) {
+  if (account.dateOfBirth !== undefined) {
+    return account.dateOfBirth;
+  }
+  if (account.role === UserRole.admin) {
+    return yearsAgo(37);
+  }
+  if (account.role === UserRole.staff) {
+    return yearsAgo(29);
+  }
+  if (account.role === UserRole.coach) {
+    return yearsAgo(32);
+  }
+  return yearsAgo(27);
+}
+
+function defaultHeightForAccount(account: RealisticAccount) {
+  if (account.heightCm !== undefined) {
+    return account.heightCm;
+  }
+  if (account.role === UserRole.coach) {
+    return 174;
+  }
+  if (account.role === UserRole.member) {
+    return 168;
+  }
+  return null;
+}
+
+function defaultWeightForAccount(account: RealisticAccount) {
+  if (account.weightKg !== undefined) {
+    return account.weightKg;
+  }
+  if (account.role === UserRole.coach) {
+    return 73;
+  }
+  if (account.role === UserRole.member) {
+    return 66;
+  }
+  return null;
+}
+
+function memberAccountsByTier(tier: MemberTierSeed) {
+  return ACCOUNTS.filter(
+    (account) =>
+      account.role === UserRole.member && account.memberTier === tier,
+  );
+}
+
+function accountsByRole(role: UserRole) {
+  return ACCOUNTS.filter((account) => account.role === role);
+}
+
+function coachProfileIdForAccount(accountKey: string) {
+  if (accountKey === 'coach') {
+    return id('coach:marco');
+  }
+  if (coachAccountKeys[1] && accountKey === coachAccountKeys[1]) {
+    return id('coach:lia');
+  }
+  return id(`coach-profile:${accountKey}`);
+}
+
+async function credentialHashFor(password: string) {
+  const cached = credentialHashCache.get(password);
+  if (cached) {
+    return cached;
+  }
+  const nextHash = bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
+  credentialHashCache.set(password, nextHash);
+  return nextHash;
+}
 
 async function ensureAccount(account: RealisticAccount) {
   const userId = accountId[account.key];
-  const verifiedAt = nowPlusDays(-35, 8);
-  const credentialHash = await bcrypt.hash(
-    REALISTIC_PASSWORD,
-    PASSWORD_HASH_ROUNDS,
-  );
+  const isPendingVerification =
+    account.status === UserStatus.pending ||
+    account.memberTier === 'pending_verification';
+  const verifiedAt = isPendingVerification ? null : nowPlusDays(-35, 8);
+  const credentialHash = await credentialHashFor(account.password);
+  const dateOfBirth = defaultDateOfBirthForAccount(account);
+  const heightCm = defaultHeightForAccount(account);
+  const weightKg = defaultWeightForAccount(account);
+  const activityLevel = defaultActivityLevelForAccount(account);
+  const fitnessGoal = defaultFitnessGoalForAccount(account);
 
   await prisma.user.upsert({
     where: { id: userId },
@@ -196,6 +668,12 @@ async function ensureAccount(account: RealisticAccount) {
       deletedAt: account.deletedAt ?? null,
       email_verified_at: verifiedAt,
       phone_verified_at: verifiedAt,
+      has_accepted_privacy:
+        account.hasAcceptedPrivacy ?? !isPendingVerification,
+      privacy_accepted_at:
+        (account.hasAcceptedPrivacy ?? !isPendingVerification)
+          ? nowPlusDays(-30, 7)
+          : null,
       qr_code_token: `real-${account.key}-${randomUUID()}`.slice(0, 64),
       qr_code_rotated_at: nowPlusDays(-1, 6),
       qr_code_expires_at: nowPlusDays(1, 6),
@@ -207,6 +685,12 @@ async function ensureAccount(account: RealisticAccount) {
       deletedAt: account.deletedAt ?? null,
       email_verified_at: verifiedAt,
       phone_verified_at: verifiedAt,
+      has_accepted_privacy:
+        account.hasAcceptedPrivacy ?? !isPendingVerification,
+      privacy_accepted_at:
+        (account.hasAcceptedPrivacy ?? !isPendingVerification)
+          ? nowPlusDays(-30, 7)
+          : null,
       qr_code_token: `real-${account.key}-${randomUUID()}`.slice(0, 64),
       qr_code_rotated_at: nowPlusDays(-1, 6),
       qr_code_expires_at: nowPlusDays(1, 6),
@@ -225,7 +709,7 @@ async function ensureAccount(account: RealisticAccount) {
         user_id: userId,
         credential_hash: credentialHash,
         is_primary: true,
-        verified_at: verifiedAt,
+        verified_at: verifiedAt ?? null,
       },
     });
   } else {
@@ -237,7 +721,7 @@ async function ensureAccount(account: RealisticAccount) {
         identifier: account.email,
         credential_hash: credentialHash,
         is_primary: true,
-        verified_at: verifiedAt,
+        verified_at: verifiedAt ?? null,
       },
     });
   }
@@ -248,15 +732,12 @@ async function ensureAccount(account: RealisticAccount) {
       first_name: account.firstName,
       last_name: account.lastName,
       phone: account.phone,
-      date_of_birth:
-        account.role === UserRole.member ? dateOnly(-365 * 27) : null,
-      gender: account.role === UserRole.member ? Gender.other : null,
-      weight_kg: account.role === UserRole.member ? money(68) : null,
-      height_cm: account.role === UserRole.member ? money(170) : null,
-      activity_level:
-        account.role === UserRole.member ? ActivityLevel.active : null,
-      fitness_goal:
-        account.role === UserRole.member ? FitnessGoal.maintenance : null,
+      date_of_birth: dateOfBirth,
+      gender: account.gender ?? Gender.other,
+      weight_kg: weightKg !== null ? money(weightKg) : null,
+      height_cm: heightCm !== null ? money(heightCm) : null,
+      activity_level: activityLevel,
+      fitness_goal: fitnessGoal,
       avatar_url: `https://cdn.fittrack.local/avatars/${account.key}.png`,
     },
     create: {
@@ -265,15 +746,12 @@ async function ensureAccount(account: RealisticAccount) {
       first_name: account.firstName,
       last_name: account.lastName,
       phone: account.phone,
-      date_of_birth:
-        account.role === UserRole.member ? dateOnly(-365 * 27) : null,
-      gender: account.role === UserRole.member ? Gender.other : null,
-      weight_kg: account.role === UserRole.member ? money(68) : null,
-      height_cm: account.role === UserRole.member ? money(170) : null,
-      activity_level:
-        account.role === UserRole.member ? ActivityLevel.active : null,
-      fitness_goal:
-        account.role === UserRole.member ? FitnessGoal.maintenance : null,
+      date_of_birth: dateOfBirth,
+      gender: account.gender ?? Gender.other,
+      weight_kg: weightKg !== null ? money(weightKg) : null,
+      height_cm: heightCm !== null ? money(heightCm) : null,
+      activity_level: activityLevel,
+      fitness_goal: fitnessGoal,
       avatar_url: `https://cdn.fittrack.local/avatars/${account.key}.png`,
     },
   });
@@ -321,8 +799,8 @@ async function ensureAccount(account: RealisticAccount) {
     update: {
       code_hash: tokenHash(`otp:${account.key}:123456`),
       expires_at: nowPlusDays(1),
-      attempts: account.status === UserStatus.pending ? 1 : 0,
-      consumed_at: account.status === UserStatus.pending ? null : verifiedAt,
+      attempts: isPendingVerification ? 1 : 0,
+      consumed_at: isPendingVerification ? null : verifiedAt,
     },
     create: {
       id: id(`otp:${account.key}:login`),
@@ -331,8 +809,8 @@ async function ensureAccount(account: RealisticAccount) {
       purpose: 'login_2fa',
       code_hash: tokenHash(`otp:${account.key}:123456`),
       expires_at: nowPlusDays(1),
-      attempts: account.status === UserStatus.pending ? 1 : 0,
-      consumed_at: account.status === UserStatus.pending ? null : verifiedAt,
+      attempts: isPendingVerification ? 1 : 0,
+      consumed_at: isPendingVerification ? null : verifiedAt,
     },
   });
 }
@@ -360,6 +838,45 @@ async function ensureAccounts() {
       reviewNotes: 'Member requested account closure after moving branches.',
     },
   });
+
+  const archivedBulkMembers = memberAccountsByTier('archived').filter(
+    (account) => account.key !== 'member-archived',
+  );
+
+  for (const [index, archivedAccount] of archivedBulkMembers.entries()) {
+    await prisma.accountDeletionRequest.upsert({
+      where: { id: id(`account-deletion:${archivedAccount.key}`) },
+      update: {
+        userId: accountId[archivedAccount.key],
+        reason: 'Requested account closure after pausing gym attendance.',
+        status:
+          index % 3 === 0
+            ? AccountDeletionRequestStatus.pending
+            : AccountDeletionRequestStatus.approved,
+        reviewedBy: index % 3 === 0 ? null : accountId.staff,
+        reviewedAt: index % 3 === 0 ? null : nowPlusDays(-(9 + index), 17),
+        reviewNotes:
+          index % 3 === 0
+            ? null
+            : 'Archive request reviewed and approved by operations.',
+      },
+      create: {
+        id: id(`account-deletion:${archivedAccount.key}`),
+        userId: accountId[archivedAccount.key],
+        reason: 'Requested account closure after pausing gym attendance.',
+        status:
+          index % 3 === 0
+            ? AccountDeletionRequestStatus.pending
+            : AccountDeletionRequestStatus.approved,
+        reviewedBy: index % 3 === 0 ? null : accountId.staff,
+        reviewedAt: index % 3 === 0 ? null : nowPlusDays(-(9 + index), 17),
+        reviewNotes:
+          index % 3 === 0
+            ? null
+            : 'Archive request reviewed and approved by operations.',
+      },
+    });
+  }
 
   await prisma.progressMetric.upsert({
     where: { id: id('progress-metric:active:latest') },
@@ -403,7 +920,8 @@ async function ensureMembershipsAndPayments() {
     {
       id: id('membership-plan:performance'),
       name: 'Performance Monthly',
-      description: 'Gym access, priority booking, and body-composition tracking.',
+      description:
+        'Gym access, priority booking, and body-composition tracking.',
       price: money(1299),
       duration_days: 30,
       features: json({ access: ['floor', 'locker', 'priority_booking'] }),
@@ -509,7 +1027,8 @@ async function ensureMembershipsAndPayments() {
     status: PaymentStatus.completed,
     verified_by: accountId.staff,
     verified_at: nowPlusDays(-27, 9),
-    screenshot_url: 'https://cdn.fittrack.local/payments/subscription-active.jpg',
+    screenshot_url:
+      'https://cdn.fittrack.local/payments/subscription-active.jpg',
     gateway_metadata: json({ source: 'front_desk_cash' }),
   });
 
@@ -674,35 +1193,62 @@ async function ensureFacilitiesAndCoaching() {
     });
   }
 
+  const namedCoach = ACCOUNTS.find((account) => account.key === 'coach');
+  const backupCoach = ACCOUNTS.find(
+    (account) => account.key === coachAccountKeys[1],
+  );
+
+  if (!namedCoach) {
+    throw new Error('Named coach account is missing from the realistic seed.');
+  }
+
   const coaches = [
     {
-      id: id('coach:marco'),
-      display_name: 'Marco Valdez',
-      contact_email: 'coach.marco@fittrack.local',
-      contact_phone: '+639170020001',
-      specialization: 'Strength / hypertrophy',
-      bio: 'Progressive strength coach focused on safe barbell progression.',
-      certification: 'NASM-CPT, StrongFirst L1',
-      hourly_rate: money(500),
-      gym_commission_pct: money(0),
-      average_rating: money(4.8),
-      rating_count: 18,
+      id: coachProfileIdForAccount(namedCoach.key),
+      user_id: accountId[namedCoach.key],
+      display_name: `${namedCoach.firstName} ${namedCoach.lastName}`,
+      contact_email: namedCoach.email,
+      contact_phone: namedCoach.phone,
+      specialization:
+        namedCoach.coachSpecialization ?? 'Strength and Conditioning',
+      bio:
+        namedCoach.coachBio ??
+        'Head coach for strength and conditioning and progressive performance blocks.',
+      certification: namedCoach.coachCertification ?? 'NSCA-CSCS',
+      hourly_rate: money(namedCoach.coachHourlyRate ?? 650),
+      gym_commission_pct: money(20),
+      schedule_type:
+        namedCoach.coachScheduleType ?? CoachScheduleType.full_time,
+      average_rating: money(4.9),
+      rating_count: 24,
       is_available_for_booking: true,
     },
-    {
-      id: id('coach:lia'),
-      display_name: 'Lia Bautista',
-      contact_email: 'coach.lia@fittrack.local',
-      contact_phone: '+639170020002',
-      specialization: 'Mobility / conditioning',
-      bio: 'Mobility and conditioning coach for returning lifters.',
-      certification: 'ACE-CPT, Mobility Specialist',
-      hourly_rate: money(420),
-      gym_commission_pct: money(0),
-      average_rating: money(4.6),
-      rating_count: 11,
-      is_available_for_booking: true,
-    },
+    ...(backupCoach
+      ? [
+          {
+            id: coachProfileIdForAccount(backupCoach.key),
+            user_id: accountId[backupCoach.key],
+            display_name: `${backupCoach.firstName} ${backupCoach.lastName}`,
+            contact_email: backupCoach.email,
+            contact_phone: backupCoach.phone,
+            specialization:
+              backupCoach.coachSpecialization ?? 'Mobility and Recovery',
+            bio:
+              backupCoach.coachBio ??
+              'Mobility and conditioning coach for returning members and active recovery blocks.',
+            certification:
+              backupCoach.coachCertification ??
+              'ACE-CPT, Functional Mobility Specialist',
+            hourly_rate: money(backupCoach.coachHourlyRate ?? 480),
+            gym_commission_pct: money(20),
+            schedule_type:
+              backupCoach.coachScheduleType ?? CoachScheduleType.part_time,
+            average_rating: money(4.7),
+            rating_count: 16,
+            is_available_for_booking: true,
+          },
+        ]
+      : []),
   ];
 
   for (const coach of coaches) {
@@ -713,19 +1259,73 @@ async function ensureFacilitiesAndCoaching() {
     });
   }
 
-  const availability = [
-    ['coach:marco', 1, '08:00:00', '12:00:00'],
-    ['coach:marco', 3, '14:00:00', '18:00:00'],
-    ['coach:marco', 6, '09:00:00', '13:00:00'],
-    ['coach:lia', 2, '10:00:00', '14:00:00'],
-    ['coach:lia', 4, '15:00:00', '19:00:00'],
-  ] as const;
+  const additionalCoachAccounts = accountsByRole(UserRole.coach).slice(
+    backupCoach ? 2 : 1,
+  );
+
+  for (const [index, coachAccount] of additionalCoachAccounts.entries()) {
+    await prisma.coachProfile.upsert({
+      where: { id: coachProfileIdForAccount(coachAccount.key) },
+      update: {
+        user_id: accountId[coachAccount.key],
+        display_name: `${coachAccount.firstName} ${coachAccount.lastName}`,
+        contact_email: coachAccount.email,
+        contact_phone: coachAccount.phone,
+        specialization:
+          coachAccount.coachSpecialization ?? 'Strength and Conditioning',
+        bio:
+          coachAccount.coachBio ??
+          'Supports strength, mobility, and structured member progression blocks.',
+        certification: coachAccount.coachCertification ?? 'NASM-CPT',
+        hourly_rate: money(coachAccount.coachHourlyRate ?? 450 + index * 10),
+        gym_commission_pct: money(20),
+        schedule_type:
+          coachAccount.coachScheduleType ?? CoachScheduleType.part_time,
+        average_rating: money(4.4 + (index % 4) * 0.1),
+        rating_count: 6 + index,
+        is_available_for_booking: true,
+      },
+      create: {
+        id: coachProfileIdForAccount(coachAccount.key),
+        user_id: accountId[coachAccount.key],
+        display_name: `${coachAccount.firstName} ${coachAccount.lastName}`,
+        contact_email: coachAccount.email,
+        contact_phone: coachAccount.phone,
+        specialization:
+          coachAccount.coachSpecialization ?? 'Strength and Conditioning',
+        bio:
+          coachAccount.coachBio ??
+          'Supports strength, mobility, and structured member progression blocks.',
+        certification: coachAccount.coachCertification ?? 'NASM-CPT',
+        hourly_rate: money(coachAccount.coachHourlyRate ?? 450 + index * 10),
+        gym_commission_pct: money(20),
+        schedule_type:
+          coachAccount.coachScheduleType ?? CoachScheduleType.part_time,
+        average_rating: money(4.4 + (index % 4) * 0.1),
+        rating_count: 6 + index,
+        is_available_for_booking: true,
+      },
+    });
+  }
+
+  const availability: Array<[string, number, string, string]> = [
+    ['coach', 1, '08:00:00', '12:00:00'],
+    ['coach', 3, '14:00:00', '18:00:00'],
+    ['coach', 6, '09:00:00', '13:00:00'],
+  ];
+
+  if (backupCoach) {
+    availability.push(
+      [backupCoach.key, 2, '10:00:00', '14:00:00'],
+      [backupCoach.key, 4, '15:00:00', '19:00:00'],
+    );
+  }
 
   for (const [coachKey, day, starts, ends] of availability) {
     await prisma.coachAvailabilitySlot.upsert({
       where: { id: id(`availability:${coachKey}:${day}:${starts}`) },
       update: {
-        coach_id: id(coachKey),
+        coach_id: coachProfileIdForAccount(coachKey),
         day_of_week: day,
         start_time: fixedTime(starts),
         end_time: fixedTime(ends),
@@ -733,13 +1333,41 @@ async function ensureFacilitiesAndCoaching() {
       },
       create: {
         id: id(`availability:${coachKey}:${day}:${starts}`),
-        coach_id: id(coachKey),
+        coach_id: coachProfileIdForAccount(coachKey),
         day_of_week: day,
         start_time: fixedTime(starts),
         end_time: fixedTime(ends),
         is_active: true,
       },
     });
+  }
+
+  for (const [index, coachAccount] of additionalCoachAccounts.entries()) {
+    const baseDay = (index % 5) + 1;
+    const windows: Array<[number, string, string]> = [
+      [baseDay, '07:00:00', '11:00:00'],
+      [(baseDay + 2) % 7 || 7, '13:00:00', '17:00:00'],
+    ];
+    for (const [day, starts, ends] of windows) {
+      await prisma.coachAvailabilitySlot.upsert({
+        where: { id: id(`availability:${coachAccount.key}:${day}:${starts}`) },
+        update: {
+          coach_id: coachProfileIdForAccount(coachAccount.key),
+          day_of_week: day,
+          start_time: fixedTime(starts),
+          end_time: fixedTime(ends),
+          is_active: true,
+        },
+        create: {
+          id: id(`availability:${coachAccount.key}:${day}:${starts}`),
+          coach_id: coachProfileIdForAccount(coachAccount.key),
+          day_of_week: day,
+          start_time: fixedTime(starts),
+          end_time: fixedTime(ends),
+          is_active: true,
+        },
+      });
+    }
   }
 
   const venueBookingId = id('amenity-booking:confirmed');
@@ -1129,7 +1757,10 @@ async function ensureFitnessAndTraining() {
       days_per_week: 3,
       is_active: true,
       is_template: false,
-      ai_generation_prompt: json({ focus: 'strength base', level: 'intermediate' }),
+      ai_generation_prompt: json({
+        focus: 'strength base',
+        level: 'intermediate',
+      }),
     },
     create: {
       id: id('training-plan:active'),
@@ -1141,7 +1772,10 @@ async function ensureFitnessAndTraining() {
       duration_weeks: 4,
       days_per_week: 3,
       is_active: true,
-      ai_generation_prompt: json({ focus: 'strength base', level: 'intermediate' }),
+      ai_generation_prompt: json({
+        focus: 'strength base',
+        level: 'intermediate',
+      }),
     },
   });
 
@@ -1247,7 +1881,11 @@ async function ensureFitnessAndTraining() {
       exercise_id: id('exercise:squat'),
       canonical_name: 'Back Squat',
       profile_kind: PoseProfileKind.seed,
-      landmark_signature: json({ hips: 'descend', knees: 'flex', ankles: 'stable' }),
+      landmark_signature: json({
+        hips: 'descend',
+        knees: 'flex',
+        ankles: 'stable',
+      }),
       angle_signature: json({ knee_min: 75, hip_min: 70 }),
       orientation_signature: json({ camera: 'front_or_3q' }),
       movement_pattern: json({ phases: ['eccentric', 'bottom', 'concentric'] }),
@@ -1265,7 +1903,11 @@ async function ensureFitnessAndTraining() {
       exercise_id: id('exercise:squat'),
       canonical_name: 'Back Squat',
       profile_kind: PoseProfileKind.seed,
-      landmark_signature: json({ hips: 'descend', knees: 'flex', ankles: 'stable' }),
+      landmark_signature: json({
+        hips: 'descend',
+        knees: 'flex',
+        ankles: 'stable',
+      }),
       angle_signature: json({ knee_min: 75, hip_min: 70 }),
       orientation_signature: json({ camera: 'front_or_3q' }),
       movement_pattern: json({ phases: ['eccentric', 'bottom', 'concentric'] }),
@@ -1292,7 +1934,10 @@ async function ensureFitnessAndTraining() {
       detected_profile_id: id('pose-profile:squat'),
       classification_confidence: money(0.94),
       subject_lock_confidence: money(0.88),
-      analysis_summary: json({ verdict: 'accepted', notes: ['consistent depth'] }),
+      analysis_summary: json({
+        verdict: 'accepted',
+        notes: ['consistent depth'],
+      }),
       started_at: nowPlusDays(-2, 18),
       ended_at: nowPlusDays(-2, 18, 12),
     },
@@ -1307,7 +1952,10 @@ async function ensureFitnessAndTraining() {
       detected_profile_id: id('pose-profile:squat'),
       classification_confidence: money(0.94),
       subject_lock_confidence: money(0.88),
-      analysis_summary: json({ verdict: 'accepted', notes: ['consistent depth'] }),
+      analysis_summary: json({
+        verdict: 'accepted',
+        notes: ['consistent depth'],
+      }),
       started_at: nowPlusDays(-2, 18),
       ended_at: nowPlusDays(-2, 18, 12),
     },
@@ -1374,7 +2022,10 @@ async function ensureGamification() {
       description: 'Complete one workout session.',
       category: MilestoneCategory.training,
       trigger_type: MilestoneTriggerType.source_event,
-      condition_payload: json({ sourceType: 'workout_session_completed', count: 1 }),
+      condition_payload: json({
+        sourceType: 'workout_session_completed',
+        count: 1,
+      }),
       reward_payload: json({ xp: 100 }),
       is_active: true,
     },
@@ -1385,7 +2036,10 @@ async function ensureGamification() {
       description: 'Complete one workout session.',
       category: MilestoneCategory.training,
       trigger_type: MilestoneTriggerType.source_event,
-      condition_payload: json({ sourceType: 'workout_session_completed', count: 1 }),
+      condition_payload: json({
+        sourceType: 'workout_session_completed',
+        count: 1,
+      }),
       reward_payload: json({ xp: 100 }),
       is_active: true,
     },
@@ -1401,7 +2055,9 @@ async function ensureGamification() {
     update: {
       user_id: accountId['member-active'],
       source_status: ProgressionSourceStatus.applied,
-      source_context: json({ workoutSessionId: id('workout-session:completed') }),
+      source_context: json({
+        workoutSessionId: id('workout-session:completed'),
+      }),
       processed_at: nowPlusDays(-2, 19),
     },
     create: {
@@ -1410,7 +2066,9 @@ async function ensureGamification() {
       source_type: ProgressionSourceType.workout_session_completed,
       source_id: id('workout-session:completed'),
       source_status: ProgressionSourceStatus.applied,
-      source_context: json({ workoutSessionId: id('workout-session:completed') }),
+      source_context: json({
+        workoutSessionId: id('workout-session:completed'),
+      }),
       processed_at: nowPlusDays(-2, 19),
     },
   });
@@ -1946,7 +2604,10 @@ async function ensureAiNotificationsAndGymContent() {
 
   const aiMessages = [
     [ChatRole.user, 'Can I add weight next week?'],
-    [ChatRole.assistant, 'Yes, if bar speed stays stable and depth remains consistent.'],
+    [
+      ChatRole.assistant,
+      'Yes, if bar speed stays stable and depth remains consistent.',
+    ],
   ] as const;
 
   for (const [index, [role, content]] of aiMessages.entries()) {
@@ -1975,7 +2636,9 @@ async function ensureAiNotificationsAndGymContent() {
       session_id: id('ai-chat-session:active'),
       interaction_type: InteractionType.chat,
       request_payload: json({ message: 'Can I add weight next week?' }),
-      response_payload: json({ answer: 'Progress if technique stays consistent.' }),
+      response_payload: json({
+        answer: 'Progress if technique stays consistent.',
+      }),
       action_triggered: 'training_tip',
       action_result: json({ safeProgression: true }),
       latency_ms: 820,
@@ -1989,7 +2652,9 @@ async function ensureAiNotificationsAndGymContent() {
       session_id: id('ai-chat-session:active'),
       interaction_type: InteractionType.chat,
       request_payload: json({ message: 'Can I add weight next week?' }),
-      response_payload: json({ answer: 'Progress if technique stays consistent.' }),
+      response_payload: json({
+        answer: 'Progress if technique stays consistent.',
+      }),
       action_triggered: 'training_tip',
       action_result: json({ safeProgression: true }),
       latency_ms: 820,
@@ -2322,6 +2987,1338 @@ async function ensureAttendanceAuditAndAnalytics() {
   });
 }
 
+async function ensureBulkOperationalData() {
+  const activeBulkMembers = memberAccountsByTier('active_member').filter(
+    (account) => account.key.startsWith('member-active-bulk'),
+  );
+  const verifiedNonMembers = memberAccountsByTier('verified_non_member').filter(
+    (account) => account.key.startsWith('member-verified-non-member-bulk'),
+  );
+  const pendingVerificationMembers = memberAccountsByTier(
+    'pending_verification',
+  ).filter((account) =>
+    account.key.startsWith('member-pending-verification-bulk'),
+  );
+  const pendingMembershipMembers = memberAccountsByTier(
+    'pending_membership',
+  ).filter((account) =>
+    account.key.startsWith('member-pending-membership-bulk'),
+  );
+  const revokedMembers = memberAccountsByTier('revoked').filter((account) =>
+    account.key.startsWith('member-revoked-bulk'),
+  );
+  const archivedMembers = memberAccountsByTier('archived').filter((account) =>
+    account.key.startsWith('member-archived-bulk'),
+  );
+  const coachIds = coachAccountKeys.map(coachProfileIdForAccount);
+  const activeOperationalMembers = [
+    ACCOUNTS.find((account) => account.key === 'member-active'),
+    ACCOUNTS.find((account) => account.key === 'member-premium'),
+    ...activeBulkMembers.slice(0, 118),
+  ].filter((account): account is RealisticAccount => Boolean(account));
+  const activeGamificationMembers = activeBulkMembers.slice(0, 60);
+
+  for (const [index, account] of activeBulkMembers.entries()) {
+    const purchasedAt = nowPlusDays(-(10 + (index % 32)), 9 + (index % 4));
+    const cardId = id(`membership-card:${account.key}`);
+    const subscriptionId = id(`subscription:${account.key}`);
+    const membershipPaymentId = id(`payment:membership-card:${account.key}`);
+    const subscriptionPaymentId = id(`payment:subscription:${account.key}`);
+    const durationDays = index % 5 === 0 ? 90 : 30;
+    const startsAt = new Date(purchasedAt);
+    const expiresAt = new Date(startsAt);
+    expiresAt.setDate(expiresAt.getDate() + durationDays);
+
+    await prisma.membershipCard.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        status: MembershipCardStatus.active,
+        source:
+          index % 3 === 0
+            ? MembershipCardSource.cash
+            : MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+        verified_at: purchasedAt,
+        verified_by: index % 2 === 0 ? accountId.staff : accountId.admin,
+        activated_at: purchasedAt,
+        revoked_at: null,
+        revoked_by: null,
+        revoke_reason: null,
+      },
+      create: {
+        id: cardId,
+        user_id: accountId[account.key],
+        status: MembershipCardStatus.active,
+        source:
+          index % 3 === 0
+            ? MembershipCardSource.cash
+            : MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+        verified_at: purchasedAt,
+        verified_by: index % 2 === 0 ? accountId.staff : accountId.admin,
+        activated_at: purchasedAt,
+      },
+    });
+
+    await ensurePayment({
+      id: membershipPaymentId,
+      user_id: accountId[account.key],
+      payable_type: PayableType.membership_card,
+      payable_id: cardId,
+      payment_stage: PaymentStage.full,
+      amount: money(400),
+      provider:
+        index % 3 === 0 ? PaymentProvider.cash : PaymentProvider.paymongo,
+      status: PaymentStatus.completed,
+      provider_ref: `membership-card-${account.key}`,
+      verified_by: index % 2 === 0 ? accountId.staff : accountId.admin,
+      verified_at: purchasedAt,
+      gateway_metadata:
+        index % 3 === 0
+          ? json({ source: 'front_desk_cash' })
+          : json({ checkout: 'test_mode', source: 'member_portal' }),
+    });
+
+    await ensurePayment({
+      id: subscriptionPaymentId,
+      user_id: accountId[account.key],
+      payable_type: PayableType.subscription,
+      payable_id: subscriptionId,
+      payment_stage: PaymentStage.full,
+      amount: money(durationDays === 90 ? 3199 : index % 2 === 0 ? 799 : 1299),
+      provider:
+        index % 4 === 0 ? PaymentProvider.cash : PaymentProvider.paymongo,
+      status: PaymentStatus.completed,
+      provider_ref: `subscription-${account.key}`,
+      verified_by: index % 2 === 0 ? accountId.staff : accountId.admin,
+      verified_at: new Date(purchasedAt.getTime() + 60 * 60 * 1000),
+      gateway_metadata:
+        index % 4 === 0
+          ? json({ source: 'front_desk_cash' })
+          : json({ checkout: 'test_mode', source: 'web_memberships' }),
+    });
+
+    await prisma.subscription.upsert({
+      where: { id: subscriptionId },
+      update: {
+        user_id: accountId[account.key],
+        plan_id:
+          durationDays === 90
+            ? id('membership-plan:performance')
+            : index % 2 === 0
+              ? id('membership-plan:starter')
+              : id('membership-plan:performance'),
+        payment_id: subscriptionPaymentId,
+        status: SubscriptionStatus.active,
+        starts_at: startsAt,
+        expires_at: expiresAt,
+        warned_7d_at: null,
+        warned_3d_at: null,
+        warned_1d_at: null,
+        cancelled_at: null,
+      },
+      create: {
+        id: subscriptionId,
+        user_id: accountId[account.key],
+        plan_id:
+          durationDays === 90
+            ? id('membership-plan:performance')
+            : index % 2 === 0
+              ? id('membership-plan:starter')
+              : id('membership-plan:performance'),
+        payment_id: subscriptionPaymentId,
+        status: SubscriptionStatus.active,
+        starts_at: startsAt,
+        expires_at: expiresAt,
+      },
+    });
+  }
+
+  for (const [index, account] of pendingMembershipMembers.entries()) {
+    const purchasedAt = nowPlusDays(-(1 + (index % 5)), 11);
+    const cardId = id(`membership-card:${account.key}`);
+    await prisma.membershipCard.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        status: MembershipCardStatus.pending_verification,
+        source:
+          index % 2 === 0
+            ? MembershipCardSource.cash
+            : MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+        verified_at: null,
+        verified_by: null,
+        activated_at: null,
+        revoked_at: null,
+        revoked_by: null,
+        revoke_reason: null,
+      },
+      create: {
+        id: cardId,
+        user_id: accountId[account.key],
+        status: MembershipCardStatus.pending_verification,
+        source:
+          index % 2 === 0
+            ? MembershipCardSource.cash
+            : MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+      },
+    });
+
+    await ensurePayment({
+      id: id(`payment:membership-card:${account.key}`),
+      user_id: accountId[account.key],
+      payable_type: PayableType.membership_card,
+      payable_id: cardId,
+      payment_stage: PaymentStage.full,
+      amount: money(400),
+      provider:
+        index % 2 === 0 ? PaymentProvider.cash : PaymentProvider.paymongo,
+      status:
+        index % 2 === 0
+          ? PaymentStatus.awaiting_verification
+          : PaymentStatus.processing,
+      screenshot_url:
+        index % 2 === 0
+          ? 'https://cdn.fittrack.local/payments/pending-membership-card.jpg'
+          : null,
+    });
+  }
+
+  for (const [index, account] of [
+    ...revokedMembers,
+    ...archivedMembers,
+  ].entries()) {
+    const purchasedAt = nowPlusDays(-(50 + (index % 18)), 10);
+    const revokedAt = nowPlusDays(-(7 + (index % 15)), 18);
+    const cardId = id(`membership-card:${account.key}`);
+    const subscriptionId = id(`subscription:${account.key}`);
+
+    await prisma.membershipCard.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        status: MembershipCardStatus.revoked,
+        source: MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+        verified_at: purchasedAt,
+        verified_by: accountId.staff,
+        activated_at: purchasedAt,
+        revoked_at: revokedAt,
+        revoked_by: accountId.staff,
+        revoke_reason:
+          account.memberTier === 'archived'
+            ? 'Account archived after membership pause request.'
+            : 'Membership access revoked after repeated unpaid renewals.',
+      },
+      create: {
+        id: cardId,
+        user_id: accountId[account.key],
+        status: MembershipCardStatus.revoked,
+        source: MembershipCardSource.paymongo,
+        price: money(400),
+        purchased_at: purchasedAt,
+        verified_at: purchasedAt,
+        verified_by: accountId.staff,
+        activated_at: purchasedAt,
+        revoked_at: revokedAt,
+        revoked_by: accountId.staff,
+        revoke_reason:
+          account.memberTier === 'archived'
+            ? 'Account archived after membership pause request.'
+            : 'Membership access revoked after repeated unpaid renewals.',
+      },
+    });
+
+    await ensurePayment({
+      id: id(`payment:membership-card:${account.key}`),
+      user_id: accountId[account.key],
+      payable_type: PayableType.membership_card,
+      payable_id: cardId,
+      payment_stage: PaymentStage.full,
+      amount: money(400),
+      provider: PaymentProvider.paymongo,
+      status: PaymentStatus.completed,
+      provider_ref: `membership-card-${account.key}`,
+      verified_by: accountId.staff,
+      verified_at: purchasedAt,
+      gateway_metadata: json({
+        checkout: 'historical',
+        source: 'member_portal',
+      }),
+    });
+
+    await prisma.subscription.upsert({
+      where: { id: subscriptionId },
+      update: {
+        user_id: accountId[account.key],
+        plan_id: id('membership-plan:starter'),
+        payment_id: null,
+        status: SubscriptionStatus.expired,
+        starts_at: purchasedAt,
+        expires_at: revokedAt,
+        warned_7d_at: nowPlusDays(-(14 + (index % 8)), 9),
+        warned_3d_at: nowPlusDays(-(10 + (index % 8)), 9),
+        warned_1d_at: nowPlusDays(-(8 + (index % 8)), 9),
+      },
+      create: {
+        id: subscriptionId,
+        user_id: accountId[account.key],
+        plan_id: id('membership-plan:starter'),
+        status: SubscriptionStatus.expired,
+        starts_at: purchasedAt,
+        expires_at: revokedAt,
+        warned_7d_at: nowPlusDays(-(14 + (index % 8)), 9),
+        warned_3d_at: nowPlusDays(-(10 + (index % 8)), 9),
+        warned_1d_at: nowPlusDays(-(8 + (index % 8)), 9),
+      },
+    });
+  }
+
+  for (const [index, account] of activeOperationalMembers.entries()) {
+    const coachId = coachIds[index % coachIds.length];
+    const amenityId =
+      index % 3 === 0
+        ? id('amenity:basketball')
+        : index % 3 === 1
+          ? id('amenity:boxing')
+          : id('amenity:studio');
+    const bookingStatusCycle = [
+      BookingStatus.confirmed,
+      BookingStatus.completed,
+      BookingStatus.cancelled,
+      BookingStatus.balance_pending,
+      BookingStatus.no_show,
+    ];
+    const bookingStatus = bookingStatusCycle[index % bookingStatusCycle.length];
+    const startsAt =
+      bookingStatus === BookingStatus.confirmed ||
+      bookingStatus === BookingStatus.balance_pending
+        ? nowPlusDays(1 + (index % 12), 7 + (index % 5))
+        : nowPlusDays(-(2 + (index % 18)), 7 + (index % 5));
+    const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
+    const bookingId = id(`amenity-booking:${account.key}`);
+    const totalAmount = 240 + (index % 4) * 130;
+    const downpaymentAmount = Math.round(totalAmount * 0.3);
+    const balanceAmount = totalAmount - downpaymentAmount;
+
+    await prisma.amenityBooking.upsert({
+      where: { id: bookingId },
+      update: {
+        user_id: accountId[account.key],
+        amenity_id: amenityId,
+        coach_id: index % 2 === 0 ? coachId : null,
+        status: bookingStatus,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        total_amount: money(totalAmount),
+        downpayment_amount: money(downpaymentAmount),
+        balance_amount: money(balanceAmount),
+        downpayment_paid_at: nowPlusDays(-1, 14),
+        balance_paid_at:
+          bookingStatus === BookingStatus.confirmed ||
+          bookingStatus === BookingStatus.completed
+            ? nowPlusDays(-1, 16)
+            : null,
+        cancelled_at:
+          bookingStatus === BookingStatus.cancelled
+            ? nowPlusDays(-(1 + (index % 12)), 18)
+            : null,
+        completed_at:
+          bookingStatus === BookingStatus.completed
+            ? nowPlusDays(-(1 + (index % 12)), 20)
+            : null,
+        notes:
+          bookingStatus === BookingStatus.no_show
+            ? 'Member did not arrive for the reserved slot.'
+            : 'Bulk realistic booking seed for local QA.',
+      },
+      create: {
+        id: bookingId,
+        user_id: accountId[account.key],
+        amenity_id: amenityId,
+        coach_id: index % 2 === 0 ? coachId : null,
+        status: bookingStatus,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        total_amount: money(totalAmount),
+        downpayment_amount: money(downpaymentAmount),
+        balance_amount: money(balanceAmount),
+        downpayment_paid_at: nowPlusDays(-1, 14),
+        balance_paid_at:
+          bookingStatus === BookingStatus.confirmed ||
+          bookingStatus === BookingStatus.completed
+            ? nowPlusDays(-1, 16)
+            : null,
+        cancelled_at:
+          bookingStatus === BookingStatus.cancelled
+            ? nowPlusDays(-(1 + (index % 12)), 18)
+            : null,
+        completed_at:
+          bookingStatus === BookingStatus.completed
+            ? nowPlusDays(-(1 + (index % 12)), 20)
+            : null,
+        notes:
+          bookingStatus === BookingStatus.no_show
+            ? 'Member did not arrive for the reserved slot.'
+            : 'Bulk realistic booking seed for local QA.',
+      },
+    });
+
+    await ensurePayment({
+      id: id(`payment:booking:downpayment:${account.key}`),
+      user_id: accountId[account.key],
+      payable_type: PayableType.booking,
+      payable_id: bookingId,
+      payment_stage: PaymentStage.downpayment,
+      amount: money(downpaymentAmount),
+      provider:
+        index % 2 === 0 ? PaymentProvider.paymongo : PaymentProvider.cash,
+      status:
+        bookingStatus === BookingStatus.balance_pending
+          ? PaymentStatus.completed
+          : bookingStatus === BookingStatus.cancelled ||
+              bookingStatus === BookingStatus.no_show ||
+              bookingStatus === BookingStatus.completed ||
+              bookingStatus === BookingStatus.confirmed
+            ? PaymentStatus.completed
+            : PaymentStatus.processing,
+      provider_ref: `booking-downpayment-${account.key}`,
+      verified_by: accountId.staff,
+      verified_at: nowPlusDays(-1, 14),
+    });
+
+    if (
+      bookingStatus === BookingStatus.confirmed ||
+      bookingStatus === BookingStatus.completed
+    ) {
+      await ensurePayment({
+        id: id(`payment:booking:balance:${account.key}`),
+        user_id: accountId[account.key],
+        payable_type: PayableType.booking,
+        payable_id: bookingId,
+        payment_stage: PaymentStage.balance,
+        amount: money(balanceAmount),
+        provider: PaymentProvider.cash,
+        status: PaymentStatus.completed,
+        verified_by: accountId.staff,
+        verified_at: nowPlusDays(-1, 16),
+      });
+    }
+  }
+
+  for (const [index, account] of activeOperationalMembers
+    .slice(0, 90)
+    .entries()) {
+    const coachId = coachIds[index % coachIds.length];
+    const appointmentStatusCycle = [
+      AppointmentStatus.confirmed,
+      AppointmentStatus.completed,
+      AppointmentStatus.pending_payment,
+      AppointmentStatus.cancelled,
+      AppointmentStatus.no_show,
+    ];
+    const status =
+      appointmentStatusCycle[index % appointmentStatusCycle.length];
+    const scheduledAt =
+      status === AppointmentStatus.confirmed ||
+      status === AppointmentStatus.pending_payment
+        ? nowPlusDays(1 + (index % 10), 8 + (index % 5))
+        : nowPlusDays(-(2 + (index % 16)), 8 + (index % 5));
+    const appointmentId = id(`coach-appointment:${account.key}`);
+    const totalAmount = 450 + (index % 5) * 80;
+
+    await prisma.coachAppointment.upsert({
+      where: { id: appointmentId },
+      update: {
+        user_id: accountId[account.key],
+        coach_id: coachId,
+        status,
+        scheduled_at: scheduledAt,
+        duration_minutes: index % 4 === 0 ? 90 : 60,
+        total_amount: money(totalAmount),
+        downpayment_amount: money(Math.round(totalAmount * 0.3)),
+        balance_amount: money(totalAmount - Math.round(totalAmount * 0.3)),
+        gym_revenue: money(Math.round(totalAmount * 0.2)),
+        coach_earnings: money(totalAmount - Math.round(totalAmount * 0.2)),
+        downpayment_paid_at:
+          status === AppointmentStatus.pending_payment
+            ? null
+            : nowPlusDays(-1, 12),
+        balance_paid_at:
+          status === AppointmentStatus.confirmed ||
+          status === AppointmentStatus.completed
+            ? nowPlusDays(-1, 15)
+            : null,
+        member_notes: 'Bulk realistic coaching request for local QA.',
+        session_notes:
+          status === AppointmentStatus.completed
+            ? 'Completed a coached progression session with movement corrections.'
+            : null,
+        coach_feedback:
+          status === AppointmentStatus.completed
+            ? 'Member responded well to the session cues and progression plan.'
+            : null,
+        assessment_report:
+          status === AppointmentStatus.completed
+            ? 'Baseline movement quality improved with reduced compensation on final sets.'
+            : null,
+        completed_at:
+          status === AppointmentStatus.completed
+            ? new Date(scheduledAt.getTime() + 75 * 60 * 1000)
+            : null,
+        cancelled_at:
+          status === AppointmentStatus.cancelled
+            ? nowPlusDays(-(1 + (index % 12)), 18)
+            : null,
+        no_show_at:
+          status === AppointmentStatus.no_show
+            ? new Date(scheduledAt.getTime() + 20 * 60 * 1000)
+            : null,
+        cancellation_reason:
+          status === AppointmentStatus.cancelled
+            ? 'Member requested a reschedule due to work conflict.'
+            : null,
+      },
+      create: {
+        id: appointmentId,
+        user_id: accountId[account.key],
+        coach_id: coachId,
+        status,
+        scheduled_at: scheduledAt,
+        duration_minutes: index % 4 === 0 ? 90 : 60,
+        total_amount: money(totalAmount),
+        downpayment_amount: money(Math.round(totalAmount * 0.3)),
+        balance_amount: money(totalAmount - Math.round(totalAmount * 0.3)),
+        gym_revenue: money(Math.round(totalAmount * 0.2)),
+        coach_earnings: money(totalAmount - Math.round(totalAmount * 0.2)),
+        downpayment_paid_at:
+          status === AppointmentStatus.pending_payment
+            ? null
+            : nowPlusDays(-1, 12),
+        balance_paid_at:
+          status === AppointmentStatus.confirmed ||
+          status === AppointmentStatus.completed
+            ? nowPlusDays(-1, 15)
+            : null,
+        member_notes: 'Bulk realistic coaching request for local QA.',
+        session_notes:
+          status === AppointmentStatus.completed
+            ? 'Completed a coached progression session with movement corrections.'
+            : null,
+        coach_feedback:
+          status === AppointmentStatus.completed
+            ? 'Member responded well to the session cues and progression plan.'
+            : null,
+        assessment_report:
+          status === AppointmentStatus.completed
+            ? 'Baseline movement quality improved with reduced compensation on final sets.'
+            : null,
+        completed_at:
+          status === AppointmentStatus.completed
+            ? new Date(scheduledAt.getTime() + 75 * 60 * 1000)
+            : null,
+        cancelled_at:
+          status === AppointmentStatus.cancelled
+            ? nowPlusDays(-(1 + (index % 12)), 18)
+            : null,
+        no_show_at:
+          status === AppointmentStatus.no_show
+            ? new Date(scheduledAt.getTime() + 20 * 60 * 1000)
+            : null,
+        cancellation_reason:
+          status === AppointmentStatus.cancelled
+            ? 'Member requested a reschedule due to work conflict.'
+            : null,
+      },
+    });
+
+    if (status !== AppointmentStatus.cancelled) {
+      await ensurePayment({
+        id: id(`payment:appointment:${account.key}`),
+        user_id: accountId[account.key],
+        payable_type: PayableType.coaching,
+        payable_id: appointmentId,
+        payment_stage: PaymentStage.full,
+        amount: money(totalAmount),
+        provider:
+          index % 2 === 0 ? PaymentProvider.cash : PaymentProvider.paymongo,
+        status:
+          status === AppointmentStatus.pending_payment
+            ? PaymentStatus.processing
+            : PaymentStatus.completed,
+        provider_ref: `coaching-${account.key}`,
+        verified_by:
+          status === AppointmentStatus.pending_payment ? null : accountId.admin,
+        verified_at:
+          status === AppointmentStatus.pending_payment
+            ? null
+            : nowPlusDays(-1, 15),
+      });
+    }
+
+    if (status === AppointmentStatus.completed && index % 4 === 0) {
+      await prisma.coachReview.upsert({
+        where: { appointment_id: appointmentId },
+        update: {
+          coach_id: coachId,
+          reviewer_id: accountId[account.key],
+          rating: 4 + (index % 2),
+          comment:
+            index % 2 === 0
+              ? 'Clear coaching cues and strong follow-through after the session.'
+              : 'Helpful feedback and good pacing throughout the appointment.',
+        },
+        create: {
+          id: id(`coach-review:${account.key}`),
+          coach_id: coachId,
+          reviewer_id: accountId[account.key],
+          appointment_id: appointmentId,
+          rating: 4 + (index % 2),
+          comment:
+            index % 2 === 0
+              ? 'Clear coaching cues and strong follow-through after the session.'
+              : 'Helpful feedback and good pacing throughout the appointment.',
+        },
+      });
+    }
+  }
+
+  for (const [index, account] of activeOperationalMembers
+    .slice(0, 160)
+    .entries()) {
+    for (let dayOffset = 0; dayOffset < 3; dayOffset += 1) {
+      const checkInAt = nowPlusDays(
+        -(dayOffset * 6 + (index % 20)),
+        6 + (index % 6),
+      );
+      const checkOutAt = new Date(
+        checkInAt.getTime() + (75 + ((index + dayOffset) % 45)) * 60 * 1000,
+      );
+      await prisma.attendanceLog.upsert({
+        where: { id: id(`attendance:${account.key}:${dayOffset}`) },
+        update: {
+          user_id: accountId[account.key],
+          scanned_by: dayOffset % 2 === 0 ? accountId.staff : accountId.admin,
+          check_in_at: checkInAt,
+          check_out_at: checkOutAt,
+        },
+        create: {
+          id: id(`attendance:${account.key}:${dayOffset}`),
+          user_id: accountId[account.key],
+          scanned_by: dayOffset % 2 === 0 ? accountId.staff : accountId.admin,
+          check_in_at: checkInAt,
+          check_out_at: checkOutAt,
+        },
+      });
+    }
+  }
+
+  for (const [index, account] of activeOperationalMembers
+    .slice(0, 80)
+    .entries()) {
+    for (let sessionIndex = 0; sessionIndex < 2; sessionIndex += 1) {
+      const sessionId = id(`workout-session:${account.key}:${sessionIndex}`);
+      const startedAt = nowPlusDays(
+        -(2 + sessionIndex * 5 + (index % 16)),
+        6 + ((index + sessionIndex) % 4),
+      );
+      const completedAt = new Date(startedAt.getTime() + 66 * 60 * 1000);
+      const squatLogId = id(
+        `exercise-log:${account.key}:${sessionIndex}:squat`,
+      );
+      const pushLogId = id(
+        `exercise-log:${account.key}:${sessionIndex}:pushup`,
+      );
+
+      await prisma.workoutSession.upsert({
+        where: { id: sessionId },
+        update: {
+          user_id: accountId[account.key],
+          plan_id: null,
+          status: SessionStatus.completed,
+          started_at: startedAt,
+          completed_at: completedAt,
+          duration_seconds: 3960,
+          total_volume_kg: money(1200 + index * 12 + sessionIndex * 90),
+          last_activity_at: completedAt,
+        },
+        create: {
+          id: sessionId,
+          user_id: accountId[account.key],
+          status: SessionStatus.completed,
+          started_at: startedAt,
+          completed_at: completedAt,
+          duration_seconds: 3960,
+          total_volume_kg: money(1200 + index * 12 + sessionIndex * 90),
+          last_activity_at: completedAt,
+        },
+      });
+
+      await prisma.exerciseLog.upsert({
+        where: { id: squatLogId },
+        update: {
+          session_id: sessionId,
+          user_id: accountId[account.key],
+          exercise_id: id('exercise:squat'),
+          set_number: 1,
+          reps_target: 8,
+          reps_completed: 8,
+          reps_ai_counted: 8,
+          weight_kg: money(45 + (index % 8) * 5),
+          duration_seconds: 120,
+        },
+        create: {
+          id: squatLogId,
+          session_id: sessionId,
+          user_id: accountId[account.key],
+          exercise_id: id('exercise:squat'),
+          set_number: 1,
+          reps_target: 8,
+          reps_completed: 8,
+          reps_ai_counted: 8,
+          weight_kg: money(45 + (index % 8) * 5),
+          duration_seconds: 120,
+        },
+      });
+
+      await prisma.exerciseLog.upsert({
+        where: { id: pushLogId },
+        update: {
+          session_id: sessionId,
+          user_id: accountId[account.key],
+          exercise_id: id('exercise:pushup'),
+          set_number: 2,
+          reps_target: 12,
+          reps_completed: 12,
+          reps_ai_counted: 12,
+          weight_kg: null,
+          duration_seconds: 90,
+        },
+        create: {
+          id: pushLogId,
+          session_id: sessionId,
+          user_id: accountId[account.key],
+          exercise_id: id('exercise:pushup'),
+          set_number: 2,
+          reps_target: 12,
+          reps_completed: 12,
+          reps_ai_counted: 12,
+          weight_kg: null,
+          duration_seconds: 90,
+        },
+      });
+
+      if (index < 18 && sessionIndex === 1) {
+        const poseSessionId = id(`pose-session:${account.key}`);
+        const reviewSubmissionId = id(`exercise-review:${account.key}`);
+        const reviewStatus =
+          index % 3 === 0
+            ? ExerciseReviewSubmissionStatus.pending
+            : index % 3 === 1
+              ? ExerciseReviewSubmissionStatus.published
+              : ExerciseReviewSubmissionStatus.rejected;
+        await prisma.poseSession.upsert({
+          where: { id: poseSessionId },
+          update: {
+            user_id: accountId[account.key],
+            exercise_log_id: pushLogId,
+            exercise_hint: 'incline push-up',
+            rep_count_ai: 12,
+            confidence_avg: money(0.87),
+            detected_exercise_name: 'Incline Push-Up',
+            classification_confidence: money(0.84),
+            subject_lock_confidence: money(0.91),
+            analysis_summary: json({ provider: 'local-pose', reviewed: false }),
+            started_at: startedAt,
+            ended_at: completedAt,
+          },
+          create: {
+            id: poseSessionId,
+            user_id: accountId[account.key],
+            exercise_log_id: pushLogId,
+            exercise_hint: 'incline push-up',
+            rep_count_ai: 12,
+            confidence_avg: money(0.87),
+            detected_exercise_name: 'Incline Push-Up',
+            classification_confidence: money(0.84),
+            subject_lock_confidence: money(0.91),
+            analysis_summary: json({ provider: 'local-pose', reviewed: false }),
+            started_at: startedAt,
+            ended_at: completedAt,
+          },
+        });
+
+        await prisma.exerciseReviewSubmission.upsert({
+          where: { id: reviewSubmissionId },
+          update: {
+            user_id: accountId[account.key],
+            pose_session_id: poseSessionId,
+            published_exercise_id:
+              reviewStatus === ExerciseReviewSubmissionStatus.published
+                ? id('exercise:pushup')
+                : null,
+            status: reviewStatus,
+            source_label: 'member capture',
+            origin_label: 'pose-assisted exercise lab',
+            queue_tag:
+              reviewStatus === ExerciseReviewSubmissionStatus.pending
+                ? 'needs review'
+                : 'resolved',
+            trigger_label: 'movement proposal from pose replay',
+            title: 'Incline Push-Up Variant Review',
+            proposed_name: 'Incline Push-Up',
+            summary:
+              'Member submitted a realistic incline push-up draft for operator review.',
+            match_hint: 'Similar to Push-Up with elevated hand placement.',
+            category: ExerciseCategory.strength,
+            muscle_group: 'chest',
+            muscle_targets: json(['chest', 'triceps', 'front_delts']),
+            movement_profile: json({
+              pattern: 'horizontal_push',
+              incline: true,
+            }),
+            hand_shape_profile: json({ grip: 'bench_edge' }),
+            description:
+              'Controlled incline push-up variation proposed from recent pose capture.',
+            instructions:
+              'Brace through the core, keep elbows stacked, and lower with control.',
+            evidence_bars: json([
+              { label: 'Similarity', value: 0.82 },
+              { label: 'Confidence', value: 0.84 },
+            ]),
+            review_notes:
+              reviewStatus === ExerciseReviewSubmissionStatus.rejected
+                ? 'Rejected after reviewing duplicate evidence against an existing pattern.'
+                : reviewStatus === ExerciseReviewSubmissionStatus.published
+                  ? 'Published after confirming the captured movement contract.'
+                  : null,
+            reviewed_at:
+              reviewStatus === ExerciseReviewSubmissionStatus.pending
+                ? null
+                : nowPlusDays(-(1 + (index % 8)), 16),
+          },
+          create: {
+            id: reviewSubmissionId,
+            user_id: accountId[account.key],
+            pose_session_id: poseSessionId,
+            published_exercise_id:
+              reviewStatus === ExerciseReviewSubmissionStatus.published
+                ? id('exercise:pushup')
+                : null,
+            status: reviewStatus,
+            source_label: 'member capture',
+            origin_label: 'pose-assisted exercise lab',
+            queue_tag:
+              reviewStatus === ExerciseReviewSubmissionStatus.pending
+                ? 'needs review'
+                : 'resolved',
+            trigger_label: 'movement proposal from pose replay',
+            title: 'Incline Push-Up Variant Review',
+            proposed_name: 'Incline Push-Up',
+            summary:
+              'Member submitted a realistic incline push-up draft for operator review.',
+            match_hint: 'Similar to Push-Up with elevated hand placement.',
+            category: ExerciseCategory.strength,
+            muscle_group: 'chest',
+            muscle_targets: json(['chest', 'triceps', 'front_delts']),
+            movement_profile: json({
+              pattern: 'horizontal_push',
+              incline: true,
+            }),
+            hand_shape_profile: json({ grip: 'bench_edge' }),
+            description:
+              'Controlled incline push-up variation proposed from recent pose capture.',
+            instructions:
+              'Brace through the core, keep elbows stacked, and lower with control.',
+            evidence_bars: json([
+              { label: 'Similarity', value: 0.82 },
+              { label: 'Confidence', value: 0.84 },
+            ]),
+            review_notes:
+              reviewStatus === ExerciseReviewSubmissionStatus.rejected
+                ? 'Rejected after reviewing duplicate evidence against an existing pattern.'
+                : reviewStatus === ExerciseReviewSubmissionStatus.published
+                  ? 'Published after confirming the captured movement contract.'
+                  : null,
+            reviewed_at:
+              reviewStatus === ExerciseReviewSubmissionStatus.pending
+                ? null
+                : nowPlusDays(-(1 + (index % 8)), 16),
+          },
+        });
+      }
+    }
+  }
+
+  for (const [index, account] of activeGamificationMembers.entries()) {
+    const sessionId = id(`workout-session:${account.key}:1`);
+    const sourceEventId = id(`progression-source:${account.key}`);
+    const grantId = id(`progression-grant:${account.key}`);
+    const milestoneDefinitionId = id('milestone:first-workout');
+    const seasonId = id('season:current');
+    const points = 240 + (60 - index) * 7;
+
+    await prisma.progressionSourceEvent.upsert({
+      where: {
+        source_type_source_id: {
+          source_type: ProgressionSourceType.workout_session_completed,
+          source_id: sessionId,
+        },
+      },
+      update: {
+        user_id: accountId[account.key],
+        source_status: ProgressionSourceStatus.applied,
+        source_context: json({ workoutSessionId: sessionId }),
+        processed_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+      create: {
+        id: sourceEventId,
+        user_id: accountId[account.key],
+        source_type: ProgressionSourceType.workout_session_completed,
+        source_id: sessionId,
+        source_status: ProgressionSourceStatus.applied,
+        source_context: json({ workoutSessionId: sessionId }),
+        processed_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+    });
+
+    await prisma.progressionGrantLedger.upsert({
+      where: { id: grantId },
+      update: {
+        user_id: accountId[account.key],
+        source_event_id: sourceEventId,
+        season_id: seasonId,
+        grant_type: ProgressionGrantType.xp,
+        grant_status: ProgressionGrantStatus.applied,
+        amount: 90 + (index % 6) * 15,
+        muscle_group: index % 2 === 0 ? 'quads' : 'chest',
+        reason: 'Bulk realistic progression grant from completed workout.',
+        metadata: json({ source: 'seed-realistic-data' }),
+      },
+      create: {
+        id: grantId,
+        user_id: accountId[account.key],
+        source_event_id: sourceEventId,
+        season_id: seasonId,
+        grant_type: ProgressionGrantType.xp,
+        grant_status: ProgressionGrantStatus.applied,
+        amount: 90 + (index % 6) * 15,
+        muscle_group: index % 2 === 0 ? 'quads' : 'chest',
+        reason: 'Bulk realistic progression grant from completed workout.',
+        metadata: json({ source: 'seed-realistic-data' }),
+      },
+    });
+
+    await prisma.userProgressionProfile.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        active_season_id: seasonId,
+        total_xp: 840 + points,
+        current_streak: 2 + (index % 8),
+        longest_streak: 5 + (index % 11),
+        current_season_points: points,
+        last_progressed_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+      create: {
+        id: id(`progression-profile:${account.key}`),
+        user_id: accountId[account.key],
+        active_season_id: seasonId,
+        total_xp: 840 + points,
+        current_streak: 2 + (index % 8),
+        longest_streak: 5 + (index % 11),
+        current_season_points: points,
+        last_progressed_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+    });
+
+    await prisma.seasonalStanding.upsert({
+      where: {
+        season_id_user_id: {
+          season_id: seasonId,
+          user_id: accountId[account.key],
+        },
+      },
+      update: {
+        season_points: points,
+        rank_position: index + 3,
+        is_hidden: false,
+        is_disqualified: false,
+        last_earned_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+      create: {
+        id: id(`seasonal-standing:${account.key}`),
+        season_id: seasonId,
+        user_id: accountId[account.key],
+        season_points: points,
+        rank_position: index + 3,
+        last_earned_at: nowPlusDays(-(1 + (index % 10)), 19),
+      },
+    });
+
+    await prisma.userMilestoneProgress.upsert({
+      where: {
+        user_id_milestone_definition_id: {
+          user_id: accountId[account.key],
+          milestone_definition_id: milestoneDefinitionId,
+        },
+      },
+      update: {
+        status:
+          index % 3 === 0
+            ? MilestoneProgressStatus.claimed
+            : MilestoneProgressStatus.unlocked,
+        progress_value: 1,
+        unlocked_at: nowPlusDays(-(1 + (index % 10)), 19),
+        claimed_at:
+          index % 3 === 0 ? nowPlusDays(-(1 + (index % 10)), 20) : null,
+      },
+      create: {
+        id: id(`milestone-progress:${account.key}`),
+        user_id: accountId[account.key],
+        milestone_definition_id: milestoneDefinitionId,
+        status:
+          index % 3 === 0
+            ? MilestoneProgressStatus.claimed
+            : MilestoneProgressStatus.unlocked,
+        progress_value: 1,
+        unlocked_at: nowPlusDays(-(1 + (index % 10)), 19),
+        claimed_at:
+          index % 3 === 0 ? nowPlusDays(-(1 + (index % 10)), 20) : null,
+      },
+    });
+
+    await prisma.muscleMasteryProgress.upsert({
+      where: {
+        user_id_muscle_group: {
+          user_id: accountId[account.key],
+          muscle_group: index % 2 === 0 ? 'quads' : 'chest',
+        },
+      },
+      update: {
+        total_volume_kg: money(900 + index * 45),
+        xp_points: 320 + index * 18,
+        rank:
+          index > 40
+            ? MasteryRank.bronze
+            : index > 22
+              ? MasteryRank.silver
+              : MasteryRank.gold,
+        last_ranked_at: nowPlusDays(-(1 + (index % 10)), 20),
+      },
+      create: {
+        id: id(`muscle-mastery:${account.key}`),
+        user_id: accountId[account.key],
+        muscle_group: index % 2 === 0 ? 'quads' : 'chest',
+        total_volume_kg: money(900 + index * 45),
+        xp_points: 320 + index * 18,
+        rank:
+          index > 40
+            ? MasteryRank.bronze
+            : index > 22
+              ? MasteryRank.silver
+              : MasteryRank.gold,
+        last_ranked_at: nowPlusDays(-(1 + (index % 10)), 20),
+      },
+    });
+
+    await prisma.rankingProfile.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        visibility:
+          index % 5 === 0
+            ? RankingVisibility.anonymous
+            : RankingVisibility.public,
+        governance_status: RankingGovernanceStatus.normal,
+        display_alias: `${account.firstName} ${account.lastName.charAt(0)}.`,
+        admin_note: null,
+      },
+      create: {
+        id: id(`ranking-profile:${account.key}`),
+        user_id: accountId[account.key],
+        visibility:
+          index % 5 === 0
+            ? RankingVisibility.anonymous
+            : RankingVisibility.public,
+        governance_status: RankingGovernanceStatus.normal,
+        display_alias: `${account.firstName} ${account.lastName.charAt(0)}.`,
+      },
+    });
+
+    await prisma.integrityProfile.upsert({
+      where: { user_id: accountId[account.key] },
+      update: {
+        risk_level:
+          index % 12 === 0 ? IntegrityRiskLevel.medium : IntegrityRiskLevel.low,
+        open_case_count: index % 12 === 0 ? 1 : 0,
+        last_flagged_at:
+          index % 12 === 0 ? nowPlusDays(-(2 + (index % 6)), 18) : null,
+        last_resolved_at:
+          index % 12 === 0 ? null : nowPlusDays(-(5 + (index % 8)), 18),
+      },
+      create: {
+        id: id(`integrity-profile:${account.key}`),
+        user_id: accountId[account.key],
+        risk_level:
+          index % 12 === 0 ? IntegrityRiskLevel.medium : IntegrityRiskLevel.low,
+        open_case_count: index % 12 === 0 ? 1 : 0,
+        last_flagged_at:
+          index % 12 === 0 ? nowPlusDays(-(2 + (index % 6)), 18) : null,
+        last_resolved_at:
+          index % 12 === 0 ? null : nowPlusDays(-(5 + (index % 8)), 18),
+      },
+    });
+
+    if (index < 12) {
+      await prisma.creatorProfile.upsert({
+        where: { user_id: accountId[account.key] },
+        update: {
+          state:
+            index % 3 === 0
+              ? CreatorState.pending_review
+              : CreatorState.candidate,
+          last_state_changed_at: nowPlusDays(-(2 + index), 17),
+          admin_notes:
+            'Bulk realistic creator profile seeded from exercise review queue.',
+        },
+        create: {
+          id: id(`creator-profile:${account.key}`),
+          user_id: accountId[account.key],
+          state:
+            index % 3 === 0
+              ? CreatorState.pending_review
+              : CreatorState.candidate,
+          last_state_changed_at: nowPlusDays(-(2 + index), 17),
+          admin_notes:
+            'Bulk realistic creator profile seeded from exercise review queue.',
+        },
+      });
+    }
+  }
+
+  for (const [index, account] of ACCOUNTS.slice(0, 140).entries()) {
+    const notificationTypeCycle = [
+      NotificationType.payment_confirmed,
+      NotificationType.booking_confirmed,
+      NotificationType.appointment_confirmed,
+      NotificationType.appointment_reminder,
+      NotificationType.system,
+    ];
+    const notificationType =
+      notificationTypeCycle[index % notificationTypeCycle.length];
+    const sentAt = nowPlusDays(-(index % 12), 9 + (index % 6));
+    const status =
+      index % 5 === 0 ? NotificationStatus.read : NotificationStatus.sent;
+
+    await prisma.notification.upsert({
+      where: { id: id(`notification:${account.key}`) },
+      update: {
+        user_id: accountId[account.key],
+        type: notificationType,
+        channel: NotificationChannel.in_app,
+        title:
+          notificationType === NotificationType.system
+            ? 'FitTrack update'
+            : notificationType === NotificationType.payment_confirmed
+              ? 'Payment confirmed'
+              : notificationType === NotificationType.booking_confirmed
+                ? 'Booking confirmed'
+                : notificationType === NotificationType.appointment_confirmed
+                  ? 'Appointment confirmed'
+                  : 'Appointment reminder',
+        body:
+          notificationType === NotificationType.system
+            ? 'Your local QA dataset was refreshed with realistic FitTrack activity.'
+            : notificationType === NotificationType.payment_confirmed
+              ? 'Your latest FitTrack payment has been recorded in PHP.'
+              : notificationType === NotificationType.booking_confirmed
+                ? 'Your venue reservation is confirmed on the local stack.'
+                : notificationType === NotificationType.appointment_confirmed
+                  ? 'Your coaching appointment is confirmed on the local stack.'
+                  : 'Reminder: your coaching appointment starts within the next day.',
+        data: json({ source: 'seed-realistic-data', userKey: account.key }),
+        status,
+        sent_at: sentAt,
+        read_at: status === NotificationStatus.read ? nowPlusDays(0, 8) : null,
+        error: null,
+      },
+      create: {
+        id: id(`notification:${account.key}`),
+        user_id: accountId[account.key],
+        type: notificationType,
+        channel: NotificationChannel.in_app,
+        title:
+          notificationType === NotificationType.system
+            ? 'FitTrack update'
+            : notificationType === NotificationType.payment_confirmed
+              ? 'Payment confirmed'
+              : notificationType === NotificationType.booking_confirmed
+                ? 'Booking confirmed'
+                : notificationType === NotificationType.appointment_confirmed
+                  ? 'Appointment confirmed'
+                  : 'Appointment reminder',
+        body:
+          notificationType === NotificationType.system
+            ? 'Your local QA dataset was refreshed with realistic FitTrack activity.'
+            : notificationType === NotificationType.payment_confirmed
+              ? 'Your latest FitTrack payment has been recorded in PHP.'
+              : notificationType === NotificationType.booking_confirmed
+                ? 'Your venue reservation is confirmed on the local stack.'
+                : notificationType === NotificationType.appointment_confirmed
+                  ? 'Your coaching appointment is confirmed on the local stack.'
+                  : 'Reminder: your coaching appointment starts within the next day.',
+        data: json({ source: 'seed-realistic-data', userKey: account.key }),
+        status,
+        sent_at: sentAt,
+        read_at: status === NotificationStatus.read ? nowPlusDays(0, 8) : null,
+      },
+    });
+  }
+
+  for (const [index, account] of activeOperationalMembers
+    .slice(0, 40)
+    .entries()) {
+    await prisma.progressMetric.upsert({
+      where: { id: id(`progress-metric:${account.key}`) },
+      update: {
+        user_id: accountId[account.key],
+        weight_kg: money(58 + (index % 18)),
+        height_cm: money(158 + (index % 17)),
+        body_fat_pct: money(16 + (index % 10)),
+        muscle_mass_kg: money(24 + (index % 9)),
+        waist_cm: money(72 + (index % 12)),
+        chest_cm: money(88 + (index % 12)),
+        notes:
+          'Bulk realistic body-composition checkpoint for analytics and profile QA.',
+        recorded_at: nowPlusDays(-(index % 10), 7),
+      },
+      create: {
+        id: id(`progress-metric:${account.key}`),
+        user_id: accountId[account.key],
+        weight_kg: money(58 + (index % 18)),
+        height_cm: money(158 + (index % 17)),
+        body_fat_pct: money(16 + (index % 10)),
+        muscle_mass_kg: money(24 + (index % 9)),
+        waist_cm: money(72 + (index % 12)),
+        chest_cm: money(88 + (index % 12)),
+        notes:
+          'Bulk realistic body-composition checkpoint for analytics and profile QA.',
+        recorded_at: nowPlusDays(-(index % 10), 7),
+      },
+    });
+  }
+
+  for (const account of [
+    ...verifiedNonMembers,
+    ...pendingVerificationMembers,
+  ].slice(0, 24)) {
+    await prisma.notification.upsert({
+      where: { id: id(`notification:onboarding:${account.key}`) },
+      update: {
+        user_id: accountId[account.key],
+        type: NotificationType.system,
+        channel: NotificationChannel.in_app,
+        title: 'Account onboarding status',
+        body:
+          account.memberTier === 'verified_non_member'
+            ? 'Your FitTrack account is verified as a non-member and ready for sign-in.'
+            : 'Complete your verification flow to activate your FitTrack account.',
+        data: json({ tier: account.memberTier }),
+        status: NotificationStatus.sent,
+        sent_at: nowPlusDays(-1, 8),
+      },
+      create: {
+        id: id(`notification:onboarding:${account.key}`),
+        user_id: accountId[account.key],
+        type: NotificationType.system,
+        channel: NotificationChannel.in_app,
+        title: 'Account onboarding status',
+        body:
+          account.memberTier === 'verified_non_member'
+            ? 'Your FitTrack account is verified as a non-member and ready for sign-in.'
+            : 'Complete your verification flow to activate your FitTrack account.',
+        data: json({ tier: account.memberTier }),
+        status: NotificationStatus.sent,
+        sent_at: nowPlusDays(-1, 8),
+      },
+    });
+  }
+}
+
+async function buildRoleBreakdown() {
+  const rows = await prisma.user.groupBy({
+    by: ['role'],
+    _count: { _all: true },
+  });
+
+  return rows.reduce<Record<string, number>>((accumulator, row) => {
+    accumulator[row.role] = row._count._all;
+    return accumulator;
+  }, {});
+}
+
+async function buildTierBreakdown() {
+  const members = await prisma.user.findMany({
+    where: { role: UserRole.member },
+    select: {
+      status: true,
+      deletedAt: true,
+      membership_card: {
+        select: {
+          status: true,
+        },
+      },
+    },
+  });
+
+  const breakdown = {
+    active_member: 0,
+    pending_membership: 0,
+    pending_verification: 0,
+    revoked: 0,
+    verified_non_member: 0,
+    archived: 0,
+  };
+
+  for (const member of members) {
+    if (member.deletedAt) {
+      breakdown.archived += 1;
+      continue;
+    }
+
+    if (member.status === UserStatus.pending) {
+      breakdown.pending_verification += 1;
+      continue;
+    }
+
+    if (member.membership_card?.status === MembershipCardStatus.active) {
+      breakdown.active_member += 1;
+      continue;
+    }
+
+    if (
+      member.membership_card?.status ===
+      MembershipCardStatus.pending_verification
+    ) {
+      breakdown.pending_membership += 1;
+      continue;
+    }
+
+    if (member.membership_card?.status === MembershipCardStatus.revoked) {
+      breakdown.revoked += 1;
+      continue;
+    }
+
+    breakdown.verified_non_member += 1;
+  }
+
+  return breakdown;
+}
+
 async function buildCounts() {
   return {
     users: await prisma.user.count(),
@@ -2394,6 +4391,8 @@ async function buildCounts() {
     gymFaqEntries: await prisma.gymFaqEntry.count(),
     businessInsightRuns: await prisma.businessInsightRun.count(),
     accountDeletionRequests: await prisma.accountDeletionRequest.count(),
+    roleBreakdown: await buildRoleBreakdown(),
+    tierBreakdown: await buildTierBreakdown(),
   };
 }
 
@@ -2409,11 +4408,12 @@ async function main() {
   await ensureInventoryAndSales();
   await ensureAiNotificationsAndGymContent();
   await ensureAttendanceAuditAndAnalytics();
+  await ensureBulkOperationalData();
 
   const counts = await buildCounts();
   console.log('[realistic-seed] complete');
   console.log(
-    `[realistic-seed] defaults ensured for ${bootstrapSummary.adminEmail}; realistic password for real.* accounts: ${REALISTIC_PASSWORD}`,
+    `[realistic-seed] defaults ensured for ${bootstrapSummary.adminEmail}; named credentials: admin@fittrack.com / FitTrack@Admin1, staff@fittrack.com / FitTrack@Staff1, coach@fittrack.com / FitTrack@Coach1, member.active@fittrack.com / FitTrack@Member1, nonmember.verified@fittrack.com / FitTrack@Member2, member.pending@fittrack.com / FitTrack@Member3, member.archived@fittrack.com / FitTrack@Member4`,
   );
   console.log(JSON.stringify(counts, null, 2));
 }

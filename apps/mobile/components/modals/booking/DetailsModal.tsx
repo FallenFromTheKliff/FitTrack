@@ -1,9 +1,13 @@
-import { useMemo } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { useQuery } from "@tanstack/react-query";
-import { Clock, Image as ImageIcon, Users } from "lucide-react-native";
-import { gymLayoutEquipmentQueryOptions } from "@fittrack/query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Clock, Image as ImageIcon, Star, Users } from "lucide-react-native";
+import {
+  gymLayoutEquipmentQueryOptions,
+  submitVenueFeedbackMutationOptions,
+  venueFeedbackQueryOptions,
+} from "@fittrack/query";
 import { isEquipmentInsideVenue } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -34,6 +38,23 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   const { data: liveEquipment = [] } = useQuery({
     ...gymLayoutEquipmentQueryOptions(mobileApiClient, { refetchInterval: 5000 }),
     enabled: isVisible && venue?.floorId !== undefined
+  });
+  const liveVenueId = venue?.sourceVenueId;
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackState, setFeedbackState] = useState<{
+    text: string;
+    tone: "danger" | "success";
+  } | null>(null);
+  const feedbackQuery = useQuery({
+    ...venueFeedbackQueryOptions(mobileApiClient, liveVenueId),
+    enabled: isVisible && !!liveVenueId,
+  });
+  const feedbackMutation = useMutation({
+    ...submitVenueFeedbackMutationOptions(mobileApiClient),
+    onSuccess: async () => {
+      await feedbackQuery.refetch();
+    },
   });
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
@@ -75,6 +96,40 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
         )
         .sort((left, right) => left.name.localeCompare(right.name))
     : [];
+  const venueFeedback = feedbackQuery.data ?? [];
+  const averageRating =
+    venueFeedback.length > 0
+      ? venueFeedback.reduce((sum, entry) => sum + entry.rating, 0) /
+        venueFeedback.length
+      : null;
+  const handleFeedbackSubmit = async () => {
+    if (!liveVenueId) {
+      setFeedbackState({
+        text: "This venue is not connected to a live facility record yet.",
+        tone: "danger",
+      });
+      return;
+    }
+
+    try {
+      await feedbackMutation.mutateAsync({
+        id: liveVenueId,
+        rating: feedbackRating,
+        comment: feedbackComment.trim() || undefined,
+      });
+      setFeedbackComment("");
+      setFeedbackRating(5);
+      setFeedbackState({
+        text: "Venue feedback submitted.",
+        tone: "success",
+      });
+    } catch {
+      setFeedbackState({
+        text: "Venue feedback could not be sent right now.",
+        tone: "danger",
+      });
+    }
+  };
 
   return (
     <Modal
@@ -149,6 +204,86 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
                     <FitText style={s.imageTileLabel}>{label}</FitText>
                   </View>
                 ))}
+              </View>
+            </View>
+            <View>
+              <FitText style={s.sectionLabel}>Venue Feedback</FitText>
+              <View style={s.fieldBlock}>
+                <FitText style={s.fieldText}>
+                  Average rating: {averageRating ? `${averageRating.toFixed(1)}/5` : "No ratings yet"}
+                </FitText>
+                {venueFeedback.slice(0, 3).map((entry) => (
+                  <FitText key={entry.id} style={s.fieldTextMuted}>
+                    {entry.rating}/5 - {entry.comment ?? "No written comment."}
+                  </FitText>
+                ))}
+              </View>
+              <View style={{ gap: 10, marginTop: 10 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <Pressable
+                      key={rating}
+                      onPress={() => setFeedbackRating(rating)}
+                      hitSlop={8}
+                      style={{
+                        alignItems: "center",
+                        backgroundColor: colors.surfaceRaised,
+                        borderColor: rating <= feedbackRating ? colors.warning : colors.border,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        height: 38,
+                        justifyContent: "center",
+                        width: 38,
+                      }}
+                    >
+                      <Star
+                        size={18}
+                        color={rating <= feedbackRating ? colors.warning : colors.textMuted}
+                        fill={rating <= feedbackRating ? colors.warning : "none"}
+                        strokeWidth={2}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  value={feedbackComment}
+                  onChangeText={(value) => {
+                    setFeedbackComment(value);
+                    if (feedbackState) setFeedbackState(null);
+                  }}
+                  placeholder="Optional note about this venue"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  textAlignVertical="top"
+                  editable={!feedbackMutation.isPending}
+                  style={{
+                    backgroundColor: colors.surfaceRaised,
+                    borderColor: colors.border,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    color: colors.textPrimary,
+                    minHeight: 88,
+                    padding: 12,
+                  }}
+                />
+                {feedbackState ? (
+                  <FitText
+                    style={{
+                      color: feedbackState.tone === "success" ? colors.success : colors.danger,
+                      fontSize: 12,
+                    }}
+                  >
+                    {feedbackState.text}
+                  </FitText>
+                ) : null}
+                <FitButton
+                  label="Leave Feedback"
+                  variant="primary"
+                  onPress={() => void handleFeedbackSubmit()}
+                  loading={feedbackMutation.isPending}
+                  loadingLabel="Submitting"
+                  disabled={!liveVenueId}
+                />
               </View>
             </View>
           </ScrollView>

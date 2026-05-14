@@ -8,6 +8,7 @@ import { BookingRepository } from './booking.repository';
 import {
   BOOKING_LIFECYCLE_QUEUE,
   BOOKING_NO_SHOW_JOB,
+  BOOKING_REMINDER_JOB,
 } from './booking.constants';
 import { BookingLifecycleService } from './booking-lifecycle.service';
 import {
@@ -72,7 +73,7 @@ describe('Booking lifecycle integration', () => {
     await moduleRef.close();
   });
 
-  it('reacts to booking.confirmed by scheduling the no-show job and dispatching booking_confirmed', async () => {
+  it('reacts to booking.confirmed by scheduling lifecycle jobs and dispatching booking_confirmed', async () => {
     repo.findBookingNotificationContextByIdOrThrow.mockResolvedValue(
       createBookingNotificationContext(),
     );
@@ -85,6 +86,14 @@ describe('Booking lifecycle integration', () => {
       { bookingId: 'booking-1' },
       expect.objectContaining({
         jobId: `${BOOKING_NO_SHOW_JOB}:booking-1`,
+        removeOnComplete: true,
+      }),
+    );
+    expect(lifecycleQueue.add).toHaveBeenCalledWith(
+      BOOKING_REMINDER_JOB,
+      { bookingId: 'booking-1' },
+      expect.objectContaining({
+        jobId: `${BOOKING_REMINDER_JOB}:booking-1`,
         removeOnComplete: true,
       }),
     );
@@ -118,6 +127,7 @@ describe('Booking lifecycle integration', () => {
 function createBookingNotificationContext() {
   return {
     id: 'booking-1',
+    status: 'confirmed',
     starts_at: new Date('2099-03-24T10:00:00.000Z'),
     ends_at: new Date('2099-03-24T11:00:00.000Z'),
     amenity: { name: 'Main Court' },
@@ -129,6 +139,7 @@ function createBookingNotificationContext() {
       notification_prefs: {
         booking_confirmed_email: true,
         booking_confirmed_sms: true,
+        venue_booking_reminder_email: true,
       },
       profile: {
         first_name: 'Jamie',

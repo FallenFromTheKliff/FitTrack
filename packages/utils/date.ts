@@ -168,3 +168,69 @@ export function getDurationMinutes(startTime: string, endTime: string) {
   const duration = end - start;
   return duration > 0 ? duration : 60;
 }
+
+export type CoachAvailabilityWindow = {
+  dayOfWeek: number | string;
+  endTime: string;
+  isAvailable?: boolean;
+  startTime: string;
+};
+
+export type CoachGeneratedSlot = CoachAvailabilityWindow & {
+  durationMinutes: number;
+};
+
+function toMinuteValue(value: string) {
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText ?? "0");
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function toTimeValue(minutes: number) {
+  const normalized = Math.max(0, minutes);
+  const hour = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function expandCoachAvailabilitySlots(
+  slots: CoachAvailabilityWindow[],
+  scheduleType: "full_time" | "part_time" = "part_time",
+  slotMinutes = 60,
+): CoachGeneratedSlot[] {
+  return slots.flatMap((slot) => {
+    const durationMinutes = getDurationMinutes(slot.startTime, slot.endTime);
+    if (scheduleType !== "full_time") {
+      return [{ ...slot, durationMinutes }];
+    }
+
+    const startMinutes = toMinuteValue(slot.startTime);
+    const endMinutes = toMinuteValue(slot.endTime);
+    if (
+      startMinutes == null ||
+      endMinutes == null ||
+      endMinutes <= startMinutes ||
+      slotMinutes <= 0
+    ) {
+      return [{ ...slot, durationMinutes }];
+    }
+
+    const generated: CoachGeneratedSlot[] = [];
+    for (
+      let cursor = startMinutes;
+      cursor + slotMinutes <= endMinutes;
+      cursor += slotMinutes
+    ) {
+      generated.push({
+        ...slot,
+        durationMinutes: slotMinutes,
+        endTime: toTimeValue(cursor + slotMinutes),
+        startTime: toTimeValue(cursor),
+      });
+    }
+
+    return generated.length > 0 ? generated : [{ ...slot, durationMinutes }];
+  });
+}

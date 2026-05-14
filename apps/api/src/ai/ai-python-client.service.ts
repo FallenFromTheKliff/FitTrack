@@ -756,6 +756,9 @@ export class AiPythonClientService {
           'The AI business-insight service is unavailable right now.',
         missingConfigDetail:
           'AI business insight generation is not configured.',
+        timeoutDetail:
+          'The AI business-insight service took too long to respond.',
+        timeoutMs: 12000,
       },
     );
 
@@ -1118,15 +1121,17 @@ export class AiPythonClientService {
       unavailableDetail?: string;
       missingConfigDetail?: string;
       timeoutDetail?: string;
+      timeoutMs?: number;
     },
   ): Promise<Response> {
     const settings = this.getRequiredSettings(options?.missingConfigDetail);
     const endpoint = `${settings.apiBaseUrl.replace(/\/+$/, '')}${path}`;
+    const requestTimeoutMs = options?.timeoutMs ?? settings.requestTimeoutMs;
 
     try {
       return await fetch(endpoint, {
         ...init,
-        signal: AbortSignal.timeout(settings.requestTimeoutMs),
+        signal: AbortSignal.timeout(requestTimeoutMs),
       });
     } catch (error) {
       const detail =

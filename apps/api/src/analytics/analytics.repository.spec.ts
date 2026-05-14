@@ -67,7 +67,8 @@ describe('AnalyticsRepository', () => {
     expect(getQueryText(0)).toContain('FROM payments');
     expect(getQueryText(1)).toContain('FROM coach_appointments');
     expect(getQueryText(2)).toContain('FROM attendance_logs');
-    expect(getQueryText(3)).toContain('FROM users');
+    expect(getQueryText(3)).toContain('FROM membership_cards');
+    expect(getQueryText(3)).toContain('JOIN users');
     expect(getQueryValue(0, 1)).toBe(start);
     expect(getQueryValue(0, 2)).toBe(end);
   });
@@ -90,7 +91,10 @@ describe('AnalyticsRepository', () => {
 
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(4);
     expect(getQueryText(2)).toContain("date_trunc('month', created_at)");
-    expect(getQueryText(3)).toContain("date_trunc('month', completed_at)");
+    expect(getQueryText(3)).toContain(
+      "date_trunc('month', COALESCE(payments.verified_at, payments.created_at))",
+    );
+    expect(getQueryText(3)).toContain('coach_appointments.gym_revenue');
   });
 
   it('groups attendance trends using the requested period bucket', async () => {
@@ -119,16 +123,18 @@ describe('AnalyticsRepository', () => {
     const start = new Date('2025-01-01T00:00:00.000Z');
     const end = new Date('2025-01-31T23:59:59.999Z');
 
-    prisma.$queryRaw.mockResolvedValueOnce([
-      { new_members: 10, active_members: 24 },
-    ]);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ new_members: 10 }])
+      .mockResolvedValueOnce([{ active_members: 24 }]);
 
     await repo.getMemberMetrics(start, end);
 
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(getQueryText(0)).toContain('FROM subscriptions');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(getQueryText(0)).toContain('FROM membership_cards');
+    expect(getQueryText(1)).toContain('FROM users');
+    expect(getQueryText(1)).toContain('LEFT JOIN subscriptions');
     expect(getQueryText(0)).toContain(
-      "subscriptions.status IN ('active', 'past_due', 'cancelled', 'expired')",
+      "membership_cards.status = 'active'",
     );
   });
 
@@ -167,7 +173,9 @@ describe('AnalyticsRepository', () => {
     await repo.getAttendanceMetrics(start, end, 'custom');
 
     expect(getQueryText(2)).toContain("date_trunc('day', created_at)");
-    expect(getQueryText(3)).toContain("date_trunc('day', completed_at)");
+    expect(getQueryText(3)).toContain(
+      "date_trunc('day', COALESCE(payments.verified_at, payments.created_at))",
+    );
     expect(getQueryText(6)).toContain("date_trunc('day', check_in_at)");
   });
 

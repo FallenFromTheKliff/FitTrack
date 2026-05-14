@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { CoachScheduleType } from '@prisma/client';
 
 import { TrimString } from '../../../common/validators';
 import { PaginationDTO } from '../../../user/dto/user-dto';
@@ -82,6 +84,16 @@ export class UpdateCoachProfileDTO {
   @Min(0, { message: 'gym_commission_pct must be at least 0' })
   @Max(100, { message: 'gym_commission_pct must not exceed 100' })
   gym_commission_pct?: number;
+
+  @ApiPropertyOptional({
+    enum: CoachScheduleType,
+    example: CoachScheduleType.part_time,
+  })
+  @IsOptional()
+  @IsEnum(CoachScheduleType, {
+    message: `schedule_type must be one of: ${Object.values(CoachScheduleType).join(', ')}`,
+  })
+  schedule_type?: CoachScheduleType;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -159,6 +171,16 @@ export class CreateStandaloneCoachDTO {
   @Min(0, { message: 'gym_commission_pct must be at least 0' })
   @Max(100, { message: 'gym_commission_pct must not exceed 100' })
   gym_commission_pct?: number;
+
+  @ApiPropertyOptional({
+    enum: CoachScheduleType,
+    example: CoachScheduleType.part_time,
+  })
+  @IsOptional()
+  @IsEnum(CoachScheduleType, {
+    message: `schedule_type must be one of: ${Object.values(CoachScheduleType).join(', ')}`,
+  })
+  schedule_type?: CoachScheduleType;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -276,6 +298,12 @@ export class CoachListItemResponseDTO {
 
   @ApiProperty({ example: '1200' })
   hourly_rate: string;
+
+  @ApiProperty({
+    enum: CoachScheduleType,
+    example: CoachScheduleType.part_time,
+  })
+  schedule_type: CoachScheduleType;
 
   @ApiPropertyOptional({ example: '4.75', nullable: true })
   average_rating: string | null;

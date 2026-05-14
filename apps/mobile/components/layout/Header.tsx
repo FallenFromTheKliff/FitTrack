@@ -1,7 +1,7 @@
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { Menu, ChevronLeft } from "lucide-react-native";
+import { Bell, ChevronLeft, HelpCircle, Menu } from "lucide-react-native";
 import { type TabKey } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -12,13 +12,25 @@ import HeaderMessage from "@/components/layout/HeaderMessage";
 
 type HeaderProps = {
   onMenuPress: () => void;
+  onHelpPress?: () => void;
+  onNotificationsPress?: () => void;
   activeTab: TabKey;
   showBack?: boolean;
   onBackPress?: () => void;
   isDimmed?: boolean;
+  unreadCount?: number;
 };
 
-export default function Header({ onMenuPress, activeTab, showBack, onBackPress, isDimmed }: HeaderProps) {
+export default function Header({
+  onMenuPress,
+  onHelpPress,
+  onNotificationsPress,
+  activeTab,
+  showBack,
+  onBackPress,
+  isDimmed,
+  unreadCount = 0,
+}: HeaderProps) {
   const { colors, activeIconColor } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const s = React.useMemo(() => makeHeaderStyles(colors), [colors]);
@@ -61,6 +73,50 @@ export default function Header({ onMenuPress, activeTab, showBack, onBackPress, 
           )}
         </Pressable>
         <HeaderMessage activeTab={activeTab} />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Pressable
+            onPress={onHelpPress}
+            style={[s.menuButton, { alignItems: "center", justifyContent: "center" }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Open page help"
+          >
+            <HelpCircle size={22} color={iconColor} strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            onPress={onNotificationsPress}
+            style={[s.menuButton, { alignItems: "center", justifyContent: "center" }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              unreadCount > 0
+                ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+                : "Open notifications"
+            }
+          >
+            <Bell size={22} color={iconColor} strokeWidth={2} />
+            {unreadCount > 0 ? (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 4,
+                  borderRadius: 9,
+                  backgroundColor: colors.brand,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.onBrand ?? "#FFFFFF", fontSize: 10, fontWeight: "800" }}>
+                  {unreadCount > 99 ? "99+" : String(unreadCount)}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
         {showOverlayBlur && (
             <Animated.View style={[StyleSheet.absoluteFill, dimOverlayStyle]}>
               <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.35)" }]} />

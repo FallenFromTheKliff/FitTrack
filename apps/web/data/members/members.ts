@@ -49,8 +49,18 @@ export const MEMBER_FILTER_OPTIONS = [
   { label: "All", value: "all" },
   { label: "Admin", value: "Admin" },
   { label: "Staff", value: "Staff" },
+  { label: "Coaches", value: "Coach" },
   { label: "Members", value: "Member" }
 ];
+
+export const MEMBER_TIER_FILTER_OPTIONS = [
+  { label: "All tiers", value: "all" },
+  { label: "Member", value: "active_member" },
+  { label: "Pending membership", value: "pending_membership" },
+  { label: "Pending verification", value: "pending_verification" },
+  { label: "Verified Non-Member", value: "verified_non_member" },
+  { label: "Revoked", value: "revoked" },
+] as const;
 
 export const ADD_USER_FIELDS: FieldConfig[] = [
   { name: "firstName", label: "First Name", type: "text", required: true, placeholder: "Enter the account holder's given name" },

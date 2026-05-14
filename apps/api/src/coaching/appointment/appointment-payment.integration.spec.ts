@@ -21,6 +21,7 @@ import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 import {
   COACHING_LIFECYCLE_QUEUE,
   COACHING_NO_SHOW_JOB,
+  COACHING_REMINDER_JOB,
 } from './appointment.constants';
 import { AppointmentService } from './appointment.service';
 
@@ -138,6 +139,14 @@ describe('Appointment payment integration', () => {
       { appointmentId: 'appt-1' },
       expect.objectContaining({
         jobId: `${COACHING_NO_SHOW_JOB}:appt-1`,
+        removeOnComplete: true,
+      }),
+    );
+    expect(lifecycleQueue.add).toHaveBeenCalledWith(
+      COACHING_REMINDER_JOB,
+      { appointmentId: 'appt-1' },
+      expect.objectContaining({
+        jobId: `${COACHING_REMINDER_JOB}:appt-1`,
         removeOnComplete: true,
       }),
     );
@@ -265,6 +274,7 @@ function createAlreadyConfirmedAppointment() {
 function createNotificationContext() {
   return {
     id: 'appt-1',
+    status: 'confirmed',
     scheduled_at: '2099-04-01T08:00:00.000Z',
     duration_minutes: 60,
     user: {
@@ -275,6 +285,7 @@ function createNotificationContext() {
       notification_prefs: {
         appointment_confirmed_email: true,
         appointment_confirmed_sms: true,
+        coach_appointment_reminder_email: true,
       },
       profile: {
         first_name: 'Jamie',

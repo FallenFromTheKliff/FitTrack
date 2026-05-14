@@ -1,10 +1,11 @@
 import {
+  ApiClientError,
   toApiClientError,
   type ApiClient,
   type LoginSuccessResponse,
   type RegisterPayload,
 } from "@fittrack/api-client";
-import type { AuthUser } from "@fittrack/types";
+import type { AuthUser, LoginPortal } from "@fittrack/types";
 import {
   createPendingAuthSession,
   getRoleGateDeniedMessage,
@@ -63,7 +64,22 @@ export function createAuthController({
     async loadCurrentUser(options?: { includeDeletionStatus?: boolean }) {
       const token = await sessionStore.getAccessToken();
       if (!token) return null;
-      const profile = await client.users.getProfile();
+      let profile;
+      try {
+        profile = await client.users.getProfile();
+      } catch (error) {
+        const apiError = toApiClientError(error, "Unable to load current user.");
+        if (
+          apiError instanceof ApiClientError &&
+          (apiError.status === 401 || apiError.status === 403)
+        ) {
+          await sessionStore.clearTokens();
+          pending.clear();
+          onUserCleared();
+          return null;
+        }
+        throw apiError;
+      }
       let authUser = mapProfileToAuthUser(profile);
       if (options?.includeDeletionStatus) {
         const status = shouldFetchDeletionStatus(authUser)
@@ -96,11 +112,18 @@ export function createAuthController({
     async login(
       email: string,
       password: string,
-      options?: { placeholderRole?: AuthUser["role"] },
+      options?: {
+        placeholderRole?: AuthUser["role"];
+        portal?: LoginPortal;
+      },
     ) {
       try {
         const normalizedEmail = normalizeAuthEmail(email);
-        const data = await client.auth.login({ email: normalizedEmail, password });
+        const data = await client.auth.login({
+          email: normalizedEmail,
+          password,
+          portal: options?.portal,
+        });
         if ("otpRequired" in data && data.otpRequired) {
           const placeholder: AuthUser = {
             id: "",
@@ -154,7 +177,7 @@ export function createAuthController({
             reason: "ACCOUNT_LOCKED" as const,
           };
         }
-        throw error;
+        throw apiError;
       }
     },
     async register(

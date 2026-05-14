@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Lock, CheckCircle, XCircle } from "lucide-react-native";
 import { useForm } from "react-hook-form";
@@ -20,6 +20,7 @@ import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
 import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import NoticeModal from "@/components/modals/shared/NoticeModal";
 
 const PASS_REQ_HEIGHT = 148;
 
@@ -29,6 +30,7 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
   const { surfaceStyle } = useThemeTransition();
   const s = useMemo(() => makePrefModalStyles(colors), [colors]);
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
+  const [samePasswordNoticeVisible, setSamePasswordNoticeVisible] = useState(false);
   const [isLogoutLoading, setIsLogoutLoading] = useState(false);
   const [pendingChange, setPendingChange] = useState<ChangePasswordData | null>(null);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
@@ -62,7 +64,7 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
 
   const onSubmit = async (data: ChangePasswordData) => {
     if (data.currentPassword === data.newPassword) {
-      Alert.alert("Cannot change password to current password.");
+      setSamePasswordNoticeVisible(true);
       return;
     }
     setPendingChange(data);
@@ -174,6 +176,13 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
           setPendingChange(null);
           setIsLogoutConfirmVisible(false);
         }}
+      />
+      <NoticeModal
+        isVisible={samePasswordNoticeVisible}
+        title="Password Unchanged"
+        message="Choose a new password that is different from your current password."
+        buttonLabel="Got It"
+        onClose={() => setSamePasswordNoticeVisible(false)}
       />
     </>
   );

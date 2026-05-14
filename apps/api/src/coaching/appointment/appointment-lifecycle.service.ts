@@ -1,6 +1,6 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { NotificationType } from '@prisma/client';
+import { AppointmentStatus, NotificationType } from '@prisma/client';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Queue } from 'bull';
 
@@ -24,6 +24,8 @@ import {
   COACHING_LIFECYCLE_TIMEZONE,
   COACHING_NO_SHOW_GRACE_MINUTES,
   COACHING_NO_SHOW_JOB,
+  COACHING_REMINDER_JOB,
+  COACHING_REMINDER_OFFSET_HOURS,
   COACHING_RECURRING_BILLING_OVERDUE_JOB,
 } from './appointment.constants';
 import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
@@ -61,6 +63,10 @@ export class AppointmentLifecycleService implements OnModuleInit {
       new Date(event.scheduledAt),
       event.durationMinutes,
     );
+    await this.queueAppointmentReminder(
+      event.appointmentId,
+      new Date(event.scheduledAt),
+    );
 
     const appointment =
       await this.repo.findAppointmentNotificationContextByIdOrThrow(
@@ -83,6 +89,72 @@ export class AppointmentLifecycleService implements OnModuleInit {
         },
       },
     );
+
+    if (appointment.coach.user) {
+      await this.notificationsService.dispatch(
+        appointment.coach.user.id,
+        NotificationType.appointment_confirmed,
+        {
+          title: 'Coaching appointment booked',
+          body: `${this.getDisplayName(appointment.user)} is booked for ${this.buildAppointmentWindowLabel(appointment)}.`,
+          data: {
+            ...this.buildAppointmentNotificationData(appointment),
+            notification_kind: 'coach_appointment_booked',
+          },
+        },
+      );
+    }
+  }
+
+  async runAppointmentReminder(appointmentId: string): Promise<void> {
+    const appointment =
+      await this.repo.findAppointmentNotificationContextByIdOrThrow(
+        appointmentId,
+      );
+    const scheduledAt = new Date(appointment.scheduled_at);
+
+    if (
+      appointment.status !== AppointmentStatus.confirmed ||
+      scheduledAt.getTime() <= Date.now()
+    ) {
+      return;
+    }
+
+    await this.notificationsService.dispatch(
+      appointment.user.id,
+      NotificationType.appointment_reminder,
+      {
+        title: 'Coaching appointment reminder',
+        body: this.buildAppointmentReminderBody(appointment),
+        data: {
+          ...this.buildAppointmentNotificationData(appointment),
+          reminder_offset_hours: COACHING_REMINDER_OFFSET_HOURS,
+        },
+        email: {
+          subject: 'Reminder: coaching appointment tomorrow',
+          html: this.buildAppointmentReminderHtml(appointment),
+        },
+        sms: {
+          body: this.buildAppointmentReminderSms(appointment),
+        },
+      },
+    );
+
+    if (appointment.coach.user) {
+      await this.notificationsService.dispatch(
+        appointment.coach.user.id,
+        NotificationType.appointment_reminder,
+        {
+          title: 'Upcoming coaching session',
+          body: `${this.getDisplayName(appointment.user)} is scheduled for ${this.buildAppointmentWindowLabel(appointment)}.`,
+          data: {
+            ...this.buildAppointmentNotificationData(appointment),
+            notification_kind: 'coach_appointment_reminder',
+            reminder_offset_hours: COACHING_REMINDER_OFFSET_HOURS,
+          },
+        },
+      );
+    }
   }
 
   @OnEvent(APPOINTMENT_CANCELLED_EVENT, { async: true })
@@ -137,6 +209,21 @@ export class AppointmentLifecycleService implements OnModuleInit {
         },
       },
     );
+
+    if (appointment.coach.user) {
+      await this.notificationsService.dispatch(
+        appointment.coach.user.id,
+        NotificationType.appointment_completed,
+        {
+          title: 'Session marked complete',
+          body: `${this.getDisplayName(appointment.user)}'s coaching appointment is now completed.`,
+          data: {
+            ...this.buildAppointmentNotificationData(appointment),
+            notification_kind: 'coach_appointment_completed',
+          },
+        },
+      );
+    }
   }
 
   async runNoShowCheck(appointmentId: string): Promise<void> {
@@ -146,15 +233,21 @@ export class AppointmentLifecycleService implements OnModuleInit {
       COACHING_NO_SHOW_GRACE_MINUTES,
     );
 
-    await this.repo.markAppointmentNoShowIfEligible(
+    const didMarkNoShow = await this.repo.markAppointmentNoShowIfEligible(
       appointmentId,
       eligibleScheduledAt,
       noShowAt,
     );
+
+    if (didMarkNoShow) {
+      await this.notifyAppointmentNoShow(appointmentId);
+    }
   }
 
   async runCompletionCron(): Promise<void> {
     const completedAt = new Date();
+    await this.runNoShowCleanupCron(completedAt);
+
     const candidates =
       await this.repo.findFreeAppointmentsAwaitingCompletion(completedAt);
 
@@ -188,6 +281,38 @@ export class AppointmentLifecycleService implements OnModuleInit {
     await this.recurringCoachingPlanService.runBillingOverdueCron();
   }
 
+  private async runNoShowCleanupCron(now: Date): Promise<void> {
+    const eligibleScheduledAt = this.subtractMinutes(
+      now,
+      COACHING_NO_SHOW_GRACE_MINUTES,
+    );
+    const candidates =
+      await this.repo.findConfirmedAppointmentsPotentiallyNoShow(
+        eligibleScheduledAt,
+      );
+
+    for (const appointment of candidates) {
+      const appointmentEndsAt = new Date(
+        appointment.scheduled_at.getTime() +
+          appointment.duration_minutes * 60 * 1000,
+      );
+
+      if (appointmentEndsAt > eligibleScheduledAt) {
+        continue;
+      }
+
+      const didMarkNoShow = await this.repo.markAppointmentNoShowIfEligible(
+        appointment.id,
+        eligibleScheduledAt,
+        now,
+      );
+
+      if (didMarkNoShow) {
+        await this.notifyAppointmentNoShow(appointment.id);
+      }
+    }
+  }
+
   private async ensureLifecycleJobs(): Promise<void> {
     await this.lifecycleQueue.add(
       COACHING_COMPLETION_JOB,
@@ -214,6 +339,29 @@ export class AppointmentLifecycleService implements OnModuleInit {
         },
       },
     );
+  }
+
+  private async queueAppointmentReminder(
+    appointmentId: string,
+    scheduledAt: Date,
+  ): Promise<void> {
+    const delay = Math.max(
+      0,
+      scheduledAt.getTime() -
+        COACHING_REMINDER_OFFSET_HOURS * 60 * 60 * 1000 -
+        Date.now(),
+    );
+
+    await this.lifecycleQueue.add(
+      COACHING_REMINDER_JOB,
+      { appointmentId },
+      {
+        delay,
+        jobId: `${COACHING_REMINDER_JOB}:${appointmentId}`,
+        removeOnComplete: true,
+      },
+    );
+
   }
 
   private async queueNoShowCheck(
@@ -276,6 +424,64 @@ export class AppointmentLifecycleService implements OnModuleInit {
     `;
   }
 
+  private async notifyAppointmentNoShow(appointmentId: string): Promise<void> {
+    const appointment =
+      await this.repo.findAppointmentNotificationContextByIdOrThrow(
+        appointmentId,
+      );
+
+    await this.notificationsService.dispatch(
+      appointment.user.id,
+      NotificationType.system,
+      {
+        title: 'Coaching appointment marked as no-show',
+        body: this.buildAppointmentNoShowBody(appointment),
+        data: {
+          ...this.buildAppointmentNotificationData(appointment),
+          status: AppointmentStatus.no_show,
+          notification_kind: 'appointment_no_show',
+        },
+        email: {
+          subject: 'You missed your coaching appointment',
+          html: this.buildAppointmentNoShowHtml(appointment),
+        },
+      },
+    );
+
+    if (appointment.coach.user) {
+      await this.notificationsService.dispatch(
+        appointment.coach.user.id,
+        NotificationType.system,
+        {
+          title: 'Client missed coaching appointment',
+          body: `${this.getDisplayName(appointment.user)} missed ${this.buildAppointmentWindowLabel(appointment)}.`,
+          data: {
+            ...this.buildAppointmentNotificationData(appointment),
+            status: AppointmentStatus.no_show,
+            notification_kind: 'coach_appointment_no_show',
+          },
+        },
+      );
+    }
+  }
+
+  private buildAppointmentReminderHtml(
+    appointment: AppointmentNotificationTarget,
+  ): string {
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#1a1a1a">Coaching appointment reminder</h2>
+        <p style="color:#555">
+          Hi ${this.getDisplayName(appointment.user)}, your session with
+          <strong>${this.getDisplayName(appointment.coach.user)}</strong> starts in about 24 hours.
+        </p>
+        <p style="color:#555">${this.buildAppointmentWindowLabel(appointment)}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin-top:24px"/>
+        <p style="color:#aaa;font-size:12px;text-align:center">FitTrack</p>
+      </div>
+    `;
+  }
+
   private buildAppointmentCancelledHtml(
     appointment: AppointmentNotificationTarget,
     audience: 'member' | 'coach',
@@ -325,6 +531,30 @@ export class AppointmentLifecycleService implements OnModuleInit {
     return `Your coaching appointment with ${this.getDisplayName(appointment.coach.user)} is confirmed. ${this.buildAppointmentWindowLabel(appointment)}`;
   }
 
+  private buildAppointmentNoShowHtml(
+    appointment: AppointmentNotificationTarget,
+  ): string {
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#1a1a1a">Coaching appointment marked as no-show</h2>
+        <p style="color:#555">
+          Hi ${this.getDisplayName(appointment.user)}, your coaching appointment with
+          <strong>${this.getDisplayName(appointment.coach.user)}</strong> was marked as missed.
+        </p>
+        <p style="color:#555">${this.buildAppointmentWindowLabel(appointment)}</p>
+        <p style="color:#555">Open FitTrack Bookings if you need to schedule a new session.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin-top:24px"/>
+        <p style="color:#aaa;font-size:12px;text-align:center">FitTrack</p>
+      </div>
+    `;
+  }
+
+  private buildAppointmentReminderBody(
+    appointment: AppointmentNotificationTarget,
+  ): string {
+    return `Reminder: your coaching appointment with ${this.getDisplayName(appointment.coach.user)} starts in about 24 hours. ${this.buildAppointmentWindowLabel(appointment)}`;
+  }
+
   private buildAppointmentCancelledBody(
     appointment: AppointmentNotificationTarget,
     audience: 'member' | 'coach',
@@ -347,6 +577,18 @@ export class AppointmentLifecycleService implements OnModuleInit {
     appointment: AppointmentNotificationTarget,
   ): string {
     return `FitTrack: your coaching appointment with ${this.getDisplayName(appointment.coach.user)} is confirmed. ${this.buildAppointmentWindowLabel(appointment)}`;
+  }
+
+  private buildAppointmentNoShowBody(
+    appointment: AppointmentNotificationTarget,
+  ): string {
+    return `You missed your coaching appointment with ${this.getDisplayName(appointment.coach.user)}. ${this.buildAppointmentWindowLabel(appointment)} Open FitTrack Bookings if you need to schedule another session.`;
+  }
+
+  private buildAppointmentReminderSms(
+    appointment: AppointmentNotificationTarget,
+  ): string {
+    return `FitTrack reminder: your coaching appointment with ${this.getDisplayName(appointment.coach.user)} starts in about 24 hours. ${this.buildAppointmentWindowLabel(appointment)}`;
   }
 
   private buildAppointmentWindowLabel(

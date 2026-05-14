@@ -1,5 +1,5 @@
 import { AdminLoginPage } from "@/components/auth/AdminLoginPage";
 
 export default function Page() {
-  return <AdminLoginPage />;
+  return <AdminLoginPage variant="team" />;
 }

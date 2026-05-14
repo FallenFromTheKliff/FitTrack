@@ -68,6 +68,28 @@ type ReviewWriteResult = {
   ratingCount: number;
 };
 
+type CoachReviewListRecord = Prisma.CoachReviewGetPayload<{
+  include: {
+    appointment: {
+      select: {
+        id: true;
+        scheduled_at: true;
+      };
+    };
+    reviewer: {
+      select: {
+        id: true;
+        profile: {
+          select: {
+            first_name: true;
+            last_name: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
 type RelationshipNotificationContext =
   Prisma.CoachClientRelationshipGetPayload<{
     include: {
@@ -329,6 +351,33 @@ export class RelationshipRepository extends BaseRepository {
         averageRating,
         ratingCount,
       };
+    });
+  }
+
+  listCoachReviewsForCoach(coachId: string, limit = 20): Promise<CoachReviewListRecord[]> {
+    return this.prisma.coachReview.findMany({
+      where: { coach_id: coachId },
+      take: limit,
+      orderBy: [{ created_at: 'desc' }],
+      include: {
+        appointment: {
+          select: {
+            id: true,
+            scheduled_at: true,
+          },
+        },
+        reviewer: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 }

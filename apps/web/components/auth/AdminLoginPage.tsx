@@ -25,12 +25,25 @@ import { getWebPortalFallbackPath } from "@/lib/portal-access";
 import { authStyles } from "@/styles/authStyles";
 
 const PAGE_COPY = {
-  badge: "FitTrack Portal",
-  heroAccent: "FITTRACK.",
-  subtitle:
-    "Sign in with your FitTrack account for the portal experience assigned to your role.",
-  emailPlaceholder: "account@fittrack.com",
-};
+  team: {
+    badge: "Team Portal",
+    cardSubtitle: "Gym Team Portal",
+    emailPlaceholder: "team@fittrack.com",
+    heroAccent: "FITTRACK.",
+    subtitle:
+      "Sign in with your FitTrack team account for admin, staff, or coach tools.",
+  },
+  member: {
+    badge: "Member Portal",
+    cardSubtitle: "Member Web Portal",
+    emailPlaceholder: "member@fittrack.com",
+    heroAccent: "MEMBER ACCESS.",
+    subtitle:
+      "Sign in to view your bookings, facility map, workouts, and profile from the web.",
+  },
+} as const;
+
+type LoginPortalVariant = keyof typeof PAGE_COPY;
 
 function getPortalLandingPath(role?: Role) {
   return getWebPortalFallbackPath(role);
@@ -48,7 +61,11 @@ function getLoginItemTransition(shouldAnimate: boolean, index: number) {
   };
 }
 
-export function AdminLoginPage() {
+export function AdminLoginPage({
+  variant = "team",
+}: {
+  variant?: LoginPortalVariant;
+}) {
   const { commitLogin, login } = useAuth();
   const { colors, onBrandTextColor, settings } = useTheme();
   const router = useRouter();
@@ -56,6 +73,7 @@ export function AdminLoginPage() {
   const themeTransition = useThemeTransition();
   const shouldAnimate = settings.animationLevel !== "none";
   const { floating } = useAuthEntrance(shouldAnimate);
+  const copy = PAGE_COPY[variant];
 
   const [errorMsg, setErrorMsg] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -91,7 +109,9 @@ export function AdminLoginPage() {
     setLoading(true);
     setErrorMsg("");
 
-    const result = await login(data.email.trim(), data.password);
+    const result = await login(data.email.trim(), data.password, {
+      portal: variant,
+    });
 
     if (!result.success) {
       setLoading(false);
@@ -100,7 +120,7 @@ export function AdminLoginPage() {
         return;
       }
 
-      setErrorMsg(result.error ?? "Invalid email or password.");
+      setErrorMsg(result.error ?? "Invalid credentials.");
       return;
     }
 
@@ -138,11 +158,11 @@ export function AdminLoginPage() {
             <FitText as="h1" style={styles.heroTitle}>
               Welcome Back,
             </FitText>
-            <FitText as="h1" style={styles.heroTitleAccent}>
-              {PAGE_COPY.heroAccent}
+              <FitText as="h1" style={styles.heroTitleAccent}>
+              {copy.heroAccent}
             </FitText>
             <FitText as="p" style={styles.heroSubtitle}>
-              {PAGE_COPY.subtitle}
+              {copy.subtitle}
             </FitText>
           </div>
         </div>
@@ -193,7 +213,7 @@ export function AdminLoginPage() {
                 transition={itemTransition(1)}
               >
                 <FitText as="p" style={styles.subtitle}>
-                  Gym Access Portal
+                  {copy.cardSubtitle}
                 </FitText>
               </motion.div>
 
@@ -203,7 +223,7 @@ export function AdminLoginPage() {
                 style={styles.badge}
                 transition={itemTransition(2)}
               >
-                {PAGE_COPY.badge}
+                {copy.badge}
               </motion.span>
             </div>
 
@@ -223,7 +243,7 @@ export function AdminLoginPage() {
                   inputRowStyle={styles.loginInputRow}
                   label="Email Address"
                   name="email"
-                  placeholder={PAGE_COPY.emailPlaceholder}
+                  placeholder={copy.emailPlaceholder}
                   type="email"
                 />
               </motion.div>

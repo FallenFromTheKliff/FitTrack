@@ -53,6 +53,10 @@ export type FitnessMilestoneProgressStatus =
   | "in_progress"
   | "unlocked"
   | "claimed";
+export type FitnessAchievementReviewStatus =
+  | "Pending"
+  | "Approved"
+  | "Rejected";
 export type FitnessRankingVisibility = "public" | "anonymous" | "private";
 export type FitnessRankingGovernanceStatus =
   | "normal"
@@ -992,6 +996,21 @@ export type FitnessMilestoneProgressRecord = {
   triggerType: FitnessMilestoneTriggerType;
   unlockedAt: string | null;
   updatedAt: string | null;
+};
+
+export type FitnessAchievementReviewRecord = {
+  badgeLabel: string;
+  id: string;
+  memberEmail: string;
+  memberId: string;
+  memberInitials: string;
+  memberName: string;
+  proofCaption: string;
+  proofImageUrl: string;
+  reviewedAt?: string;
+  reviewerNotes?: string;
+  status: FitnessAchievementReviewStatus;
+  submittedAt: string;
 };
 
 export type FitnessIntegrityCaseSummaryRecord = {

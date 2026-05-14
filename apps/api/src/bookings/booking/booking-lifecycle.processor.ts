@@ -5,6 +5,7 @@ import {
   BOOKING_LIFECYCLE_QUEUE,
   BOOKING_NO_SHOW_JOB,
   BOOKING_PENDING_CLEANUP_JOB,
+  BOOKING_REMINDER_JOB,
 } from './booking.constants';
 import { BookingLifecycleService } from './booking-lifecycle.service';
 
@@ -17,6 +18,11 @@ export class BookingLifecycleProcessor {
   @Process(BOOKING_NO_SHOW_JOB)
   handleNoShowJob(job: { data: { bookingId: string } }): Promise<void> {
     return this.bookingLifecycleService.runNoShowCheck(job.data.bookingId);
+  }
+
+  @Process(BOOKING_REMINDER_JOB)
+  handleReminderJob(job: { data: { bookingId: string } }): Promise<void> {
+    return this.bookingLifecycleService.runBookingReminder(job.data.bookingId);
   }
 
   @Process(BOOKING_PENDING_CLEANUP_JOB)

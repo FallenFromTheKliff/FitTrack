@@ -2,7 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useRouter, useSegments } from "expo-router";
-import { Home, Map, CalendarDays, Apple, Trophy, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
+import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 
@@ -21,6 +21,7 @@ type NavItem = { label: string; icon: LucideIcon; route: string };
 const NAV_ITEMS: NavItem[] = [
   { label: "Home", icon: Home, route: "/(tabs)/home" },
   { label: "Bookings", icon: CalendarDays, route: "/(tabs)/bookings" },
+  { label: "Assessments", icon: ClipboardCheck, route: "/(tabs)/assessments" },
   { label: "Facilities", icon: Map, route: "/(tabs)/facilities" },
   { label: "Nutrition", icon: Apple, route: "/(tabs)/nutrition" },
   { label: "Muscle Mastery", icon: Trophy, route: "/(tabs)/mastery" },

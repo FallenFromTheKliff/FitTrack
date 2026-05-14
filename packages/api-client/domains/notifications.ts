@@ -42,9 +42,11 @@ type NotificationPreferencesApiRecord = {
   appointment_cancelled_email: boolean;
   appointment_completed_email: boolean;
   appointment_confirmed_email: boolean;
+  coach_appointment_reminder_email: boolean;
   booking_cancelled_email: boolean;
   booking_confirmed_email: boolean;
   booking_no_show_email: boolean;
+  venue_booking_reminder_email: boolean;
   payment_confirmed_email: boolean;
   payment_failed_email: boolean;
   rank_up_email: boolean;
@@ -86,9 +88,12 @@ function mapNotificationPreferences(
     appointmentCancelledEmail: record.appointment_cancelled_email,
     appointmentCompletedEmail: record.appointment_completed_email,
     appointmentConfirmedEmail: record.appointment_confirmed_email,
+    coachAppointmentReminderEmail:
+      record.coach_appointment_reminder_email,
     bookingCancelledEmail: record.booking_cancelled_email,
     bookingConfirmedEmail: record.booking_confirmed_email,
     bookingNoShowEmail: record.booking_no_show_email,
+    venueBookingReminderEmail: record.venue_booking_reminder_email,
     paymentConfirmedEmail: record.payment_confirmed_email,
     paymentFailedEmail: record.payment_failed_email,
     rankUpEmail: record.rank_up_email,
@@ -124,6 +129,12 @@ function toNotificationPreferencesPayload(
     ...(payload.appointmentConfirmedEmail !== undefined
       ? { appointment_confirmed_email: payload.appointmentConfirmedEmail }
       : {}),
+    ...(payload.coachAppointmentReminderEmail !== undefined
+      ? {
+          coach_appointment_reminder_email:
+            payload.coachAppointmentReminderEmail,
+        }
+      : {}),
     ...(payload.bookingCancelledEmail !== undefined
       ? { booking_cancelled_email: payload.bookingCancelledEmail }
       : {}),
@@ -132,6 +143,9 @@ function toNotificationPreferencesPayload(
       : {}),
     ...(payload.bookingNoShowEmail !== undefined
       ? { booking_no_show_email: payload.bookingNoShowEmail }
+      : {}),
+    ...(payload.venueBookingReminderEmail !== undefined
+      ? { venue_booking_reminder_email: payload.venueBookingReminderEmail }
       : {}),
     ...(payload.paymentConfirmedEmail !== undefined
       ? { payment_confirmed_email: payload.paymentConfirmedEmail }

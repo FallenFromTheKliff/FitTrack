@@ -4,6 +4,7 @@ import {
   ProgressMetric,
   NotificationPreference,
   AttendanceLog,
+  AppFeedback,
   AccountDeletionRequest,
   AccountDeletionRequestStatus,
   User,
@@ -193,6 +194,31 @@ export class UserRepository extends BaseRepository {
 
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User> {
     return this.updateById<User>(this.prisma.user, id, data);
+  }
+
+  createAppFeedback(data: Prisma.AppFeedbackCreateInput): Promise<AppFeedback> {
+    return this.create<AppFeedback>(this.prisma.appFeedback, data);
+  }
+
+  listAppFeedback(limit = 25) {
+    return this.prisma.appFeedback.findMany({
+      take: limit,
+      orderBy: [{ created_at: 'desc' }],
+      include: {
+        user: {
+          select: {
+            id: true,
+            role: true,
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   deletePhoneIdentities(userId: string): Promise<{ count: number }> {

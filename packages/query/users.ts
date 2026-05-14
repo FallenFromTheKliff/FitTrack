@@ -56,6 +56,18 @@ export function cancelDeletionRequestMutationOptions(client: Pick<ApiClient, "us
   });
 }
 
+export function submitAppFeedbackMutationOptions(client: Pick<ApiClient, "users">) {
+  return mutationOptions({
+    mutationFn: ({
+      category,
+      message,
+    }: {
+      category?: "bug_report" | "feature_request" | "general_feedback";
+      message: string;
+    }) => client.users.submitAppFeedback({ category, message }),
+  });
+}
+
 export function invalidateAttendanceQrForUser(queryClient: QueryClient, userId?: string) {
   return invalidateAttendanceQrQuery(queryClient, userId);
 }

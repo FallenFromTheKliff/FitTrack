@@ -12,13 +12,22 @@ import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
 
 type Props = {
+  highlightedDates?: string[];
   isOpen: boolean;
+  minDate?: string | null;
   selectedDate?: string;
   onSelect: (dateYmd: string) => void;
   onClose: () => void;
 };
 
-export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose }: Props) {
+export default function CalendarModal({
+  highlightedDates = [],
+  isOpen,
+  minDate,
+  selectedDate,
+  onSelect,
+  onClose,
+}: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const s = modalStyles(colors);
   const selected = useMemo(() => parseDateYMD(selectedDate), [selectedDate]);
@@ -37,7 +46,12 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose 
   const monthDays = getDaysInMonth(cursor);
   const offset = getDay(startOfMonth(cursor));
   const todayYmd = formatDateYMD(new Date());
+  const minDateYmd = minDate === null ? null : minDate ?? todayYmd;
   const selectedYmd = selectedDate ?? "";
+  const highlightedDateSet = useMemo(
+    () => new Set(highlightedDates),
+    [highlightedDates],
+  );
   const yearRangeStart = year - 7;
   const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
   const headerTitle = format(cursor, "MMMM yyyy");
@@ -88,17 +102,41 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose 
                   if (!cell) return <div key={`empty-${index}`} style={s.calendarEmptyCell} />;
                   const isSelected = cell.ymd === selectedYmd;
                   const isToday = cell.ymd === todayYmd;
+                  const isDisabled = Boolean(minDateYmd && cell.ymd < minDateYmd);
+                  const isHighlighted = highlightedDateSet.has(cell.ymd);
                   return (
                     <FitButton
                       key={cell.ymd}
                       variant={isSelected ? "primary" : "ghost"}
                       label={String(cell.dayNumber)}
                       onClick={() => {
+                        if (isDisabled) return;
                         onSelect(cell.ymd);
                         onClose();
                       }}
-                      style={s.calendarDayBtn(isSelected, isToday)}
-                      aria-label={`Select ${cell.ymd}`}
+                      disabled={isDisabled}
+                      style={{
+                        ...s.calendarDayBtn(isSelected, isToday),
+                        ...(isHighlighted && !isSelected
+                          ? {
+                              borderColor: colors.success,
+                              boxShadow: `inset 0 -3px 0 ${colors.success}`,
+                              color: colors.success,
+                            }
+                          : {}),
+                        ...(isDisabled
+                          ? {
+                              backgroundColor: colors.surface,
+                              color: colors.textMuted,
+                              opacity: 0.42,
+                            }
+                          : {}),
+                      }}
+                      aria-label={
+                        isDisabled
+                          ? `${cell.ymd} is unavailable`
+                          : `Select ${cell.ymd}`
+                      }
                     />
                   );
                 })}
@@ -156,6 +194,7 @@ export default function CalendarModal({ isOpen, selectedDate, onSelect, onClose 
               onSelect(todayYmd);
               onClose();
             }}
+            disabled={Boolean(minDateYmd && todayYmd < minDateYmd)}
             style={s.calendarTodayBtn}
           >
             Today

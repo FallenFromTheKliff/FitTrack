@@ -2,9 +2,11 @@ import type {
   CancelMembershipInput,
   CreateMembershipPlanInput,
   MembershipCardPurchaseRecord,
+  MembershipCatalogSettingsRecord,
   MembershipCardRecord,
   ManualMembershipPaymentInput,
   MembershipCheckoutRecord,
+  MembershipOperationsDashboardRecord,
   MembershipPaymentDetailsRecord,
   MembershipPaymentHistoryParams,
   MembershipPaymentRecord,
@@ -15,6 +17,7 @@ import type {
   PaginatedResult,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipCatalogSettingsInput,
   UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
@@ -26,8 +29,10 @@ export type {
   CancelMembershipInput,
   CreateMembershipPlanInput,
   MembershipCardPurchaseRecord,
+  MembershipCatalogSettingsRecord,
   ManualMembershipPaymentInput,
   MembershipCheckoutRecord,
+  MembershipOperationsDashboardRecord,
   MembershipPaymentDetailsRecord,
   MembershipPaymentHistoryParams,
   MembershipPaymentRecord,
@@ -38,6 +43,7 @@ export type {
   PaginatedResult,
   PurchaseMembershipCardInput,
   SubscribeToMembershipInput,
+  UpdateMembershipCatalogSettingsInput,
   UpdateMembershipPlanInput,
   VerifyMembershipPaymentInput
 } from "@fittrack/types";
@@ -112,6 +118,25 @@ type RawMembershipCardRecord = MembershipCardRecord & {
   verified_at?: string | null;
 };
 
+type MembershipOperationsDashboardItemApiRecord = {
+  expires_at: string | null;
+  id: string;
+  member_name: string;
+  plan_name: string;
+  starts_at: string | null;
+  status: MembershipOperationsDashboardRecord["recentlyActivated"][number]["status"];
+  user_id: string;
+};
+
+type MembershipOperationsDashboardApiRecord = {
+  expiring_membership_count: number;
+  expiring_memberships: MembershipOperationsDashboardItemApiRecord[];
+  generated_at: string;
+  recently_activated: MembershipOperationsDashboardItemApiRecord[];
+  recently_activated_count: number;
+  total_active_members_count: number;
+};
+
 function normalizeMembershipCard(record: RawMembershipCardRecord | null | undefined): MembershipCardRecord {
   return {
     activatedAt: record?.activatedAt ?? record?.activated_at ?? null,
@@ -122,6 +147,33 @@ function normalizeMembershipCard(record: RawMembershipCardRecord | null | undefi
     status: record?.status ?? "none",
     updatedAt: record?.updatedAt ?? record?.updated_at ?? null,
     verifiedAt: record?.verifiedAt ?? record?.verified_at ?? null
+  };
+}
+
+function mapOperationsDashboardItem(
+  record: MembershipOperationsDashboardItemApiRecord
+): MembershipOperationsDashboardRecord["recentlyActivated"][number] {
+  return {
+    expiresAt: record.expires_at,
+    id: record.id,
+    memberName: record.member_name,
+    planName: record.plan_name,
+    startsAt: record.starts_at,
+    status: record.status,
+    userId: record.user_id
+  };
+}
+
+function mapOperationsDashboard(
+  record: MembershipOperationsDashboardApiRecord
+): MembershipOperationsDashboardRecord {
+  return {
+    expiringMembershipCount: record.expiring_membership_count,
+    expiringMemberships: record.expiring_memberships.map(mapOperationsDashboardItem),
+    generatedAt: record.generated_at,
+    recentlyActivated: record.recently_activated.map(mapOperationsDashboardItem),
+    recentlyActivatedCount: record.recently_activated_count,
+    totalActiveMembersCount: record.total_active_members_count
   };
 }
 
@@ -167,8 +219,20 @@ function normalizeMembershipCardPurchaseResponse(payload: {
   };
 }
 
+function toCatalogSettingsRequest(payload: UpdateMembershipCatalogSettingsInput) {
+  return {
+    membership_card_price: payload.membershipCardPrice,
+  };
+}
+
 export function createMembershipApi(transport: ApiTransport) {
   return {
+    getCatalogSettings() {
+      return unwrapResponse<MembershipCatalogSettingsRecord>(
+        transport.get("/membership/catalog-settings"),
+        "Unable to load membership catalog settings."
+      );
+    },
     listPlans(params?: MembershipPlanListParams): Promise<PaginatedResult<MembershipPlanRecord>> {
       return unwrapPaginatedResponse<MembershipPlanRecord>(
         transport.get("/membership/plans", { params: toPaginationParams(params) }),
@@ -181,6 +245,12 @@ export function createMembershipApi(transport: ApiTransport) {
         "Unable to load membership plan."
       );
     },
+    getOperationsDashboard() {
+      return unwrapResponse<MembershipOperationsDashboardApiRecord>(
+        transport.get("/membership/operations-dashboard"),
+        "Unable to load membership operations dashboard."
+      ).then(mapOperationsDashboard);
+    },
     createPlan(payload: CreateMembershipPlanInput) {
       return unwrapResponse<MembershipPlanRecord>(
         transport.post("/membership/plans", toPlanMutationRequest(payload)),
@@ -191,6 +261,12 @@ export function createMembershipApi(transport: ApiTransport) {
       return unwrapResponse<MembershipPlanRecord>(
         transport.patch(`/membership/plans/${planId}`, toPlanMutationRequest(payload)),
         "Unable to update membership plan."
+      );
+    },
+    updateCatalogSettings(payload: UpdateMembershipCatalogSettingsInput) {
+      return unwrapResponse<MembershipCatalogSettingsRecord>(
+        transport.patch("/membership/catalog-settings", toCatalogSettingsRequest(payload)),
+        "Unable to update membership catalog settings."
       );
     },
     async getCurrentSubscription(): Promise<MembershipSubscriptionRecord | null> {

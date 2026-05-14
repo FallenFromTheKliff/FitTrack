@@ -170,4 +170,19 @@ export class RelationshipController {
   ) {
     return this.relationshipService.submitReview(user.sub, id, dto);
   }
+
+  @Get('coaches/me/reviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List feedback submitted for the authenticated coach.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Coach reviews returned.',
+  })
+  getMyReceivedReviews(@CurrentUser() user: JwtPayload) {
+    return this.relationshipService.getMyReceivedReviews(user.sub);
+  }
 }

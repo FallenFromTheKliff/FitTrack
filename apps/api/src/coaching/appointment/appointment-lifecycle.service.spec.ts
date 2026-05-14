@@ -3,12 +3,14 @@ import { NotificationType } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { NotificationsService } from '../../notifications/notifications.service';
+import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
 import { AppointmentRepository } from './appointment.repository';
 import {
   COACHING_COMPLETION_JOB,
   COACHING_LIFECYCLE_QUEUE,
   COACHING_LIFECYCLE_TIMEZONE,
   COACHING_NO_SHOW_JOB,
+  COACHING_REMINDER_JOB,
 } from './appointment.constants';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 
@@ -18,6 +20,7 @@ describe('AppointmentLifecycleService', () => {
   const repo = {
     findAppointmentNotificationContextByIdOrThrow: jest.fn(),
     markAppointmentNoShowIfEligible: jest.fn(),
+    findConfirmedAppointmentsPotentiallyNoShow: jest.fn(),
     findFreeAppointmentsAwaitingCompletion: jest.fn(),
     completeFreeAppointmentIfEligible: jest.fn(),
   };
@@ -30,12 +33,20 @@ describe('AppointmentLifecycleService', () => {
     add: jest.fn(),
   };
 
+  const recurringCoachingPlanService = {
+    runBillingOverdueCron: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppointmentLifecycleService,
         { provide: AppointmentRepository, useValue: repo },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: RecurringCoachingPlanService,
+          useValue: recurringCoachingPlanService,
+        },
         {
           provide: getQueueToken(COACHING_LIFECYCLE_QUEUE),
           useValue: lifecycleQueue,
@@ -66,9 +77,10 @@ describe('AppointmentLifecycleService', () => {
     );
   });
 
-  it('queues a no-show check and dispatches appointment_confirmed when an appointment is confirmed', async () => {
+  it('queues lifecycle checks and dispatches appointment_confirmed when an appointment is confirmed', async () => {
     repo.findAppointmentNotificationContextByIdOrThrow.mockResolvedValue({
       id: 'appt-1',
+      status: 'confirmed',
       scheduled_at: '2099-03-24T10:00:00.000Z',
       duration_minutes: 60,
       user: {
@@ -79,6 +91,7 @@ describe('AppointmentLifecycleService', () => {
         notification_prefs: {
           appointment_confirmed_email: true,
           appointment_confirmed_sms: true,
+          coach_appointment_reminder_email: true,
         },
         profile: {
           first_name: 'Jamie',
@@ -121,6 +134,14 @@ describe('AppointmentLifecycleService', () => {
         removeOnComplete: true,
       }),
     );
+    expect(lifecycleQueue.add).toHaveBeenCalledWith(
+      COACHING_REMINDER_JOB,
+      { appointmentId: 'appt-1' },
+      expect.objectContaining({
+        jobId: `${COACHING_REMINDER_JOB}:appt-1`,
+        removeOnComplete: true,
+      }),
+    );
     const confirmedDispatchArgs = notificationsService.dispatch.mock
       .calls[0] as
       | [
@@ -149,8 +170,106 @@ describe('AppointmentLifecycleService', () => {
     );
   });
 
+  it('dispatches appointment_reminder for a future confirmed appointment', async () => {
+    repo.findAppointmentNotificationContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      status: 'confirmed',
+      scheduled_at: '2099-03-24T10:00:00.000Z',
+      duration_minutes: 60,
+      user: {
+        id: 'member-1',
+        auth_identities: [
+          { identifier: 'member@example.com', provider: 'email' },
+        ],
+        notification_prefs: {
+          coach_appointment_reminder_email: true,
+        },
+        profile: {
+          first_name: 'Jamie',
+          last_name: 'Rivera',
+        },
+      },
+      coach: {
+        display_name: 'Maria Santos',
+        user: {
+          id: 'coach-user-1',
+          auth_identities: [],
+          notification_prefs: {},
+          profile: {
+            first_name: 'Maria',
+            last_name: 'Santos',
+          },
+        },
+      },
+    });
+
+    await service.runAppointmentReminder('appt-1');
+
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
+      'member-1',
+      NotificationType.appointment_reminder,
+      expect.objectContaining({
+        title: 'Coaching appointment reminder',
+      }),
+    );
+  });
+
+  it('skips appointment_reminder for a cancelled appointment', async () => {
+    repo.findAppointmentNotificationContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      status: 'cancelled',
+      scheduled_at: '2099-03-24T10:00:00.000Z',
+      duration_minutes: 60,
+      user: {
+        id: 'member-1',
+        auth_identities: [],
+        notification_prefs: {
+          coach_appointment_reminder_email: true,
+        },
+        profile: {
+          first_name: 'Jamie',
+          last_name: 'Rivera',
+        },
+      },
+      coach: {
+        display_name: 'Maria Santos',
+        user: null,
+      },
+    });
+
+    await service.runAppointmentReminder('appt-1');
+
+    expect(notificationsService.dispatch).not.toHaveBeenCalled();
+  });
+
   it('marks confirmed appointments as no_show only after the grace window', async () => {
     repo.markAppointmentNoShowIfEligible.mockResolvedValue(true);
+    repo.findAppointmentNotificationContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      scheduled_at: '2000-03-24T10:00:00.000Z',
+      duration_minutes: 60,
+      user: {
+        id: 'member-1',
+        auth_identities: [],
+        notification_prefs: {},
+        profile: {
+          first_name: 'Jamie',
+          last_name: 'Rivera',
+        },
+      },
+      coach: {
+        display_name: 'Maria Santos',
+        user: {
+          id: 'coach-user-1',
+          auth_identities: [],
+          notification_prefs: {},
+          profile: {
+            first_name: 'Maria',
+            last_name: 'Santos',
+          },
+        },
+      },
+    });
 
     await service.runNoShowCheck('appt-1');
 
@@ -159,9 +278,17 @@ describe('AppointmentLifecycleService', () => {
       expect.any(Date),
       expect.any(Date),
     );
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
+      'member-1',
+      NotificationType.system,
+      expect.objectContaining({
+        title: 'Coaching appointment marked as no-show',
+      }),
+    );
   });
 
   it('auto-completes past free appointments and dispatches appointment_completed to the member', async () => {
+    repo.findConfirmedAppointmentsPotentiallyNoShow.mockResolvedValue([]);
     repo.findFreeAppointmentsAwaitingCompletion.mockResolvedValue([
       {
         id: 'appt-1',

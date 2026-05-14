@@ -1,5 +1,11 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { MembershipPlan, Payment, Prisma, Subscription } from '@prisma/client';
+import {
+  MembershipCatalogSettings,
+  MembershipPlan,
+  Payment,
+  Prisma,
+  Subscription,
+} from '@prisma/client';
 
 import {
   BaseRepository,
@@ -11,6 +17,29 @@ import { PaginationDTO } from './dto/subscription.dto';
 type SubscriptionWithPlan = Prisma.SubscriptionGetPayload<{
   include: { plan: true };
 }>;
+
+const OPERATIONS_DASHBOARD_INCLUDE = {
+  plan: true,
+  user: {
+    include: {
+      profile: true,
+    },
+  },
+} as const;
+
+export type MembershipOperationsSubscriptionRecord =
+  Prisma.SubscriptionGetPayload<{
+    include: typeof OPERATIONS_DASHBOARD_INCLUDE;
+  }>;
+
+export type MembershipOperationsDashboardRecord = {
+  expiringMembershipCount: number;
+  expiringMemberships: MembershipOperationsSubscriptionRecord[];
+  generatedAt: Date;
+  recentlyActivated: MembershipOperationsSubscriptionRecord[];
+  recentlyActivatedCount: number;
+  totalActiveMembersCount: number;
+};
 
 type SubscriptionNotificationContext = Prisma.SubscriptionGetPayload<{
   include: {
@@ -52,6 +81,9 @@ const EXPIRING_SUBSCRIPTION_STATUSES = [
   'past_due',
   'cancelled',
 ] as const;
+const DEFAULT_MEMBERSHIP_CARD_PRICE = new Prisma.Decimal(400);
+const MEMBERSHIP_CATALOG_SETTINGS_ID =
+  '94f956b6-98ad-447b-b22a-aa111d7c4000';
 
 type SubscriptionInitiationRecord = {
   subscription: SubscriptionWithPlan;
@@ -83,6 +115,110 @@ export class SubscriptionRepository extends BaseRepository {
       { id, is_active: true },
       'MembershipPlan',
     );
+  }
+
+  async getCatalogSettings(): Promise<MembershipCatalogSettings> {
+    const existing = await this.prisma.membershipCatalogSettings.findFirst();
+    if (existing) {
+      return existing;
+    }
+
+    return this.prisma.membershipCatalogSettings.create({
+      data: {
+        id: MEMBERSHIP_CATALOG_SETTINGS_ID,
+        membership_card_price: DEFAULT_MEMBERSHIP_CARD_PRICE,
+      },
+    });
+  }
+
+  async updateCatalogSettings(
+    membershipCardPrice: Prisma.Decimal,
+  ): Promise<MembershipCatalogSettings> {
+    const existing = await this.prisma.membershipCatalogSettings.findFirst({
+      select: { id: true },
+    });
+
+    if (existing) {
+      return this.prisma.membershipCatalogSettings.update({
+        where: { id: existing.id },
+        data: {
+          membership_card_price: membershipCardPrice,
+        },
+      });
+    }
+
+    return this.prisma.membershipCatalogSettings.create({
+      data: {
+        id: MEMBERSHIP_CATALOG_SETTINGS_ID,
+        membership_card_price: membershipCardPrice,
+      },
+    });
+  }
+
+  async getOperationsDashboard(
+    now = new Date(),
+  ): Promise<MembershipOperationsDashboardRecord> {
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAhead = new Date(now);
+    sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
+
+    const activeSubscriptionWhere = {
+      status: 'active',
+      user: {
+        deletedAt: null,
+      },
+    } satisfies Prisma.SubscriptionWhereInput;
+    const recentlyActivatedWhere = {
+      ...activeSubscriptionWhere,
+      starts_at: {
+        gte: sevenDaysAgo,
+        lte: now,
+      },
+    } satisfies Prisma.SubscriptionWhereInput;
+    const expiringWhere = {
+      status: { in: [...EXPIRING_SUBSCRIPTION_STATUSES] },
+      expires_at: {
+        gte: now,
+        lte: sevenDaysAhead,
+      },
+      user: {
+        deletedAt: null,
+      },
+    } satisfies Prisma.SubscriptionWhereInput;
+
+    const [
+      totalActiveMembersCount,
+      recentlyActivatedCount,
+      expiringMembershipCount,
+      recentlyActivated,
+      expiringMemberships,
+    ] = await Promise.all([
+      this.prisma.subscription.count({ where: activeSubscriptionWhere }),
+      this.prisma.subscription.count({ where: recentlyActivatedWhere }),
+      this.prisma.subscription.count({ where: expiringWhere }),
+      this.prisma.subscription.findMany({
+        where: recentlyActivatedWhere,
+        include: OPERATIONS_DASHBOARD_INCLUDE,
+        orderBy: [{ starts_at: 'desc' }, { created_at: 'desc' }],
+        take: 6,
+      }),
+      this.prisma.subscription.findMany({
+        where: expiringWhere,
+        include: OPERATIONS_DASHBOARD_INCLUDE,
+        orderBy: [{ expires_at: 'asc' }, { created_at: 'desc' }],
+        take: 6,
+      }),
+    ]);
+
+    return {
+      expiringMembershipCount,
+      expiringMemberships,
+      generatedAt: now,
+      recentlyActivated,
+      recentlyActivatedCount,
+      totalActiveMembersCount,
+    };
   }
 
   findPlanByIdOrThrow(id: string): Promise<MembershipPlan> {

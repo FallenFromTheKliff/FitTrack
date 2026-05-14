@@ -4,6 +4,9 @@
   "description": "",
   "author": "",
   "private": true,
+  "prisma": {
+    "seed": "node -r ts-node/register prisma/seed.ts"
+  },
   "license": "UNLICENSED",
   "scripts": {
     "build": "pnpm run prisma:prepare-client && nest build",

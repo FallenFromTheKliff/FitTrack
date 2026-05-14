@@ -455,6 +455,55 @@ export class MilestoneProgressResponseDTO {
   updated_at: string | null;
 }
 
+export class AchievementReviewResponseDTO {
+  @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
+  id: string;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  member_id: string;
+
+  @ApiProperty({ example: 'Casey Reyes' })
+  member_name: string;
+
+  @ApiProperty({ example: 'CR' })
+  member_initials: string;
+
+  @ApiProperty({ example: 'member.active@fittrack.com' })
+  member_email: string;
+
+  @ApiProperty({ example: 'First Workout Complete' })
+  badge_label: string;
+
+  @ApiProperty({
+    example:
+      'Unlocked from 1/1 completed_workout_sessions progress in the local database.',
+  })
+  proof_caption: string;
+
+  @ApiProperty({
+    example: 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D...',
+  })
+  proof_image_url: string;
+
+  @ApiProperty({
+    enum: ['Pending', 'Approved', 'Rejected'],
+    example: 'Pending',
+  })
+  status: 'Pending' | 'Approved' | 'Rejected';
+
+  @ApiProperty({ example: '2026-04-23T09:30:00.000Z' })
+  submitted_at: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-04-24T09:30:00.000Z',
+  })
+  reviewed_at?: string;
+
+  @ApiPropertyOptional({ example: 'Claimed by the member.' })
+  reviewer_notes?: string;
+}
+
 export class MilestoneListFilterDTO {
   @ApiPropertyOptional({
     example: true,

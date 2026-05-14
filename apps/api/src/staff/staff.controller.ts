@@ -108,9 +108,14 @@ export class StaffController {
       'Update coach profile details from the staff coaching management surface.',
   })
   updateCoachProfile(
+    @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCoachProfileDTO,
   ) {
+    if (user.role === UserRole.admin) {
+      return this.coachService.adminUpdateCoach(user.sub, id, dto);
+    }
+
     return this.coachService.updateManagedProfile(id, dto);
   }
 
@@ -243,6 +248,17 @@ export class StaffController {
       id,
       dto,
     );
+  }
+
+  @Patch('appointments/:id/coach-payout')
+  @ApiOperation({
+    summary: 'Mark a completed coaching appointment payout as paid.',
+  })
+  markCoachPayoutPaid(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.appointmentService.markCoachPayoutPaid(user.sub, id);
   }
 
   @Patch('appointments/:id/cancel')

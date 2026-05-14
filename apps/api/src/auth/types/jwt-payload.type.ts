@@ -29,6 +29,8 @@ export interface TokenPairResponse {
     role: UserRole;
     status: UserStatus;
     email_verified_at: string | null;
+    has_accepted_privacy?: boolean;
+    privacy_accepted_at?: string | null;
     membership_card?: {
       activated_at?: Date | null;
       purchased_at?: Date | null;

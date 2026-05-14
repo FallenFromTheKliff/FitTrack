@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import {
+  MembershipCatalogSettings,
   MembershipPlan,
   PayableType,
   Payment,
@@ -27,11 +28,18 @@ import {
   CancelSubscriptionDTO,
   CreatePlanDTO,
   CreateSubscriptionDTO,
+  MembershipCatalogSettingsResponseDTO,
+  MembershipOperationsDashboardResponseDTO,
+  MembershipOperationsDashboardItemDTO,
   PaginationDTO,
   SubscriptionCheckoutResponseDTO,
+  UpdateMembershipCatalogSettingsDTO,
   UpdatePlanDTO,
 } from './dto/subscription.dto';
-import { SubscriptionRepository } from './subscription.repository';
+import {
+  SubscriptionRepository,
+  type MembershipOperationsSubscriptionRecord,
+} from './subscription.repository';
 
 type SubscriptionWithPlan = Prisma.SubscriptionGetPayload<{
   include: { plan: true };
@@ -80,12 +88,43 @@ export class SubscriptionService {
     return this.repo.findActivePlanByIdOrThrow(id);
   }
 
+  async getCatalogSettings(): Promise<MembershipCatalogSettingsResponseDTO> {
+    const settings = await this.repo.getCatalogSettings();
+    return this.toCatalogSettingsResponse(settings);
+  }
+
+  async getOperationsDashboard(): Promise<MembershipOperationsDashboardResponseDTO> {
+    const dashboard = await this.repo.getOperationsDashboard();
+
+    return {
+      generated_at: dashboard.generatedAt.toISOString(),
+      total_active_members_count: dashboard.totalActiveMembersCount,
+      recently_activated_count: dashboard.recentlyActivatedCount,
+      recently_activated: dashboard.recentlyActivated.map((subscription) =>
+        this.toOperationsDashboardItem(subscription),
+      ),
+      expiring_membership_count: dashboard.expiringMembershipCount,
+      expiring_memberships: dashboard.expiringMemberships.map((subscription) =>
+        this.toOperationsDashboardItem(subscription),
+      ),
+    };
+  }
+
   createPlan(dto: CreatePlanDTO): Promise<MembershipPlan> {
     return this.repo.createPlan(this.toCreateInput(dto));
   }
 
   async updatePlan(id: string, dto: UpdatePlanDTO): Promise<MembershipPlan> {
     return this.repo.updatePlan(id, this.toUpdateInput(dto));
+  }
+
+  async updateCatalogSettings(
+    dto: UpdateMembershipCatalogSettingsDTO,
+  ): Promise<MembershipCatalogSettingsResponseDTO> {
+    const settings = await this.repo.updateCatalogSettings(
+      new Prisma.Decimal(dto.membership_card_price),
+    );
+    return this.toCatalogSettingsResponse(settings);
   }
 
   async subscribe(
@@ -237,6 +276,37 @@ export class SubscriptionService {
 
   private toJsonValue(value: Record<string, unknown>): Prisma.InputJsonValue {
     return value as Prisma.InputJsonValue;
+  }
+
+  private toOperationsDashboardItem(
+    subscription: MembershipOperationsSubscriptionRecord,
+  ): MembershipOperationsDashboardItemDTO {
+    return {
+      id: subscription.id,
+      user_id: subscription.user_id,
+      member_name: this.formatUserName(subscription.user.profile),
+      plan_name: subscription.plan.name,
+      status: subscription.status,
+      starts_at: subscription.starts_at?.toISOString() ?? null,
+      expires_at: subscription.expires_at?.toISOString() ?? null,
+    };
+  }
+
+  private toCatalogSettingsResponse(
+    settings: MembershipCatalogSettings,
+  ): MembershipCatalogSettingsResponseDTO {
+    return {
+      membership_card_price: settings.membership_card_price.toString(),
+      updated_at: settings.updated_at.toISOString(),
+    };
+  }
+
+  private formatUserName(
+    profile: { first_name: string; last_name: string } | null,
+  ): string {
+    const firstName = profile?.first_name.trim() ?? '';
+    const lastName = profile?.last_name.trim() ?? '';
+    return [firstName, lastName].filter(Boolean).join(' ') || 'FitTrack member';
   }
 
   private normalizeAndValidateIdempotencyKey(

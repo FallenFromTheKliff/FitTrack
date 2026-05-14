@@ -1,9 +1,9 @@
 # FitTrack Codebase Context for Claude
 
-Generated: 2026-05-11  
-Workspace: `C:\FitTrack`  
+Generated: 2026-05-14  
+Workspace: `C:\Users\Khristiane\Documents\GitHub\FitTrack`  
 Current branch when generated: `origin/temporary-master-branch`  
-Last observed commit: `e9d046d Merge branch 'origin/temporary-master-branch' of https://github.com/FallenFromTheKliff/FitTrack into origin/temporary-master-branch`
+Last observed commit: `6a77ac6 FitTrack UI/UX Revamp 3.1`
 
 This file is a practical handoff for working inside the FitTrack repo. It is intentionally written as a map, not a full code dump. Before editing, inspect the current files because this repo moves quickly and the working tree may already contain user changes.
 
@@ -50,30 +50,54 @@ Do not treat starter READMEs as authoritative when they conflict with source. So
 
 ## Current Working Tree Notes
 
-At generation time, `git status --short` showed:
+At regeneration time, the working tree contains the active 2026-05-14 QA fix batch. Treat these files as in-progress user/Codex work and inspect before editing further. Important current additions:
 
-```text
- M .ai-frontend/agent.md
- M .ai-frontend/config.json
- M .ai-frontend/goals-mode.md
- M .vscode/mcp.json
- M apps/api/prisma/migrations/migration_lock.toml
-?? .codex/skills/goals/
-?? apps/api/prisma/migrations/20260511135613_sync_branch_schema/
-```
+- `apps/api/prisma/migrations/20260513101500_add_feedback_records/`
+- `apps/api/prisma/seed-realistic-data.ts`
+- `apps/api/src/user/activity-level.service.ts`
+- `apps/web/components/help/FloatingHelpButton.tsx`
+- `apps/mobile/components/help/FloatingHelpButton.tsx`
 
-The new migration was created during a schema sync after a branch pull:
+Current QA batch status:
 
-- `apps/api/prisma/migrations/20260511135613_sync_branch_schema/migration.sql`
+- The local database was reset for the current audit to the 7 named local accounts only, then later local verification created a small set of appointment and feedback records.
+- The active seed script creates only the named local accounts requested for the current audit: admin, staff, coach, active member, verified non-member, pending member, and archived member.
+- Feedback storage and submission paths exist for coach reviews, app feedback, and amenity/venue feedback across backend/shared clients/web/mobile where applicable. App feedback now includes a category, and amenity/venue feedback now includes a 1-5 rating.
+- Mobile now has an `Assessments` tab that consolidates coaching session notes, coach-to-member feedback, assessment reports, and member-to-coach review ratings/comments from the member appointment API.
+- Coach booking in `GymOperationsOverlays.tsx` has searchable member/coach selects and a `NEXT AVAILABLE SLOT` shortcut.
+- User activity level recalculates from completed sessions, exercise review submissions, and attendance check-ins in the last 30 days. Manual edits remain possible but are overwritten by the next recalculation.
+- Floating help buttons exist on the requested web pages and equivalent mobile screens through reusable web/mobile `FloatingHelpButton` components.
+- Gamification and Exercise Lab milestone review queues now load DB-backed records from `/v1/fitness/milestone-reviews`; the old `ACHIEVEMENT_REVIEW_SEED` is no longer used by those consumers.
+- The memberships/promos page now includes a membership operations dashboard backed by `/v1/membership/operations-dashboard`.
+- Member appointment details now receive the coach summary from the member appointment API, matching the admin Schedule data source.
+- Completed mobile coaching appointment details now expose the post-session report plus the member's submitted coach review, and the detail actions include a custom modal for one review per completed session.
+- Member web Workout access is blocked through portal access and removed from member web navigation.
+- Coach self profile edits share the same `CoachProfile` record as admin/staff management, but schedule type is now admin-controlled and read-only for coaches.
+- Full-time coach availability is generated from admin-managed working windows; part-time coaches keep manually opened slots. Coach self-service availability editing is locked for full-time profiles.
+- Coach client filters now include server-side membership status, upcoming-session status, and activity-level filters scoped to the coach's appointment clients.
+- Current coach client directory UX uses only three coach-facing filters: Sessions, Activity, and Member/Non-member. Admin/staff account role filters include Coaches. Coach client rows now show client membership, activity level, session counts, next session, and reviewed/not reviewed status from live coach appointment review data.
+- Mobile help is now opened from the global header question-mark button placed immediately before the notification bell. Old bottom-right mobile floating help usages were removed from Bookings, Facilities, and Workout to avoid FAB overlap, and the shared help panel is scrollable inside the existing settings modal shell.
+- Coach/staff appointment DTOs and API client records now include member review summaries for coach appointments. The coach Sessions modal uses that data to show reviewed/not reviewed state, client details, member review text, and a coach reply/session report editor for completed appointments.
+- The coach client snapshot panel in Accounts is scroll-contained so long client profiles and action forms remain reachable on shorter screens.
+- Coaching no-show handling now dispatches a member notification/email when a confirmed appointment transitions to `no_show`, and the lifecycle cleanup cron sweeps stale confirmed appointments so missed delayed jobs do not leave sessions editable. The coach appointment modal treats `no_show` as resolved and shows no status-edit decision path.
+- Member coaching payments now auto-confirm coach appointments once full/downpayment verification completes, so the intended flow is member booking/payment selection -> admin/staff payment verification -> confirmed booked appointment -> reminder -> session report/review. Coaches receive booking, reminder, completion, cancellation, and no-show notifications related to their sessions.
+- Gym Operations keeps admin/staff payment/status appointment review separate from coach-only session actions. The coach Sessions page no longer exposes recurring-plan creation, and Gym Operations Coaches no longer offers standalone coach creation from that tab.
+- Mobile Assessments includes coach-name search plus filters for coach assessments, coach-to-member replies, and member-to-coach ratings. Mobile help modals have an explicit X close button, and Nutrition, Muscle Mastery, Workout, and Brodigy AI auto-open help once per user/page unless dismissed with "Never show this automatically again."
+- Coach hourly rate is admin-controlled. Coach self-service and staff-facing managed profile updates cannot change `hourly_rate`; admin coach management remains the authorized path.
+- Admin Analytics surfaces coach gym commission as gym share amount plus effective commission percentage, backed by the same coaching revenue fields used by revenue analytics, PDF exports, and business-insight grounding.
+- Coaching analytics gym-share revenue is aligned to verified coaching payments and the gym commission portion of each coach appointment or recurring cycle. Gross coaching collections remain separate from gym share, while completed-session metrics remain tied to completed appointments.
+- Business insight generation now has a fast API-side timeout for the AI microservice path and the AI microservice has shorter OpenRouter attempts/timeouts, so generated insights and PDF exports fall back to grounded local analysis instead of hanging when the external provider is slow.
+- Coach earnings now carry a dedicated `coach_payout_paid_at` marker on `CoachAppointment`, exposed through staff/coach appointment DTOs and clients. Admin/staff can mark completed coach payouts paid from Schedule coach management, and coaches see Paid/Pending in their Earnings view.
+- Analytics snapshot KPIs now include active members, session completion rate, coach satisfaction rating, venue feedback rating, and app feedback submission count, all sourced from live database tables.
+- Mobile notification access is available from the global header bell with unread count and opens notification history only. Notification preference groups remain in Settings -> Notifications and cover booking, coach appointment, membership, payment, AI, rank, and system notifications.
+- Accounts now lets both admin and staff load and approve/reject pending cash membership-card or subscription payment reviews from the selected member's action panel, using the existing backend payment verification flow.
+- Long feedback inbox lists on web are scroll-contained inside their cards so admin/staff feedback review does not stretch the page indefinitely.
+- The public landing route now tolerates stale browser auth tokens during bootstrap: public pages clear bad tokens without redirect loops or startup runtime overlays, while protected routes still fall back to `/login` on auth failure.
+- The minimal local seed now includes a live membership catalog on top of the 7 named accounts: two active membership plans, one active Casey subscription/payment, one pending Riley membership-card cash verification payment, one membership promo, and a shared membership catalog settings row.
+- Membership catalog settings now include a shared `membership_card_price` source of truth in the database. The admin/staff memberships page can edit it, and the mobile member Profile purchase flow reads that value instead of a hardcoded PHP 400 string.
+- Coach role gaps, member portal login separation, server-side account tier filters, venue rate validation, custom modal replacements, booking min dates, privacy gate, delayed reminders, PHP analytics cleanup, and analytics fallback styling remain part of the already-fixed baseline.
 
-It changes:
-
-- `coach_profiles.user_id` foreign key to `ON DELETE SET NULL`
-- drops defaults from `muscle_definitions.id` and `muscle_definitions.updated_at`
-- drops defaults from `recurring_coaching_billing_cycles.id` and `recurring_coaching_billing_cycles.updated_at`
-- renames the recurring coaching billing cycle unique index
-
-`migration_lock.toml` showed modified with no content diff, likely line-ending metadata from Prisma on Windows.
+Known build note: `pnpm --filter @fittrack/web run build` has previously timed out at "Creating an optimized production build..." after 15 minutes even with the dev server stopped. Use focused typechecks for fix verification unless investigating that production-build hang directly.
 
 ## Runtime And Commands
 
@@ -96,6 +120,8 @@ pnpm build
 pnpm lint
 pnpm typecheck
 ```
+
+PowerShell note: on this Windows machine, prefer `pnpm.cmd` for command execution because PowerShell script policy can block `pnpm.ps1`.
 
 Database commands:
 
@@ -351,9 +377,9 @@ Development migration rule:
 
 Major Prisma domains and models:
 
-- auth/user: `User`, `AuthIdentity`, `RefreshToken`, `OtpVerification`, `UserProfile`, `NotificationPreference`, `AccountDeletionRequest`
+- auth/user: `User`, `AuthIdentity`, `RefreshToken`, `OtpVerification`, `UserProfile`, `NotificationPreference`, `AccountDeletionRequest`, `AppFeedback`
 - membership/payment: `MembershipPlan`, `Subscription`, `MembershipCard`, `Payment`
-- facilities/bookings: `Amenity`, `FacilityFloorPlanMedia`, `AmenityBooking`
+- facilities/bookings: `Amenity`, `AmenityFeedback`, `FacilityFloorPlanMedia`, `AmenityBooking`
 - coaching: `CoachProfile`, `CoachAppointment`, `RecurringCoachingPlan`, `RecurringCoachingBillingCycle`, `CoachReview`, `CoachAvailabilitySlot`, `CoachClientRelationship`
 - fitness/training/pose: `ExerciseCatalog`, `MuscleDefinition`, `ExerciseReviewSubmission`, `TrainingPlan`, `WorkoutSession`, `ExerciseLog`, `PoseExerciseProfile`, `PoseSession`, `MuscleMasteryProgress`
 - gamification/moderation: `ProgressionSourceEvent`, `ProgressionGrantLedger`, `UserProgressionProfile`, `SeasonDefinition`, `SeasonalStanding`, `MilestoneDefinition`, `UserMilestoneProgress`, `RankingProfile`, `IntegrityProfile`, `IntegrityCase`, `IntegrityEvent`, `CreatorProfile`, `ModerationActionRecord`
@@ -361,6 +387,15 @@ Major Prisma domains and models:
 - inventory/sales/equipment: `RetailProduct`, `SaleTransaction`, `SaleTransactionItem`, `GymEquipmentItem`, `EquipmentWriteOff`, `GymEquipment`
 - AI/chat: `AiChatSession`, `AiChatMessage`, `AiInteractionLog`, `GymChatSession`, `GymChatMessage`, `GymChatInteractionLog`
 - operations: `Notification`, `AuditLog`, `GymOperatingHour`, `GymSpecialSchedule`, `GymPromotion`, `GymFaqEntry`, `BusinessInsightRun`
+
+Recent schema details from the QA fix batch:
+
+- `User` now persists `has_accepted_privacy` and `privacy_accepted_at`; new accounts default to privacy not accepted, while migration backfills existing users as accepted.
+- `User` relates to `AppFeedback`; `Amenity` relates to `AmenityFeedback`; both models store user-submitted feedback with timestamps.
+- `CoachProfile` has `schedule_type` using enum `CoachScheduleType` (`full_time`, `part_time`).
+- `CoachAppointment` has `coach_feedback` and `assessment_report` for coach-submitted post-session feedback/reporting.
+- `NotificationType` includes `booking_reminder` and `appointment_reminder`.
+- `NotificationPreference` includes `venue_booking_reminder_email/sms` and `coach_appointment_reminder_email/sms`.
 
 Seed scripts:
 
@@ -370,61 +405,33 @@ Seed scripts:
 - `apps/api/prisma/report-test-data.ts` - prints seeded credentials, counts, and manual test paths
 - `apps/api/prisma/seed-realistic-data.ts` - richer realistic fixtures
 
-Current local DB snapshot after cleanup on 2026-05-11:
+Current local DB snapshot note:
 
-- Prisma migrations are up to date
-- local schema was reset and reseeded with `pnpm db:seed:test`
-- report command: `pnpm db:seed:test:report`
+- The current audit baseline requested a clean local reset with only the 7 named accounts below.
+- Do not assume the older 507-user realistic seed snapshot is still present unless you query the local database first.
+- `apps/api/prisma/seed.ts` is the authoritative current seed entrypoint; inspect it before reseeding because this file has changed during the QA batch.
 
-Seeded test credentials:
-
-```text
-seed.admin@fittrack.com / SeedAdmin!2026
-seed.staff@fittrack.com / SeedStaff!2026
-seed.coach.ridge@fittrack.com / SeedCoach!2026
-seed.member.active@fittrack.com / SeedMember!2026
-seed.member.premium@fittrack.com / SeedMember!2026
-seed.member.frozen@fittrack.com / SeedMember!2026
-seed.member.pending@fittrack.com / SeedMember!2026
-seed.member.nomembership@fittrack.com / SeedMember!2026
-seed.member.expired@fittrack.com / SeedMember!2026
-```
-
-Representative seeded counts from direct Prisma check:
+Named seeded credentials:
 
 ```text
-User 9
-AuthIdentity 9
-UserProfile 9
-NotificationPreference 9
-MembershipPlan 3
-Subscription 4
-MembershipCard 5
-Payment 8
-Amenity 4
-FacilityFloorPlanMedia 3
-AmenityBooking 4
-CoachProfile 4
-CoachAppointment 4
-RecurringCoachingPlan 1
-RecurringCoachingBillingCycle 2
-ExerciseCatalog 8
-MuscleDefinition 23
-ExerciseReviewSubmission 18
-TrainingPlan 1
-WorkoutSession 2
-ExerciseLog 2
-PoseExerciseProfile 6
-PoseSession 2
-MuscleMasteryProgress 4
-RetailProduct 6
-SaleTransaction 4
-SaleTransactionItem 8
-GymEquipmentItem 4
-GymEquipment 4
-NutritionLog 24
-BusinessInsightRun 2
+admin@fittrack.com / FitTrack@Admin1
+staff@fittrack.com / FitTrack@Staff1
+coach@fittrack.com / FitTrack@Coach1
+member.active@fittrack.com / FitTrack@Member1
+nonmember.verified@fittrack.com / FitTrack@Member2
+member.pending@fittrack.com / FitTrack@Member3
+member.archived@fittrack.com / FitTrack@Member4
 ```
+
+Verified seed summary:
+
+```text
+User 507
+Roles: admin 5, staff 9, coach 12, member 481
+Tiers: active_member 282, verified_non_member 92, pending_verification 46, pending_membership 25, revoked 20, archived 16
+```
+
+Query table-specific counts from the local database before relying on finer-grained volume assumptions.
 
 Empty transient auth tables like refresh tokens and OTPs are expected on a clean seed.
 
@@ -458,6 +465,7 @@ Current web routes from source:
 ```text
 /(land)/(home)
 /(land)/login
+/(land)/member-login
 /(land)/locked
 /(land)/payments/success
 /(land)/payments/cancel
@@ -526,6 +534,11 @@ Web implementation pattern:
 - prefer web Fit primitives from `apps/web/components/fit`
 - `use client` is required for hook/event/browser-interactive files
 - role/portal access lives around `apps/web/lib/portal-access.ts` and related auth context
+- member web users have a separate login entry at `/member-login` and should land in member-facing routes rather than the admin/staff portal
+- the facilities map depends on the current map/canvas stack and the `react-konva` dependency is expected to resolve for `/facilities`
+- analytics AI fallback state is intentionally visually distinct: `grounded-fallback` should render as a warning-styled banner, not as a normal generated insight
+- web calendar flows should pass `minDate` for future-only booking/scheduling dates; opt out explicitly only for legitimate historical dates such as profile DOB
+- venue forms should keep frontend validation consistent with backend reservable hourly-rate rules
 
 ## Mobile App
 
@@ -552,6 +565,7 @@ Root providers in `apps/mobile/app/_layout.tsx`:
 - `AuthProvider`
 - `QueryProvider`
 - API token hydration through `hydrateMobileApiAuth`
+- first-login privacy gate through `FirstLoginPrivacyGate`
 - font loading for `Blrrpix` and `CaveatBrush`
 - max-width constrained mobile shell using `MAX_WIDTH` from `@fittrack/ui/tokens`
 
@@ -735,6 +749,8 @@ High-level role surfaces:
 
 Auth is JWT plus refresh token support. Token refresh is handled in shared API transport; do not hand-roll token refresh in pages/screens.
 
+Privacy acceptance is API-backed. `PATCH /v1/users/me/privacy-acceptance` sets `has_accepted_privacy` and `privacy_accepted_at`; mobile blocks first authenticated navigation with the privacy modal until that flag is accepted.
+
 ## Business Domains
 
 The main product domains are:
@@ -753,6 +769,37 @@ The main product domains are:
 - audit logs
 - analytics and business insights
 - gym layout/equipment live status
+
+Notification lifecycle notes:
+
+- Booking lifecycle uses `BOOKING_LIFECYCLE_QUEUE` for stale pending cleanup, completion, no-show checks, and 24-hour booking reminders.
+- Coaching lifecycle uses `COACHING_LIFECYCLE_QUEUE` for free appointment completion, recurring billing overdue cleanup, no-show checks, and 24-hour appointment reminders.
+- Reminder jobs are scheduled when booking/appointment confirmation events fire, not for unconfirmed pending records.
+- Reminder notification preference fields are exposed through the notifications preferences DTO and shared notification types.
+
+Coach role notes:
+
+- Coaches have coach-owned appointment endpoints for viewing schedules, responding, completing sessions, and submitting feedback/report fields.
+- Completion can persist `session_notes`, `coach_feedback`, and `assessment_report`.
+- Coach profile surfaces include schedule type (`full_time` / `part_time`), rates, specialization, availability, and earnings fields.
+- Schedule type is admin-controlled. Coaches can view the badge but cannot edit it from their own profile.
+- Full-time availability is expanded into bookable slots from the working-day/hour windows; part-time availability uses explicitly opened slots.
+
+Analytics AI notes:
+
+- Nest computes and persists the grounded analytics payload; Python/FastAPI narrates business insights.
+- Nest calls FastAPI server-side through `AiPythonClientService` using `fetch`, intentionally bypassing browser Axios token-refresh interceptors.
+- If FastAPI/OpenRouter generation is unavailable, both Python and Nest log warnings and return a `grounded-fallback` insight payload.
+- The web analytics page detects fallback by `modelUsed === "grounded-fallback"` or fallback summary prefix and renders a warning-styled fallback banner.
+
+Current QA-batch endpoint notes:
+
+- `POST /v1/users/feedback` stores app feedback in `AppFeedback`.
+- `POST /v1/bookings/venues/:id/feedback` stores facility/venue feedback in `AmenityFeedback`.
+- Existing coach review submission remains under the coaching relationship controller and is now reachable from the member bookings UI after completed sessions; submitted reviews are also visible in the member appointment detail and mobile Assessments tab.
+- `GET /v1/fitness/milestone-reviews` returns DB-backed milestone review records for admin/staff milestone queues.
+- `GET /v1/membership/operations-dashboard` returns total active subscriptions plus recent activation and upcoming expiry summaries for the memberships page.
+- Activity-level recalculation is centralized in `apps/api/src/user/activity-level.service.ts` and is triggered from attendance, workout-session completion, and exercise review submission writes.
 
 Domain docs that can help:
 

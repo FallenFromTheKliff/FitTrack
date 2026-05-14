@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
-import { Modal, ScrollView } from "react-native";
+import { Modal, Pressable, ScrollView } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -19,6 +20,7 @@ export type PrefKey =
     | "terms";
 
 type Props = {
+  allowRequestClose?: boolean;
   visible: boolean;
   title: string;
   icon: LucideIcon;
@@ -26,7 +28,14 @@ type Props = {
   children: ReactNode;
 };
 
-export default function SettingsModal({ visible, title, icon: Icon, onClose, children }: Props) {
+export default function SettingsModal({
+  allowRequestClose = true,
+  visible,
+  title,
+  icon: Icon,
+  onClose,
+  children,
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(visible, "scale");
@@ -51,7 +60,7 @@ export default function SettingsModal({ visible, title, icon: Icon, onClose, chi
           visible={visible}
           transparent
           animationType="none"
-          onRequestClose={onClose}
+          onRequestClose={allowRequestClose ? onClose : undefined}
           statusBarTranslucent
       >
         <Animated.View style={[s.backdrop, backdropStyle]}>
@@ -63,6 +72,15 @@ export default function SettingsModal({ visible, title, icon: Icon, onClose, chi
               <AnimatedFitText style={[s.headerTitle, headerTitleStyle]}>
                 {title}
               </AnimatedFitText>
+              <Pressable
+                accessibilityLabel="Close modal"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={onClose}
+                style={s.closeButton}
+              >
+                <X size={18} color={colors.textPrimary} strokeWidth={2.4} />
+              </Pressable>
             </Animated.View>
             <ScrollView
                 keyboardShouldPersistTaps="handled"

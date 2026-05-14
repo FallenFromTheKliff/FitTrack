@@ -172,7 +172,11 @@ export function mapVenueMutationPayloadToAmenityPayload(payload: VenueLikePayloa
     grid_height: payload.gridHeight,
     grid_row: payload.gridRow,
     grid_width: payload.gridWidth,
-    hourly_rate: payload.hourlyRate ?? 0,
+    ...(payload.hourlyRate !== undefined
+      ? { hourly_rate: payload.hourlyRate }
+      : payload.isReservable
+        ? {}
+        : { hourly_rate: 0 }),
     icon_key: payload.iconKey,
     ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
     is_reservable: payload.isReservable,

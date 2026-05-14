@@ -45,7 +45,7 @@ export const DASHBOARD_ACTIVITY_FILTER_OPTIONS = [
 export const DASHBOARD_KPIS: DashboardKpi[] = [
   { icon: Users, label: "Active Members", value: "580", delta: "+12%" },
   { icon: CalendarDays, label: "Sessions Today", value: "124", delta: "+8%" },
-  { icon: DollarSign, label: "Monthly Revenue", value: "$48K", delta: "+15%" },
+  { icon: DollarSign, label: "Monthly Revenue", value: "₱2.7M", delta: "+15%" },
   { icon: TrendingUp, label: "Avg. Attendance", value: "87%", delta: "+5%" }
 ];
 

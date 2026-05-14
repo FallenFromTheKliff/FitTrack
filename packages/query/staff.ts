@@ -211,12 +211,41 @@ export function completeStaffAppointmentMutationOptions(
   return mutationOptions({
     mutationFn: ({
       appointmentId,
+      assessmentReport,
+      coachFeedback,
       sessionNotes
     }: {
       appointmentId: string;
+      assessmentReport?: string;
       coachId?: string;
+      coachFeedback?: string;
       sessionNotes?: string;
-    }) => client.staff.completeAppointment(appointmentId, sessionNotes),
+    }) =>
+      client.staff.completeAppointment(appointmentId, {
+        assessmentReport,
+        coachFeedback,
+        sessionNotes,
+      }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        invalidateStaffCoachManagementQueries(queryClient, variables.coachId),
+        invalidateAnalyticsQueries(queryClient),
+      ]);
+    }
+  });
+}
+
+export function markCoachPayoutPaidMutationOptions(
+  client: Pick<ApiClient, "staff">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: ({
+      appointmentId
+    }: {
+      appointmentId: string;
+      coachId?: string;
+    }) => client.staff.markCoachPayoutPaid(appointmentId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateStaffCoachManagementQueries(queryClient, variables.coachId),
