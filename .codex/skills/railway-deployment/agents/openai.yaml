@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Railway Deployment"
+  short_description: "Diagnose Railway Next.js monorepo deploy failures"
+  default_prompt: "Use $railway-deployment to debug a FitTrack Railway deploy failure from the exact failing log section before changing config or Dockerfiles."
+
+policy:
+  allow_implicit_invocation: true

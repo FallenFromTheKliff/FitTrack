@@ -1,0 +1,4 @@
+interface:
+  display_name: "FitTrack Layout Wireframe Gate"
+  short_description: "Tiered layout approval before risky UI relayouts"
+  default_prompt: "Use $layout-wireframe-gate to choose the cheapest honest approval artifact before implementing a risky FitTrack layout revision; create static HTML only for major route or modal architecture, batched approval, or explicit preview requests."

@@ -74,6 +74,16 @@ config(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
+const LOCAL_RESET_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  'db',
+  'fittrack-db',
+  'fittrack-db-local',
+]);
+const LOCAL_RESET_DATABASES = new Set(['fittrack', 'fittrackdb']);
+
 const PASSWORD_HASH_ROUNDS = 12;
 const BULK_PASSWORDS = {
   admin: 'FitTrack@Leadership1',
@@ -127,6 +137,55 @@ function slugify(value: string) {
     .replace(/^\.+|\.+$/g, '');
 }
 
+function assertSafeResetDatabaseUrl() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required before resetting seed data.');
+  }
+
+  const url = new URL(connectionString);
+  const host = url.hostname.toLowerCase();
+  const database = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+
+  if (
+    !LOCAL_RESET_HOSTS.has(host) ||
+    !LOCAL_RESET_DATABASES.has(database.toLowerCase())
+  ) {
+    throw new Error(
+      `[realistic-seed] Refusing to clean database "${database}" on host "${url.hostname}". Point DATABASE_URL at the local FitTrack database before running this seed.`,
+    );
+  }
+}
+
+function quotePgIdentifier(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+async function resetDatabaseForCleanSlate() {
+  assertSafeResetDatabaseUrl();
+
+  const tables = await prisma.$queryRaw<Array<{ table_name: string }>>`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name <> '_prisma_migrations'
+    ORDER BY table_name
+  `;
+
+  if (!tables.length) {
+    return;
+  }
+
+  const tableList = tables
+    .map(({ table_name }) => `"public".${quotePgIdentifier(table_name)}`)
+    .join(', ');
+
+  await prisma.$executeRawUnsafe(
+    `TRUNCATE TABLE ${tableList} RESTART IDENTITY CASCADE`,
+  );
+}
+
 type MemberTierSeed =
   | 'active_member'
   | 'verified_non_member'
@@ -161,94 +220,110 @@ type RealisticAccount = {
 };
 
 const FIRST_NAME_POOL = [
-  'Adrian',
-  'Bianca',
-  'Carlo',
-  'Danica',
-  'Elijah',
-  'Frances',
-  'Gabriel',
-  'Hannah',
-  'Isabel',
-  'Jared',
-  'Kiara',
-  'Luis',
-  'Mika',
-  'Noel',
-  'Olivia',
+  'Juan Carlos',
+  'Maria Clara',
+  'Jose Miguel',
+  'Ana Patricia',
+  'Mark Angelo',
+  'Mary Grace',
   'Paolo',
-  'Quinn',
+  'Camille',
   'Rafael',
-  'Samantha',
-  'Theo',
-  'Uma',
-  'Vincent',
-  'Ysabel',
-  'Zion',
+  'Angelica',
+  'Miguel',
+  'Katrina',
+  'Christian',
+  'Mikaela',
+  'Joshua',
+  'Andrea',
+  'Gabriel',
+  'Fatima',
+  'Daniel',
+  'Nicole',
+  'Jerome',
+  'Laarni',
+  'Carlo',
+  'Jessa',
+  'Arnel',
+  'Rica',
+  'Jomar',
+  'Trisha',
+  'Renato',
+  'Alyssa',
+  'Patrick',
+  'Mariel',
 ] as const;
 
 const LAST_NAME_POOL = [
-  'Aquino',
-  'Bernardo',
-  'Castillo',
-  'Domingo',
-  'Evangelista',
-  'Fernandez',
-  'Gutierrez',
-  'Hernandez',
-  'Ignacio',
-  'Jimenez',
-  'Katigbak',
-  'Lopez',
+  'Dela Cruz',
+  'Santos',
+  'Reyes',
+  'Garcia',
   'Mendoza',
-  'Navarro',
-  'Ortega',
-  'Pascual',
-  'Quinto',
-  'Rosario',
-  'Soriano',
+  'Bautista',
+  'Ramos',
+  'Cruz',
+  'Gonzales',
   'Torres',
-  'Umali',
-  'Valencia',
-  'Wong',
-  'Yap',
+  'Flores',
+  'Villanueva',
+  'Rivera',
+  'Aquino',
+  'Castillo',
+  'Navarro',
+  'Pascual',
+  'Santiago',
+  'Tolentino',
+  'Mercado',
+  'De Leon',
+  'Salvador',
+  'Manalo',
+  'Dimaculangan',
+  'Macalintal',
+  'Del Rosario',
+  'Lim',
+  'Chua',
+  'Uy',
+  'Tan',
+  'Abad',
+  'Roxas',
 ] as const;
 
 const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'admin',
     email: `admin@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Alex',
-    lastName: 'Rivera',
+    firstName: 'Marisol',
+    lastName: 'Aquino',
     phone: '+639170010001',
     password: 'FitTrack@Admin1',
     role: UserRole.admin,
     dateOfBirth: yearsAgo(38),
-    gender: Gender.other,
+    gender: Gender.female,
     hasAcceptedPrivacy: true,
   },
   {
     key: 'staff',
     email: `staff@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Jamie',
+    firstName: 'Liza',
     lastName: 'Santos',
     phone: '+639170010002',
     password: 'FitTrack@Staff1',
     role: UserRole.staff,
     dateOfBirth: yearsAgo(31),
-    gender: Gender.other,
+    gender: Gender.female,
     hasAcceptedPrivacy: true,
   },
   {
     key: 'coach',
     email: `coach@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Morgan',
-    lastName: 'Cruz',
+    firstName: 'Marco',
+    lastName: 'Dela Cruz',
     phone: '+639170010003',
     password: 'FitTrack@Coach1',
     role: UserRole.coach,
     dateOfBirth: yearsAgo(34),
-    gender: Gender.other,
+    gender: Gender.male,
     weightKg: 78,
     heightCm: 178,
     activityLevel: ActivityLevel.very_active,
@@ -264,14 +339,14 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'member-active',
     email: `member.active@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Casey',
+    firstName: 'Carlo',
     lastName: 'Reyes',
     phone: '+639170010004',
     password: 'FitTrack@Member1',
     role: UserRole.member,
     memberTier: 'active_member',
     dateOfBirth: yearsAgo(27),
-    gender: Gender.other,
+    gender: Gender.male,
     weightKg: 68,
     heightCm: 170,
     activityLevel: ActivityLevel.active,
@@ -281,14 +356,14 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'member-premium',
     email: `member.coaching@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Sky',
+    firstName: 'Bianca',
     lastName: 'Villanueva',
     phone: '+639170010005',
     password: 'FitTrack@Member5',
     role: UserRole.member,
     memberTier: 'active_member',
     dateOfBirth: yearsAgo(29),
-    gender: Gender.other,
+    gender: Gender.female,
     weightKg: 74,
     heightCm: 175,
     activityLevel: ActivityLevel.active,
@@ -298,14 +373,14 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'member-verified-non-member',
     email: `nonmember.verified@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Dana',
+    firstName: 'Danica',
     lastName: 'Lim',
     phone: '+639170010006',
     password: 'FitTrack@Member2',
     role: UserRole.member,
     memberTier: 'verified_non_member',
     dateOfBirth: yearsAgo(26),
-    gender: Gender.other,
+    gender: Gender.female,
     weightKg: 61,
     heightCm: 163,
     activityLevel: ActivityLevel.light,
@@ -315,7 +390,7 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'member-pending',
     email: `member.pending@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Riley',
+    firstName: 'Rafael',
     lastName: 'Tan',
     phone: '+639170010007',
     password: 'FitTrack@Member3',
@@ -323,7 +398,7 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
     status: UserStatus.pending,
     memberTier: 'pending_verification',
     dateOfBirth: yearsAgo(24),
-    gender: Gender.other,
+    gender: Gender.male,
     weightKg: 58,
     heightCm: 161,
     activityLevel: ActivityLevel.sedentary,
@@ -333,7 +408,7 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
   {
     key: 'member-archived',
     email: `member.archived@${TEST_DATA_EMAIL_DOMAIN}`,
-    firstName: 'Jordan',
+    firstName: 'Nestor',
     lastName: 'Dela Cruz',
     phone: '+639170010008',
     password: 'FitTrack@Member4',
@@ -341,7 +416,7 @@ const CORE_ACCOUNTS: readonly RealisticAccount[] = [
     memberTier: 'archived',
     deletedAt: nowPlusDays(-15, 18),
     dateOfBirth: yearsAgo(35),
-    gender: Gender.other,
+    gender: Gender.male,
     weightKg: 72,
     heightCm: 172,
     activityLevel: ActivityLevel.light,
@@ -404,38 +479,28 @@ function buildBulkAccounts(): RealisticAccount[] {
     }
   };
 
-  pushRoleAccounts(UserRole.admin, 3, (identity, index) => ({
-    key: `admin-ops-${index + 1}`,
-    password: BULK_PASSWORDS.admin,
-    role: UserRole.admin,
-    dateOfBirth: yearsAgo(33 + (index % 8)),
-    gender: Gender.other,
-    hasAcceptedPrivacy: true,
-    ...identity,
-  }));
-
-  pushRoleAccounts(UserRole.staff, 8, (identity, index) => ({
+  pushRoleAccounts(UserRole.staff, 7, (identity, index) => ({
     key: `staff-ops-${index + 1}`,
     password: BULK_PASSWORDS.staff,
     role: UserRole.staff,
     dateOfBirth: yearsAgo(24 + (index % 10)),
-    gender: Gender.other,
+    gender: index % 2 === 0 ? Gender.female : Gender.male,
     hasAcceptedPrivacy: true,
     ...identity,
   }));
 
-  pushRoleAccounts(UserRole.coach, 11, (identity, index) => ({
+  pushRoleAccounts(UserRole.coach, 20, (identity, index) => ({
     key: `coach-team-${index + 1}`,
     password: BULK_PASSWORDS.coach,
     role: UserRole.coach,
     dateOfBirth: yearsAgo(28 + (index % 10)),
-    gender: Gender.other,
     weightKg: 67 + (index % 16),
     heightCm: 165 + (index % 15),
     activityLevel:
       index % 3 === 0 ? ActivityLevel.very_active : ActivityLevel.active,
     fitnessGoal: FitnessGoal.sport_specific,
     hasAcceptedPrivacy: true,
+    gender: index % 2 === 0 ? Gender.male : Gender.female,
     coachSpecialization:
       index % 2 === 0 ? 'Strength and Conditioning' : 'Mobility and Recovery',
     coachScheduleType:
@@ -495,7 +560,7 @@ function buildBulkAccounts(): RealisticAccount[] {
         status: isPending ? UserStatus.pending : UserStatus.active,
         deletedAt: isArchived ? nowPlusDays(-(7 + (index % 20)), 18) : null,
         dateOfBirth: yearsAgo(age),
-        gender: Gender.other,
+        gender: index % 2 === 0 ? Gender.female : Gender.male,
         weightKg: 52 + ((index * 3) % 32),
         heightCm: 150 + ((index * 2) % 35),
         activityLevel:
@@ -4397,9 +4462,12 @@ async function buildCounts() {
 }
 
 async function main() {
-  const bootstrapSummary = await bootstrapDefaults(prisma);
+  await resetDatabaseForCleanSlate();
 
   await ensureAccounts();
+  await bootstrapDefaults(prisma, {
+    includeUsers: false,
+  });
   await ensureMembershipsAndPayments();
   await ensureFacilitiesAndCoaching();
   await ensureFitnessAndTraining();
@@ -4413,7 +4481,7 @@ async function main() {
   const counts = await buildCounts();
   console.log('[realistic-seed] complete');
   console.log(
-    `[realistic-seed] defaults ensured for ${bootstrapSummary.adminEmail}; named credentials: admin@fittrack.com / FitTrack@Admin1, staff@fittrack.com / FitTrack@Staff1, coach@fittrack.com / FitTrack@Coach1, member.active@fittrack.com / FitTrack@Member1, nonmember.verified@fittrack.com / FitTrack@Member2, member.pending@fittrack.com / FitTrack@Member3, member.archived@fittrack.com / FitTrack@Member4`,
+    `[realistic-seed] clean local slate rebuilt; defaults ensured without demo accounts; named credentials: admin@fittrack.com / FitTrack@Admin1, staff@fittrack.com / FitTrack@Staff1, coach@fittrack.com / FitTrack@Coach1, member.active@fittrack.com / FitTrack@Member1, nonmember.verified@fittrack.com / FitTrack@Member2, member.pending@fittrack.com / FitTrack@Member3, member.archived@fittrack.com / FitTrack@Member4`,
   );
   console.log(JSON.stringify(counts, null, 2));
 }

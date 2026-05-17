@@ -31,6 +31,7 @@ This skill is for end-to-end feature wiring, completion audits, and orchestrator
 - 2026-04-20: added purpose-driven reference keyword stacks and sibling-inheritance limits so new premium pages stop over-adapting the nearest existing page instead of using route-specific professional benchmarks.
 - 2026-04-20: added adaptation-candidate screening so weak, vibe-coded, or structurally wrong current surfaces become anti-references instead of silent design anchors during premium rebuilds.
 - 2026-04-20: added `ui-visual-dna-director` and `figma-concept-explorer` so premium admin work must set a reusable visual DNA and prove real Figma concept divergence before scaffold lock.
+- 2026-05-17: wired the new debugger, runtime guardrails, browser runtime loop, layout wireframe gate, component decorator, schema contract sync, and Railway deployment lanes into integration routing.
 
 ## First pass
 
@@ -56,6 +57,8 @@ This skill is for end-to-end feature wiring, completion audits, and orchestrator
 
 - The active chat agent is the only orchestrator and shared-state owner.
 - Default to one implementation worker. Add a second implementation worker only when the coupling scan proves a disjoint write scope and real parallel value.
+- Do not exceed 3 active worker agents per batch by default. Close completed workers before launching another batch unless the environment clearly supports more.
+- When the user has granted standing permission for implicit subagents, allow the orchestrator to spawn bounded sidecar or async verification workers without another prompt for read-heavy, browser-check, log-analysis, or disjoint implementation slices.
 - Use this execution rubric:
   - `single-scope`: one worker owns the change
   - `dual-scope`: two bounded workers own disjoint slices
@@ -73,6 +76,7 @@ This skill is for end-to-end feature wiring, completion audits, and orchestrator
   - `request -> notion -> approve -> figma macro -> figma micro -> check -> implement`
 - Route ownership for that shorthand is:
   - `ui-notion-gate` = request plus packet plus approval
+  - `layout-wireframe-gate` = tiered manual layout approval when the user asks for layout review, the direction is subjective, or Figma is not the right stop point. It should use the cheapest honest artifact: layout delta packet, screenshot/ASCII direction, or static HTML only for major route/modal architecture and explicit preview requests.
   - `figma-scaffold-builder` = macro scaffold
   - `component-decorator` = micro component-authorship pass
   - `ui-art-direction-review` = pre-code check
@@ -542,6 +546,12 @@ This skill is for end-to-end feature wiring, completion audits, and orchestrator
   - `frontend-uiux-polish` for layout, spacing, hierarchy, theme, responsive quality, modal quality, copy restraint, and presentation polish once the flow is logically sound
   - `ui-animator` for premium motion language, component-level animation choices, consistency, and Notion motion-bible writeback once the static surface is already strong
   - `backend` for endpoint, contract, auth, migration, or DB-backed invariant work
+  - `schema-contract-sync` for Prisma, DTO, Swagger, API client, query hook, form, seed, or migration drift where UI and backend disagree
+  - `debugger` before patching tricky failures, build or test failures, flaky bugs, CI/local mismatches, or repeated failed fixes
+  - `runtime-guardrails` before starting, stopping, killing, or diagnosing local stack processes, blank browser pages, Playwright confusion, or rogue Node processes
+  - `browser-runtime-loop` for Playwright MCP plus Chrome DevTools click-through loops after implementation or during browser-visible runtime diagnosis
+  - `railway-deployment` for Railway build, Dockerfile/Railpack/Nixpacks, monorepo, healthcheck, start command, or production env failures
+  - `layout-wireframe-gate` before subjective or risky relayout, modal architecture, page composition, or responsiveness redesign when the user needs manual approval before code. Static HTML is optional and reserved for major architecture or explicit preview requests.
   - `security-hardening` for auth, permissions, PII, external integrations, uploads, payments, AI endpoints, or sensitive logging
   - `ai-contract-core` plus exactly one domain wrapper for pose, chatbot, or business-analytics AI work
   - `quality-assurance` only for final verification, not implementation
@@ -632,7 +642,7 @@ This skill is for end-to-end feature wiring, completion audits, and orchestrator
   - modal-triggered flows open, close, and submit or cancel cleanly when they exist
   - premium web surfaces must get a live click-through after implementation: activate the primary row or card, change pagination, switch filters or tabs, open and close the main modal or drawer, and trigger one safe confirm path when that flow exists
   - use that click-through to classify modal-stack mistakes, duplicated modal fields, contradictory data labels, weak motion strength, and awkward state transitions before the run can close
-  - default that click-through to `ui-runtime-review` before `quality-assurance` unless the surface is too small to justify the extra lane
+  - default that click-through to `browser-runtime-loop` or `ui-runtime-review` before `quality-assurance` unless the surface is too small to justify the extra lane
   - loading, empty, error, and pending states are acceptable for the touched flow
   - obvious sort, filter, label, layout, animation, and responsive mismatches are either fixed or classified
   - important web pages that changed materially should get a targeted Lighthouse or equivalent DevTools check

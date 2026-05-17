@@ -10,6 +10,7 @@ Use this skill for normal FitTrack stack operations and day-to-day local environ
 ## Changelog
 
 - 2026-04-17: added runtime-shape awareness, watcher-aware operator rules, health and log defaults, and stronger start-vs-status decision guidance.
+- 2026-05-17: added runtime-guardrails alignment for rogue process prevention and blank Playwright or DevTools recovery.
 
 ## First pass
 
@@ -51,12 +52,14 @@ Use this skill for normal FitTrack stack operations and day-to-day local environ
 - Prefer `pnpm dev:stack:stop` for supervisor-owned shutdowns instead of ad hoc process killing.
 - Treat Expo crash or restart loops as runtime-owned until status, logs, or health prove the stack is actually down.
 - Prefer health or manifest truth over terminal assumptions.
+- Do not spawn ad hoc `node`, `next`, `expo`, `npm`, or `pnpm` dev servers when the supervised stack may already own the runtime. Use `runtime-guardrails` when process ownership, blank browser state, or Playwright/DevTools availability is unclear.
 
 ## MCP routing
 
 - Serena is required for command truth and repo navigation.
 - Prisma Local is required when the operator task depends on database state, schema state, seed state, or Prisma Studio truth.
 - Browser DevTools, Swagger, and Playwright are not start-up MCPs. Use them only when the request explicitly becomes a verification task after the stack is running.
+- A blank Playwright or DevTools page is not proof the stack is down. Navigate directly to the configured FitTrack route before recommending a restart.
 
 ## Workflow
 

@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FitTrack Layout Wireframe</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #64748b;
+      --line: #d9dee7;
+      --soft: #eef2f6;
+      --accent: #1f7a6b;
+      --accent-soft: #dff3ee;
+      --warn: #9a5b13;
+      --radius: 8px;
+      --shadow: 0 18px 38px rgba(15, 23, 42, 0.10);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: #fbfcfd;
+      padding: 18px 14px;
+    }
+
+    .brand {
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .nav-item {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border-radius: 7px;
+      color: var(--muted);
+    }
+
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 650;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 18px;
+    }
+
+    .command-header,
+    .toolbar,
+    .panel,
+    .drawer {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .command-header {
+      min-height: 74px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .title-block p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      max-width: 720px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .button,
+    .chip,
+    .input {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 0 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 650;
+    }
+
+    .toolbar {
+      margin-top: 12px;
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px;
+    }
+
+    .toolbar-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input {
+      min-width: 220px;
+      color: var(--muted);
+    }
+
+    .content-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.75fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .panel {
+      overflow: hidden;
+    }
+
+    .panel-header {
+      min-height: 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      gap: 10px;
+    }
+
+    .panel-title {
+      font-weight: 650;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th,
+    .table td {
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: middle;
+    }
+
+    .table th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      background: #fbfcfd;
+    }
+
+    .row-title {
+      font-weight: 650;
+    }
+
+    .row-sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 11px;
+      background: #fbfcfd;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 2px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .list-card {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 11px;
+      background: #fff;
+    }
+
+    .drawer-wrap {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 12px;
+    }
+
+    .drawer {
+      box-shadow: var(--shadow);
+      min-height: 260px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .drawer-body {
+      padding: 12px;
+      color: var(--muted);
+    }
+
+    .drawer-footer {
+      border-top: 1px solid var(--line);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .breakpoints {
+      margin-top: 12px;
+      border: 1px dashed #aab4c3;
+      border-radius: var(--radius);
+      padding: 12px;
+      color: var(--muted);
+      background: #fff;
+    }
+
+    .breakpoints strong {
+      color: var(--ink);
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1040px) {
+      .shell {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
+      .nav-item span,
+      .brand span {
+        display: none;
+      }
+
+      .content-grid,
+      .drawer-wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        display: block;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+      }
+
+      .main {
+        padding: 12px;
+      }
+
+      .command-header,
+      .toolbar,
+      .panel-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .actions,
+      .toolbar-group {
+        justify-content: flex-start;
+      }
+
+      .input {
+        min-width: 100%;
+      }
+
+      .table th:nth-child(3),
+      .table td:nth-child(3) {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Admin navigation">
+      <div class="brand"><span>FitTrack Admin</span></div>
+      <div class="nav-item active"><span>Current Route</span></div>
+      <div class="nav-item"><span>Members</span></div>
+      <div class="nav-item"><span>Analytics</span></div>
+      <div class="nav-item"><span>Settings</span></div>
+    </aside>
+
+    <main class="main">
+      <section class="command-header">
+        <div class="title-block">
+          <h1>Route or Modal Title</h1>
+          <p>Short context line for the operator job, current state, and highest-value action.</p>
+        </div>
+        <div class="actions">
+          <span class="button">Secondary</span>
+          <span class="button primary">Primary Action</span>
+        </div>
+      </section>
+
+      <section class="toolbar" aria-label="Dense toolbar">
+        <div class="toolbar-group">
+          <span class="input">Search placeholder</span>
+          <span class="chip">Status</span>
+          <span class="chip">Segment</span>
+          <span class="chip">Date range</span>
+        </div>
+        <div class="toolbar-group">
+          <span class="chip">List</span>
+          <span class="chip">Sort</span>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Primary Work Region</div>
+              <div class="note">Table or list keeps scan speed high.</div>
+            </div>
+            <span class="chip">Bulk tools</span>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Record</th>
+                <th>Status</th>
+                <th>Signal</th>
+                <th>Next step</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="row-title">Representative item</div><div class="row-sub">Secondary identifier</div></td>
+                <td>Active</td>
+                <td>Priority detail</td>
+                <td>Review</td>
+              </tr>
+              <tr>
+                <td><div class="row-title">Representative item</div><div class="row-sub">Secondary identifier</div></td>
+                <td>Needs action</td>
+                <td>Recent change</td>
+                <td>Resolve</td>
+              </tr>
+              <tr>
+                <td><div class="row-title">Representative item</div><div class="row-sub">Secondary identifier</div></td>
+                <td>Pending</td>
+                <td>Missing data</td>
+                <td>Open</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+
+        <aside class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Secondary Region</div>
+            <span class="chip">Inspector</span>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><strong>42</strong><span class="note">Key metric</span></div>
+            <div class="metric"><strong>8</strong><span class="note">Needs review</span></div>
+          </div>
+          <div class="stack">
+            <div class="list-card">Context, summary, or selected-record detail.</div>
+            <div class="list-card">Small task queue or recommendations.</div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="drawer-wrap">
+        <div class="breakpoints">
+          <strong>Responsive hints:</strong> desktop uses two columns; tablet stacks secondary content below the work region; mobile keeps command actions first, then filters, then list, then details. Page owns scroll unless this note says otherwise.
+        </div>
+        <aside class="drawer" aria-label="Modal or drawer mock">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Drawer or Modal Mock</div>
+              <div class="note">Overlay owner: drawer, modal, inspector, or confirm.</div>
+            </div>
+            <span class="chip">Close</span>
+          </div>
+          <div class="drawer-body">
+            Model the main fields, confirmation copy, destructive state, or focused task flow here.
+          </div>
+          <div class="drawer-footer">
+            <span class="button">Cancel</span>
+            <span class="button primary">Confirm</span>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

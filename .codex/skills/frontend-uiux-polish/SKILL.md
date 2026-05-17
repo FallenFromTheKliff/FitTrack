@@ -25,6 +25,7 @@ Use this skill when the main need is presentation polish after the flow, ownersh
 - 2026-04-20: added explicit fix-versus-enhancement outputs, a modern UX enhancement bank, and anti-generic provenance rules so premium surfaces can prove they came from real references and scaffold decisions.
 - 2026-04-20: narrowed the skill so premium motion-system design, component-level animation choice, and Notion motion-bible maintenance now hand off to `ui-animator`.
 - 2026-04-20: added stronger static-quality failure rules for annotation leakage, clean-but-generic composition, and admin-family drift so conservative premium work gets rejected before QA.
+- 2026-05-17: added `layout-wireframe-gate` and `component-decorator` handoffs for manual relayout approval and post-scaffold component anatomy work.
 
 ## First pass
 
@@ -55,6 +56,7 @@ Use this skill when the main need is presentation polish after the flow, ownersh
 ## Premium gap handoff
 
 - When a `premium-route-rebuild` packet exists, treat the approved route-wide Figma wireframes as the structural source of truth.
+- When the user asks for manual layout review or the relayout is subjective, route the structure through `layout-wireframe-gate` before implementing code. That gate may return a compact layout delta packet or screenshot/ASCII direction instead of static HTML when that is enough to make the decision clear.
 - Do not reopen the page as isolated component tweaks when the route packet already locked:
   - landing state
   - secondary states
@@ -98,6 +100,7 @@ Use this skill when the main need is presentation polish after the flow, ownersh
   - `Visual delta assessment`
   - `Task-view authenticity check`
 - If the `Review verdict` is `needs_relayout` or `needs_component_replacement`, do not settle for surface polish. Choose the stronger replacement or relayout direction before implementation details start.
+- If the macro layout is approved but cards, tables, filters, pagination, modals, or controls still feel generic, hand the run to `component-decorator` before motion polish.
 - If the unresolved decision is high-impact, expect `integration` to surface it in `Q&A God Tier Automation` before this skill continues with implementation-facing polish.
 - It is acceptable to recommend:
   - removing or replacing weak functionality patterns when the operator experience improves

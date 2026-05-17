@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Component Decorator"
+  short_description: "FitTrack component anatomy and micro-UI polish"
+  default_prompt: "Use $component-decorator to turn an approved FitTrack scaffold into component-level anatomy guidance or patches for cards, tables, filters, pagination, states, modals, and microinteractions without reopening page architecture."
+
+policy:
+  allow_implicit_invocation: true

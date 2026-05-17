@@ -669,9 +669,19 @@ async function ensureDefaultGamificationProfiles(prisma: PrismaClient) {
   }
 }
 
-export async function bootstrapDefaults(prisma: PrismaClient) {
-  await ensureAdmin(prisma);
-  await ensureDemoMember(prisma);
+type BootstrapDefaultsOptions = {
+  includeUsers?: boolean;
+};
+
+export async function bootstrapDefaults(
+  prisma: PrismaClient,
+  options: BootstrapDefaultsOptions = {},
+) {
+  if (options.includeUsers ?? true) {
+    await ensureAdmin(prisma);
+    await ensureDemoMember(prisma);
+  }
+
   const amenitySummary = await ensureDefaultAmenities(prisma);
   const muscleSummary = await ensureDefaultMuscleDefinitions(prisma);
   await ensureDefaultGamificationBackbone(prisma);

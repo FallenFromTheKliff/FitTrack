@@ -25,6 +25,7 @@ Use this skill for the final verification pass on a touched FitTrack surface, fe
 - 2026-04-20: added hard failures for annotation leakage, separate premium-Figma-file drift, clean-but-generic output, admin-family drift, and conservative scaffolds that still read like polished prototypes.
 - 2026-04-20: added anti-reference drift checks so a prior weak scaffold or live surface cannot still dominate the final composition after a premium redesign pass.
 - 2026-04-20: added visual-DNA and concept-divergence closure checks so premium UI must prove both workflow strength and screenshot-level identity.
+- 2026-05-17: added runtime-guardrails and browser-runtime-loop alignment so blank browser states, Playwright MCP recovery, and click-through evidence are handled consistently.
 
 ## First pass
 
@@ -42,6 +43,7 @@ Use this skill for the final verification pass on a touched FitTrack surface, fe
 
 Run verification in this order unless the touched change is clearly exempt from a later step:
 
+0. runtime guardrail check when ports, stack ownership, blank browser state, or Playwright/DevTools availability is uncertain
 1. Serena-backed preflight and touched-surface confirmation
 2. lint and typecheck
 3. targeted tests
@@ -49,7 +51,7 @@ Run verification in this order unless the touched change is clearly exempt from 
 5. Prisma Local or PostgreSQL truth checks when DB-backed state matters
 6. Swagger confirmation
 7. Browser DevTools checks for browser runtime issues, targeted accessibility, or Lighthouse
-8. Playwright MCP verification
+8. Playwright MCP verification, preferably through `browser-runtime-loop` for browser-visible flows that need click-through evidence
 9. final bug, edge-case, use-case, UI-quality, accessibility, and performance report
 
 ## Risk-based matrix
@@ -141,7 +143,7 @@ Run verification in this order unless the touched change is clearly exempt from 
 - `postgresReadOnly` is allowed when a raw SQL truth check is faster or clearer than Prisma-level inspection.
 - Browser DevTools is allowed for browser-visible runtime issues, targeted accessibility checks, and Lighthouse.
 - Swagger is a verification MCP, not an implementation MCP.
-- Playwright is a browser-surface verification MCP and should only run after direct API checks pass for runtime-sensitive flows.
+- Playwright is a browser-surface verification MCP and should only run after direct API checks pass for runtime-sensitive flows. If Playwright appears blank or stuck, use `runtime-guardrails` and direct route navigation before declaring the MCP unavailable.
 - Sentry is optional and future-facing here; use it only when a real FitTrack project exists and the issue is genuinely prod-observed.
 
 ## Regression-adjacent selection rules

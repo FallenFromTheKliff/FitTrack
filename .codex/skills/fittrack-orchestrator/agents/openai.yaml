@@ -1,0 +1,7 @@
+interface:
+  display_name: "FitTrack Orchestrator"
+  short_description: "Thin router for FitTrack task planning and skill routing"
+  default_prompt: "Use $fittrack-orchestrator to classify a FitTrack request, choose the right downstream skills, and coordinate bounded local or delegated work."
+
+policy:
+  allow_implicit_invocation: true
