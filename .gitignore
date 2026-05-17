@@ -15,7 +15,12 @@ agents/
 # Build outputs
 .artifacts/
 artifacts/
+.agents/
+.ai/
+.codex-local/
 .npm-cache/
+.playwright-mcp/
+.pnpm-store/
 .gradle-user-home/
 .next/
 .expo/
