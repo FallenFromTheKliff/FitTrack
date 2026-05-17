@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { randomUUID } from 'node:crypto';
 import {
   CreatorState,
   ExerciseReviewSubmissionStatus,
@@ -12,6 +13,7 @@ import {
   IntegrityRiskLevel,
   type MasteryRank,
   MilestoneProgressStatus,
+  ModerationActionType,
   type MuscleMasteryProgress,
   Prisma,
   ProgressionSourceStatus,
@@ -42,6 +44,7 @@ import {
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
+  AdminManualExpGrantDTO,
   AchievementReviewResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
@@ -584,6 +587,43 @@ export class GamificationService {
     });
 
     return this.toAdminProgressionGrantResponse(result);
+  }
+
+  async adminCreateManualExpGrant(
+    actorUserId: string,
+    dto: AdminManualExpGrantDTO,
+  ): Promise<AdminProgressionGrantResponseDTO> {
+    const result = await this.repo.createManualExpGrant({
+      actorUserId,
+      amount: dto.amount,
+      appointmentId: dto.appointment_id ?? null,
+      muscleGroup: dto.muscle_group?.trim() || null,
+      rationale: dto.rationale,
+      sourceId: `manual_exp:${dto.appointment_id ?? randomUUID()}`,
+      userId: dto.user_id,
+    });
+
+    this.emitAudit({
+      userId: actorUserId,
+      action: 'GAMIFICATION_MANUAL_EXP_GRANTED',
+      entity: 'ProgressionGrantLedger',
+      entityId: result.grantId,
+      after: {
+        user_id: dto.user_id,
+        amount: dto.amount,
+        appointment_id: dto.appointment_id ?? null,
+      },
+    });
+
+    return {
+      grant_id: result.grantId,
+      user_id: result.userId,
+      grant_status: result.grantStatus,
+      moderation_action_type: ModerationActionType.manual_exp_grant,
+      moderation_action_id: result.moderationActionId,
+      total_xp: result.totalXp,
+      current_season_points: result.currentSeasonPoints,
+    };
   }
 
   async adminRestoreProgressionGrant(

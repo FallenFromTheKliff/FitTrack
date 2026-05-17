@@ -256,6 +256,7 @@ export default function BookingsScreen() {
           id: appointment.id,
           nextPaymentDate: appointment.nextPaymentDate ?? undefined,
           paymentPlan: appointment.paymentPlan ?? undefined,
+          recurringPlanId: appointment.recurringPlanId ?? null,
           remainingBalance: appointment.remainingBalance ?? undefined,
           sessionNotes: appointment.sessionNotes,
           resourceId: appointment.coachId ?? "coach",
@@ -278,6 +279,81 @@ export default function BookingsScreen() {
         };
       }),
     [appointmentsRaw],
+  );
+
+  const appointmentTimelines = useMemo(() => {
+    const byPlan = new Map<string, DetailBooking[]>();
+    appointments.forEach((appointment) => {
+      if (!appointment.recurringPlanId) return;
+      const existing = byPlan.get(appointment.recurringPlanId) ?? [];
+      existing.push(appointment);
+      byPlan.set(appointment.recurringPlanId, existing);
+    });
+
+    for (const sessions of byPlan.values()) {
+      sessions.sort((left, right) =>
+        `${left.date} ${left.startTime ?? left.time}`.localeCompare(
+          `${right.date} ${right.startTime ?? right.time}`,
+        ),
+      );
+    }
+
+    return new Map(
+      Array.from(byPlan.entries()).map(([planId, sessions]) => [
+        planId,
+        sessions.map((session, index) => ({
+          id: session.id,
+          label: `Session ${index + 1}`,
+          meta: `${formatBookingDate(session.date)} | ${
+            session.startTime && session.endTime
+              ? `${session.startTime} - ${session.endTime}`
+              : session.time
+          } | ${formatStatusLabel(session.status)}`,
+          status: session.status,
+          tone: STATUS_COLORS[session.status] ?? colors.textMuted,
+        })),
+      ]),
+    );
+  }, [appointments, colors.textMuted]);
+
+  const appointmentsWithTimeline = useMemo(
+    () =>
+      appointments.map((appointment) => ({
+        ...appointment,
+        timelineItems: appointment.recurringPlanId
+          ? appointmentTimelines.get(appointment.recurringPlanId)
+          : [
+              {
+                id: `${appointment.id}:requested`,
+                label: "Booking requested",
+                meta: `${formatBookingDate(appointment.date)} | ${appointment.time}`,
+                status: "pending",
+                tone: colors.textMuted,
+              },
+              {
+                id: `${appointment.id}:status`,
+                label: formatStatusLabel(appointment.status),
+                meta:
+                  appointment.status === "completed"
+                    ? "Coach session completed."
+                    : "Current appointment state.",
+                status: appointment.status,
+                tone: STATUS_COLORS[appointment.status] ?? colors.textMuted,
+              },
+              ...(appointment.coachReviewRating
+                ? [
+                    {
+                      id: `${appointment.id}:review`,
+                      label: "Member feedback submitted",
+                      meta: `${appointment.coachReviewRating}/5 stars`,
+                      status: "completed",
+                      tone: colors.warning,
+                    },
+                  ]
+                : []),
+            ],
+      })),
+    [appointmentTimelines, appointments, colors.textMuted, colors.warning],
   );
 
   const isLoading =
@@ -548,8 +624,8 @@ export default function BookingsScreen() {
   ]);
 
   const activeItems = useMemo(() => {
-    return activeSection === "bookings" ? reservations : appointments;
-  }, [activeSection, appointments, reservations]);
+    return activeSection === "bookings" ? reservations : appointmentsWithTimeline;
+  }, [activeSection, appointmentsWithTimeline, reservations]);
 
   const filtered = useMemo(() => {
     let result = activeItems;

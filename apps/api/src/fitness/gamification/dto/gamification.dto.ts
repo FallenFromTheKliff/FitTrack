@@ -19,10 +19,13 @@ import {
   IsEnum,
   IsBoolean,
   IsObject,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -760,6 +763,53 @@ export class ResolveIntegrityCaseDTO {
 
   @ApiProperty({
     example: 'Manual review confirmed the session should remain invalid.',
+  })
+  @TrimString()
+  @IsString({ message: 'rationale must be a string' })
+  @MinLength(3, { message: 'rationale must be at least 3 characters' })
+  @MaxLength(500, {
+    message: 'rationale must not exceed 500 characters',
+  })
+  rationale: string;
+}
+
+export class AdminManualExpGrantDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsUUID('all', { message: 'user_id must be a UUID' })
+  user_id: string;
+
+  @ApiProperty({
+    example: 75,
+    description: 'EXP amount approved after a non-camera or coach-verified session.',
+  })
+  @Type(() => Number)
+  @IsInt({ message: 'amount must be an integer' })
+  @Min(1, { message: 'amount must be at least 1' })
+  @Max(1000, { message: 'amount must not exceed 1000' })
+  amount: number;
+
+  @ApiPropertyOptional({
+    example: 'legs',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'muscle_group must be a string' })
+  @MaxLength(100, {
+    message: 'muscle_group must not exceed 100 characters',
+  })
+  muscle_group?: string | null;
+
+  @ApiPropertyOptional({
+    example: '33333333-3333-4333-8333-333333333333',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('all', { message: 'appointment_id must be a UUID' })
+  appointment_id?: string | null;
+
+  @ApiProperty({
+    example: 'Coach confirmed the member completed the post-session workout without camera tracking.',
   })
   @TrimString()
   @IsString({ message: 'rationale must be a string' })

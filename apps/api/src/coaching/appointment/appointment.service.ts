@@ -42,6 +42,7 @@ import {
   AppointmentCheckoutResponseDTO,
   AppointmentResponseDTO,
   CancelAppointmentDTO,
+  CoachAppointmentBookingMode,
   CoachScheduleAppointmentResponseDTO,
   CompleteAppointmentDTO,
   CreateCoachManagedAppointmentDTO,
@@ -223,12 +224,33 @@ export class AppointmentService {
       slotStart,
       slotEnd,
       durationMinutes: dto.duration_minutes,
-      memberNotes: dto.member_notes,
+      memberNotes: this.formatMemberAppointmentNotes(dto),
       isFreeSession,
       ...amounts,
     });
 
     return this.toAppointmentResponse(appointment);
+  }
+
+  private formatMemberAppointmentNotes(dto: CreateAppointmentDTO) {
+    const bookingMode =
+      dto.booking_mode ?? CoachAppointmentBookingMode.single;
+    const sessionCount =
+      bookingMode === CoachAppointmentBookingMode.single
+        ? 1
+        : Math.max(1, dto.session_count ?? 1);
+    const memberNotes = dto.member_notes?.trim();
+
+    if (bookingMode === CoachAppointmentBookingMode.single) {
+      return memberNotes;
+    }
+
+    const intentLabel =
+      bookingMode === CoachAppointmentBookingMode.pack
+        ? `Multi-session pack request (${sessionCount} sessions)`
+        : `Recurring coach plan request (${sessionCount} sessions)`;
+
+    return [intentLabel, memberNotes].filter(Boolean).join(' - ');
   }
 
   async createCoachManagedAppointment(

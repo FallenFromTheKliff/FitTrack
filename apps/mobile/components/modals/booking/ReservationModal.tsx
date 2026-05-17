@@ -191,6 +191,14 @@ function getCoachPriceLabel(coach: CoachProfileRecord) {
   return `PHP ${coach.hourlyRate.toLocaleString("en-PH")} / hr`;
 }
 
+function getCoachRatingLabel(coach: CoachProfileRecord) {
+  if (!coach.averageRating || coach.ratingCount === 0) {
+    return "New coach";
+  }
+
+  return `${coach.averageRating.toFixed(1)} stars (${coach.ratingCount ?? 0})`;
+}
+
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -901,6 +909,9 @@ export default function ReservationModal({
                         <FitText style={s.trainerSpecialty}>
                           {coach.specialties?.[0] ?? "General Coaching"} {" - "}{" "}
                           {getCoachPriceLabel(coach)}
+                        </FitText>
+                        <FitText style={s.trainerRating}>
+                          {getCoachRatingLabel(coach)}
                         </FitText>
                         <FitText style={s.validationHint}>
                           {coach.bio?.trim() ||

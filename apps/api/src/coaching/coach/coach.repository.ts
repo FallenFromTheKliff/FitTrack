@@ -19,6 +19,17 @@ const coachListInclude = {
       profile: true,
     },
   },
+  reviews: {
+    take: 2,
+    orderBy: [{ created_at: 'desc' }],
+    include: {
+      reviewer: {
+        include: {
+          profile: true,
+        },
+      },
+    },
+  },
   availability_slots: {
     where: { is_active: true },
     orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
@@ -29,6 +40,17 @@ const coachDetailInclude = {
   user: {
     include: {
       profile: true,
+    },
+  },
+  reviews: {
+    take: 3,
+    orderBy: [{ created_at: 'desc' }],
+    include: {
+      reviewer: {
+        include: {
+          profile: true,
+        },
+      },
     },
   },
   availability_slots: {

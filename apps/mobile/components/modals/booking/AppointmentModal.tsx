@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Linking,
@@ -40,6 +40,7 @@ import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitSearch from "@/components/fit/FitSearch";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import NoticeModal from "@/components/modals/shared/NoticeModal";
@@ -56,6 +57,7 @@ type Props = {
 type CoachRecord = CoachProfileRecord;
 
 type AppointmentStep = "coach" | "time";
+type AppointmentPlanMode = "single" | "pack" | "recurring";
 type AppointmentPaymentOption =
   | "cash_downpayment"
   | "cash_full"
@@ -72,12 +74,50 @@ type PaymentOptionCard = {
   subtitle: string;
   title: string;
 };
+type PlanOptionCard = {
+  body: string;
+  key: AppointmentPlanMode;
+  sessionCount: number;
+  title: string;
+};
 
 type SlotOption = {
   durationMin: number;
   label: string;
   startTime: string;
 };
+
+const COACH_SPECIALIZATION_FILTERS = [
+  "All",
+  "Strength",
+  "Mobility",
+  "Boxing",
+  "Conditioning",
+] as const;
+const COACH_RATING_FILTERS = [
+  { label: "Any rating", value: 0 },
+  { label: "4+ stars", value: 4 },
+] as const;
+const PLAN_OPTION_CARDS: PlanOptionCard[] = [
+  {
+    body: "Reserve one coach session from the live availability calendar.",
+    key: "single",
+    sessionCount: 1,
+    title: "Single Session",
+  },
+  {
+    body: "Start with this slot and mark the booking as a multi-session pack request.",
+    key: "pack",
+    sessionCount: 3,
+    title: "3-Session Pack",
+  },
+  {
+    body: "Start with this slot and mark the request for a recurring coach plan.",
+    key: "recurring",
+    sessionCount: 4,
+    title: "Recurring Plan",
+  },
+];
 
 function getCoachName(coach: CoachRecord) {
   const standaloneName = coach.displayName?.trim();
@@ -106,6 +146,14 @@ function getCoachPriceLabel(coach: CoachRecord) {
   }
 
   return `PHP ${coach.hourlyRate.toLocaleString("en-PH")} / session`;
+}
+
+function getCoachRatingLabel(coach: CoachRecord) {
+  if (!coach.averageRating || coach.ratingCount === 0) {
+    return "New coach";
+  }
+
+  return `${coach.averageRating.toFixed(1)} stars (${coach.ratingCount ?? 0})`;
 }
 
 function matchesDay(selectedDate: string, dayValue: number | string) {
@@ -196,6 +244,7 @@ export default function AppointmentModal({
     ? "paymongo_downpayment"
     : "cash_downpayment";
   const [step, setStep] = useState<AppointmentStep>("coach");
+  const [planMode, setPlanMode] = useState<AppointmentPlanMode>("single");
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [selectedSlotLabel, setSelectedSlotLabel] = useState("");
@@ -211,15 +260,51 @@ export default function AppointmentModal({
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [errorText, setErrorText] = useState("");
+  const [coachSearch, setCoachSearch] = useState("");
+  const [specializationFilter, setSpecializationFilter] =
+    useState<(typeof COACH_SPECIALIZATION_FILTERS)[number]>("All");
+  const [minimumRating, setMinimumRating] =
+    useState<(typeof COACH_RATING_FILTERS)[number]["value"]>(0);
 
   const {
     data: coaches = [],
     isLoading: coachesLoading,
     error: coachesError,
   } = useQuery({
-    ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient),
+    ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient, {
+      ...(minimumRating > 0 ? { minRating: minimumRating } : {}),
+      ...(specializationFilter !== "All"
+        ? { specialization: specializationFilter }
+        : {}),
+    }),
     enabled: isVisible,
   });
+
+  const filteredCoaches = useMemo(() => {
+    const query = coachSearch.trim().toLowerCase();
+    if (!query) return coaches;
+
+    return coaches.filter((coach) => {
+      const haystack = [
+        getCoachName(coach),
+        coach.bio ?? "",
+        ...(coach.specialties ?? []),
+        ...(coach.certifications ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [coachSearch, coaches]);
+
+  useEffect(() => {
+    if (!selectedCoachId) return;
+    if (filteredCoaches.some((coach) => String(coach.id) === selectedCoachId)) {
+      return;
+    }
+    setSelectedCoachId(null);
+    setSelectedSlotLabel("");
+  }, [filteredCoaches, selectedCoachId]);
 
   const selectedCoach = useMemo(
     () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
@@ -255,7 +340,7 @@ export default function AppointmentModal({
     }
     return expandCoachAvailabilitySlots(
       availability.availability,
-      availability.scheduleType,
+      "full_time",
     )
       .filter(
         (slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek),
@@ -311,6 +396,12 @@ export default function AppointmentModal({
     const slotHours = selectedSlot.durationMin / 60;
     return roundCurrency(rate * slotHours);
   }, [selectedCoach, selectedSlot]);
+  const selectedPlan = useMemo(
+    () =>
+      PLAN_OPTION_CARDS.find((option) => option.key === planMode) ??
+      PLAN_OPTION_CARDS[0],
+    [planMode],
+  );
   const splitAmountDueNow = useMemo(
     () => roundCurrency(estimatedTotalAmount * 0.3),
     [estimatedTotalAmount],
@@ -458,6 +549,7 @@ export default function AppointmentModal({
     }
     setStep("coach");
     setSelectedCoachId(null);
+    setPlanMode("single");
     setSelectedDate(getTodayString());
     setSelectedSlotLabel("");
     setPaymentOption(defaultPaymentOption);
@@ -504,6 +596,8 @@ export default function AppointmentModal({
           coachId: String(selectedCoach.id),
           scheduledAt: toGymWallClockIso(selectedDate, selectedSlot.startTime),
           duration: selectedSlot.durationMin,
+          bookingMode: planMode,
+          sessionCount: selectedPlan.sessionCount,
         },
       });
       appointmentId = createdAppointment.id;
@@ -517,6 +611,7 @@ export default function AppointmentModal({
         setAppointmentConfirmation(null);
         setStep("coach");
         setSelectedCoachId(null);
+        setPlanMode("single");
         setSelectedDate(getTodayString());
         setSelectedSlotLabel("");
         setPaymentOption(defaultPaymentOption);
@@ -555,6 +650,7 @@ export default function AppointmentModal({
       setAppointmentConfirmation(null);
       setStep("coach");
       setSelectedCoachId(null);
+      setPlanMode("single");
       setSelectedDate(getTodayString());
       setSelectedSlotLabel("");
       setPaymentOption(defaultPaymentOption);
@@ -584,11 +680,17 @@ export default function AppointmentModal({
 
     const scheduleLabel = `${formatBookingDate(selectedDate)} at ${selectedSlot.label}`;
     const coachName = getCoachName(selectedCoach);
+    const planCopy =
+      planMode === "single"
+        ? "This reserves one coach session."
+        : planMode === "pack"
+          ? "This reserves the first session and flags the booking as a 3-session pack request for staff confirmation."
+          : "This reserves the first session and flags the booking as a recurring coach plan request for admin confirmation.";
 
     if (isFreeAppointment) {
       setAppointmentConfirmation({
         title: "Confirm coach appointment?",
-        message: `Book ${coachName} for ${scheduleLabel}. No upfront payment will be collected for this session.`,
+        message: `Book ${coachName} for ${scheduleLabel}. ${planCopy} No upfront payment will be collected for this session.`,
         yesLabel: "Confirm Appointment",
       });
       return;
@@ -597,7 +699,7 @@ export default function AppointmentModal({
     if (paymentOption === "paymongo_downpayment") {
       setAppointmentConfirmation({
         title: "Continue to PayMongo?",
-        message: `You are about to start PayMongo checkout for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the session date.`,
+        message: `You are about to start PayMongo checkout for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. ${planCopy} The remaining ${formatCurrency(remainingBalance)} stays due on or after the session date.`,
         yesLabel: "Continue to PayMongo",
       });
       return;
@@ -606,7 +708,7 @@ export default function AppointmentModal({
     if (paymentOption === "cash_full") {
       setAppointmentConfirmation({
         title: "Submit full cash payment?",
-        message: `Submit a full cash payment request for ${formatCurrency(estimatedTotalAmount)} for ${coachName} on ${scheduleLabel}. Staff will still verify the payment before it is treated as fully paid.`,
+        message: `Submit a full cash payment request for ${formatCurrency(estimatedTotalAmount)} for ${coachName} on ${scheduleLabel}. ${planCopy} Staff will still verify the payment before it is treated as fully paid.`,
         yesLabel: "Submit Full Payment",
       });
       return;
@@ -614,7 +716,7 @@ export default function AppointmentModal({
 
     setAppointmentConfirmation({
       title: "Submit cash downpayment?",
-      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} will stay due on or after the session date.`,
+      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. ${planCopy} The remaining ${formatCurrency(remainingBalance)} will stay due on or after the session date.`,
       yesLabel: "Submit Downpayment",
     });
   };
@@ -660,17 +762,84 @@ export default function AppointmentModal({
                 <View style={{ gap: 12 }}>
                   <View>
                     <FitText style={s.sectionLabel}>AVAILABLE COACHES</FitText>
+                    <View style={s.filterPanel}>
+                      <FitSearch
+                        value={coachSearch}
+                        onChangeText={setCoachSearch}
+                        placeholder="Search coach, skill, or credential"
+                      />
+                      <View style={s.filterChipRow}>
+                        {COACH_SPECIALIZATION_FILTERS.map((filter) => {
+                          const isActive = specializationFilter === filter;
+                          return (
+                            <Pressable
+                              key={filter}
+                              style={[
+                                s.filterChip,
+                                isActive && {
+                                  borderColor: colors.brand,
+                                  backgroundColor: colors.brand + "12",
+                                },
+                              ]}
+                              onPress={() => {
+                                setSpecializationFilter(filter);
+                                setSelectedSlotLabel("");
+                              }}
+                            >
+                              <FitText
+                                style={[
+                                  s.filterChipText,
+                                  isActive && { color: colors.brand },
+                                ]}
+                              >
+                                {filter}
+                              </FitText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={s.filterChipRow}>
+                        {COACH_RATING_FILTERS.map((filter) => {
+                          const isActive = minimumRating === filter.value;
+                          return (
+                            <Pressable
+                              key={filter.label}
+                              style={[
+                                s.filterChip,
+                                isActive && {
+                                  borderColor: colors.warning,
+                                  backgroundColor: colors.warning + "14",
+                                },
+                              ]}
+                              onPress={() => {
+                                setMinimumRating(filter.value);
+                                setSelectedSlotLabel("");
+                              }}
+                            >
+                              <FitText
+                                style={[
+                                  s.filterChipText,
+                                  isActive && { color: colors.warning },
+                                ]}
+                              >
+                                {filter.label}
+                              </FitText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
                     {coachesLoading ? (
                       <FitText style={s.helperText}>
                         Loading coach profiles...
                       </FitText>
-                    ) : coaches.length === 0 ? (
+                    ) : filteredCoaches.length === 0 ? (
                       <FitText style={s.helperText}>
-                        No bookable coaches are available yet.
+                        No bookable coaches match those filters.
                       </FitText>
                     ) : (
                       <View style={s.coachList}>
-                        {coaches.map((coach) => {
+                        {filteredCoaches.map((coach) => {
                           const isActive = selectedCoach?.id === coach.id;
                           return (
                             <Pressable
@@ -713,6 +882,9 @@ export default function AppointmentModal({
                                   {getCoachPrimarySpecialty(coach)} {" - "}
                                   {getCoachPriceLabel(coach)}
                                 </FitText>
+                                <FitText style={s.coachRating}>
+                                  {getCoachRatingLabel(coach)}
+                                </FitText>
                                 <FitText style={s.coachBio}>
                                   {coach.bio?.trim() ||
                                     "Staff has not added a coach bio yet."}
@@ -743,6 +915,11 @@ export default function AppointmentModal({
                                       </View>
                                     ))}
                                 </View>
+                                {coach.recentReviews?.[0]?.comment ? (
+                                  <FitText style={s.coachReviewQuote}>
+                                    {coach.recentReviews[0].comment}
+                                  </FitText>
+                                ) : null}
                               </View>
                               {isActive ? (
                                 <CheckCircle
@@ -823,6 +1000,52 @@ export default function AppointmentModal({
                       </View>
                     </View>
                   ) : null}
+                  <View style={s.previewCard}>
+                    <FitText style={s.previewSectionTitle}>
+                      SESSION PLAN
+                    </FitText>
+                    <View style={s.planOptionList}>
+                      {PLAN_OPTION_CARDS.map((option) => {
+                        const isActive = planMode === option.key;
+                        return (
+                          <Pressable
+                            key={option.key}
+                            style={[
+                              s.planOptionCard,
+                              isActive && {
+                                borderColor: colors.brand,
+                                backgroundColor: colors.brand + "12",
+                              },
+                            ]}
+                            onPress={() => {
+                              setPlanMode(option.key);
+                              setErrorText("");
+                            }}
+                          >
+                            <View style={{ flex: 1, gap: 3 }}>
+                              <FitText style={s.planOptionTitle}>
+                                {option.title}
+                              </FitText>
+                              <FitText style={s.planOptionBody}>
+                                {option.sessionCount} session
+                                {option.sessionCount === 1 ? "" : "s"}
+                              </FitText>
+                            </View>
+                            {isActive ? (
+                              <CheckCircle
+                                size={17}
+                                color={colors.brand}
+                                strokeWidth={2}
+                              />
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <FitText style={s.previewPlainText}>
+                      {selectedPlan.body}
+                    </FitText>
+                  </View>
                   <View>
                     <FitText style={s.sectionLabel}>SELECT DATE</FitText>
                     <Pressable

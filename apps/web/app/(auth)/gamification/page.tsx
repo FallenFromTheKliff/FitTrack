@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Crown,
   EyeOff,
+  PlusCircle,
   RefreshCcw,
   ShieldAlert,
   ShieldCheck,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminManualExpGrantInput,
   AdminGamificationSeasonStandingListParams,
   FitnessRankingGovernanceStatus,
 } from "@fittrack/api-client";
@@ -27,11 +29,14 @@ import type {
   AdminGamificationSeasonSummaryRecord,
   FitnessRankingVisibility,
   FitnessSeasonStatus,
+  MemberRecord,
 } from "@fittrack/types";
 import {
+  adminMembersQueryOptions,
   adminGamificationSeasonStandingsQueryOptions,
   adminGamificationSeasonsQueryOptions,
   adminGamificationOverviewQueryOptions,
+  createAdminManualExpGrantMutationOptions,
   fitnessAchievementReviewsQueryOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
   updateAdminGamificationRankingOverrideMutationOptions,
@@ -54,6 +59,7 @@ import {
   FitTable,
   FitText,
   FitTextArea,
+  FitTextInput,
 } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import { ConfirmModal } from "@/components/modals";
@@ -108,6 +114,13 @@ const MILESTONE_STATUS_OPTIONS: Array<{
 ];
 
 type GamificationTab = "overview" | "milestones";
+type ManualExpDraft = {
+  amount: string;
+  appointmentId: string;
+  muscleGroup: string;
+  rationale: string;
+  userId: string;
+};
 type AdminConfirmationState = {
   confirmIcon?: LucideIcon;
   confirmLabel: string;
@@ -134,6 +147,13 @@ function labelize(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getMemberDisplayName(member: MemberRecord) {
+  const firstName = member.profile?.firstName?.trim() ?? "";
+  const lastName = member.profile?.lastName?.trim() ?? "";
+  const fullName = `${firstName} ${lastName}`.trim();
+  return fullName || member.email;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -378,9 +398,20 @@ function AdminGamificationPage() {
   const [rankingNotes, setRankingNotes] = useState<DraftMap>({});
   const [rankingStateDrafts, setRankingStateDrafts] =
     useState<RankingStateDraftMap>({});
+  const [manualExpDraft, setManualExpDraft] = useState<ManualExpDraft>({
+    amount: "75",
+    appointmentId: "",
+    muscleGroup: "",
+    rationale:
+      "Coach verified the member completed the post-session work without camera tracking.",
+    userId: "",
+  });
 
   const overviewQuery = useQuery(
     adminGamificationOverviewQueryOptions(webApiClient),
+  );
+  const membersQuery = useQuery(
+    adminMembersQueryOptions(webApiClient, { role: "member" }),
   );
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
@@ -441,6 +472,9 @@ function AdminGamificationPage() {
       queryClient,
     ),
   );
+  const manualExpMutation = useMutation(
+    createAdminManualExpGrantMutationOptions(webApiClient, queryClient),
+  );
   useEffect(() => {
     if (searchParams.get("tab") === "milestones") {
       setActiveTab("milestones");
@@ -468,6 +502,15 @@ function AdminGamificationPage() {
     seasonVisibilityFilter,
   ]);
 
+  useEffect(() => {
+    const members = membersQuery.data ?? [];
+    setManualExpDraft((current) =>
+      current.userId || members.length === 0
+        ? current
+        : { ...current, userId: members[0].id },
+    );
+  }, [membersQuery.data]);
+
   const overview = overviewQuery.data;
   const activeSeasonActions = useMemo(
     () =>
@@ -480,9 +523,11 @@ function AdminGamificationPage() {
     overviewQuery.error ??
     seasonsQuery.error ??
     seasonStandingsQuery.error ??
+    membersQuery.error ??
     milestoneReviewsQuery.error ??
     seasonMutation.error ??
     integrityMutation.error ??
+    manualExpMutation.error ??
     rankingMutation.error;
 
   const panelStyle = {
@@ -578,6 +623,72 @@ function AdminGamificationPage() {
             adminNote: governanceStatus === "normal" ? null : rationale,
           },
         });
+      },
+    });
+  };
+
+  const submitManualExpGrant = () => {
+    const amount = Number(manualExpDraft.amount);
+    const selectedMember = (membersQuery.data ?? []).find(
+      (member) => member.id === manualExpDraft.userId,
+    );
+    const rationale = manualExpDraft.rationale.trim();
+
+    if (!manualExpDraft.userId || !Number.isInteger(amount) || amount < 1) {
+      setConfirmationState({
+        confirmIcon: ShieldAlert,
+        confirmLabel: "Close",
+        message:
+          "Choose a member and enter a whole-number EXP amount before applying a manual grant.",
+        title: "Manual EXP Needs A Valid Amount",
+        onConfirm: () => undefined,
+      });
+      return;
+    }
+
+    if (!rationale) {
+      setConfirmationState({
+        confirmIcon: ShieldAlert,
+        confirmLabel: "Close",
+        message:
+          "Add a reviewer rationale so the manual grant is audit-ready.",
+        title: "Manual EXP Needs A Rationale",
+        onConfirm: () => undefined,
+      });
+      return;
+    }
+
+    const payload: AdminManualExpGrantInput = {
+      amount,
+      rationale,
+      userId: manualExpDraft.userId,
+      ...(manualExpDraft.muscleGroup.trim()
+        ? { muscleGroup: manualExpDraft.muscleGroup.trim() }
+        : {}),
+      ...(manualExpDraft.appointmentId.trim()
+        ? { appointmentId: manualExpDraft.appointmentId.trim() }
+        : {}),
+    };
+
+    setConfirmationState({
+      confirmIcon: PlusCircle,
+      confirmLabel: "Grant EXP",
+      message: `${amount} EXP will be added to ${selectedMember ? getMemberDisplayName(selectedMember) : "this member"} and logged as a manual post-session correction.`,
+      title: "Apply Manual EXP Grant?",
+      onConfirm: () => {
+        manualExpMutation.mutate(
+          { payload },
+          {
+            onSuccess: () => {
+              setManualExpDraft((current) => ({
+                ...current,
+                amount: "75",
+                appointmentId: "",
+                muscleGroup: "",
+              }));
+            },
+          },
+        );
       },
     });
   };
@@ -1014,6 +1125,15 @@ function AdminGamificationPage() {
             </RecordList>
           </FitSection>
 
+          <ManualExpGrantPanel
+            draft={manualExpDraft}
+            isLoading={manualExpMutation.isPending}
+            members={membersQuery.data ?? []}
+            onDraftChange={setManualExpDraft}
+            onSubmit={submitManualExpGrant}
+            style={overviewBottomCardStyle}
+          />
+
         <FitSection
           heading="Audit And Corrections"
           action={<Activity size={16} color={colors.brand} />}
@@ -1131,6 +1251,7 @@ function AdminGamificationPage() {
         isLoading={
           seasonMutation.isPending ||
           integrityMutation.isPending ||
+          manualExpMutation.isPending ||
           rankingMutation.isPending
         }
         loadingLabel="Applying..."
@@ -1798,6 +1919,140 @@ function MetricGrid({
         );
       })}
     </div>
+  );
+}
+
+function ManualExpGrantPanel({
+  draft,
+  isLoading,
+  members,
+  onDraftChange,
+  onSubmit,
+  style,
+}: {
+  draft: ManualExpDraft;
+  isLoading: boolean;
+  members: MemberRecord[];
+  onDraftChange: Dispatch<SetStateAction<ManualExpDraft>>;
+  onSubmit: () => void;
+  style: CSSProperties;
+}) {
+  const { colors } = useTheme();
+  const memberOptions = members.map((member) => ({
+    label: getMemberDisplayName(member),
+    value: member.id,
+  }));
+  const selectedMember = members.find((member) => member.id === draft.userId);
+  const inputShell: CSSProperties = {
+    alignItems: "center",
+    backgroundColor: colors.fieldBg,
+    border: `1px solid ${colors.fieldBorder}`,
+    borderRadius: 8,
+    display: "flex",
+    minHeight: 38,
+    padding: "0 10px",
+  };
+
+  const updateDraft = (patch: Partial<ManualExpDraft>) =>
+    onDraftChange((current) => ({ ...current, ...patch }));
+
+  return (
+    <FitSection
+      heading="Manual EXP Grant"
+      action={<PlusCircle size={16} color={colors.brand} />}
+      style={style}
+      bare
+    >
+      <div style={{ display: "grid", gap: 10 }}>
+        <div>
+          <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+            Post-session allocation for members who completed coach work without
+            camera tracking.
+          </FitText>
+        </div>
+        <FitDropdown
+          fullWidth
+          value={draft.userId}
+          options={memberOptions}
+          placeholder={
+            members.length === 0 ? "No members loaded" : "Select member"
+          }
+          disabled={members.length === 0}
+          onChange={(userId) => updateDraft({ userId })}
+        />
+        {selectedMember ? (
+          <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+            {selectedMember.email}
+          </FitText>
+        ) : null}
+        <div
+          style={{
+            display: "grid",
+            gap: 8,
+            gridTemplateColumns: "110px minmax(0, 1fr)",
+          }}
+        >
+          <label style={inputShell}>
+            <FitTextInput
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={draft.amount}
+              placeholder="EXP"
+              onChange={(event) =>
+                updateDraft({
+                  amount: event.target.value.replace(/[^0-9]/g, ""),
+                })
+              }
+            />
+          </label>
+          <label style={inputShell}>
+            <FitTextInput
+              value={draft.muscleGroup}
+              placeholder="Muscle group (optional)"
+              onChange={(event) =>
+                updateDraft({ muscleGroup: event.target.value })
+              }
+            />
+          </label>
+        </div>
+        <label style={inputShell}>
+          <FitTextInput
+            value={draft.appointmentId}
+            placeholder="Appointment ID (optional)"
+            onChange={(event) =>
+              updateDraft({ appointmentId: event.target.value })
+            }
+          />
+        </label>
+        <div
+          style={{
+            ...inputShell,
+            alignItems: "stretch",
+            minHeight: 76,
+            padding: 10,
+          }}
+        >
+          <FitTextArea
+            rows={3}
+            value={draft.rationale}
+            placeholder="Reviewer rationale"
+            onChange={(event) =>
+              updateDraft({ rationale: event.target.value })
+            }
+          />
+        </div>
+        <FitButton
+          variant="primary"
+          icon={PlusCircle}
+          label="Grant EXP"
+          loading={isLoading}
+          disabled={members.length === 0}
+          onClick={onSubmit}
+          style={{ minHeight: 36 }}
+          textStyle={{ fontSize: 12, fontWeight: 850 }}
+        />
+      </div>
+    </FitSection>
   );
 }
 

@@ -6,6 +6,7 @@ import {
 import type {
   AdminGamificationCreatorStateInput,
   AdminGamificationIntegrityResolutionInput,
+  AdminManualExpGrantInput,
   AdminGamificationRankingOverrideInput,
   AdminGamificationSeasonStandingListParams,
   AdminGamificationSeasonStatusInput,
@@ -164,6 +165,19 @@ export function resolveAdminGamificationIntegrityCaseMutationOptions(
       caseId: string;
       payload: AdminGamificationIntegrityResolutionInput;
     }) => client.admin.resolveGamificationIntegrityCase(caseId, payload),
+    onSuccess: async () => {
+      await invalidateAdminGamificationOverviewQuery(queryClient);
+    },
+  });
+}
+
+export function createAdminManualExpGrantMutationOptions(
+  client: Pick<ApiClient, "admin">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ payload }: { payload: AdminManualExpGrantInput }) =>
+      client.admin.createManualExpGrant(payload),
     onSuccess: async () => {
       await invalidateAdminGamificationOverviewQuery(queryClient);
     },

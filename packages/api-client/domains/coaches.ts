@@ -146,6 +146,7 @@ type CoachUserApiRecord = {
 };
 
 type CoachApiRecord = {
+  average_rating?: number | string | null;
   availability_slots?: CoachAvailabilitySlotApiRecord[];
   booked_dates?: string[];
   bio?: string | null;
@@ -157,9 +158,25 @@ type CoachApiRecord = {
   id: string;
   is_available_for_booking?: boolean;
   profile?: CoachUserProfileApiRecord | null;
+  rating_count?: number | null;
+  recent_reviews?: CoachPublicReviewApiRecord[];
   schedule_type?: "full_time" | "part_time";
   specialization?: string | null;
   user?: CoachUserApiRecord | null;
+};
+
+type CoachPublicReviewApiRecord = {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  reviewer_name?: string | null;
+  created_at: string;
+};
+
+export type CoachListFilters = {
+  maxRate?: number;
+  minRating?: number;
+  specialization?: string;
 };
 
 type CoachScheduleApiRecord = {
@@ -274,6 +291,7 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
   );
 
   return {
+    averageRating: toNullableNumber(record.average_rating),
     availability: (record.availability_slots ?? []).map((slot) => ({
       dayOfWeek: slot.day_of_week,
       endTime: slot.end_time,
@@ -292,11 +310,36 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
     hourlyRate: toNullableNumber(record.hourly_rate),
     id: record.id,
     isActive: record.is_available_for_booking ?? true,
+    ratingCount: record.rating_count ?? 0,
+    recentReviews: (record.recent_reviews ?? []).map((review) => ({
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment ?? null,
+      reviewerName: review.reviewer_name ?? "FitTrack member",
+      createdAt: review.created_at,
+    })),
     scheduleType: record.schedule_type ?? "part_time",
     specialties: splitMultiValue(record.specialization),
     user: null,
     yearsExperience: null,
   };
+}
+
+function toCoachListQuery(filters?: CoachListFilters) {
+  const params = new URLSearchParams({ limit: "100" });
+  const specialization = filters?.specialization?.trim();
+
+  if (specialization) {
+    params.set("specialization", specialization);
+  }
+  if (filters?.minRating !== undefined) {
+    params.set("min_rating", String(filters.minRating));
+  }
+  if (filters?.maxRate !== undefined) {
+    params.set("max_rate", String(filters.maxRate));
+  }
+
+  return params.toString();
 }
 
 function mapCoachAvailability(
@@ -408,9 +451,9 @@ export function createCoachesApi(transport: ApiTransport) {
   }
 
   return {
-    listActive<T>() {
+    listActive<T>(filters?: CoachListFilters) {
       return unwrapResponse<CoachApiRecord[]>(
-        transport.get("/coaching/coaches?limit=100"),
+        transport.get(`/coaching/coaches?${toCoachListQuery(filters)}`),
         "Unable to load coaches.",
       ).then(
         (records) => records.map((record) => mapCoachRecord(record)) as T[],

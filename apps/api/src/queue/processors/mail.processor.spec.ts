@@ -64,7 +64,7 @@ describe('MailProcessor', () => {
           },
         },
       } as Job,
-      new Error('SMTP timeout'),
+      new Error('Email provider timeout'),
     );
 
     expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -72,7 +72,7 @@ describe('MailProcessor', () => {
       {
         notificationId: 'notif-email',
         channel: NotificationChannel.email,
-        error: 'SMTP timeout',
+        error: 'Email provider timeout',
       },
     );
   });

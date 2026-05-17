@@ -253,6 +253,7 @@ export function makeReservationModalStyles(colors: ThemeColors) {
     trainerInfo: { flex: 1 },
     trainerName: { fontSize: 14, fontWeight: "600", color: colors.textPrimary },
     trainerSpecialty: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+    trainerRating: { fontSize: 12, fontWeight: "700", color: colors.warning, marginTop: 2 },
     footer: {
       flexDirection: "row",
       gap: 10,

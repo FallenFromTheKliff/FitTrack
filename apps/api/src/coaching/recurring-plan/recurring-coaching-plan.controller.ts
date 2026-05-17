@@ -15,10 +15,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   BulkUpdateRecurringPlanSessionsDTO,
   CancelRecurringCoachingPlanDTO,
@@ -40,6 +43,8 @@ export class RecurringCoachingPlanController {
   ) {}
 
   @Post('preview')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Preview generated recurring coaching sessions and conflicts without persisting rows.',
@@ -53,6 +58,8 @@ export class RecurringCoachingPlanController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Create a recurring coaching plan and persist generated child appointments.',
@@ -102,6 +109,8 @@ export class RecurringCoachingPlanController {
   }
 
   @Patch(':id/sessions/bulk')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Update future non-completed sessions from a selected recurring session forward.',
@@ -116,6 +125,8 @@ export class RecurringCoachingPlanController {
   }
 
   @Patch(':id/sessions/:sessionId')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Reschedule or skip one session without changing the parent recurrence template.',
@@ -137,6 +148,8 @@ export class RecurringCoachingPlanController {
   }
 
   @Patch(':id/cancel')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.admin)
   @ApiOperation({
     summary:
       'Cancel a recurring coaching plan and future non-completed sessions only.',

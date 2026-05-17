@@ -51,6 +51,28 @@ export default function MobileHelpPanel({
           paddingHorizontal: 12,
           paddingVertical: 12,
         },
+        slideGrid: {
+          gap: 8,
+        },
+        slideCard: {
+          gap: 4,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: colors.brand + "44",
+          backgroundColor: colors.brand + "12",
+          paddingHorizontal: 12,
+          paddingVertical: 12,
+        },
+        slideTitle: {
+          color: colors.textPrimary,
+          fontSize: 13,
+          fontWeight: "800",
+        },
+        slideBody: {
+          color: colors.textSecondary,
+          fontSize: 12,
+          lineHeight: 18,
+        },
         stepRow: {
           flexDirection: "row",
           gap: 10,
@@ -113,6 +135,22 @@ export default function MobileHelpPanel({
   return (
     <View style={s.body}>
       <FitText style={s.description}>{content.description}</FitText>
+
+      {content.slides?.length ? (
+        <View style={s.section}>
+          <FitText style={s.sectionTitle}>Quick walkthrough</FitText>
+          <View style={s.slideGrid}>
+            {content.slides.map((slide, index) => (
+              <View key={`${slide.title}-${index}`} style={s.slideCard}>
+                <FitText style={s.slideTitle}>
+                  {index + 1}. {slide.title}
+                </FitText>
+                <FitText style={s.slideBody}>{slide.body}</FitText>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <View style={s.section}>
         <FitText style={s.sectionTitle}>How to use this page</FitText>

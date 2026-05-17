@@ -26,6 +26,7 @@ export type MemberBookingItem = Booking & {
   participantName?: string;
   paymentPlan?: "downpayment" | "free" | "full";
   remainingBalance?: number;
+  recurringPlanId?: string | null;
   totalAmount?: number;
 };
 
@@ -395,6 +396,7 @@ export function toMemberAppointment(appointment: AppointmentLikeRecord): MemberB
     paymentPlan: appointment.paymentPlan ?? undefined,
     price: appointment.coach?.hourlyRate ?? 0,
     remainingBalance: appointment.remainingBalance ?? undefined,
+    recurringPlanId: appointment.recurringPlanId ?? null,
     resourceId: appointment.coachId ?? "coach",
     resourceName: coachName,
     resourceType: "trainer",

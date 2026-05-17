@@ -1545,6 +1545,7 @@ enum CreatorState {
 }
 
 enum ModerationActionType {
+  manual_exp_grant
   void_progression_grant
   restore_progression_grant
   hide_from_rankings

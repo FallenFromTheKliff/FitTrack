@@ -28,7 +28,9 @@ export type DetailBooking = {
   nextPaymentDate?: string;
   paymentPlan?: "downpayment" | "free" | "full";
   remainingBalance?: number;
+  recurringPlanId?: string | null;
   sessionNotes?: string | null;
+  timelineItems?: DetailTimelineItem[];
   resourceId?: string;
   resourceName: string;
   date: string;
@@ -44,6 +46,14 @@ export type DetailBooking = {
   detailTitle?: string;
   detailSubtitle?: string;
   totalAmount?: number;
+};
+
+export type DetailTimelineItem = {
+  id: string;
+  label: string;
+  meta: string;
+  status: string;
+  tone?: string;
 };
 
 type DetailAction = {
@@ -332,6 +342,43 @@ export default function BookingDetailModal({
               <FitText style={s.detailValue}>{bookingTypeLabel}</FitText>
               <FitText style={s.priceSub}>{bookingSummaryLabel}</FitText>
             </View>
+
+            {booking.timelineItems?.length ? (
+              <View style={s.timelineCard}>
+                <FitText style={s.detailLabel}>SESSION TIMELINE</FitText>
+                <View style={s.timelineList}>
+                  {booking.timelineItems.map((item, index) => {
+                    const tone =
+                      item.tone ??
+                      STATUS_COLORS[item.status] ??
+                      colors.textMuted;
+                    const isLast = index === booking.timelineItems!.length - 1;
+                    return (
+                      <View key={item.id} style={s.timelineRow}>
+                        <View style={s.timelineRail}>
+                          <View
+                            style={[
+                              s.timelineDot,
+                              {
+                                backgroundColor: tone,
+                                borderColor: `${tone}55`,
+                              },
+                            ]}
+                          />
+                          {!isLast ? <View style={s.timelineLine} /> : null}
+                        </View>
+                        <View style={s.timelineContent}>
+                          <FitText style={s.timelineTitle}>
+                            {item.label}
+                          </FitText>
+                          <FitText style={s.timelineMeta}>{item.meta}</FitText>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             {booking.description ? (
               <View style={s.priceCard}>

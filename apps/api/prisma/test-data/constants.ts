@@ -51,7 +51,7 @@ export const TEST_ACCOUNTS: readonly TestAccount[] = [
     key: 'coach',
     label: 'Seed Coach',
     role: UserRole.coach,
-    email: `seed.coach.ridge@${TEST_DATA_EMAIL_DOMAIN}`,
+    email: `seed.coach@${TEST_DATA_EMAIL_DOMAIN}`,
     password: 'SeedCoach!2026',
     firstName: 'Ridge',
     lastName: 'Coach',

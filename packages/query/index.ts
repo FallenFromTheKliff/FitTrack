@@ -89,6 +89,7 @@ export {
   approveDeletionRequestMutationOptions,
   cancelAdminBookingMutationOptions,
   completeAdminBookingMutationOptions,
+  createAdminManualExpGrantMutationOptions,
   confirmAdminBookingMutationOptions,
   createUserMutationOptions,
   deleteUserMutationOptions,

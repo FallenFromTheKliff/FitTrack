@@ -461,6 +461,7 @@ export class RecurringCoachingPlanRepository {
         where: { id: planId },
         data: {
           completed_sessions: completedSessions,
+          total_sessions: activeSessions,
           status:
             activeSessions > 0 && completedSessions >= activeSessions
               ? RecurringCoachingPlanStatus.completed

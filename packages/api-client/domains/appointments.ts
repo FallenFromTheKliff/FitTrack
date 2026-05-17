@@ -73,10 +73,12 @@ export type CoachScheduleRecord = {
 };
 
 export type CreateAppointmentPayload = {
+  bookingMode?: "pack" | "recurring" | "single";
   coachId: string;
   duration: number;
   notes?: string;
   scheduledAt: string;
+  sessionCount?: number;
 };
 
 export type AppointmentCheckoutResponse = {
@@ -297,7 +299,13 @@ export function createAppointmentsApi(transport: ApiTransport) {
         transport.post("/coaching/appointments", {
           coach_id: payload.coachId,
           duration_minutes: payload.duration,
+          ...(payload.bookingMode
+            ? { booking_mode: payload.bookingMode }
+            : {}),
           ...(payload.notes ? { member_notes: payload.notes } : {}),
+          ...(payload.sessionCount !== undefined
+            ? { session_count: payload.sessionCount }
+            : {}),
           scheduled_at: payload.scheduledAt,
         }),
         "Unable to create appointment.",

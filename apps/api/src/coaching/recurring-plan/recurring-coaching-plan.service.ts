@@ -105,9 +105,15 @@ export class RecurringCoachingPlanService {
       startDate: normalized.startDate,
     });
 
+    const activeGeneratedSessions = generatedSessions.filter(
+      (session) =>
+        session.state !== RecurringCoachingSessionState.skipped &&
+        session.state !== RecurringCoachingSessionState.cancelled,
+    );
+
     return {
       can_confirm: generatedSessions.every((session) => !session.conflict),
-      total_sessions: generatedSessions.length,
+      total_sessions: activeGeneratedSessions.length,
       conflict_count: generatedSessions.filter((session) => session.conflict)
         .length,
       venue_conflicts_checked: false,
@@ -157,6 +163,12 @@ export class RecurringCoachingPlanService {
       });
     }
 
+    const activeSessions = sessions.filter(
+      (session) =>
+        session.state !== RecurringCoachingSessionState.skipped &&
+        session.state !== RecurringCoachingSessionState.cancelled,
+    );
+
     const plan = await this.repo.createPlanWithSessions({
       plan: {
         member: { connect: { id: dto.member_id } },
@@ -169,7 +181,7 @@ export class RecurringCoachingPlanService {
         end_date: normalized.endDate,
         duration_minutes: normalized.durationMinutes,
         status: RecurringCoachingPlanStatus.active,
-        total_sessions: sessions.length,
+        total_sessions: activeSessions.length,
         completed_sessions: 0,
       },
       billingCycles: this.buildBillingCycles({

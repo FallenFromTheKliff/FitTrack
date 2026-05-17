@@ -122,10 +122,11 @@ export const jwtConfig = registerAs('jwt', () => ({
 export const redisConfig = registerAs('redis', () => resolveRedisConfig());
 
 export const mailConfig = registerAs('mail', () => ({
-  host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: parseEnvInteger(process.env.MAIL_PORT, 587),
-  user: requireEnvValue('MAIL_USER'),
-  appPassword: requireEnvValue('MAIL_APP_PASSWORD', 'MAIL_PASSWORD'),
+  resendApiKey: requireEnvValue(
+    'RESEND_API_KEY',
+    'MAIL_APP_PASSWORD',
+    'MAIL_PASSWORD',
+  ),
   fromName: process.env.MAIL_FROM_NAME || 'FitTrack',
   fromAddress: process.env.MAIL_FROM_ADDRESS || 'no-reply@fittrack.com',
 }));

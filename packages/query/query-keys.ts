@@ -181,7 +181,8 @@ const recurringCoachingPlanKeys = {
 };
 
 const coachKeys = {
-  list: () => ["coaches"] as const,
+  list: (filters?: Record<string, unknown>) =>
+    filters ? (["coaches", filters] as const) : (["coaches"] as const),
   detail: (coachId?: string) =>
     coachId
       ? (["coaches", coachId] as const)

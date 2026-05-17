@@ -11,6 +11,8 @@ import type {
   AdminGamificationSeasonStandingRecord,
   AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
+  AdminManualExpGrantInput,
+  AdminProgressionGrantRecord,
   AttendanceCheckInRecord,
   CreateUserInput,
   MemberDirectoryFilters,
@@ -41,6 +43,8 @@ export type {
   AdminGamificationSeasonStandingRecord,
   AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
+  AdminManualExpGrantInput,
+  AdminProgressionGrantRecord,
 };
 
 export type ReviewDeletionPayload = {
@@ -230,6 +234,16 @@ type AdminIntegrityCaseMutationApiRecord = {
   risk_level: AdminGamificationIntegrityCaseMutationRecord["riskLevel"];
   status: AdminGamificationIntegrityCaseMutationRecord["status"];
   summary: string | null;
+  user_id: string;
+};
+
+type AdminProgressionGrantApiRecord = {
+  current_season_points: number;
+  grant_id: string;
+  grant_status: AdminProgressionGrantRecord["grantStatus"];
+  moderation_action_id: string;
+  moderation_action_type: AdminProgressionGrantRecord["moderationActionType"];
+  total_xp: number;
   user_id: string;
 };
 
@@ -427,6 +441,20 @@ function mapAdminIntegrityCaseMutation(
     riskLevel: record.risk_level,
     status: record.status,
     summary: record.summary,
+    userId: record.user_id,
+  };
+}
+
+function mapAdminProgressionGrant(
+  record: AdminProgressionGrantApiRecord,
+): AdminProgressionGrantRecord {
+  return {
+    currentSeasonPoints: record.current_season_points,
+    grantId: record.grant_id,
+    grantStatus: record.grant_status,
+    moderationActionId: record.moderation_action_id,
+    moderationActionType: record.moderation_action_type,
+    totalXp: record.total_xp,
     userId: record.user_id,
   };
 }
@@ -677,6 +705,23 @@ export function createAdminApi(transport: ApiTransport) {
         "Unable to update ranking governance.",
       );
       return mapAdminRankingOverride(data);
+    },
+    async createManualExpGrant(payload: AdminManualExpGrantInput) {
+      const data = await unwrapResponse<AdminProgressionGrantApiRecord>(
+        transport.post("/admin/gamification/manual-exp-grants", {
+          user_id: payload.userId,
+          amount: payload.amount,
+          rationale: payload.rationale,
+          ...(payload.muscleGroup !== undefined
+            ? { muscle_group: payload.muscleGroup }
+            : {}),
+          ...(payload.appointmentId !== undefined
+            ? { appointment_id: payload.appointmentId }
+            : {}),
+        }),
+        "Unable to create manual EXP grant.",
+      );
+      return mapAdminProgressionGrant(data);
     },
     async resolveGamificationIntegrityCase(
       caseId: string,

@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
+  CoachListFilters,
   SubmitCoachReviewPayload,
   UpdateCoachProfilePayload,
   UpsertCoachAvailabilityPayload,
@@ -8,10 +9,13 @@ import type {
 import { invalidateAppointmentQueries, invalidateCoachQueries } from "./cache";
 import { queryKeys } from "./query-keys";
 
-export function activeCoachesQueryOptions<T>(client: Pick<ApiClient, "coaches">) {
+export function activeCoachesQueryOptions<T>(
+  client: Pick<ApiClient, "coaches">,
+  filters?: CoachListFilters,
+) {
   return queryOptions({
-    queryKey: queryKeys.coaches(),
-    queryFn: () => client.coaches.listActive<T>()
+    queryKey: queryKeys.coaches(filters),
+    queryFn: () => client.coaches.listActive<T>(filters)
   });
 }
 

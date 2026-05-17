@@ -17,6 +17,7 @@ import {
   CoachDetailResponseDTO,
   CoachFilterDTO,
   CoachListItemResponseDTO,
+  CoachPublicReviewResponseDTO,
   CoachSelfDetailResponseDTO,
   CoachUserProfileResponseDTO,
   UpdateCoachProfileDTO,
@@ -311,12 +312,33 @@ export class CoachService {
       schedule_type: coach.schedule_type,
       average_rating: coach.average_rating?.toString() ?? null,
       rating_count: coach.rating_count,
+      recent_reviews: (coach.reviews ?? []).map((review) =>
+        this.toPublicReview(review),
+      ),
       is_available_for_booking: coach.is_available_for_booking,
       profile: this.toCoachUserProfile(),
       availability_slots: coach.availability_slots.map((slot) =>
         this.toAvailabilitySlot(slot),
       ),
       booked_dates: bookedDates,
+    };
+  }
+
+  private toPublicReview(
+    review: CoachListRecord['reviews'][number],
+  ): CoachPublicReviewResponseDTO {
+    const firstName = review.reviewer.profile?.first_name?.trim();
+    const lastInitial = review.reviewer.profile?.last_name?.trim()?.[0];
+    const reviewerName = firstName
+      ? `${firstName}${lastInitial ? ` ${lastInitial}.` : ''}`
+      : 'FitTrack member';
+
+    return {
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      reviewer_name: reviewerName,
+      created_at: review.created_at.toISOString(),
     };
   }
 

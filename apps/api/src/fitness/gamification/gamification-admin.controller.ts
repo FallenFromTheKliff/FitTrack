@@ -29,6 +29,7 @@ import {
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
+  AdminManualExpGrantDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
@@ -57,6 +58,7 @@ function singleEnvelopeSchema(itemSchemaRef: string) {
 @ApiExtraModels(
   AdminGamificationOverviewResponseDTO,
   AdminGamificationSeasonListItemDTO,
+  AdminManualExpGrantDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStandingRowDTO,
   AdminCreatorStateResponseDTO,
@@ -134,6 +136,25 @@ export class GamificationAdminController {
   })
   listSeasonStandings(@Query() dto: AdminSeasonStandingFilterDTO) {
     return this.gamificationService.listAdminSeasonStandings(dto);
+  }
+
+  @Post('manual-exp-grants')
+  @ApiOperation({
+    summary:
+      'Manually allocate approved EXP for a non-camera or coach-verified session.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Manual EXP grant created.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminProgressionGrantResponseDTO),
+    ),
+  })
+  createManualExpGrant(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AdminManualExpGrantDTO,
+  ) {
+    return this.gamificationService.adminCreateManualExpGrant(user.sub, dto);
   }
 
   @Patch('seasons/:seasonId/status')

@@ -608,7 +608,13 @@ export function GymOperationsCoachAppointmentModal({
                     ? "Optional note for front desk, coach, or audit trail..."
                     : "Optional payment or status note for the operations audit trail..."
                 }
-                style={{ fontSize: 12, lineHeight: 1.4 }}
+                style={{
+                  boxSizing: "border-box",
+                  display: "block",
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  width: "100%",
+                }}
               />
             </div>
           </div>

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
-import { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 
 export interface SendMailOptions {
   to: string;
@@ -12,44 +11,37 @@ export interface SendMailOptions {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: Transporter;
+  private readonly resend: Resend;
   private readonly fromName: string;
   private readonly fromAddress: string;
 
   constructor(private readonly config: ConfigService) {
     this.fromName = config.get<string>('mail.fromName')!;
     this.fromAddress = config.get<string>('mail.fromAddress')!;
-
-    this.transporter = nodemailer.createTransport({
-      host: config.get<string>('mail.host'),
-      port: config.get<number>('mail.port'),
-      secure: false, // STARTTLS on port 587
-      auth: {
-        user: config.get<string>('mail.user'),
-        pass: config.get<string>('mail.appPassword'), // Gmail App Password
-      },
-      tls: {
-        rejectUnauthorized: false, // ← add this
-      },
-    });
+    this.resend = new Resend(config.get<string>('mail.resendApiKey')!);
   }
 
   async send(options: SendMailOptions): Promise<void> {
     try {
-      await this.transporter.sendMail({
+      const { data, error } = await this.resend.emails.send({
         from: `"${this.fromName}" <${this.fromAddress}>`,
         to: options.to,
         subject: options.subject,
         html: options.html,
       });
-      this.logger.log(`Email sent → ${options.to} | "${options.subject}"`);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      this.logger.log(
+        `Email sent -> ${options.to} | "${options.subject}" | ${data?.id ?? 'queued'}`,
+      );
     } catch (error) {
-      this.logger.error(`Email failed → ${options.to}`, error);
+      this.logger.error(`Email failed -> ${options.to}`, error);
       throw error;
     }
   }
-
-  // ── Pre-built templates ─────────────────────────────────────────────────────
 
   async sendOtpEmail(to: string, otp: string, purpose: string): Promise<void> {
     const labels: Record<string, string> = {

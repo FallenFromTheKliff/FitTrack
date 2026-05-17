@@ -63,6 +63,7 @@ export interface CoachUserSummary {
 
 export interface CoachProfileRecord {
   id: string;
+  averageRating?: number | null;
   bio?: string | null;
   displayName?: string | null;
   contactEmail?: string | null;
@@ -71,9 +72,19 @@ export interface CoachProfileRecord {
   certifications?: string[];
   yearsExperience?: number | null;
   hourlyRate?: number | null;
+  ratingCount?: number;
+  recentReviews?: CoachPublicReviewRecord[];
   scheduleType?: "full_time" | "part_time";
   isActive?: boolean;
   availability?: CoachAvailabilityRecord[];
   bookedDates?: string[];
   user?: CoachUserSummary | null;
+}
+
+export interface CoachPublicReviewRecord {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  reviewerName: string;
+  createdAt: string;
 }

@@ -6,6 +6,10 @@ node_modules
 **/.railway-deploy
 .railway-upload
 **/.railway-upload
+.artifacts
+**/.artifacts
+.npm-cache
+**/.npm-cache
 .codex
 **/.codex
 .serena

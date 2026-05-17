@@ -169,6 +169,54 @@ export function makeBookingDetailModalStyles(colors: ThemeColors) {
       paddingVertical: 12,
       gap: 4
     },
+    timelineCard: {
+      backgroundColor: colors.surfaceRaised,
+      borderRadius: R.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10
+    },
+    timelineList: {
+      gap: 0
+    },
+    timelineRow: {
+      flexDirection: "row",
+      gap: 10
+    },
+    timelineRail: {
+      width: 18,
+      alignItems: "center"
+    },
+    timelineDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      borderWidth: 2,
+      marginTop: 5
+    },
+    timelineLine: {
+      flex: 1,
+      minHeight: 22,
+      borderLeftWidth: 1,
+      borderStyle: "dotted",
+      borderColor: colors.border
+    },
+    timelineContent: {
+      flex: 1,
+      paddingBottom: 12
+    },
+    timelineTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textPrimary
+    },
+    timelineMeta: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted
+    },
     priceValue: {
       fontSize: 22,
       fontWeight: "700",

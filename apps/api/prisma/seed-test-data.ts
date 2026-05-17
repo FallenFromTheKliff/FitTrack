@@ -90,7 +90,7 @@ const TEST_MANUAL_PATHS = [
 
 const LEGACY_COACH_SEED_ACCOUNTS = [
   {
-    email: 'seed.coach@fittrack.com',
+    email: 'seed.coach.ridge@fittrack.com',
     key: 'coach',
   },
   {
@@ -804,7 +804,7 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
     },
     {
       accountKey: 'coach',
-      contactEmail: 'seed.coach.ridge@fittrack.com',
+      contactEmail: 'seed.coach@fittrack.com',
       contactPhone: '+639110000003',
       displayName: 'Coach Ridge',
       averageRating: new Prisma.Decimal('4.88'),

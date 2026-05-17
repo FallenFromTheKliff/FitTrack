@@ -271,6 +271,26 @@ export class CoachAvailabilitySlotResponseDTO {
   end_time: string;
 }
 
+export class CoachPublicReviewResponseDTO {
+  @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
+  id: string;
+
+  @ApiProperty({ example: 5 })
+  rating: number;
+
+  @ApiPropertyOptional({
+    example: 'Clear cues and a good pace for a beginner session.',
+    nullable: true,
+  })
+  comment: string | null;
+
+  @ApiProperty({ example: 'Casey R.' })
+  reviewer_name: string;
+
+  @ApiProperty({ example: '2026-05-17T08:30:00.000Z' })
+  created_at: string;
+}
+
 export class CoachListItemResponseDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   id: string;
@@ -310,6 +330,12 @@ export class CoachListItemResponseDTO {
 
   @ApiProperty({ example: 24 })
   rating_count: number;
+
+  @ApiProperty({
+    type: CoachPublicReviewResponseDTO,
+    isArray: true,
+  })
+  recent_reviews: CoachPublicReviewResponseDTO[];
 
   @ApiProperty({ example: true })
   is_available_for_booking: boolean;

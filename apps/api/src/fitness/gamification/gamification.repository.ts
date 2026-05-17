@@ -1682,6 +1682,195 @@ export class GamificationRepository extends BaseRepository {
     });
   }
 
+  async createManualExpGrant(input: {
+    actorUserId: string;
+    amount: number;
+    appointmentId?: string | null;
+    muscleGroup?: string | null;
+    rationale: string;
+    sourceId: string;
+    userId: string;
+  }): Promise<GrantModerationResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const activeSeason = await tx.seasonDefinition.findFirst({
+        where: {
+          status: SeasonStatus.active,
+          starts_at: { lte: now },
+          ends_at: { gte: now },
+        },
+        orderBy: [{ starts_at: 'desc' }, { created_at: 'desc' }],
+      });
+      const existingProfile = await tx.userProgressionProfile.findUnique({
+        where: { user_id: input.userId },
+        select: {
+          active_season_id: true,
+          current_season_points: true,
+          total_xp: true,
+        },
+      });
+      const sourceEvent = await tx.progressionSourceEvent.create({
+        data: {
+          user_id: input.userId,
+          source_type: ProgressionSourceType.moderation_action,
+          source_id: input.sourceId,
+          source_status: ProgressionSourceStatus.applied,
+          processed_at: now,
+          source_context: {
+            allocation_type: 'manual_exp_post_session',
+            appointment_id: input.appointmentId ?? null,
+            rationale: input.rationale,
+            muscle_group: input.muscleGroup ?? null,
+            amount: input.amount,
+          } satisfies Prisma.JsonObject,
+        },
+      });
+      const xpGrant = await tx.progressionGrantLedger.create({
+        data: {
+          user_id: input.userId,
+          source_event_id: sourceEvent.id,
+          season_id: activeSeason?.id ?? null,
+          grant_type: ProgressionGrantType.xp,
+          grant_status: ProgressionGrantStatus.applied,
+          amount: input.amount,
+          muscle_group: input.muscleGroup ?? null,
+          reason: 'manual_exp_post_session',
+          metadata: {
+            appointment_id: input.appointmentId ?? null,
+            rationale: input.rationale,
+          } satisfies Prisma.JsonObject,
+        },
+      });
+      const seasonPointsGranted = activeSeason ? input.amount : 0;
+      if (seasonPointsGranted > 0 && activeSeason) {
+        await tx.progressionGrantLedger.create({
+          data: {
+            user_id: input.userId,
+            source_event_id: sourceEvent.id,
+            season_id: activeSeason.id,
+            grant_type: ProgressionGrantType.season_points,
+            grant_status: ProgressionGrantStatus.applied,
+            amount: seasonPointsGranted,
+            muscle_group: null,
+            reason: 'manual_exp_post_session',
+            metadata: {
+              grant_basis: 'manual_xp_mirror',
+              appointment_id: input.appointmentId ?? null,
+            } satisfies Prisma.JsonObject,
+          },
+        });
+      }
+
+      const nextTotalXp = (existingProfile?.total_xp ?? 0) + input.amount;
+      const nextCurrentSeasonPoints = activeSeason
+        ? existingProfile?.active_season_id === activeSeason.id
+          ? (existingProfile?.current_season_points ?? 0) + seasonPointsGranted
+          : seasonPointsGranted
+        : 0;
+
+      await tx.userProgressionProfile.upsert({
+        where: { user_id: input.userId },
+        create: {
+          user_id: input.userId,
+          active_season_id: activeSeason?.id ?? null,
+          total_xp: input.amount,
+          current_season_points: nextCurrentSeasonPoints,
+          last_progressed_at: now,
+        },
+        update: {
+          active_season_id: activeSeason?.id ?? null,
+          total_xp: nextTotalXp,
+          current_season_points: nextCurrentSeasonPoints,
+          last_progressed_at: now,
+        },
+      });
+
+      if (input.muscleGroup) {
+        await tx.muscleMasteryProgress.upsert({
+          where: {
+            user_id_muscle_group: {
+              user_id: input.userId,
+              muscle_group: input.muscleGroup,
+            },
+          },
+          create: {
+            user_id: input.userId,
+            muscle_group: input.muscleGroup,
+            xp_points: input.amount,
+            rank: MasteryRank.bronze,
+          },
+          update: {
+            xp_points: { increment: input.amount },
+          },
+        });
+      }
+
+      if (activeSeason) {
+        await tx.seasonalStanding.upsert({
+          where: {
+            season_id_user_id: {
+              season_id: activeSeason.id,
+              user_id: input.userId,
+            },
+          },
+          create: {
+            season_id: activeSeason.id,
+            user_id: input.userId,
+            season_points: seasonPointsGranted,
+            last_earned_at: now,
+          },
+          update: {
+            season_points: { increment: seasonPointsGranted },
+            last_earned_at: now,
+          },
+        });
+      }
+
+      const moderationAction = await tx.moderationActionRecord.create({
+        data: {
+          actor_user_id: input.actorUserId,
+          target_user_id: input.userId,
+          source_event_id: sourceEvent.id,
+          progression_grant_id: xpGrant.id,
+          season_id: activeSeason?.id ?? null,
+          action_type: ModerationActionType.manual_exp_grant,
+          rationale: input.rationale,
+          after_state: {
+            amount: input.amount,
+            total_xp: nextTotalXp,
+            current_season_points: nextCurrentSeasonPoints,
+            appointment_id: input.appointmentId ?? null,
+          } satisfies Prisma.JsonObject,
+        },
+      });
+
+      const milestoneSnapshot = await buildMilestoneSnapshot(tx, {
+        userId: input.userId,
+        totalXp: nextTotalXp,
+        currentSeasonPoints: nextCurrentSeasonPoints,
+        currentStreak: 0,
+        longestStreak: 0,
+      });
+
+      await syncMilestoneProgress(tx, {
+        userId: input.userId,
+        evaluatedAt: now,
+        snapshot: milestoneSnapshot,
+        sourceEventId: sourceEvent.id,
+        sourceType: ProgressionSourceType.moderation_action,
+      });
+
+      return {
+        currentSeasonPoints: nextCurrentSeasonPoints,
+        grantId: xpGrant.id,
+        grantStatus: ProgressionGrantStatus.applied,
+        moderationActionId: moderationAction.id,
+        totalXp: nextTotalXp,
+        userId: input.userId,
+      };
+    });
+  }
+
   async restoreProgressionGrant(input: {
     actorUserId: string;
     grantId: string;

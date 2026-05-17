@@ -69,6 +69,28 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
     coachList: {
       gap: 8,
     },
+    filterPanel: {
+      gap: 8,
+      marginBottom: 10,
+    },
+    filterChipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    filterChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    filterChipText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
     coachRow: {
       flexDirection: "row",
       alignItems: "flex-start",
@@ -105,10 +127,23 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
       fontSize: 12,
       color: colors.textMuted,
     },
+    coachRating: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.warning,
+    },
     coachBio: {
       fontSize: 12,
       lineHeight: 18,
       color: colors.textMuted,
+    },
+    coachReviewQuote: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textSecondary,
+      borderLeftWidth: 2,
+      borderLeftColor: colors.warning + "88",
+      paddingLeft: 8,
     },
     coachMetaRow: {
       flexDirection: "row",
@@ -167,6 +202,32 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
       fontSize: 12,
       color: colors.textSecondary,
       lineHeight: 18,
+    },
+    planOptionList: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    planOptionCard: {
+      flex: 1,
+      minWidth: 132,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: 10,
+    },
+    planOptionTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    planOptionBody: {
+      fontSize: 11,
+      color: colors.textMuted,
     },
     fieldBtn: {
       flexDirection: "row",

@@ -81,7 +81,9 @@ export type FitnessProgressionSourceStatus =
   | "reduced"
   | "voided"
   | "invalidated";
+export type FitnessProgressionGrantStatus = "applied" | "voided";
 export type FitnessModerationActionType =
+  | "manual_exp_grant"
   | "void_progression_grant"
   | "restore_progression_grant"
   | "hide_from_rankings"
@@ -244,6 +246,14 @@ export type AdminGamificationIntegrityResolutionInput = {
     FitnessIntegrityCaseStatus,
     "resolved_valid" | "resolved_invalid"
   >;
+};
+
+export type AdminManualExpGrantInput = {
+  amount: number;
+  appointmentId?: string | null;
+  muscleGroup?: string | null;
+  rationale: string;
+  userId: string;
 };
 
 export type AdminGamificationSeasonStandingListParams = {
@@ -1183,6 +1193,16 @@ export type AdminGamificationIntegrityCaseMutationRecord = {
   riskLevel: FitnessIntegrityRiskLevel;
   status: FitnessIntegrityCaseStatus;
   summary: string | null;
+  userId: string;
+};
+
+export type AdminProgressionGrantRecord = {
+  currentSeasonPoints: number;
+  grantId: string;
+  grantStatus: FitnessProgressionGrantStatus;
+  moderationActionId: string;
+  moderationActionType: FitnessModerationActionType;
+  totalXp: number;
   userId: string;
 };
 

@@ -31,6 +31,11 @@ import { TrimString } from '../../../common/validators';
 import { DateRangeDTO } from '../../../user/dto/user-dto';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+export enum CoachAppointmentBookingMode {
+  single = 'single',
+  pack = 'pack',
+  recurring = 'recurring',
+}
 
 export class AvailabilitySlotInputDTO {
   @ApiProperty({ example: 1 })
@@ -91,6 +96,28 @@ export class CreateAppointmentDTO {
   @IsString({ message: 'member_notes must be a string' })
   @MaxLength(500, { message: 'member_notes must not exceed 500 characters' })
   member_notes?: string;
+
+  @ApiPropertyOptional({
+    enum: CoachAppointmentBookingMode,
+    example: CoachAppointmentBookingMode.single,
+  })
+  @IsOptional()
+  @IsEnum(CoachAppointmentBookingMode, {
+    message: `booking_mode must be one of: ${Object.values(CoachAppointmentBookingMode).join(', ')}`,
+  })
+  booking_mode?: CoachAppointmentBookingMode;
+
+  @ApiPropertyOptional({
+    example: 3,
+    description:
+      'Requested number of coaching sessions for pack or recurring booking intent.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'session_count must be an integer' })
+  @Min(1, { message: 'session_count must be at least 1' })
+  @Max(12, { message: 'session_count must not exceed 12' })
+  session_count?: number;
 }
 
 export class CreateCoachManagedAppointmentDTO {

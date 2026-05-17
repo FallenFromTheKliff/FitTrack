@@ -7,6 +7,10 @@ export type MobileHelpTerm = {
 
 export type MobileHelpContent = {
   description: string;
+  slides?: Array<{
+    body: string;
+    title: string;
+  }>;
   steps: string[];
   terms: MobileHelpTerm[];
   title: string;
@@ -57,6 +61,20 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
   bookings: {
     title: "Bookings",
     description: "This screen manages your venue reservations and coaching appointments.",
+    slides: [
+      {
+        title: "Choose the booking type",
+        body: "Use Reservations for venues and Book a Trainer for one-on-one coaching.",
+      },
+      {
+        title: "Compare coaches",
+        body: "Review specialties, certifications, ratings, and recent member feedback before choosing.",
+      },
+      {
+        title: "Track the session",
+        body: "Open appointment details to follow the timeline from request to payment, session, report, and review.",
+      },
+    ],
     steps: [
       "Search or filter to find a reservation or coaching appointment.",
       "Tap an item to open details, payment state, coach name, and session report.",
