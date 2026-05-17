@@ -208,6 +208,55 @@ describe('AuthService', () => {
     );
   });
 
+  it('masks unexpected persistence errors during login', async () => {
+    repo.findIdentity.mockRejectedValue(
+      new Error('Invalid `prisma.user.findUnique()` invocation'),
+    );
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'Password1' },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+
+    expect(redis.incr).toHaveBeenCalledWith(
+      'auth:login_attempts:member@example.com',
+    );
+  });
+
+  it('masks missing auth profile state during login', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      profile: null,
+    });
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'Password1!' },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+  });
+
   it('locks login after the fifth invalid credential attempt', async () => {
     repo.findIdentity.mockResolvedValue({
       id: 'identity-1',
@@ -372,6 +421,34 @@ describe('AuthService', () => {
           password: 'Password1!',
           portal: 'member',
         },
+        'device',
+        '127.0.0.1',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+  });
+
+  it('does not reveal suspended account state when the password is wrong', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.suspended,
+      email_verified_at: new Date('2026-03-28T08:00:00.000Z'),
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+
+    await expect(
+      service.login(
+        { email: 'member@example.com', password: 'WrongPassword1!' },
         'device',
         '127.0.0.1',
       ),

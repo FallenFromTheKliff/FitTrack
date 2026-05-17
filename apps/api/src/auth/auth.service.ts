@@ -6,6 +6,7 @@ import {
   NotFoundException,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -65,6 +66,8 @@ type LoginPortal = NonNullable<LoginDTO['portal']>;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly repo: AuthRepository,
     private readonly jwt: JwtService,
@@ -145,33 +148,38 @@ export class AuthService {
     ip: string,
   ): Promise<InternalTokenPairResponse> {
     const normalizedEmail = this.normalizeLoginEmail(dto.email);
-    await this.assertLoginNotLocked(normalizedEmail);
 
-    const identity = await this.repo.findIdentity(
-      AuthProvider.email,
-      normalizedEmail,
-    );
-    if (!identity || !identity.credential_hash) {
-      return this.throwInvalidCredentials(normalizedEmail);
+    try {
+      await this.assertLoginNotLocked(normalizedEmail);
+
+      const identity = await this.repo.findIdentity(
+        AuthProvider.email,
+        normalizedEmail,
+      );
+      if (!identity || !identity.credential_hash) {
+        return this.throwInvalidCredentials(normalizedEmail);
+      }
+
+      const userRecord = await this.repo.findUserWithProfile(identity.user_id);
+
+      const passwordMatch = await bcrypt.compare(
+        dto.password,
+        identity.credential_hash,
+      );
+      if (!passwordMatch) {
+        return this.throwInvalidCredentials(normalizedEmail);
+      }
+
+      const user = this.requireActiveAuthUser(userRecord);
+      if (!this.isLoginPortalAllowed(dto.portal, user.role)) {
+        return this.throwInvalidCredentials(normalizedEmail);
+      }
+
+      await this.clearLoginLockState(normalizedEmail);
+      return this.issueTokenPair(user, deviceInfo, ip);
+    } catch (error) {
+      return this.handleLoginFailure(normalizedEmail, error);
     }
-
-    const user = this.requireActiveAuthUser(
-      await this.repo.findUserWithProfile(identity.user_id),
-    );
-
-    const passwordMatch = await bcrypt.compare(
-      dto.password,
-      identity.credential_hash,
-    );
-    if (!passwordMatch) {
-      return this.throwInvalidCredentials(normalizedEmail);
-    }
-    if (!this.isLoginPortalAllowed(dto.portal, user.role)) {
-      return this.throwInvalidCredentials(normalizedEmail);
-    }
-
-    await this.clearLoginLockState(normalizedEmail);
-    return this.issueTokenPair(user, deviceInfo, ip);
   }
 
   async googleLogin(
@@ -820,6 +828,48 @@ export class AuthService {
       status: 401,
       detail: 'Invalid credentials.',
     });
+  }
+
+  private async throwSafeInvalidCredentials(email: string): Promise<never> {
+    try {
+      return await this.throwInvalidCredentials(email);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      this.logger.error(
+        'Login failed while updating the credential failure state.',
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw new UnauthorizedException({
+        type: 'INVALID_CREDENTIALS',
+        title: 'Invalid Credentials',
+        status: 401,
+        detail: 'Invalid credentials.',
+      });
+    }
+  }
+
+  private async handleLoginFailure(
+    email: string,
+    error: unknown,
+  ): Promise<never> {
+    if (error instanceof HttpException) {
+      if (error instanceof NotFoundException) {
+        return this.throwSafeInvalidCredentials(email);
+      }
+
+      throw error;
+    }
+
+    this.logger.error(
+      'Login failed with an internal auth persistence error.',
+      error instanceof Error ? error.stack : String(error),
+    );
+
+    return this.throwSafeInvalidCredentials(email);
   }
 
   private generateQrToken(): string {

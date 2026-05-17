@@ -98,10 +98,10 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
           otpRequired: data.otpRequired,
           user: data.user,
         };
-      } catch (error: unknown) {
+      } catch {
         return {
           success: false as const,
-          error: toActionErrorMessage(error, "Invalid credentials."),
+          error: "Invalid credentials.",
         };
       }
     },

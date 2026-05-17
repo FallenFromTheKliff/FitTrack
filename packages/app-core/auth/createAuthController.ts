@@ -177,7 +177,11 @@ export function createAuthController({
             reason: "ACCOUNT_LOCKED" as const,
           };
         }
-        throw apiError;
+        return {
+          success: false as const,
+          otpRequired: false as const,
+          error: "Invalid credentials.",
+        };
       }
     },
     async register(
