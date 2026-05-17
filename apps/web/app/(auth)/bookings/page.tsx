@@ -294,13 +294,19 @@ export default function BookingsPage() {
         Find a coach, prepare a session request, and review your venue reservations or coaching appointments.
       </MemberText>
 
-      <MemberSurface padded>
+      <MemberSurface
+        padded
+        style={{ alignContent: "start", minHeight: 66, overflow: "visible" }}
+      >
         <FilterChips options={BOOKING_MODE_OPTIONS} value={bookingMode} onChange={setBookingMode} />
       </MemberSurface>
 
       {bookingMode === "find" ? (
         <>
-          <MemberSurface padded>
+          <MemberSurface
+            padded
+            style={{ alignContent: "start", minHeight: 180, overflow: "visible" }}
+          >
             <FitSearch value={coachSearchQuery} onChangeText={setCoachSearchQuery} placeholder="Search coach, skill, or certification" />
             <div style={{ display: "grid", gap: 10 }}>
               <MemberText variant="brand">Skills and specialization</MemberText>
@@ -487,7 +493,10 @@ export default function BookingsPage() {
         </>
       ) : (
         <>
-      <MemberSurface padded>
+      <MemberSurface
+        padded
+        style={{ alignContent: "start", minHeight: 148, overflow: "visible" }}
+      >
         <FitSearch value={searchQuery} onChangeText={setSearchQuery} placeholder="Search bookings" />
         <FilterChips options={MEMBER_BOOKING_SECTIONS} value={activeSection} onChange={setActiveSection} />
         <FilterChips options={BOOKING_STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
