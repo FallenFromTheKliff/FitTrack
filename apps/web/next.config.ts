@@ -16,7 +16,7 @@ function createNextConfig(phase?: string): NextConfig {
     },
     experimental: {
       cpus: 1,
-      webpackBuildWorker: false,
+      webpackBuildWorker: true,
       webpackMemoryOptimizations: true,
       workerThreads: false
     },
