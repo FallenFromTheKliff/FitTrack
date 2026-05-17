@@ -15,9 +15,7 @@ function createNextConfig(phase?: string): NextConfig {
       ignoreBuildErrors: true
     },
     experimental: {
-      cpus: 1,
-      webpackBuildWorker: false,
-      workerThreads: true
+      cpus: 1
     },
     transpilePackages: [
       "@fittrack/types",
@@ -166,7 +164,10 @@ function createNextConfig(phase?: string): NextConfig {
     },
     devIndicators: false,
     turbopack: {
-      root: path.resolve(__dirname, "../..")
+      root: path.resolve(__dirname, "../.."),
+      resolveAlias: {
+        canvas: path.resolve(__dirname, "empty.ts")
+      }
     }
   };
 }
