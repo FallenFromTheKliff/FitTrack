@@ -25,6 +25,7 @@ artifacts/
 .next/
 .expo/
 .turbo/
+.worktrees/
 dist/
 *.tsbuildinfo
 tmp/

@@ -17,7 +17,8 @@ function createNextConfig(phase?: string): NextConfig {
     experimental: {
       cpus: 1,
       webpackBuildWorker: false,
-      workerThreads: true
+      webpackMemoryOptimizations: true,
+      workerThreads: false
     },
     transpilePackages: [
       "@fittrack/types",

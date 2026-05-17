@@ -51,6 +51,8 @@ dist
 **/dist
 .turbo
 **/.turbo
+.worktrees
+**/.worktrees
 .expo
 **/.expo
 pytest-cache-files-*
