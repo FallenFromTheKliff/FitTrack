@@ -60,7 +60,7 @@ export const RETAIL_STOCK_FILTER_OPTIONS: Array<{
   label: string;
   value: "All" | RetailStockStatus;
 }> = [
-  { label: "All", value: "All" },
+  { label: "All Stock", value: "All" },
   { label: "In Stock", value: "In Stock" },
   { label: "Low Stock", value: "Low Stock" },
   { label: "Out of Stock", value: "Out of Stock" }
@@ -70,7 +70,7 @@ export const EQUIPMENT_STATUS_FILTER_OPTIONS: Array<{
   label: string;
   value: "All" | EquipmentAvailabilityStatus;
 }> = [
-  { label: "All", value: "All" },
+  { label: "All Statuses", value: "All" },
   { label: "Available", value: "Available" },
   { label: "Under Maintenance", value: "Under Maintenance" },
   { label: "Broken", value: "Broken" }

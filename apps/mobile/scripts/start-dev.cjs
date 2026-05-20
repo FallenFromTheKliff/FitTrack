@@ -8,6 +8,9 @@ const appRoot = path.resolve(__dirname, "..");
 const expoCliPath = path.join(appRoot, "node_modules", "expo", "bin", "cli");
 const metroPort = "8081";
 const apiPort = "3001";
+const requestedArgs = process.argv.slice(2);
+const shouldClearMetroCache =
+  requestedArgs.includes("--clear") || process.env.FITTRACK_MOBILE_CLEAR_CACHE === "1";
 const localApiBaseUrl = process.env.FITTRACK_LOCAL_API_URL || `http://127.0.0.1:${apiPort}/v1`;
 const devClientUrl = `exp+fittrack-mobile://expo-development-client/?url=${encodeURIComponent(
   `http://127.0.0.1:${metroPort}`,
@@ -179,10 +182,18 @@ const expoEnv = {
 };
 
 console.log(`[fittrack-mobile] Local API: ${expoEnv.EXPO_PUBLIC_API_URL}`);
+if (shouldClearMetroCache) {
+  console.log("[fittrack-mobile] Clearing Metro cache for this startup.");
+}
+
+const expoArgs = ["--max-old-space-size=8192", expoCliPath, "start", "--lan", "--port", metroPort];
+if (shouldClearMetroCache) {
+  expoArgs.push("--clear");
+}
 
 const expoProcess = spawn(
   process.execPath,
-  ["--max-old-space-size=8192", expoCliPath, "start", "--lan", "--port", metroPort],
+  expoArgs,
   {
     cwd: appRoot,
     stdio: "inherit",

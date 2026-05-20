@@ -14,6 +14,13 @@ def _build_grounding_payload() -> dict[str, object]:
                 "closes_at": "22:00",
                 "is_closed": False,
                 "label": "Weekday hours",
+            },
+            {
+                "day_of_week": 6,
+                "opens_at": "08:00",
+                "closes_at": "20:00",
+                "is_closed": False,
+                "label": "Saturday hours",
             }
         ],
         "special_schedules": [
@@ -43,6 +50,18 @@ def _build_grounding_payload() -> dict[str, object]:
                 "question": "Do you offer walk-in rates?",
                 "answer": "Yes, day passes are available at the front desk.",
                 "keywords": ["walk-in", "day pass"],
+            },
+            {
+                "category": "general",
+                "question": "How do I book a coach appointment?",
+                "answer": "Open Bookings, choose a coach, pick an available slot, and submit the request.",
+                "keywords": ["book", "booking", "coach", "appointment"],
+            },
+            {
+                "category": "rates",
+                "question": "How do downpayments work?",
+                "answer": "A downpayment reserves the booking; the remaining balance is settled before completion.",
+                "keywords": ["payment", "downpayment", "balance"],
             }
         ],
         "membership_plans": [
@@ -109,8 +128,9 @@ def test_gym_chat_route_refuses_out_of_scope_prompts() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "reply": (
-            "I can only help with gym support topics like hours, memberships, "
-            "promotions, schedules, and FAQs."
+            "I can only help with gym support topics like hours, bookings, "
+            "payments, memberships, coaching, training, promotions, schedules, "
+            "and FAQs."
         ),
         "out_of_scope": True,
         "sources": [],
@@ -197,3 +217,83 @@ def test_gym_chat_route_returns_422_for_nested_extra_fields() -> None:
     assert error_payload["status"] == 422
     assert "body.grounding.session_history.0.unexpected" in error_payload["detail"]
     assert "Extra inputs are not permitted" in error_payload["detail"]
+
+
+def test_gym_chat_route_answers_opening_and_closing_hours() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/chat/gym",
+        json={
+            "session_id": "gym-session-6",
+            "message": "When is SertFit opening and closing time?",
+            "grounding": _build_grounding_payload(),
+            "policy": {"gym_only": True, "refuse_out_of_scope": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["out_of_scope"] is False
+    assert payload["sources"] == ["operating_hours"]
+    assert "Current gym hours: Monday: 06:00-22:00; Saturday: 08:00-20:00." in payload["reply"]
+
+
+def test_gym_chat_route_answers_booking_faq() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/chat/gym",
+        json={
+            "session_id": "gym-session-7",
+            "message": "How do I book a coach appointment?",
+            "grounding": _build_grounding_payload(),
+            "policy": {"gym_only": True, "refuse_out_of_scope": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["out_of_scope"] is False
+    assert payload["sources"] == ["faqs"]
+    assert "How do I book a coach appointment?" in payload["reply"]
+
+
+def test_gym_chat_route_answers_payment_faq() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/chat/gym",
+        json={
+            "session_id": "gym-session-8",
+            "message": "How does the downpayment balance work?",
+            "grounding": _build_grounding_payload(),
+            "policy": {"gym_only": True, "refuse_out_of_scope": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["out_of_scope"] is False
+    assert payload["sources"] == ["faqs"]
+    assert "How do downpayments work?" in payload["reply"]
+
+
+def test_gym_chat_route_refuses_member_sensitive_analytics() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/chat/gym",
+        json={
+            "session_id": "gym-session-9",
+            "message": "What are the total sales and attendance this month?",
+            "grounding": _build_grounding_payload(),
+            "policy": {"gym_only": True, "refuse_out_of_scope": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["out_of_scope"] is True
+    assert payload["sources"] == []
+    assert "private business analytics" in payload["reply"]

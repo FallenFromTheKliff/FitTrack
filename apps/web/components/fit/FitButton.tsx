@@ -85,6 +85,11 @@ export default function FitButton({
             <span style={{
               flex: needsTrailing ? 1 : undefined,
               display: isCard && children ? "contents" : undefined,
+              minWidth: 0,
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
               ...(!isCard || !children ? textStyle : {})
             }}>
               {children ?? displayLabel}

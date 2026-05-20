@@ -2,10 +2,12 @@ import type { MemberProfile, MembershipCardRecord } from "@fittrack/types";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
 
+export type AuthPortal = "team" | "member";
+
 export type LoginCredentials = {
   email: string;
   password: string;
-  portal?: "team" | "member";
+  portal?: AuthPortal;
 };
 
 export type RegisterPayload = {
@@ -32,6 +34,7 @@ export type VerifyEmailPayload = {
 
 export type ForgotPasswordPayload = {
   email: string;
+  portal?: AuthPortal;
 };
 
 export type VerifyCurrentPasswordPayload = {
@@ -41,12 +44,14 @@ export type VerifyCurrentPasswordPayload = {
 export type VerifyResetOtpPayload = {
   code: string;
   email: string;
+  portal?: AuthPortal;
 };
 
 export type ResetPasswordPayload = {
   code: string;
   email: string;
   new_password: string;
+  portal?: AuthPortal;
 };
 
 export type ResendOtpPayload = {
@@ -96,6 +101,15 @@ export type LoginSuccessResponse = {
 
 export type LoginOtpResponse = {
   otpRequired?: boolean;
+  user_id?: string;
+  userId?: string;
+  email?: string;
+  role?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    role?: string;
+  };
 };
 
 export type RegisterResponse = {

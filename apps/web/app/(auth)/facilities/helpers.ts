@@ -27,7 +27,10 @@ export function buildVenueInitialValues(venueEditTarget: VenueRecord | null) {
     name: venueEditTarget.name ?? "",
     description: venueEditTarget.description ?? "",
     capacity: String(venueEditTarget.capacity ?? ""),
-    hourlyRate: String(venueEditTarget.hourlyRate ?? ""),
+    hourlyRate:
+      venueEditTarget.isReservable === false
+        ? ""
+        : String(venueEditTarget.hourlyRate ?? ""),
     minimumHours: String(venueEditTarget.minimumHours ?? 1),
     iconKey: venueEditTarget.iconKey ?? "gym-area",
     imageUrl: venueEditTarget.imageUrl ?? "",

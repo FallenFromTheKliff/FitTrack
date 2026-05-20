@@ -91,7 +91,11 @@ export function getCoachDisplayName(
     return standaloneName;
   }
 
-  return fallback;
+  return getPersonDisplayName(
+    coach?.profile ?? coach?.user?.profile,
+    coach?.email ?? coach?.user?.email ?? coach?.contactEmail,
+    fallback,
+  );
 }
 
 export function formatAppointmentWindow(appointment: StaffAppointmentRecord) {

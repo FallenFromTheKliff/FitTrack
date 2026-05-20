@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Clock, CheckCircle } from "lucide-react-native";
 
@@ -10,6 +10,7 @@ import { makeTimeSlotModalStyles } from "@/styles/modals/TimeSlotStyles";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitModalScrollView from "./FitModalScrollView";
 
 export type TimeSlot = {
   time: string;
@@ -120,9 +121,9 @@ export default function TimeSlotModal({ isVisible, slots, selectedTime, onSelect
               <FitText style={[s.legendText, { color: colors.textMuted }]}>Full</FitText>
             </View>
           </Animated.View>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
+          <FitModalScrollView
             contentContainerStyle={s.grid}
+            resetKey={`${isVisible}-${selectedTime}-${slots.length}`}
           >
             {slots.map((slot) => {
               const isChosen = slot.time === selectedTime;
@@ -160,7 +161,7 @@ export default function TimeSlotModal({ isVisible, slots, selectedTime, onSelect
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </FitModalScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton
               label="Cancel"

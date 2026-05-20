@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsNotEmpty,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsAllowedEmail,
@@ -93,6 +94,17 @@ export class ForgotPasswordDTO {
   @ApiProperty({ example: 'juan@gmail.com' })
   @IsAllowedEmail('email')
   email: string;
+
+  @ApiPropertyOptional({
+    enum: ['team', 'member'],
+    description:
+      'Portal context for password reset. Team resets are limited to admin, staff, and coach accounts; member resets are limited to member accounts.',
+  })
+  @IsOptional()
+  @IsIn(['team', 'member'], {
+    message: 'portal must be one of: team, member',
+  })
+  portal?: 'team' | 'member';
 }
 
 export class VerifyCurrentPasswordDTO {
@@ -114,6 +126,16 @@ export class VerifyResetOtpDTO {
   @ApiProperty({ example: '193847' })
   @IsOtpCode('code')
   code: string;
+
+  @ApiPropertyOptional({
+    enum: ['team', 'member'],
+    description: 'Portal context that issued the reset OTP.',
+  })
+  @IsOptional()
+  @IsIn(['team', 'member'], {
+    message: 'portal must be one of: team, member',
+  })
+  portal?: 'team' | 'member';
 }
 
 export class ResetPasswordDTO {
@@ -132,6 +154,16 @@ export class ResetPasswordDTO {
   })
   @IsStrongPasswordField('new_password')
   new_password: string;
+
+  @ApiPropertyOptional({
+    enum: ['team', 'member'],
+    description: 'Portal context that issued the reset OTP.',
+  })
+  @IsOptional()
+  @IsIn(['team', 'member'], {
+    message: 'portal must be one of: team, member',
+  })
+  portal?: 'team' | 'member';
 }
 
 export class ChangePasswordDTO {
@@ -187,6 +219,9 @@ export class AdminCreateUserDTO {
   role: 'admin' | 'staff' | 'member' | 'coach';
 
   @ApiPropertyOptional({ example: '+639171234567' })
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.trim().length === 0 ? undefined : value,
+  )
   @IsOptional()
   @IsPhilippineMobileNumber('phone')
   phone?: string;

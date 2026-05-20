@@ -1,0 +1,32 @@
+{
+  "buildFiles": [
+    "C:\\FitTrack\\node_modules\\.pnpm\\react-n_aa2e1944190f02c3cd28344d3d15ff2c\\node_modules\\react-native-reanimated\\android\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\Paulo\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\FitTrack\\.cxx\\rnr\\RelWithDebInfo\\3p116r69\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\Paulo\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\FitTrack\\.cxx\\rnr\\RelWithDebInfo\\3p116r69\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "reanimated::@6890427a1f51a3e7e1df": {
+      "artifactName": "reanimated",
+      "abi": "x86",
+      "output": "C:\\FitTrack\\node_modules\\.pnpm\\react-n_aa2e1944190f02c3cd28344d3d15ff2c\\node_modules\\react-native-reanimated\\android\\build\\intermediates\\cxx\\RelWithDebInfo\\3p116r69\\obj\\x86\\libreanimated.so",
+      "runtimeFiles": [
+        "C:\\Users\\Paulo\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so",
+        "C:\\Users\\Paulo\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\Paulo\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\FitTrack\\node_modules\\.pnpm\\react-n_640e7c95d80a533f1602ed4625ef3b4b\\node_modules\\react-native-worklets\\android\\build\\intermediates\\cmake\\release\\obj\\x86\\libworklets.so"
+      ]
+    }
+  }
+}

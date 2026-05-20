@@ -41,7 +41,7 @@ export function FitTextInput({ style, ...props }: TextInputProps) {
   );
 }
 
-const ReanimatedText = Animated.createAnimatedComponent(FitText);
+const ReanimatedText = Animated.createAnimatedComponent(Text);
 export function AnimatedFitText({
   style,
   ...props

@@ -3,8 +3,6 @@ import { View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Animated from "react-native-reanimated";
 import {
-  markAllNotificationsReadMutationOptions,
-  notificationInboxQueryOptions,
   notificationPreferencesQueryOptions,
   updateNotificationPreferencesMutationOptions
 } from "@fittrack/query";
@@ -25,12 +23,10 @@ import FitButton from "@/components/fit/FitButton";
 
 type NotificationsPreferencesPanelProps = {
   onClose: () => void;
-  showPreferences?: boolean;
 };
 
 export default function NotificationsPreferencesPanel({
   onClose,
-  showPreferences = true
 }: NotificationsPreferencesPanelProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -41,89 +37,49 @@ export default function NotificationsPreferencesPanel({
 
   const preferencesQuery = useQuery({
     ...notificationPreferencesQueryOptions(mobileApiClient, userId),
-    enabled: Boolean(userId) && showPreferences
-  });
-  const inboxQuery = useQuery({
-    ...notificationInboxQueryOptions(mobileApiClient, userId, { limit: 20, page: 1 }),
     enabled: Boolean(userId)
   });
   const updatePreferencesMutation = useMutation(
     updateNotificationPreferencesMutationOptions(mobileApiClient, queryClient, userId)
   );
-  const markAllReadMutation = useMutation(
-    markAllNotificationsReadMutationOptions(mobileApiClient, queryClient, userId)
-  );
 
   return (
     <Animated.View style={[s.body, surfaceStyle]}>
-      {showPreferences ? (
-        <>
-          <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>ALERTS</AnimatedFitText>
-          <View style={s.infoCard}>
-            {NOTIFICATION_PREFERENCE_GROUPS.map((group, index) => {
-              const enabled = preferencesQuery.data
-                ? isNotificationPreferenceGroupEnabled(preferencesQuery.data, group)
-                : false;
+      <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>ALERTS</AnimatedFitText>
+      <View style={s.infoCard}>
+        {NOTIFICATION_PREFERENCE_GROUPS.map((group, index) => {
+          const enabled = preferencesQuery.data
+            ? isNotificationPreferenceGroupEnabled(preferencesQuery.data, group)
+            : false;
 
-              return (
-                <View key={group.id}>
-                  <View style={s.toggleRow}>
-                    <View style={s.toggleInfo}>
-                      <FitText style={s.toggleLabel}>{group.label}</FitText>
-                      <FitText style={s.toggleHint}>{group.description}</FitText>
-                    </View>
-                    <FitSquareToggle
-                      value={enabled}
-                      onValueChange={(next) => {
-                        void updatePreferencesMutation.mutateAsync(
-                          buildNotificationPreferenceGroupPatch(group.fields, next)
-                        );
-                      }}
-                      activeColor={colors.brand}
-                      inactiveColor={colors.border}
-                      useAnimations={settings.animationLevel === "full"}
-                    />
-                  </View>
-                  {index < NOTIFICATION_PREFERENCE_GROUPS.length - 1 ? (
-                    <View style={s.infoCardDivider} />
-                  ) : null}
+          return (
+            <View key={group.id}>
+              <View style={s.toggleRow}>
+                <View style={s.toggleInfo}>
+                  <FitText style={s.toggleLabel}>{group.label}</FitText>
+                  <FitText style={s.toggleHint}>{group.description}</FitText>
                 </View>
-              );
-            })}
-          </View>
-        </>
-      ) : null}
-
-      <View>
-        <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>
-          RECENT DELIVERY HISTORY
-        </AnimatedFitText>
-        <View style={s.infoCard}>
-          {(inboxQuery.data?.data ?? []).length === 0 ? (
-            <FitText style={s.infoCardHint}>No notifications yet. You are all caught up.</FitText>
-          ) : (
-            (inboxQuery.data?.data ?? []).map((item, index, items) => (
-              <View key={item.id}>
-                <FitText style={s.infoCardTitle}>{item.title}</FitText>
-                <FitText style={s.infoCardHint}>{item.body}</FitText>
-                <FitText style={[s.toggleHint, { marginTop: 4 }]}>
-                  {new Date(item.createdAt).toLocaleString()}
-                </FitText>
-                {index < items.length - 1 ? <View style={s.infoCardDivider} /> : null}
+                <FitSquareToggle
+                  value={enabled}
+                  onValueChange={(next) => {
+                    void updatePreferencesMutation.mutateAsync(
+                      buildNotificationPreferenceGroupPatch(group.fields, next)
+                    );
+                  }}
+                  activeColor={colors.brand}
+                  inactiveColor={colors.border}
+                  useAnimations={settings.animationLevel === "full"}
+                />
               </View>
-            ))
-          )}
-        </View>
+              {index < NOTIFICATION_PREFERENCE_GROUPS.length - 1 ? (
+                <View style={s.infoCardDivider} />
+              ) : null}
+            </View>
+          );
+        })}
       </View>
 
       <View style={s.footer}>
-        <FitButton
-          label="Mark all read"
-          variant="ghost"
-          onPress={() => void markAllReadMutation.mutateAsync()}
-          disabled={markAllReadMutation.isPending}
-          flex={1}
-        />
         <FitButton label="Close" variant="primary" onPress={onClose} flex={1} />
       </View>
     </Animated.View>

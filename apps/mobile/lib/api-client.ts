@@ -3,7 +3,7 @@ import { NativeModules, Platform } from "react-native";
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@fittrack/app-core";
 import { createApiClient, createTokenStore, resolveApiBaseUrl } from "@fittrack/api-client";
 
-const DEFAULT_MOBILE_API_BASE_URL = "http://127.0.0.1:3001/v1";
+const DEFAULT_MOBILE_API_BASE_URL = "https://api-production-388f.up.railway.app/v1";
 const FITTRACK_API_DEV_PORT = "3001";
 const FITTRACK_API_BASE_PATH = "/v1";
 

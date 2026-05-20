@@ -164,7 +164,7 @@ export function ExerciseLabReviewSurface() {
             actions={reviewTableActions}
             compact
             onRowClick={openReviewModal}
-            overflowX={false}
+            overflowX
             style={{ borderRadius: 0, border: 0 }}
           />
         </div>

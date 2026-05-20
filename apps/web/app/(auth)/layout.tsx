@@ -69,7 +69,6 @@ const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
 const SIGN_OUT_BOTTOM_GAP = 10;
 const LOGOUT_REDIRECT_STORAGE_KEY = "fittrack.logoutRedirectPath";
 const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
-  "profile",
   "coach-dashboard",
   "accounts",
   "schedule",

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Cpu } from "lucide-react-native";
 
@@ -11,6 +11,7 @@ import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import FitButton from "@/components/fit/FitButton";
 import FitSearch from "@/components/fit/FitSearch";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 type ExerciseConfirmationModalProps = {
   candidateExercises: string[];
@@ -224,7 +225,11 @@ export default function ExerciseConfirmationModal({
             </View>
           </View>
 
-          <ScrollView style={s.scroll} contentContainerStyle={{ gap: 18 }} showsVerticalScrollIndicator={false}>
+          <FitModalScrollView
+            style={s.scroll}
+            contentContainerStyle={{ gap: 18 }}
+            resetKey={isVisible}
+          >
             {currentPlanLabel ? (
               <View style={s.section}>
                 <FitText style={s.sectionLabel}>Current Plan</FitText>
@@ -314,7 +319,7 @@ export default function ExerciseConfirmationModal({
                 </View>
               </View>
             </View>
-          </ScrollView>
+          </FitModalScrollView>
 
           <View style={s.footer}>
             <View style={s.buttonRow}>

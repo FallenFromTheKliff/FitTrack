@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarDays, ClipboardList, UsersRound } from "lucide-react";
+import { CalendarDays, ClipboardList, Moon, Sun, Sunrise, UsersRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type {
   RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanInput,
@@ -37,6 +38,14 @@ export type PaymentConfirmState =
       kind: "coachBalance";
       appointment: StaffAppointmentRecord;
       provider: PaymentCollectionProvider;
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "coachPaymentApproval";
+      appointment: StaffAppointmentRecord;
+      paymentId: string;
       title: string;
       message: string;
       confirmLabel: string;
@@ -82,6 +91,7 @@ export const EMPTY_APPOINTMENT_RESULT = {
 export const STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
   { label: "Pending coach", value: "pending_coach" },
+  { label: "Pending payment", value: "pending_payment" },
   { label: "Pending full payment", value: "pending_full_payment" },
   { label: "Confirmed", value: "confirmed" },
   { label: "Completed", value: "completed" },
@@ -106,11 +116,12 @@ export const SCHEDULE_SURFACE_TABS: Array<{
 export const SCHEDULE_DAY_PART_OPTIONS: Array<{
   key: ScheduleDayPart;
   label: string;
+  icon?: LucideIcon;
   hours: number[];
 }> = [
-  { key: "morning", label: "Morning", hours: [7, 8, 9, 10, 11] },
-  { key: "afternoon", label: "Afternoon", hours: [12, 13, 14, 15, 16, 17] },
-  { key: "night", label: "Night", hours: [18, 19, 20, 21, 22, 23] },
+  { key: "morning", label: "Morning", icon: Sunrise, hours: [7, 8, 9, 10, 11] },
+  { key: "afternoon", label: "Afternoon", icon: Sun, hours: [12, 13, 14, 15, 16, 17] },
+  { key: "night", label: "Night", icon: Moon, hours: [18, 19, 20, 21, 22, 23] },
 ];
 
 export const VENUE_STATUS_OPTIONS = [
@@ -319,7 +330,7 @@ export function OperationsMetricCard({
   return (
     <div
       style={{
-        borderRadius: 16,
+        borderRadius: 8,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
         padding: "10px 12px",
@@ -393,7 +404,7 @@ export function OperationsLoadingBlock({
       style={{
         minHeight: maxHeight,
         maxHeight,
-        borderRadius: 18,
+        borderRadius: 8,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surfaceRaised,
         padding: maxHeight > 130 ? "20px 22px" : "16px 18px",

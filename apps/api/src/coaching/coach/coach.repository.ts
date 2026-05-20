@@ -3,6 +3,7 @@ import {
   AppointmentStatus,
   BookingStatus,
   Prisma,
+  UserRole,
   UserStatus,
 } from '@prisma/client';
 
@@ -92,7 +93,10 @@ export class CoachRepository extends BaseRepository {
   ): Promise<PaginatedResult<CoachListRecord>> {
     const where: Prisma.CoachProfileWhereInput = {
       is_available_for_booking: true,
-      OR: [{ user_id: null }, { user: { status: UserStatus.active } }],
+      user: {
+        role: UserRole.coach,
+        status: UserStatus.active,
+      },
     };
 
     if (dto.specialization) {
@@ -131,7 +135,10 @@ export class CoachRepository extends BaseRepository {
       this.prisma.coachProfile,
       {
         id,
-        OR: [{ user_id: null }, { user: { status: UserStatus.active } }],
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
       },
       'CoachProfile',
       coachDetailInclude,
@@ -139,9 +146,15 @@ export class CoachRepository extends BaseRepository {
   }
 
   findCoachByUserIdOrThrow(userId: string): Promise<CoachDetailRecord> {
-    return this.findUniqueWhereOrThrow<CoachDetailRecord>(
+    return this.findOneOrThrow<CoachDetailRecord>(
       this.prisma.coachProfile,
-      { user_id: userId },
+      {
+        user_id: userId,
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
+      },
       'CoachProfile',
       coachDetailInclude,
     );

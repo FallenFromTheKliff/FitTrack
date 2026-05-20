@@ -105,7 +105,7 @@ export function ExerciseLabMilestoneSurface({
           options={[
             { key: "pending", label: `Pending (${pendingMilestoneCount})` },
             { key: "closed", label: `Closed (${closedMilestoneCount})` },
-            { key: "all", label: "All" },
+            { key: "all", label: "All Claims" },
           ]}
         />
 

@@ -148,17 +148,40 @@ describe('NotificationDomainEventsListener', () => {
     expect(dispatchCalls[0]?.[0]).toBe('admin-1');
     expect(dispatchCalls[1]?.[0]).toBe('staff-1');
     expect(dispatchCalls[0]?.[1]).toBe(NotificationType.system);
-    expect(dispatchCalls[0]?.[2].title).toBe(
-      'Account archived: Mina Rivera',
+    expect(dispatchCalls[0]?.[2].title).toBe('Account archived: Mina Rivera');
+    expect((dispatchCalls[0]?.[2].data as Record<string, unknown>).action).toBe(
+      'account_archived',
     );
-    expect(
-      (dispatchCalls[0]?.[2].data as Record<string, unknown>).action,
-    ).toBe('account_archived');
     expect(
       (dispatchCalls[0]?.[2].data as Record<string, unknown>).target_email,
     ).toBe('member@fittrack.test');
     expect(
       (dispatchCalls[0]?.[2].data as Record<string, unknown>).target_name,
     ).toBe('Mina Rivera');
+  });
+
+  it('uses generic manual verification wording for account verification activity', async () => {
+    notificationsRepository.listManagementNotificationRecipients.mockResolvedValue(
+      [{ user_id: 'admin-1' }],
+    );
+
+    await listener.handleAccountActivity({
+      action: 'account_verified_non_member',
+      actorId: 'actor-1',
+      occurredAt: '2026-04-25T08:00:00.000Z',
+      targetEmail: 'coach@fittrack.test',
+      targetName: 'Kai Santos',
+      targetRole: UserRole.coach,
+      targetUserId: 'coach-1',
+    });
+
+    const dispatchCalls = notificationsService.dispatch.mock.calls as Array<
+      [string, NotificationType, NotificationDispatchPayload]
+    >;
+
+    expect(dispatchCalls[0]?.[2].title).toBe('Account verified: Kai Santos');
+    expect(dispatchCalls[0]?.[2].body).toBe(
+      'Kai Santos (coach) was manually verified from the Account Module.',
+    );
   });
 });

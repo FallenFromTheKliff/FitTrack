@@ -440,7 +440,7 @@ export function useVenueMutations() {
       name,
       description: (data.description ?? "").trim() || undefined,
       capacity,
-      hourlyRate,
+      hourlyRate: isReservable ? hourlyRate : undefined,
       minimumHours: Number.isFinite(minHoursRaw) && minHoursRaw > 0 ? minHoursRaw : 1,
       iconKey: (data.iconKey ?? "").trim() || "gym-area",
       imageUrl: (data.imageUrl ?? "").trim() || undefined,

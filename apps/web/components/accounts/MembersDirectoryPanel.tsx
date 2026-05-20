@@ -12,6 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 type Props = {
   activeRowId?: string;
   actionsHeading?: string;
+  compactToolbar?: boolean;
   emptyMessage?: string;
   filteredCount: number;
   footerNote?: string;
@@ -40,6 +41,7 @@ function getGridTemplate(hasActions: boolean) {
 export default function MembersDirectoryPanel({
   activeRowId,
   actionsHeading,
+  compactToolbar = false,
   emptyMessage = "No accounts match your current filters.",
   filteredCount,
   footerNote,
@@ -92,7 +94,7 @@ export default function MembersDirectoryPanel({
         <div
           className="members-directory-panel__top"
           style={{
-            padding: "14px 12px",
+            padding: compactToolbar ? "10px 12px" : "14px 12px",
             borderRadius: 0,
             border: "none",
             borderBottom: `1px solid ${colors.border}`,
@@ -108,7 +110,7 @@ export default function MembersDirectoryPanel({
         style={{
           display: "grid",
           minHeight: 0,
-          padding: 10,
+          padding: 0,
           borderRadius: 0,
           border: "none",
           background: colors.surface,
@@ -498,7 +500,7 @@ export default function MembersDirectoryPanel({
           }
 
           .members-directory-panel__middle {
-            padding: 10px !important;
+            padding: 0 !important;
           }
 
           .members-directory-panel__mobile {

@@ -6,6 +6,8 @@ import {
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
+  CircleCheck,
   Pencil,
   Plus,
   RefreshCw,
@@ -209,6 +211,7 @@ function GymOperationsPageBody() {
     recurringRemainingCount,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
+    requestApproveAppointmentPayment,
     requestCollectAppointmentBalance,
     requestCollectAppointmentInitialPayment,
     requestCollectVenueBalance,
@@ -324,15 +327,31 @@ function GymOperationsPageBody() {
             />
           ) : null}
           {activeOperationsTab === "schedule" && canManageCoaching ? (
-            <FitPill
-              options={SCHEDULE_SURFACE_TABS}
-              active={activeScheduleSurfaceTab}
-              onChange={setActiveScheduleSurfaceTab}
-              style={{
-                minHeight: 42,
-                alignSelf: "center",
-              }}
-            />
+            SCHEDULE_SURFACE_TABS.map((tab) => {
+              const isActive = activeScheduleSurfaceTab === tab.key;
+              return (
+                <FitButton
+                  key={tab.key}
+                  variant={isActive ? "primary" : "ghost"}
+                  label={tab.label.toUpperCase()}
+                  onClick={() => setActiveScheduleSurfaceTab(tab.key)}
+                  style={{
+                    minHeight: 38,
+                    minWidth: 142,
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    backgroundColor: isActive
+                      ? `${colors.brand}18`
+                      : colors.surface,
+                    border: `1px solid ${
+                      isActive ? `${colors.brand}55` : colors.border
+                    }`,
+                    color: isActive ? colors.brand : colors.textSecondary,
+                  }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+              );
+            })
           ) : null}
           <div
             style={{
@@ -345,6 +364,24 @@ function GymOperationsPageBody() {
           >
             {activeOperationsTab === "schedule" ? (
               <>
+                <FitButton
+                  variant="primary"
+                  iconOnly
+                  icon={RefreshCw}
+                  iconSize={15}
+                  onClick={() => {
+                    void refreshGymOperationsData();
+                  }}
+                  aria-label="Refresh Gym Operations data"
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 8,
+                    backgroundColor: colors.warning,
+                    border: `1px solid ${colors.warning}`,
+                    boxShadow: `0 8px 18px ${colors.warning}24`,
+                    color: colors.onBrand,
+                  }}
+                />
                 {activeScheduleSurfaceTab === "coach-schedule" && !isCoach ? (
                   <FitButton
                     variant="primary"
@@ -368,17 +405,6 @@ function GymOperationsPageBody() {
                     textStyle={{ fontSize: 11, fontWeight: 800 }}
                   />
                 ) : null}
-                <FitButton
-                  variant="ghost"
-                  iconOnly
-                  icon={RefreshCw}
-                  iconSize={15}
-                  onClick={() => {
-                    void refreshGymOperationsData();
-                  }}
-                  aria-label="Refresh Gym Operations data"
-                  style={{ minHeight: 38, borderRadius: 8 }}
-                />
                 <FitButton
                   variant="primary"
                   label={
@@ -406,7 +432,7 @@ function GymOperationsPageBody() {
             ) : activeOperationsTab === "appointments" ? (
               <>
                 <FitButton
-                  variant="ghost"
+                  variant="primary"
                   iconOnly
                   icon={RefreshCw}
                   iconSize={15}
@@ -414,7 +440,14 @@ function GymOperationsPageBody() {
                     void refreshGymOperationsData();
                   }}
                   aria-label="Refresh Gym Operations data"
-                  style={{ minHeight: 38, borderRadius: 8 }}
+                  style={{
+                    minHeight: 38,
+                    borderRadius: 8,
+                    backgroundColor: colors.warning,
+                    border: `1px solid ${colors.warning}`,
+                    boxShadow: `0 8px 18px ${colors.warning}24`,
+                    color: colors.onBrand,
+                  }}
                 />
                 <FitButton
                   variant="primary"
@@ -492,13 +525,16 @@ function GymOperationsPageBody() {
                 }}
               >
                 <CoachIconRail
+                  draggable
                   railRef={leftRailRef}
                   maxHeight={coachRailAsRow ? null : scheduleRosterMaxHeight}
                   orientation={coachRailAsRow ? "row" : "column"}
                   filteredStaff={filteredStaff}
                   bookings={rosterBookings}
                   selectedStaffId={focusedCoachId}
+                  onStaffPreview={handleCoachFocus}
                   onStaffClick={handleStaffClick}
+                  requireSecondClickToOpen
                   colors={colors}
                 />
                 <div
@@ -593,40 +629,36 @@ function GymOperationsPageBody() {
                       />
                       <FitButton
                         variant="ghost"
+                        icon={CalendarDays}
+                        iconSize={15}
+                        label={
+                          scheduleRangeMode === "weekly"
+                            ? formatWeekRange(weekStart)
+                            : formatScheduleDay(weekStart)
+                        }
                         onClick={() => setCalendarOpen(true)}
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
                           minHeight: 32,
+                          minWidth: 188,
                           padding: "4px 9px",
                           borderRadius: 8,
                           backgroundColor: `${colors.brand}12`,
+                          color: colors.brand,
+                          whiteSpace: "nowrap",
+                        }}
+                        textStyle={{
+                          color: colors.brand,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          lineHeight: 1,
+                          whiteSpace: "nowrap",
                         }}
                         aria-label={
                           scheduleRangeMode === "weekly"
                             ? "Pick week"
                             : "Pick day"
                         }
-                      >
-                        <CalendarDays
-                          size={15}
-                          color={colors.brand}
-                          strokeWidth={2}
-                        />
-                        <FitText
-                          excludeGlobalScale
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 800,
-                            color: colors.brand,
-                          }}
-                        >
-                          {scheduleRangeMode === "weekly"
-                            ? formatWeekRange(weekStart)
-                            : formatScheduleDay(weekStart)}
-                        </FitText>
-                      </FitButton>
+                      />
                       <FitButton
                         variant="ghost"
                         iconOnly
@@ -658,8 +690,9 @@ function GymOperationsPageBody() {
                         aria-label="Toggle schedule range"
                         style={{
                           minHeight: 32,
+                          width: 74,
                           borderRadius: 8,
-                          padding: "4px 12px",
+                          padding: "4px 0",
                           fontSize: 10,
                           fontWeight: 800,
                         }}
@@ -678,23 +711,21 @@ function GymOperationsPageBody() {
                       height: scheduleTimelineMaxHeight,
                       minHeight: 0,
                       overflow: "hidden",
-                      padding: 10,
                       boxSizing: "border-box",
                     }}
                   >
-                    <div style={{ height: "100%", minHeight: 0 }}>
-                      <WeeklyTimeline
-                        weekDays={visibleTimelineDays}
-                        hours={visibleTimelineHours}
-                        bookings={focusedCoachScheduleBookings}
-                        slideStyle={slideStyle as MotionStyle}
-                        isLoading={appointmentsLoading}
-                        colors={colors}
-                        height={Math.max(320, scheduleTimelineMaxHeight - 20)}
-                        allowDrag={false}
-                        onBlockClick={handleBlockClick}
-                      />
-                    </div>
+                    <WeeklyTimeline
+                      weekDays={visibleTimelineDays}
+                      hours={visibleTimelineHours}
+                      bookings={focusedCoachScheduleBookings}
+                      slideStyle={slideStyle as MotionStyle}
+                      isLoading={appointmentsLoading}
+                      colors={colors}
+                      flush
+                      height={Math.max(320, scheduleTimelineMaxHeight)}
+                      allowDrag={false}
+                      onBlockClick={handleBlockClick}
+                    />
                   </div>
                 </div>
               </div>
@@ -709,13 +740,12 @@ function GymOperationsPageBody() {
                   gap: 14,
                 }}
               >
-                <div style={{ display: "grid", gap: 14 }}>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "flex-end",
                       justifyContent: "space-between",
-                      gap: 16,
+                      gap: 12,
                       flexWrap: "wrap",
                     }}
                   >
@@ -820,7 +850,6 @@ function GymOperationsPageBody() {
                       onOpenReview={setVenueReviewTarget}
                     />
                   )}
-                </div>
               </div>
             )}
           </div>
@@ -838,7 +867,7 @@ function GymOperationsPageBody() {
               gridTemplateColumns: coachRailAsRow
                 ? "minmax(0, 1fr)"
                 : "94px minmax(0, 1fr)",
-              gap: 12,
+              gap: 10,
               alignItems: "stretch",
               minHeight: coachRosterMaxHeight,
             }}
@@ -856,7 +885,8 @@ function GymOperationsPageBody() {
             <div
               style={{
                 display: "grid",
-                gap: 14,
+                gap: 10,
+                gridTemplateRows: "auto auto minmax(0, 1fr)",
                 borderRadius: 8,
                 border: `1px solid ${colors.border}`,
                 backgroundColor: colors.surface,
@@ -870,9 +900,9 @@ function GymOperationsPageBody() {
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "space-between",
-                  gap: 16,
+                  gap: 10,
                   flexWrap: "wrap",
-                  paddingTop: 4,
+                  paddingTop: 0,
                 }}
               >
                 <div style={{ display: "grid", gap: 6 }}>
@@ -996,64 +1026,17 @@ function GymOperationsPageBody() {
 
         {activeOperationsTab === "coaches" && canManageCoaching ? (
           <div
+            className="gym-operations-coaches-grid"
             style={{
-              borderRadius: 8,
-              border: "none",
-              backgroundColor: "transparent",
-              padding: 0,
               display: "grid",
-              gap: 12,
+              gridTemplateColumns: coachRailAsRow
+                ? "minmax(0, 1fr)"
+                : "94px minmax(0, 1fr) minmax(278px, 0.38fr)",
+              gap: 10,
+              alignItems: "stretch",
               minHeight: coachRosterMaxHeight,
             }}
           >
-            <div style={{ display: "grid", gap: 16 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ display: "grid", gap: 6 }}>
-                  <FitText
-                    excludeGlobalScale
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: colors.brand,
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    COACH DATA MANAGEMENT
-                  </FitText>
-                  <FitText
-                    excludeGlobalScale
-                    style={{
-                      fontSize: 18,
-                      color: colors.textPrimary,
-                      lineHeight: 1.3,
-                      fontWeight: 700,
-                    }}
-                  >
-                    Maintain coach-facing booking trust, weekly availability,
-                    and member-visible profile quality from one contained tab.
-                  </FitText>
-                </div>
-              </div>
-              <div
-                className="gym-operations-coaches-grid"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: coachRailAsRow
-                    ? "minmax(0, 1fr)"
-                    : "94px minmax(0, 1fr) minmax(278px, 0.38fr)",
-                  gap: 10,
-                  alignItems: "stretch",
-                  minHeight: coachRosterMaxHeight,
-                }}
-              >
                 <CoachIconRail
                   railRef={leftRailRef}
                   maxHeight={coachRailAsRow ? null : coachRosterMaxHeight}
@@ -1071,7 +1054,7 @@ function GymOperationsPageBody() {
                     backgroundColor: colors.surface,
                     padding: 14,
                     display: "grid",
-                    gap: 16,
+                    gap: 12,
                     minHeight: coachRosterMaxHeight,
                     transition: canAnimate
                       ? "border-color 180ms ease"
@@ -1088,17 +1071,6 @@ function GymOperationsPageBody() {
                     }}
                   >
                     <div style={{ display: "grid", gap: 4 }}>
-                      <FitText
-                        excludeGlobalScale
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: colors.brand,
-                          letterSpacing: "0.08em",
-                        }}
-                      >
-                        COACH DATA MANAGEMENT
-                      </FitText>
                       <FitText
                         excludeGlobalScale
                         style={{
@@ -1141,6 +1113,7 @@ function GymOperationsPageBody() {
                       fontWeight={700}
                       borderOpacity="35"
                       bgOpacity="14"
+                      style={{ borderRadius: 6 }}
                     />
                   </div>
 
@@ -1195,7 +1168,7 @@ function GymOperationsPageBody() {
                   >
                     <div
                       style={{
-                        borderRadius: 16,
+                        borderRadius: 8,
                         border: `1px solid ${colors.border}`,
                         backgroundColor: colors.surfaceRaised,
                         padding: "14px 16px",
@@ -1248,7 +1221,7 @@ function GymOperationsPageBody() {
                     </div>
                     <div
                       style={{
-                        borderRadius: 16,
+                        borderRadius: 8,
                         border: `1px solid ${colors.border}`,
                         backgroundColor: colors.surfaceRaised,
                         padding: "14px 16px",
@@ -1283,6 +1256,7 @@ function GymOperationsPageBody() {
                                 fontWeight={700}
                                 borderOpacity="28"
                                 bgOpacity="12"
+                                style={{ borderRadius: 6 }}
                               />
                             ),
                           )
@@ -1300,7 +1274,7 @@ function GymOperationsPageBody() {
 
                   <div
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: colors.surfaceRaised,
                       padding: "14px 16px",
@@ -1333,7 +1307,7 @@ function GymOperationsPageBody() {
 
                   <div
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: colors.surfaceRaised,
                       padding: "14px 16px",
@@ -1403,7 +1377,7 @@ function GymOperationsPageBody() {
 
                   <div
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: colors.surfaceRaised,
                       padding: "14px 16px",
@@ -1540,7 +1514,8 @@ function GymOperationsPageBody() {
                     backgroundColor: colors.surface,
                     padding: 14,
                     display: "grid",
-                    gap: 12,
+                    gap: 8,
+                    alignContent: "start",
                     transition: canAnimate
                       ? "border-color 180ms ease"
                       : "border-color 180ms ease, box-shadow 180ms ease",
@@ -1602,7 +1577,7 @@ function GymOperationsPageBody() {
 
                   <div
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: colors.surfaceRaised,
                       padding: "14px 16px",
@@ -1647,7 +1622,7 @@ function GymOperationsPageBody() {
 
                   <div
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: colors.surfaceRaised,
                       padding: "14px 16px",
@@ -1680,8 +1655,6 @@ function GymOperationsPageBody() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
         ) : null}
         </div>
 
@@ -1829,6 +1802,13 @@ function GymOperationsPageBody() {
               paymentStage,
             );
           }}
+          onApprovePayment={(paymentId) => {
+            if (!appointmentReviewTarget) return;
+            requestApproveAppointmentPayment(
+              appointmentReviewTarget,
+              paymentId,
+            );
+          }}
           onPayRecurringCycle={(cycle, provider) =>
             requestRecurringCyclePayment(cycle, provider)
           }
@@ -1950,7 +1930,8 @@ function GymOperationsPageBody() {
         <FitModal
           isOpen={feedbackModal !== null}
           title={feedbackModal?.tone === "danger" ? "Schedule Action Failed" : "Schedule Updated"}
-          subtitle={feedbackModal?.tone === "danger" ? "Review the message before trying again" : undefined}
+          subtitle={feedbackModal?.tone === "danger" ? "Review the message before trying again" : "The schedule change has been applied."}
+          icon={feedbackModal?.tone === "danger" ? CircleAlert : CircleCheck}
           onClose={() => setFeedbackModal(null)}
           footer={
             <FitButton
@@ -2040,14 +2021,19 @@ function GymOperationsPageBody() {
             .gym-operations-coach-rail {
               height: auto !important;
               min-height: 0 !important;
+              grid-template-columns: 56px minmax(0, 1fr) !important;
               grid-template-rows: auto auto !important;
             }
 
-            .gym-operations-coach-rail > div:last-child {
+            .gym-operations-coach-rail-list {
               grid-auto-flow: column;
-              grid-auto-columns: max-content;
+              grid-auto-columns: 58px;
               overflow-x: auto !important;
               overflow-y: hidden !important;
+            }
+
+            .gym-operations-coach-rail-pagination {
+              grid-column: 1 / -1 !important;
             }
 
             .gym-operations-metric-grid {

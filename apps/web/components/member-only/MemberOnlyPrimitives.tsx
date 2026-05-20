@@ -13,6 +13,7 @@ import { getMemberOnlyToneColor, makeMemberOnlyStyles } from "@/styles/memberOnl
 
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 type Tone = "brand" | "danger" | "muted" | "success" | "warning";
+type Density = "normal" | "compact";
 type TextVariant = "body" | "brand" | "eyebrow" | "muted" | "subtitle" | "title";
 
 export function getToneColor(tone: Tone, colors: ThemeColors) {
@@ -96,6 +97,7 @@ export function MemberSurface({
 export function MemberCard({
   avatarInitials,
   children,
+  density = "normal",
   hasBorder = false,
   icon: Icon,
   iconBg,
@@ -110,6 +112,7 @@ export function MemberCard({
 }: {
   avatarInitials?: string;
   children?: ReactNode;
+  density?: Density;
   hasBorder?: boolean;
   icon?: LucideIcon;
   iconBg?: string;
@@ -125,20 +128,20 @@ export function MemberCard({
   const { colors } = useTheme();
   const s = useMemo(() => makeMemberOnlyStyles(colors), [colors]);
   const toneColor = getToneColor(trailingTone, colors);
-  const baseStyle = s.card(selected, hasBorder, !!onClick);
+  const baseStyle = s.card(selected, hasBorder, !!onClick, density);
 
   const content = (
     <>
-      <div style={s.cardIcon(iconBg, iconColor)}>
+      <div style={s.cardIcon(iconBg, iconColor, density)}>
         {avatarInitials ? (
-          <FitText style={s.cardIconLabel(iconColor)} excludeGlobalScale>
+          <FitText style={s.cardIconLabel(iconColor, density)} excludeGlobalScale>
             {avatarInitials}
           </FitText>
         ) : Icon ? (
-          <Icon size={19} strokeWidth={2} />
+          <Icon size={density === "compact" ? 17 : 19} strokeWidth={2} />
         ) : null}
       </div>
-      <div style={s.cardBody(!!subtitle)}>
+      <div style={s.cardBody(!!subtitle, density)}>
         <div style={s.cardTitleRow}>
           <FitText style={s.cardTitle} excludeGlobalScale>
             {label}
@@ -178,27 +181,51 @@ export function MemberCard({
 export function StatTile({
   icon: Icon,
   label,
+  variant = "stacked",
   value,
   tone = "brand",
 }: {
   icon?: LucideIcon;
   label: string;
+  variant?: "stacked" | "inline";
   value: string;
   tone?: Tone;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => makeMemberOnlyStyles(colors), [colors]);
   const toneColor = getToneColor(tone, colors);
+  const isInline = variant === "inline";
 
   return (
-    <div style={s.statTile}>
-      {Icon ? <Icon size={16} color={toneColor} strokeWidth={2} /> : null}
-      <FitText style={s.statLabel} excludeGlobalScale>
-        {label}
-      </FitText>
-      <FitText style={s.statValue} excludeGlobalScale>
-        {value}
-      </FitText>
+    <div style={isInline ? s.statTileInline : s.statTile}>
+      {Icon ? (
+        isInline ? (
+          <div style={s.statTileIconPanel(toneColor)}>
+            <Icon size={28} color={toneColor} strokeWidth={1.9} />
+          </div>
+        ) : (
+          <Icon size={16} color={toneColor} strokeWidth={2} />
+        )
+      ) : null}
+      {isInline ? (
+        <div style={s.statTileBody}>
+          <FitText style={s.statLabelInline} excludeGlobalScale>
+            {label}
+          </FitText>
+          <FitText style={s.statValueInline} excludeGlobalScale>
+            {value}
+          </FitText>
+        </div>
+      ) : (
+        <>
+          <FitText style={s.statLabel} excludeGlobalScale>
+            {label}
+          </FitText>
+          <FitText style={s.statValue} excludeGlobalScale>
+            {value}
+          </FitText>
+        </>
+      )}
     </div>
   );
 }

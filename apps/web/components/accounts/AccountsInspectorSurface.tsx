@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ChevronUp, CreditCard, LogIn, Pencil, ScanLine, UserCheck, UserPlus } from "lucide-react";
+import { Archive, Check, ChevronUp, CreditCard, LogIn, Pencil, ScanLine, UserCheck, UserPlus, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -12,7 +12,7 @@ import { coachScheduleQueryOptions, coachSelfProfileQueryOptions, invalidateCoac
 import type { CoachProfileRecord } from "@fittrack/types";
 import { fullName } from "@fittrack/utils";
 
-import { FitButton, FitPill, FitText } from "@/components/fit";
+import { FitButton, FitPill, FitSelect, FitText } from "@/components/fit";
 import MemberInspectorPanel from "@/components/accounts/MemberInspectorPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -21,7 +21,6 @@ import {
   formatLastCheckIn,
   getDirectoryAccessLabel,
   getDirectoryRoleLabel,
-  getDirectoryStatusColor,
   getDirectoryStatusLabel,
   getMemberAvatarUrl,
   getMemberInitials,
@@ -130,6 +129,8 @@ function CoachClientManagementPanel() {
   const [memberNotes, setMemberNotes] = useState("");
   const [scheduleMessage, setScheduleMessage] = useState<CoachInspectorMessage>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
+  const [historyAppointmentId, setHistoryAppointmentId] = useState("");
+  const [coachPanelMode, setCoachPanelMode] = useState<"overview" | "schedule" | "feedback">("overview");
   const [coachFeedback, setCoachFeedback] = useState("");
   const [assessmentReport, setAssessmentReport] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState<CoachInspectorMessage>(null);
@@ -161,6 +162,10 @@ function CoachClientManagementPanel() {
   const selectedAppointment = useMemo(
     () => completedAppointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null,
     [completedAppointments, selectedAppointmentId],
+  );
+  const historyAppointment = useMemo(
+    () => clientAppointments.find((appointment) => appointment.id === historyAppointmentId) ?? null,
+    [clientAppointments, historyAppointmentId],
   );
   const createManagedAppointmentMutation = useMutation({
     mutationFn: (payload: CreateCoachManagedAppointmentPayload) =>
@@ -221,15 +226,32 @@ function CoachClientManagementPanel() {
   }, [completedAppointments, isCoachClient]);
 
   useEffect(() => {
+    if (!isCoachClient) {
+      setHistoryAppointmentId("");
+      return;
+    }
+
+    setHistoryAppointmentId((current) => {
+      if (current && clientAppointments.some((appointment) => appointment.id === current)) {
+        return current;
+      }
+
+      return clientAppointments[0]?.id ?? "";
+    });
+  }, [clientAppointments, isCoachClient]);
+
+  useEffect(() => {
     setCoachFeedback(selectedAppointment?.coachFeedback ?? "");
     setAssessmentReport(selectedAppointment?.assessmentReport ?? "");
     setFeedbackMessage(null);
   }, [selectedAppointment?.id, selectedAppointment?.coachFeedback, selectedAppointment?.assessmentReport]);
 
+  useEffect(() => {
+    setCoachPanelMode("overview");
+  }, [editTarget?.id]);
+
   if (!isCoachClient || !editTarget) return null;
 
-  const membershipStatus = formatCoachStatusLabel(getMembershipFieldValue(editTarget));
-  const profile = editTarget.profile;
   const latestSession = clientAppointments[0] ?? null;
   const upcomingSessions = clientAppointments.filter((appointment) =>
     appointment.status !== "completed" && appointment.status !== "cancelled",
@@ -299,6 +321,7 @@ function CoachClientManagementPanel() {
   };
 
   const sharedInputStyle: CSSProperties = {
+    boxSizing: "border-box",
     width: "100%",
     minHeight: 40,
     padding: "10px 12px",
@@ -306,150 +329,168 @@ function CoachClientManagementPanel() {
     border: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
     color: colors.textPrimary,
+    fontFamily: "inherit",
+  };
+  const compactCoachFieldStyle: CSSProperties = {
+    display: "grid",
+    gap: 4,
+  };
+  const compactCoachFieldLabelStyle: CSSProperties = {
+    fontSize: 9.25,
+    fontWeight: 800,
+    color: colors.textMuted,
+    letterSpacing: "0.03em",
+    lineHeight: 1.1,
+    textTransform: "uppercase",
+  };
+  const compactCoachInputStyle: CSSProperties = {
+    ...sharedInputStyle,
+    minHeight: 34,
+    padding: "7px 9px",
+    fontSize: 11,
+    lineHeight: 1.25,
+  };
+  const compactCoachTextareaStyle: CSSProperties = {
+    ...compactCoachInputStyle,
+    minHeight: 62,
+    maxHeight: 76,
+    overflowY: "auto",
+    resize: "none",
+  };
+  const sharedSelectStyle: CSSProperties = {
+    width: "100%",
+    minHeight: 40,
+    borderRadius: 8,
   };
   const sectionCardStyle: CSSProperties = {
     display: "grid",
     gap: 10,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 8,
     border: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
   };
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: 12,
-        maxHeight: "calc(100vh - 245px)",
-        overflowY: "auto",
-        paddingBottom: 84,
-        paddingRight: 2,
-      }}
-    >
-      <div style={sectionCardStyle}>
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 850,
-            color: colors.brand,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Client Profile Snapshot
-        </FitText>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-          {[
-            { label: "Membership", value: membershipStatus },
-            {
-              label: "Membership Type",
-              value: formatCoachDetailValue(profile?.membershipType),
-            },
-            { label: "Activity Level", value: formatCoachDetailValue(profile?.activityLevel) },
-            { label: "Goal", value: formatCoachDetailValue(profile?.fitnessGoal) },
-            { label: "Weight", value: formatCoachDetailValue(profile?.currentWeightKg, " kg") },
-            { label: "Height", value: formatCoachDetailValue(profile?.heightCm, " cm") },
-            { label: "Phone", value: formatCoachDetailValue(editTarget.phone_no) },
-            {
-              label: "Verification",
-              value: editTarget.emailVerified ? "Verified" : "Pending verification",
-            },
-          ].map((item) => (
-            <div
-              key={item.label}
+    <div style={{ display: "grid", gap: 10 }}>
+      <div
+        role="tablist"
+        aria-label="Coach client panel"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 6,
+        }}
+      >
+        {[
+          ["overview", "Overview"],
+          ["schedule", "Schedule"],
+          ["feedback", "Feedback"],
+        ].map(([mode, label]) => {
+          const isActive = coachPanelMode === mode;
+
+          return (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setCoachPanelMode(mode as "overview" | "schedule" | "feedback")}
               style={{
-                display: "grid",
-                gap: 4,
-                padding: "10px 11px",
-                borderRadius: 8,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surface,
+                minHeight: 34,
+                borderRadius: 7,
+                border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
+                backgroundColor: isActive ? `${colors.brand}14` : colors.surfaceRaised,
+                color: isActive ? colors.brand : colors.textSecondary,
+                cursor: "pointer",
+                padding: "6px 8px",
               }}
             >
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 9.5,
-                  fontWeight: 850,
-                  color: colors.textMuted,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {item.label}
+              <FitText as="span" excludeGlobalScale style={{ fontSize: 10.5, fontWeight: 800, lineHeight: 1 }}>
+                {label}
               </FitText>
-              <FitText style={{ fontSize: 12.25, fontWeight: 800, color: colors.textPrimary }}>
-                {item.value}
-              </FitText>
-            </div>
-          ))}
-        </div>
+            </button>
+          );
+        })}
       </div>
 
-      <div style={sectionCardStyle}>
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 850,
-            color: colors.brand,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Session History
-        </FitText>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-          {[
-            { label: "Total Sessions", value: String(clientAppointments.length) },
-            { label: "Completed", value: String(completedAppointments.length) },
-            { label: "Upcoming", value: String(upcomingSessions.length) },
-          ].map((item) => (
-            <div
-              key={item.label}
-              style={{
-                display: "grid",
-                gap: 4,
-                padding: "10px 11px",
-                borderRadius: 8,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surface,
-              }}
-            >
-              <FitText
-                excludeGlobalScale
+      {coachPanelMode === "overview" ? (
+        <div style={sectionCardStyle}>
+          <FitText
+            style={{
+              fontSize: 11,
+              fontWeight: 850,
+              color: colors.brand,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Coaching Overview
+          </FitText>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 7 }}>
+            {[
+              { label: "Sessions", value: String(clientAppointments.length) },
+              { label: "Done", value: String(completedAppointments.length) },
+              { label: "Next", value: String(upcomingSessions.length) },
+            ].map((item) => (
+              <div
+                key={item.label}
                 style={{
-                  fontSize: 9.5,
-                  fontWeight: 850,
-                  color: colors.textMuted,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
+                  display: "grid",
+                  gap: 4,
+                  padding: "9px 8px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surface,
                 }}
               >
-                {item.label}
-              </FitText>
-              <FitText style={{ fontSize: 13, fontWeight: 850, color: colors.textPrimary }}>
-                {item.value}
-              </FitText>
-            </div>
-          ))}
-        </div>
-        {latestSession ? (
-          <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-            Latest session: {formatCoachScheduleDate(latestSession.scheduledAt)}
-          </FitText>
-        ) : (
-          <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-            No coaching sessions recorded for this client yet.
-          </FitText>
-        )}
-        <div style={{ display: "grid", gap: 8 }}>
-          {clientAppointments.slice(0, 4).map((appointment) => (
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 9.25,
+                    fontWeight: 800,
+                    color: colors.textMuted,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {item.label}
+                </FitText>
+                <FitText style={{ fontSize: 13, fontWeight: 850, color: colors.textPrimary }}>
+                  {item.value}
+                </FitText>
+              </div>
+            ))}
+          </div>
+          {latestSession ? (
+            <FitText style={{ fontSize: 11, lineHeight: 1.45, color: colors.textSecondary }}>
+              Latest session: {formatCoachScheduleDate(latestSession.scheduledAt)}
+            </FitText>
+          ) : (
+            <FitText style={{ fontSize: 11, lineHeight: 1.45, color: colors.textSecondary }}>
+              No coaching sessions recorded for this client yet.
+            </FitText>
+          )}
+          <label style={{ display: "grid", gap: 6 }}>
+            <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Session record</FitText>
+            <FitSelect
+              fullWidth
+              value={historyAppointmentId}
+              onChange={(event) => setHistoryAppointmentId(event.currentTarget.value)}
+              placeholder="No sessions yet"
+              options={clientAppointments.map((appointment) => ({
+                label: formatCoachScheduleDate(appointment.scheduledAt),
+                value: appointment.id,
+              }))}
+              style={sharedSelectStyle}
+              disabled={clientAppointments.length === 0}
+            />
+          </label>
+          {historyAppointment ? (
             <div
-              key={appointment.id}
               style={{
                 display: "grid",
-                gap: 6,
+                gap: 7,
                 padding: "10px 11px",
                 borderRadius: 8,
                 border: `1px solid ${colors.border}`,
@@ -457,208 +498,207 @@ function CoachClientManagementPanel() {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                <FitText style={{ fontSize: 12.5, fontWeight: 800, color: colors.textPrimary }}>
-                  {formatCoachScheduleDate(appointment.scheduledAt)}
+                <FitText style={{ fontSize: 12, fontWeight: 800, color: colors.textPrimary }}>
+                  {historyAppointment.duration} min
                 </FitText>
                 <FitPill
                   mode="status"
-                  label={formatCoachStatusLabel(appointment.status)}
-                  color={appointment.status === "completed" ? colors.success : colors.brand}
+                  label={formatCoachStatusLabel(historyAppointment.status)}
+                  color={historyAppointment.status === "completed" ? colors.success : colors.brand}
                   fontSize={9}
+                  style={{ borderRadius: 6 }}
                 />
               </div>
-              <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-                {appointment.duration} min
-                {appointment.notes ? ` • ${appointment.notes}` : ""}
-              </FitText>
-              {appointment.coachFeedback ? (
-                <FitText style={{ fontSize: 11, color: colors.textPrimary }}>
-                  Feedback: {appointment.coachFeedback}
-                </FitText>
-              ) : null}
-              {appointment.assessmentReport ? (
-                <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-                  Assessment: {appointment.assessmentReport}
-                </FitText>
-              ) : null}
+              {[
+                { label: "Notes", value: historyAppointment.notes },
+                { label: "Feedback", value: historyAppointment.coachFeedback },
+                { label: "Assessment", value: historyAppointment.assessmentReport },
+              ].map((item) => (
+                <div key={item.label} style={{ display: "grid", gap: 2 }}>
+                  <FitText style={{ fontSize: 9.75, fontWeight: 800, color: colors.textMuted }}>
+                    {item.label}
+                  </FitText>
+                  <FitText style={{ fontSize: 11, lineHeight: 1.45, color: colors.textSecondary }}>
+                    {item.value?.trim() || "Not added"}
+                  </FitText>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : null}
         </div>
-      </div>
+      ) : null}
 
-      <div style={sectionCardStyle}>
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 850,
-            color: colors.brand,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Schedule New Appointment
-        </FitText>
-        <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-          Creates a confirmed appointment for this client using your current coach availability.
-        </FitText>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Date &amp; time</FitText>
-          <input
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={(event) => {
-              setScheduledAt(event.currentTarget.value);
-              if (scheduleMessage) setScheduleMessage(null);
-            }}
-            style={sharedInputStyle}
-          />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Duration</FitText>
-          <select
-            value={durationMinutes}
-            onChange={(event) => {
-              setDurationMinutes(event.currentTarget.value);
-              if (scheduleMessage) setScheduleMessage(null);
-            }}
-            style={sharedInputStyle}
-          >
-            {COACH_DURATION_OPTIONS.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes} minutes
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Session notes</FitText>
-          <textarea
-            rows={3}
-            value={memberNotes}
-            onChange={(event) => {
-              setMemberNotes(event.currentTarget.value);
-              if (scheduleMessage) setScheduleMessage(null);
-            }}
-            placeholder="Add session focus, reminders, or prep notes."
-            style={{ ...sharedInputStyle, minHeight: 88, resize: "vertical" }}
-          />
-        </label>
-        {scheduleMessage ? (
+      {coachPanelMode === "schedule" ? (
+        <div style={sectionCardStyle}>
           <FitText
             style={{
               fontSize: 11,
-              color: scheduleMessage.tone === "success" ? colors.success : colors.danger,
+              fontWeight: 850,
+              color: colors.brand,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
             }}
           >
-            {scheduleMessage.text}
+            Schedule New Appointment
           </FitText>
-        ) : null}
-        <FitButton
-          variant="primary"
-          label="SCHEDULE APPOINTMENT"
-          disabled={createManagedAppointmentMutation.isPending}
-          loading={createManagedAppointmentMutation.isPending}
-          onClick={() => void handleCreateManagedAppointment()}
-          style={{
-            minHeight: 42,
-            borderRadius: 8,
-            backgroundColor: colors.brand,
-            color: colors.surface,
-            border: `1px solid ${colors.brand}`,
-          }}
-          textStyle={{ fontSize: 10.75, fontWeight: 800, color: colors.surface }}
-        />
-      </div>
+          <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
+            Creates a confirmed appointment for this client using your current coach availability.
+          </FitText>
+          <label style={compactCoachFieldStyle}>
+            <FitText style={compactCoachFieldLabelStyle}>Date &amp; time</FitText>
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(event) => {
+                setScheduledAt(event.currentTarget.value);
+                if (scheduleMessage) setScheduleMessage(null);
+              }}
+              style={compactCoachInputStyle}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Duration</FitText>
+            <FitSelect
+              fullWidth
+              value={durationMinutes}
+              onChange={(event) => {
+                setDurationMinutes(event.currentTarget.value);
+                if (scheduleMessage) setScheduleMessage(null);
+              }}
+              options={COACH_DURATION_OPTIONS.map((minutes) => ({
+                label: `${minutes} minutes`,
+                value: String(minutes),
+              }))}
+              style={sharedSelectStyle}
+            />
+          </label>
+          <label style={compactCoachFieldStyle}>
+            <FitText style={compactCoachFieldLabelStyle}>Session notes</FitText>
+            <textarea
+              rows={2}
+              value={memberNotes}
+              onChange={(event) => {
+                setMemberNotes(event.currentTarget.value);
+                if (scheduleMessage) setScheduleMessage(null);
+              }}
+              placeholder="Add session focus, reminders, or prep notes."
+              style={compactCoachTextareaStyle}
+            />
+          </label>
+          {scheduleMessage ? (
+            <FitText
+              style={{
+                fontSize: 11,
+                color: scheduleMessage.tone === "success" ? colors.success : colors.danger,
+              }}
+            >
+              {scheduleMessage.text}
+            </FitText>
+          ) : null}
+          <FitButton
+            variant="primary"
+            label="SCHEDULE APPOINTMENT"
+            disabled={createManagedAppointmentMutation.isPending}
+            loading={createManagedAppointmentMutation.isPending}
+            onClick={() => void handleCreateManagedAppointment()}
+            style={{
+              minHeight: 42,
+              borderRadius: 8,
+              backgroundColor: colors.brand,
+              color: colors.surface,
+              border: `1px solid ${colors.brand}`,
+            }}
+            textStyle={{ fontSize: 10.75, fontWeight: 800, color: colors.surface }}
+          />
+        </div>
+      ) : null}
 
-      <div style={sectionCardStyle}>
-        <FitText
-          style={{
-            fontSize: 11,
-            fontWeight: 850,
-            color: colors.brand,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Client Feedback
-        </FitText>
-        <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-          Save feedback and an optional assessment report to a completed session record.
-        </FitText>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>
-            Completed session
-          </FitText>
-          <select
-            value={selectedAppointmentId}
-            onChange={(event) => setSelectedAppointmentId(event.currentTarget.value)}
-            style={sharedInputStyle}
-            disabled={completedAppointments.length === 0}
-          >
-            {completedAppointments.length === 0 ? (
-              <option value="">No completed sessions yet</option>
-            ) : null}
-            {completedAppointments.map((appointment) => (
-              <option key={appointment.id} value={appointment.id}>
-                {formatCoachScheduleDate(appointment.scheduledAt)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Coach feedback</FitText>
-          <textarea
-            rows={4}
-            value={coachFeedback}
-            onChange={(event) => {
-              setCoachFeedback(event.currentTarget.value);
-              if (feedbackMessage) setFeedbackMessage(null);
-            }}
-            placeholder="Summarize what the client did well and what to improve next."
-            style={{ ...sharedInputStyle, minHeight: 110, resize: "vertical" }}
-          />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>
-            Assessment report
-          </FitText>
-          <textarea
-            rows={4}
-            value={assessmentReport}
-            onChange={(event) => {
-              setAssessmentReport(event.currentTarget.value);
-              if (feedbackMessage) setFeedbackMessage(null);
-            }}
-            placeholder="Add optional assessment notes, mobility observations, or progression updates."
-            style={{ ...sharedInputStyle, minHeight: 110, resize: "vertical" }}
-          />
-        </label>
-        {feedbackMessage ? (
+      {coachPanelMode === "feedback" ? (
+        <div style={sectionCardStyle}>
           <FitText
             style={{
               fontSize: 11,
-              color: feedbackMessage.tone === "success" ? colors.success : colors.danger,
+              fontWeight: 850,
+              color: colors.brand,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
             }}
           >
-            {feedbackMessage.text}
+            Client Feedback
           </FitText>
-        ) : null}
-        <FitButton
-          variant="primary"
-          label="SAVE CLIENT FEEDBACK"
-          disabled={submitAppointmentFeedbackMutation.isPending || completedAppointments.length === 0}
-          loading={submitAppointmentFeedbackMutation.isPending}
-          onClick={() => void handleSubmitAppointmentFeedback()}
-          style={{
-            minHeight: 42,
-            borderRadius: 8,
-            backgroundColor: colors.brand,
-            color: colors.surface,
-            border: `1px solid ${colors.brand}`,
-          }}
-          textStyle={{ fontSize: 10.75, fontWeight: 800, color: colors.surface }}
-        />
-      </div>
+          <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
+            Save feedback and an optional assessment report to a completed session record.
+          </FitText>
+          <label style={{ display: "grid", gap: 6 }}>
+            <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>
+              Completed session
+            </FitText>
+            <FitSelect
+              fullWidth
+              value={selectedAppointmentId}
+              onChange={(event) => setSelectedAppointmentId(event.currentTarget.value)}
+              placeholder="No completed sessions yet"
+              options={completedAppointments.map((appointment) => ({
+                label: formatCoachScheduleDate(appointment.scheduledAt),
+                value: appointment.id,
+              }))}
+              style={sharedSelectStyle}
+              disabled={completedAppointments.length === 0}
+            />
+          </label>
+          <label style={compactCoachFieldStyle}>
+            <FitText style={compactCoachFieldLabelStyle}>Coach feedback</FitText>
+            <textarea
+              rows={2}
+              value={coachFeedback}
+              onChange={(event) => {
+                setCoachFeedback(event.currentTarget.value);
+                if (feedbackMessage) setFeedbackMessage(null);
+              }}
+              placeholder="Summarize what the client did well and what to improve next."
+              style={compactCoachTextareaStyle}
+            />
+          </label>
+          <label style={compactCoachFieldStyle}>
+            <FitText style={compactCoachFieldLabelStyle}>Assessment report</FitText>
+            <textarea
+              rows={2}
+              value={assessmentReport}
+              onChange={(event) => {
+                setAssessmentReport(event.currentTarget.value);
+                if (feedbackMessage) setFeedbackMessage(null);
+              }}
+              placeholder="Add optional assessment notes, mobility observations, or progression updates."
+              style={compactCoachTextareaStyle}
+            />
+          </label>
+          {feedbackMessage ? (
+            <FitText
+              style={{
+                fontSize: 11,
+                color: feedbackMessage.tone === "success" ? colors.success : colors.danger,
+              }}
+            >
+              {feedbackMessage.text}
+            </FitText>
+          ) : null}
+          <FitButton
+            variant="primary"
+            label="SAVE CLIENT FEEDBACK"
+            disabled={submitAppointmentFeedbackMutation.isPending || completedAppointments.length === 0}
+            loading={submitAppointmentFeedbackMutation.isPending}
+            onClick={() => void handleSubmitAppointmentFeedback()}
+            style={{
+              minHeight: 42,
+              borderRadius: 8,
+              backgroundColor: colors.brand,
+              color: colors.surface,
+              border: `1px solid ${colors.brand}`,
+            }}
+            textStyle={{ fontSize: 10.75, fontWeight: 800, color: colors.surface }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -746,6 +786,7 @@ export function AccountInspectorFooter() {
     canVerifyNonMemberTarget,
     editTarget,
     handleManualCheckIn,
+    isCoach,
     isMembershipCardPending,
     isManualAttendancePending,
     isMembershipPaymentReviewPending,
@@ -809,6 +850,10 @@ export function AccountInspectorFooter() {
     whiteSpace: "normal",
     textAlign: "center",
   };
+  const isCoachActionsVariant = isCoach && Boolean(editTarget);
+  const actionsPanelMaxHeight = isCoachActionsVariant ? "min(620px, max(340px, calc(100vh - 300px)))" : 320;
+  const verifyAccountActionLabel =
+    editTarget?.role?.name === "USER" ? "Verify Non-Member" : "Verify Team Member";
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
@@ -816,12 +861,13 @@ export function AccountInspectorFooter() {
         id={actionsPanelId}
         aria-hidden={!actionsOpen}
         style={{
-          display: "grid",
-          gap: 8,
-          maxHeight: actionsOpen ? 320 : 0,
+          display: isCoachActionsVariant ? "flex" : "grid",
+          flexDirection: isCoachActionsVariant ? "column" : undefined,
+          gap: isCoachActionsVariant ? 0 : 8,
+          maxHeight: actionsOpen ? actionsPanelMaxHeight : 0,
           opacity: actionsOpen ? 1 : 0,
           overflowX: "hidden",
-          overflowY: actionsOpen ? "auto" : "hidden",
+          overflowY: isCoachActionsVariant ? "hidden" : actionsOpen ? "auto" : "hidden",
           pointerEvents: actionsOpen ? "auto" : "none",
           transform: actionsOpen ? "translateY(0)" : "translateY(12px)",
           transformOrigin: "bottom center",
@@ -831,152 +877,184 @@ export function AccountInspectorFooter() {
           visibility: actionsOpen ? "visible" : "hidden",
         }}
       >
+        {isCoachActionsVariant ? (
+          <div
+            style={{
+              display: "grid",
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowX: "hidden",
+              overflowY: "auto",
+              paddingBottom: 12,
+              borderBottom: `1px solid ${colors.border}`,
+            }}
+          >
+            <div
+              style={{
+                minHeight: 0,
+                overflowX: "hidden",
+                paddingRight: 2,
+              }}
+            >
+              <CoachClientManagementPanel />
+            </div>
+          </div>
+        ) : null}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            flexShrink: isCoachActionsVariant ? 0 : undefined,
             gap: 8,
+            paddingTop: isCoachActionsVariant ? 12 : 0,
           }}
         >
-          <FitButton
-            variant="primary"
-            label="Edit Details"
-            icon={Pencil}
-            iconSize={13}
-            fullWidth
-            disabled={!editTarget || !canEditTargetDetails}
-            onClick={editTarget && canEditTargetDetails ? openEditModal : undefined}
-            style={{ ...primaryActionStyle, ...compactActionStyle }}
-            textStyle={{ ...compactTextStyle, color: primaryCommandTextColor }}
-          />
-          <FitButton
-            variant="ghost"
-            label={editTarget ? memberCardActionLabel : "Manage Membership"}
-            icon={CreditCard}
-            iconSize={13}
-            fullWidth
-            disabled={!editTarget || !canManageMemberCard || isMembershipCardPending}
-            onClick={() => {
-              if (!editTarget || !canManageMemberCard) return;
-              if (getMembershipFieldValue(editTarget) === "active") {
-                setRevokeCardTarget(editTarget);
-                return;
-              }
-              setGrantCardTarget(editTarget);
-            }}
+          <div
             style={{
-              ...secondaryActionStyle,
-              ...compactActionStyle,
-              border: membershipActionTone.border,
-              backgroundColor: membershipActionTone.backgroundColor,
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 8,
             }}
-            textStyle={{ ...compactTextStyle, color: membershipActionTone.color }}
-          />
-          <FitButton
-            variant="ghost"
-            label="Verify Non-Member"
-            icon={UserCheck}
-            iconSize={13}
-            fullWidth
-            disabled={!editTarget || !canVerifyNonMemberTarget}
-            onClick={() => {
-              if (!editTarget || !canVerifyNonMemberTarget) return;
-              setVerifyNonMemberTarget(editTarget);
-            }}
-            style={{
-              ...secondaryActionStyle,
-              ...compactActionStyle,
-              border: `1px solid ${colors.brand}42`,
-              backgroundColor: canVerifyNonMemberTarget ? `${colors.brand}10` : colors.surfaceRaised,
-            }}
-            textStyle={{ ...compactTextStyle, color: colors.brand }}
-          />
-          <FitButton
-            variant="ghost"
-            label="Check In"
-            icon={LogIn}
-            iconSize={13}
-            fullWidth
-            disabled={!editTarget || !canManualCheckInTarget || isManualAttendancePending}
-            onClick={() => {
-              if (!editTarget || !canManualCheckInTarget) return;
-              void handleManualCheckIn(editTarget);
-            }}
-            style={{ ...secondaryActionStyle, ...compactActionStyle }}
-            textStyle={{ ...compactTextStyle, color: colors.textPrimary }}
-          />
-          <FitButton
-            variant="ghost"
-            label={editTarget ? accountActionLabel : "Archive Account"}
-            icon={Archive}
-            iconSize={13}
-            fullWidth
-            disabled={!editTarget || !canRunAccountArchiveAction}
-            onClick={() => {
-              if (!editTarget) return;
-              if (canRestoreEditTarget) {
-                setRestoreTarget(editTarget);
-                return;
-              }
-              if (canArchiveEditTarget) {
-                setArchiveTarget(editTarget);
-              }
-            }}
-            style={{
-              ...accountLifecycleActionStyle,
-              ...compactActionStyle,
-              gridColumn: "1 / -1",
-            }}
-            textStyle={{ ...compactTextStyle, color: accountLifecycleActionColor }}
-          />
+          >
+            <FitButton
+              variant="primary"
+              label="Edit Details"
+              icon={Pencil}
+              iconSize={13}
+              fullWidth
+              disabled={!editTarget || !canEditTargetDetails}
+              onClick={editTarget && canEditTargetDetails ? openEditModal : undefined}
+              style={{ ...primaryActionStyle, ...compactActionStyle }}
+              textStyle={{ ...compactTextStyle, color: primaryCommandTextColor }}
+            />
+            <FitButton
+              variant="ghost"
+              label={editTarget ? memberCardActionLabel : "Manage Membership"}
+              icon={CreditCard}
+              iconSize={13}
+              fullWidth
+              disabled={!editTarget || !canManageMemberCard || isMembershipCardPending}
+              onClick={() => {
+                if (!editTarget || !canManageMemberCard) return;
+                if (getMembershipFieldValue(editTarget) === "active") {
+                  setRevokeCardTarget(editTarget);
+                  return;
+                }
+                setGrantCardTarget(editTarget);
+              }}
+              style={{
+                ...secondaryActionStyle,
+                ...compactActionStyle,
+                border: membershipActionTone.border,
+                backgroundColor: membershipActionTone.backgroundColor,
+              }}
+              textStyle={{ ...compactTextStyle, color: membershipActionTone.color }}
+            />
+            <FitButton
+              variant="ghost"
+              label={verifyAccountActionLabel}
+              icon={UserCheck}
+              iconSize={13}
+              fullWidth
+              disabled={!editTarget || !canVerifyNonMemberTarget}
+              onClick={() => {
+                if (!editTarget || !canVerifyNonMemberTarget) return;
+                setVerifyNonMemberTarget(editTarget);
+              }}
+              style={{
+                ...secondaryActionStyle,
+                ...compactActionStyle,
+                border: `1px solid ${colors.brand}42`,
+                backgroundColor: canVerifyNonMemberTarget ? `${colors.brand}10` : colors.surfaceRaised,
+              }}
+              textStyle={{ ...compactTextStyle, color: colors.brand }}
+            />
+            <FitButton
+              variant="ghost"
+              label="Check In"
+              icon={LogIn}
+              iconSize={13}
+              fullWidth
+              disabled={!editTarget || !canManualCheckInTarget || isManualAttendancePending}
+              onClick={() => {
+                if (!editTarget || !canManualCheckInTarget) return;
+                void handleManualCheckIn(editTarget);
+              }}
+              style={{ ...secondaryActionStyle, ...compactActionStyle }}
+              textStyle={{ ...compactTextStyle, color: colors.textPrimary }}
+            />
+            <FitButton
+              variant="ghost"
+              label={editTarget ? accountActionLabel : "Archive Account"}
+              icon={Archive}
+              iconSize={13}
+              fullWidth
+              disabled={!editTarget || !canRunAccountArchiveAction}
+              onClick={() => {
+                if (!editTarget) return;
+                if (canRestoreEditTarget) {
+                  setRestoreTarget(editTarget);
+                  return;
+                }
+                if (canArchiveEditTarget) {
+                  setArchiveTarget(editTarget);
+                }
+              }}
+              style={{
+                ...accountLifecycleActionStyle,
+                ...compactActionStyle,
+                gridColumn: "1 / -1",
+              }}
+              textStyle={{ ...compactTextStyle, color: accountLifecycleActionColor }}
+            />
+            {canReviewMembershipPayment ? (
+              <>
+                <FitButton
+                  variant="ghost"
+                  label="Approve Payment"
+                  icon={CreditCard}
+                  iconSize={13}
+                  fullWidth
+                  disabled={isMembershipPaymentReviewPending}
+                  onClick={() => setPaymentReviewAction("approve")}
+                  style={{
+                    ...secondaryActionStyle,
+                    ...compactActionStyle,
+                    border: `1px solid ${colors.success}45`,
+                    backgroundColor: `${colors.success}10`,
+                  }}
+                  textStyle={{ ...compactTextStyle, color: colors.success }}
+                />
+                <FitButton
+                  variant="ghost"
+                  label="Reject Payment"
+                  icon={CreditCard}
+                  iconSize={13}
+                  fullWidth
+                  disabled={isMembershipPaymentReviewPending}
+                  onClick={() => setPaymentReviewAction("reject")}
+                  style={{
+                    ...secondaryActionStyle,
+                    ...compactActionStyle,
+                    border: `1px solid ${colors.danger}45`,
+                    backgroundColor: `${colors.danger}10`,
+                  }}
+                  textStyle={{ ...compactTextStyle, color: colors.danger }}
+                />
+              </>
+            ) : null}
+          </div>
+          {isMembershipCardPending ? (
+            <FitText style={{ fontSize: 11, color: colors.textMuted }}>{membershipCardLoadingLabel}</FitText>
+          ) : null}
           {canReviewMembershipPayment ? (
-            <>
-              <FitButton
-                variant="ghost"
-                label="Approve Payment"
-                icon={CreditCard}
-                iconSize={13}
-                fullWidth
-                disabled={isMembershipPaymentReviewPending}
-                onClick={() => setPaymentReviewAction("approve")}
-                style={{
-                  ...secondaryActionStyle,
-                  ...compactActionStyle,
-                  border: `1px solid ${colors.success}45`,
-                  backgroundColor: `${colors.success}10`,
-                }}
-                textStyle={{ ...compactTextStyle, color: colors.success }}
-              />
-              <FitButton
-                variant="ghost"
-                label="Reject Payment"
-                icon={CreditCard}
-                iconSize={13}
-                fullWidth
-                disabled={isMembershipPaymentReviewPending}
-                onClick={() => setPaymentReviewAction("reject")}
-                style={{
-                  ...secondaryActionStyle,
-                  ...compactActionStyle,
-                  border: `1px solid ${colors.danger}45`,
-                  backgroundColor: `${colors.danger}10`,
-                }}
-                textStyle={{ ...compactTextStyle, color: colors.danger }}
-              />
-            </>
+            <FitText style={{ fontSize: 11, color: colors.textMuted }}>
+              Cash membership payment is awaiting staff verification.
+            </FitText>
+          ) : null}
+          {isManualAttendancePending ? (
+            <FitText style={{ fontSize: 11, color: colors.textMuted }}>{manualCheckInLoadingLabel}</FitText>
           ) : null}
         </div>
-        {isMembershipCardPending ? (
-          <FitText style={{ fontSize: 11, color: colors.textMuted }}>{membershipCardLoadingLabel}</FitText>
-        ) : null}
-        {canReviewMembershipPayment ? (
-          <FitText style={{ fontSize: 11, color: colors.textMuted }}>
-            Cash membership payment is awaiting staff verification.
-          </FitText>
-        ) : null}
-        {isManualAttendancePending ? (
-          <FitText style={{ fontSize: 11, color: colors.textMuted }}>{manualCheckInLoadingLabel}</FitText>
-        ) : null}
       </div>
       <FitButton
         variant="ghost"
@@ -1018,42 +1096,102 @@ export function AccountInspectorFooter() {
 
 export function AccountInspectorBody() {
   const { colors } = useTheme();
-  const { editTarget, pendingRequestsByUserId } = useAccountsPage();
+  const { editTarget, isCoach, pendingRequestsByUserId } = useAccountsPage();
   const emptyAccountValue = "N/A";
   const accountDetailsAvatarUrl = editTarget ? getMemberAvatarUrl(editTarget) : null;
   const accountDetailsTitle = editTarget ? fullName(editTarget) || "Unnamed account" : emptyAccountValue;
+  const profile = editTarget?.profile;
   const accountStatusLabel = editTarget
     ? getDirectoryStatusLabel(editTarget, pendingRequestsByUserId)
     : emptyAccountValue;
+  const accountStatusTone =
+    accountStatusLabel === "Archived" ||
+    accountStatusLabel === "Pending" ||
+    accountStatusLabel === "Requesting Termination"
+      ? colors.warning
+      : accountStatusLabel === "Suspended" || accountStatusLabel === "Banned"
+        ? colors.danger
+        : colors.success;
   const accountAccessLabel = editTarget
     ? getDirectoryAccessLabel(editTarget, pendingRequestsByUserId)
     : emptyAccountValue;
-  const accountInspectorSections = [
-    {
-      title: "User Details",
-      items: [
+  const accountStatusLines = accountStatusLabel === "Requesting Termination"
+    ? ["Requesting", "Termination"]
+    : [accountStatusLabel];
+  const showVerifiedAccessMarker =
+    editTarget &&
+    accountAccessLabel !== "Archived" &&
+    accountAccessLabel !== "Not Verified" &&
+    accountAccessLabel !== "Revoked" &&
+    (editTarget.emailVerified || editTarget.status === "active");
+  const accountInspectorSections = isCoach
+    ? [
         {
-          label: "User Type",
-          value: editTarget ? getDirectoryRoleLabel(editTarget.role?.name) : emptyAccountValue,
+          title: "Client Profile",
+          items: [
+            { label: "Phone", value: formatCoachDetailValue(editTarget?.phone_no) },
+            {
+              label: "Verification",
+              value: editTarget?.emailVerified ? "Verified" : "Not Verified",
+            },
+            {
+              label: "Membership Type",
+              value: formatCoachDetailValue(profile?.membershipType),
+            },
+            {
+              label: "Activity Level",
+              value: formatCoachDetailValue(profile?.activityLevel),
+            },
+            { label: "Goal", value: formatCoachDetailValue(profile?.fitnessGoal) },
+            {
+              label: "Metrics",
+              value: `${formatCoachDetailValue(profile?.currentWeightKg, " kg")} / ${formatCoachDetailValue(
+                profile?.heightCm,
+                " cm",
+              )}`,
+            },
+          ],
         },
-        { label: "Access", value: accountAccessLabel },
-        { label: "Email", value: editTarget?.email ?? emptyAccountValue },
-      ],
-    },
-    {
-      title: "Activity",
-      items: [
         {
-          label: "Last Check-in",
-          value: editTarget ? formatLastCheckIn(editTarget.lastCheckInAt) : emptyAccountValue,
+          title: "Account Signals",
+          items: [
+            {
+              label: "Last Check-in",
+              value: editTarget ? formatLastCheckIn(editTarget.lastCheckInAt) : emptyAccountValue,
+            },
+            {
+              label: "Scan Status",
+              value: editTarget ? getScanReadinessLabel(editTarget) : emptyAccountValue,
+            },
+          ],
+        },
+      ]
+    : [
+        {
+          title: "User Details",
+          items: [
+            {
+              label: "User Type",
+              value: editTarget ? getDirectoryRoleLabel(editTarget.role?.name).toUpperCase() : emptyAccountValue,
+            },
+            { label: "Access", value: accountAccessLabel },
+            { label: "Email", value: editTarget?.email ?? emptyAccountValue },
+          ],
         },
         {
-          label: "Scan Status",
-          value: editTarget ? getScanReadinessLabel(editTarget) : emptyAccountValue,
+          title: "Activity",
+          items: [
+            {
+              label: "Last Check-in",
+              value: editTarget ? formatLastCheckIn(editTarget.lastCheckInAt) : emptyAccountValue,
+            },
+            {
+              label: "Scan Status",
+              value: editTarget ? getScanReadinessLabel(editTarget) : emptyAccountValue,
+            },
+          ],
         },
-      ],
-    },
-  ];
+      ];
 
   return (
     <>
@@ -1131,24 +1269,77 @@ export function AccountInspectorBody() {
             {editTarget?.email ?? emptyAccountValue}
           </FitText>
           <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
-            <FitPill
-              mode="status"
-              label={accountStatusLabel}
-              color={
-                editTarget
-                  ? getDirectoryStatusColor(editTarget, pendingRequestsByUserId, colors.warning)
-                  : colors.textMuted
-              }
-              fontSize={9.5}
-            />
-            <FitPill
-              mode="status"
-              label={accountAccessLabel}
-              color={editTarget ? colors.brand : colors.textMuted}
-              fontSize={9.5}
-              borderOpacity="35"
-              bgOpacity="12"
-            />
+            <span
+              style={{
+                display: "inline-grid",
+                justifyItems: "center",
+                alignItems: "center",
+                minWidth: accountStatusLines.length > 1 ? 78 : 64,
+                padding: accountStatusLines.length > 1 ? "4px 8px" : "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${editTarget ? accountStatusTone : colors.textMuted}55`,
+                backgroundColor: `${editTarget ? accountStatusTone : colors.textMuted}14`,
+                textAlign: "center",
+              }}
+            >
+              {accountStatusLines.map((line) => (
+                <FitText
+                  key={line}
+                  as="span"
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 500,
+                    lineHeight: 1.08,
+                    color: editTarget ? accountStatusTone : colors.textMuted,
+                  }}
+                >
+                  {line}
+                </FitText>
+              ))}
+            </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                minWidth: 0,
+                padding: "4px 8px",
+                borderRadius: 6,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surfaceRaised,
+              }}
+            >
+              {accountAccessLabel === "Revoked" ? (
+                <X size={12} color={colors.danger} strokeWidth={2.4} />
+              ) : accountAccessLabel === "Not Verified" ? (
+                <FitText
+                  as="span"
+                  excludeGlobalScale
+                  style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 700, lineHeight: 1 }}
+                >
+                  !
+                </FitText>
+              ) : showVerifiedAccessMarker ? (
+                <Check size={12} color={colors.warning} strokeWidth={2.4} />
+              ) : null}
+              <FitText
+                as="span"
+                excludeGlobalScale
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 500,
+                  lineHeight: 1.15,
+                  color: editTarget ? colors.textSecondary : colors.textMuted,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {accountAccessLabel}
+              </FitText>
+            </span>
           </div>
         </div>
       </div>
@@ -1206,8 +1397,8 @@ export function AccountInspectorBody() {
                       excludeGlobalScale={isEmailDetail}
                       style={{
                         fontSize: isEmailDetail ? 10.5 : 12.25,
-                        fontWeight: 800,
-                        color: colors.textPrimary,
+                        fontWeight: 500,
+                        color: colors.textSecondary,
                         lineHeight: 1.3,
                         overflowWrap: "anywhere",
                         wordBreak: "normal",
@@ -1223,7 +1414,6 @@ export function AccountInspectorBody() {
           </div>
         ))}
       </div>
-      <CoachClientManagementPanel />
     </>
   );
 }

@@ -82,8 +82,9 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
         <AttendanceQrModal
           attendanceQr={controller.attendanceQrData}
           countdownLabel={controller.attendanceQrCountdownLabel}
+          errorMessage={controller.attendanceQrError}
           isRefreshing={controller.isRefreshingAttendanceQr}
-          isLoading={controller.attendanceQrVisible && controller.attendanceQrData === null}
+          isLoading={controller.isAttendanceQrLoading}
           isVisible={controller.attendanceQrVisible}
           onClose={() => controller.setAttendanceQrVisible(false)}
           onCopy={controller.handleCopyAttendanceQrValue}

@@ -58,7 +58,7 @@ const GYM_ACTION_SECTION_OPTIONS: Array<{
   key: GymActionSectionFilter;
   label: string;
 }> = [
-  { key: "all", label: "All" },
+  { key: "all", label: "All Sections" },
   { key: "transactions", label: "Transaction History" },
   { key: "audit", label: "Audit Log" },
   { key: "recent", label: "Recent Activity" },

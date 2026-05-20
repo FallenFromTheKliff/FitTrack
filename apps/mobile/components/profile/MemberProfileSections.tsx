@@ -24,13 +24,6 @@ type MemberProfileSectionsProps = {
   styles: ReturnType<typeof makeProfileStyles>;
 };
 
-function formatMembershipStatus(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function getRankingPrivacyIcon(value: FitnessRankingVisibility) {
   if (value === "anonymous") return UserRound;
   if (value === "private") return EyeOff;
@@ -43,7 +36,7 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
     ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
     : controller.memberAccessLabel === "Revoked"
       ? "Your membership access is revoked. Ask the front desk to restore it; the one-time card payment stays on record and does not need to be paid again."
-      : `Permanent ${controller.membershipCardPriceLabel} membership card. Buy once, then load weekly, monthly, or multi-month plans whenever you need them.`;
+      : `Permanent ${controller.membershipCardPriceLabel} membership card. Buy once to unlock member-only app access.`;
   const gamificationMessage = controller.memberAccessLabel === "Pending verification"
     ? "Your membership card is waiting for verification. Fitness progress, badges, and achievement history unlock as soon as the card becomes active."
     : `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
@@ -226,46 +219,6 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
             )}
           </>
         ) : null}
-        <FitCard
-          icon={CreditCard}
-          label="Loaded Plan"
-          subtitle={controller.membershipSubtitle}
-          trailingLabel={controller.membershipStatusLabel}
-          trailingLabelColor={
-            controller.membershipStatusLabel && controller.currentSubscription
-              ? controller.membershipStatusColors[controller.currentSubscription.status]
-              : undefined
-          }
-          noChevron
-        />
-        <FitCard
-          icon={CreditCard}
-          label="Payment History"
-          subtitle={controller.paymentHistorySubtitle}
-          trailingLabel={
-            controller.latestMembershipPayment
-              ? formatMembershipStatus(controller.latestMembershipPayment.status)
-              : controller.membershipCard && controller.membershipCard.status !== "none"
-                ? controller.membershipCard.status === "pending_verification"
-                  ? "Pending"
-                  : controller.membershipCard.status === "revoked"
-                    ? "Revoked"
-                    : "Completed"
-                : undefined
-          }
-          trailingLabelColor={
-            controller.latestMembershipPayment
-              ? controller.membershipStatusColors[controller.latestMembershipPayment.status]
-              : controller.membershipCard?.status === "revoked"
-                ? controller.memberAccessColor
-                : controller.membershipCard?.status === "pending_verification"
-                  ? controller.memberAccessColor
-                  : controller.membershipCard?.status === "active"
-                    ? controller.membershipStatusColors.completed
-                    : undefined
-          }
-          noChevron
-        />
       </FitSection>
     </>
   );

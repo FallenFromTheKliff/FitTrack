@@ -1,0 +1,11 @@
+# ninja log v5
+3	36	0	C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/x86/CMakeFiles/cmake.verify_globs	5a49cd0aa3166f32
+8	1364	8008667291713590	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/dispatch/WKTDispatchQueue.cpp.o	d582a6dc5ea253d7
+18	1384	8008667291833082	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/base/WKTRuntimeLifecycleMonitor.cpp.o	18a8400ce23ec8ae
+12	1893	8008667296918719	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/base/WKTJsiHostObject.cpp.o	41610b5bc336ac7e
+33	2096	8008667298978185	CMakeFiles/rnworklets.dir/cpp-adapter.cpp.o	2b30ca1fb0feb356
+28	2731	8008667305386887	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/wrappers/WKTJsiPromiseWrapper.cpp.o	244234417af84a68
+1	2746	8008667305486847	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/WKTJsiWorkletApi.cpp.o	747fca268ad21fd8
+23	3746	8008667315472405	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/wrappers/WKTJsiWrapper.cpp.o	d1a45ac8c0b08a45
+5	5844	8008667336428439	CMakeFiles/rnworklets.dir/C_/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/cpp/WKTJsiWorkletContext.cpp.o	9a86190c4b34ecfa
+5844	5955	8008667337608742	C:/FitTrack/node_modules/.pnpm/react-n_6ef590755a28ec4da8e4cd229da8594d/node_modules/react-native-worklets-core/android/build/intermediates/cxx/RelWithDebInfo/3jr1c2n4/obj/x86/librnworklets.so	7c328a8ab6c34984

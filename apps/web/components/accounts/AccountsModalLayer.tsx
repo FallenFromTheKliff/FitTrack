@@ -12,6 +12,7 @@ import { EDIT_MEMBER_FIELDS } from "@/data/members/members";
 import {
   formatReviewPayableLabel,
   getDirectoryAccessLabel,
+  getDirectoryRoleLabel,
   getEditDraftValues,
   getMembershipFieldValue,
   getScanReadinessLabel,
@@ -87,6 +88,10 @@ export default function AccountsModalLayer() {
     setScanOpen,
     verifyNonMemberTarget,
   } = useAccountsPage();
+  const isVerifyNonMemberTarget = verifyNonMemberTarget?.role?.name === "USER";
+  const verifyAccountRoleLabel = verifyNonMemberTarget
+    ? getDirectoryRoleLabel(verifyNonMemberTarget.role?.name).toLowerCase()
+    : "account";
 
   return (
     <>
@@ -101,11 +106,15 @@ export default function AccountsModalLayer() {
           }
           onClose={closeInspector}
           title="Account details"
+          subtitle={
+            editTarget
+              ? fullName(editTarget) || editTarget.email
+              : "Selected member profile"
+          }
+          icon={BadgeCheck}
           maxWidth={448}
           noScroll
-          hideHeaderText
-          hideHeaderDivider
-          headerStyle={{ paddingBottom: 0 }}
+          footer={<AccountInspectorFooter />}
         >
           <div
             className="members-account-details-modal"
@@ -114,7 +123,7 @@ export default function AccountsModalLayer() {
               minHeight: 0,
             }}
           >
-            <MemberInspectorPanel ariaLabel="Account details" footer={<AccountInspectorFooter />}>
+            <MemberInspectorPanel ariaLabel="Account details">
               <AccountInspectorBody />
             </MemberInspectorPanel>
           </div>
@@ -327,11 +336,17 @@ export default function AccountsModalLayer() {
       {verifyNonMemberTarget ? (
         <ConfirmModal
           isOpen={!!verifyNonMemberTarget}
-          title="Verify Non-Member"
-          message={`Promote ${
-            verifyNonMemberTarget?.email ?? "this account"
-          } from Pending Verification to Verified Non-Member? This verifies account access without granting membership-card access.`}
-          confirmLabel="VERIFY NON-MEMBER"
+          title={isVerifyNonMemberTarget ? "Verify Non-Member" : "Verify Team Member"}
+          message={
+            isVerifyNonMemberTarget
+              ? `Promote ${
+                  verifyNonMemberTarget?.email ?? "this account"
+                } from Not Verified to Non-member? This verifies account access without granting membership-card access.`
+              : `Verify ${
+                  verifyNonMemberTarget?.email ?? "this account"
+                } and activate this ${verifyAccountRoleLabel} account? This confirms account access for the selected role.`
+          }
+          confirmLabel={isVerifyNonMemberTarget ? "VERIFY NON-MEMBER" : "VERIFY TEAM MEMBER"}
           confirmIcon={BadgeCheck}
           isLoading={false}
           onConfirm={handleVerifyNonMember}

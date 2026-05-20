@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { HelpCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -20,30 +20,40 @@ export default function FloatingHelpButton({
   title,
 }: FloatingHelpButtonProps) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, settings } = useTheme();
   const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const canAnimate = settings.animationLevel !== "none";
 
   return (
     <>
       <button
         type="button"
-        aria-label={`Open help for ${title}`}
+        aria-controls={panelId}
+        aria-expanded={open}
+        aria-label={`${open ? "Close" : "Open"} help for ${title}`}
         onClick={() => setOpen((current) => !current)}
         style={{
           alignItems: "center",
           backgroundColor: colors.brand,
           border: "none",
-          borderRadius: "50%",
+          borderRadius: open ? 14 : 16,
           bottom: 24,
-          boxShadow: "0 16px 38px rgba(0,0,0,0.22)",
+          boxShadow: open
+            ? "0 12px 26px rgba(0,0,0,0.24)"
+            : "0 16px 38px rgba(0,0,0,0.22)",
           color: colors.onBrand,
           cursor: "pointer",
           display: "flex",
-          height: 52,
+          height: 56,
           justifyContent: "center",
           position: "fixed",
           right: 24,
-          width: 52,
+          transform: open ? "translateY(-2px) scale(0.96)" : "translateY(0) scale(1)",
+          transition: canAnimate
+            ? "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 180ms ease, box-shadow 180ms ease, background-color 180ms ease"
+            : undefined,
+          width: 56,
           zIndex: 60,
         }}
       >
@@ -51,6 +61,7 @@ export default function FloatingHelpButton({
       </button>
       {open ? (
         <aside
+          id={panelId}
           aria-label={`${title} help panel`}
           style={{
             backgroundColor: colors.surface,

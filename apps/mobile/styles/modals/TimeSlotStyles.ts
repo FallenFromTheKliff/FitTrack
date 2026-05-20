@@ -13,6 +13,7 @@ export function makeTimeSlotModalStyles() {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
+      height: "78%",
       maxHeight: "78%",
       borderRadius: R.xl,
       borderWidth: 1,
@@ -48,7 +49,7 @@ export function makeTimeSlotModalStyles() {
     legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
     legendDot: { width: 10, height: 10, borderRadius: 5 },
     legendText: { fontSize: 12 },
-    grid: { flexDirection: "row", flexWrap: "wrap", padding: 12, gap: 8 },
+    grid: { flexDirection: "row", flexWrap: "wrap", flexGrow: 1, padding: 12, paddingBottom: 24, gap: 8 },
     slotCard: {
       width: "31%",
       borderRadius: R.md,

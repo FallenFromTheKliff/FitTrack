@@ -114,6 +114,17 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
           maxWidth={400}
           closeAriaLabel="Close"
           noScroll
+          closeDisabled={verifying}
+          footer={
+            <FitButton
+                label={verified ? "Verified!" : verifying ? verifyLabel : "VERIFY CODE"}
+                variant="primary"
+                fullWidth
+                loading={verifying}
+                disabled={verifying || verified}
+                onClick={handleVerify}
+            />
+          }
       >
         <FitText as="p" style={s.otpInstruction}>
           {email
@@ -138,14 +149,6 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
               <FitText style={s.errorBannerText}>{errorText}</FitText>
             </div>
         )}
-        <FitButton
-            label={verified ? "Verified!" : verifying ? verifyLabel : "VERIFY CODE"}
-            variant="primary"
-            fullWidth
-            loading={verifying}
-            disabled={verifying || verified}
-            onClick={handleVerify}
-        />
         <div style={s.otpResendRow}>
           <FitText style={s.otpResendText}>Didn&apos;t receive it?</FitText>
           {resendSecs > 0 ? (

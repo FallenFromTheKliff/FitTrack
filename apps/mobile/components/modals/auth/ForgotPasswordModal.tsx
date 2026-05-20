@@ -159,7 +159,8 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     setSuccessText("");
     try {
       await forgotPasswordMutation.mutateAsync({
-        email: values.email.trim()
+        email: values.email.trim(),
+        portal: "member"
       });
       showMessage("Code sent. Check your email.");
       setStep("otp");
@@ -179,7 +180,8 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
     try {
       const verified = await verifyResetOtpMutation.mutateAsync({
         email: emailForm.getValues("email").trim(),
-        code: otpCode
+        code: otpCode,
+        portal: "member"
       });
       if (verified.verified === false) {
         setErrorText("Invalid OTP.");
@@ -238,7 +240,8 @@ export default function ForgotPasswordModal({ isVisible, onClose }: Props) {
       const data = await resetPasswordMutation.mutateAsync({
         email: emailForm.getValues("email").trim(),
         code,
-        new_password: values.newPassword
+        new_password: values.newPassword,
+        portal: "member"
       });
       setSuccessText(data.message || "Password reset successful.");
       setTimeout(() => {

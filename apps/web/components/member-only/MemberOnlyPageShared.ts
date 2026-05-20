@@ -20,7 +20,7 @@ export type MasteryTab = "leaderboard" | "milestones" | "muscles" | "summary";
 export type MuscleRankFilter = "adamantite" | "all" | "bronze" | "gold" | "platinum" | "silver";
 
 export const RANK_FILTERS: Array<{ label: string; value: MuscleRankFilter }> = [
-  { label: "All", value: "all" },
+  { label: "All Ranks", value: "all" },
   { label: "Bronze", value: "bronze" },
   { label: "Silver", value: "silver" },
   { label: "Gold", value: "gold" },

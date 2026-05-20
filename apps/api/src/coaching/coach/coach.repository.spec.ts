@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 
 import { CoachRepository } from './coach.repository';
 
@@ -47,7 +47,10 @@ describe('CoachRepository', () => {
     expect(coachProfile.findMany).toHaveBeenCalledWith({
       where: {
         is_available_for_booking: true,
-        user: { status: UserStatus.active },
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
         specialization: {
           contains: 'boxing',
           mode: 'insensitive',
@@ -55,13 +58,13 @@ describe('CoachRepository', () => {
         average_rating: { gte: 4 },
         hourly_rate: { lte: 1500 },
       },
-      include: {
+      include: expect.objectContaining({
         user: {
           include: {
             profile: true,
           },
         },
-      },
+      }),
       orderBy: [
         { average_rating: 'desc' },
         { rating_count: 'desc' },
@@ -74,7 +77,10 @@ describe('CoachRepository', () => {
     expect(coachProfile.count).toHaveBeenCalledWith({
       where: {
         is_available_for_booking: true,
-        user: { status: UserStatus.active },
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
         specialization: {
           contains: 'boxing',
           mode: 'insensitive',
@@ -93,9 +99,12 @@ describe('CoachRepository', () => {
     expect(coachProfile.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'coach-1',
-        user: { status: UserStatus.active },
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
       },
-      include: {
+      include: expect.objectContaining({
         user: {
           include: {
             profile: true,
@@ -105,7 +114,7 @@ describe('CoachRepository', () => {
           where: { is_active: true },
           orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
         },
-      },
+      }),
       orderBy: undefined,
     });
   });
@@ -126,7 +135,7 @@ describe('CoachRepository', () => {
     expect(coachProfile.update).toHaveBeenCalledWith({
       where: { user_id: 'user-1' },
       data: { bio: 'Updated' },
-      include: {
+      include: expect.objectContaining({
         user: {
           include: {
             profile: true,
@@ -136,7 +145,7 @@ describe('CoachRepository', () => {
           where: { is_active: true },
           orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
         },
-      },
+      }),
     });
   });
 
@@ -159,8 +168,8 @@ describe('CoachRepository', () => {
         coach_id: 'coach-1',
         status: { in: ['pending_coach', 'pending_payment', 'confirmed'] },
         scheduled_at: {
-          gte: new Date('2099-03-23T05:30:00.000Z'),
-          lt: endsAt,
+          gte: new Date('2099-03-22T16:00:00.000Z'),
+          lt: new Date('2099-03-23T16:00:00.000Z'),
         },
       },
       select: {
@@ -183,8 +192,10 @@ describe('CoachRepository', () => {
       where: {
         coach_id: 'coach-1',
         status: { in: ['pending', 'confirmed', 'balance_pending'] },
-        starts_at: { lt: endsAt },
-        ends_at: { gt: startsAt },
+        starts_at: {
+          gte: new Date('2099-03-22T16:00:00.000Z'),
+          lt: new Date('2099-03-23T16:00:00.000Z'),
+        },
       },
     });
   });

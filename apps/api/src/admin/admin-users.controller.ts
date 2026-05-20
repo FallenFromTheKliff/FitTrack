@@ -98,7 +98,7 @@ export class AdminUsersController {
   @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary:
-      'Promote a pending member account to verified non-member without granting membership-card access.',
+      'Manually verify a pending member or team account without granting membership-card access.',
   })
   verifyNonMember(
     @Param('id', ParseUUIDPipe) id: string,

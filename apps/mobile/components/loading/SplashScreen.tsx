@@ -11,9 +11,9 @@ import { R } from "@fittrack/ui/tokens";
 const ReanimatedText = createAnimatedComponent(Text);
 
 const APP_NAME = "FitTrack";
-const SPLASH_DURATION_MS = 800;
 const EXIT_FADE_MS = 200;
-const TYPEWRITER_DURATION_MS = SPLASH_DURATION_MS - EXIT_FADE_MS;
+const COMPLETED_WORD_HOLD_MS = 180;
+const TYPEWRITER_DURATION_MS = 520;
 const CHAR_INTERVAL = TYPEWRITER_DURATION_MS / APP_NAME.length;
 
 const s = StyleSheet.create({
@@ -108,11 +108,17 @@ export default function SplashScreen({ onDone, fontsReady }: Props) {
 
   useEffect(() => {
     if (!typingDone) return;
-    contentOpacity.value = withTiming(0, { duration: EXIT_FADE_MS });
-    const doneTimer = setTimeout(() => {
-      doneSignal.value = 1;
-    }, EXIT_FADE_MS);
-    return () => clearTimeout(doneTimer);
+    let doneTimer: ReturnType<typeof setTimeout> | null = null;
+    const fadeTimer = setTimeout(() => {
+      contentOpacity.value = withTiming(0, { duration: EXIT_FADE_MS });
+      doneTimer = setTimeout(() => {
+        doneSignal.value = 1;
+      }, EXIT_FADE_MS);
+    }, COMPLETED_WORD_HOLD_MS);
+    return () => {
+      clearTimeout(fadeTimer);
+      if (doneTimer) clearTimeout(doneTimer);
+    };
   }, [contentOpacity, doneSignal, typingDone]);
 
   return (

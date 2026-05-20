@@ -2,15 +2,13 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useFontClass } from "@/contexts/ThemeContext";
+import { shouldUseDefaultPublicAppearance } from "@/utils/publicAppearance";
 
 export default function RootLayoutClient() {
   const fontClass = useFontClass();
   const pathname = usePathname() ?? "/";
-  const isAuthRoute =
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/member-login") ||
-    pathname.startsWith("/locked") ||
-    pathname.startsWith("/payments/");
+  const isPublicDefaultAppearanceRoute =
+    shouldUseDefaultPublicAppearance(pathname);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -20,14 +18,14 @@ export default function RootLayoutClient() {
     if (fontClass) root.classList.add(fontClass);
 
     body.classList.remove("site-font-retro", "site-font-painter", "auth-route");
-    if (isAuthRoute) {
+    if (isPublicDefaultAppearanceRoute) {
       body.classList.add("auth-route");
       return;
     }
 
     if (fontClass === "font-retro") body.classList.add("site-font-retro");
     if (fontClass === "font-painter") body.classList.add("site-font-painter");
-  }, [fontClass, isAuthRoute]);
+  }, [fontClass, isPublicDefaultAppearanceRoute]);
 
   return null;
 }

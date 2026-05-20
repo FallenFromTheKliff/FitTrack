@@ -81,6 +81,31 @@ type PendingMembershipPayment = {
   status: string;
 };
 
+const MANUAL_VERIFICATION_ROLE_NAMES = new Set(["ADMIN", "STAFF", "USER", "COACH"]);
+
+function canManuallyVerifyAccountTarget(
+  member: MemberRecord | null,
+  options: {
+    canManageAccounts: boolean;
+    canManageAdminAccounts: boolean;
+    currentUserId?: string;
+    pendingRequestsByUserId: Map<string, DeletionRequest>;
+  },
+) {
+  if (!options.canManageAccounts || !member || member.id === options.currentUserId) return false;
+  if (!member.role?.name || !MANUAL_VERIFICATION_ROLE_NAMES.has(member.role.name)) return false;
+  if (member.role.name === "ADMIN" && !options.canManageAdminAccounts) return false;
+  if (member.status !== "pending") return false;
+  if (options.pendingRequestsByUserId.has(member.id)) return false;
+  return getDirectoryMemberStatus(member, options.pendingRequestsByUserId) !== "Archived";
+}
+
+function getManualVerificationFallbackMessage(member: MemberRecord | null) {
+  return member?.role?.name === "USER"
+    ? "Failed to promote this account to verified non-member."
+    : "Failed to verify this account.";
+}
+
 type AccountsPageContextValue = {
   activeChip: string;
   activeCoachActivityLevel: string;
@@ -549,13 +574,12 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       !isEditTargetArchived,
   );
   const canVerifyNonMemberTarget = Boolean(
-    canManageAccounts &&
-      editTarget &&
-      !isSelfEdit &&
-      editTarget.role?.name === "USER" &&
-      editTarget.status === "pending" &&
-      !editPendingRequest &&
-      !isEditTargetArchived,
+    canManuallyVerifyAccountTarget(editTarget, {
+      canManageAccounts,
+      canManageAdminAccounts: isAdmin,
+      currentUserId: user?.id,
+      pendingRequestsByUserId,
+    }),
   );
   const canTerminateEditTarget = Boolean(isAdmin && !isSelfEdit && editPendingRequest);
   const canRestoreEditTarget = Boolean(
@@ -642,10 +666,20 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     setAddLoading(false);
     if (result.success) {
       setContentMode("directory");
+      const roleLabel =
+        role === "admin"
+          ? "Admin"
+          : role === "staff"
+            ? "Staff"
+            : role === "coach"
+              ? "Coach"
+              : "Member";
+      const creationMessage =
+        "Account is not verified yet. The verification OTP sends when they sign in.";
       notify(
         "success",
-        `${role === "admin" ? "Admin" : role === "staff" ? "Staff" : "Member"} account created`,
-        "Verification OTP sent to the account email.",
+        `${roleLabel} account created`,
+        creationMessage,
       );
       return;
     }
@@ -821,7 +855,17 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
 
   const handleVerifyNonMember = async () => {
     const target = verifyNonMemberTarget ?? editTarget;
-    if (!target || target.role?.name !== "USER") return;
+    if (!target) return;
+    if (
+      !canManuallyVerifyAccountTarget(target, {
+        canManageAccounts,
+        canManageAdminAccounts: isAdmin,
+        currentUserId: user?.id,
+        pendingRequestsByUserId,
+      })
+    ) {
+      return;
+    }
 
     try {
       const result = await verifyNonMemberMutation.mutateAsync(target.id);
@@ -835,7 +879,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       notifyActionError(
         "Could not verify this account",
         error,
-        "Failed to promote this account to verified non-member.",
+        getManualVerificationFallbackMessage(target),
       );
     }
   };

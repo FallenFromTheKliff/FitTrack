@@ -76,7 +76,8 @@ export class StaffController {
 
   @Post('coaches')
   @ApiOperation({
-    summary: 'Create a standalone coach profile for Gym Operations.',
+    summary:
+      'Deprecated. Coach profiles are created through coach account creation.',
   })
   createCoach(@Body() dto: CreateStandaloneCoachDTO) {
     return this.coachService.createStandaloneCoach(dto);

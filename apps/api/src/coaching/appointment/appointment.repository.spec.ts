@@ -199,8 +199,8 @@ describe('AppointmentRepository', () => {
       where: {
         user_id: 'member-1',
         scheduled_at: {
-          gte: new Date('2099-04-01'),
-          lte: new Date('2099-04-30'),
+          gte: new Date('2099-03-31T16:00:00.000Z'),
+          lte: new Date('2099-04-30T15:59:59.999Z'),
         },
       },
       orderBy: { scheduled_at: 'desc' },

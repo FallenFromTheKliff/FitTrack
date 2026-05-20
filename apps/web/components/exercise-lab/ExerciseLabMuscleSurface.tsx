@@ -287,7 +287,7 @@ export function ExerciseLabMuscleSurface() {
                       actions={muscleTableActions}
                       onRowClick={resetMuscleDraft}
                       compact
-                      overflowX={false}
+                      overflowX
                       style={{ border: 0, borderRadius: 0 }}
                     />
                   </div>

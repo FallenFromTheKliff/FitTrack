@@ -37,6 +37,7 @@ type Props = {
   isLoading: boolean;
   colors: ThemeColors;
   allowDrag?: boolean;
+  flush?: boolean;
   height?: number;
   onBlockClick: (booking: Booking) => void;
 };
@@ -240,6 +241,7 @@ export default function WeeklyTimeline({
   isLoading,
   colors,
   allowDrag = true,
+  flush = false,
   height,
   onBlockClick,
 }: Props) {
@@ -259,8 +261,8 @@ export default function WeeklyTimeline({
       <div
         style={{
           backgroundColor: colors.surface,
-          border: `1px solid ${colors.border}`,
-          borderRadius: 8,
+          border: flush ? "none" : `1px solid ${colors.border}`,
+          borderRadius: flush ? 0 : 8,
           overflow: "hidden",
           height: height ?? undefined,
         }}

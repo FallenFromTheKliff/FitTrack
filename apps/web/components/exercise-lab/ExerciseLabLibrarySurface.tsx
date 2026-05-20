@@ -157,7 +157,7 @@ export function ExerciseLabLibrarySurface() {
                     emptyMessage="No global exercises match the current filters yet."
                     actions={libraryTableActions}
                     compact
-                    overflowX={false}
+                    overflowX
                     style={{ borderRadius: 0, border: 0 }}
                   />
                 </div>

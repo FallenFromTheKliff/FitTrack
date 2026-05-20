@@ -969,7 +969,12 @@ export default function BookingsScreen() {
         </Animated.View>
       </Animated.ScrollView>
       <BookingDetailModal
-        isVisible={!!detailBooking}
+        isVisible={
+          !!detailBooking &&
+          reviewTarget == null &&
+          pendingAppointmentPayment == null &&
+          pendingCancellation == null
+        }
         booking={detailBooking}
         venue={detailVenue}
         onClose={() => setDetailBooking(null)}

@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
-import { X } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
 import FitButton from "@/components/fit/FitButton";
@@ -24,8 +24,7 @@ type Props = {
   noScroll?: boolean;
   hideHeaderDivider?: boolean;
   hideFooterDivider?: boolean;
-  hideHeaderText?: boolean;
-  hideCloseButton?: boolean;
+  closeDisabled?: boolean;
   headerStyle?: CSSProperties;
   footerStyle?: CSSProperties;
   overlayStyle?: CSSProperties;
@@ -50,8 +49,7 @@ export default function FitModal({
   noScroll,
   hideHeaderDivider = false,
   hideFooterDivider = false,
-  hideHeaderText = false,
-  hideCloseButton = false,
+  closeDisabled = false,
   headerStyle,
   footerStyle,
   overlayStyle,
@@ -69,7 +67,7 @@ export default function FitModal({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const subtitleId = useId();
-  const Icon = icon;
+  const Icon = icon ?? Info;
   const isSlideRight = motionPreset === "slide-right";
 
   useEffect(() => {
@@ -121,6 +119,7 @@ export default function FitModal({
     });
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (closeDisabled) return;
       const dialogs = Array.from(
         document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
       );
@@ -136,9 +135,14 @@ export default function FitModal({
       document.body.style.overflow = previousOverflow;
       previousFocusRef.current?.focus({ preventScroll: true });
     };
-  }, [isOpen, portalRoot]);
+  }, [isOpen, portalRoot, closeDisabled]);
 
   if ((!isOpen && !visible) || !portalRoot) return null;
+
+  const handleRequestClose = () => {
+    if (closeDisabled) return;
+    onClose();
+  };
 
   return createPortal(
     <>
@@ -162,9 +166,49 @@ export default function FitModal({
               transform: scale(1) !important;
             }
           }
+
+          @media (max-width: 640px) {
+            [data-fit-modal-overlay="true"] {
+              align-items: center !important;
+              padding: 12px !important;
+            }
+
+            [data-fit-modal-container="true"] {
+              border-radius: 12px !important;
+              max-height: calc(100dvh - 24px) !important;
+              width: min(100%, calc(100vw - 24px)) !important;
+            }
+
+            [data-fit-modal-header="true"],
+            [data-fit-modal-content="true"],
+            [data-fit-modal-footer="true"] {
+              padding-left: 14px !important;
+              padding-right: 14px !important;
+            }
+
+            [data-fit-modal-header="true"] {
+              gap: 10px !important;
+              padding-top: 14px !important;
+              padding-bottom: 12px !important;
+            }
+
+            [data-fit-modal-content="true"] {
+              max-height: calc(100dvh - 184px) !important;
+              padding-top: 14px !important;
+              padding-bottom: 14px !important;
+            }
+
+            [data-fit-modal-footer="true"] {
+              flex-wrap: wrap !important;
+              justify-content: stretch !important;
+              padding-top: 12px !important;
+              padding-bottom: 12px !important;
+            }
+          }
         `}
       </style>
       <div
+        data-fit-modal-overlay="true"
         style={{
           ...s.overlay,
           opacity: visible ? 1 : 0,
@@ -172,15 +216,14 @@ export default function FitModal({
           transition: "opacity 180ms ease",
           ...overlayStyle
         }}
-        onClick={onClose}
+        onClick={handleRequestClose}
       >
         <div
           ref={modalRef}
           role="dialog"
           aria-modal="true"
-          aria-labelledby={hideHeaderText ? undefined : titleId}
-          aria-describedby={subtitle && !hideHeaderText ? subtitleId : undefined}
-          aria-label={hideHeaderText ? title : undefined}
+          aria-labelledby={titleId}
+          aria-describedby={subtitle ? subtitleId : undefined}
           tabIndex={-1}
           style={{
             ...s.container,
@@ -204,6 +247,7 @@ export default function FitModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div
+            data-fit-modal-header="true"
             style={{
               ...s.header,
               ...(hideHeaderDivider ? { borderBottom: "none" } : {}),
@@ -211,33 +255,29 @@ export default function FitModal({
             }}
           >
             <div style={s.headerLeft}>
-              {(iconNode || icon) && (
-                <div style={s.headerIconWrap}>
-                  {iconNode ?? (Icon ? <Icon size={15} color={onBrandTextColor} strokeWidth={2} /> : null)}
-                </div>
-              )}
-              {!hideHeaderText && (
-                <div style={s.headerText}>
-                  <FitText id={titleId} style={{ ...s.title, ...titleStyle }}>{title}</FitText>
-                  {subtitle ? (
-                    <FitText id={subtitleId} as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
-                  ) : null}
-                </div>
-              )}
+              <div style={s.headerIconWrap}>
+                {iconNode ?? <Icon size={15} color={onBrandTextColor} strokeWidth={2} />}
+              </div>
+              <div style={s.headerText}>
+                <FitText id={titleId} style={{ ...s.title, ...titleStyle }}>{title}</FitText>
+                {subtitle ? (
+                  <FitText id={subtitleId} as="p" style={{ ...s.subtitle, ...subtitleStyle }}>{subtitle}</FitText>
+                ) : null}
+              </div>
             </div>
-            {!hideCloseButton ? (
-              <FitButton
-                variant="ghost"
-                iconOnly
-                icon={X}
-                iconSize={20}
-                onClick={onClose}
-                style={s.closeBtn}
-                aria-label={closeAriaLabel ?? "Close modal"}
-              />
-            ) : null}
+            <FitButton
+              variant="ghost"
+              iconOnly
+              icon={X}
+              iconSize={20}
+              onClick={handleRequestClose}
+              disabled={closeDisabled}
+              style={s.closeBtn}
+              aria-label={closeAriaLabel ?? "Close modal"}
+            />
           </div>
           <div
+            data-fit-modal-content="true"
             style={
               noScroll
                 ? { ...s.content, ...contentStyle }
@@ -253,6 +293,7 @@ export default function FitModal({
           </div>
           {footer && (
             <div
+              data-fit-modal-footer="true"
               style={{
                 ...s.footer,
                 ...(hideFooterDivider ? { borderTop: "none" } : {}),

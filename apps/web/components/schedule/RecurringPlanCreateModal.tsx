@@ -88,6 +88,7 @@ export function RecurringPlanCreateModal({
       onClose={() => {
         if (!isBusy) onClose();
       }}
+      closeDisabled={isBusy}
       title="Recurring coaching plan"
       subtitle="Preview generated coaching sessions before saving."
       maxWidth={920}
@@ -99,23 +100,61 @@ export function RecurringPlanCreateModal({
         borderRadius: 8,
       }}
       contentStyle={{
+        display: "grid",
+        gap: 14,
         maxHeight: "calc(100vh - 180px)",
         overflowY: "auto",
         padding: 20,
       }}
+      footer={
+        <>
+          <FitButton
+            variant="ghost"
+            label={isBusy ? "PREVIEWING..." : "PREVIEW SCHEDULE"}
+            onClick={onPreview}
+            disabled={isBusy || inputInvalid}
+            style={{
+              minHeight: 38,
+              borderRadius: 10,
+              padding: "8px 14px",
+            }}
+            textStyle={{ fontSize: 11, fontWeight: 800 }}
+          />
+          {preview?.conflictCount ? (
+            <FitButton
+              variant="ghost"
+              label="CONFIRM + SKIP CONFLICTS"
+              onClick={() => onConfirm(true)}
+              disabled={isBusy}
+              style={{
+                minHeight: 38,
+                borderRadius: 10,
+                padding: "8px 14px",
+              }}
+              textStyle={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: colors.warning,
+              }}
+            />
+          ) : null}
+          <FitButton
+            variant="primary"
+            label={isCreatePending ? "CREATING..." : "CONFIRM PLAN"}
+            onClick={() => onConfirm(false)}
+            disabled={isBusy || !preview || preview.conflictCount > 0}
+            style={{
+              minHeight: 38,
+              borderRadius: 8,
+              padding: "8px 14px",
+              backgroundColor: colors.brand,
+              color: colors.onBrand,
+            }}
+            textStyle={{ fontSize: 11, fontWeight: 800 }}
+          />
+        </>
+      }
     >
-      <div
-        style={{
-          width: "100%",
-          overflow: "visible",
-          borderRadius: 0,
-          border: "none",
-          backgroundColor: "transparent",
-          padding: 0,
-          display: "grid",
-          gap: 14,
-        }}
-      >
         <div
           style={{
             display: "grid",
@@ -365,60 +404,6 @@ export function RecurringPlanCreateModal({
           ) : null}
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label={isBusy ? "PREVIEWING..." : "PREVIEW SCHEDULE"}
-            onClick={onPreview}
-            disabled={isBusy || inputInvalid}
-            style={{
-              minHeight: 38,
-              borderRadius: 16,
-              padding: "8px 14px",
-            }}
-            textStyle={{ fontSize: 11, fontWeight: 800 }}
-          />
-          {preview?.conflictCount ? (
-            <FitButton
-              variant="ghost"
-              label="CONFIRM + SKIP CONFLICTS"
-              onClick={() => onConfirm(true)}
-              disabled={isBusy}
-              style={{
-                minHeight: 38,
-                borderRadius: 16,
-                padding: "8px 14px",
-              }}
-              textStyle={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: colors.warning,
-              }}
-            />
-          ) : null}
-          <FitButton
-            variant="primary"
-            label={isCreatePending ? "CREATING..." : "CONFIRM PLAN"}
-            onClick={() => onConfirm(false)}
-            disabled={isBusy || !preview || preview.conflictCount > 0}
-            style={{
-              minHeight: 38,
-              borderRadius: 8,
-              padding: "8px 14px",
-              backgroundColor: colors.brand,
-              color: colors.onBrand,
-            }}
-            textStyle={{ fontSize: 11, fontWeight: 800 }}
-          />
-        </div>
-      </div>
     </FitModal>
   );
 }

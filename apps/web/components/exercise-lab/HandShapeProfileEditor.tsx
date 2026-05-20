@@ -10,6 +10,7 @@ import type { ExerciseHandPosePreset } from "@fittrack/types";
 import type { ExerciseHandShapeProfileRecord } from "@fittrack/api-client";
 import { normalizeExerciseHandShapeProfile } from "@fittrack/utils";
 
+import { FitSelect } from "@/components/fit";
 import {
   FieldShell,
   HAND_LANDMARK_LABELS,
@@ -574,18 +575,17 @@ export function HandShapeProfileEditor({
             </span>
           </div>
           <FieldShell colors={colors} label="Selected hand node">
-            <select
+            <FitSelect
+              compact
+              fullWidth
               name="exercise-hand-selected-node"
               onChange={(event) => setSelectedPoint(Number(event.target.value))}
-              style={inputStyle(colors)}
+              options={handPoints.map((_, index) => ({
+                label: `${index}: ${HAND_LANDMARK_LABELS[index] ?? "hand landmark"}`,
+                value: String(index),
+              }))}
               value={selectedPoint}
-            >
-              {handPoints.map((_, index) => (
-                <option key={index} value={index}>
-                  {index}: {HAND_LANDMARK_LABELS[index] ?? "hand landmark"}
-                </option>
-              ))}
-            </select>
+            />
           </FieldShell>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
             <FieldShell colors={colors} label="X">

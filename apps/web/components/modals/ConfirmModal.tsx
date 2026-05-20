@@ -54,7 +54,7 @@ export default function ConfirmModal({
       titleStyle={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}
       hideHeaderDivider
       hideFooterDivider
-      hideCloseButton={isLoading}
+      closeDisabled={isLoading}
       headerStyle={{ alignItems: "flex-start", paddingBottom: 8 }}
       footer={isLoading ? undefined : (
         <FitButton

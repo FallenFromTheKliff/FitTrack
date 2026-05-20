@@ -83,7 +83,8 @@ export function makeHomeStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
       padding: 14,
-      justifyContent: "space-between"
+      alignItems: "center",
+      justifyContent: "center"
     },
     statCardLabel: { fontSize: 12, color: colors.textMuted, fontWeight: "500", letterSpacing: 0.3 },
     statCardValue: { fontSize: 28, fontWeight: "700", color: colors.textPrimary, marginTop: 4 },
@@ -92,7 +93,8 @@ export function makeHomeStyles(colors: ThemeColors) {
     sectionViewAll: { alignItems: "flex-end", marginTop: 4 },
     quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     quickCard: {
-      width: "47.5%",
+      flexBasis: "47.5%",
+      flexGrow: 1,
       backgroundColor: colors.surface,
       borderRadius: R.xl,
       borderWidth: 1,
@@ -109,6 +111,16 @@ export function makeHomeStyles(colors: ThemeColors) {
     },
     quickLabel: { fontSize: 15, fontWeight: "600", color: colors.textPrimary },
     quickSub: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+    scheduleOverflowNote: {
+      paddingVertical: 12,
+      paddingHorizontal: 16
+    },
+    scheduleOverflowText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 17,
+      textAlign: "center"
+    },
     goalRow: { paddingVertical: 12, paddingHorizontal: 16, gap: 6 },
     goalRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
     goalLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -211,14 +223,6 @@ export function makeBookingsScreenStyles(colors: ThemeColors) {
 
 export function makeGymMapStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      marginBottom: 16
-    },
-    sectionTitle: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },
-    sectionSubtitle: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
     refreshBtn: { width: 40, height: 40, paddingHorizontal: 0 },
     floorToggleWrap: {
       gap: 10,
@@ -228,6 +232,11 @@ export function makeGymMapStyles(colors: ThemeColors) {
       borderColor: colors.border,
       backgroundColor: colors.surfaceRaised,
       marginBottom: 16
+    },
+    floorToggleHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between"
     },
     floorToggleLabel: {
       fontSize: 11,
@@ -504,7 +513,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     gridLine: { position: "absolute" as const, backgroundColor: colors.border },
     initButtonWrap: {
       position: "absolute" as const,
-      top: "50%" as any,
+      top: "50%" as const,
       left: 0,
       right: 0,
       alignItems: "center",
@@ -947,7 +956,7 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
       padding: 10,
-      maxWidth: "84%" as any,
+      maxWidth: "84%" as const,
       flexShrink: 1
     },
     aiBubbleText: {
@@ -960,7 +969,7 @@ export function makeBrodigyStyles(colors: ThemeColors) {
       borderRadius: 12,
       borderTopRightRadius: 4,
       padding: 10,
-      maxWidth: "84%" as any,
+      maxWidth: "84%" as const,
       alignSelf: "flex-end" as const
     },
     userBubbleText: {

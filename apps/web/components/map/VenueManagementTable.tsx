@@ -79,8 +79,11 @@ export function VenueManagementTable<TVenue extends VenueRecord = VenueRecord>({
         display: "grid",
         gridTemplateRows: "auto minmax(0, 1fr) auto",
         height: embedded ? "100%" : undefined,
+        maxWidth: "100%",
         minHeight: 0,
-        overflow: "hidden",
+        overflowX: "auto",
+        overflowY: "hidden",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
@@ -88,6 +91,7 @@ export function VenueManagementTable<TVenue extends VenueRecord = VenueRecord>({
           backgroundColor: colors.surfaceRaised,
           display: "grid",
           gridTemplateColumns: COLS,
+          minWidth: 640,
         }}
       >
         {["NAME", "CAPACITY", "ZONE", "STATUS", "ACTION"].map((heading) => (
@@ -128,6 +132,7 @@ export function VenueManagementTable<TVenue extends VenueRecord = VenueRecord>({
                 cursor: onSelectVenue ? "pointer" : "default",
                 display: "grid",
                 gridTemplateColumns: COLS,
+                minWidth: 640,
                 position: "relative",
                 transition: "background-color 140ms ease, box-shadow 140ms ease",
                 zIndex: isSelected ? 1 : undefined,

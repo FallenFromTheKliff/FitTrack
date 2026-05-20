@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, Dumbbell, Target } from "lucide-react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ import { makeGoalsModalStyles } from "@/styles/modals/GoalsStyles";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 type NutritionFieldErrors = Partial<Record<keyof NutritionGoalSetupData, string[]>>;
 type GenderValue = "male" | "female" | "other";
@@ -234,7 +235,7 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
   };
 
   return (
-    <Modal visible={isVisible} transparent animationType="none" statusBarTranslucent onRequestClose={undefined}>
+    <Modal visible={isVisible} transparent animationType="none" statusBarTranslucent onRequestClose={resetAndClose}>
       <Animated.View style={[s.backdrop, backdropStyle]}>
         <Animated.View style={[s.card, cardStyle]}>
           <Animated.View style={[s.header, headerBorderStyle]}>
@@ -246,11 +247,11 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               <FitText style={s.headerSubtitle}>Save your profile metrics and recalculate live macros</FitText>
             </View>
           </Animated.View>
-          <ScrollView
+          <FitModalScrollView
             style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={s.body}
+            resetKey={isVisible}
           >
             <View style={s.sectionGap}>
               <FitText style={s.sectionLabel}>DATE OF BIRTH</FitText>
@@ -394,7 +395,7 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
                 <FitText style={[s.fieldNote, { color: colors.danger }]}>{submitError}</FitText>
               ) : null}
             </View>
-          </ScrollView>
+          </FitModalScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton label="Cancel" variant="ghost" onPress={resetAndClose} flex={1} />
             <FitButton

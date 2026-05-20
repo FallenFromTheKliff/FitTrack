@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
+import { Modal, Platform, Pressable, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, Camera, Dumbbell, User } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -33,6 +33,7 @@ import { useLoadingText } from "@fittrack/hooks";
 import { makeEditProfileModalStyles } from "@/styles/modals/EditProfileStyles";
 
 import CalendarModal from "@/components/modals/shared/CalendarModal";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import { FitAvatarImage, FitButton, FitInputField, FitText, FitTextInput } from "@/components/fit";
 
 type Props = {
@@ -95,6 +96,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
+  const { height: windowHeight } = useWindowDimensions();
   const s = useMemo(() => makeEditProfileModalStyles(colors), [colors]);
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
@@ -145,6 +147,10 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const statusValue = (user?.status ?? "active").toLowerCase();
   const statusLabel = statusValue === "frozen" ? "Frozen" : statusValue === "expired" ? "Expired" : "Active";
   const statusColor = statusValue === "frozen" ? colors.warning : statusValue === "expired" ? colors.danger : colors.success;
+  const modalCardHeight = Math.max(
+    280,
+    Math.min(windowHeight - 32, windowHeight * 0.88)
+  );
 
   useEffect(() => {
     const isOpening = isVisible && !wasVisibleRef.current;
@@ -374,10 +380,10 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={undefined}
+      onRequestClose={handleClose}
     >
       <Animated.View style={[s.backdrop, { backgroundColor: colors.overlay }]}>
-        <Animated.View style={[s.card, cardStyle]}>
+        <Animated.View style={[s.card, { height: modalCardHeight }, cardStyle]}>
           <View style={s.header}>
             <View style={s.tabPill}>
               <Pressable style={[s.tabBtn, activeTab === "personal" && s.tabBtnActive]} onPress={() => setActiveTab("personal")}>
@@ -390,11 +396,14 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
               </Pressable>
             </View>
           </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
+          <FitModalScrollView
+            style={s.scrollHost}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
             contentContainerStyle={s.body}
+            resetKey={`${isVisible}-${activeTab}`}
           >
             {activeTab === "personal" ? (
               <>
@@ -630,7 +639,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 </View>
               </>
             )}
-          </ScrollView>
+          </FitModalScrollView>
           <View style={s.footer}>
             <FitButton
               label="Cancel"

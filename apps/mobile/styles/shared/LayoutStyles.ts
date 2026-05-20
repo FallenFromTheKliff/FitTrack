@@ -16,7 +16,38 @@ export function makeHeaderStyles(colors: ThemeColors) {
       backgroundColor: colors.surface,
       gap: 14
     },
-    menuButton: { padding: 4 }
+    menuButton: {
+      padding: 4,
+      position: "relative" as const
+    },
+    headerActions: {
+      alignItems: "center",
+      flexDirection: "row"
+    },
+    headerActionButton: {
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    notificationBadge: {
+      alignItems: "center",
+      backgroundColor: colors.danger,
+      borderColor: colors.surface,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      height: 19,
+      justifyContent: "center",
+      minWidth: 19,
+      paddingHorizontal: 4,
+      position: "absolute" as const,
+      right: -7,
+      top: -7,
+      zIndex: 2
+    },
+    notificationBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "800"
+    }
   });
 }
 

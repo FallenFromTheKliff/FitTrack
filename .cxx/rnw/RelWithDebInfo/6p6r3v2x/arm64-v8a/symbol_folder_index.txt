@@ -1,0 +1,1 @@
+C:\FitTrack\node_modules\.pnpm\react-n_640e7c95d80a533f1602ed4625ef3b4b\node_modules\react-native-worklets\android\build\intermediates\cxx\RelWithDebInfo\6p6r3v2x\obj\arm64-v8a

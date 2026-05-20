@@ -25,6 +25,7 @@ import {
 import { AuthRepository } from './auth.repository';
 import { GoogleProfile } from './strategies/google.strategy';
 import {
+  InternalLoginResponse,
   InternalTokenPairResponse,
   JwtPayload,
 } from './types/jwt-payload.type';
@@ -63,6 +64,14 @@ type AuthenticatedUser = Awaited<
 >;
 
 type LoginPortal = NonNullable<LoginDTO['portal']>;
+
+function buildAccountDisplayName(firstName?: string, lastName?: string) {
+  return [firstName, lastName]
+    .map((part) => part?.trim() ?? '')
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
 
 @Injectable()
 export class AuthService {
@@ -146,7 +155,7 @@ export class AuthService {
     dto: LoginDTO,
     deviceInfo: string,
     ip: string,
-  ): Promise<InternalTokenPairResponse> {
+  ): Promise<InternalLoginResponse> {
     const normalizedEmail = this.normalizeLoginEmail(dto.email);
 
     try {
@@ -176,6 +185,22 @@ export class AuthService {
       }
 
       await this.clearLoginLockState(normalizedEmail);
+      if (this.requiresEmailVerification(user)) {
+        await this.otpService.issueOtp(
+          user.id,
+          OtpPurpose.registration,
+          OtpChannel.email,
+          normalizedEmail,
+        );
+
+        return {
+          otpRequired: true,
+          user_id: user.id,
+          email: normalizedEmail,
+          role: user.role,
+        };
+      }
+
       return this.issueTokenPair(user, deviceInfo, ip);
     } catch (error) {
       return this.handleLoginFailure(normalizedEmail, error);
@@ -342,6 +367,8 @@ export class AuthService {
     const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) return;
 
+    await this.assertPasswordResetPortalAllowed(identity, dto.portal);
+
     await this.otpService.issueOtp(
       identity.user_id,
       OtpPurpose.password_reset,
@@ -376,6 +403,9 @@ export class AuthService {
     const email = this.normalizeLoginEmail(dto.email);
     const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) {
+      if (dto.portal) {
+        this.throwInvalidPortalCredentials();
+      }
       throw new NotFoundException({
         type: 'NOT_FOUND',
         title: 'Not Found',
@@ -383,6 +413,8 @@ export class AuthService {
         detail: 'No account found with this email.',
       });
     }
+
+    await this.assertPasswordResetPortalAllowed(identity, dto.portal);
 
     await this.otpService.assertOtpValid(
       identity.user_id,
@@ -397,6 +429,9 @@ export class AuthService {
     const email = this.normalizeLoginEmail(dto.email);
     const identity = await this.repo.findIdentity(AuthProvider.email, email);
     if (!identity) {
+      if (dto.portal) {
+        this.throwInvalidPortalCredentials();
+      }
       throw new NotFoundException({
         type: 'NOT_FOUND',
         title: 'Not Found',
@@ -404,6 +439,7 @@ export class AuthService {
         detail: 'No account found with this email.',
       });
     }
+    await this.assertPasswordResetPortalAllowed(identity, dto.portal);
     const credentialHash = identity.credential_hash;
     if (!credentialHash) {
       throw new UnauthorizedException({
@@ -572,16 +608,16 @@ export class AuthService {
       phone: dto.phone,
     });
 
-    if (dto.role === 'coach') {
-      await this.repo.createCoachProfile(user.id);
-    }
-
-    await this.otpService.issueOtp(
-      user.id,
-      OtpPurpose.registration,
-      OtpChannel.email,
-      email,
+    const accountDisplayName = buildAccountDisplayName(
+      dto.first_name,
+      dto.last_name,
     );
+
+    if (dto.role === 'coach') {
+      await this.repo.createCoachProfile(user.id, {
+        displayName: accountDisplayName,
+      });
+    }
 
     this.emitAudit({
       userId: actorId,
@@ -597,10 +633,7 @@ export class AuthService {
       actorId,
       occurredAt: new Date().toISOString(),
       targetEmail: email,
-      targetName: [dto.first_name, dto.last_name]
-        .map((part) => part?.trim() ?? '')
-        .filter(Boolean)
-        .join(' '),
+      targetName: accountDisplayName,
       targetRole: dto.role,
       targetUserId: user.id,
     });
@@ -805,6 +838,33 @@ export class AuthService {
     }
 
     return role === UserRole.member;
+  }
+
+  private requiresEmailVerification(user: AuthenticatedUser): boolean {
+    return user.status === UserStatus.pending || !user.email_verified_at;
+  }
+
+  private async assertPasswordResetPortalAllowed(
+    identity: { user_id: string },
+    portal: LoginPortal | undefined,
+  ): Promise<void> {
+    if (!portal) {
+      return;
+    }
+
+    const user = await this.repo.findUserWithProfile(identity.user_id);
+    if (!user || !this.isLoginPortalAllowed(portal, user.role)) {
+      this.throwInvalidPortalCredentials();
+    }
+  }
+
+  private throwInvalidPortalCredentials(): never {
+    throw new UnauthorizedException({
+      type: 'INVALID_CREDENTIALS',
+      title: 'Invalid Credentials',
+      status: 401,
+      detail: 'Invalid credentials.',
+    });
   }
 
   private async throwInvalidCredentials(email: string): Promise<never> {

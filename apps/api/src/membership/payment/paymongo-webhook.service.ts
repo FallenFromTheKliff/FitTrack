@@ -24,7 +24,12 @@ export interface PaymongoWebhookEvent {
         id: string;
         type: string;
         attributes: {
+          amount?: number;
           checkout_url?: string | null;
+          currency?: string;
+          external_reference_number?: string | null;
+          failed_message?: string | null;
+          failure_code?: string | null;
           metadata?: Record<string, unknown> | null;
           paid_at?: number | null;
           payment_method_used?: string | null;
@@ -40,6 +45,7 @@ export interface PaymongoWebhookEvent {
             };
           }>;
           reference_number?: string | null;
+          reason?: string | null;
           status?: string | null;
         };
       };
@@ -50,6 +56,7 @@ export interface PaymongoWebhookEvent {
 
 export const PAYMONGO_CHECKOUT_SESSION_PAID_EVENT =
   'checkout_session.payment.paid';
+export const PAYMONGO_PAYMENT_FAILED_EVENT = 'payment.failed';
 
 @Injectable()
 export class PaymongoWebhookService {

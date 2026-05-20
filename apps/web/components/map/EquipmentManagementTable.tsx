@@ -64,8 +64,11 @@ export function EquipmentManagementTable({
         display: "grid",
         gridTemplateRows: "auto minmax(0, 1fr) auto",
         height: embedded ? "100%" : undefined,
+        maxWidth: "100%",
         minHeight: 0,
-        overflow: "hidden",
+        overflowX: "auto",
+        overflowY: "hidden",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
@@ -73,6 +76,7 @@ export function EquipmentManagementTable({
           backgroundColor: colors.surfaceRaised,
           display: "grid",
           gridTemplateColumns: COLS,
+          minWidth: 760,
         }}
       >
         {["NAME", "CATEGORY", "SOURCE", "AVAILABLE", "STATUS", "ACTION"].map(
@@ -129,6 +133,7 @@ export function EquipmentManagementTable({
                 cursor: onSelectEquipment ? "pointer" : "default",
                 display: "grid",
                 gridTemplateColumns: COLS,
+                minWidth: 760,
                 position: "relative",
                 transition: "background-color 140ms ease, box-shadow 140ms ease",
                 zIndex: selectedEquipmentId === item.id ? 1 : undefined,

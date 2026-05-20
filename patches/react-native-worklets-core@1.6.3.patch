@@ -1,0 +1,33 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -1,6 +1,10 @@
+ project("rnworklets")
+ cmake_minimum_required(VERSION 3.8)
+ 
++# Windows + pnpm can produce extremely long object paths under node_modules/.pnpm.
++# Force CMake to hash object filenames earlier so native builds stay under path limits.
++set(CMAKE_OBJECT_PATH_MAX 128)
++
+ set(CMAKE_VERBOSE_MAKEFILE ON)
+ set(CMAKE_CXX_STANDARD 17)
+ 
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -63,6 +63,7 @@ task prepareHeaders(type: Copy) {
+ task deleteCmakeCache() {
+   doFirst {
+     delete "${projectDir}/.cxx"
++    delete new File(rootDir.getParentFile().getParentFile().getParentFile(), ".cxx/rnwc")
+   }
+ }
+ 
+@@ -99,6 +100,7 @@ android {
+   externalNativeBuild {
+     cmake {
+       path "CMakeLists.txt"
++      buildStagingDirectory new File(rootDir.getParentFile().getParentFile().getParentFile(), ".cxx/rnwc")
+     }
+   }
+ 

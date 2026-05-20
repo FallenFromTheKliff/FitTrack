@@ -77,7 +77,10 @@ export type CoachAvailabilityResponse = {
 };
 
 export type CoachAppointmentScheduleRecord = {
-  activePaymentStage?: null;
+  activePaymentId?: string | null;
+  activePaymentProvider?: "cash" | "paymongo" | null;
+  activePaymentStage?: "balance" | "downpayment" | "full" | null;
+  activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   amountDueNow?: null;
   assessmentReport?: string | null;
   balancePaidAt?: string | null;
@@ -90,7 +93,11 @@ export type CoachAppointmentScheduleRecord = {
   };
   coachEarnings?: number | null;
   coachFeedback?: string | null;
+  coachPayoutPaidAt?: string | null;
   coachId?: string;
+  noShowAt?: string | null;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
   completedAt?: string | null;
   createdAt: string;
   downpaymentPaidAt?: string | null;
@@ -180,6 +187,10 @@ export type CoachListFilters = {
 };
 
 type CoachScheduleApiRecord = {
+  active_payment_id?: string | null;
+  active_payment_provider?: "cash" | "paymongo" | null;
+  active_payment_stage?: "balance" | "downpayment" | "full" | null;
+  active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach_earnings?: number | string | null;
@@ -193,6 +204,10 @@ type CoachScheduleApiRecord = {
   id: string;
   assessment_report?: string | null;
   coach_feedback?: string | null;
+  coach_payout_paid_at?: string | null;
+  no_show_at?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
   member_notes?: string | null;
   recurring_plan_id?: string | null;
   recurring_state?: string | null;
@@ -285,10 +300,19 @@ function mapUserProfile(profile?: CoachUserProfileApiRecord | null) {
   };
 }
 
+function getProfileDisplayName(profile: ReturnType<typeof mapUserProfile>) {
+  return [profile?.firstName, profile?.lastName]
+    .map((part) => part?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
 function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
   const profile = mapUserProfile(
     record.user?.profile ?? record.profile ?? null,
   );
+  const profileDisplayName = getProfileDisplayName(profile);
 
   return {
     averageRating: toNullableNumber(record.average_rating),
@@ -306,7 +330,9 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
       ? null
       : (record.contact_email ?? null),
     contactPhone: record.contact_phone ?? null,
-    displayName: normalizeCoachDisplayName(record.display_name),
+    displayName:
+      normalizeCoachDisplayName(record.display_name) ??
+      normalizeCoachDisplayName(profileDisplayName),
     hourlyRate: toNullableNumber(record.hourly_rate),
     id: record.id,
     isActive: record.is_available_for_booking ?? true,
@@ -359,7 +385,10 @@ function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
   const remainingBalance = toNullableNumber(record.balance_amount);
 
   return {
-    activePaymentStage: null,
+    activePaymentId: record.active_payment_id ?? null,
+    activePaymentProvider: record.active_payment_provider ?? null,
+    activePaymentStage: record.active_payment_stage ?? null,
+    activePaymentStatus: record.active_payment_status ?? null,
     amountDueNow: null,
     assessmentReport: record.assessment_report ?? null,
     balancePaidAt: record.balance_paid_at ?? null,
@@ -373,6 +402,10 @@ function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
     coachId: record.coach_id,
     coachEarnings: toNullableNumber(record.coach_earnings),
     coachFeedback: record.coach_feedback ?? null,
+    coachPayoutPaidAt: record.coach_payout_paid_at ?? null,
+    noShowAt: record.no_show_at ?? null,
+    cancellationReason: record.cancellation_reason ?? null,
+    cancelledAt: record.cancelled_at ?? null,
     createdAt: record.created_at ?? "",
     duration: record.duration_minutes ?? 0,
     gymRevenue: toNullableNumber(record.gym_revenue),

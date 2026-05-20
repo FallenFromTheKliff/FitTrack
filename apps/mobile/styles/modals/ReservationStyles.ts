@@ -14,10 +14,15 @@ export function makeReservationModalStyles(colors: ThemeColors) {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
+      height: "88%",
       maxHeight: "88%",
       borderRadius: R.xl,
       borderWidth: 1,
       overflow: "hidden"
+    },
+    middle: {
+      flex: 1,
+      minHeight: 0
     },
     header: {
       flexDirection: "row",
@@ -41,9 +46,10 @@ export function makeReservationModalStyles(colors: ThemeColors) {
     headerTitle: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
     headerSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
     body: {
+      flexGrow: 1,
       paddingHorizontal: 16,
       paddingTop: 16,
-      paddingBottom: 8
+      paddingBottom: 24
     },
     sectionLabel: {
       fontSize: 11,

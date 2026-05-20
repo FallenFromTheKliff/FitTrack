@@ -1,15 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   Archive,
+  Bike,
+  ChevronUp,
+  Droplet,
+  Dumbbell,
   Edit3,
+  Filter,
+  Gauge,
   Package,
+  Pill,
   Plus,
   ReceiptText,
   RefreshCw,
-  SlidersHorizontal,
+  ShoppingBag,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
 
 import type { IThemeContext } from "@fittrack/types";
@@ -19,18 +34,15 @@ import {
   EQUIPMENT_STATUS_FILTER_OPTIONS,
   INVENTORY_CATEGORY_FILTER_OPTIONS,
   INVENTORY_REVENUE_WINDOW_OPTIONS,
-  INVENTORY_TABS,
   RETAIL_STOCK_FILTER_OPTIONS,
   RETAIL_STOCK_STATUS_COLOR,
 } from "@/data/inventory/inventory";
-import FitButton from "@/components/fit/FitButton";
-import FitDropdown from "@/components/fit/FitDropdown";
+import FitButton, { type FitButtonVariant } from "@/components/fit/FitButton";
+import { FitSelect } from "@/components/fit/FitCard";
 import FitPill from "@/components/fit/FitPill";
 import FitPagination from "@/components/fit/FitPagination";
 import FitSearch from "@/components/fit/FitSearch";
-import FitTable, {
-  type FitTableColumn,
-} from "@/components/fit/FitTable";
+import type { FitTableColumn } from "@/components/fit/FitTable";
 import { FitText } from "@/components/fit/FitText";
 import { WEB_API_BASE_URL } from "@/lib/api-client";
 import type {
@@ -47,6 +59,20 @@ type InventoryMainPanelProps = {
 };
 
 const INVENTORY_PAGE_SIZE = 6;
+const INVENTORY_COMPACT_BREAKPOINT = 1259;
+const RETAIL_GRID_TEMPLATE =
+  "58px minmax(220px, 2.1fr) minmax(72px, 0.62fr) minmax(76px, 0.68fr) minmax(122px, 0.82fr) minmax(118px, 0.78fr) minmax(124px, 0.82fr)";
+const EQUIPMENT_GRID_TEMPLATE =
+  "58px minmax(230px, 2.1fr) minmax(78px, 0.62fr) minmax(68px, 0.56fr) minmax(78px, 0.62fr) minmax(76px, 0.58fr) minmax(128px, 0.82fr)";
+
+type InventoryInspectorAction = {
+  disabled?: boolean;
+  fullWidth?: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  variant: FitButtonVariant;
+};
 
 function getInventoryImageUrl(assetUrl: string | null | undefined) {
   const imageUrl = buildRenderableAssetUrl({
@@ -57,20 +83,46 @@ function getInventoryImageUrl(assetUrl: string | null | undefined) {
   return imageUrl?.startsWith("https://fittrack.dev/") ? null : imageUrl;
 }
 
+function getRetailFallbackIcon(category: string) {
+  switch (category) {
+    case "supplements":
+      return Pill;
+    case "beverages":
+      return Droplet;
+    case "merchandise":
+    case "accessories":
+      return Dumbbell;
+    default:
+      return Package;
+  }
+}
+
+function getEquipmentFallbackIcon(name: string) {
+  const normalizedName = name.toLowerCase();
+  if (normalizedName.includes("bike")) return Bike;
+  if (
+    normalizedName.includes("rower") ||
+    normalizedName.includes("treadmill")
+  ) {
+    return Gauge;
+  }
+  if (
+    normalizedName.includes("bench") ||
+    normalizedName.includes("dumbbell") ||
+    normalizedName.includes("rack")
+  ) {
+    return Dumbbell;
+  }
+
+  return Wrench;
+}
+
 function formatLabel(value: string) {
   return value
     .split(/[_-]/g)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function panelStyle(colors: IThemeContext["colors"]): CSSProperties {
-  return {
-    backgroundColor: colors.surface,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 8,
-  };
 }
 
 function getRetailColumns(
@@ -84,6 +136,7 @@ function getRetailColumns(
       headingStyle: { width: 76 },
       render: (product, c) => {
         const imageUrl = getInventoryImageUrl(product.imageUrl);
+        const FallbackIcon = getRetailFallbackIcon(product.category);
 
         return (
           <div
@@ -106,7 +159,7 @@ function getRetailColumns(
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <Package size={17} color={c.textMuted} />
+              <FallbackIcon size={18} color={c.brand} />
             )}
           </div>
         );
@@ -119,6 +172,7 @@ function getRetailColumns(
       render: (product, c) => (
         <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
           <FitText
+            className="inventory-directory-panel__primary-text"
             style={{
               color: c.textPrimary,
               display: "block",
@@ -132,6 +186,7 @@ function getRetailColumns(
             {product.name}
           </FitText>
           <FitText
+            className="inventory-directory-panel__secondary-text"
             style={{
               color: c.textMuted,
               display: "block",
@@ -151,10 +206,25 @@ function getRetailColumns(
       heading: "Stock",
       align: "left",
       headingStyle: { width: 92 },
-      render: (product) => (
-        <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
-          {product.stockQuantity}
-        </FitText>
+      render: (product, c) => (
+        <span
+          style={{
+            display: "inline-grid",
+            minWidth: 46,
+            justifyItems: "center",
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: `1px solid ${c.warning}55`,
+            backgroundColor: `${c.warning}18`,
+          }}
+        >
+          <FitText
+            className="inventory-directory-panel__emphasis-text"
+            style={{ color: c.warning, display: "block", fontSize: 13.5, fontWeight: 900 }}
+          >
+            {product.stockQuantity}
+          </FitText>
+        </span>
       ),
     },
     {
@@ -163,7 +233,10 @@ function getRetailColumns(
       align: "left",
       headingStyle: { width: 96 },
       render: (product) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           {product.reorderThreshold}
         </FitText>
       ),
@@ -190,7 +263,10 @@ function getRetailColumns(
       align: "left",
       headingStyle: { width: 138 },
       render: (product) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           PHP{" "}
           {product.price.toLocaleString("en-PH", {
             minimumFractionDigits: 2,
@@ -205,7 +281,10 @@ function getRetailColumns(
       align: "left",
       headingStyle: { width: 148 },
       render: (product) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           PHP{" "}
           {product.totalValue.toLocaleString("en-PH", {
             minimumFractionDigits: 2,
@@ -228,6 +307,7 @@ function getEquipmentColumns(
       headingStyle: { width: 76 },
       render: (equipment, c) => {
         const imageUrl = getInventoryImageUrl(equipment.imageUrl);
+        const FallbackIcon = getEquipmentFallbackIcon(equipment.name);
 
         return (
           <div
@@ -250,7 +330,7 @@ function getEquipmentColumns(
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <Wrench size={17} color={c.textMuted} />
+              <FallbackIcon size={18} color={c.brand} />
             )}
           </div>
         );
@@ -263,6 +343,7 @@ function getEquipmentColumns(
       render: (equipment, c) => (
         <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
           <FitText
+            className="inventory-directory-panel__primary-text"
             style={{
               color: c.textPrimary,
               display: "block",
@@ -276,6 +357,7 @@ function getEquipmentColumns(
             {equipment.name}
           </FitText>
           <FitText
+            className="inventory-directory-panel__secondary-text"
             style={{
               color: c.textMuted,
               display: "block",
@@ -296,7 +378,10 @@ function getEquipmentColumns(
       align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
-        <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
+        <FitText
+          className="inventory-directory-panel__emphasis-text"
+          style={{ display: "block", fontSize: 14, fontWeight: 800 }}
+        >
           {equipment.quantityCurrent}
         </FitText>
       ),
@@ -307,7 +392,10 @@ function getEquipmentColumns(
       align: "left",
       headingStyle: { width: 88 },
       render: (equipment) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           {equipment.quantityTotal}
         </FitText>
       ),
@@ -318,7 +406,10 @@ function getEquipmentColumns(
       align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           {equipment.missingCount}
         </FitText>
       ),
@@ -329,7 +420,10 @@ function getEquipmentColumns(
       align: "left",
       headingStyle: { width: 100 },
       render: (equipment) => (
-        <FitText style={{ color: colors.textMuted, display: "block", fontSize: 13 }}>
+        <FitText
+          className="inventory-directory-panel__detail-text"
+          style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
+        >
           {equipment.unit}
         </FitText>
       ),
@@ -361,15 +455,9 @@ export function InventoryMainPanel({
 }: InventoryMainPanelProps) {
   const retailColumns = useMemo(() => getRetailColumns(colors), [colors]);
   const equipmentColumns = useMemo(() => getEquipmentColumns(colors), [colors]);
-  const visibleInventoryTabs = INVENTORY_TABS.filter(
-    (option) => option.key !== "analytics",
-  );
   const isRetail = inventory.tab === "retail";
   const selectedRetail = inventory.selectedRetail;
   const selectedEquipment = inventory.selectedEquipment;
-  const selectedRows = isRetail
-    ? inventory.filteredRetailProducts
-    : inventory.filteredEquipmentItems;
   const [retailPage, setRetailPage] = useState(1);
   const [equipmentPage, setEquipmentPage] = useState(1);
   const retailTotalPages = Math.max(
@@ -416,308 +504,358 @@ export function InventoryMainPanel({
       ),
     [equipmentPage, inventory.filteredEquipmentItems],
   );
+  const inspectorCommandActions: InventoryInspectorAction[] = isRetail
+    ? [
+        {
+          disabled: inventory.retailSaleProductOptions.length === 0,
+          icon: ReceiptText,
+          label: "Record Sale",
+          onClick: () => inventory.openRetailSale(selectedRetail?.id),
+          variant: "primary",
+        },
+        {
+          icon: Plus,
+          label: "Add Product",
+          onClick: inventory.openCreateRetail,
+          variant: "primary",
+        },
+      ]
+    : [
+        {
+          icon: Plus,
+          label: "Add Equipment",
+          onClick: inventory.openCreateEquipment,
+          variant: "primary",
+        },
+      ];
 
-  return (
-    <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-      <section
+  const directoryToolbar = (
+    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+      <div
+        className="inventory-directory-toolbar"
         style={{
-          ...panelStyle(colors),
-          padding: 14,
-          display: "grid",
-          gap: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "nowrap",
+          gap: 10,
+          minWidth: 0,
+          overflowX: "auto",
+          overflowY: "hidden",
         }}
       >
         <div
+          className="inventory-directory-toolbar-left"
           style={{
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: "auto minmax(240px, 1fr) auto",
+            display: "flex",
             alignItems: "center",
+            gap: 8,
+            minWidth: 0,
+            flex: "1 1 340px",
           }}
         >
-          <FitPill
-            options={visibleInventoryTabs}
-            active={inventory.tab}
-            onChange={(value) => inventory.setTab(value as typeof inventory.tab)}
-          />
-          <FitSearch
-            value={inventory.q}
-            onChangeText={inventory.setQ}
-            placeholder={
-              isRetail
-                ? "Search retail products, categories, or descriptions..."
-                : "Search equipment, units, or descriptions..."
-            }
-          />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <FitButton
-              variant="ghost"
-              label="FILTERS"
-              icon={SlidersHorizontal}
-              iconSize={15}
-              onClick={() => inventory.setShowFilters((value) => !value)}
-            />
-            {isRetail ? (
-              <FitButton
-                variant="primary"
-                label="RECORD SALE"
-                icon={ReceiptText}
-                iconSize={15}
-                onClick={() => inventory.openRetailSale()}
-                disabled={inventory.retailSaleProductOptions.length === 0}
-              />
-            ) : null}
-            <FitButton
-              variant="primary"
-              label={isRetail ? "ADD PRODUCT" : "ADD EQUIPMENT"}
-              icon={Plus}
-              iconSize={15}
-              onClick={isRetail ? inventory.openCreateRetail : inventory.openCreateEquipment}
+          <div
+            className="inventory-directory-search"
+            style={{ flex: "1 1 340px", minWidth: 260, maxWidth: 480 }}
+          >
+            <FitSearch
+              value={inventory.q}
+              onChangeText={inventory.setQ}
+              placeholder={
+                isRetail
+                  ? "Search retail products, categories, or descriptions..."
+                  : "Search equipment, units, or descriptions..."
+              }
             />
           </div>
         </div>
-
-        {inventory.showFilters ? (
-          <div
-            className="inventory-filter-grid"
-            style={{
-              display: "grid",
-              gap: 10,
-              gridTemplateColumns: isRetail
-                ? "repeat(2, minmax(180px, 1fr))"
-                : "minmax(180px, 320px)",
-            }}
-          >
-            {isRetail ? (
-              <>
-                <LabeledSelect
-                  colors={colors}
-                  label="Category"
-                  value={inventory.retailCategoryFilter}
-                  options={INVENTORY_CATEGORY_FILTER_OPTIONS}
-                  onChange={(value) =>
-                    inventory.setRetailCategoryFilter(
-                      value as typeof inventory.retailCategoryFilter,
-                    )
-                  }
-                />
-                <LabeledSelect
-                  colors={colors}
-                  label="Stock"
-                  value={inventory.retailStockFilter}
-                  options={RETAIL_STOCK_FILTER_OPTIONS}
-                  onChange={(value) =>
-                    inventory.setRetailStockFilter(
-                      value as typeof inventory.retailStockFilter,
-                    )
-                  }
-                />
-                <LabeledSelect
-                  colors={colors}
-                  label="Revenue Window"
-                  value={inventory.salesRevenueWindowFilter}
-                  options={INVENTORY_REVENUE_WINDOW_OPTIONS}
-                  onChange={(value) =>
-                    inventory.setSalesRevenueWindowFilter(
-                      value as typeof inventory.salesRevenueWindowFilter,
-                    )
-                  }
-                />
-              </>
-            ) : (
-              <LabeledSelect
+        <div
+          className="inventory-directory-toolbar-right"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 8,
+            flex: "0 0 auto",
+            minWidth: 0,
+            marginLeft: "auto",
+            flexWrap: "nowrap",
+          }}
+        >
+          <InventoryModeToggle
+            active={isRetail ? "retail" : "equipment"}
+            colors={colors}
+            onChange={(value) => inventory.setTab(value)}
+          />
+          {isRetail ? (
+            <>
+              <InventoryFilterSelect
+                ariaLabel="Filter retail inventory by category"
                 colors={colors}
-                label="Equipment Status"
-                value={inventory.equipmentStatusFilter}
-                options={EQUIPMENT_STATUS_FILTER_OPTIONS}
+                value={inventory.retailCategoryFilter}
+                options={INVENTORY_CATEGORY_FILTER_OPTIONS}
                 onChange={(value) =>
-                  inventory.setEquipmentStatusFilter(
-                    value as typeof inventory.equipmentStatusFilter,
+                  inventory.setRetailCategoryFilter(
+                    value as typeof inventory.retailCategoryFilter,
                   )
                 }
               />
-            )}
-          </div>
-        ) : null}
-      </section>
+              <InventoryFilterSelect
+                ariaLabel="Filter retail inventory by stock"
+                colors={colors}
+                value={inventory.retailStockFilter}
+                options={RETAIL_STOCK_FILTER_OPTIONS}
+                onChange={(value) =>
+                  inventory.setRetailStockFilter(
+                    value as typeof inventory.retailStockFilter,
+                  )
+                }
+              />
+              <InventoryFilterSelect
+                ariaLabel="Filter retail revenue window"
+                colors={colors}
+                value={inventory.salesRevenueWindowFilter}
+                options={INVENTORY_REVENUE_WINDOW_OPTIONS}
+                onChange={(value) =>
+                  inventory.setSalesRevenueWindowFilter(
+                    value as typeof inventory.salesRevenueWindowFilter,
+                  )
+                }
+              />
+            </>
+          ) : (
+            <InventoryFilterSelect
+              ariaLabel="Filter equipment inventory by status"
+              colors={colors}
+              value={inventory.equipmentStatusFilter}
+              options={EQUIPMENT_STATUS_FILTER_OPTIONS}
+              onChange={(value) =>
+                inventory.setEquipmentStatusFilter(
+                  value as typeof inventory.equipmentStatusFilter,
+                )
+              }
+            />
+          )}
+        </div>
+      </div>
 
-      <div
-        className="inventory-workbench"
-        style={{
-          display: "grid",
-          gap: 14,
-          gridTemplateColumns: isCompactDetail
-            ? "minmax(0, 1fr)"
-            : "minmax(0, 1fr) minmax(280px, 340px)",
-          alignItems: "stretch",
-          height: isCompactDetail ? "auto" : "calc(100vh - 238px)",
-          minHeight: isCompactDetail ? 0 : 560,
-        }}
-      >
-        <section
+      {isCompactDetail ? (
+        <InventoryInspectorCommandRow actions={inspectorCommandActions} colors={colors} />
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div
+      className="inventory-directory-stage"
+      style={{
+        display: "grid",
+        gap: 12,
+        gridTemplateColumns: isCompactDetail
+          ? "minmax(0, 1fr)"
+          : "minmax(0, 1fr) minmax(284px, 0.36fr)",
+        alignItems: "stretch",
+        height: isCompactDetail ? "auto" : "calc(100vh - 154px)",
+        minHeight: isCompactDetail ? 0 : 600,
+        minWidth: 0,
+        width: "100%",
+        borderRadius: 8,
+      }}
+    >
+      {isRetail ? (
+        <InventoryDirectoryPanel
+          activeRowId={selectedRetail?.id}
+          ariaLabel="Retail inventory"
+          colors={colors}
+          columns={retailColumns}
+          currentPage={retailPage}
+          emptyMessage="No retail items match this view."
+          filteredCount={inventory.filteredRetailProducts.length}
+          gridTemplateColumns={RETAIL_GRID_TEMPLATE}
+          isLoading={inventory.isRetailLoading}
+          loadingMessage="Loading live retail inventory..."
+          minWidth={900}
+          onPageChange={setRetailPage}
+          onRowClick={(product) => inventory.openRetailDetails(product.id)}
+          pageSize={INVENTORY_PAGE_SIZE}
+          renderMobileCard={(product, isActive) => (
+            <RetailInventoryMobileCard
+              colors={colors}
+              isActive={isActive}
+              product={product}
+            />
+          )}
+          rows={retailRows}
+          toolbar={directoryToolbar}
+          totalPages={retailTotalPages}
+        />
+      ) : (
+        <InventoryDirectoryPanel
+          activeRowId={selectedEquipment?.id}
+          ariaLabel="Equipment inventory"
+          colors={colors}
+          columns={equipmentColumns}
+          currentPage={equipmentPage}
+          emptyMessage="No equipment items match this view."
+          filteredCount={inventory.filteredEquipmentItems.length}
+          gridTemplateColumns={EQUIPMENT_GRID_TEMPLATE}
+          isLoading={inventory.isEquipmentLoading}
+          loadingMessage="Loading live equipment inventory..."
+          minWidth={840}
+          onPageChange={setEquipmentPage}
+          onRowClick={(equipment) => inventory.openEquipmentDetails(equipment.id)}
+          pageSize={INVENTORY_PAGE_SIZE}
+          renderMobileCard={(equipment, isActive) => (
+            <EquipmentInventoryMobileCard
+              colors={colors}
+              equipment={equipment}
+              isActive={isActive}
+            />
+          )}
+          rows={equipmentRows}
+          toolbar={directoryToolbar}
+          totalPages={equipmentTotalPages}
+        />
+      )}
+
+      {!isCompactDetail ? (
+        <div
+          className="inventory-directory-inspector"
           style={{
-            ...panelStyle(colors),
-            minWidth: 0,
-            overflow: "hidden",
             display: "grid",
-            gridTemplateRows: "auto minmax(0, 1fr) auto",
+            gridTemplateRows: "auto minmax(0, 1fr)",
+            gap: 10,
+            height: "100%",
             minHeight: 0,
           }}
         >
-          <div
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.surfaceRaised,
-              borderBottom: `1px solid ${colors.border}`,
-              display: "flex",
-              gap: 12,
-              justifyContent: "space-between",
-              padding: "14px 16px",
-            }}
-          >
-            <div>
-              <FitText style={{ fontSize: 18, fontWeight: 900 }}>
-                {isRetail ? "Retail Inventory Table" : "Equipment Inventory Table"}
-              </FitText>
-              <FitText style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 3 }}>
-                {selectedRows.length} row{selectedRows.length === 1 ? "" : "s"} in the current view
-              </FitText>
-            </div>
-            <FitButton
-              variant="ghost"
-              label={inventory.isRefreshing ? "REFRESHING" : "REFRESH"}
-              icon={RefreshCw}
-              iconSize={15}
-              onClick={() => {
-                void inventory.handleRefresh();
-              }}
-              disabled={inventory.isRefreshing}
-            />
-          </div>
+          <InventoryInspectorCommandRow actions={inspectorCommandActions} colors={colors} />
           {isRetail ? (
-            <FitTable
-              columns={retailColumns}
-              rows={retailRows}
-              getRowKey={(product) => product.id}
-              isLoading={inventory.isRetailLoading}
-              loadingMessage="Loading live retail inventory..."
-              emptyMessage="No retail items match this view."
-              onRowClick={(product) => inventory.openRetailDetails(product.id)}
-              getRowClassName={(product) =>
-                product.id === selectedRetail?.id
-                  ? "inventory-table-row--selected"
-                  : undefined
+            <InventoryInspectorPanel
+              ariaLabel="Retail inventory details"
+              colors={colors}
+              footer={
+                selectedRetail ? (
+                  <InventoryInspectorFooter
+                    colors={colors}
+                    actions={[
+                      {
+                        icon: RefreshCw,
+                        label: "Restock Item",
+                        onClick: () => inventory.openRetailRestock(selectedRetail.id),
+                        variant: "ghost",
+                      },
+                      {
+                        icon: Edit3,
+                        label: "Edit Details",
+                        onClick: () => onOpenDetailEditor("retail"),
+                        variant: "ghost",
+                      },
+                      {
+                        fullWidth: true,
+                        icon: Archive,
+                        label: "Archive Item",
+                        onClick: () => inventory.openRetailArchive(selectedRetail.id),
+                        variant: "danger",
+                      },
+                    ]}
+                  />
+                ) : null
               }
-              style={{ border: 0, borderRadius: 0 }}
-              tableStyle={{ minWidth: 960, tableLayout: "fixed" }}
-            />
-          ) : (
-            <FitTable
-              columns={equipmentColumns}
-              rows={equipmentRows}
-              getRowKey={(equipment) => equipment.id}
-              isLoading={inventory.isEquipmentLoading}
-              loadingMessage="Loading live equipment inventory..."
-              emptyMessage="No equipment items match this view."
-              onRowClick={(equipment) => inventory.openEquipmentDetails(equipment.id)}
-              getRowClassName={(equipment) =>
-                equipment.id === selectedEquipment?.id
-                  ? "inventory-table-row--selected"
-                  : undefined
-              }
-              style={{ border: 0, borderRadius: 0 }}
-              tableStyle={{ minWidth: 900, tableLayout: "fixed" }}
-            />
-          )}
-          <div
-            style={{
-              borderTop: `1px solid ${colors.border}`,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "center",
-              padding: "12px 16px",
-              backgroundColor: colors.surface,
-            }}
-          >
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-              Page {isRetail ? retailPage : equipmentPage} of{" "}
-              {isRetail ? retailTotalPages : equipmentTotalPages}
-            </FitText>
-            <FitPagination
-              currentPage={isRetail ? retailPage : equipmentPage}
-              totalPages={isRetail ? retailTotalPages : equipmentTotalPages}
-              onPageChange={isRetail ? setRetailPage : setEquipmentPage}
-              showSinglePage
-              ariaLabel={`${isRetail ? "Retail" : "Equipment"} inventory pagination`}
-            />
-          </div>
-        </section>
-
-        {!isCompactDetail ? (
-          <aside
-            style={{
-              ...panelStyle(colors),
-              minHeight: 0,
-              height: "100%",
-              padding: 16,
-              overflow: "hidden",
-            }}
-          >
-            {isRetail ? (
-              selectedRetail ? (
-                <RetailDetailCard
-                  colors={colors}
-                  product={selectedRetail}
-                  onArchive={() => inventory.openRetailArchive(selectedRetail.id)}
-                  onEdit={() => onOpenDetailEditor("retail")}
-                  onRecordSale={() => inventory.openRetailSale(selectedRetail.id)}
-                  onRestock={() => inventory.openRetailRestock(selectedRetail.id)}
-                />
+            >
+              {selectedRetail ? (
+                <RetailDetailCard colors={colors} product={selectedRetail} />
               ) : (
                 <EmptyDetailCard
                   colors={colors}
                   copy="Select a retail row to inspect stock, pricing, image, and sale actions here."
                   title="No retail item selected"
                 />
-              )
-            ) : selectedEquipment ? (
-              <EquipmentDetailCard
-                colors={colors}
-                equipment={selectedEquipment}
-                onArchive={() => inventory.openEquipmentArchive(selectedEquipment.id)}
-                onEdit={() => onOpenDetailEditor("equipment")}
-                onWriteOff={() => inventory.openEquipmentWriteOff(selectedEquipment.id)}
-              />
-            ) : (
-              <EmptyDetailCard
-                colors={colors}
-                copy="Select an equipment row to inspect status, quantities, images, and write-off actions here."
-                title="No equipment selected"
-              />
-            )}
-          </aside>
-        ) : null}
-      </div>
+              )}
+            </InventoryInspectorPanel>
+          ) : (
+            <InventoryInspectorPanel
+              ariaLabel="Equipment inventory details"
+              colors={colors}
+              footer={
+                selectedEquipment ? (
+                  <InventoryInspectorFooter
+                    colors={colors}
+                    actions={[
+                      {
+                        icon: Wrench,
+                        label: "Record Writeoff",
+                        onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
+                        variant: "primary",
+                      },
+                      {
+                        icon: Edit3,
+                        label: "Edit Details",
+                        onClick: () => onOpenDetailEditor("equipment"),
+                        variant: "ghost",
+                      },
+                      {
+                        fullWidth: true,
+                        icon: Archive,
+                        label: "Archive Equipment",
+                        onClick: () => inventory.openEquipmentArchive(selectedEquipment.id),
+                        variant: "danger",
+                      },
+                    ]}
+                  />
+                ) : null
+              }
+            >
+              {selectedEquipment ? (
+                <EquipmentDetailCard colors={colors} equipment={selectedEquipment} />
+              ) : (
+                <EmptyDetailCard
+                  colors={colors}
+                  copy="Select an equipment row to inspect status, quantities, images, and write-off actions here."
+                  title="No equipment selected"
+                />
+              )}
+            </InventoryInspectorPanel>
+          )}
+        </div>
+      ) : null}
 
       <style>{`
-        .inventory-table-row--selected {
-          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fit-brand) 56%, transparent),
-            0 0 18px color-mix(in srgb, var(--fit-brand) 24%, transparent);
-        }
+        @media (max-width: ${INVENTORY_COMPACT_BREAKPOINT}px) {
+          .inventory-directory-stage {
+            grid-template-columns: 1fr !important;
+            height: auto !important;
+            min-height: 0 !important;
+          }
 
-        .inventory-table-row--selected > td {
-          background-color: color-mix(in srgb, var(--fit-brand) 14%, transparent);
-        }
+          .inventory-directory-inspector {
+            display: none !important;
+          }
 
-        .inventory-table-row--selected > td:first-child {
-          box-shadow: inset 3px 0 0 var(--fit-brand);
+          .inventory-directory-toolbar {
+            align-items: stretch !important;
+            flex-wrap: wrap !important;
+            overflow: visible !important;
+          }
+
+          .inventory-directory-toolbar-left,
+          .inventory-directory-toolbar-right,
+          .inventory-directory-search {
+            width: 100% !important;
+            max-width: none !important;
+          }
         }
 
         @media (max-width: 760px) {
-          .inventory-workbench,
-          .inventory-filter-grid {
+          .inventory-directory-toolbar-left,
+          .inventory-directory-toolbar-right {
+            display: grid !important;
             grid-template-columns: 1fr !important;
+          }
+
+          .inventory-directory-toolbar-right > *,
+          .inventory-filter-select {
+            width: 100% !important;
           }
         }
       `}</style>
@@ -725,32 +863,862 @@ export function InventoryMainPanel({
   );
 }
 
-function LabeledSelect({
+function getInventoryColumnJustify<T>(column: FitTableColumn<T>) {
+  if (column.align === "center") return "center";
+  if (column.align === "right") return "end";
+  return "start";
+}
+
+function InventoryDirectoryPanel<T extends { id: string }>({
+  activeRowId,
+  ariaLabel,
+  colors,
+  columns,
+  currentPage,
+  emptyMessage,
+  filteredCount,
+  gridTemplateColumns,
+  isLoading,
+  loadingMessage,
+  minWidth,
+  onPageChange,
+  onRowClick,
+  pageSize,
+  renderMobileCard,
+  rows,
+  toolbar,
+  totalPages,
+}: {
+  activeRowId?: string;
+  ariaLabel: string;
+  colors: IThemeContext["colors"];
+  columns: FitTableColumn<T>[];
+  currentPage: number;
+  emptyMessage: string;
+  filteredCount: number;
+  gridTemplateColumns: string;
+  isLoading: boolean;
+  loadingMessage: string;
+  minWidth: number;
+  onPageChange: (page: number) => void;
+  onRowClick: (row: T) => void;
+  pageSize: number;
+  renderMobileCard: (row: T, isActive: boolean) => ReactNode;
+  rows: T[];
+  toolbar: ReactNode;
+  totalPages: number;
+}) {
+  const pageStart = filteredCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const pageEnd = filteredCount === 0 ? 0 : Math.min(filteredCount, currentPage * pageSize);
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, row: T) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onRowClick(row);
+  };
+
+  return (
+    <section
+      className="inventory-directory-panel"
+      aria-label={ariaLabel}
+      style={{
+        display: "grid",
+        gridTemplateRows: "auto minmax(0, 1fr) auto",
+        gap: 0,
+        height: "100%",
+        minHeight: 0,
+        padding: 0,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: `${colors.surface}f2`,
+        boxShadow: "none",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        className="inventory-directory-panel__top"
+        style={{
+          padding: "14px 12px",
+          borderBottom: `1px solid ${colors.border}`,
+          backgroundColor: `${colors.surfaceRaised}f5`,
+        }}
+      >
+        {toolbar}
+      </div>
+
+      <div
+        className="inventory-directory-panel__middle"
+        style={{
+          display: "grid",
+          minHeight: 0,
+          padding: 0,
+          background: colors.surface,
+        }}
+      >
+        <div
+          className="inventory-directory-panel__desktop"
+          style={{ display: "grid", minHeight: 0 }}
+        >
+          {isLoading ? (
+            <div
+              className="inventory-directory-panel__view-enter"
+              style={{ padding: 18, color: colors.textSecondary }}
+            >
+              <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
+                {loadingMessage}
+              </FitText>
+            </div>
+          ) : rows.length > 0 ? (
+            <div
+              className="inventory-directory-panel__list inventory-directory-panel__view-enter"
+              style={{
+                display: "grid",
+                gridTemplateRows: "auto minmax(0, 1fr)",
+                minHeight: 0,
+                overflowX: "auto",
+              }}
+            >
+              <div style={{ minWidth, display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
+                <div
+                  className="inventory-directory-panel__table-head"
+                  style={{
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns,
+                    padding: "7px 12px 8px",
+                    backgroundColor: `${colors.surfaceRaised}bd`,
+                    borderBottom: `1px solid ${colors.border}`,
+                  }}
+                >
+                  {columns.map((column) => {
+                    const isStockColumn = column.key === "stockQuantity";
+
+                    return (
+                      <FitText
+                        key={column.key}
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: isStockColumn ? colors.warning : colors.textMuted,
+                          letterSpacing: "0.05em",
+                          justifySelf: getInventoryColumnJustify(column),
+                          textAlign: column.align ?? "left",
+                        }}
+                      >
+                        {column.heading}
+                      </FitText>
+                    );
+                  })}
+                </div>
+                <div
+                  className="inventory-directory-panel__rows"
+                  style={{ display: "grid", gap: 0, alignContent: "start", minHeight: 0, overflowY: "auto" }}
+                >
+                  {rows.map((row, index) => {
+                    const isActive = row.id === activeRowId;
+
+                    return (
+                      <div
+                        key={row.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isActive}
+                        className={
+                          isActive
+                            ? "inventory-directory-panel__row inventory-directory-panel__row-active"
+                            : "inventory-directory-panel__row"
+                        }
+                        data-row-index={index + 1}
+                        onClick={() => onRowClick(row)}
+                        onKeyDown={(event) => handleRowKeyDown(event, row)}
+                        style={{
+                          display: "grid",
+                          gap: 12,
+                          gridTemplateColumns,
+                          alignItems: "center",
+                          minHeight: 56,
+                          padding: "7px 12px",
+                          borderBottom: `1px solid ${colors.border}`,
+                          backgroundColor: isActive ? `${colors.brand}12` : "transparent",
+                          boxShadow: isActive ? `3px 0 0 ${colors.brand} inset` : "none",
+                          cursor: "pointer",
+                          outline: "none",
+                        }}
+                      >
+                        {columns.map((column) => (
+                          <div
+                            key={column.key}
+                            className="inventory-directory-panel__cell"
+                            style={{
+                              justifySelf: getInventoryColumnJustify(column),
+                              textAlign: column.align ?? "left",
+                              minWidth: 0,
+                            }}
+                          >
+                            {column.render(row, colors)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="inventory-directory-panel__view-enter"
+              style={{
+                padding: 18,
+                border: `1px dashed ${colors.border}`,
+                backgroundColor: `${colors.surface}d8`,
+              }}
+            >
+              <FitText style={{ fontSize: 13, lineHeight: 1.6, color: colors.textSecondary }}>
+                {emptyMessage}
+              </FitText>
+            </div>
+          )}
+        </div>
+
+        <div className="inventory-directory-panel__mobile" style={{ display: "none", gap: 12 }}>
+          {isLoading ? (
+            <div style={{ padding: 18, border: `1px solid ${colors.border}`, backgroundColor: `${colors.surface}e2` }}>
+              <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
+                {loadingMessage}
+              </FitText>
+            </div>
+          ) : rows.length > 0 ? (
+            rows.map((row) => {
+              const isActive = row.id === activeRowId;
+
+              return (
+                <div
+                  key={row.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isActive}
+                  className={
+                    isActive
+                      ? "inventory-directory-panel__mobile-card inventory-directory-panel__mobile-card-active"
+                      : "inventory-directory-panel__mobile-card"
+                  }
+                  onClick={() => onRowClick(row)}
+                  onKeyDown={(event) => handleRowKeyDown(event, row)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {renderMobileCard(row, isActive)}
+                </div>
+              );
+            })
+          ) : (
+            <div style={{ padding: 18, border: `1px dashed ${colors.border}`, backgroundColor: `${colors.surface}d8` }}>
+              <FitText style={{ fontSize: 13, lineHeight: 1.6, color: colors.textSecondary }}>
+                {emptyMessage}
+              </FitText>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!isLoading ? (
+        <div
+          className="inventory-directory-panel__bottom"
+          style={{
+            padding: "10px 12px",
+            borderTop: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.surfaceRaised}f5`,
+          }}
+        >
+          <div
+            className="inventory-directory-panel__footer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <FitText style={{ fontSize: 11.5, color: colors.textSecondary }}>
+              Showing {pageStart} - {pageEnd} of {filteredCount}
+            </FitText>
+            <FitPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+              ariaLabel={`${ariaLabel} pagination`}
+              showSinglePage
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <style>{`
+        @keyframes inventory-directory-view-enter {
+          0% {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .inventory-directory-panel__view-enter {
+          animation: inventory-directory-view-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
+
+        .inventory-directory-panel__row {
+          transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+
+        .inventory-directory-panel__row:hover {
+          background-color: ${colors.brand}0d !important;
+          box-shadow: 3px 0 0 ${colors.brand}66 inset;
+          transform: translateX(1px);
+        }
+
+        .inventory-directory-panel__row:focus-visible {
+          outline: 2px solid ${colors.brand}35;
+          outline-offset: 2px;
+        }
+
+        .inventory-directory-panel__row-active .inventory-directory-panel__primary-text {
+          font-weight: 900 !important;
+        }
+
+        .inventory-directory-panel__row-active .inventory-directory-panel__secondary-text {
+          color: ${colors.textPrimary} !important;
+          opacity: 0.94;
+        }
+
+        .inventory-directory-panel__cell,
+        .inventory-directory-panel__identity-copy {
+          min-width: 0;
+        }
+
+        .inventory-directory-panel__mobile-card {
+          cursor: pointer;
+          outline: none;
+          transition: filter 140ms ease, transform 140ms ease;
+        }
+
+        .inventory-directory-panel__mobile-card:hover {
+          filter: brightness(1.02);
+          transform: translateY(-1px);
+        }
+
+        .inventory-directory-panel__mobile-card:hover > .inventory-mobile-card {
+          border-color: ${colors.brand}44 !important;
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.11) !important;
+        }
+
+        .inventory-directory-panel__mobile-card-active > .inventory-mobile-card {
+          border-color: ${colors.brand}66 !important;
+          box-shadow: 0 0 0 1px ${colors.brand}22 inset, 0 16px 30px rgba(0, 0, 0, 0.14) !important;
+        }
+
+        @media (max-width: ${INVENTORY_COMPACT_BREAKPOINT}px) {
+          .inventory-directory-panel {
+            height: auto !important;
+            min-height: 0 !important;
+          }
+
+          .inventory-directory-panel__desktop {
+            display: none !important;
+          }
+
+          .inventory-directory-panel__middle {
+            padding: 0 !important;
+          }
+
+          .inventory-directory-panel__mobile {
+            display: grid !important;
+            padding: 12px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .inventory-directory-panel__view-enter,
+          .inventory-directory-panel__row,
+          .inventory-directory-panel__mobile-card,
+          .inventory-directory-panel__primary-text,
+          .inventory-directory-panel__secondary-text,
+          .inventory-directory-panel__emphasis-text {
+            transition: none !important;
+            animation: none !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .inventory-directory-panel__footer {
+            align-items: flex-start !important;
+          }
+        }
+      `}</style>
+    </section>
+  );
+}
+
+function InventoryMobileStat({
   colors,
   label,
-  onChange,
-  options,
+  tone,
   value,
 }: {
   colors: IThemeContext["colors"];
   label: string;
+  tone?: string;
+  value: string;
+}) {
+  const accent = tone ?? colors.border;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 4,
+        minWidth: 0,
+        padding: "9px 10px",
+        borderRadius: 8,
+        border: `1px solid ${tone ? `${accent}55` : colors.border}`,
+        backgroundColor: tone ? `${accent}18` : colors.surfaceRaised,
+      }}
+    >
+      <FitText style={{ fontSize: 9.5, fontWeight: 850, color: colors.textMuted, letterSpacing: "0.04em" }}>
+        {label}
+      </FitText>
+      <FitText style={{ fontSize: 12, fontWeight: tone ? 900 : 750, color: tone ?? colors.textSecondary, overflowWrap: "anywhere" }}>
+        {value}
+      </FitText>
+    </div>
+  );
+}
+
+function RetailInventoryMobileCard({
+  colors,
+  isActive,
+  product,
+}: {
+  colors: IThemeContext["colors"];
+  isActive: boolean;
+  product: InventoryRetailTableRow;
+}) {
+  const imageUrl = getInventoryImageUrl(product.imageUrl);
+  const FallbackIcon = getRetailFallbackIcon(product.category);
+
+  return (
+    <div
+      className="inventory-mobile-card"
+      style={{
+        display: "grid",
+        gap: 12,
+        padding: 12,
+        borderRadius: 8,
+        border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
+        backgroundColor: isActive ? `${colors.brand}10` : colors.surface,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <InventoryThumb
+          alt={product.name}
+          colors={colors}
+          fallbackIcon={FallbackIcon}
+          imageUrl={imageUrl}
+        />
+        <div style={{ display: "grid", gap: 4, minWidth: 0, flex: 1 }}>
+          <FitText className="inventory-directory-panel__primary-text" style={{ fontSize: 13, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {product.name}
+          </FitText>
+          <FitText className="inventory-directory-panel__secondary-text" style={{ fontSize: 11, color: colors.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {formatLabel(product.category)} / {product.id.slice(0, 8).toUpperCase()}
+          </FitText>
+        </div>
+        <FitPill mode="status" label={product.status} color={RETAIL_STOCK_STATUS_COLOR[product.status]} fontSize={11} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        <InventoryMobileStat colors={colors} label="Stock" tone={colors.warning} value={String(product.stockQuantity)} />
+        <InventoryMobileStat colors={colors} label="Reorder" value={String(product.reorderThreshold)} />
+        <InventoryMobileStat colors={colors} label="Price" value={`PHP ${product.price.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} />
+        <InventoryMobileStat colors={colors} label="Value" value={`PHP ${product.totalValue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} />
+      </div>
+    </div>
+  );
+}
+
+function EquipmentInventoryMobileCard({
+  colors,
+  equipment,
+  isActive,
+}: {
+  colors: IThemeContext["colors"];
+  equipment: InventoryEquipmentTableRow;
+  isActive: boolean;
+}) {
+  const imageUrl = getInventoryImageUrl(equipment.imageUrl);
+  const FallbackIcon = getEquipmentFallbackIcon(equipment.name);
+
+  return (
+    <div
+      className="inventory-mobile-card"
+      style={{
+        display: "grid",
+        gap: 12,
+        padding: 12,
+        borderRadius: 8,
+        border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
+        backgroundColor: isActive ? `${colors.brand}10` : colors.surface,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <InventoryThumb
+          alt={equipment.name}
+          colors={colors}
+          fallbackIcon={FallbackIcon}
+          imageUrl={imageUrl}
+        />
+        <div style={{ display: "grid", gap: 4, minWidth: 0, flex: 1 }}>
+          <FitText className="inventory-directory-panel__primary-text" style={{ fontSize: 13, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {equipment.name}
+          </FitText>
+          <FitText className="inventory-directory-panel__secondary-text" style={{ fontSize: 11, color: colors.textSecondary }}>
+            {equipment.id.slice(0, 8).toUpperCase()}
+          </FitText>
+        </div>
+        <FitPill mode="status" label={equipment.status} color={EQUIPMENT_STATUS_COLOR[equipment.status]} fontSize={11} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        <InventoryMobileStat colors={colors} label="Current" value={String(equipment.quantityCurrent)} />
+        <InventoryMobileStat colors={colors} label="Total" value={String(equipment.quantityTotal)} />
+        <InventoryMobileStat colors={colors} label="Missing" value={String(equipment.missingCount)} />
+        <InventoryMobileStat colors={colors} label="Unit" value={equipment.unit} />
+      </div>
+    </div>
+  );
+}
+
+function InventoryThumb({
+  alt,
+  colors,
+  fallbackIcon: FallbackIcon,
+  imageUrl,
+}: {
+  alt: string;
+  colors: IThemeContext["colors"];
+  fallbackIcon: LucideIcon;
+  imageUrl: string | null | undefined;
+}) {
+  return (
+    <div
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surfaceRaised,
+        display: "grid",
+        placeItems: "center",
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      {imageUrl ? (
+        <img src={imageUrl} alt={alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <FallbackIcon size={17} color={colors.brand} />
+      )}
+    </div>
+  );
+}
+
+function InventoryInspectorCommandRow({
+  actions,
+  colors,
+}: {
+  actions: InventoryInspectorAction[];
+  colors: IThemeContext["colors"];
+}) {
+  return (
+    <div
+      className="inventory-inspector-command-row"
+      style={{
+        display: "grid",
+        gridTemplateColumns: actions.length > 1 ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)",
+        gap: 8,
+        padding: 10,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: `${colors.surfaceRaised}f5`,
+      }}
+    >
+      {actions.map((action) => (
+        <FitButton
+          key={action.label}
+          variant={action.variant}
+          label={action.label.toUpperCase()}
+          icon={action.icon}
+          iconSize={14}
+          fullWidth
+          disabled={action.disabled}
+          onClick={action.onClick}
+          style={{
+            minHeight: 38,
+            borderRadius: 8,
+            paddingInline: 10,
+            gridColumn: action.fullWidth ? "1 / -1" : undefined,
+          }}
+          textStyle={{ fontSize: 10.75, fontWeight: 850, whiteSpace: "nowrap" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function InventoryInspectorPanel({
+  ariaLabel,
+  children,
+  colors,
+  footer,
+}: {
+  ariaLabel: string;
+  children?: ReactNode;
+  colors: IThemeContext["colors"];
+  footer?: ReactNode;
+}) {
+  return (
+    <aside
+      className="inventory-inspector-panel"
+      aria-label={ariaLabel}
+      style={{
+        display: "grid",
+        gridTemplateRows: "minmax(0, 1fr) auto",
+        gap: 0,
+        height: "100%",
+        minHeight: 0,
+        padding: 0,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surface,
+        boxShadow: "none",
+        overflow: "hidden",
+      }}
+    >
+      {children ? <div className="inventory-inspector-panel__body">{children}</div> : null}
+      {footer ? <div className="inventory-inspector-panel__footer">{footer}</div> : null}
+
+      <style>{`
+        .inventory-inspector-panel__body {
+          display: grid;
+          align-content: start;
+          gap: 12px;
+          min-height: 0;
+          overflow: hidden;
+          padding: 18px;
+          background: ${colors.surface};
+        }
+
+        .inventory-inspector-panel__footer {
+          display: grid;
+          gap: 10px;
+          padding: 16px 18px 18px;
+          border-top: 1px solid ${colors.border};
+          background-color: ${colors.surfaceRaised};
+        }
+      `}</style>
+    </aside>
+  );
+}
+
+function InventoryInspectorFooter({
+  actions,
+  colors,
+}: {
+  actions: InventoryInspectorAction[];
+  colors: IThemeContext["colors"];
+}) {
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionButtonTextStyle: CSSProperties = {
+    fontSize: 10.5,
+    fontWeight: 800,
+    lineHeight: 1.1,
+    whiteSpace: "normal",
+    textAlign: "center",
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 8,
+          maxHeight: actionsOpen ? 320 : 0,
+          opacity: actionsOpen ? 1 : 0,
+          overflowX: "hidden",
+          overflowY: actionsOpen ? "auto" : "hidden",
+          pointerEvents: actionsOpen ? "auto" : "none",
+          transform: actionsOpen ? "translateY(0)" : "translateY(12px)",
+          transformOrigin: "bottom center",
+          transition: `max-height 240ms ease, opacity 180ms ease, transform 240ms ease, visibility 0ms linear ${
+            actionsOpen ? "0ms" : "240ms"
+          }`,
+          visibility: actionsOpen ? "visible" : "hidden",
+        }}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+          {actions.map((action) => (
+            <FitButton
+              key={action.label}
+              variant={action.variant}
+              label={action.label}
+              icon={action.icon}
+              iconSize={13}
+              fullWidth
+              disabled={action.disabled}
+              onClick={action.onClick}
+              style={{
+                minHeight: 36,
+                borderRadius: 8,
+                paddingInline: 8,
+                gridColumn: action.fullWidth ? "1 / -1" : undefined,
+              }}
+              textStyle={actionButtonTextStyle}
+            />
+          ))}
+        </div>
+      </div>
+      <FitButton
+        variant="ghost"
+        aria-expanded={actionsOpen}
+        onClick={() => setActionsOpen((current) => !current)}
+        style={{
+          border: `1px solid ${actionsOpen ? colors.brand : colors.border}`,
+          backgroundColor: actionsOpen ? `${colors.brand}12` : colors.surface,
+          color: colors.brand,
+          minHeight: 44,
+          borderRadius: 8,
+        }}
+        textStyle={{ color: colors.brand, fontWeight: 850, letterSpacing: "0.04em" }}
+      >
+        <span style={{ alignItems: "center", display: "inline-flex", gap: 8, justifyContent: "center", lineHeight: 1 }}>
+          <span>{actionsOpen ? "CLOSE ACTIONS" : "OPEN ACTIONS"}</span>
+          <ChevronUp
+            size={15}
+            strokeWidth={2.4}
+            style={{
+              transform: actionsOpen ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 180ms ease",
+            }}
+          />
+        </span>
+      </FitButton>
+    </div>
+  );
+}
+
+function InventoryFilterSelect({
+  ariaLabel,
+  colors,
+  onChange,
+  options,
+  value,
+}: {
+  ariaLabel: string;
+  colors: IThemeContext["colors"];
   onChange: (value: string) => void;
   options: Array<{ label: string; value: string }>;
   value: string;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <FitText style={{ color: colors.textMuted, fontSize: 11, fontWeight: 850 }}>
-        {label}
-      </FitText>
-      <FitDropdown
+    <div
+      className="inventory-filter-select"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "14px minmax(150px, 190px)",
+        alignItems: "center",
+        gap: 6,
+        minWidth: 0,
+      }}
+    >
+      <Filter size={14} color={colors.textMuted} strokeWidth={2} />
+      <FitSelect
+        aria-label={ariaLabel}
         fullWidth
         compact
         value={value}
         options={options}
-        onChange={onChange}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        style={{
+          width: "100%",
+          minWidth: 0,
+          height: 38,
+          borderRadius: 8,
+          paddingLeft: 8,
+          paddingRight: 22,
+          fontSize: 12,
+        }}
       />
-    </label>
+    </div>
+  );
+}
+
+function InventoryModeToggle({
+  active,
+  colors,
+  onChange,
+}: {
+  active: "retail" | "equipment";
+  colors: IThemeContext["colors"];
+  onChange: (value: "retail" | "equipment") => void;
+}) {
+  const options: Array<{
+    icon: LucideIcon;
+    label: string;
+    value: "retail" | "equipment";
+  }> = [
+    { icon: ShoppingBag, label: "Retail inventory", value: "retail" },
+    { icon: Dumbbell, label: "Equipment inventory", value: "equipment" },
+  ];
+
+  return (
+    <div
+      className="inventory-mode-toggle"
+      style={{
+        display: "inline-flex",
+        gap: 4,
+        padding: 4,
+        borderRadius: 10,
+        backgroundColor: colors.surfaceRaised,
+        border: `1px solid ${colors.border}`,
+        flex: "0 0 auto",
+      }}
+    >
+      {options.map((option) => {
+        const isActive = active === option.value;
+        return (
+          <FitButton
+            key={option.value}
+            aria-label={option.label}
+            title={option.label}
+            variant={isActive ? "primary" : "ghost"}
+            icon={option.icon}
+            iconOnly
+            iconSize={15}
+            onClick={() => onChange(option.value)}
+            style={{
+              minHeight: 32,
+              width: 34,
+              padding: 0,
+              borderRadius: 7,
+              border: `1px solid ${isActive ? `${colors.brand}55` : "transparent"}`,
+              backgroundColor: isActive ? `${colors.brand}18` : "transparent",
+              color: isActive ? colors.brand : colors.textSecondary,
+              flex: "0 0 auto",
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -764,8 +1732,8 @@ function EmptyDetailCard({
   title: string;
 }) {
   return (
-    <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
-      <FitText style={{ fontSize: 18, fontWeight: 900 }}>{title}</FitText>
+    <div style={{ display: "grid", gap: 12, alignContent: "start", textAlign: "center" }}>
+      <FitText style={{ fontSize: 16, fontWeight: 850 }}>{title}</FitText>
       <FitText style={{ color: colors.textMuted, fontSize: 13, lineHeight: 1.55 }}>
         {copy}
       </FitText>
@@ -775,17 +1743,9 @@ function EmptyDetailCard({
 
 function RetailDetailCard({
   colors,
-  onArchive,
-  onEdit,
-  onRecordSale,
-  onRestock,
   product,
 }: {
   colors: IThemeContext["colors"];
-  onArchive: () => void;
-  onEdit: () => void;
-  onRecordSale: () => void;
-  onRestock: () => void;
   product: InventoryRetailTableRow;
 }) {
   const imageUrl = getInventoryImageUrl(product.imageUrl);
@@ -815,12 +1775,6 @@ function RetailDetailCard({
           ["Value", `PHP ${product.totalValue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`],
         ]}
       />
-      <div style={{ display: "grid", gap: 8 }}>
-        <FitButton variant="primary" label="RECORD SALE" icon={ReceiptText} onClick={onRecordSale} />
-        <FitButton variant="ghost" label="RESTOCK ITEM" icon={RefreshCw} onClick={onRestock} />
-        <FitButton variant="ghost" label="EDIT DETAILS" icon={Edit3} onClick={onEdit} />
-        <FitButton variant="danger" label="ARCHIVE ITEM" icon={Archive} onClick={onArchive} />
-      </div>
     </DetailCardShell>
   );
 }
@@ -828,15 +1782,9 @@ function RetailDetailCard({
 function EquipmentDetailCard({
   colors,
   equipment,
-  onArchive,
-  onEdit,
-  onWriteOff,
 }: {
   colors: IThemeContext["colors"];
   equipment: InventoryEquipmentTableRow;
-  onArchive: () => void;
-  onEdit: () => void;
-  onWriteOff: () => void;
 }) {
   const imageUrl = getInventoryImageUrl(equipment.imageUrl);
 
@@ -864,11 +1812,6 @@ function EquipmentDetailCard({
           ["Status", equipment.status],
         ]}
       />
-      <div style={{ display: "grid", gap: 8 }}>
-        <FitButton variant="primary" label="RECORD WRITEOFF" icon={Wrench} onClick={onWriteOff} />
-        <FitButton variant="ghost" label="EDIT DETAILS" icon={Edit3} onClick={onEdit} />
-        <FitButton variant="danger" label="ARCHIVE EQUIPMENT" icon={Archive} onClick={onArchive} />
-      </div>
     </DetailCardShell>
   );
 }
@@ -892,28 +1835,30 @@ function DetailCardShell({
     <div style={{ display: "grid", gap: 14 }}>
       <div
         style={{
-          border: `1px solid ${colors.border}`,
+          width: 74,
+          height: 74,
           borderRadius: 8,
+          border: `1px solid ${colors.border}`,
           backgroundColor: colors.surfaceRaised,
-          minHeight: 170,
-          overflow: "hidden",
           display: "grid",
           placeItems: "center",
+          justifySelf: "center",
+          overflow: "hidden",
         }}
       >
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={imageAlt}
-            style={{ width: "100%", height: 190, objectFit: "cover" }}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (
-          <Package size={32} color={colors.textMuted} />
+          <Package size={26} color={colors.textMuted} />
         )}
       </div>
-      <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <FitText style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.12 }}>
+      <div style={{ display: "grid", gap: 8, justifyItems: "center", textAlign: "center" }}>
+        <div style={{ display: "grid", justifyItems: "center", gap: 7, minWidth: 0 }}>
+          <FitText style={{ fontSize: 16, fontWeight: 850, lineHeight: 1.22, overflowWrap: "anywhere" }}>
             {title}
           </FitText>
           {status}

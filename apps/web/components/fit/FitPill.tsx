@@ -1,5 +1,6 @@
 "use client";
 import type { CSSProperties } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -9,6 +10,7 @@ import { FitText } from "./FitText";
 export type FitPillOption<T extends string = string> = {
     key: T;
     label: string;
+    icon?: LucideIcon;
 };
 
 type ToggleProps<T extends string = string> = {
@@ -61,6 +63,8 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    maxWidth: "100%",
+                    minWidth: 0,
                     borderRadius: 999,
                     border: `1px solid ${tone}${borderOpacity}`,
                     padding: "3px 9px",
@@ -68,7 +72,18 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
                     ...style
                 }}
             >
-                <FitText as="span" style={{ color: tone, fontSize, fontWeight }}>
+                <FitText
+                    as="span"
+                    style={{
+                        color: tone,
+                        fontSize,
+                        fontWeight,
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                    }}
+                >
                     {label}
                 </FitText>
             </span>
@@ -82,6 +97,11 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
                 display: "inline-flex",
                 gap: 4,
                 padding: 4,
+                maxWidth: "100%",
+                minWidth: 0,
+                overflowX: "auto",
+                overflowY: "hidden",
+                WebkitOverflowScrolling: "touch",
                 borderRadius: 10,
                 backgroundColor: colors.surfaceRaised,
                 border: `1px solid ${colors.border}`,
@@ -90,15 +110,19 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
         >
             {options.map((opt) => {
                 const isActive = opt.key === active;
+                const Icon = opt.icon;
                 return (
                     <FitButton
                         key={opt.key}
                         variant={isActive ? "primary" : "ghost"}
                         label={opt.label}
+                        icon={Icon}
+                        iconSize={14}
                         onClick={() => onChange(opt.key)}
                         style={{
                             padding: "5px 14px",
                             minHeight: 32,
+                            flexShrink: 0,
                             borderRadius: 7,
                             border: `1px solid ${isActive ? colors.brand + "55" : "transparent"}`,
                             backgroundColor: isActive ? `${colors.brand}18` : "transparent"
@@ -106,7 +130,8 @@ export default function FitPill<T extends string = string>(props: Props<T>) {
                         textStyle={{
                             fontSize: 12,
                             fontWeight: 600,
-                            color: isActive ? colors.brand : colors.textSecondary
+                            color: isActive ? colors.brand : colors.textSecondary,
+                            whiteSpace: "nowrap"
                         }}
                     />
                 );

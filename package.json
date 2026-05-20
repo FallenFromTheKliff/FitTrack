@@ -20,6 +20,8 @@
     "dev:web": "pnpm --filter @fittrack/web run dev",
     "dev:mobile": "pnpm --filter @fittrack/mobile run dev",
     "dev:mobile:web": "pnpm --dir apps/mobile run web -- --port 8081",
+    "build:mobile:apk": "pnpm --dir apps/mobile run android:apk",
+    "install:mobile:apk": "pnpm run build:mobile:apk -- --install",
     "db:ensure-local": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/ensure-local-db.ts",
     "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate && node tasks/ensure-prisma-client-link.mjs",
     "db:push": "pnpm --filter @fittrack/api exec npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
@@ -28,6 +30,7 @@
     "db:migrate:generate": "pnpm db:migrate && pnpm db:generate",
     "db:seed": "pnpm --filter @fittrack/api exec npx prisma db seed",
     "db:seed:realistic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-realistic-data.ts",
+    "db:seed:defense-demo": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-defense-demo-data.ts",
     "db:seed:test": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=reset",
     "db:seed:test:additive": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=additive",
     "db:seed:test:report": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/report-test-data.ts",
@@ -62,6 +65,11 @@
     ],
     "patchedDependencies": {
       "@react-native/gradle-plugin@0.83.4": "patches/@react-native__gradle-plugin@0.83.4.patch",
+      "@shopify/react-native-skia@2.6.2": "patches/@shopify__react-native-skia@2.6.2.patch",
+      "expo-modules-core@55.0.14": "patches/expo-modules-core@55.0.14.patch",
+      "react-native-reanimated@4.2.2": "patches/react-native-reanimated@4.2.2.patch",
+      "react-native-vision-camera@4.7.3": "patches/react-native-vision-camera@4.7.3.patch",
+      "react-native-worklets-core@1.6.3": "patches/react-native-worklets-core@1.6.3.patch",
       "react-native-worklets@0.7.4": "patches/react-native-worklets@0.7.4.patch",
       "vision-camera-pose-detector@1.1.0": "patches/vision-camera-pose-detector@1.1.0.patch"
     }

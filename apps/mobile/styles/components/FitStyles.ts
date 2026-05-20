@@ -86,6 +86,13 @@ export function makeFitSectionStyles(colors: ThemeColors) {
       marginBottom: 10,
       paddingHorizontal: 4
     },
+    subtitle: {
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 17,
+      marginBottom: 10,
+      paddingHorizontal: 4
+    },
     card: {
       backgroundColor: colors.surface,
       borderRadius: R.xl,
@@ -168,9 +175,10 @@ export function makeFitCardStyles(colors: ThemeColors) {
     },
     statValue: {
       fontSize: 22,
-      fontWeight: "700"
+      fontWeight: "700",
+      textAlign: "center"
     },
-    statLabel: { fontSize: 11 }
+    statLabel: { fontSize: 11, textAlign: "center" }
   });
 }
 

@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -10,6 +10,7 @@ describe('AuthController', () => {
   let controller: AuthController;
 
   const authService = {
+    login: jest.fn(),
     refresh: jest.fn(),
   };
 
@@ -72,5 +73,36 @@ describe('AuthController', () => {
         refresh_token: 'next-refresh',
       }),
     );
+  });
+
+  it('returns login OTP challenges without setting a refresh cookie', async () => {
+    const req = {
+      headers: {},
+      socket: { remoteAddress: '127.0.0.1' },
+    } as Request;
+    const res = {
+      cookie: jest.fn(),
+    } as unknown as Response;
+    const challenge = {
+      otpRequired: true,
+      user_id: 'staff-1',
+      email: 'staff@example.com',
+      role: 'staff',
+    };
+
+    authService.login.mockResolvedValue(challenge);
+
+    await expect(
+      controller.login(
+        {
+          email: 'staff@example.com',
+          password: 'Password1!',
+          portal: 'team',
+        },
+        req,
+        res,
+      ),
+    ).resolves.toEqual(challenge);
+    expect(res.cookie).not.toHaveBeenCalled();
   });
 });

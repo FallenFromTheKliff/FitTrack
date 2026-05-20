@@ -56,3 +56,14 @@ export interface TokenPairResponse {
 export interface InternalTokenPairResponse extends TokenPairResponse {
   _refresh_token: string;
 }
+
+export interface LoginOtpChallengeResponse {
+  otpRequired: true;
+  user_id: string;
+  email: string;
+  role: UserRole;
+}
+
+export type InternalLoginResponse =
+  | InternalTokenPairResponse
+  | LoginOtpChallengeResponse;

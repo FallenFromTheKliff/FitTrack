@@ -27,6 +27,9 @@ const LIVE_ACCOUNT_KEYS = new Set([
   'admin',
   'staff',
   'coach',
+  'coach-casey',
+  'coach-bravo',
+  'coach-ivy',
   'member-active',
   'member-premium',
   'member-frozen',
@@ -515,10 +518,7 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
 
 async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
   const coachAccounts = ensuredAccounts.filter(
-    ({ account }) =>
-      account.key === 'coach' ||
-      account.key === 'staff' ||
-      account.key === 'member-expired',
+    ({ account }) => account.role === UserRole.coach,
   );
 
   for (const { account, userId } of coachAccounts) {
@@ -529,13 +529,13 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         contact_email: account.email,
         contact_phone: account.phone,
         specialization:
-          account.key === 'staff'
+          account.key === 'coach-casey'
             ? 'Strength floor operations and programming'
             : 'Conditioning, mobility, and guided training',
         bio: 'Seeded coach profile for production smoke testing.',
-        certification: account.key === 'staff' ? 'NASM-CPT' : 'ACE-CPT',
+        certification: account.key === 'coach-casey' ? 'NASM-CPT' : 'ACE-CPT',
         hourly_rate: new Prisma.Decimal(
-          account.key === 'staff' ? '700' : '900',
+          account.key === 'coach-casey' ? '700' : '900',
         ),
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: new Prisma.Decimal('4.80'),
@@ -549,13 +549,13 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         contact_email: account.email,
         contact_phone: account.phone,
         specialization:
-          account.key === 'staff'
+          account.key === 'coach-casey'
             ? 'Strength floor operations and programming'
             : 'Conditioning, mobility, and guided training',
         bio: 'Seeded coach profile for production smoke testing.',
-        certification: account.key === 'staff' ? 'NASM-CPT' : 'ACE-CPT',
+        certification: account.key === 'coach-casey' ? 'NASM-CPT' : 'ACE-CPT',
         hourly_rate: new Prisma.Decimal(
-          account.key === 'staff' ? '700' : '900',
+          account.key === 'coach-casey' ? '700' : '900',
         ),
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: new Prisma.Decimal('4.80'),

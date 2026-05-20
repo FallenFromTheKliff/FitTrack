@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   View,
 } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
@@ -44,6 +43,7 @@ import FitSearch from "@/components/fit/FitSearch";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import NoticeModal from "@/components/modals/shared/NoticeModal";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import TimeSlotModal, {
   type TimeSlot,
 } from "@/components/modals/shared/TimeSlotModal";
@@ -323,7 +323,10 @@ export default function AppointmentModal({
     enabled: isVisible && !!selectedCoach,
   });
 
-  const bookedCoachDates = availability?.bookedDates ?? [];
+  const bookedCoachDates = useMemo(
+    () => availability?.bookedDates ?? [],
+    [availability?.bookedDates],
+  );
   const bookedCoachDateSet = useMemo(
     () => new Set(bookedCoachDates),
     [bookedCoachDates],
@@ -728,7 +731,9 @@ export default function AppointmentModal({
           isVisible &&
           appointmentConfirmation == null &&
           successNotice == null &&
-          !isPaymongoNoticeOpen
+          !isPaymongoNoticeOpen &&
+          !isCalOpen &&
+          !isTimeOpen
         }
         transparent
         animationType="none"
@@ -754,9 +759,10 @@ export default function AppointmentModal({
                 </FitText>
               </View>
             </Animated.View>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
+            <FitModalScrollView
+              style={s.middle}
               contentContainerStyle={s.body}
+              resetKey={`${isVisible}-${step}`}
             >
               {step === "coach" ? (
                 <View style={{ gap: 12 }}>
@@ -1212,7 +1218,7 @@ export default function AppointmentModal({
               {errorText ? (
                 <FitText style={s.errorText}>{errorText}</FitText>
               ) : null}
-            </ScrollView>
+            </FitModalScrollView>
             <Animated.View style={[s.footer, footerBorderStyle]}>
               <FitButton
                 label={step === "coach" ? "Cancel" : "Back"}
@@ -1244,33 +1250,33 @@ export default function AppointmentModal({
             </Animated.View>
             </Animated.View>
           </Animated.View>
-          <CalendarModal
-            isVisible={isCalOpen}
-            selectedDate={selectedDate}
-            blockPast
-            defaultYear={new Date().getFullYear()}
-            defaultMonth={new Date().getMonth() + 1}
-            blockedDates={bookedCoachDates}
-            highlightedDates={highlightedCoachDates}
-            onSelect={(date) => {
-              setSelectedDate(date);
-              setSelectedSlotLabel("");
-              setIsCalOpen(false);
-            }}
-            onClose={() => setIsCalOpen(false)}
-          />
-          <TimeSlotModal
-            isVisible={isTimeOpen}
-            slots={timeSlots}
-            selectedTime={selectedSlotLabel}
-            onSelect={(slot) => {
-              setSelectedSlotLabel(slot.time);
-              setIsTimeOpen(false);
-            }}
-            onClose={() => setIsTimeOpen(false)}
-          />
         </KeyboardAvoidingView>
       </Modal>
+      <CalendarModal
+        isVisible={isCalOpen}
+        selectedDate={selectedDate}
+        blockPast
+        defaultYear={new Date().getFullYear()}
+        defaultMonth={new Date().getMonth() + 1}
+        blockedDates={bookedCoachDates}
+        highlightedDates={highlightedCoachDates}
+        onSelect={(date) => {
+          setSelectedDate(date);
+          setSelectedSlotLabel("");
+          setIsCalOpen(false);
+        }}
+        onClose={() => setIsCalOpen(false)}
+      />
+      <TimeSlotModal
+        isVisible={isTimeOpen}
+        slots={timeSlots}
+        selectedTime={selectedSlotLabel}
+        onSelect={(slot) => {
+          setSelectedSlotLabel(slot.time);
+          setIsTimeOpen(false);
+        }}
+        onClose={() => setIsTimeOpen(false)}
+      />
       <NoticeModal
         isVisible={isPaymongoNoticeOpen}
         title={PAYMONGO_AVAILABILITY.modalTitle}

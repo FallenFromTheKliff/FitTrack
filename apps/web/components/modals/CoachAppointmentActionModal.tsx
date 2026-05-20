@@ -88,34 +88,20 @@ export default function CoachAppointmentActionModal({
   return (
     <FitModal
       isOpen={isOpen}
-      onClose={isSubmitting ? () => {} : onClose}
+      onClose={onClose}
       title={copy.title}
       subtitle={appointmentLabel}
       maxWidth={560}
+      closeDisabled={isSubmitting}
       closeAriaLabel="Close appointment action modal"
       footer={
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            width: "100%",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label="BACK"
-            onClick={onClose}
-            disabled={isSubmitting}
-          />
-          <FitButton
-            variant={copy.variant}
-            label={isSubmitting ? copy.actionLabel : copy.buttonLabel}
-            onClick={() => void onSubmit(value.trim())}
-            disabled={isDisabled}
-          />
-        </div>
+        <FitButton
+          variant={copy.variant}
+          label={isSubmitting ? copy.actionLabel : copy.buttonLabel}
+          onClick={() => void onSubmit(value.trim())}
+          disabled={isDisabled}
+          style={{ flex: 1 }}
+        />
       }
     >
       <div style={{ display: "grid", gap: 14 }}>

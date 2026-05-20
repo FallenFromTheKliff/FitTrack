@@ -1,5 +1,6 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -83,6 +84,7 @@ describe('CoachService', () => {
       data: [
         expect.objectContaining({
           id: 'coach-1',
+          display_name: 'Maria Santos',
           hourly_rate: '1200',
           average_rating: '4.75',
           availability_slots: [
@@ -95,9 +97,9 @@ describe('CoachService', () => {
           ],
           booked_dates: [],
           profile: {
-            first_name: null,
-            last_name: null,
-            avatar_url: null,
+            first_name: 'Maria',
+            last_name: 'Santos',
+            avatar_url: 'https://cdn.fittrack.test/avatars/maria.png',
           },
         }),
       ],
@@ -131,9 +133,9 @@ describe('CoachService', () => {
         user: {
           id: 'user-1',
           profile: {
-            first_name: null,
-            last_name: null,
-            avatar_url: null,
+            first_name: 'Maria',
+            last_name: 'Santos',
+            avatar_url: 'https://cdn.fittrack.test/avatars/maria.png',
           },
         },
       }),
@@ -143,6 +145,13 @@ describe('CoachService', () => {
   it('rejects gym commission updates from coach self-service', async () => {
     await expect(
       service.updateMyProfile('user-1', { gym_commission_pct: 25 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
+  });
+
+  it('rejects hourly rate updates from coach self-service', async () => {
+    await expect(
+      service.updateMyProfile('user-1', { hourly_rate: 1500 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
   });
@@ -239,6 +248,14 @@ describe('CoachService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(repo.updateCoachById).not.toHaveBeenCalled();
+  });
+
+  it('rejects standalone coach profile creation', async () => {
+    await expect(
+      service.createStandaloneCoach({
+        display_name: 'Standalone Coach',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('accepts coach-linked reservation windows that fit active availability with no conflicts', async () => {

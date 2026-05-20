@@ -89,14 +89,14 @@ type NutritionLogApiRecord = {
   carbs_g: string | number;
   created_at: string;
   fat_g: string | number;
-  food_item: string;
+  food_item: string | null;
   id: string;
   log_date: string;
   macro_target_id: string | null;
-  meal_name: string;
+  meal_name: string | null;
   protein_g: string | number;
   quantity: string | number;
-  unit: NutritionUnit;
+  unit: NutritionUnit | string | null;
   updated_at: string;
   user_id: string;
 };
@@ -129,6 +129,33 @@ type NutritionCoachingInsightApiRecord = {
 function toNumber(value: string | number | null | undefined) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+const NUTRITION_UNITS = new Set<NutritionUnit>([
+  "g",
+  "kg",
+  "ml",
+  "L",
+  "oz",
+  "lb",
+  "cup",
+  "tbsp",
+  "tsp",
+  "serving",
+  "piece"
+]);
+
+function toSafeString(value: unknown, fallback: string) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  }
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
+function toNutritionUnit(value: unknown): NutritionUnit {
+  return NUTRITION_UNITS.has(value as NutritionUnit) ? (value as NutritionUnit) : "serving";
 }
 
 function mapMacroTotals(record: DailyMacroTotalsApiRecord): NutritionMacroTotalsRecord {
@@ -178,18 +205,18 @@ function mapNutritionLog(record: NutritionLogApiRecord): NutritionLogRecord {
   return {
     calories: toNumber(record.calories),
     carbsG: toNumber(record.carbs_g),
-    createdAt: record.created_at,
+    createdAt: toSafeString(record.created_at, ""),
     fatG: toNumber(record.fat_g),
-    foodItem: record.food_item,
-    id: record.id,
-    logDate: record.log_date,
+    foodItem: toSafeString(record.food_item, "Meal"),
+    id: toSafeString(record.id, ""),
+    logDate: toSafeString(record.log_date, toSafeString(record.created_at, "")),
     macroTargetId: record.macro_target_id,
-    mealName: record.meal_name,
+    mealName: toSafeString(record.meal_name, "Snack"),
     proteinG: toNumber(record.protein_g),
     quantity: toNumber(record.quantity),
-    unit: record.unit,
-    updatedAt: record.updated_at,
-    userId: record.user_id
+    unit: toNutritionUnit(record.unit),
+    updatedAt: toSafeString(record.updated_at, ""),
+    userId: toSafeString(record.user_id, "")
   };
 }
 

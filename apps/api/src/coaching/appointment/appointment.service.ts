@@ -79,6 +79,10 @@ const DOWNPAYMENT_RATE = new Prisma.Decimal('0.30');
 const ZERO_DECIMAL = new Prisma.Decimal('0');
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
+type ActiveAppointmentPayment = Pick<
+  Payment,
+  'id' | 'payment_stage' | 'provider' | 'status'
+>;
 
 type AppointmentAmounts = {
   totalAmount: Prisma.Decimal;
@@ -356,17 +360,14 @@ export class AppointmentService {
         PayableType.coaching,
         result.data.map((appointment) => appointment.id),
       );
-    const latestPaymentStageByAppointmentId = new Map<
+    const latestPaymentByAppointmentId = new Map<
       string,
-      PaymentStage
+      ActiveAppointmentPayment
     >();
 
     for (const payment of latestPayments) {
-      if (!latestPaymentStageByAppointmentId.has(payment.payable_id)) {
-        latestPaymentStageByAppointmentId.set(
-          payment.payable_id,
-          payment.payment_stage,
-        );
+      if (!latestPaymentByAppointmentId.has(payment.payable_id)) {
+        latestPaymentByAppointmentId.set(payment.payable_id, payment);
       }
     }
 
@@ -374,7 +375,7 @@ export class AppointmentService {
       data: result.data.map((appointment) =>
         this.toAppointmentResponse(
           appointment,
-          latestPaymentStageByAppointmentId.get(appointment.id) ?? null,
+          latestPaymentByAppointmentId.get(appointment.id) ?? null,
         ),
       ),
       meta: result.meta,
@@ -386,10 +387,28 @@ export class AppointmentService {
     dto: DateRangeDTO,
   ): Promise<PaginatedResult<CoachScheduleAppointmentResponseDTO>> {
     const result = await this.repo.getCoachAppointments(coachUserId, dto);
+    const latestPayments =
+      await this.paymentRepository.findLatestPaymentsForPayableIds(
+        PayableType.coaching,
+        result.data.map((appointment) => appointment.id),
+      );
+    const latestPaymentByAppointmentId = new Map<
+      string,
+      ActiveAppointmentPayment
+    >();
+
+    for (const payment of latestPayments) {
+      if (!latestPaymentByAppointmentId.has(payment.payable_id)) {
+        latestPaymentByAppointmentId.set(payment.payable_id, payment);
+      }
+    }
 
     return {
       data: result.data.map((appointment) =>
-        this.toCoachScheduleResponse(appointment),
+        this.toCoachScheduleResponse(
+          appointment,
+          latestPaymentByAppointmentId.get(appointment.id) ?? null,
+        ),
       ),
       meta: result.meta,
     };
@@ -404,14 +423,14 @@ export class AppointmentService {
         PayableType.coaching,
         result.data.map((appointment) => appointment.id),
       );
-    const latestPaymentStageByAppointmentId = new Map<string, PaymentStage>();
+    const latestPaymentByAppointmentId = new Map<
+      string,
+      ActiveAppointmentPayment
+    >();
 
     for (const payment of latestPayments) {
-      if (!latestPaymentStageByAppointmentId.has(payment.payable_id)) {
-        latestPaymentStageByAppointmentId.set(
-          payment.payable_id,
-          payment.payment_stage,
-        );
+      if (!latestPaymentByAppointmentId.has(payment.payable_id)) {
+        latestPaymentByAppointmentId.set(payment.payable_id, payment);
       }
     }
 
@@ -419,7 +438,7 @@ export class AppointmentService {
       data: result.data.map((appointment) =>
         this.toStaffAppointmentResponse(
           appointment,
-          latestPaymentStageByAppointmentId.get(appointment.id) ?? null,
+          latestPaymentByAppointmentId.get(appointment.id) ?? null,
         ),
       ),
       meta: result.meta,
@@ -854,10 +873,7 @@ export class AppointmentService {
         return;
       }
 
-      if (
-        appointment.status !== AppointmentStatus.pending_payment &&
-        appointment.status !== AppointmentStatus.pending_coach
-      ) {
+      if (appointment.status !== AppointmentStatus.pending_payment) {
         return;
       }
 
@@ -883,8 +899,7 @@ export class AppointmentService {
     }
 
     if (
-      appointment.status !== AppointmentStatus.pending_payment &&
-      appointment.status !== AppointmentStatus.pending_coach
+      appointment.status !== AppointmentStatus.pending_payment
     ) {
       return;
     }
@@ -1010,7 +1025,7 @@ export class AppointmentService {
 
   private toAppointmentResponse(
     appointment: CoachAppointment | MemberAppointmentRecord,
-    activePaymentStage: PaymentStage | null = null,
+    activePayment: ActiveAppointmentPayment | null = null,
   ): AppointmentResponseDTO {
     return {
       id: appointment.id,
@@ -1033,7 +1048,10 @@ export class AppointmentService {
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
-      active_payment_stage: activePaymentStage,
+      active_payment_stage: activePayment?.payment_stage ?? null,
+      active_payment_id: activePayment?.id ?? null,
+      active_payment_status: activePayment?.status ?? null,
+      active_payment_provider: activePayment?.provider ?? null,
       session_notes: appointment.session_notes ?? null,
       coach_feedback: appointment.coach_feedback ?? null,
       assessment_report: appointment.assessment_report ?? null,
@@ -1071,6 +1089,7 @@ export class AppointmentService {
 
   private toCoachScheduleResponse(
     appointment: CoachScheduleRecord,
+    activePayment: ActiveAppointmentPayment | null = null,
   ): CoachScheduleAppointmentResponseDTO {
     return {
       id: appointment.id,
@@ -1087,6 +1106,10 @@ export class AppointmentService {
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
+      active_payment_stage: activePayment?.payment_stage ?? null,
+      active_payment_id: activePayment?.id ?? null,
+      active_payment_status: activePayment?.status ?? null,
+      active_payment_provider: activePayment?.provider ?? null,
       member_notes: appointment.member_notes ?? null,
       session_notes: appointment.session_notes ?? null,
       coach_feedback: appointment.coach_feedback ?? null,
@@ -1094,6 +1117,9 @@ export class AppointmentService {
       completed_at: appointment.completed_at?.toISOString() ?? null,
       coach_payout_paid_at:
         appointment.coach_payout_paid_at?.toISOString() ?? null,
+      no_show_at: appointment.no_show_at?.toISOString() ?? null,
+      cancellation_reason: appointment.cancellation_reason ?? null,
+      cancelled_at: appointment.cancelled_at?.toISOString() ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
       original_scheduled_at:
@@ -1124,7 +1150,7 @@ export class AppointmentService {
 
   private toStaffAppointmentResponse(
     appointment: StaffAppointmentRecord,
-    activePaymentStage: PaymentStage | null = null,
+    activePayment: ActiveAppointmentPayment | null = null,
   ): StaffAppointmentResponseDTO {
     return {
       id: appointment.id,
@@ -1141,7 +1167,10 @@ export class AppointmentService {
       downpayment_paid_at:
         appointment.downpayment_paid_at?.toISOString() ?? null,
       balance_paid_at: appointment.balance_paid_at?.toISOString() ?? null,
-      active_payment_stage: activePaymentStage,
+      active_payment_stage: activePayment?.payment_stage ?? null,
+      active_payment_id: activePayment?.id ?? null,
+      active_payment_status: activePayment?.status ?? null,
+      active_payment_provider: activePayment?.provider ?? null,
       member_notes: appointment.member_notes ?? null,
       session_notes: appointment.session_notes ?? null,
       coach_feedback: appointment.coach_feedback ?? null,
@@ -1149,6 +1178,9 @@ export class AppointmentService {
       completed_at: appointment.completed_at?.toISOString() ?? null,
       coach_payout_paid_at:
         appointment.coach_payout_paid_at?.toISOString() ?? null,
+      no_show_at: appointment.no_show_at?.toISOString() ?? null,
+      cancellation_reason: appointment.cancellation_reason ?? null,
+      cancelled_at: appointment.cancelled_at?.toISOString() ?? null,
       recurring_plan_id: appointment.recurring_plan_id ?? null,
       recurring_state: appointment.recurring_state ?? null,
       original_scheduled_at:
@@ -1272,6 +1304,13 @@ export class AppointmentService {
       return;
     }
 
+    if (
+      role === UserRole.coach &&
+      appointment.coach.user_id === requesterId
+    ) {
+      return;
+    }
+
     if (appointment.user_id === requesterId) {
       return;
     }
@@ -1332,8 +1371,7 @@ export class AppointmentService {
     }
 
     if (
-      appointment.status !== AppointmentStatus.pending_payment &&
-      appointment.status !== AppointmentStatus.pending_coach
+      appointment.status !== AppointmentStatus.pending_payment
     ) {
       throw new HttpException(
         {
@@ -1341,7 +1379,7 @@ export class AppointmentService {
           title: 'Downpayment Cannot Be Started',
           status: 422,
           detail:
-            'Only pending coach requests or coach-accepted appointments awaiting payment can start a downpayment.',
+            'Only coach-accepted appointments awaiting payment can start a downpayment.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1560,8 +1598,7 @@ export class AppointmentService {
     }
 
     if (
-      appointment.status !== AppointmentStatus.pending_payment &&
-      appointment.status !== AppointmentStatus.pending_coach
+      appointment.status !== AppointmentStatus.pending_payment
     ) {
       throw new HttpException(
         {
@@ -1569,7 +1606,7 @@ export class AppointmentService {
           title: 'Payment Cannot Be Started',
           status: 422,
           detail:
-            'Only pending coach requests or coach-accepted appointments awaiting payment can start a full payment.',
+            'Only coach-accepted appointments awaiting payment can start a full payment.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Dumbbell, SlidersHorizontal } from "lucide-react-native";
 
@@ -13,6 +13,7 @@ import { EXERCISE_REFERENCES, type ExerciseReference } from "@/data/exercises";
 import { FitText } from "@/components/fit/FitText";
 import FitSearch from "@/components/fit/FitSearch";
 import FitButton from "@/components/fit/FitButton";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 const LEVEL_OPTIONS: { label: string; value: "all" | ExerciseReference["level"] }[] = [
   { label: "All", value: "all" },
@@ -150,10 +151,10 @@ export default function ExerciseModal({
                   </View>
               )}
             </View>
-            <ScrollView
+            <FitModalScrollView
                 style={s.body}
                 contentContainerStyle={s.listContent}
-                showsVerticalScrollIndicator={false}
+                resetKey={`${isVisible}-${activeLevel}-${debouncedQuery}`}
             >
               {isLoading ? (
                   <FitText style={s.emptyText}>Loading live exercise library...</FitText>
@@ -203,7 +204,7 @@ export default function ExerciseModal({
                     </Pressable>
                 );
               })}
-            </ScrollView>
+            </FitModalScrollView>
             <View style={s.footer}>
               {onCreateFromSession ? (
                 <FitButton

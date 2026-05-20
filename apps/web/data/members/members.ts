@@ -2,7 +2,7 @@ import type { FieldConfig } from "@/components/modals/DetailsModal";
 import type { MemberRecord } from "@fittrack/types";
 
 export const MEMBER_STATUS_TABS = [
-  { key: "All", label: "All" },
+  { key: "All", label: "All Statuses" },
   { key: "Active", label: "Active" },
   { key: "Archived", label: "Archived" },
   { key: "Termination Requests", label: "Requests" }
@@ -26,7 +26,7 @@ export type DeletionRequestResponse = {
 export const MEMBERSHIP_CARD_STATUS_COLORS: Record<string, string> = {
   Member: "var(--fit-success)",
   "Non-member": "var(--fit-text-secondary)",
-  "Pending verification": "var(--fit-warning)",
+  "Not Verified": "var(--fit-text-secondary)",
   Revoked: "var(--fit-danger)",
   "Not Applicable": "var(--fit-text-secondary)"
 };
@@ -34,6 +34,7 @@ export const MEMBERSHIP_CARD_STATUS_COLORS: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   Active: "var(--fit-success)",
   Archived: "var(--fit-warning)",
+  "Requesting Termination": "var(--fit-warning)",
   "Termination request": "var(--fit-warning)",
   "Termination Requests": "var(--fit-warning)"
 };
@@ -46,7 +47,7 @@ export const TIER_COLORS: Record<string, string> = {
 };
 
 export const MEMBER_FILTER_OPTIONS = [
-  { label: "All", value: "all" },
+  { label: "All Roles", value: "all" },
   { label: "Admin", value: "Admin" },
   { label: "Staff", value: "Staff" },
   { label: "Coaches", value: "Coach" },
@@ -54,11 +55,11 @@ export const MEMBER_FILTER_OPTIONS = [
 ];
 
 export const MEMBER_TIER_FILTER_OPTIONS = [
-  { label: "All tiers", value: "all" },
+  { label: "All Tiers", value: "all" },
   { label: "Member", value: "active_member" },
   { label: "Pending membership", value: "pending_membership" },
-  { label: "Pending verification", value: "pending_verification" },
-  { label: "Verified Non-Member", value: "verified_non_member" },
+  { label: "Not Verified", value: "pending_verification" },
+  { label: "Non-member", value: "verified_non_member" },
   { label: "Revoked", value: "revoked" },
 ] as const;
 
@@ -135,7 +136,7 @@ export const EDIT_MEMBER_FIELDS: FieldConfig[] = [
     options: [
       { label: "Not Applicable", value: "not_applicable" },
       { label: "Non-member", value: "none" },
-      { label: "Pending verification", value: "pending_verification" },
+      { label: "Not Verified", value: "pending_verification" },
       { label: "Member", value: "active" },
       { label: "Revoked", value: "revoked" }
     ]

@@ -15,7 +15,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
+import { formatBookingDate } from "@fittrack/utils";
 import type { StaffAppointmentRecord } from "@fittrack/api-client";
 import { coachScheduleQueryOptions } from "@fittrack/query";
 
@@ -25,11 +25,8 @@ import {
   MemberCard,
   MemberGrid,
   MemberOnlyScreen,
-  MemberPanelHeader,
   MemberSection,
   MemberSurface,
-  MemberText,
-  MemberToneSurface,
   PremiumGate,
   StatTile,
 } from "@/components/member-only/MemberOnlyPrimitives";
@@ -49,9 +46,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const { isLoading, user } = useAuth();
   const access = useMemberOnlyAccess("Home insights");
-  const { hasMemberCardAccess, membershipCardStatus } = access;
+  const { hasMemberCardAccess } = access;
   const todayString = getTodayString();
-  const firstName = user?.name?.split(" ")[0] ?? "Member";
   const memberUserId = user?.role === "USER" ? user.id : undefined;
   const data = useMemberOnlyHomeData({ hasMemberCardAccess: user?.role === "USER" && hasMemberCardAccess, todayString, userId: memberUserId });
   const coachAppointmentsQuery = useQuery({
@@ -69,7 +65,6 @@ export default function DashboardPage() {
   const activeDaysLast7Days = countRecentActiveDays(sessions);
   const currentStreakDays = countCurrentStreakDays(sessions);
   const completedSessionsLast7Days = countRecentCompletedSessions(sessions);
-  const statusTone = membershipCardStatus === "revoked" ? "danger" : membershipCardStatus === "pending_verification" ? "warning" : hasMemberCardAccess ? "success" : "muted";
 
   useEffect(() => {
     if (isLoading) return;
@@ -96,66 +91,65 @@ export default function DashboardPage() {
 
     return (
       <MemberOnlyScreen>
-        <MemberText as="h1" variant="title">
-          Coach Dashboard
-        </MemberText>
-        <MemberText as="p" variant="subtitle">
-          Hi {firstName}. Your coach portal keeps clients, sessions, and earnings one click away.
-        </MemberText>
+        <div className="coach-dashboard-page">
+          <MemberGrid columns={3} compactPair>
+            <StatTile
+              icon={Users}
+              label="Clients"
+              value={coachAppointmentsQuery.isLoading ? "--" : String(coachClientCount)}
+              variant="inline"
+            />
+            <StatTile
+              icon={CalendarDays}
+              label="Sessions"
+              value={coachAppointmentsQuery.isLoading ? "--" : String(totalSessions)}
+              tone="success"
+              variant="inline"
+            />
+            <StatTile
+              icon={LineChart}
+              label="Earnings"
+              value={coachAppointmentsQuery.isLoading ? "--" : `PHP ${totalEarnings.toLocaleString("en-PH")}`}
+              tone="warning"
+              variant="inline"
+            />
+          </MemberGrid>
 
-        <MemberGrid columns={3} compactPair>
-          <StatTile
-            icon={Users}
-            label="Clients"
-            value={coachAppointmentsQuery.isLoading ? "--" : String(coachClientCount)}
-          />
-          <StatTile
-            icon={CalendarDays}
-            label="Sessions"
-            value={coachAppointmentsQuery.isLoading ? "--" : String(totalSessions)}
-            tone="success"
-          />
-          <StatTile
-            icon={LineChart}
-            label="Earnings"
-            value={coachAppointmentsQuery.isLoading ? "--" : `₱${totalEarnings.toLocaleString("en-PH")}`}
-            tone="warning"
-          />
-        </MemberGrid>
-
-        <MemberSection heading="Coach actions">
-          <MemberSurface>
-            {[
-              {
-                icon: Users,
-                label: "Clients",
-                path: "/accounts",
-                subtitle: "Review member profiles and client readiness.",
-              },
-              {
-                icon: CalendarCheck,
-                label: "Sessions",
-                path: "/schedule",
-                subtitle: "Track coaching appointments and session status.",
-              },
-              {
-                icon: LineChart,
-                label: "Earnings",
-                path: "/analytics",
-                subtitle: "Review completed coaching work and expected earnings.",
-              },
-            ].map((item, index, items) => (
-              <MemberCard
-                key={item.path}
-                hasBorder={index < items.length - 1}
-                icon={item.icon}
-                label={item.label}
-                subtitle={item.subtitle}
-                onClick={() => router.push(item.path)}
-              />
-            ))}
-          </MemberSurface>
-        </MemberSection>
+          <MemberSection heading="Coach actions">
+            <MemberSurface>
+              {[
+                {
+                  icon: Users,
+                  label: "Clients",
+                  path: "/accounts",
+                  subtitle: "Review member profiles and client readiness.",
+                },
+                {
+                  icon: CalendarCheck,
+                  label: "Sessions",
+                  path: "/schedule",
+                  subtitle: "Track coaching appointments and session status.",
+                },
+                {
+                  icon: LineChart,
+                  label: "Earnings",
+                  path: "/analytics",
+                  subtitle: "Review completed coaching work and expected earnings.",
+                },
+              ].map((item, index, items) => (
+                <MemberCard
+                  key={item.path}
+                  density="compact"
+                  hasBorder={index < items.length - 1}
+                  icon={item.icon}
+                  label={item.label}
+                  subtitle={item.subtitle}
+                  onClick={() => router.push(item.path)}
+                />
+              ))}
+            </MemberSurface>
+          </MemberSection>
+        </div>
       </MemberOnlyScreen>
     );
   }
@@ -163,13 +157,6 @@ export default function DashboardPage() {
   if (user?.role === "USER") {
     return (
       <MemberOnlyScreen>
-        <MemberText as="h1" variant="title">
-          Hi {firstName}, {formatTodayLong()}
-        </MemberText>
-        <MemberText as="p" variant="subtitle">
-          Your web view keeps bookings, gym access, workouts, and account details in sync with FitTrack.
-        </MemberText>
-
         <MemberGrid columns={3} compactPair>
           <StatTile icon={CalendarDays} label="Today Bookings" value={String(todayBookings.length)} />
           <StatTile icon={Dumbbell} label="7 Day Activity" value={String(activeDaysLast7Days)} />
@@ -186,17 +173,6 @@ export default function DashboardPage() {
             title="Member-only tools stay synced after verification"
           />
         ) : null}
-
-        <MemberSection heading="Snapshot">
-          <MemberToneSurface tone={statusTone}>
-            <MemberPanelHeader eyebrow="Access" title={access.statusLabel} />
-            <MemberText variant="muted">
-              {hasMemberCardAccess
-                ? "Member-only web pages are unlocked for this account."
-                : "Profile verification controls the same unlock state as mobile."}
-            </MemberText>
-          </MemberToneSurface>
-        </MemberSection>
 
         <MemberSection heading="Quick Links">
           <MemberSurface>

@@ -23,6 +23,7 @@ import {
   getPoseMovementContractAngle,
   normalizeExerciseMovementProfile,
 } from "@fittrack/utils";
+import { FitSelect } from "@/components/fit";
 import { ConfirmModal } from "@/components/modals";
 import {
   DYNAMIC_REP_MODEL_OPTIONS,
@@ -1457,18 +1458,17 @@ export function MovementProfileEditor({
                 </div>
               ) : null}
               <FieldShell colors={colors} label="Selected landmark">
-                <select
+                <FitSelect
+                  compact
+                  fullWidth
                   name="exercise-selected-landmark"
                   onChange={(event) => setSelectedPoint(Number(event.target.value))}
-                  style={inputStyle(colors)}
+                  options={(activeFrame?.keypoints ?? []).map((_, index) => ({
+                    label: `${index}: ${LANDMARK_LABELS[index] ?? "landmark"}`,
+                    value: String(index),
+                  }))}
                   value={selectedPoint}
-                >
-                  {(activeFrame?.keypoints ?? []).map((_, index) => (
-                    <option key={index} value={index}>
-                      {index}: {LANDMARK_LABELS[index] ?? "landmark"}
-                    </option>
-                  ))}
-                </select>
+                />
               </FieldShell>
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                 <FieldShell colors={colors} label="X">
@@ -1647,67 +1647,64 @@ export function MovementProfileEditor({
             )}
             {movementMode === "dynamic_rep" ? (
               <FieldShell colors={colors} label="Side model">
-              <select
-                name="exercise-side-model"
-                onChange={(event) =>
-                  setRepModel(event.target.value as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number])
-                }
-                style={inputStyle(colors)}
-                value={
-                  DYNAMIC_REP_MODEL_OPTIONS.includes(
-                    contract.repModel as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
-                  )
-                    ? contract.repModel
-                    : "bilateral"
-                }
-              >
-                {DYNAMIC_REP_MODEL_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </select>
+                <FitSelect
+                  compact
+                  fullWidth
+                  name="exercise-side-model"
+                  onChange={(event) =>
+                    setRepModel(event.target.value as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number])
+                  }
+                  options={DYNAMIC_REP_MODEL_OPTIONS.map((option) => ({
+                    label: option.replace(/_/g, " "),
+                    value: option,
+                  }))}
+                  value={
+                    DYNAMIC_REP_MODEL_OPTIONS.includes(
+                      contract.repModel as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
+                    )
+                      ? contract.repModel
+                      : "bilateral"
+                  }
+                />
               </FieldShell>
             ) : null}
             <FieldShell colors={colors} label="Required sides">
-              <select
+              <FitSelect
+                compact
+                fullWidth
                 name="exercise-required-sides"
                 onChange={(event) =>
                   patchMovementContract({
                     requiredSides: event.target.value as (typeof REQUIRED_SIDE_OPTIONS)[number],
                   })
                 }
-                style={inputStyle(colors)}
-                value={contract.requiredSides ?? "either"}
-              >
-                {(movementMode === "static_hold"
+                options={(movementMode === "static_hold"
                   ? STATIC_REQUIRED_SIDE_OPTIONS
                   : REQUIRED_SIDE_OPTIONS
-                ).map((option) => (
-                  <option key={option} value={option}>
-                    {option.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </select>
+                ).map((option) => ({
+                  label: option.replace(/_/g, " "),
+                  value: option,
+                }))}
+                value={contract.requiredSides ?? "either"}
+              />
             </FieldShell>
             {movementMode === "dynamic_rep" ? (
               <FieldShell colors={colors} label="Partial rep policy">
-                <select
+                <FitSelect
+                  compact
+                  fullWidth
                   name="exercise-partial-rep-policy"
                   onChange={(event) =>
                     patchMovementContract({
                       partialRepPolicy: event.target.value as (typeof PARTIAL_REP_POLICY_OPTIONS)[number],
                     })
                   }
-                  style={inputStyle(colors)}
+                  options={PARTIAL_REP_POLICY_OPTIONS.map((option) => ({
+                    label: option.replace(/_/g, " "),
+                    value: option,
+                  }))}
                   value={contract.partialRepPolicy ?? "count_half_reps"}
-                >
-                  {PARTIAL_REP_POLICY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option.replace(/_/g, " ")}
-                    </option>
-                  ))}
-                </select>
+                />
               </FieldShell>
             ) : null}
           </div>

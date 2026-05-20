@@ -124,8 +124,8 @@ describe('BookingRepository', () => {
         where: {
           user_id: 'user-1',
           starts_at: {
-            gte: new Date('2026-03-01'),
-            lte: new Date('2026-03-31'),
+            gte: new Date('2026-02-28T16:00:00.000Z'),
+            lte: new Date('2026-03-31T15:59:59.999Z'),
           },
         },
         orderBy: { starts_at: 'desc' },

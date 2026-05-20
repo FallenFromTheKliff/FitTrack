@@ -211,121 +211,123 @@ export default function AssessmentsScreen() {
         showsVerticalScrollIndicator={false}
         style={[base.content, screenStyle]}
       >
-        <Animated.View style={[s.heroCard, contentStyle]}>
-          <Animated.View style={[s.heroIcon, iconStyle]}>
-            <ClipboardCheck size={24} color={colors.brand} strokeWidth={2} />
-          </Animated.View>
-          <View style={s.heroText}>
-            <FitText style={s.heroKicker}>COACHING RECORD</FitText>
-            <FitText style={s.heroTitle}>Assessments</FitText>
-            <FitText style={s.heroBody}>
-              Coach notes, session reports, and your submitted ratings are kept together here.
-            </FitText>
+        <Animated.View style={contentStyle}>
+          <View style={s.heroCard}>
+            <Animated.View style={[s.heroIcon, iconStyle]}>
+              <ClipboardCheck size={24} color={colors.brand} strokeWidth={2} />
+            </Animated.View>
+            <View style={s.heroText}>
+              <FitText style={s.heroKicker}>COACHING RECORD</FitText>
+              <FitText style={s.heroTitle}>Assessments</FitText>
+              <FitText style={s.heroBody}>
+                Coach notes, session reports, and your submitted ratings are kept together here.
+              </FitText>
+            </View>
           </View>
-        </Animated.View>
 
-        <View style={s.filterCard}>
-          <TextInput
-            value={coachSearch}
-            onChangeText={setCoachSearch}
-            placeholder="Search coach name..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={s.searchInput}
-          />
-          <View style={s.filterRow}>
-            {FILTER_OPTIONS.map((option) => {
-              const isActive = activeFilter === option.value;
+          <View style={s.filterCard}>
+            <TextInput
+              value={coachSearch}
+              onChangeText={setCoachSearch}
+              placeholder="Search coach name..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={s.searchInput}
+            />
+            <View style={s.filterRow}>
+              {FILTER_OPTIONS.map((option) => {
+                const isActive = activeFilter === option.value;
 
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isActive }}
-                  onPress={() => setActiveFilter(option.value)}
-                  style={[s.filterPill, isActive ? s.filterPillActive : null]}
-                >
-                  <FitText style={[s.filterPillText, isActive ? s.filterPillTextActive : null]}>
-                    {option.label}
-                  </FitText>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {isLoading ? (
-          <View style={s.emptyState}>
-            <ActivityIndicator color={colors.brand} />
-            <FitText style={s.emptyTitle}>Loading assessments</FitText>
-          </View>
-        ) : errorMessage ? (
-          <View style={s.emptyState}>
-            <MessageSquareText size={28} color={colors.danger} strokeWidth={2} />
-            <FitText style={s.emptyTitle}>Unable to load assessments</FitText>
-            <FitText style={s.emptyHint}>{errorMessage}</FitText>
-          </View>
-        ) : assessmentCards.length === 0 ? (
-          <View style={s.emptyState}>
-            <NotebookText size={30} color={colors.textMuted} strokeWidth={2} />
-            <FitText style={s.emptyTitle}>No assessments yet</FitText>
-            <FitText style={s.emptyHint}>
-              Completed coaching sessions with notes, reports, or ratings will appear here.
-            </FitText>
-          </View>
-        ) : (
-          <View style={s.cardStack}>
-            {assessmentCards.map((assessment) => (
-              <View key={assessment.id} style={s.assessmentCard}>
-                <View style={s.cardHeader}>
-                  <View style={s.cardTitleGroup}>
-                    <FitText style={s.cardTitle}>{assessment.coachName}</FitText>
-                    <FitText style={s.cardSubtitle}>
-                      {formatDateTime(assessment.scheduledAt)}
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                    onPress={() => setActiveFilter(option.value)}
+                    style={[s.filterPill, isActive ? s.filterPillActive : null]}
+                  >
+                    <FitText style={[s.filterPillText, isActive ? s.filterPillTextActive : null]}>
+                      {option.label}
                     </FitText>
-                  </View>
-                  <View style={s.statusPill}>
-                    <FitText style={s.statusText}>{assessment.status}</FitText>
-                  </View>
-                </View>
-
-                <View style={s.timeline}>
-                  {assessment.timeline.map((item, index) => (
-                    <View
-                      key={`${assessment.id}-${item.label}-${index}`}
-                      style={[
-                        s.timelineItem,
-                        index < assessment.timeline.length - 1
-                          ? s.timelineDivider
-                          : undefined,
-                      ]}
-                    >
-                      <View style={s.timelineIcon}>
-                        {item.tone === "member" ? (
-                          <Star
-                            fill={colors.warning}
-                            size={15}
-                            color={colors.warning}
-                            strokeWidth={2}
-                          />
-                        ) : item.tone === "coach" ? (
-                          <MessageSquareText size={16} color={colors.brand} strokeWidth={2} />
-                        ) : (
-                          <NotebookText size={16} color={colors.success} strokeWidth={2} />
-                        )}
-                      </View>
-                      <View style={s.timelineCopy}>
-                        <FitText style={s.timelineLabel}>{item.label}</FitText>
-                        <FitText style={s.timelineBody}>{item.body}</FitText>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        )}
+
+          {isLoading ? (
+            <View style={s.emptyState}>
+              <ActivityIndicator color={colors.brand} />
+              <FitText style={s.emptyTitle}>Loading assessments</FitText>
+            </View>
+          ) : errorMessage ? (
+            <View style={s.emptyState}>
+              <MessageSquareText size={28} color={colors.danger} strokeWidth={2} />
+              <FitText style={s.emptyTitle}>Unable to load assessments</FitText>
+              <FitText style={s.emptyHint}>{errorMessage}</FitText>
+            </View>
+          ) : assessmentCards.length === 0 ? (
+            <View style={s.emptyState}>
+              <NotebookText size={30} color={colors.textMuted} strokeWidth={2} />
+              <FitText style={s.emptyTitle}>No assessments yet</FitText>
+              <FitText style={s.emptyHint}>
+                Completed coaching sessions with notes, reports, or ratings will appear here.
+              </FitText>
+            </View>
+          ) : (
+            <View style={s.cardStack}>
+              {assessmentCards.map((assessment) => (
+                <View key={assessment.id} style={s.assessmentCard}>
+                  <View style={s.cardHeader}>
+                    <View style={s.cardTitleGroup}>
+                      <FitText style={s.cardTitle}>{assessment.coachName}</FitText>
+                      <FitText style={s.cardSubtitle}>
+                        {formatDateTime(assessment.scheduledAt)}
+                      </FitText>
+                    </View>
+                    <View style={s.statusPill}>
+                      <FitText style={s.statusText}>{assessment.status}</FitText>
+                    </View>
+                  </View>
+
+                  <View style={s.timeline}>
+                    {assessment.timeline.map((item, index) => (
+                      <View
+                        key={`${assessment.id}-${item.label}-${index}`}
+                        style={[
+                          s.timelineItem,
+                          index < assessment.timeline.length - 1
+                            ? s.timelineDivider
+                            : undefined,
+                        ]}
+                      >
+                        <View style={s.timelineIcon}>
+                          {item.tone === "member" ? (
+                            <Star
+                              fill={colors.warning}
+                              size={15}
+                              color={colors.warning}
+                              strokeWidth={2}
+                            />
+                          ) : item.tone === "coach" ? (
+                            <MessageSquareText size={16} color={colors.brand} strokeWidth={2} />
+                          ) : (
+                            <NotebookText size={16} color={colors.success} strokeWidth={2} />
+                          )}
+                        </View>
+                        <View style={s.timelineCopy}>
+                          <FitText style={s.timelineLabel}>{item.label}</FitText>
+                          <FitText style={s.timelineBody}>{item.body}</FitText>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </Animated.View>
       </Animated.ScrollView>
     </Animated.View>
   );

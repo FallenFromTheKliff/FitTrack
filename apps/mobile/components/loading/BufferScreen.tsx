@@ -28,12 +28,17 @@ export default function BufferScreen({ onCommit, onDone }: Props) {
     let cancelled = false;
     const runTransition = async () => {
       const minimumDelay = settings.animationLevel === "full" ? 500 : 0;
-      await Promise.all([
-        onCommit(),
-        new Promise((resolve) => setTimeout(resolve, minimumDelay))
-      ]);
-      if (!cancelled) {
-        onDone();
+      try {
+        await Promise.all([
+          onCommit(),
+          new Promise((resolve) => setTimeout(resolve, minimumDelay))
+        ]);
+      } catch (error) {
+        console.warn("[fittrack-mobile] Login transition commit failed.", error);
+      } finally {
+        if (!cancelled) {
+          onDone();
+        }
       }
     };
     void runTransition();

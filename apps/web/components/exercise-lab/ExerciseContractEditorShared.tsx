@@ -356,12 +356,16 @@ export function miniButtonStyle(
   return {
     background: active ? colors.primary : colors.surface,
     border: `1px solid ${active ? colors.primary : colors.border}`,
-    borderRadius: 999,
+    borderRadius: 10,
+    boxShadow: active ? `0 10px 18px -14px ${colors.primary}` : "none",
     color: active ? "#090909" : colors.text,
     cursor: "pointer",
     fontSize: 12,
     fontWeight: 800,
     padding: "8px 12px",
+    transform: active ? "translateY(-1px)" : "translateY(0)",
+    transition:
+      "background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease",
   };
 }
 
@@ -396,17 +400,19 @@ export function FieldLabel({
           style={{
             alignItems: "center",
             border: `1px solid ${colors.border}`,
-            borderRadius: 999,
+            borderRadius: 5,
             color: colors.textMuted,
             cursor: "help",
             display: "inline-flex",
             fontSize: 9,
-            height: 15,
+            height: 16,
             justifyContent: "center",
             letterSpacing: 0,
             lineHeight: 1,
             textTransform: "none",
-            width: 15,
+            transition:
+              "background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease",
+            width: 17,
           }}
           title={help}
         >

@@ -40,6 +40,7 @@ export default function FirstLoginPrivacyGate({
       visible={isVisible}
       title="Data Privacy Policy"
       icon={ShieldCheck}
+      showScrollHint
       onClose={() => {}}
     >
       <View style={[s.body, { gap: 14 }]}>

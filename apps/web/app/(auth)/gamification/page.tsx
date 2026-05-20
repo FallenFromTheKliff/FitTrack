@@ -62,7 +62,7 @@ import {
   FitTextInput,
 } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
-import { ConfirmModal } from "@/components/modals";
+import { ConfirmModal, FitModal } from "@/components/modals";
 import {
   ACHIEVEMENT_REVIEW_STATUS_COLORS,
   type AchievementReviewRecord,
@@ -108,7 +108,7 @@ const MILESTONE_STATUS_OPTIONS: Array<{
   value: AchievementReviewStatus | "all";
 }> = [
   { label: "Pending", value: "Pending" },
-  { label: "All", value: "all" },
+  { label: "All Review Statuses", value: "all" },
   { label: "Approved", value: "Approved" },
   { label: "Rejected", value: "Rejected" },
 ];
@@ -1646,6 +1646,8 @@ function MilestoneManagementPanel({
     nextStatus: AchievementReviewStatus;
     review: AchievementReviewRecord;
   } | null>(null);
+  const [isCompactMilestoneLayout, setIsCompactMilestoneLayout] = useState(false);
+  const [mobileReviewOpen, setMobileReviewOpen] = useState(false);
   const filteredReviews = reviews.filter((review) => {
     const matchesStatus = status === "all" || review.status === status;
     const q = search.trim().toLowerCase();
@@ -1660,6 +1662,26 @@ function MilestoneManagementPanel({
     filteredReviews.find((review) => review.id === selectedId) ??
     filteredReviews[0] ??
     null;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 960px)");
+    const update = () => setIsCompactMilestoneLayout(mediaQuery.matches);
+
+    update();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", update);
+      return () => mediaQuery.removeEventListener("change", update);
+    }
+
+    mediaQuery.addListener(update);
+    return () => mediaQuery.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (isCompactMilestoneLayout) return;
+    setMobileReviewOpen(false);
+  }, [isCompactMilestoneLayout]);
 
   const applyDecision = () => {
     if (!confirmTarget) return;
@@ -1695,6 +1717,7 @@ function MilestoneManagementPanel({
       }}
     >
       <div
+        className="gamification-milestone-management-grid"
         style={{
           display: "grid",
           gap: 18,
@@ -1724,7 +1747,10 @@ function MilestoneManagementPanel({
                   <button
                     key={review.id}
                     type="button"
-                    onClick={() => onSelectedChange(review.id)}
+                    onClick={() => {
+                      onSelectedChange(review.id);
+                      if (isCompactMilestoneLayout) setMobileReviewOpen(true);
+                    }}
                     style={{
                       border: `1px solid ${active ? colors.brand : colors.border}`,
                       backgroundColor: active
@@ -1758,6 +1784,7 @@ function MilestoneManagementPanel({
         </div>
 
         <div
+          className="gamification-milestone-detail-panel"
           style={{
             border: `1px solid ${colors.border}`,
             backgroundColor: colors.surface,
@@ -1841,6 +1868,97 @@ function MilestoneManagementPanel({
           )}
         </div>
       </div>
+      <FitModal
+        isOpen={isCompactMilestoneLayout && mobileReviewOpen && Boolean(selectedReview)}
+        onClose={() => setMobileReviewOpen(false)}
+        title={selectedReview?.badgeLabel ?? "Milestone review"}
+        subtitle={selectedReview ? selectedReview.memberName : "Review proof"}
+        icon={ShieldCheck}
+        maxWidth={720}
+        closeAriaLabel="Close milestone review"
+      >
+        {selectedReview ? (
+          <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
+              <img
+                alt={`${selectedReview.badgeLabel} proof`}
+                src={selectedReview.proofImageUrl}
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 16,
+                  height: 180,
+                  objectFit: "cover",
+                  width: "100%",
+                }}
+              />
+              <div style={{ minWidth: 0 }}>
+                <FitText style={{ fontSize: 22, fontWeight: 900 }}>
+                  {selectedReview.badgeLabel}
+                </FitText>
+                <FitText style={{ color: colors.textSecondary, marginTop: 6, overflowWrap: "anywhere" }}>
+                  {selectedReview.memberName} / {selectedReview.memberEmail}
+                </FitText>
+                <FitText style={{ color: colors.textMuted, fontSize: 13, marginTop: 10 }}>
+                  {selectedReview.proofCaption}
+                </FitText>
+                <FitPill
+                  mode="status"
+                  label={selectedReview.status}
+                  color={ACHIEVEMENT_REVIEW_STATUS_COLORS[selectedReview.status]}
+                  style={{ marginTop: 12 }}
+                />
+              </div>
+            </div>
+            <FitTextArea
+              rows={3}
+              value={notes}
+              onChange={(event) => onNotesChange(event.target.value)}
+              placeholder="Moderator notes for this milestone decision"
+            />
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+              <FitButton
+                icon={CheckCircle2}
+                label="Approve milestone"
+                onClick={() =>
+                  setConfirmTarget({
+                    nextStatus: "Approved",
+                    review: selectedReview,
+                  })
+                }
+                variant="primary"
+              />
+              <FitButton
+                icon={EyeOff}
+                label="Reject milestone"
+                onClick={() =>
+                  setConfirmTarget({
+                    nextStatus: "Rejected",
+                    review: selectedReview,
+                  })
+                }
+                variant="danger"
+              />
+            </div>
+          </div>
+        ) : null}
+      </FitModal>
+      <style>{`
+        @media (max-width: 960px) {
+          .gamification-milestone-management-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .gamification-milestone-detail-panel {
+            display: none !important;
+          }
+        }
+      `}</style>
       <ConfirmModal
         isOpen={confirmTarget !== null}
         title={`${confirmTarget?.nextStatus ?? "Review"} Milestone?`}

@@ -1,11 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { FitModal } from "@/components/modals";
 
 export function OverlayFrame({
   children,
+  closeDisabled = false,
+  footer,
+  icon,
   isOpen,
   maxWidth = 820,
   onClose,
@@ -13,6 +17,9 @@ export function OverlayFrame({
   title = "Gym Operations",
 }: {
   children: ReactNode;
+  closeDisabled?: boolean;
+  footer?: ReactNode;
+  icon?: LucideIcon;
   isOpen: boolean;
   maxWidth?: number;
   onClose: () => void;
@@ -25,6 +32,9 @@ export function OverlayFrame({
       onClose={onClose}
       title={title}
       subtitle={subtitle}
+      icon={icon}
+      closeDisabled={closeDisabled}
+      footer={footer}
       maxWidth={maxWidth}
       overlayStyle={{
         alignItems: "center",

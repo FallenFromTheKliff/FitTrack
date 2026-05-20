@@ -25,10 +25,83 @@ type AuthControllerConfig = {
   sessionStore: SessionStoreAdapter;
 };
 
+type LoginOtpChallengeResponse = {
+  otpRequired?: boolean;
+  user_id?: string;
+  userId?: string;
+  email?: string;
+  role?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    role?: string;
+  };
+};
+
 function isLoginSuccess(
-  value: LoginSuccessResponse | { otpRequired?: boolean },
+  value: LoginSuccessResponse | LoginOtpChallengeResponse,
 ): value is LoginSuccessResponse {
   return "access_token" in value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() !== ""
+    ? value.trim()
+    : undefined;
+}
+
+function getLoginOtpChallenge(value: unknown): LoginOtpChallengeResponse | null {
+  if (!isRecord(value)) return null;
+  if (value.otpRequired === true) {
+    return value as LoginOtpChallengeResponse;
+  }
+  return getLoginOtpChallenge(value.data);
+}
+
+function normalizeChallengeRole(
+  role: string | undefined,
+  fallback: AuthUser["role"],
+): AuthUser["role"] {
+  switch (role?.toLowerCase()) {
+    case "admin":
+      return "ADMIN";
+    case "staff":
+      return "STAFF";
+    case "coach":
+      return "COACH";
+    case "member":
+    case "user":
+      return "USER";
+    default:
+      return fallback;
+  }
+}
+
+function createOtpChallengeUser(
+  challenge: LoginOtpChallengeResponse,
+  fallbackEmail: string,
+  fallbackRole: AuthUser["role"],
+): AuthUser {
+  const nestedUser = isRecord(challenge.user) ? challenge.user : undefined;
+  const email =
+    readString(challenge.email) ?? readString(nestedUser?.email) ?? fallbackEmail;
+
+  return {
+    id:
+      readString(challenge.user_id) ??
+      readString(challenge.userId) ??
+      readString(nestedUser?.id) ??
+      "",
+    email,
+    role: normalizeChallengeRole(
+      readString(challenge.role) ?? readString(nestedUser?.role),
+      fallbackRole,
+    ),
+  };
 }
 
 function normalizeAuthEmail(email: string) {
@@ -117,27 +190,32 @@ export function createAuthController({
         portal?: LoginPortal;
       },
     ) {
+      const normalizedEmail = normalizeAuthEmail(email);
+      const acceptOtpChallenge = (challenge: LoginOtpChallengeResponse) => {
+        const placeholder = createOtpChallengeUser(
+          challenge,
+          normalizedEmail,
+          options?.placeholderRole ?? "USER",
+        );
+        pending.setPendingUser(placeholder);
+        pending.setPendingEmail(placeholder.email);
+        pending.setPendingCredentials({ email: normalizedEmail, password });
+        return {
+          success: true as const,
+          otpRequired: true as const,
+          user: placeholder,
+        };
+      };
+
       try {
-        const normalizedEmail = normalizeAuthEmail(email);
         const data = await client.auth.login({
           email: normalizedEmail,
           password,
           portal: options?.portal,
         });
-        if ("otpRequired" in data && data.otpRequired) {
-          const placeholder: AuthUser = {
-            id: "",
-            email: normalizedEmail,
-            role: options?.placeholderRole ?? "USER",
-          };
-          pending.setPendingUser(placeholder);
-          pending.setPendingEmail(normalizedEmail);
-          pending.setPendingCredentials({ email: normalizedEmail, password });
-          return {
-            success: true as const,
-            otpRequired: true as const,
-            user: placeholder,
-          };
+        const otpChallenge = getLoginOtpChallenge(data);
+        if (otpChallenge) {
+          return acceptOtpChallenge(otpChallenge);
         }
         if (!isLoginSuccess(data)) {
           return {
@@ -169,6 +247,10 @@ export function createAuthController({
         };
       } catch (error) {
         const apiError = toApiClientError(error, "Login failed.");
+        const otpChallenge = getLoginOtpChallenge(apiError.details);
+        if (otpChallenge) {
+          return acceptOtpChallenge(otpChallenge);
+        }
         if (apiError.status === 423) {
           return {
             success: false as const,

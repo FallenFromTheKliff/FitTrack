@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useSharedValue, withTiming } from "react-native-reanimated";
+import { cancelAnimation, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -16,6 +16,10 @@ export function useOverlayAnim(
   const translateY = useSharedValue(24);
 
   useEffect(() => {
+    cancelAnimation(opacity);
+    cancelAnimation(scale);
+    cancelAnimation(translateY);
+
     if (isVisible) {
       if (!shouldAnimate) {
         opacity.value = 1;
@@ -49,7 +53,12 @@ export function useOverlayAnim(
         translateY.value = withTiming(24, { duration: 160 });
       }
     }
-  }, [isVisible, mode, shouldAnimate]);
+    return () => {
+      cancelAnimation(opacity);
+      cancelAnimation(scale);
+      cancelAnimation(translateY);
+    };
+  }, [isVisible, mode, opacity, scale, shouldAnimate, translateY]);
 
   return { opacity, scale, translateY };
 }

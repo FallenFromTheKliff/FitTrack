@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, TextInput, View } from "react-native";
+import { Modal, Pressable, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Clock, Image as ImageIcon, Star, Users } from "lucide-react-native";
@@ -22,6 +22,7 @@ import type { VenuePresentation } from "@/utils/venueBookings";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 type Props = {
   isVisible: boolean;
@@ -136,7 +137,7 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
       visible={isVisible}
       transparent
       animationType="none"
-      onRequestClose={undefined}
+      onRequestClose={onClose}
       statusBarTranslucent
     >
       <Animated.View style={[s.backdrop, backdropStyle]}>
@@ -151,7 +152,11 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
               <FitText style={s.headerSubtitle}>{priceLabel} {"\u00B7"} up to {venue.maxSlots} slots</FitText>
             </View>
           </Animated.View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
+          <FitModalScrollView
+            style={s.middle}
+            contentContainerStyle={s.body}
+            resetKey={venue.sourceVenueId ?? venue.id}
+          >
             <View>
               <FitText style={s.sectionLabel}>Description</FitText>
               <View style={s.fieldBlock}>
@@ -286,7 +291,7 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
                 />
               </View>
             </View>
-          </ScrollView>
+          </FitModalScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
             {onReserve && venue.isReservable && meta.status === "available" ? (

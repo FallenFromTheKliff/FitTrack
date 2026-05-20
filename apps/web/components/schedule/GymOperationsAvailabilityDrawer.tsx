@@ -79,59 +79,40 @@ export function GymOperationsAvailabilityDrawer({
   };
 
   return (
-    <OverlayFrame isOpen={isOpen} onClose={isSaving ? () => {} : onClose}>
+    <OverlayFrame
+      isOpen={isOpen}
+      onClose={onClose}
+      closeDisabled={isSaving}
+      title="Manage availability"
+      subtitle={`Set the weekly slots members can book for ${coachName}. Visibility controls whether this coach appears in member booking surfaces.`}
+      footer={
+        <FitButton
+          variant="primary"
+          label={isSaving ? "SAVING..." : "SAVE SCHEDULE"}
+          onClick={() => void handleSave()}
+          disabled={isSaving || hasInvalidSlot}
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      }
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          margin: "auto",
-          width: 760,
-          maxWidth: "min(760px, calc(100vw - 48px))",
-          maxHeight: "min(820px, calc(100vh - 48px))",
-          overflow: "auto",
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
-          padding: 24,
           display: "grid",
-          gap: 20,
+          gap: 14,
           transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
           transition: shouldAnimate ? "transform 180ms ease" : "none",
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
         }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             gap: 16,
           }}
         >
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 30,
-                fontWeight: 800,
-                color: colors.textPrimary,
-                lineHeight: 1.12,
-              }}
-            >
-              Manage availability
-            </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 13,
-                color: colors.textMuted,
-                lineHeight: 1.35,
-                maxWidth: 480,
-              }}
-            >
-              Set the weekly slots members can book for {coachName}. Visibility
-              controls whether this coach appears in member booking surfaces.
-            </FitText>
-          </div>
           <FitButton
             variant={isVisibleInBooking ? "ghost" : "primary"}
             label={isVisibleInBooking ? "HIDE FROM BOOKING" : "SHOW IN BOOKING"}
@@ -328,46 +309,6 @@ export function GymOperationsAvailabilityDrawer({
           ) : null}
         </div>
 
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 16 }}>
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}
-          >
-            Save changes
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.35 }}
-          >
-            Save the current weekly slots, or change booking visibility first if
-            the coach should stay hidden from new reservations.
-          </FitText>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <FitButton
-              variant="ghost"
-              label="CLOSE"
-              onClick={onClose}
-              disabled={isSaving}
-              style={actionPillStyle(colors)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
-            />
-            <FitButton
-              variant="primary"
-              label={isSaving ? "SAVING..." : "SAVE SCHEDULE"}
-              onClick={() => void handleSave()}
-              disabled={isSaving || hasInvalidSlot}
-              style={actionPillStyle(colors, true)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
-            />
-          </div>
-        </div>
       </div>
     </OverlayFrame>
   );

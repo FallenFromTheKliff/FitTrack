@@ -1,5 +1,6 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -27,6 +28,8 @@ import {
   CoachListRecord,
   CoachRepository,
 } from './coach.repository';
+
+type CoachUserProfileRecord = NonNullable<CoachDetailRecord['user']>['profile'];
 
 const COACH_SELF_UPDATE_FIELDS = [
   'display_name',
@@ -70,6 +73,24 @@ function normalizeStandaloneDisplayName(value?: string | null) {
   }
 
   return null;
+}
+
+function getUserProfileDisplayName(profile?: CoachUserProfileRecord | null) {
+  return [profile?.first_name, profile?.last_name]
+    .map((part) => part?.trim() ?? '')
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
+function getCoachDisplayName(
+  coach: Pick<CoachListRecord, 'display_name' | 'user'>,
+) {
+  return (
+    normalizeStandaloneDisplayName(coach.display_name) ||
+    getUserProfileDisplayName(coach.user?.profile) ||
+    null
+  );
 }
 
 @Injectable()
@@ -178,22 +199,14 @@ export class CoachService {
     );
   }
 
-  async createStandaloneCoach(
+  createStandaloneCoach(
     dto: CreateStandaloneCoachDTO,
   ): Promise<CoachDetailResponseDTO> {
-    return this.toCoachDetail(
-      await this.repo.createStandaloneCoach({
-        display_name: dto.display_name,
-        contact_email: dto.contact_email ?? null,
-        contact_phone: dto.contact_phone ?? null,
-        specialization: dto.specialization ?? null,
-        bio: dto.bio ?? null,
-        certification: dto.certification ?? null,
-        hourly_rate: dto.hourly_rate ?? 0,
-        gym_commission_pct: dto.gym_commission_pct ?? 20,
-        schedule_type: dto.schedule_type ?? 'part_time',
-        is_available_for_booking: dto.is_available_for_booking ?? true,
-      }),
+    void dto;
+    return Promise.reject(
+      new BadRequestException(
+        'Create coach user accounts from the Accounts page. Coach profiles are tied to coach-role accounts only.',
+      ),
     );
   }
 
@@ -302,7 +315,7 @@ export class CoachService {
   ): CoachListItemResponseDTO {
     return {
       id: coach.id,
-      display_name: normalizeStandaloneDisplayName(coach.display_name),
+      display_name: getCoachDisplayName(coach),
       contact_email: coach.contact_email,
       contact_phone: coach.contact_phone,
       specialization: coach.specialization,
@@ -316,7 +329,7 @@ export class CoachService {
         this.toPublicReview(review),
       ),
       is_available_for_booking: coach.is_available_for_booking,
-      profile: this.toCoachUserProfile(),
+      profile: this.toCoachUserProfile(coach.user?.profile),
       availability_slots: coach.availability_slots.map((slot) =>
         this.toAvailabilitySlot(slot),
       ),
@@ -376,16 +389,18 @@ export class CoachService {
       ...this.toCoachDetail(coach),
       user: {
         id: coach.user.id,
-        profile: this.toCoachUserProfile(),
+        profile: this.toCoachUserProfile(coach.user.profile),
       },
     };
   }
 
-  private toCoachUserProfile(): CoachUserProfileResponseDTO {
+  private toCoachUserProfile(
+    profile?: CoachUserProfileRecord | null,
+  ): CoachUserProfileResponseDTO {
     return {
-      first_name: null,
-      last_name: null,
-      avatar_url: null,
+      first_name: profile?.first_name ?? null,
+      last_name: profile?.last_name ?? null,
+      avatar_url: profile?.avatar_url ?? null,
     };
   }
 

@@ -12,6 +12,8 @@ import {
   PaymentStage,
   PaymentStatus,
   Prisma,
+  UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
@@ -26,6 +28,7 @@ const ACTIVE_APPOINTMENT_STATUSES = [
 ] as const;
 
 const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 type CoachIdLookup = { id: string };
 
@@ -251,9 +254,15 @@ export class AppointmentRepository extends BaseRepository {
   } as const;
 
   findCoachByUserIdOrThrow(userId: string): Promise<CoachIdLookup> {
-    return this.findUniqueWhereOrThrow<CoachIdLookup>(
+    return this.findOneOrThrow<CoachIdLookup>(
       this.prisma.coachProfile,
-      { user_id: userId },
+      {
+        user_id: userId,
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
+      },
       'CoachProfile',
       undefined,
       { id: true },
@@ -506,11 +515,7 @@ export class AppointmentRepository extends BaseRepository {
     return this.paginateByUserIdWithDateRange<MemberAppointmentRecord>(
       this.prisma.coachAppointment,
       userId,
-      {
-        start_date: dto.start_date,
-        end_date: dto.end_date,
-        dateField: 'scheduled_at',
-      },
+      getGymDateRangeFilter(dto, 'scheduled_at'),
       {
         include: memberAppointmentInclude,
         orderBy: { scheduled_at: 'desc' },
@@ -527,11 +532,7 @@ export class AppointmentRepository extends BaseRepository {
           user_id: coachUserId,
         },
       },
-      {
-        start_date: dto.start_date,
-        end_date: dto.end_date,
-        dateField: 'scheduled_at',
-      },
+      getGymDateRangeFilter(dto, 'scheduled_at'),
       {
         include: coachScheduleInclude,
         orderBy: { scheduled_at: 'desc' },
@@ -547,11 +548,7 @@ export class AppointmentRepository extends BaseRepository {
         ...(dto.coach_id ? { coach_id: dto.coach_id } : {}),
         ...(dto.status ? { status: dto.status } : {}),
       },
-      {
-        start_date: dto.start_date,
-        end_date: dto.end_date,
-        dateField: 'scheduled_at',
-      },
+      getGymDateRangeFilter(dto, 'scheduled_at'),
       {
         include: staffAppointmentInclude,
         orderBy: { scheduled_at: 'desc' },
@@ -705,6 +702,42 @@ function toGymWallClockDate(value: Date): Date {
 
 function toGymDateKey(value: Date): string {
   return toGymWallClockDate(value).toISOString().slice(0, 10);
+}
+
+function getGymDateRangeFilter(
+  dto: DateRangeDTO,
+  dateField: string,
+): { start_date?: string; end_date?: string; dateField: string } {
+  return {
+    start_date: dto.start_date
+      ? normalizeGymDateBoundary(dto.start_date, 'start').toISOString()
+      : undefined,
+    end_date: dto.end_date
+      ? normalizeGymDateBoundary(dto.end_date, 'end').toISOString()
+      : undefined,
+    dateField,
+  };
+}
+
+function normalizeGymDateBoundary(
+  value: string,
+  boundary: 'start' | 'end',
+): Date {
+  if (!DATE_ONLY_PATTERN.test(value)) {
+    return new Date(value);
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const gymDayStartUtc = new Date(
+    Date.UTC(year, month - 1, day) -
+      GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+
+  if (boundary === 'start') {
+    return gymDayStartUtc;
+  }
+
+  return new Date(gymDayStartUtc.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
 function getGymDayUtcRange(value: Date): { gte: Date; lt: Date } {

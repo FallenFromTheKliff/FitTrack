@@ -81,7 +81,8 @@ export default function FitTable<T>({
     textAlign: "left",
     borderBottom: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
-    whiteSpace: "nowrap"
+    whiteSpace: "nowrap",
+    overflowWrap: "anywhere"
   };
 
   const cellStyle: CSSProperties = {
@@ -89,7 +90,9 @@ export default function FitTable<T>({
     fontSize: compact ? 13 : 14,
     color: colors.textPrimary,
     borderBottom: `1px solid ${colors.border}`,
-    verticalAlign: "middle"
+    verticalAlign: "middle",
+    minWidth: 0,
+    overflowWrap: "anywhere"
   };
 
   const colSpan = columns.length + (actions ? 1 : 0);
@@ -99,9 +102,12 @@ export default function FitTable<T>({
           style={{
             border: `1px solid ${colors.border}`,
             borderRadius: 10,
+            maxWidth: "100%",
+            minWidth: 0,
             overflow: "hidden",
             overflowX: overflowX ? "auto" : "visible",
             overflowY: maxHeight ? "auto" : "visible",
+            WebkitOverflowScrolling: "touch",
             maxHeight: maxHeight ?? undefined,
             ...style
           }}
@@ -203,10 +209,33 @@ type TextCellProps = {
 export function FitTableTextCell({ primary, secondary }: TextCellProps) {
   const { colors } = useTheme();
   return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <FitText style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{primary}</FitText>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        <FitText
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: colors.textPrimary,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {primary}
+        </FitText>
         {secondary ? (
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>{secondary}</FitText>
+            <FitText
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {secondary}
+            </FitText>
         ) : null}
       </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Filter, LayoutGrid, List } from "lucide-react";
+import { Check, Filter, LayoutGrid, List, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { CoachAppointmentScheduleRecord } from "@fittrack/api-client";
 import { coachScheduleQueryOptions } from "@fittrack/query";
@@ -14,12 +14,11 @@ import type { FitTableColumn } from "@/components/fit/FitTable";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { webApiClient } from "@/lib/api-client";
-import { MEMBERSHIP_CARD_STATUS_COLORS, type MemberStatusTab } from "@/data/members/members";
+import type { MemberStatusTab } from "@/data/members/members";
 import {
   formatLastCheckIn,
   getDirectoryAccessLabel,
   getDirectoryRoleLabel,
-  getDirectoryStatusColor,
   getDirectoryStatusLabel,
   getMemberAvatarUrl,
   getMemberInitials,
@@ -149,6 +148,146 @@ export default function AccountsDirectorySurface() {
     { label: "Active", value: "active" },
     { label: "Very Active", value: "very_active" },
   ];
+  const detailTextStyle = (c: typeof colors) => ({
+    fontSize: 12,
+    fontWeight: 500,
+    color: c.textSecondary,
+    lineHeight: 1.3,
+  });
+  const getStatusLines = (label: string) =>
+    label === "Requesting Termination" ? ["Requesting", "Termination"] : [label];
+  const getStatusTone = (label: string, c: typeof colors) => {
+    if (label === "Archived" || label === "Pending" || label === "Requesting Termination") return c.warning;
+    if (label === "Suspended" || label === "Banned") return c.danger;
+    return c.success;
+  };
+  const isVerifiedAccess = (member: MemberRecord, label: string) =>
+    label !== "Archived" &&
+    label !== "Not Verified" &&
+    label !== "Revoked" &&
+    (member.emailVerified || member.status === "active");
+  const getAccessTone = (member: MemberRecord, label: string, c: typeof colors) => {
+    if (label === "Archived") return c.warning;
+    if (label === "Revoked") return c.danger;
+    if (label === "Not Verified") return c.textSecondary;
+    if (isVerifiedAccess(member, label)) return c.success;
+    return c.textMuted;
+  };
+  const renderTierMarker = (member: MemberRecord, label: string, c: typeof colors, size = 13) => {
+    if (label === "Revoked") return <X size={size} color={c.danger} strokeWidth={2.4} />;
+    if (label === "Not Verified") {
+      return (
+        <FitText
+          as="span"
+          excludeGlobalScale
+          style={{ color: c.textSecondary, fontSize: size, fontWeight: 700, lineHeight: 1 }}
+        >
+          !
+        </FitText>
+      );
+    }
+    return isVerifiedAccess(member, label) ? (
+      <Check size={size} color={c.warning} strokeWidth={2.4} />
+    ) : null;
+  };
+  const renderStatusBox = (label: string, tone: string, c: typeof colors, fontSize = 9.5) => {
+    const lines = getStatusLines(label);
+
+    return (
+      <span
+        style={{
+          display: "inline-grid",
+          justifyItems: "center",
+          alignItems: "center",
+          minWidth: lines.length > 1 ? 78 : 64,
+          padding: lines.length > 1 ? "4px 8px" : "4px 9px",
+          borderRadius: 6,
+          border: `1px solid ${tone}55`,
+          backgroundColor: `${tone}14`,
+          textAlign: "center",
+        }}
+      >
+        {lines.map((line, index) => (
+          <FitText
+            key={`${line}-${index}`}
+            as="span"
+            excludeGlobalScale
+            style={{
+              fontSize,
+              fontWeight: 500,
+              lineHeight: 1.08,
+              color: tone,
+            }}
+          >
+            {line}
+          </FitText>
+        ))}
+      </span>
+    );
+  };
+  const renderTierValue = (member: MemberRecord, c: typeof colors) => {
+    const label = getDirectoryAccessLabel(member, pendingRequestsByUserId);
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+        {renderTierMarker(member, label, c, 13)}
+        <FitText
+          className="members-directory-panel__detail-text"
+          style={{
+            ...detailTextStyle(c),
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </FitText>
+      </span>
+    );
+  };
+  const renderAccessBox = (
+    member: MemberRecord,
+    c: typeof colors,
+    fontSize = 10,
+    options?: { neutral?: boolean },
+  ) => {
+    const label = getDirectoryAccessLabel(member, pendingRequestsByUserId);
+    const tone = options?.neutral ? c.textSecondary : getAccessTone(member, label, c);
+    const borderColor = options?.neutral ? c.border : `${tone}45`;
+    const backgroundColor = options?.neutral ? c.surface : `${tone}12`;
+
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 5,
+          minWidth: 0,
+          padding: "4px 8px",
+          borderRadius: 6,
+          border: `1px solid ${borderColor}`,
+          backgroundColor,
+        }}
+      >
+        {renderTierMarker(member, label, c, 12)}
+        <FitText
+          as="span"
+          excludeGlobalScale
+          style={{
+            fontSize,
+            fontWeight: 500,
+            lineHeight: 1.15,
+            color: tone,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </FitText>
+      </span>
+    );
+  };
 
   const memberColumns: FitTableColumn<MemberRecord>[] = [
     {
@@ -251,8 +390,12 @@ export default function AccountsDirectorySurface() {
       heading: "USER TYPE",
       render: (member, c) => (
         <FitText
-          className="members-directory-panel__emphasis-text"
-          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+          className="members-directory-panel__detail-text"
+          style={{
+            ...detailTextStyle(c),
+            textTransform: "uppercase",
+            letterSpacing: "0.02em",
+          }}
         >
           {getDirectoryRoleLabel(member.role?.name)}
         </FitText>
@@ -263,34 +406,22 @@ export default function AccountsDirectorySurface() {
       heading: "STATUS",
       render: (member, c) => {
         const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
-        const profileTone = getDirectoryStatusColor(member, pendingRequestsByUserId, c.warning);
 
-        return <FitPill mode="status" label={statusLabel} color={profileTone ?? c.textMuted} fontSize={9} />;
+        return renderStatusBox(statusLabel, getStatusTone(statusLabel, c), c, 9);
       },
     },
     {
       key: "tier",
       heading: "TIER",
-      render: (member, c) => (
-        <FitText
-          className="members-directory-panel__emphasis-text"
-          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
-        >
-          {getDirectoryAccessLabel(member, pendingRequestsByUserId)}
-        </FitText>
-      ),
+      render: (member, c) => renderTierValue(member, c),
     },
     {
       key: "lastCheckIn",
       heading: "LAST CHECK-IN",
       render: (member, c) => (
         <FitText
-          className="members-directory-panel__emphasis-text"
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: member.lastCheckInAt ? c.textPrimary : c.textSecondary,
-          }}
+          className="members-directory-panel__detail-text"
+          style={detailTextStyle(c)}
         >
           {formatLastCheckIn(member.lastCheckInAt)}
         </FitText>
@@ -302,22 +433,15 @@ export default function AccountsDirectorySurface() {
     {
       key: "membership",
       heading: "MEMBERSHIP",
-      render: (member, c) => (
-        <FitText
-          className="members-directory-panel__emphasis-text"
-          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
-        >
-          {getDirectoryAccessLabel(member, pendingRequestsByUserId)}
-        </FitText>
-      ),
+      render: (member, c) => renderTierValue(member, c),
     },
     {
       key: "activity",
       heading: "ACTIVITY",
       render: (member, c) => (
         <FitText
-          className="members-directory-panel__emphasis-text"
-          style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+          className="members-directory-panel__detail-text"
+          style={detailTextStyle(c)}
         >
           {member.profile?.activityLevel ?? "Not set"}
         </FitText>
@@ -331,8 +455,8 @@ export default function AccountsDirectorySurface() {
 
         return (
           <FitText
-            className="members-directory-panel__emphasis-text"
-            style={{ fontSize: 12, fontWeight: 700, color: c.textPrimary }}
+            className="members-directory-panel__detail-text"
+            style={detailTextStyle(c)}
           >
             {summary
               ? `${summary.completed}/${summary.total} done, ${summary.upcoming} upcoming`
@@ -360,11 +484,11 @@ export default function AccountsDirectorySurface() {
         return (
           <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
             <FitText
-              className="members-directory-panel__emphasis-text"
+              className="members-directory-panel__detail-text"
               style={{
                 fontSize: 11,
-                fontWeight: 700,
-                color: c.textPrimary,
+                fontWeight: 500,
+                color: c.textSecondary,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -372,7 +496,7 @@ export default function AccountsDirectorySurface() {
             >
               {summary?.nextSessionLabel ?? "None scheduled"}
             </FitText>
-            <FitPill mode="status" label={reviewLabel} color={reviewColor} fontSize={8.5} />
+            {renderStatusBox(reviewLabel, reviewColor, c, 8.5)}
           </div>
         );
       },
@@ -465,19 +589,21 @@ export default function AccountsDirectorySurface() {
                 {showRoleLabel ? (
                   <FitPill
                     mode="status"
-                    label={roleLabel}
+                    label={roleLabel.toUpperCase()}
                     color={colors.brand}
                     fontSize={10}
+                    fontWeight={500}
                     borderOpacity="35"
                     bgOpacity="14"
+                    style={{ borderRadius: 6 }}
                   />
                 ) : null}
-                <FitPill
-                  mode="status"
-                  label={statusLabel}
-                  color={getDirectoryStatusColor(member, pendingRequestsByUserId, colors.warning)}
-                  fontSize={10}
-                />
+                {renderStatusBox(
+                  statusLabel,
+                  getStatusTone(statusLabel, colors),
+                  colors,
+                  10,
+                )}
               </div>
               <FitText style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}>
                 {fullName(member) || "Unnamed account"}
@@ -485,12 +611,7 @@ export default function AccountsDirectorySurface() {
               <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>{member.email}</FitText>
             </div>
           </div>
-          <FitPill
-            mode="status"
-            label={accessLabel}
-            color={MEMBERSHIP_CARD_STATUS_COLORS[accessLabel] ?? colors.textMuted}
-            fontSize={11}
-          />
+          {renderAccessBox(member, colors, 11)}
         </div>
         <div
           className="members-mobile-meta-grid"
@@ -518,17 +639,17 @@ export default function AccountsDirectorySurface() {
                 {label}
               </FitText>
               {label === "ACCOUNT" ? (
-                <FitPill
-                  mode="status"
-                  label={statusLabel}
-                  color={getDirectoryStatusColor(member, pendingRequestsByUserId, colors.warning)}
-                  fontSize={12}
-                />
+                renderStatusBox(
+                  statusLabel,
+                  getStatusTone(statusLabel, colors),
+                  colors,
+                  12,
+                )
               ) : (
                 <FitText
                   style={{
                     fontSize: 12.5,
-                    fontWeight: label === "SCAN" || label === "ACCESS" ? 600 : undefined,
+                    fontWeight: 500,
                     color:
                       label === "SCAN" && member.attendanceQrReady
                         ? colors.brand
@@ -548,7 +669,6 @@ export default function AccountsDirectorySurface() {
   const renderGridCard = (member: MemberRecord) => {
     const avatarUrl = getMemberAvatarUrl(member);
     const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
-    const accessLabel = getDirectoryAccessLabel(member, pendingRequestsByUserId);
     const initials = getMemberInitials(member);
 
     return (
@@ -556,12 +676,12 @@ export default function AccountsDirectorySurface() {
         className="members-grid-card"
         style={{
           display: "grid",
-          gridTemplateRows: "46px 42px 38px 38px",
+          gridTemplateRows: "46px 42px auto auto 38px",
           justifyItems: "center",
           alignContent: "space-between",
-          gap: 10,
-          minHeight: 180,
-          padding: "14px 10px",
+          gap: 9,
+          minHeight: 218,
+          padding: "15px 10px",
           borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surfaceRaised,
@@ -623,25 +743,50 @@ export default function AccountsDirectorySurface() {
           >
             {fullName(member) || "Unnamed account"}
           </FitText>
-          <FitText style={{ fontSize: 10.5, fontWeight: 700, color: colors.textSecondary }}>
+          <FitText
+            style={{
+              fontSize: 10.5,
+              fontWeight: 500,
+              color: colors.textSecondary,
+              textTransform: "uppercase",
+              letterSpacing: "0.02em",
+            }}
+          >
             {getDirectoryRoleLabel(member.role?.name)}
           </FitText>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
-          <FitPill
-            mode="status"
-            label={statusLabel}
-            color={getDirectoryStatusColor(member, pendingRequestsByUserId, colors.warning)}
-            fontSize={10}
-          />
-          <FitPill
-            mode="status"
-            label={accessLabel}
-            color={MEMBERSHIP_CARD_STATUS_COLORS[accessLabel] ?? colors.textMuted}
-            fontSize={10}
-            borderOpacity="35"
-            bgOpacity="12"
-          />
+        <div style={{ display: "grid", justifyItems: "center", gap: 4, width: "100%" }}>
+          <FitText
+            style={{
+              fontSize: 9.5,
+              fontWeight: 700,
+              color: colors.textMuted,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Status
+          </FitText>
+          {renderStatusBox(
+            statusLabel,
+            getStatusTone(statusLabel, colors),
+            colors,
+            10,
+          )}
+        </div>
+        <div style={{ display: "grid", justifyItems: "center", gap: 4, width: "100%" }}>
+          <FitText
+            style={{
+              fontSize: 9.5,
+              fontWeight: 700,
+              color: colors.textMuted,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Tier
+          </FitText>
+          {renderAccessBox(member, colors, 10, { neutral: true })}
         </div>
         <div style={{ display: "grid", gap: 2 }}>
           <FitText
@@ -657,8 +802,8 @@ export default function AccountsDirectorySurface() {
           <FitText
             style={{
               fontSize: 11,
-              fontWeight: 800,
-              color: member.lastCheckInAt ? colors.textPrimary : colors.textSecondary,
+              fontWeight: 500,
+              color: colors.textSecondary,
             }}
           >
             {formatLastCheckIn(member.lastCheckInAt)}
@@ -670,14 +815,17 @@ export default function AccountsDirectorySurface() {
 
   const directoryToolbar = (
     <div
-      className="members-directory-toolbar"
+      className={isCoach ? "members-directory-toolbar members-directory-toolbar-coach" : "members-directory-toolbar"}
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 10,
-        minHeight: 40,
+        flexWrap: isCoach ? "nowrap" : "wrap",
+        gap: isCoach ? 8 : 10,
+        minHeight: isCoach ? 38 : 40,
+        minWidth: 0,
+        overflowX: isCoach ? "auto" : undefined,
+        overflowY: isCoach ? "hidden" : undefined,
       }}
     >
       <div
@@ -686,13 +834,17 @@ export default function AccountsDirectorySurface() {
           display: "flex",
           alignItems: "center",
           gap: 8,
-          minWidth: 0,
-          flex: "1 1 360px",
+          minWidth: isCoach ? 174 : 0,
+          flex: isCoach ? "0 1 300px" : "1 1 360px",
         }}
       >
         <div
           className="members-directory-search"
-          style={{ flex: "1 1 250px", minWidth: 220, maxWidth: 320 }}
+          style={{
+            flex: isCoach ? "1 1 auto" : "1 1 280px",
+            minWidth: isCoach ? 174 : 220,
+            maxWidth: isCoach ? 300 : 380,
+          }}
         >
           <FitSearch
             id="members_people_search"
@@ -711,55 +863,41 @@ export default function AccountsDirectorySurface() {
           alignItems: "center",
           justifyContent: "flex-end",
           gap: 8,
-          flex: "1 1 520px",
-          minWidth: 0,
+          flex: isCoach ? "0 0 auto" : "1 1 520px",
+          minWidth: isCoach ? "max-content" : 0,
           marginLeft: "auto",
-          flexWrap: "wrap",
+          flexWrap: isCoach ? "nowrap" : "wrap",
         }}
       >
-        <div
-          className="members-view-toggle"
-          aria-label="Account view mode"
-          style={{
-            display: "inline-flex",
-            gap: 4,
-            padding: 3,
-            borderRadius: 8,
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.surface,
-            flex: "0 0 auto",
-          }}
-        >
-          <FitButton
-            variant="chip"
-            icon={List}
-            iconOnly
-            iconSize={15}
-            active={viewMode === "list"}
-            title="List view"
-            aria-label="Show accounts as a list"
-            onClick={() => setViewMode("list")}
-            style={{ minHeight: 31, width: 33, borderRadius: 7 }}
-          />
-          <FitButton
-            variant="chip"
-            icon={LayoutGrid}
-            iconOnly
-            iconSize={15}
-            active={viewMode === "grid"}
-            title="Grid view"
-            aria-label="Show accounts as a grid"
-            onClick={() => setViewMode("grid")}
-            style={{ minHeight: 31, width: 33, borderRadius: 7 }}
-          />
-        </div>
+        <FitButton
+          variant="chip"
+          icon={List}
+          iconOnly
+          iconSize={15}
+          active={viewMode === "list"}
+          title="List view"
+          aria-label="Show accounts as a list"
+          onClick={() => setViewMode("list")}
+          style={{ minHeight: 33, width: 35, borderRadius: 6, flex: "0 0 auto" }}
+        />
+        <FitButton
+          variant="chip"
+          icon={LayoutGrid}
+          iconOnly
+          iconSize={15}
+          active={viewMode === "grid"}
+          title="Grid view"
+          aria-label="Show accounts as a grid"
+          onClick={() => setViewMode("grid")}
+          style={{ minHeight: 33, width: 35, borderRadius: 6, flex: "0 0 auto" }}
+        />
         {!isCoach ? (
           <>
             <div
               className="members-toolbar-status-filter"
               style={{
                 display: "grid",
-                gridTemplateColumns: "14px minmax(96px, 124px)",
+                gridTemplateColumns: "14px minmax(122px, 156px)",
                 alignItems: "center",
                 gap: 6,
                 flex: "0 0 auto",
@@ -796,7 +934,7 @@ export default function AccountsDirectorySurface() {
               className="members-toolbar-filters"
               style={{
                 display: "grid",
-                gridTemplateColumns: "14px minmax(82px, 102px)",
+                gridTemplateColumns: "14px minmax(112px, 140px)",
                 alignItems: "center",
                 gap: 6,
                 flex: "0 0 auto",
@@ -831,7 +969,7 @@ export default function AccountsDirectorySurface() {
               className="members-toolbar-tier-filter"
               style={{
                 display: "grid",
-                gridTemplateColumns: "14px minmax(128px, 168px)",
+                gridTemplateColumns: "14px minmax(142px, 184px)",
                 alignItems: "center",
                 gap: 6,
                 flex: "0 0 auto",
@@ -995,6 +1133,7 @@ export default function AccountsDirectorySurface() {
         rows={paginatedRows}
         tableColumns={isCoach ? coachClientColumns : memberColumns}
         toolbar={directoryToolbar}
+        compactToolbar={isCoach}
         totalPages={totalPages}
         viewMode={viewMode}
       />

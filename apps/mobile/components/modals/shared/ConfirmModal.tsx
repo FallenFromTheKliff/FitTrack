@@ -73,7 +73,7 @@ export default function ConfirmModal({
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={undefined}
+      onRequestClose={isLoading ? undefined : onNo}
     >
       <Animated.View style={[s.modalOverlay, backdropStyle]}>
         <Animated.View style={[s.container, cardStyle]}>

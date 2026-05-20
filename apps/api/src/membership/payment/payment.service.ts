@@ -34,6 +34,7 @@ import {
 } from './events/payment-failed.event';
 import {
   PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
+  PAYMONGO_PAYMENT_FAILED_EVENT,
   PaymongoWebhookEvent,
   PaymongoWebhookService,
 } from './paymongo-webhook.service';
@@ -183,10 +184,20 @@ export class PaymentService {
       signature,
     );
 
-    if (event.data.attributes.type !== PAYMONGO_CHECKOUT_SESSION_PAID_EVENT) {
-      return this.successAck();
+    if (event.data.attributes.type === PAYMONGO_CHECKOUT_SESSION_PAID_EVENT) {
+      return this.handleCheckoutSessionPaidWebhook(event);
     }
 
+    if (event.data.attributes.type === PAYMONGO_PAYMENT_FAILED_EVENT) {
+      return this.handlePaymentFailedWebhook(event);
+    }
+
+    return this.successAck();
+  }
+
+  private async handleCheckoutSessionPaidWebhook(
+    event: PaymongoWebhookEvent,
+  ): Promise<PaymentWebhookAckDTO> {
     const existingEvent = await this.repo.findPaymentByGatewayEventId(
       event.data.id,
     );
@@ -223,6 +234,54 @@ export class PaymentService {
         verifiedBy: null,
       });
     }
+
+    return this.successAck();
+  }
+
+  private async handlePaymentFailedWebhook(
+    event: PaymongoWebhookEvent,
+  ): Promise<PaymentWebhookAckDTO> {
+    const existingEvent = await this.repo.findPaymentByGatewayEventId(
+      event.data.id,
+    );
+
+    if (existingEvent) {
+      return this.successAck();
+    }
+
+    const payment = await this.findWebhookPayment(event);
+
+    if (payment.status === 'completed' || payment.status === 'failed') {
+      return this.successAck();
+    }
+
+    const failedAt = new Date().toISOString();
+    const failureReason =
+      this.extractPaymongoFailureReason(event) ??
+      'PayMongo reported that this payment failed.';
+
+    try {
+      await this.repo.updatePayment(
+        payment.id,
+        this.toWebhookFailureUpdateInput(payment, event, failureReason),
+      );
+    } catch (error) {
+      if (this.isDuplicateGatewayEventConflict(error)) {
+        return this.successAck();
+      }
+
+      throw error;
+    }
+
+    this.emitPaymentFailed({
+      paymentId: payment.id,
+      userId: payment.user_id,
+      payableType: payment.payable_type,
+      payableId: payment.payable_id,
+      amount: payment.amount.toString(),
+      reason: failureReason,
+      failedAt,
+    });
 
     return this.successAck();
   }
@@ -347,9 +406,71 @@ export class PaymentService {
   ): Prisma.PaymentUpdateInput {
     return {
       status: 'completed',
+      verified_at: this.extractWebhookPaidAt(event) ?? new Date(),
       gateway_event_id: event.data.id,
       gateway_metadata: this.toWebhookGatewayMetadata(payment, event),
     };
+  }
+
+  private toWebhookFailureUpdateInput(
+    payment: Payment,
+    event: PaymongoWebhookEvent,
+    failureReason: string,
+  ): Prisma.PaymentUpdateInput {
+    return {
+      status: 'failed',
+      gateway_event_id: event.data.id,
+      gateway_metadata: this.toWebhookGatewayMetadata(payment, event),
+      rejection_reason: failureReason,
+    };
+  }
+
+  private async findWebhookPayment(
+    event: PaymongoWebhookEvent,
+  ): Promise<Payment> {
+    const paymentId = this.extractWebhookMetadataString(event, 'payment_id');
+
+    if (paymentId) {
+      return this.repo.findPaymentByIdOrThrow(paymentId);
+    }
+
+    return this.repo.findPaymentByProviderRefOrThrow(
+      event.data.attributes.data.id,
+    );
+  }
+
+  private extractPaymongoFailureReason(
+    event: PaymongoWebhookEvent,
+  ): string | null {
+    const attributes = event.data.attributes.data.attributes;
+
+    return (
+      attributes.failed_message ??
+      attributes.reason ??
+      attributes.failure_code ??
+      (typeof attributes.status === 'string' ? attributes.status : null)
+    );
+  }
+
+  private extractWebhookPaidAt(event: PaymongoWebhookEvent): Date | null {
+    const attributes = event.data.attributes.data.attributes;
+    const paidAt =
+      attributes.paid_at ?? attributes.payments?.find(Boolean)?.attributes
+        .paid_at;
+
+    if (typeof paidAt !== 'number' || !Number.isFinite(paidAt)) {
+      return null;
+    }
+
+    return new Date(paidAt * 1000);
+  }
+
+  private extractWebhookMetadataString(
+    event: PaymongoWebhookEvent,
+    key: string,
+  ): string | null {
+    const value = event.data.attributes.data.attributes.metadata?.[key];
+    return typeof value === 'string' && value.length > 0 ? value : null;
   }
 
   private toWebhookGatewayMetadata(
@@ -357,37 +478,53 @@ export class PaymentService {
     event: PaymongoWebhookEvent,
   ): Prisma.InputJsonValue {
     const existingMetadata = this.asJsonObject(payment.gateway_metadata);
-    const checkoutSession = event.data.attributes.data;
-    const checkoutAttributes = checkoutSession.attributes;
-    const firstPayment = checkoutAttributes.payments?.[0];
+    const gatewayResource = event.data.attributes.data;
+    const gatewayAttributes = gatewayResource.attributes;
+    const firstPayment = gatewayAttributes.payments?.[0];
+    const paymentAttributes =
+      gatewayResource.type === 'payment'
+        ? gatewayAttributes
+        : firstPayment?.attributes;
+    const existingCheckoutSession =
+      existingMetadata.checkout_session &&
+      typeof existingMetadata.checkout_session === 'object' &&
+      !Array.isArray(existingMetadata.checkout_session)
+        ? existingMetadata.checkout_session
+        : null;
 
     return {
       ...existingMetadata,
       checkout_url:
-        checkoutAttributes.checkout_url ??
+        gatewayAttributes.checkout_url ??
         (typeof existingMetadata.checkout_url === 'string'
           ? existingMetadata.checkout_url
           : null),
-      checkout_session: {
-        id: checkoutSession.id,
-        paid_at: checkoutAttributes.paid_at ?? null,
-        payment_method_used: checkoutAttributes.payment_method_used ?? null,
-        reference_number: checkoutAttributes.reference_number ?? null,
-        status: checkoutAttributes.status ?? null,
-      },
+      checkout_session:
+        gatewayResource.type === 'checkout_session'
+          ? {
+              id: gatewayResource.id,
+              paid_at: gatewayAttributes.paid_at ?? null,
+              payment_method_used: gatewayAttributes.payment_method_used ?? null,
+              reference_number: gatewayAttributes.reference_number ?? null,
+              status: gatewayAttributes.status ?? null,
+            }
+          : existingCheckoutSession,
       last_webhook: {
         event_id: event.data.id,
         event_type: event.data.attributes.type,
       },
-      payment: firstPayment
+      payment: paymentAttributes
         ? {
-            amount: firstPayment.attributes.amount ?? null,
-            currency: firstPayment.attributes.currency ?? null,
+            amount: paymentAttributes.amount ?? null,
+            currency: paymentAttributes.currency ?? null,
             external_reference_number:
-              firstPayment.attributes.external_reference_number ?? null,
-            id: firstPayment.id,
-            paid_at: firstPayment.attributes.paid_at ?? null,
-            status: firstPayment.attributes.status ?? null,
+              paymentAttributes.external_reference_number ?? null,
+            id:
+              gatewayResource.type === 'payment'
+                ? gatewayResource.id
+                : (firstPayment?.id ?? null),
+            paid_at: paymentAttributes.paid_at ?? null,
+            status: paymentAttributes.status ?? null,
           }
         : null,
     } as Prisma.InputJsonValue;

@@ -1,0 +1,3 @@
+C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/armeabi-v7a/CMakeFiles/rnworklets.dir
+C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/armeabi-v7a/CMakeFiles/rebuild_cache.dir

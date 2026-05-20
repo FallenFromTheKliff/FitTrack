@@ -68,6 +68,42 @@ export default function AccountsResponsiveStyles() {
           gap: 8px !important;
         }
 
+        .members-directory-toolbar.members-directory-toolbar-coach {
+          align-items: center !important;
+          flex-wrap: nowrap !important;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+
+        .members-directory-toolbar-coach .members-directory-toolbar-left {
+          display: flex !important;
+          flex: 0 1 300px !important;
+          min-width: 174px !important;
+          width: auto !important;
+        }
+
+        .members-directory-toolbar-coach .members-directory-search {
+          flex: 1 1 auto !important;
+          min-width: 174px !important;
+          max-width: 300px !important;
+          width: auto !important;
+        }
+
+        .members-directory-toolbar-coach .members-directory-toolbar-right {
+          display: flex !important;
+          flex: 0 0 auto !important;
+          flex-wrap: nowrap !important;
+          justify-content: flex-end !important;
+          min-width: max-content !important;
+          width: auto !important;
+        }
+
+        .members-directory-toolbar-coach .members-toolbar-coach-membership-filter,
+        .members-directory-toolbar-coach .members-toolbar-coach-session-filter,
+        .members-directory-toolbar-coach .members-toolbar-coach-activity-filter {
+          width: auto !important;
+        }
+
         .members-grid {
           grid-template-columns: 1fr !important;
         }
@@ -107,6 +143,15 @@ export default function AccountsResponsiveStyles() {
 
         .members-directory-toolbar-right > button {
           width: 100% !important;
+        }
+
+        .members-directory-toolbar-coach .members-directory-toolbar-right {
+          display: flex !important;
+          grid-template-columns: none !important;
+        }
+
+        .members-directory-toolbar-coach .members-directory-toolbar-right > button {
+          width: 35px !important;
         }
       }
 

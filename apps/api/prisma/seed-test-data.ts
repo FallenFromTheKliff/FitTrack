@@ -790,12 +790,12 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
 
   const coachSeeds = [
     {
-      accountKey: 'staff',
-      contactEmail: 'coach.profile.alpha@fittrack.local',
+      accountKey: 'coach-casey',
+      contactEmail: 'seed.coach.casey@fittrack.com',
       contactPhone: '+639170000101',
-      displayName: 'Coach Profile Alpha',
+      displayName: 'Casey Floor',
       averageRating: new Prisma.Decimal('4.90'),
-      bio: 'Standalone coach profile used to review bookings, readiness, and weekly availability from the staff console.',
+      bio: 'Coach account profile used to review bookings, readiness, and weekly availability from the staff console.',
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('850'),
       isAvailableForBooking: true,
@@ -816,12 +816,12 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       specialization: 'Strength onboarding, form checks, member progression',
     },
     {
-      accountKey: 'member-nomembership',
-      contactEmail: 'coach.profile.bravo@fittrack.local',
+      accountKey: 'coach-bravo',
+      contactEmail: 'seed.coach.bravo@fittrack.com',
       contactPhone: '+639170000102',
       displayName: 'Coach Profile Bravo',
       averageRating: new Prisma.Decimal('4.72'),
-      bio: 'Standalone coach profile used for gym-operations staffing checks and venue-linked sessions.',
+      bio: 'Coach account profile used for gym-operations staffing checks and venue-linked sessions.',
       certification: 'ACE-CPT',
       hourlyRate: new Prisma.Decimal('900'),
       isAvailableForBooking: true,
@@ -829,12 +829,12 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       specialization: 'Conditioning, boxing, athletic movement',
     },
     {
-      accountKey: 'member-expired',
-      contactEmail: 'coach.profile.charlie@fittrack.local',
+      accountKey: 'coach-ivy',
+      contactEmail: 'seed.coach.ivy@fittrack.com',
       contactPhone: '+639170000103',
-      displayName: 'Coach Profile Charlie',
+      displayName: 'Ivy Navarro',
       averageRating: new Prisma.Decimal('4.81'),
-      bio: 'Standalone coach profile for recovery and lower-intensity mobility blocks that still need booking visibility checks.',
+      bio: 'Coach account profile for recovery and lower-intensity mobility blocks that still need booking visibility checks.',
       certification: 'Yoga Alliance',
       hourlyRate: new Prisma.Decimal('780'),
       isAvailableForBooking: true,
@@ -887,6 +887,10 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
 
     coachProfiles[seed.accountKey] = profile.id;
   }
+
+  coachProfiles['staff'] = coachProfiles['coach-casey'];
+  coachProfiles['member-nomembership'] = coachProfiles['coach-bravo'];
+  coachProfiles['member-expired'] = coachProfiles['coach-ivy'];
 
   const coachProfileIds = Object.values(coachProfiles);
   if (coachProfileIds.length) {
@@ -1951,6 +1955,50 @@ async function ensureNutritionFixtures(
           ),
           fat_g: new Prisma.Decimal(
             Math.round(fat * 0.28 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.serving,
+        },
+        {
+          id: seedId(`nutrition:log:${account.key}:carb-refill`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(1),
+          meal_name: 'Pre-workout',
+          food_item: 'Banana oat recovery cup',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.18 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.08 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.25 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.08 * dailyModifier).toString(),
+          ),
+          quantity: new Prisma.Decimal('1'),
+          unit: NutritionUnit.cup,
+        },
+        {
+          id: seedId(`nutrition:log:${account.key}:fat-support`),
+          user_id: userId,
+          macro_target_id: macroTargetId,
+          log_date: nutritionDate(2),
+          meal_name: 'Snack',
+          food_item: 'Avocado egg wrap',
+          calories: new Prisma.Decimal(
+            Math.round(calories * 0.22 * dailyModifier).toString(),
+          ),
+          protein_g: new Prisma.Decimal(
+            Math.round(protein * 0.12 * dailyModifier).toString(),
+          ),
+          carbs_g: new Prisma.Decimal(
+            Math.round(carbs * 0.12 * dailyModifier).toString(),
+          ),
+          fat_g: new Prisma.Decimal(
+            Math.round(fat * 0.34 * dailyModifier).toString(),
           ),
           quantity: new Prisma.Decimal('1'),
           unit: NutritionUnit.serving,

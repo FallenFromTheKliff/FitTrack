@@ -16,7 +16,8 @@ import type {
 import {
   invalidateAnalyticsQueries,
   invalidateAdminMembershipPaymentQueries,
-  invalidateMembershipQueries
+  invalidateMembershipQueries,
+  invalidateStaffCoachManagementQueries
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
@@ -209,7 +210,8 @@ export function verifyMembershipPaymentMutationOptions(
       await Promise.all([
         invalidateAnalyticsQueries(queryClient),
         invalidateAdminMembershipPaymentQueries(queryClient),
-        invalidateMembershipQueries(queryClient, variables.affectedUserId)
+        invalidateMembershipQueries(queryClient, variables.affectedUserId),
+        invalidateStaffCoachManagementQueries(queryClient)
       ]);
     }
   });

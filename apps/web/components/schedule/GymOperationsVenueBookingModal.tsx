@@ -179,22 +179,35 @@ export function GymOperationsVenueBookingModal({
 
   return (
     <>
-    <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
+    <OverlayFrame
+      isOpen={isOpen}
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      title="Review venue booking"
+      subtitle="Basketball court, boxing ring, and yoga room requests should resolve here before they hit the floor."
+      footer={
+        <FitButton
+          variant="primary"
+          label={isSubmitting ? "SAVING..." : "SAVE"}
+          onClick={handleSave}
+          disabled={
+            isSubmitting ||
+            isTerminal ||
+            visibleDecisionOptions.length === 0 ||
+            ((decision === "collect_cash_balance" ||
+              decision === "paymongo_balance") &&
+              !onCollectBalance)
+          }
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      }
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 760,
-          maxWidth: "min(760px, calc(100vw - 48px))",
-          maxHeight: "min(776px, calc(100vh - 48px))",
-          overflow: "auto",
-          margin: "auto",
-          padding: 24,
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
           display: "grid",
-          gap: 20,
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
+          gap: 14,
           transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
           transition: shouldAnimate ? "transform 180ms ease" : "none",
         }}
@@ -218,32 +231,6 @@ export function GymOperationsVenueBookingModal({
             {tone.label}
           </FitText>
         </div>
-        <div style={{ display: "grid", gap: 10 }}>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 30,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              lineHeight: 1.12,
-            }}
-          >
-            Review venue booking
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 14,
-              color: colors.textMuted,
-              lineHeight: 1.3,
-              maxWidth: 520,
-            }}
-          >
-            Basketball court, boxing ring, and yoga room requests should resolve
-            here before they hit the floor.
-          </FitText>
-        </div>
-
         <div style={{ ...overlaySurfaceStyle(colors), gap: 8 }}>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}
@@ -457,38 +444,6 @@ export function GymOperationsVenueBookingModal({
               rows={3}
               placeholder="Optional handoff note for facilities staff or front desk..."
               style={{ fontSize: 12, lineHeight: 1.4 }}
-            />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <FitButton
-              variant="ghost"
-              label="CLOSE"
-              onClick={onClose}
-              disabled={isSubmitting}
-              style={actionPillStyle(colors)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
-            />
-            <FitButton
-              variant="primary"
-              label={isSubmitting ? "SAVING..." : "SAVE"}
-              onClick={handleSave}
-              disabled={
-                isSubmitting ||
-                isTerminal ||
-                visibleDecisionOptions.length === 0 ||
-                ((decision === "collect_cash_balance" ||
-                  decision === "paymongo_balance") &&
-                  !onCollectBalance)
-              }
-              style={actionPillStyle(colors, true)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
             />
           </div>
         </div>

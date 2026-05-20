@@ -90,6 +90,7 @@ export default function BlockDetailModal({
       iconNode={<CalendarDays size={15} color={onBrandTextColor} strokeWidth={2} />}
       maxWidth={460}
       closeAriaLabel="Close schedule block"
+      contentStyle={{ display: "flex", flexDirection: "column", gap: 16 }}
       footer={
         <>
           <FitButton
@@ -107,46 +108,44 @@ export default function BlockDetailModal({
         </>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <FitText as="label" style={labelStyle}>Title</FitText>
-          <FitTextInput
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Strength Session"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <FitText as="label" style={labelStyle}>Venue Assigned</FitText>
-          <FitTextInput
-            value={venueLabel}
-            onChange={(e) => setVenueLabel(e.target.value)}
-            placeholder="e.g. Basketball Court"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <FitText as="label" style={labelStyle}>Duration (minutes)</FitText>
-          <FitTextInput
-            type="number"
-            min={15}
-            step={15}
-            value={durationMin}
-            onChange={(e) => setDurationMin(e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <FitText as="label" style={labelStyle}>{resourceLabel} Assigned</FitText>
-          <FitSelect
-            fullWidth
-            value={assignedId}
-            onChange={(e) => setAssignedId(e.target.value)}
-            options={staffMembers.map((s) => ({ label: s.name, value: s.id }))}
-            style={{ borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg }}
-          />
-        </div>
+      <div>
+        <FitText as="label" style={labelStyle}>Title</FitText>
+        <FitTextInput
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Strength Session"
+          style={inputStyle}
+        />
+      </div>
+      <div>
+        <FitText as="label" style={labelStyle}>Venue Assigned</FitText>
+        <FitTextInput
+          value={venueLabel}
+          onChange={(e) => setVenueLabel(e.target.value)}
+          placeholder="e.g. Basketball Court"
+          style={inputStyle}
+        />
+      </div>
+      <div>
+        <FitText as="label" style={labelStyle}>Duration (minutes)</FitText>
+        <FitTextInput
+          type="number"
+          min={15}
+          step={15}
+          value={durationMin}
+          onChange={(e) => setDurationMin(e.target.value)}
+          style={inputStyle}
+        />
+      </div>
+      <div>
+        <FitText as="label" style={labelStyle}>{resourceLabel} Assigned</FitText>
+        <FitSelect
+          fullWidth
+          value={assignedId}
+          onChange={(e) => setAssignedId(e.target.value)}
+          options={staffMembers.map((s) => ({ label: s.name, value: s.id }))}
+          style={{ borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg }}
+        />
       </div>
     </FitModal>
   );

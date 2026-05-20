@@ -101,6 +101,7 @@ export function RecurringPlanActionModal({
       onClose={() => {
         if (!isBusy) onClose();
       }}
+      closeDisabled={isBusy}
       title="Recurring plan action"
       subtitle="Apply one recurring-session change at a time."
       maxWidth={720}
@@ -112,23 +113,82 @@ export function RecurringPlanActionModal({
         borderRadius: 8,
       }}
       contentStyle={{
+        display: "grid",
+        gap: 16,
         maxHeight: "calc(100vh - 180px)",
         overflowY: "auto",
         padding: 20,
       }}
+      footer={
+        action.mode === "single" ? (
+          <>
+            <FitButton
+              variant="ghost"
+              label={isSessionUpdatePending ? "SKIPPING..." : "SKIP SESSION"}
+              onClick={onSkipSession}
+              disabled={isBusy}
+              style={{
+                minHeight: 38,
+                borderRadius: 10,
+                padding: "8px 14px",
+              }}
+              textStyle={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: colors.warning,
+              }}
+            />
+            <FitButton
+              variant="primary"
+              label={isSessionUpdatePending ? "SAVING..." : "RESCHEDULE SESSION"}
+              onClick={onRescheduleSession}
+              disabled={isBusy || !selectedDate || !selectedTime}
+              style={{
+                minHeight: 38,
+                borderRadius: 8,
+                padding: "8px 14px",
+                backgroundColor: colors.brand,
+                color: colors.onBrand,
+              }}
+              textStyle={{ fontSize: 11, fontWeight: 800 }}
+            />
+          </>
+        ) : action.mode === "future" ? (
+          <FitButton
+            variant="primary"
+            label={isBulkUpdatePending ? "UPDATING..." : "UPDATE FUTURE SESSIONS"}
+            onClick={onUpdateFuture}
+            disabled={isBusy || !selectedTime || selectedDays.length === 0}
+            style={{
+              minHeight: 38,
+              borderRadius: 8,
+              padding: "8px 14px",
+              backgroundColor: colors.brand,
+              color: colors.onBrand,
+            }}
+            textStyle={{ fontSize: 11, fontWeight: 800 }}
+          />
+        ) : (
+          <FitButton
+            variant="danger"
+            label={isCancelPending ? "CANCELLING..." : "CANCEL PLAN"}
+            onClick={onCancelPlan}
+            disabled={isBusy}
+            style={{
+              minHeight: 38,
+              borderRadius: 10,
+              padding: "8px 14px",
+              borderColor: colors.danger,
+            }}
+            textStyle={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: colors.danger,
+            }}
+          />
+        )
+      }
     >
-      <div
-        style={{
-          width: "100%",
-          overflow: "visible",
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
-          padding: 20,
-          display: "grid",
-          gap: 16,
-        }}
-      >
         <div style={{ display: "grid", gap: 6 }}>
           <FitText
             excludeGlobalScale
@@ -281,83 +341,6 @@ export function RecurringPlanActionModal({
           />
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          {action.mode === "single" ? (
-            <>
-              <FitButton
-                variant="ghost"
-                label={isSessionUpdatePending ? "SKIPPING..." : "SKIP SESSION"}
-                onClick={onSkipSession}
-                disabled={isBusy}
-                style={{
-                  minHeight: 38,
-                  borderRadius: 16,
-                  padding: "8px 14px",
-                }}
-                textStyle={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: colors.warning,
-                }}
-              />
-              <FitButton
-                variant="primary"
-                label={isSessionUpdatePending ? "SAVING..." : "RESCHEDULE SESSION"}
-                onClick={onRescheduleSession}
-                disabled={isBusy || !selectedDate || !selectedTime}
-                style={{
-                  minHeight: 38,
-                  borderRadius: 8,
-                  padding: "8px 14px",
-                  backgroundColor: colors.brand,
-                  color: colors.onBrand,
-                }}
-                textStyle={{ fontSize: 11, fontWeight: 800 }}
-              />
-            </>
-          ) : action.mode === "future" ? (
-            <FitButton
-              variant="primary"
-              label={isBulkUpdatePending ? "UPDATING..." : "UPDATE FUTURE SESSIONS"}
-              onClick={onUpdateFuture}
-              disabled={isBusy || !selectedTime || selectedDays.length === 0}
-              style={{
-                minHeight: 38,
-                borderRadius: 8,
-                padding: "8px 14px",
-                backgroundColor: colors.brand,
-                color: colors.onBrand,
-              }}
-              textStyle={{ fontSize: 11, fontWeight: 800 }}
-            />
-          ) : (
-            <FitButton
-              variant="danger"
-              label={isCancelPending ? "CANCELLING..." : "CANCEL PLAN"}
-              onClick={onCancelPlan}
-              disabled={isBusy}
-              style={{
-                minHeight: 38,
-                borderRadius: 16,
-                padding: "8px 14px",
-                borderColor: colors.danger,
-              }}
-              textStyle={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: colors.danger,
-              }}
-            />
-          )}
-        </div>
-      </div>
     </FitModal>
   );
 }

@@ -40,6 +40,7 @@ export default function SettingsScreen() {
           visible={activePref !== null}
           title={activeMeta.title}
           icon={activeMeta.icon}
+          showScrollHint
           onClose={closeModal}
         >
           <SettingsModalContent activePref={activePref!} onClose={closeModal} />

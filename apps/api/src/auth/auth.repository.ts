@@ -167,11 +167,15 @@ export class AuthRepository extends BaseRepository {
   }
 
   /**
-   * Create an empty CoachProfile for a newly created coach account.
+   * Create a CoachProfile for a newly created coach account.
    * Called by adminCreateUser() when role = coach.
    */
-  createCoachProfile(userId: string): Promise<CoachProfile> {
+  createCoachProfile(
+    userId: string,
+    data: { displayName?: string | null } = {},
+  ): Promise<CoachProfile> {
     return this.create<CoachProfile>(this.prisma.coachProfile, {
+      display_name: data.displayName?.trim() || null,
       user_id: userId,
     });
   }

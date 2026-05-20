@@ -1,13 +1,14 @@
 "use client";
-import type { CSSProperties, ReactNode, SelectHTMLAttributes } from "react";
-import { useMemo } from "react";
+import type { ChangeEvent, CSSProperties, ReactNode, SelectHTMLAttributes } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight, ChevronDown, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { useTheme, useFontClass } from "@/contexts/ThemeContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/utils/cn";
 import { makeFitCardStyles } from "@/styles/fitStyles";
 
+import FitDropdown, { type FitDropdownOption } from "./FitDropdown";
 import { FitText } from "./FitText";
 
 type FitCardProps = {
@@ -192,6 +193,7 @@ export function FitKpiCard({ icon: Icon, label, value, color, style, labelStyle,
 export type FitSelectOption = {
   label: string;
   value: string;
+  disabled?: boolean;
 };
 
 type FitSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> & {
@@ -203,34 +205,60 @@ type FitSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> 
 
 export function FitSelect({ options, placeholder, compact = false, fullWidth = false, className, style, value, defaultValue, ...props }: FitSelectProps) {
   const { colors } = useTheme();
-  const fontClass = useFontClass();
   const s = useMemo(() => makeFitCardStyles(colors), [colors]);
-  const controlStyle = s.selectControl(compact, fullWidth, !!props.disabled);
+  const {
+    disabled,
+    id,
+    name,
+    onChange,
+    ...selectProps
+  } = props;
   const hasPlaceholder = Boolean(placeholder);
-  const selectedValue = typeof value === "string" ? value : undefined;
-  const selectedDefaultValue = typeof defaultValue === "string" ? defaultValue : undefined;
+  const controlledValue = typeof value === "string" || typeof value === "number" ? String(value) : undefined;
+  const initialValue = typeof defaultValue === "string" || typeof defaultValue === "number" ? String(defaultValue) : "";
+  const [uncontrolledValue, setUncontrolledValue] = useState(initialValue);
+  const selectedValue = controlledValue ?? uncontrolledValue;
+  const dropdownOptions = useMemo<FitDropdownOption[]>(() => {
+    const normalizedOptions = options.map((option) => ({
+      label: option.label,
+      value: option.value,
+      disabled: option.disabled,
+    }));
+    if (!hasPlaceholder || normalizedOptions.some((option) => option.value === "")) {
+      return normalizedOptions;
+    }
+    return [
+      { label: placeholder ?? "Select", value: "", isPlaceholder: true },
+      ...normalizedOptions,
+    ];
+  }, [hasPlaceholder, options, placeholder]);
+
+  const emitChange = (nextValue: string) => {
+    if (controlledValue === undefined) {
+      setUncontrolledValue(nextValue);
+    }
+    onChange?.({
+      target: { id, name, value: nextValue },
+      currentTarget: { id, name, value: nextValue },
+    } as unknown as ChangeEvent<HTMLSelectElement>);
+  };
+
   return (
       <div style={s.selectWrap(fullWidth)}>
-        <select
-            {...props}
-            value={selectedValue}
-            defaultValue={selectedDefaultValue}
-            className={cn(fontClass, className)}
-            style={{ ...controlStyle, ...style }}
-        >
-          {hasPlaceholder && <option value="">{placeholder}</option>}
-          {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-          ))}
-        </select>
-        <ChevronDown
-            size={16}
-            color={colors.textMuted}
-            strokeWidth={2}
-            style={s.selectChevron}
+        <FitDropdown
+          id={id}
+          ariaLabel={selectProps["aria-label"] ?? placeholder}
+          className={cn(className)}
+          compact={compact}
+          disabled={disabled}
+          fullWidth={fullWidth}
+          onChange={emitChange}
+          options={dropdownOptions}
+          placeholder={placeholder}
+          style={style}
+          value={selectedValue}
         />
+        {name ? <input disabled={disabled} name={name} type="hidden" value={selectedValue} /> : null}
       </div>
   );
 }

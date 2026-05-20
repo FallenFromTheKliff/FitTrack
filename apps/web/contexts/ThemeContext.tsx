@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useState, useRef, useMemo, useCallback, useEffect, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
 import {
   themes,
@@ -12,6 +13,7 @@ import type { IThemeContext, ThemeKey, FontKey, ThemeSettings } from "@fittrack/
 import { createThemeController, type ThemeControllerState } from "@fittrack/app-core";
 import { getReadableTextColor } from "@fittrack/utils";
 import { loadPreferences, savePreferences } from "@/utils/preferences";
+import { shouldUseDefaultPublicAppearance } from "@/utils/publicAppearance";
 
 export interface IWebThemeContext extends IThemeContext {
     isTransitioning: boolean;
@@ -28,6 +30,8 @@ const DEFAULT_SETTINGS: ThemeSettings = {
 const ThemeContext = createContext<IWebThemeContext | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "/";
+  const useDefaultPublicAppearance = shouldUseDefaultPublicAppearance(pathname);
   const controller = useMemo(() => createThemeController({
     defaultSettings: DEFAULT_SETTINGS,
     storage: {
@@ -40,7 +44,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   const isFirstMount = useRef(true);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { activeFont, activeThemeKey } = controller.getResolvedState(state);
+  const resolvedState = controller.getResolvedState(state);
+  const activeFont = useDefaultPublicAppearance ? DEFAULT_FONT : resolvedState.activeFont;
+  const activeThemeKey = useDefaultPublicAppearance ? DEFAULT_THEME : resolvedState.activeThemeKey;
+  const activeSettings = useDefaultPublicAppearance ? DEFAULT_SETTINGS : state.settings;
   const activeAccentColor = THEME_ACCENT_COLOR[activeThemeKey];
   const activeColors = themes[activeThemeKey];
   const onBrandTextColor = activeColors.onBrand ?? getReadableTextColor(activeColors.brand, activeColors.textPrimary, themes.sunlight.surface);
@@ -138,7 +145,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         activeIconColor: activeAccentColor,
         onBrandTextColor,
         getReadableTextColor: resolveReadableTextColor,
-        settings: state.settings,
+        settings: activeSettings,
         isTransitioning,
         loadUserSettings,
         clearUserSettings,

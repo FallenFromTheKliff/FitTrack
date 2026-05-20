@@ -45,6 +45,28 @@ describe('Auth DTO validation', () => {
     );
   });
 
+  it('allows admin-created accounts without a phone number', async () => {
+    const basePayload = {
+      email: 'member@fittrack.com',
+      password: 'Password1!',
+      first_name: 'Maria',
+      last_name: 'Santos',
+      role: 'member',
+    };
+
+    await expect(
+      validate(plainToInstance(AdminCreateUserDTO, basePayload)),
+    ).resolves.toHaveLength(0);
+
+    const blankPhoneDto = plainToInstance(AdminCreateUserDTO, {
+      ...basePayload,
+      phone: '   ',
+    });
+
+    await expect(validate(blankPhoneDto)).resolves.toHaveLength(0);
+    expect(blankPhoneDto.phone).toBeUndefined();
+  });
+
   it('allows login with an allowed email domain without strong-password enforcement', async () => {
     const dto = plainToInstance(LoginDTO, {
       email: 'member@gmail.com',

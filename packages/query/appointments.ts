@@ -7,8 +7,10 @@ import type {
 } from "@fittrack/api-client";
 import {
   invalidateAnalyticsQueries,
+  invalidateAdminMembershipPaymentQueries,
   invalidateAppointmentQueries,
-  invalidateCoachScheduleQueries
+  invalidateCoachScheduleQueries,
+  invalidateStaffCoachManagementQueries,
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
@@ -24,7 +26,11 @@ export function createAppointmentMutationOptions(client: Pick<ApiClient, "appoin
     mutationFn: ({ payload, userId }: { payload: CreateAppointmentPayload; userId?: string }) =>
       client.appointments.create(payload),
     onSuccess: async (_data, variables) => {
-      await invalidateAppointmentQueries(queryClient, variables.userId);
+      await Promise.all([
+        invalidateAppointmentQueries(queryClient, variables.userId),
+        invalidateStaffCoachManagementQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
+      ]);
     }
   });
 }
@@ -55,6 +61,7 @@ export function payAppointmentDownpaymentMutationOptions(
         invalidateAppointmentQueries(queryClient, variables.userId),
         invalidateCoachScheduleQueries(queryClient),
         invalidateAnalyticsQueries(queryClient),
+        invalidateAdminMembershipPaymentQueries(queryClient),
       ]);
     },
   });
@@ -88,6 +95,7 @@ export function processAppointmentBalanceMutationOptions(
         invalidateAppointmentQueries(queryClient, variables.userId),
         invalidateCoachScheduleQueries(queryClient),
         invalidateAnalyticsQueries(queryClient),
+        invalidateAdminMembershipPaymentQueries(queryClient),
       ]);
     },
   });
@@ -100,7 +108,9 @@ export function cancelAppointmentMutationOptions(client: Pick<ApiClient, "appoin
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateAppointmentQueries(queryClient, variables.userId),
-        invalidateCoachScheduleQueries(queryClient)
+        invalidateCoachScheduleQueries(queryClient),
+        invalidateStaffCoachManagementQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
       ]);
     }
   });
@@ -113,7 +123,9 @@ export function confirmCoachAppointmentMutationOptions(client: Pick<ApiClient, "
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateCoachScheduleQueries(queryClient, variables.userId),
-        invalidateAppointmentQueries(queryClient)
+        invalidateAppointmentQueries(queryClient),
+        invalidateStaffCoachManagementQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
       ]);
     }
   });
@@ -126,7 +138,9 @@ export function declineCoachAppointmentMutationOptions(client: Pick<ApiClient, "
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateCoachScheduleQueries(queryClient, variables.userId),
-        invalidateAppointmentQueries(queryClient)
+        invalidateAppointmentQueries(queryClient),
+        invalidateStaffCoachManagementQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
       ]);
     }
   });
@@ -154,7 +168,9 @@ export function completeCoachAppointmentMutationOptions(client: Pick<ApiClient, 
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateCoachScheduleQueries(queryClient, variables.userId),
-        invalidateAppointmentQueries(queryClient)
+        invalidateAppointmentQueries(queryClient),
+        invalidateStaffCoachManagementQueries(queryClient),
+        invalidateAnalyticsQueries(queryClient),
       ]);
     }
   });

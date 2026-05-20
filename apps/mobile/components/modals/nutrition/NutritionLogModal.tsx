@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, Check, ChevronDown, Plus, Scale, UtensilsCrossed } from "lucide-react-native";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, Check, ChevronDown, Plus, Scale, Search, UtensilsCrossed } from "lucide-react-native";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { createNutritionLogMutationOptions } from "@fittrack/query";
-import type { NutritionUnit, ThemeColors } from "@fittrack/types";
+import { createNutritionLogMutationOptions, nutritionLogsQueryOptions } from "@fittrack/query";
+import type { NutritionLogRecord, NutritionUnit, ThemeColors } from "@fittrack/types";
 import { nutritionLogSchema, type NutritionLogData } from "@fittrack/validators";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +27,7 @@ import { MAX_WIDTH, R } from "@fittrack/ui/tokens";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 type Props = {
   isVisible: boolean;
@@ -35,7 +36,25 @@ type Props = {
 };
 
 type NutritionLogFieldErrors = Partial<Record<keyof NutritionLogData, string[]>>;
+type LogStep = "choice" | "form";
 type PickerSheet = "meal" | "unit";
+
+const localStyles = StyleSheet.create({
+  choiceAction: {
+    paddingHorizontal: 16,
+    paddingBottom: 12
+  },
+  previousMealCopy: {
+    flex: 1,
+    gap: 2
+  },
+  previousMealIcon: {
+    marginTop: 2
+  },
+  previousMealList: {
+    gap: 8
+  }
+});
 
 function sanitizeDecimalInput(value: string) {
   const sanitized = value.replace(/[^0-9.]/g, "");
@@ -55,6 +74,39 @@ function getSelectedOption<T extends string>(
   value: T | ""
 ) {
   return options.find((option) => option.value === value);
+}
+
+function getKnownMealName(value: string): NutritionMealName | "" {
+  return MEAL_NAME_OPTIONS.some((option) => option.value === value)
+    ? (value as NutritionMealName)
+    : "";
+}
+
+function toFieldValue(value: number) {
+  return Number.isFinite(value) ? String(value) : "";
+}
+
+function getPreviousMealSubtitle(entry: NutritionLogRecord) {
+  return `${entry.mealName} | ${entry.calories.toFixed(0)} kcal | P ${entry.proteinG.toFixed(0)} C ${entry.carbsG.toFixed(0)} F ${entry.fatG.toFixed(0)}`;
+}
+
+function getPreviousMealSearchText(entry: NutritionLogRecord) {
+  const unitOption = getSelectedOption(NUTRITION_UNIT_OPTIONS, entry.unit);
+  return [
+    entry.foodItem,
+    entry.mealName,
+    entry.unit,
+    unitOption?.label,
+    getPreviousMealSubtitle(entry),
+    `${entry.quantity} ${entry.unit}`,
+    `calories ${entry.calories.toFixed(0)} kcal`,
+    `protein ${entry.proteinG.toFixed(0)} p`,
+    `carbs ${entry.carbsG.toFixed(0)} c`,
+    `fat ${entry.fatG.toFixed(0)} f`
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 type OptionSheetModalProps<T extends string> = {
@@ -166,7 +218,10 @@ function OptionSheetModal<T extends string>({
             <FitText style={sheetStyles.title}>{title}</FitText>
             <FitText style={sheetStyles.subtitle}>{subtitle}</FitText>
           </Animated.View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={sheetStyles.body}>
+          <FitModalScrollView
+            contentContainerStyle={sheetStyles.body}
+            resetKey={isVisible}
+          >
             {options.map((option) => {
               const isActive = option.value === selectedValue;
               return (
@@ -205,7 +260,7 @@ function OptionSheetModal<T extends string>({
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </FitModalScrollView>
           <Animated.View style={[sheetStyles.footer, footerBorderStyle]}>
             <FitButton label="Done" variant="ghost" onPress={onClose} flex={1} />
           </Animated.View>
@@ -222,6 +277,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const { ic } = useThemeTransitionAnim();
   const s = useMemo(() => makeGoalsModalStyles(colors), [colors]);
 
+  const [step, setStep] = useState<LogStep>("choice");
+  const [previousMealSearch, setPreviousMealSearch] = useState("");
   const [logDate, setLogDate] = useState(getTodayString());
   const [mealName, setMealName] = useState<NutritionMealName | "">("");
   const [foodItem, setFoodItem] = useState("");
@@ -239,10 +296,47 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const savingText = useLoadingText("Saving", isSubmitting);
 
   const createLogMutation = useMutation(createNutritionLogMutationOptions(mobileApiClient, queryClient));
+  const {
+    data: recentLogs = { data: [], meta: { page: 1, limit: 12, total: 0, total_pages: 0 } },
+    isFetching: isRecentLogsLoading
+  } = useQuery({
+    ...nutritionLogsQueryOptions<NutritionLogRecord>(mobileApiClient, user?.id, {
+      page: 1,
+      limit: 12
+    }),
+    enabled: isVisible && !!user?.id
+  });
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
+
+  const previousMeals = useMemo(() => {
+    const seen = new Set<string>();
+    return recentLogs.data.filter((entry) => {
+      const key = [
+        entry.mealName,
+        entry.foodItem.trim().toLowerCase(),
+        entry.calories,
+        entry.proteinG,
+        entry.carbsG,
+        entry.fatG,
+        entry.quantity,
+        entry.unit
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 6);
+  }, [recentLogs.data]);
+
+  const previousMealSearchTerm = previousMealSearch.trim().toLowerCase();
+  const filteredPreviousMeals = useMemo(() => {
+    if (!previousMealSearchTerm) return previousMeals;
+    return previousMeals.filter((entry) => getPreviousMealSearchText(entry).includes(previousMealSearchTerm));
+  }, [previousMeals, previousMealSearchTerm]);
 
   useEffect(() => {
     if (!isVisible) return;
+    setStep("choice");
+    setPreviousMealSearch("");
     setLogDate(getTodayString());
     setMealName("");
     setFoodItem("");
@@ -270,11 +364,56 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
   const handleClose = () => {
+    setStep("choice");
+    setPreviousMealSearch("");
     setSubmitError(null);
     setFieldErrors({});
     setIsSubmitting(false);
     setActivePicker(null);
     onClose();
+  };
+
+  const handleStartNewMeal = () => {
+    setLogDate(getTodayString());
+    setMealName("");
+    setFoodItem("");
+    setCalories("");
+    setProteinG("");
+    setCarbsG("");
+    setFatG("");
+    setQuantity("1");
+    setUnit("serving");
+    setFieldErrors({});
+    setSubmitError(null);
+    setActivePicker(null);
+    setIsCalOpen(false);
+    setStep("form");
+  };
+
+  const handleUsePreviousMeal = (entry: NutritionLogRecord) => {
+    setLogDate(getTodayString());
+    setMealName(getKnownMealName(entry.mealName));
+    setFoodItem(entry.foodItem);
+    setCalories(toFieldValue(entry.calories));
+    setProteinG(toFieldValue(entry.proteinG));
+    setCarbsG(toFieldValue(entry.carbsG));
+    setFatG(toFieldValue(entry.fatG));
+    setQuantity(toFieldValue(entry.quantity));
+    setUnit(entry.unit);
+    setFieldErrors({});
+    setSubmitError(null);
+    setActivePicker(null);
+    setIsCalOpen(false);
+    setStep("form");
+  };
+
+  const handleBackToPreviousMeals = () => {
+    setSubmitError(null);
+    setFieldErrors({});
+    setIsSubmitting(false);
+    setActivePicker(null);
+    setIsCalOpen(false);
+    setStep("choice");
   };
 
   const clearFieldError = (field: keyof NutritionLogData) => {
@@ -377,15 +516,95 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
             </View>
             <View style={s.headerText}>
               <FitText style={s.headerTitle}>Log Meal</FitText>
-              <FitText style={s.headerSubtitle}>Save today's nutrition to the live backend</FitText>
+              <FitText style={s.headerSubtitle}>
+                {step === "choice"
+                  ? "Choose a previous meal or start fresh"
+                  : "Save today's nutrition to the live backend"}
+              </FitText>
             </View>
           </Animated.View>
-          <ScrollView
+          <FitModalScrollView
             style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={s.body}
+            resetKey={`${isVisible}-${step}`}
           >
+            {step === "choice" ? (
+              <>
+                <View style={s.sectionGap}>
+                  <FitText style={s.sectionLabel}>SEARCH PREVIOUS MEALS</FitText>
+                  <View style={s.inputFieldWrap}>
+                    <Search size={16} color={colors.textMuted} strokeWidth={2} />
+                    <FitTextInput
+                      style={s.inputField}
+                      placeholder="Search food, meal, unit, or macros"
+                      value={previousMealSearch}
+                      onChangeText={setPreviousMealSearch}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="search"
+                    />
+                  </View>
+                </View>
+
+                <View style={s.sectionGap}>
+                  <FitText style={s.sectionLabel}>PREVIOUS MEALS</FitText>
+                  <View style={localStyles.previousMealList}>
+                    {isRecentLogsLoading && previousMeals.length === 0 ? (
+                      <View style={[s.readOnlyRow, { alignItems: "flex-start" }]}>
+                        <View style={{ flex: 1 }}>
+                          <FitText style={s.readOnlyValue}>Loading previous meals</FitText>
+                          <FitText style={[s.fieldNote, { marginTop: 3, paddingHorizontal: 0 }]}>
+                            Recent logs will appear here when the backend finishes loading.
+                          </FitText>
+                        </View>
+                      </View>
+                    ) : filteredPreviousMeals.length > 0 ? (
+                      filteredPreviousMeals.map((entry) => (
+                        <Pressable
+                          key={entry.id}
+                          accessibilityRole="button"
+                          onPress={() => handleUsePreviousMeal(entry)}
+                          style={[s.fieldBtn, { alignItems: "flex-start", borderColor: colors.fieldBorder }]}
+                        >
+                          <UtensilsCrossed
+                            size={16}
+                            color={colors.brand}
+                            strokeWidth={2}
+                            style={localStyles.previousMealIcon}
+                          />
+                          <View style={localStyles.previousMealCopy}>
+                            <FitText
+                              numberOfLines={1}
+                              style={[s.fieldBtnText, { color: colors.textPrimary, fontWeight: "700" }]}
+                            >
+                              {entry.foodItem}
+                            </FitText>
+                            <FitText style={[s.fieldNote, { marginTop: 0, paddingHorizontal: 0 }]}>
+                              {getPreviousMealSubtitle(entry)}
+                            </FitText>
+                          </View>
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={[s.readOnlyRow, { alignItems: "flex-start" }]}>
+                        <View style={{ flex: 1 }}>
+                          <FitText style={s.readOnlyValue}>
+                            {previousMealSearchTerm ? "No matching meals" : "No previous meals yet"}
+                          </FitText>
+                          <FitText style={[s.fieldNote, { marginTop: 3, paddingHorizontal: 0 }]}>
+                            {previousMealSearchTerm
+                              ? "Try a food item, meal type, unit, or macro number."
+                              : "Log a new meal once and it can appear here for faster future entries."}
+                          </FitText>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
             <View style={s.sectionGap}>
               <FitText style={s.sectionLabel}>LOG DATE</FitText>
               <Pressable
@@ -528,24 +747,49 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                 <FitText style={[s.fieldNote, { color: colors.danger }]}>{submitError}</FitText>
               ) : null}
             </View>
-          </ScrollView>
+              </>
+            )}
+          </FitModalScrollView>
+          {step === "choice" ? (
+            <View style={localStyles.choiceAction}>
+              <FitButton
+                label="New Log Meal"
+                variant="primary"
+                icon={Plus}
+                iconSize={16}
+                onPress={handleStartNewMeal}
+              />
+            </View>
+          ) : null}
           <Animated.View style={[s.footer, footerBorderStyle]}>
-            <FitButton label="Cancel" variant="ghost" onPress={handleClose} flex={1} />
-            <FitButton
-              label={isSubmitting ? savingText : "Save Log"}
-              variant="primary"
-              icon={Plus}
-              iconSize={16}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-              loading={isSubmitting}
-              flex={2}
-            />
+            {step === "choice" ? (
+              <FitButton label="Cancel" variant="ghost" onPress={handleClose} flex={1} />
+            ) : (
+              <>
+                <FitButton
+                  label="Back"
+                  variant="ghost"
+                  onPress={handleBackToPreviousMeals}
+                  disabled={isSubmitting}
+                  flex={1}
+                />
+                <FitButton
+                  label={isSubmitting ? savingText : "Save Log"}
+                  variant="primary"
+                  icon={Plus}
+                  iconSize={16}
+                  onPress={handleSubmit}
+                  disabled={isSubmitting}
+                  loading={isSubmitting}
+                  flex={2}
+                />
+              </>
+            )}
           </Animated.View>
         </Animated.View>
       </Animated.View>
       <CalendarModal
-        isVisible={isCalOpen}
+        isVisible={step === "form" && isCalOpen}
         selectedDate={logDate}
         blockPast={false}
         defaultYear={new Date().getFullYear()}
@@ -558,7 +802,7 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
         onClose={() => setIsCalOpen(false)}
       />
       <OptionSheetModal
-        isVisible={activePicker === "meal"}
+        isVisible={step === "form" && activePicker === "meal"}
         title="Choose meal type"
         subtitle="Pick the meal window that best matches this log."
         options={MEAL_NAME_OPTIONS}
@@ -572,7 +816,7 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
         onClose={() => setActivePicker(null)}
       />
       <OptionSheetModal
-        isVisible={activePicker === "unit"}
+        isVisible={step === "form" && activePicker === "unit"}
         title="Choose portion unit"
         subtitle="Use the measurement that best matches how you tracked this portion."
         options={NUTRITION_UNIT_OPTIONS}

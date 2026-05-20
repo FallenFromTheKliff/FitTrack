@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import FitButton from "@/components/fit/FitButton";
+import { FitSelect } from "@/components/fit";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import { FitModal } from "@/components/modals";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -508,9 +509,21 @@ export default function AttendanceScanModal({
       icon={ScanLine}
       maxWidth={620}
       noScroll
+      contentStyle={{ display: "grid", gap: 14 }}
+      footer={
+        <FitButton
+          variant="primary"
+          label="SUBMIT QR"
+          loading={isSubmitting}
+          disabled={isSubmitting || !manualToken.trim()}
+          onClick={() => {
+            void handleManualSubmit();
+          }}
+          style={{ flex: 1 }}
+        />
+      }
     >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div
+      <div
           style={{
             position: "relative",
             overflow: "hidden",
@@ -596,10 +609,10 @@ export default function AttendanceScanModal({
               </FitText>
             </div>
           )}
-        </div>
+      </div>
 
-        {cameraDevices.length > 0 ? (
-          <div
+      {cameraDevices.length > 0 ? (
+        <div
             style={{
               display: "grid",
               gap: 8,
@@ -625,34 +638,28 @@ export default function AttendanceScanModal({
               <SwitchCamera size={14} />
               CAMERA SOURCE
             </FitText>
-            <select
+            <FitSelect
               id="attendance_camera_source"
+              fullWidth
               value={activeDeviceId}
               onChange={(event) => {
                 const nextDeviceId = event.target.value;
                 setActiveDeviceId(nextDeviceId);
                 setRequestedDeviceId(nextDeviceId);
               }}
+              options={cameraDevices.map((device) => ({
+                label: device.label,
+                value: device.deviceId,
+              }))}
               style={{
-                minHeight: 42,
                 borderRadius: 14,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surfaceRaised,
-                color: colors.textPrimary,
-                padding: "0 14px",
-                fontSize: 14,
+                minHeight: 42,
               }}
-            >
-              {cameraDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+            />
+        </div>
+      ) : null}
 
-        <div
+      <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -667,10 +674,10 @@ export default function AttendanceScanModal({
           <FitText style={{ fontSize: 13, color: colors.textMuted }}>
             {scanHint}
           </FitText>
-        </div>
+      </div>
 
-        {feedback && feedbackColors ? (
-          <div
+      {feedback && feedbackColors ? (
+        <div
             style={{
               display: "grid",
               gap: 4,
@@ -698,10 +705,10 @@ export default function AttendanceScanModal({
                 {feedback.detail}
               </FitText>
             ) : null}
-          </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        <div
+      <div
           style={{
             display: "grid",
             gap: 10,
@@ -727,41 +734,23 @@ export default function AttendanceScanModal({
             <Keyboard size={14} />
             PASTE QR CODE VALUE
           </FitText>
-          <div
+          <FitTextInput
+            id="attendance_qr_token"
+            name="attendance_qr_token"
+            value={manualToken}
+            onChange={(event) => setManualToken(event.target.value)}
+            placeholder="Paste the QR code value if live camera scanning is unavailable"
             style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 8,
+              minHeight: 44,
+              borderRadius: 14,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.surface,
+              padding: "0 14px",
             }}
-          >
-            <FitTextInput
-              id="attendance_qr_token"
-              name="attendance_qr_token"
-              value={manualToken}
-              onChange={(event) => setManualToken(event.target.value)}
-              placeholder="Paste the QR code value if live camera scanning is unavailable"
-              style={{
-                minHeight: 44,
-                borderRadius: 14,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surface,
-                padding: "0 14px",
-              }}
-            />
-            <FitButton
-              variant="primary"
-              label="SUBMIT QR"
-              loading={isSubmitting}
-              disabled={isSubmitting || !manualToken.trim()}
-              onClick={() => {
-                void handleManualSubmit();
-              }}
-            />
-          </div>
+          />
           <FitText style={{ fontSize: 12, color: colors.textMuted }}>
             Keep this modal open for continuous front-desk scanning. Camera scan and manual paste use the same attendance check-in path.
           </FitText>
-        </div>
       </div>
     </FitModal>
   );

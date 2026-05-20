@@ -12,8 +12,6 @@ import type {
   CoachProfileRecord,
   MembershipCardStatus,
   MembershipPaymentProvider,
-  MembershipPaymentStatus,
-  MembershipSubscriptionRecord,
   MuscleMasteryRecord,
   FitnessRankingVisibility
 } from "@fittrack/types";
@@ -28,8 +26,6 @@ import {
   fitnessMasteryQueryOptions,
   fitnessRankingProfileQueryOptions,
   membershipCatalogSettingsQueryOptions,
-  membershipPaymentsQueryOptions,
-  membershipPlansQueryOptions,
   purchaseMembershipCardMutationOptions,
   profileDeletionStatusQueryOptions,
   refreshAttendanceQrMutationOptions,
@@ -45,7 +41,6 @@ import { to12HourLabel, to24HourValue } from "@fittrack/utils";
 import { TIME_SLOTS } from "@/data/bookings";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { usePremiumFitnessAccess } from "@/hooks/membership/usePremiumFitnessAccess";
 import { mobileApiClient } from "@/lib/api-client";
 import type { TimeSlot } from "@/components/modals";
 
@@ -108,13 +103,6 @@ function buildEndSlots(startTime: string): TimeSlot[] {
     nextSlots.push(TIME_SLOTS[index]);
   }
   return nextSlots;
-}
-
-function formatMembershipStatus(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function formatRankingVisibility(value: FitnessRankingVisibility) {
@@ -197,18 +185,6 @@ function formatShortCountdown(remainingMs: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function formatShortDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  });
-}
-
 function getFutureRemainingMs(isoString?: string | null) {
   if (!isoString) return 0;
 
@@ -222,14 +198,6 @@ export function useProfileScreen() {
   const { user, updateUser } = useAuth();
   const { colors, resetAppearance } = useTheme();
   const isFocused = useIsFocused();
-  const {
-    currentSubscription,
-    hasActivePlan,
-    isPlanAccessLoading,
-    isPremiumLocked,
-    membershipAccessSummary: loadedPlanAccessSummary,
-    subscriptionStatusLabel
-  } = usePremiumFitnessAccess();
   const queryClient = useQueryClient();
   const isMounted = useRef(true);
   const { message: statusMessage, showMessage } = useTimedMessage(2400);
@@ -237,7 +205,8 @@ export function useProfileScreen() {
   const isMember = user?.role === "USER";
   const membershipCard = user?.membershipCard ?? null;
   const membershipCardStatus = membershipCard?.status ?? "none";
-  const hasMemberCardAccess = user?.membershipAccess === "member";
+  const hasMemberCardAccess =
+    membershipCardStatus === "active" || user?.membershipAccess === "member";
 
   const [terminateVisible, setTerminateVisible] = useState(false);
   const [cancelVisible, setCancelVisible] = useState(false);
@@ -275,22 +244,10 @@ export function useProfileScreen() {
     staleTime: 60_000,
     gcTime: 300_000
   });
-  const { data: membershipPlans = { data: [], meta: { page: 1, limit: 0, total: 0, total_pages: 0 } } } = useQuery({
-    ...membershipPlansQueryOptions(mobileApiClient, { limit: 10, page: 1 }),
-    enabled: !!user?.id && isMember,
-    staleTime: 60_000,
-    gcTime: 300_000
-  });
   const { data: membershipCatalogSettings = null } = useQuery({
     ...membershipCatalogSettingsQueryOptions(mobileApiClient),
     staleTime: 60_000,
     gcTime: 300_000,
-  });
-  const { data: membershipPayments = { data: [], meta: { page: 1, limit: 0, total: 0, total_pages: 0 } } } = useQuery({
-    ...membershipPaymentsQueryOptions(mobileApiClient, user?.id, { limit: 5, page: 1 }),
-    enabled: !!user?.id && isMember,
-    staleTime: 60_000,
-    gcTime: 300_000
   });
   const masteryQuery = useQuery({
     ...fitnessMasteryQueryOptions(mobileApiClient, user?.id),
@@ -401,57 +358,6 @@ export function useProfileScreen() {
     ? `Refresh in ${formatShortCountdown(attendanceQrRefreshCooldownMs)}`
     : "Refresh QR";
 
-  const membershipStatusColors: Partial<Record<MembershipPaymentStatus | MembershipSubscriptionRecord["status"], string>> = useMemo(() => ({
-    active: colors.success,
-    awaiting_verification: colors.warning,
-    cancelled: colors.warning,
-    completed: colors.success,
-    expired: colors.textMuted,
-    failed: colors.danger,
-    past_due: colors.warning,
-    pending: colors.warning,
-    pending_payment: colors.warning,
-    processing: colors.brand,
-    suspended: colors.danger
-  }), [colors.brand, colors.danger, colors.success, colors.textMuted, colors.warning]);
-
-  const membershipScopedPayments = membershipPayments.data.filter(
-    (payment) =>
-      payment.payable_type === "membership_card" ||
-      payment.payable_type === "subscription"
-  );
-  const latestMembershipPayment = membershipScopedPayments[0];
-  const membershipCardPaidAt = formatShortDate(
-    membershipCard?.activatedAt ??
-      membershipCard?.verifiedAt ??
-      membershipCard?.purchasedAt
-  );
-  const membershipCardHistoryLabel = membershipCard
-    ? membershipCardStatus === "pending_verification"
-      ? "Pending verification"
-      : membershipCardStatus === "revoked"
-        ? "Revoked"
-        : membershipCardStatus === "active"
-          ? "Completed"
-          : null
-    : null;
-  const membershipSubtitle = currentSubscription
-    ? `${currentSubscription.plan.name} | ${formatMembershipStatus(currentSubscription.status)}`
-    : hasMemberCardAccess
-      ? membershipPlans.meta.total > 0
-        ? `${membershipPlans.meta.total} plan${membershipPlans.meta.total === 1 ? "" : "s"} available to load`
-        : "No loaded plan yet"
-      : "Add a membership card first to load plans";
-  const membershipStatusLabel = currentSubscription ? formatMembershipStatus(currentSubscription.status) : undefined;
-  const paymentHistorySubtitle = latestMembershipPayment
-    ? `Latest ${formatMembershipStatus(latestMembershipPayment.status)} | PHP ${Number(latestMembershipPayment.amount).toLocaleString("en-PH")}`
-    : membershipScopedPayments.length > 0
-      ? `${membershipScopedPayments.length} payment record${membershipScopedPayments.length === 1 ? "" : "s"}`
-      : membershipCardHistoryLabel
-        ? `Membership card ${membershipCardHistoryLabel.toLowerCase()} | PHP ${Number(membershipCatalogSettings?.membership_card_price ?? 400).toLocaleString("en-PH")}${membershipCardPaidAt ? ` | ${membershipCardPaidAt}` : ""}`
-      : hasMemberCardAccess
-        ? "No card or plan payments recorded yet"
-        : "Card and plan payments will appear here once available";
   const membershipCardPriceLabel = `PHP ${Number(
     membershipCatalogSettings?.membership_card_price ?? 400,
   ).toLocaleString("en-PH")}`;
@@ -879,9 +785,7 @@ export function useProfileScreen() {
     avatarUri,
     cancelVisible,
     coachProfile,
-    currentSubscription,
     editVisible,
-    hasActivePlan,
     hasMemberCardAccess,
     canPurchaseMembershipCard,
     handleAvailabilitySelect,
@@ -900,6 +804,7 @@ export function useProfileScreen() {
     handleStartAvailabilityEditor,
     hasPendingTermination,
     initials,
+    isAttendanceQrLoading: attendanceQrQuery.isFetching,
     isAvailabilityDeleting,
     isAvailabilityEditorOpen,
     isAvailabilitySaving,
@@ -908,24 +813,17 @@ export function useProfileScreen() {
     isCoach,
     isMember,
     isRefreshingAttendanceQr: refreshAttendanceQrMutation.isPending,
-    isPlanAccessLoading,
     isMembershipCardPurchasePending: purchaseMembershipCardMutation.isPending,
     isRankingPrivacySaving: updateRankingProfileMutation.isPending,
-    isPremiumLocked,
     isTerminating,
-    latestMembershipPayment,
     memberSince,
     memberAccessColor,
     memberAccessLabel,
     memberAccessSummary,
     membershipCardPriceLabel,
     membershipCardPurchaseProvider,
-    membershipAccessSummary: loadedPlanAccessSummary,
     membershipCard,
-    membershipStatusColors,
-    membershipStatusLabel,
-    membershipSubtitle,
-    paymentHistorySubtitle,
+    attendanceQrError: (attendanceQrQuery.error as Error | null)?.message ?? null,
     qrCodeStatusColor,
     qrCodeStatusLabel,
     qrCodeSubtitle,
@@ -956,7 +854,6 @@ export function useProfileScreen() {
     fitnessSummaryHealthDetail,
     fitnessSummaryRank,
     fitnessSummaryRankDetail,
-    subscriptionStatusLabel,
     terminateVisible,
     user,
     onOpenMastery: () => router.push("/(tabs)/mastery"),

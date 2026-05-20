@@ -1,11 +1,6 @@
 import {
   AccountDeletionRequestStatus,
   AuthProvider,
-  PayableType,
-  PaymentProvider,
-  PaymentStage,
-  PaymentStatus,
-  Prisma,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -22,6 +17,9 @@ describe('AdminUsersService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    authIdentity: {
+      updateMany: jest.fn(),
     },
     membershipCard: {
       upsert: jest.fn(),
@@ -301,7 +299,7 @@ describe('AdminUsersService', () => {
     ]);
   });
 
-  it('promotes pending member accounts when granting membership-card access', async () => {
+  it('keeps pending member accounts blocked from membership-card grants until manual verification', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'member-1',
       role: UserRole.member,
@@ -317,114 +315,219 @@ describe('AdminUsersService', () => {
       ],
       membership_card: null,
     });
+
+    await expect(
+      service.updateMembershipCard('member-1', { action: 'grant' }, 'admin-1'),
+    ).rejects.toThrow(
+      'Pending verification accounts must be verified as non-members before membership-card access can be changed',
+    );
+    expect(prisma.membershipCard.upsert).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['member', UserRole.member],
+    ['admin', UserRole.admin],
+    ['staff', UserRole.staff],
+    ['coach', UserRole.coach],
+  ])(
+    'manually verifies pending %s accounts as an admin',
+    async (_label, role) => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'target-1',
+        role,
+        status: UserStatus.pending,
+        deletedAt: null,
+        email_verified_at: null,
+        auth_identities: [
+          {
+            provider: AuthProvider.email,
+            identifier: `${role}@fittrack.test`,
+            is_primary: true,
+          },
+        ],
+        membership_card: null,
+        profile: {
+          first_name: 'Pending',
+          last_name: 'Account',
+        },
+      });
+      prisma.$transaction.mockImplementation(
+        (
+          callback: (tx: {
+            authIdentity: { updateMany: typeof prisma.authIdentity.updateMany };
+            user: { update: typeof prisma.user.update };
+          }) => unknown,
+        ) =>
+          callback({
+            authIdentity: {
+              updateMany: prisma.authIdentity.updateMany,
+            },
+            user: {
+              update: prisma.user.update,
+            },
+          }),
+      );
+      prisma.user.update.mockResolvedValue({
+        id: 'target-1',
+        email_verified_at: new Date('2026-04-28T10:00:00.000Z'),
+        status: UserStatus.active,
+      });
+
+      const result = await service.verifyNonMember(
+        'target-1',
+        'admin-1',
+        UserRole.admin,
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'target-1' },
+        data: {
+          email_verified_at: expect.any(Date),
+          status: UserStatus.active,
+        },
+        select: {
+          email_verified_at: true,
+          id: true,
+          status: true,
+        },
+      });
+      expect(prisma.authIdentity.updateMany).toHaveBeenCalledWith({
+        where: {
+          provider: AuthProvider.email,
+          user_id: 'target-1',
+          verified_at: null,
+        },
+        data: { verified_at: expect.any(Date) },
+      });
+      expect(result).toEqual({
+        message: 'Account manually verified.',
+        user: {
+          emailVerified: true,
+          id: 'target-1',
+          status: UserStatus.active,
+        },
+      });
+    },
+  );
+
+  it('allows staff to manually verify pending coach accounts', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'coach-2',
+      role: UserRole.coach,
+      status: UserStatus.pending,
+      deletedAt: null,
+      email_verified_at: null,
+      auth_identities: [],
+      membership_card: null,
+      profile: null,
+    });
     prisma.$transaction.mockImplementation(
       (
         callback: (tx: {
-          membershipCard: {
-            upsert: typeof prisma.membershipCard.upsert;
-          };
-          payment: {
-            create: typeof prisma.payment.create;
-            findFirst: typeof prisma.payment.findFirst;
-            update: typeof prisma.payment.update;
-          };
+          authIdentity: { updateMany: typeof prisma.authIdentity.updateMany };
           user: { update: typeof prisma.user.update };
         }) => unknown,
       ) =>
         callback({
-          membershipCard: {
-            upsert: prisma.membershipCard.upsert,
-          },
-          payment: {
-            create: prisma.payment.create,
-            findFirst: prisma.payment.findFirst,
-            update: prisma.payment.update,
+          authIdentity: {
+            updateMany: prisma.authIdentity.updateMany,
           },
           user: {
             update: prisma.user.update,
           },
         }),
     );
-    prisma.membershipCard.upsert.mockResolvedValue({
-      activated_at: new Date('2026-04-28T10:00:00.000Z'),
-      purchased_at: new Date('2026-04-28T09:00:00.000Z'),
-      revoke_reason: null,
-      revoked_at: null,
-      source: 'admin_grant',
-      status: 'active',
-      updated_at: new Date('2026-04-28T10:00:00.000Z'),
-      verified_at: new Date('2026-04-28T10:00:00.000Z'),
-    });
-    prisma.payment.findFirst.mockResolvedValue(null);
-    prisma.payment.create.mockResolvedValue({
-      amount: new Prisma.Decimal(400),
-      id: 'payment-1',
-      payable_id: 'card-1',
-      payable_type: PayableType.membership_card,
-      payment_stage: PaymentStage.full,
-      provider: PaymentProvider.cash,
-      status: PaymentStatus.completed,
-      verified_at: new Date('2026-04-28T10:00:00.000Z'),
-      verified_by: 'admin-1',
-    });
     prisma.user.update.mockResolvedValue({
-      id: 'member-1',
+      id: 'coach-2',
+      email_verified_at: new Date('2026-04-28T10:00:00.000Z'),
       status: UserStatus.active,
-      qr_code_token: 'generated-qr-token',
     });
 
-    const result = await service.updateMembershipCard(
-      'member-1',
-      { action: 'grant' },
-      'admin-1',
-    );
-
-    expect(prisma.membershipCard.upsert).toHaveBeenCalled();
-    const updateCalls = (
-      prisma.user.update as unknown as {
-        mock: {
-          calls: Array<
-            [
-              {
-                data: {
-                  qr_code_token: string;
-                  status: UserStatus;
-                };
-                where: { id: string };
-              },
-            ]
-          >;
-        };
-      }
-    ).mock.calls;
-    const updateArgs = updateCalls[0]?.[0];
-    expect(updateArgs?.where).toEqual({ id: 'member-1' });
-    expect(updateArgs?.data.status).toBe(UserStatus.active);
-    expect(updateArgs?.data.qr_code_token).toEqual(expect.any(String));
-    expect(prisma.payment.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        amount: new Prisma.Decimal(400),
-        payable_type: PayableType.membership_card,
-        payment_stage: PaymentStage.full,
-        provider: PaymentProvider.cash,
-        status: PaymentStatus.completed,
-        user: { connect: { id: 'member-1' } },
-        verifier: { connect: { id: 'admin-1' } },
-      }),
-    });
-    expect(result).toEqual({
-      membershipCard: {
-        activatedAt: '2026-04-28T10:00:00.000Z',
-        purchasedAt: '2026-04-28T09:00:00.000Z',
-        revokeReason: null,
-        revokedAt: null,
-        source: 'admin_grant',
-        status: 'active',
-        updatedAt: '2026-04-28T10:00:00.000Z',
-        verifiedAt: '2026-04-28T10:00:00.000Z',
+    await expect(
+      service.verifyNonMember('coach-2', 'staff-1', UserRole.staff),
+    ).resolves.toMatchObject({
+      message: 'Account manually verified.',
+      user: {
+        id: 'coach-2',
+        status: UserStatus.active,
       },
-      message: 'Membership card access granted.',
     });
+  });
+
+  it('blocks staff from manually verifying admin accounts', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-2',
+      role: UserRole.admin,
+      status: UserStatus.pending,
+      deletedAt: null,
+      email_verified_at: null,
+      auth_identities: [],
+      membership_card: null,
+      profile: null,
+    });
+
+    await expect(
+      service.verifyNonMember('admin-2', 'staff-1', UserRole.staff),
+    ).rejects.toThrow('Staff accounts cannot manually verify admin accounts');
+  });
+
+  it('keeps archived accounts ineligible for manual verification', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'staff-2',
+      role: UserRole.staff,
+      status: UserStatus.pending,
+      deletedAt: new Date('2026-04-28T10:00:00.000Z'),
+      email_verified_at: null,
+      auth_identities: [],
+      membership_card: null,
+      profile: null,
+    });
+
+    await expect(
+      service.verifyNonMember('staff-2', 'admin-1', UserRole.admin),
+    ).rejects.toThrow('Archived users cannot be verified');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps active accounts ineligible for manual verification', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'staff-2',
+      role: UserRole.staff,
+      status: UserStatus.active,
+      deletedAt: null,
+      email_verified_at: new Date('2026-04-28T10:00:00.000Z'),
+      auth_identities: [],
+      membership_card: null,
+      profile: null,
+    });
+
+    await expect(
+      service.verifyNonMember('staff-2', 'admin-1', UserRole.admin),
+    ).rejects.toThrow(
+      'Only pending verification accounts can be manually verified',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps active membership-card accounts ineligible for manual verification', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'member-2',
+      role: UserRole.member,
+      status: UserStatus.pending,
+      deletedAt: null,
+      email_verified_at: null,
+      auth_identities: [],
+      membership_card: {
+        status: 'active',
+      },
+      profile: null,
+    });
+
+    await expect(
+      service.verifyNonMember('member-2', 'admin-1', UserRole.admin),
+    ).rejects.toThrow('This account already has active membership-card access');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('soft deletes eligible directory users', async () => {

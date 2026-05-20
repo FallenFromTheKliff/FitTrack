@@ -136,7 +136,12 @@ function buildVenueFormValues(venue: FloorVenueRecord): Record<string, string> {
     name: venue.name ?? "",
     description: venue.description ?? "",
     capacity: String(venue.capacity ?? 1),
-    hourlyRate: venue.hourlyRate != null ? String(venue.hourlyRate) : "",
+    hourlyRate:
+      venue.isReservable === false
+        ? ""
+        : venue.hourlyRate != null
+          ? String(venue.hourlyRate)
+          : "",
     minimumHours: String(venue.minimumHours ?? 1),
     iconKey: venue.iconKey ?? "gym-area",
     floorId: venue.floorId ?? "floor-1",
@@ -1317,9 +1322,58 @@ export function FloorPlanPanel({
         }
         maxWidth={560}
         closeAriaLabel="Close region editor"
+        contentStyle={{ display: "grid", gap: 12 }}
+        footer={editingVenue ? (
+          <>
+            <FitButton
+              variant={
+                repositionVenueMapId === editingVenue.mapId
+                  ? "primary"
+                  : "ghost"
+              }
+              label="REPOSITION"
+              onClick={() => {
+                if (!canEditSelectedVenue) {
+                  return;
+                }
+                setRepositionVenueMapId(editingVenue.mapId);
+                setEditingVenueMapId(null);
+                onSelectVenue(editingVenue);
+              }}
+              disabled={!canEditSelectedVenue}
+              style={{ flex: 1 }}
+            />
+            <FitButton
+              variant="primary"
+              label={isVenueSubmitting ? "SAVING VENUE" : "SAVE VENUE"}
+              loading={isVenueSubmitting}
+              onClick={() => {
+                void handleSubmitVenueEdit();
+              }}
+              disabled={
+                editingVenue.isSystem ||
+                isVenueSubmitting ||
+                !onSubmitVenueEdit
+              }
+              style={{ flex: 1 }}
+            />
+            {!editingVenue.isSystem && onRequestVenueDelete ? (
+              <FitButton
+                variant="danger"
+                label="DELETE VENUE"
+                onClick={() => {
+                  setEditingVenueMapId(null);
+                  onRequestVenueDelete(editingVenue.mapId);
+                }}
+                disabled={isVenueSubmitting}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+          </>
+        ) : undefined}
       >
         {editingVenue ? (
-          <div style={{ display: "grid", gap: 12 }}>
+          <>
             <div style={{ display: "grid", gap: 8 }}>
               <FitText
                 as="label"
@@ -1697,59 +1751,7 @@ export function FloorPlanPanel({
               />
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 8,
-              }}
-            >
-              <FitButton
-                variant={
-                  repositionVenueMapId === editingVenue.mapId
-                    ? "primary"
-                    : "ghost"
-                }
-                label="REPOSITION"
-                onClick={() => {
-                  if (!canEditSelectedVenue) {
-                    return;
-                  }
-                  setRepositionVenueMapId(editingVenue.mapId);
-                  setEditingVenueMapId(null);
-                  onSelectVenue(editingVenue);
-                }}
-                disabled={!canEditSelectedVenue}
-                fullWidth
-              />
-              <FitButton
-                variant="primary"
-                label={isVenueSubmitting ? "SAVING VENUE" : "SAVE VENUE"}
-                loading={isVenueSubmitting}
-                onClick={() => {
-                  void handleSubmitVenueEdit();
-                }}
-                disabled={
-                  editingVenue.isSystem ||
-                  isVenueSubmitting ||
-                  !onSubmitVenueEdit
-                }
-                fullWidth
-              />
-            </div>
-            {!editingVenue.isSystem && onRequestVenueDelete ? (
-              <FitButton
-                variant="danger"
-                label="DELETE VENUE"
-                onClick={() => {
-                  setEditingVenueMapId(null);
-                  onRequestVenueDelete(editingVenue.mapId);
-                }}
-                disabled={isVenueSubmitting}
-                fullWidth
-              />
-            ) : null}
-          </div>
+          </>
         ) : null}
       </FitModal>
       <div

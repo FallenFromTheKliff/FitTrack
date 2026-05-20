@@ -5,11 +5,38 @@ index 0097ab5..d762856 100644
 @@ -1,6 +1,10 @@
  project(Worklets)
  cmake_minimum_required(VERSION 3.8)
- 
+
 +# Windows + pnpm can produce extremely long object paths under node_modules/.pnpm.
 +# Force CMake to hash object filenames earlier so native builds stay under path limits.
 +set(CMAKE_OBJECT_PATH_MAX 128)
 +
  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
- 
+
  set(CMAKE_CXX_STANDARD 20)
+@@ -44,10 +48,10 @@ elseif(${JS_RUNTIME} STREQUAL "jsc")
+ endif()
+
+ set(BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
+ set(ANDROID_CPP_DIR "${CMAKE_SOURCE_DIR}/src/main/cpp")
+ set(COMMON_CPP_DIR "${CMAKE_SOURCE_DIR}/../Common/cpp")
+
+ file(GLOB_RECURSE WORKLETS_COMMON_CPP_SOURCES CONFIGURE_DEPENDS
+-     "${COMMON_CPP_DIR}/worklets/*.cpp")
++     RELATIVE "${CMAKE_SOURCE_DIR}" "../Common/cpp/worklets/*.cpp")
+ file(GLOB_RECURSE WORKLETS_ANDROID_CPP_SOURCES CONFIGURE_DEPENDS
+-     "${ANDROID_CPP_DIR}/worklets/*.cpp")
++     RELATIVE "${CMAKE_SOURCE_DIR}" "src/main/cpp/worklets/*.cpp")
+
+ # Consume shared libraries and headers from prefabs
+ find_package(fbjni REQUIRED CONFIG)
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -211,6 +211,7 @@ android {
+         cmake {
+             version = System.getenv("CMAKE_VERSION") ?: "3.22.1"
+             path "CMakeLists.txt"
++            buildStagingDirectory new File(rootDir.getParentFile().getParentFile().getParentFile(), ".cxx/rnw")
+         }
+     }
+     buildTypes {

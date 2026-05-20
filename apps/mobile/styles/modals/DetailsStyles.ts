@@ -14,10 +14,15 @@ export function makeDetailsModalStyles(colors: ThemeColors) {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
+      height: "88%",
       maxHeight: "88%",
       borderRadius: R.xl,
       borderWidth: 1,
       overflow: "hidden"
+    },
+    middle: {
+      flex: 1,
+      minHeight: 0
     },
     header: {
       flexDirection: "row",
@@ -38,7 +43,7 @@ export function makeDetailsModalStyles(colors: ThemeColors) {
     headerText: { flex: 1 },
     headerTitle: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
     headerSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
-    body: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 20 },
+    body: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 20 },
     sectionLabel: {
       fontSize: 11,
       fontWeight: "700",

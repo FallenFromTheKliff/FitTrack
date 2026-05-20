@@ -73,10 +73,10 @@ export default function Header({
           )}
         </Pressable>
         <HeaderMessage activeTab={activeTab} />
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={s.headerActions}>
           <Pressable
             onPress={onHelpPress}
-            style={[s.menuButton, { alignItems: "center", justifyContent: "center" }]}
+            style={[s.menuButton, s.headerActionButton]}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Open page help"
@@ -85,7 +85,7 @@ export default function Header({
           </Pressable>
           <Pressable
             onPress={onNotificationsPress}
-            style={[s.menuButton, { alignItems: "center", justifyContent: "center" }]}
+            style={[s.menuButton, s.headerActionButton]}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={
@@ -96,21 +96,8 @@ export default function Header({
           >
             <Bell size={22} color={iconColor} strokeWidth={2} />
             {unreadCount > 0 ? (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  right: 10,
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: 4,
-                  borderRadius: 9,
-                  backgroundColor: colors.brand,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: colors.onBrand ?? "#FFFFFF", fontSize: 10, fontWeight: "800" }}>
+              <View style={s.notificationBadge}>
+                <Text style={s.notificationBadgeText}>
                   {unreadCount > 99 ? "99+" : String(unreadCount)}
                 </Text>
               </View>

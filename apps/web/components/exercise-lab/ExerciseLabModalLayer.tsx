@@ -561,11 +561,6 @@ export function ExerciseLabModalLayer() {
                   }
                 />
               ) : null}
-              <FitButton
-                label="Cancel"
-                variant="ghost"
-                onClick={handleCloseSheet}
-              />
             </div>
             <FitButton
               disabled={Boolean(draftValidationError) || sheetPending}

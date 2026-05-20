@@ -3,6 +3,7 @@ import {
   AppointmentStatus,
   PaymentProvider,
   PaymentStage,
+  PaymentStatus,
   RecurringCoachingSessionState,
 } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -415,6 +416,30 @@ export class AppointmentResponseDTO {
   active_payment_stage?: PaymentStage | null;
 
   @ApiPropertyOptional({
+    example: '77777777-7777-4777-8777-777777777777',
+    nullable: true,
+    description:
+      'Latest non-failed payment id for this appointment, when a payment request exists.',
+  })
+  active_payment_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentStatus,
+    nullable: true,
+    description:
+      'Latest non-failed payment status for this appointment, used to gate staff/admin payment approval.',
+  })
+  active_payment_status?: PaymentStatus | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentProvider,
+    nullable: true,
+    description:
+      'Latest non-failed payment provider for this appointment, when a payment request exists.',
+  })
+  active_payment_provider?: PaymentProvider | null;
+
+  @ApiPropertyOptional({
     example: 'Completed a full lower-body strength session.',
     nullable: true,
   })
@@ -532,6 +557,32 @@ export class CoachScheduleAppointmentResponseDTO {
   balance_paid_at?: string | null;
 
   @ApiPropertyOptional({
+    enum: PaymentStage,
+    nullable: true,
+    description:
+      'Latest non-failed payment stage requested for this coach appointment.',
+  })
+  active_payment_stage?: PaymentStage | null;
+
+  @ApiPropertyOptional({
+    example: '77777777-7777-4777-8777-777777777777',
+    nullable: true,
+  })
+  active_payment_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentStatus,
+    nullable: true,
+  })
+  active_payment_status?: PaymentStatus | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentProvider,
+    nullable: true,
+  })
+  active_payment_provider?: PaymentProvider | null;
+
+  @ApiPropertyOptional({
     example: 'Focus on mobility and shoulder stability.',
     nullable: true,
   })
@@ -560,6 +611,15 @@ export class CoachScheduleAppointmentResponseDTO {
 
   @ApiPropertyOptional({ example: '2026-04-05T09:00:00.000Z', nullable: true })
   coach_payout_paid_at?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T09:30:00.000Z', nullable: true })
+  no_show_at?: string | null;
+
+  @ApiPropertyOptional({ example: 'Member cancelled from front desk.', nullable: true })
+  cancellation_reason?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T07:30:00.000Z', nullable: true })
+  cancelled_at?: string | null;
 
   @ApiPropertyOptional({
     example: '55555555-5555-4555-8555-555555555555',
@@ -683,6 +743,30 @@ export class StaffAppointmentResponseDTO {
   active_payment_stage?: PaymentStage | null;
 
   @ApiPropertyOptional({
+    example: '77777777-7777-4777-8777-777777777777',
+    nullable: true,
+    description:
+      'Latest non-failed payment id for this appointment, when a payment request exists.',
+  })
+  active_payment_id?: string | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentStatus,
+    nullable: true,
+    description:
+      'Latest non-failed payment status for this appointment, used to decide whether staff/admin can approve payment.',
+  })
+  active_payment_status?: PaymentStatus | null;
+
+  @ApiPropertyOptional({
+    enum: PaymentProvider,
+    nullable: true,
+    description:
+      'Latest non-failed payment provider for this appointment, when a payment request exists.',
+  })
+  active_payment_provider?: PaymentProvider | null;
+
+  @ApiPropertyOptional({
     example: 'Focus on mobility and shoulder stability.',
     nullable: true,
   })
@@ -711,6 +795,15 @@ export class StaffAppointmentResponseDTO {
 
   @ApiPropertyOptional({ example: '2026-04-05T09:00:00.000Z', nullable: true })
   coach_payout_paid_at?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T09:30:00.000Z', nullable: true })
+  no_show_at?: string | null;
+
+  @ApiPropertyOptional({ example: 'Member cancelled from front desk.', nullable: true })
+  cancellation_reason?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-04-01T07:30:00.000Z', nullable: true })
+  cancelled_at?: string | null;
 
   @ApiPropertyOptional({
     example: '55555555-5555-4555-8555-555555555555',

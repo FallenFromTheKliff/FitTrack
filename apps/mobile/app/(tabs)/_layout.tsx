@@ -15,10 +15,10 @@ import { FABStateProvider, useFABState } from "@/contexts/FABStateContext";
 import { type TabKey } from "@fittrack/app-config";
 
 import { FitFAB, FitFABMenu } from "@/components/fit";
-import Sidebar from "@/components/layout/Sidebar";
+import Sidebar, { SIDEBAR_NAV_LABELS_BY_TAB } from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import SettingsModal from "@/components/modals/settings/SettingsModal";
-import NotificationsPreferencesPanel from "@/components/settings/NotificationsPreferencesPanel";
+import NotificationInboxPanel from "@/components/settings/NotificationInboxPanel";
 import MobileHelpPanel from "@/components/help/MobileHelpPanel";
 import { getMobileHelpContent } from "@/components/help/mobileHelpContent";
 import { ConfirmModal, ReservationModal } from "@/components/modals";
@@ -75,6 +75,7 @@ function TabsLayoutInner() {
 
   const activeTab: TabKey = TAB_ROUTES.find((r) => segments.includes(r as never)) ?? "home";
   const activeHelpContent = getMobileHelpContent(activeTab);
+  const activeHelpTitle = `Help - ${SIDEBAR_NAV_LABELS_BY_TAB[activeTab]}`;
   const isAutoHelpEligible = AUTO_HELP_TABS.includes(activeTab);
   const isChatScreen = segments.includes("chatbot" as never);
   const showBackButton = isChatScreen;
@@ -232,17 +233,18 @@ function TabsLayoutInner() {
         visible={notificationsVisible}
         title="Notifications"
         icon={Bell}
+        showScrollHint
         onClose={() => setNotificationsVisible(false)}
       >
-        <NotificationsPreferencesPanel
-          onClose={() => setNotificationsVisible(false)}
-          showPreferences={false}
-        />
+        <NotificationInboxPanel onClose={() => setNotificationsVisible(false)} />
       </SettingsModal>
       <SettingsModal
         visible={helpVisible}
-        title={activeHelpContent.title}
+        title={activeHelpTitle}
         icon={HelpCircle}
+        hideHeaderClose
+        showFixedCloseButton
+        showScrollHint
         onClose={() => {
           setHelpVisible(false);
           setAutoHelpTab(null);

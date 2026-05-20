@@ -124,7 +124,7 @@ export function formatMembershipAccess(
     case "active":
       return "Member";
     case "pending_verification":
-      return "Pending verification";
+      return "Not Verified";
     case "revoked":
       return "Revoked";
     case "none":
@@ -230,11 +230,7 @@ export function getDirectoryAccessLabel(
   const roleLabel = getDirectoryRoleLabel(member.role?.name);
 
   if (directoryStatus === "Archived") return "Archived";
-  if (member.role?.name !== "USER") return `${roleLabel} access`;
-  if (member.status === "active" && accessLabel === "Non-member") {
-    return "Verified Non-Member";
-  }
-
+  if (member.role?.name !== "USER") return roleLabel;
   return accessLabel;
 }
 
@@ -245,13 +241,13 @@ export function getDirectoryStatusLabel(
   const status = getDirectoryMemberStatus(member, pendingRequestsByUserId);
   const accessLabel = getMembershipAccessLabel(member);
 
-  if (status === "Termination Requests") return "Termination request";
+  if (status === "Termination Requests") return "Requesting Termination";
   if (status === "Archived") return "Archived";
   if (member.status === "pending") return "Pending";
   if (member.status === "suspended") return "Suspended";
   if (member.status === "banned") return "Banned";
   if (
-    accessLabel === "Pending verification" ||
+    accessLabel === "Not Verified" ||
     accessLabel === "Revoked"
   )
     return "Pending";
@@ -265,8 +261,8 @@ export function getDirectoryStatusColor(
   warningColor: string,
 ) {
   const statusLabel = getDirectoryStatusLabel(member, pendingRequestsByUserId);
-  if (statusLabel === "Termination request")
-    return STATUS_COLORS["Termination request"] ?? warningColor;
+  if (statusLabel === "Requesting Termination")
+    return STATUS_COLORS["Requesting Termination"] ?? warningColor;
   if (statusLabel === "Archived") return STATUS_COLORS.Archived ?? warningColor;
   if (statusLabel === "Pending") return warningColor;
   return STATUS_COLORS.Active ?? warningColor;

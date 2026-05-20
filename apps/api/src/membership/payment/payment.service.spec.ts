@@ -378,6 +378,7 @@ describe('PaymentService', () => {
       'payment-1',
       expect.objectContaining({
         status: 'completed',
+        verified_at: new Date('2023-11-14T22:13:20.000Z'),
         gateway_event_id: 'evt_1',
       }),
     );
@@ -388,6 +389,72 @@ describe('PaymentService', () => {
         userId: 'member-1',
         payableType: PayableType.subscription,
         payableId: 'sub-1',
+      }),
+    );
+  });
+
+  it('marks a matching PayMongo payment failed and emits payment.failed', async () => {
+    paymongoWebhookService.parseAndVerify.mockReturnValue({
+      data: {
+        id: 'evt_failed_1',
+        type: 'event',
+        attributes: {
+          type: 'payment.failed',
+          livemode: false,
+          data: {
+            id: 'pay_failed_1',
+            type: 'payment',
+            attributes: {
+              amount: 149900,
+              currency: 'PHP',
+              failed_message: 'card declined',
+              metadata: {
+                payment_id: 'payment-1',
+              },
+              status: 'failed',
+            },
+          },
+          previous_data: {},
+        },
+      },
+    });
+    repo.findPaymentByGatewayEventId.mockResolvedValue(null);
+    repo.findPaymentByIdOrThrow.mockResolvedValue({
+      id: 'payment-1',
+      user_id: 'member-1',
+      payable_type: PayableType.subscription,
+      payable_id: 'sub-1',
+      provider_ref: 'cs_1',
+      gateway_metadata: {
+        checkout_url: 'https://checkout.paymongo.com/cs_1',
+      },
+      status: 'processing',
+      amount: 1499,
+    });
+    repo.updatePayment.mockResolvedValue({ id: 'payment-1' });
+
+    const result = await service.handleWebhook(
+      Buffer.from('{}'),
+      't=1700000000,te=signature',
+    );
+
+    expect(result).toEqual({ message: 'SUCCESS' });
+    expect(repo.updatePayment).toHaveBeenCalledWith(
+      'payment-1',
+      expect.objectContaining({
+        status: 'failed',
+        gateway_event_id: 'evt_failed_1',
+        rejection_reason: 'card declined',
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      PAYMENT_FAILED_EVENT,
+      expect.objectContaining({
+        paymentId: 'payment-1',
+        userId: 'member-1',
+        payableType: PayableType.subscription,
+        payableId: 'sub-1',
+        reason: 'card declined',
       }),
     );
   });

@@ -208,14 +208,17 @@ function buildAuthStrongPasswordSchema(fieldLabel: string) {
 }
 
 function buildOptionalAuthPhilippineMobileSchema(fieldLabel: string) {
-  return z
-    .string()
-    .trim()
-    .refine((value) => value.length === 0 || isSupportedAuthPhilippineMobileNumber(value), {
-      message:
-        `${fieldLabel} must be a valid PH mobile number (+639XXXXXXXXX, 09XXXXXXXXX, or 639XXXXXXXXX)`,
-    })
-    .transform((value) => (value.length === 0 ? undefined : value));
+  return z.preprocess(
+    (value) => (value == null ? "" : value),
+    z
+      .string()
+      .trim()
+      .refine((value) => value.length === 0 || isSupportedAuthPhilippineMobileNumber(value), {
+        message:
+          `${fieldLabel} must be a valid PH mobile number (+639XXXXXXXXX, 09XXXXXXXXX, or 639XXXXXXXXX)`,
+      })
+      .transform((value) => (value.length === 0 ? undefined : value)),
+  );
 }
 
 export const authPersonNameSchema = buildAuthPersonNameSchema("Name");

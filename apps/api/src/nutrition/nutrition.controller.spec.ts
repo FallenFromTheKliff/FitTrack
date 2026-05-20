@@ -1,7 +1,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import { ActiveMemberPlanGuard } from '../common/guards/active-member-plan.guard';
+import { ActiveMemberAccountGuard } from '../common/guards/active-member-account.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { NutritionController } from './nutrition.controller';
 
@@ -55,10 +55,10 @@ describe('NutritionController', () => {
     'listNutritionLogs',
     'updateNutritionLog',
     'deleteNutritionLog',
-  ] as const)('protects %s with active-plan enforcement', (methodName) => {
+  ] as const)('protects %s with active-member enforcement', (methodName) => {
     expect(getGuardMetadata(methodName)).toEqual([
       JwtAuthGuard,
-      ActiveMemberPlanGuard,
+      ActiveMemberAccountGuard,
     ]);
   });
 

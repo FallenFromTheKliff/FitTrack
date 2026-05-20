@@ -38,6 +38,7 @@ export function GymOperationsCoachAppointmentModal({
   onCancelAppointment,
   onClose,
   onComplete,
+  onApprovePayment,
   onSaveFeedback,
   onEditRecurringFuture,
   onEditRecurringSession,
@@ -61,6 +62,7 @@ export function GymOperationsCoachAppointmentModal({
     coachFeedback?: string;
     sessionNotes?: string;
   }) => void;
+  onApprovePayment?: (paymentId: string) => void;
   onSaveFeedback?: (payload: SubmitCoachAppointmentFeedbackPayload) => void;
   onEditRecurringFuture?: () => void;
   onEditRecurringSession?: () => void;
@@ -87,7 +89,14 @@ export function GymOperationsCoachAppointmentModal({
   const canConfirm = status === "pending_coach";
   const canComplete = status === "confirmed";
   const canCollectInitialPayment = status === "pending_payment";
-  const canResolvePendingCoachPayment = status === "pending_coach";
+  const hasAwaitingPayment =
+    status === "pending_payment" &&
+    appointment?.activePaymentStatus === "awaiting_verification" &&
+    Boolean(appointment?.activePaymentId);
+  const hasUnresolvedPaymentRequest =
+    status === "pending_payment" &&
+    Boolean(appointment?.activePaymentId) &&
+    appointment?.activePaymentStatus !== "failed";
   const isRecurring = Boolean(appointment?.recurringPlanId);
   const bookingTypeLabel = isRecurring ? "Recurring booking" : "Single booking";
   const coachRate = appointment?.coach?.hourlyRate ?? null;
@@ -161,7 +170,8 @@ export function GymOperationsCoachAppointmentModal({
       )
     : "Member";
   const coachName = appointment
-    ? getPersonDisplayName(appointment.coach.profile, null, "Coach")
+    ? appointment.coach.displayName?.trim() ||
+      getPersonDisplayName(appointment.coach.profile, null, "Coach")
     : "Coach";
   const scheduleWindow = appointment
     ? formatAppointmentWindow(appointment)
@@ -206,27 +216,7 @@ export function GymOperationsCoachAppointmentModal({
       return ["cancel"];
     }
     if (canConfirm) {
-      const options: CoachDecision[] = [];
-      if (
-        canResolvePendingCoachPayment &&
-        appointment?.activePaymentStage === "downpayment"
-      ) {
-        options.push("paymongo_downpayment", "accept_cash_downpayment");
-      }
-      if (
-        canResolvePendingCoachPayment &&
-        appointment?.activePaymentStage === "full"
-      ) {
-        options.push("accept_cash_full");
-      }
-      if (
-        !canResolvePendingCoachPayment ||
-        !appointment?.activePaymentStage
-      ) {
-        options.push("confirm", "reject");
-      }
-      options.push("cancel");
-      return options;
+      return ["confirm", "reject", "cancel"];
     }
     if (canComplete) {
       const options: CoachDecision[] = [];
@@ -239,6 +229,12 @@ export function GymOperationsCoachAppointmentModal({
       return options;
     }
     if (canCollectInitialPayment) {
+      if (hasAwaitingPayment) {
+        return ["approve_payment", "cancel"];
+      }
+      if (hasUnresolvedPaymentRequest) {
+        return ["cancel"];
+      }
       if (appointment?.activePaymentStage === "full") {
         return ["accept_cash_full", "cancel"];
       }
@@ -260,7 +256,8 @@ export function GymOperationsCoachAppointmentModal({
     canCollectInitialPayment,
     canComplete,
     canConfirm,
-    canResolvePendingCoachPayment,
+    hasAwaitingPayment,
+    hasUnresolvedPaymentRequest,
     status,
     isCoachView,
   ]);
@@ -288,6 +285,11 @@ export function GymOperationsCoachAppointmentModal({
         return;
       case "accept_cash_full":
         onCollectInitialPayment?.("cash", "full");
+        return;
+      case "approve_payment":
+        if (appointment?.activePaymentId) {
+          onApprovePayment?.(appointment.activePaymentId);
+        }
         return;
       case "confirm":
         onConfirm();
@@ -319,15 +321,28 @@ export function GymOperationsCoachAppointmentModal({
     ((coachDecision === "paymongo_downpayment" ||
       coachDecision === "accept_cash_downpayment" ||
       coachDecision === "accept_cash_full") &&
-      !onCollectInitialPayment);
+      !onCollectInitialPayment) ||
+    (coachDecision === "approve_payment" &&
+      (!onApprovePayment || !appointment?.activePaymentId));
 
   return (
     <OverlayFrame
       isOpen={isOpen}
       maxWidth={760}
-      onClose={isSubmitting ? () => {} : onClose}
+      onClose={onClose}
+      closeDisabled={isSubmitting}
       subtitle={description}
       title={title}
+      footer={coachDecisionOptions.length > 0 ? (
+        <FitButton
+          variant="primary"
+          label={isSubmitting ? "SUBMITTING..." : "SUBMIT DECISION"}
+          onClick={handleCoachDecisionSubmit}
+          disabled={isCoachDecisionDisabled}
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      ) : undefined}
     >
       <div
         onClick={(event) => event.stopPropagation()}
@@ -1101,7 +1116,7 @@ export function GymOperationsCoachAppointmentModal({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(220px, 1fr) auto auto",
+              gridTemplateColumns: "minmax(220px, 1fr)",
               gap: 12,
               alignItems: "center",
             }}
@@ -1117,22 +1132,6 @@ export function GymOperationsCoachAppointmentModal({
               }
               disabled={isSubmitting || coachDecisionOptions.length === 0}
               fullWidth
-            />
-            <FitButton
-              variant="primary"
-              label={isSubmitting ? "SUBMITTING..." : "SUBMIT DECISION"}
-              onClick={handleCoachDecisionSubmit}
-              disabled={isCoachDecisionDisabled}
-              style={actionPillStyle(colors, true)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
-            />
-            <FitButton
-              variant="ghost"
-              label="CLOSE"
-              onClick={onClose}
-              disabled={isSubmitting}
-              style={actionPillStyle(colors)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
             />
           </div>
         </div>
@@ -1150,14 +1149,6 @@ export function GymOperationsCoachAppointmentModal({
             >
               This session is already resolved. Review the client details, member review, and coach reply above.
             </FitText>
-            <FitButton
-              variant="ghost"
-              label="CLOSE"
-              onClick={onClose}
-              disabled={isSubmitting}
-              style={actionPillStyle(colors)}
-              textStyle={{ fontSize: 13, fontWeight: 700 }}
-            />
           </div>
         )}
       </div>

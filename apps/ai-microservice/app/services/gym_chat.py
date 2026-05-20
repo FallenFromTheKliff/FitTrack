@@ -4,6 +4,7 @@ from ..models.gym_chat import (
     GymChatGroundingPayload,
     GymChatRequest,
     GymChatResponse,
+    GymFaqItem,
 )
 
 
@@ -33,6 +34,52 @@ class GymChatService:
         "workout",
         "training",
         "nutrition",
+        "sertfit",
+        "sertfits",
+        "book",
+        "booking",
+        "reservation",
+        "appointment",
+        "payment",
+        "billing",
+        "invoice",
+        "receipt",
+        "downpayment",
+        "balance",
+        "renew",
+        "cancel",
+        "freeze",
+        "pause",
+        "upgrade",
+        "downgrade",
+        "feedback",
+        "rating",
+        "camera",
+        "rep",
+        "exercise",
+    )
+
+    _SENSITIVE_BUSINESS_KEYWORDS = (
+        "total sales",
+        "sales this",
+        "revenue",
+        "profit",
+        "earnings",
+        "payroll",
+        "salary",
+        "attendance this",
+        "check-ins",
+        "checkins",
+        "member emails",
+        "member phone",
+        "phone numbers",
+        "database",
+        "all users",
+        "staff list",
+        "overdue payments",
+        "who paid",
+        "who owes",
+        "private data",
     )
 
     _OUT_OF_SCOPE_SUGGESTIONS = [
@@ -43,11 +90,30 @@ class GymChatService:
     def reply_to_message(self, payload: GymChatRequest) -> GymChatResponse:
         message = payload.message.strip().lower()
 
+        if self._is_sensitive_member_request(message, payload):
+            return GymChatResponse(
+                reply=(
+                    "I can help with your own gym support questions, but I can't "
+                    "share private business analytics, member records, staff data, "
+                    "or payment lists in member chat. Admin users can review those "
+                    "inside the admin analytics tools."
+                ),
+                out_of_scope=True,
+                sources=[],
+                follow_up_suggestions=[
+                    "Ask about gym hours, bookings, memberships, or coaching.",
+                    "Ask about your own payment or booking next steps.",
+                ],
+                model_used=None,
+                token_count=None,
+            )
+
         if self._is_out_of_scope(message):
             return GymChatResponse(
                 reply=(
                     "I can only help with gym support topics like hours, "
-                    "memberships, promotions, schedules, and FAQs."
+                    "bookings, payments, memberships, coaching, training, "
+                    "promotions, schedules, and FAQs."
                 ),
                 out_of_scope=True,
                 sources=[],
@@ -72,6 +138,17 @@ class GymChatService:
     def _is_out_of_scope(self, message: str) -> bool:
         return not any(keyword in message for keyword in self._GYM_SCOPE_KEYWORDS)
 
+    def _is_sensitive_member_request(
+        self,
+        message: str,
+        payload: GymChatRequest,
+    ) -> bool:
+        role = payload.grounding.user_context.role if payload.grounding.user_context else None
+        if role in ("admin", "staff"):
+            return False
+
+        return any(keyword in message for keyword in self._SENSITIVE_BUSINESS_KEYWORDS)
+
     def _select_sources(self, message: str, payload: GymChatRequest) -> list[str]:
         sources: list[str] = []
         grounding = payload.grounding
@@ -90,7 +167,29 @@ class GymChatService:
             if grounding.membership_plans:
                 sources.append("membership_plans")
 
-        if any(keyword in message for keyword in ("faq", "rule", "coach", "class", "nutrition")):
+        if any(
+            keyword in message
+            for keyword in (
+                "faq",
+                "rule",
+                "coach",
+                "class",
+                "nutrition",
+                "book",
+                "booking",
+                "reservation",
+                "appointment",
+                "payment",
+                "billing",
+                "downpayment",
+                "balance",
+                "camera",
+                "rep",
+                "exercise",
+                "feedback",
+                "rating",
+            )
+        ):
             if grounding.faqs:
                 sources.append("faqs")
 
@@ -125,11 +224,7 @@ class GymChatService:
         grounding = payload.grounding
 
         if "operating_hours" in sources and grounding.operating_hours:
-            first_hours = grounding.operating_hours[0]
-            details.append(
-                "Current hours include day "
-                f"{first_hours.day_of_week}: {first_hours.opens_at}-{first_hours.closes_at}."
-            )
+            details.append(self._format_operating_hours(grounding))
 
         if "special_schedules" in sources and grounding.special_schedules:
             special_schedule = grounding.special_schedules[0]
@@ -156,7 +251,7 @@ class GymChatService:
             )
 
         if "faqs" in sources and grounding.faqs:
-            faq = grounding.faqs[0]
+            faq = self._select_best_faq(message, grounding.faqs)
             details.append(f"FAQ reference: {faq.question} -> {faq.answer}")
 
         user_prefix = self._build_user_prefix(payload)
@@ -164,8 +259,9 @@ class GymChatService:
 
         if not base_reply:
             base_reply = (
-                "I can help with gym support details like schedules, promotions, "
-                "memberships, and FAQs using the provided grounding data."
+                "I can help with gym support details like schedules, bookings, "
+                "payments, memberships, coaching, training, and FAQs using the "
+                "provided grounding data."
             )
 
         if "session history" in message and payload.grounding.session_history:
@@ -174,6 +270,49 @@ class GymChatService:
             )
 
         return f"{user_prefix}{base_reply}".strip()
+
+    def _format_operating_hours(self, grounding: GymChatGroundingPayload) -> str:
+        day_names = {
+            0: "Sunday",
+            1: "Monday",
+            2: "Tuesday",
+            3: "Wednesday",
+            4: "Thursday",
+            5: "Friday",
+            6: "Saturday",
+        }
+        hours = sorted(grounding.operating_hours, key=lambda item: item.day_of_week)
+        parts = []
+        for item in hours:
+            day = day_names.get(item.day_of_week, f"Day {item.day_of_week}")
+            if item.is_closed:
+                parts.append(f"{day}: closed")
+            else:
+                parts.append(f"{day}: {item.opens_at}-{item.closes_at}")
+
+        return "Current gym hours: " + "; ".join(parts) + "."
+
+    def _select_best_faq(
+        self,
+        message: str,
+        faqs: list[GymFaqItem],
+    ) -> GymFaqItem:
+        message_tokens = {
+            token.strip(".,?!:;()[]{}")
+            for token in message.split()
+            if len(token.strip(".,?!:;()[]{}")) >= 3
+        }
+
+        def score(faq: GymFaqItem) -> int:
+            haystack = f"{faq.category} {faq.question} {faq.answer}".lower()
+            keywords = faq.keywords or []
+            keyword_score = sum(
+                4 for keyword in keywords if str(keyword).lower() in message
+            )
+            token_score = sum(1 for token in message_tokens if token in haystack)
+            return keyword_score + token_score
+
+        return max(faqs, key=score)
 
     def _build_user_prefix(self, payload: GymChatRequest) -> str:
         user_context = payload.grounding.user_context

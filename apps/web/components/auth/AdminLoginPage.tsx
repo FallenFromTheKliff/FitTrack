@@ -346,6 +346,7 @@ export function AdminLoginPage({
       <ForgotPasswordModal
         isOpen={forgotOpen}
         onClose={() => setForgotOpen(false)}
+        portal={variant}
       />
 
       <style>{`

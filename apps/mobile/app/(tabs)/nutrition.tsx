@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { View } from "react-native";
-import Animated, { FadeInDown, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { Bot, Flame, Plus, Target, UtensilsCrossed } from "lucide-react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,6 @@ import { useIsFocused } from "@react-navigation/native";
 
 import type {
   ActiveNutritionProfileRecord,
-  NutritionCoachingInsightRecord,
   DailyNutritionSummaryRecord,
   NutritionLogRecord,
   NutritionMacroTotalsRecord,
@@ -20,19 +19,11 @@ import {
   nutritionHistoryQueryOptions,
   nutritionLogsQueryOptions
 } from "@fittrack/query";
-import {
-  CURATED_FOOD_CATALOG,
-  getNutritionGuidanceAlerts,
-  getRecommendedFoodCatalogItems,
-  type NutritionFoodCatalogItem,
-  type NutritionGuidanceAlertTone
-} from "@/data/nutrition";
 import { getTodayString } from "@/data/bookings";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
-import { usePremiumFitnessAccess } from "@/hooks/membership/usePremiumFitnessAccess";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeNutritionStyles } from "@/styles/shared/ScreenStyles";
 import { mobileApiClient } from "@/lib/api-client";
@@ -44,7 +35,10 @@ import { FitText } from "@/components/fit/FitText";
 import { GoalsModal, NutritionLogModal } from "@/components/modals";
 
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
-type NutritionStyles = ReturnType<typeof makeNutritionStyles>;
+type MealMacroFocus = "protein" | "carbs" | "fat" | "balance";
+type RecommendedMealLog = NutritionLogRecord & {
+  focus: MealMacroFocus;
+};
 
 function formatGoalLabel(value?: string | null) {
   if (!value) return "No active target";
@@ -109,47 +103,120 @@ function formatCalorieDelta(current?: number, previous?: number) {
   return `${delta > 0 ? "+" : ""}${delta.toFixed(0)} kcal`;
 }
 
-function getAlertToneStyle(tone: NutritionGuidanceAlertTone, styles: NutritionStyles) {
-  switch (tone) {
-    case "success":
-      return styles.signalCardSuccess;
-    case "warning":
-      return styles.signalCardWarning;
+function getMacroGaps(
+  logged: NutritionMacroTotalsRecord,
+  target: NutritionMacroTotalsRecord
+) {
+  return [
+    {
+      key: "protein" as const,
+      delta: target.proteinG - logged.proteinG,
+      threshold: 12
+    },
+    {
+      key: "carbs" as const,
+      delta: target.carbsG - logged.carbsG,
+      threshold: 18
+    },
+    {
+      key: "fat" as const,
+      delta: target.fatG - logged.fatG,
+      threshold: 8
+    }
+  ].sort((left, right) => right.delta - left.delta);
+}
+
+function getMealMacroValue(entry: NutritionLogRecord, focus: MealMacroFocus) {
+  switch (focus) {
+    case "protein":
+      return entry.proteinG;
+    case "carbs":
+      return entry.carbsG;
+    case "fat":
+      return entry.fatG;
     default:
-      return styles.signalCardBrand;
+      return 0;
   }
 }
 
-function getAlertToneColor(tone: NutritionGuidanceAlertTone, colors: ThemeColors) {
-  switch (tone) {
-    case "success":
-      return colors.success;
-    case "warning":
-      return colors.warning;
-    default:
-      return colors.brand;
+function getDominantMealFocus(entry: NutritionLogRecord): MealMacroFocus {
+  const macroCalories = [
+    { focus: "protein" as const, value: entry.proteinG * 4 },
+    { focus: "carbs" as const, value: entry.carbsG * 4 },
+    { focus: "fat" as const, value: entry.fatG * 9 }
+  ].sort((left, right) => right.value - left.value);
+  const total = macroCalories.reduce((sum, macro) => sum + macro.value, 0);
+
+  if (!total || macroCalories[0].value / total < 0.4) {
+    return "balance";
   }
+
+  return macroCalories[0].focus;
 }
 
-function mapCoachingInsightToAlert(insight: NutritionCoachingInsightRecord) {
-  const tone: NutritionGuidanceAlertTone =
-    insight.priority === "warning"
-      ? "warning"
-      : insight.priority === "recovery"
-        ? "success"
-        : "brand";
+function getRecommendedMealFocus(
+  entry: NutritionLogRecord,
+  positiveGaps: ReturnType<typeof getMacroGaps>
+): MealMacroFocus {
+  const topMatch = positiveGaps
+    .map((gap, index) => ({
+      focus: gap.key,
+      value: getMealMacroValue(entry, gap.key) * (positiveGaps.length - index)
+    }))
+    .sort((left, right) => right.value - left.value)[0];
 
-  return {
-    id: insight.id,
-    tone,
-    eyebrow: insight.source === "progression_summary" ? "PROGRESSION-AWARE" : "LIVE SUMMARY",
-    title: insight.title,
-    message: insight.message
-  };
+  return topMatch && topMatch.value > 0 ? topMatch.focus : getDominantMealFocus(entry);
 }
 
-function getFoodTrailingLabel(item: NutritionFoodCatalogItem) {
-  switch (item.focus[0]) {
+function getRecommendedMealLogs(
+  logs: NutritionLogRecord[],
+  logged: NutritionMacroTotalsRecord,
+  target: NutritionMacroTotalsRecord | null,
+  limit = 3
+): RecommendedMealLog[] {
+  const seen = new Set<string>();
+  const uniqueLogs = logs.filter((entry) => {
+    const key = [
+      entry.mealName,
+      entry.foodItem.trim().toLowerCase(),
+      entry.calories,
+      entry.proteinG,
+      entry.carbsG,
+      entry.fatG,
+      entry.quantity,
+      entry.unit
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const positiveGaps = target
+    ? getMacroGaps(logged, target).filter((gap) => gap.delta > gap.threshold / 2)
+    : [];
+
+  return uniqueLogs
+    .map((entry, index) => {
+      const focus = getRecommendedMealFocus(entry, positiveGaps);
+      const score = positiveGaps.length
+        ? positiveGaps.reduce(
+            (total, gap, gapIndex) =>
+              total + getMealMacroValue(entry, gap.key) * (positiveGaps.length - gapIndex + 1),
+            0
+          )
+        : uniqueLogs.length - index;
+
+      return {
+        ...entry,
+        focus,
+        score
+      };
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit);
+}
+
+function getMealTrailingLabel(focus: MealMacroFocus) {
+  switch (focus) {
     case "protein":
       return "PROTEIN";
     case "carbs":
@@ -161,8 +228,8 @@ function getFoodTrailingLabel(item: NutritionFoodCatalogItem) {
   }
 }
 
-function getFoodTrailingColor(item: NutritionFoodCatalogItem, colors: ThemeColors) {
-  switch (item.focus[0]) {
+function getMealTrailingColor(focus: MealMacroFocus, colors: ThemeColors) {
+  switch (focus) {
     case "protein":
       return colors.brand;
     case "carbs":
@@ -174,8 +241,8 @@ function getFoodTrailingColor(item: NutritionFoodCatalogItem, colors: ThemeColor
   }
 }
 
-function formatFoodSubtitle(item: NutritionFoodCatalogItem) {
-  return `${item.serving} | ${item.calories.toFixed(0)} kcal | P ${item.proteinG.toFixed(0)} C ${item.carbsG.toFixed(0)} F ${item.fatG.toFixed(0)} | ${item.highlight}`;
+function formatRecommendedMealSubtitle(entry: NutritionLogRecord) {
+  return `${formatShortDateTime(entry.logDate)} | ${formatNutritionLogSubtitle(entry)} | ${entry.quantity.toFixed(0)} ${entry.unit}`;
 }
 
 export default function NutritionScreen() {
@@ -183,13 +250,6 @@ export default function NutritionScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
-  const {
-    isMember,
-    isPlanAccessLoading,
-    isPremiumLocked,
-    membershipAccessSummary,
-    subscriptionStatusLabel
-  } = usePremiumFitnessAccess();
   const {
     registerFAB,
     unregisterFAB,
@@ -201,9 +261,30 @@ export default function NutritionScreen() {
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeNutritionStyles(colors), [colors]);
   const isFrozen = user?.status === "frozen";
-  const membershipCardStatus = user?.membershipCard?.status ?? "none";
-  const hasMemberCardAccess = user?.membershipAccess === "member";
-  const canUsePremiumNutrition = !isMember || (!isPlanAccessLoading && !isPremiumLocked);
+  const isMember = user?.role === "USER";
+  const { data: liveProfile = null, isFetching: isCheckingMemberAccess } = useQuery({
+    queryKey: ["nutrition-member-access", user?.id],
+    queryFn: () => mobileApiClient.users.getProfile(),
+    enabled: isFocused && !!user?.id && isMember,
+    staleTime: 15_000,
+    gcTime: 60_000
+  });
+  const memberAccountStatus = liveProfile?.status ?? user?.status ?? "active";
+  const membershipCardStatus = liveProfile?.membershipCard?.status ?? user?.membershipCard?.status ?? "none";
+  const hasMemberCardAccess =
+    membershipCardStatus === "active" || user?.membershipAccess === "member";
+  const isActiveMemberAccount = isMember && memberAccountStatus === "active";
+  const canUseNutritionLogging = !isMember || isActiveMemberAccount;
+  const memberAccessLabel = isCheckingMemberAccess
+    ? "Checking access"
+    : isActiveMemberAccount
+      ? "Active member"
+      : memberAccountStatus === "frozen"
+        ? "Frozen"
+        : "Inactive member";
+  const memberAccessSummary = isCheckingMemberAccess
+    ? "FitTrack is checking your current member status before meal logging opens."
+    : "Meal logging is available to active members. Your account needs to be active before logging meals.";
   const todayString = getTodayString();
 
   const [isGoalsVisible, setGoalsVisible] = useState(false);
@@ -224,7 +305,14 @@ export default function NutritionScreen() {
       page: 1,
       limit: 20
     }),
-    enabled: isFocused && !!user?.id && canUsePremiumNutrition
+    enabled: isFocused && !!user?.id && canUseNutritionLogging
+  });
+  const { data: recentNutritionLogs = { data: [], meta: { page: 1, limit: 24, total: 0, total_pages: 0 } } } = useQuery({
+    ...nutritionLogsQueryOptions<NutritionLogRecord>(mobileApiClient, user?.id, {
+      page: 1,
+      limit: 24
+    }),
+    enabled: isFocused && !!user?.id && canUseNutritionLogging
   });
   const { data: nutritionHistory = { data: [], meta: { page: 1, limit: 4, total: 0, total_pages: 0 } } } = useQuery({
     ...nutritionHistoryQueryOptions<NutritionTdeeRecord>(mobileApiClient, user?.id, {
@@ -234,16 +322,23 @@ export default function NutritionScreen() {
     enabled: isFocused && !!user?.id
   });
 
-  const loggedTotals = dailySummary?.logged ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
-  const targetTotals = dailySummary?.target ?? (
-    activeNutrition
-      ? {
-          calories: activeNutrition.macros.targetCalories,
-          proteinG: activeNutrition.macros.proteinG,
-          carbsG: activeNutrition.macros.carbsG,
-          fatG: activeNutrition.macros.fatG
-        }
-      : null
+  const loggedTotals = useMemo(
+    () => dailySummary?.logged ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+    [dailySummary?.logged]
+  );
+  const targetTotals = useMemo(
+    () =>
+      dailySummary?.target ?? (
+        activeNutrition
+          ? {
+              calories: activeNutrition.macros.targetCalories,
+              proteinG: activeNutrition.macros.proteinG,
+              carbsG: activeNutrition.macros.carbsG,
+              fatG: activeNutrition.macros.fatG
+            }
+          : null
+      ),
+    [activeNutrition, dailySummary?.target]
   );
 
   const today = loggedTotals.calories;
@@ -266,18 +361,10 @@ export default function NutritionScreen() {
     ? `Last calculated ${formatShortDateTime(recentTdee.calculatedAt)}.`
     : "No backend TDEE calculation is active yet.";
   const macroRows = formatMacroRows(loggedTotals, targetTotals);
-  const guidanceAlerts = useMemo(
-    () =>
-      dailySummary?.coaching?.length
-        ? dailySummary.coaching.map(mapCoachingInsightToAlert)
-        : getNutritionGuidanceAlerts(loggedTotals, targetTotals),
-    [dailySummary?.coaching, loggedTotals, targetTotals]
+  const recommendedMeals = useMemo(
+    () => getRecommendedMealLogs(recentNutritionLogs.data, loggedTotals, targetTotals, 3),
+    [loggedTotals, recentNutritionLogs.data, targetTotals]
   );
-  const recommendedFoods = useMemo(
-    () => getRecommendedFoodCatalogItems(loggedTotals, targetTotals, 3),
-    [loggedTotals, targetTotals]
-  );
-  const catalogShelf = useMemo(() => CURATED_FOOD_CATALOG.slice(0, 6), []);
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -425,6 +512,7 @@ export default function NutritionScreen() {
           <FitSection heading="Target Status">
             <View style={s.cardList}>
               <FitCard
+                icon={Target}
                 label="Daily Target"
                 subtitle={targetStatusDetail}
                 trailingLabel={targetStatusLabel}
@@ -433,6 +521,7 @@ export default function NutritionScreen() {
                 noChevron
               />
               <FitCard
+                icon={Flame}
                 label="Recent Adherence"
                 subtitle={
                   target > 0
@@ -445,6 +534,7 @@ export default function NutritionScreen() {
                 noChevron
               />
               <FitCard
+                icon={UtensilsCrossed}
                 label="Target History"
                 subtitle={`${recalculationDetail} ${nutritionHistory.meta.total} saved calculation${nutritionHistory.meta.total === 1 ? "" : "s"} on record.`}
                 trailingLabel={formatCalorieDelta(activeNutrition?.tdee.tdeeCalories, previousTdee?.tdeeCalories)}
@@ -488,102 +578,15 @@ export default function NutritionScreen() {
             </View>
           </FitSection>
 
-          <FitSection heading="Coaching Signals">
-            <View style={s.sectionBlock}>
-              <FitText style={s.matchBadge}>{hasGoal ? "LIVE GUIDANCE" : "FREE BASELINE"}</FitText>
-              <FitText style={s.matchTitle}>
-                {hasGoal ? "Today's biggest nutrition swings" : "Build from your current intake"}
-              </FitText>
-              <FitText style={s.matchSubtitle}>
-                {hasGoal
-                  ? "These alerts react to the live backend target and daily summary, so the page tells you what actually needs attention next."
-                  : "Your calorie and macro totals stay live even before premium logging tools or a paid plan are active."}
-              </FitText>
-              <View style={s.signalStack}>
-                {guidanceAlerts.map((alert, index) => (
-                  <Animated.View
-                    key={alert.id}
-                    entering={FadeInDown.delay(index * 70).duration(220)}
-                    style={[s.signalCard, getAlertToneStyle(alert.tone, s)]}
-                  >
-                    <FitText style={[s.signalEyebrow, { color: getAlertToneColor(alert.tone, colors) }]}>
-                      {alert.eyebrow}
-                    </FitText>
-                    <FitText style={s.signalTitle}>{alert.title}</FitText>
-                    <FitText style={s.signalMessage}>{alert.message}</FitText>
-                  </Animated.View>
-                ))}
-              </View>
-            </View>
-          </FitSection>
-
-          <FitSection heading="Recommended Next Bites">
-            <View style={s.sectionBlock}>
-              <FitText style={s.matchBadge}>{hasGoal ? "DEFICIT-AWARE PICKS" : "STARTER SHELF"}</FitText>
-              <FitText style={s.matchTitle}>Quick foods to close the next gap</FitText>
-              <FitText style={s.matchSubtitle}>
-                {hasGoal
-                  ? "These picks are sorted against the macros you're still missing, so the shelf changes with the live summary."
-                  : "No target is active yet, so this shelf stays balanced and easy to use while you set your first nutrition goal."}
-              </FitText>
-              <View style={s.cardList}>
-                {recommendedFoods.map((item, index) => (
-                  <FitCard
-                    key={item.id}
-                    emoji={item.emoji}
-                    label={item.name}
-                    subtitle={formatFoodSubtitle(item)}
-                    trailingLabel={getFoodTrailingLabel(item)}
-                    trailingLabelColor={getFoodTrailingColor(item, colors)}
-                    hasBorder={index < recommendedFoods.length - 1}
-                    noChevron
-                  />
-                ))}
-              </View>
-              <FitText style={s.sectionNote}>
-                Use these as starter ideas, then log the exact meal if you want the premium daily log to keep pace with what you actually ate.
-              </FitText>
-            </View>
-          </FitSection>
-
-          <FitSection heading="Curated Food Catalog">
-            <View style={s.sectionBlock}>
-              <FitText style={s.matchBadge}>INTERNAL CATALOG</FitText>
-              <FitText style={s.matchTitle}>Seeded staples for fast nutrition logging</FitText>
-              <FitText style={s.matchSubtitle}>
-                Batch D keeps a small internal shelf here so the page feels useful even before search, barcode, or a larger food database exists.
-              </FitText>
-              <View style={s.cardList}>
-                {catalogShelf.map((item, index) => (
-                  <FitCard
-                    key={item.id}
-                    emoji={item.emoji}
-                    label={item.name}
-                    subtitle={formatFoodSubtitle(item)}
-                    trailingLabel={getFoodTrailingLabel(item)}
-                    trailingLabelColor={getFoodTrailingColor(item, colors)}
-                    hasBorder={index < catalogShelf.length - 1}
-                    noChevron
-                  />
-                ))}
-              </View>
-            </View>
-          </FitSection>
-
           <FitSection heading="Today's Nutrition Log">
-            {isPlanAccessLoading ? (
+            {!canUseNutritionLogging ? (
               <PremiumFeatureGate
-                statusLabel="Checking access"
-                title="Checking premium nutrition access"
-                message="We're confirming your membership plan before loading meal logs and premium nutrition tools."
-              />
-            ) : isPremiumLocked ? (
-              <PremiumFeatureGate
+                eyebrow="ACTIVE MEMBER REQUIRED"
                 actionLabel="Open Membership Details"
                 onActionPress={() => router.push("/(tabs)/profile")}
-                statusLabel={subscriptionStatusLabel}
-                title="Meal logging unlocks with an active plan"
-                message={`${membershipAccessSummary} Daily meal logs stay discoverable here, but only active plans can save and compare entries against live nutrition targets.`}
+                statusLabel={memberAccessLabel}
+                title="Meal logging unlocks for active members"
+                message={memberAccessSummary}
               />
             ) : nutritionLogs.data.length > 0 ? (
               nutritionLogs.data.map((entry, index) => (
@@ -606,7 +609,7 @@ export default function NutritionScreen() {
                 </FitText>
               </View>
             )}
-            {!isFrozen && canUsePremiumNutrition ? (
+            {!isFrozen && canUseNutritionLogging ? (
               <FitButton
                 label="Log Meal"
                 icon={Plus}
@@ -617,38 +620,45 @@ export default function NutritionScreen() {
             ) : null}
           </FitSection>
 
-          <View style={s.contentCard}>
-            <FitText style={s.matchBadge}>LIVE TARGET</FitText>
-            <FitText style={s.matchTitle}>Nutrition Snapshot</FitText>
-            <FitText style={s.matchSubtitle}>
-              {hasGoal
-                ? `${goalLabel} plan from the backend TDEE module`
-                : "No active nutrition target found for this account yet."}
-            </FitText>
-            <View style={s.cardList}>
-              <FitCard
-                label="TDEE"
-                subtitle={activeNutrition ? `${activeNutrition.tdee.tdeeCalories.toFixed(0)} kcal/day` : "Unavailable"}
-                hasBorder
-                noChevron
-              />
-              <FitCard
-                label="BMR"
-                subtitle={activeNutrition ? `${activeNutrition.tdee.bmrCalories.toFixed(0)} kcal/day` : "Unavailable"}
-                hasBorder
-                noChevron
-              />
-              <FitCard
-                label="Today vs Target"
-                subtitle={target > 0 ? `${today.toFixed(0)} / ${target.toFixed(0)} kcal` : "Target not configured"}
-                noChevron
-              />
+          <FitSection heading="Recommended Next Bites">
+            <View style={s.sectionBlock}>
+              <FitText style={s.matchBadge}>{hasGoal ? "LIVE MEAL PICKS" : "SAVED MEAL PICKS"}</FitText>
+              <FitText style={s.matchTitle}>Recent meals to close the next gap</FitText>
+              <FitText style={s.matchSubtitle}>
+                {hasGoal
+                  ? "These picks come from your saved meal logs and sort against the macros you're still missing."
+                  : "No target is active yet, so FitTrack shows recent saved meals while you set your first nutrition goal."}
+              </FitText>
+              {recommendedMeals.length > 0 ? (
+                <View style={s.cardList}>
+                  {recommendedMeals.map((entry, index) => (
+                    <FitCard
+                      key={entry.id}
+                      icon={UtensilsCrossed}
+                      label={entry.foodItem}
+                      subtitle={formatRecommendedMealSubtitle(entry)}
+                      trailingLabel={getMealTrailingLabel(entry.focus)}
+                      trailingLabelColor={getMealTrailingColor(entry.focus, colors)}
+                      hasBorder={index < recommendedMeals.length - 1}
+                      noChevron
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={s.contentCard}>
+                  <FitText style={s.matchBadge}>NO SAVED MEALS</FitText>
+                  <FitText style={s.matchTitle}>Log meals to build this shelf</FitText>
+                  <FitText style={s.matchSubtitle}>
+                    Recommended bites now come from live meal logs instead of a built-in catalog.
+                  </FitText>
+                </View>
+              )}
+              <FitText style={s.sectionNote}>
+                Pick a previous meal from Log Meal or save a fresh entry to keep this list aligned with what you actually eat.
+              </FitText>
             </View>
-          </View>
+          </FitSection>
 
-          <FitText style={s.disclaimer}>
-            Nutrition data now comes from the live backend TDEE, summary, and log endpoints, while the mini-chat launcher follows the newer member-card access policy.
-          </FitText>
         </Animated.View>
       </Animated.ScrollView>
       <GoalsModal
@@ -657,7 +667,7 @@ export default function NutritionScreen() {
         onSuccess={() => setGoalsVisible(false)}
       />
       <NutritionLogModal
-        isVisible={canUsePremiumNutrition && isLogVisible}
+        isVisible={canUseNutritionLogging && isLogVisible}
         onClose={() => setLogVisible(false)}
         onSuccess={() => setLogVisible(false)}
       />

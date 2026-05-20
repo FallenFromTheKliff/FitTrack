@@ -23,6 +23,7 @@ import {
   toNumber,
   type EditorColors,
 } from "./ExerciseContractEditorShared";
+import { FitSelect } from "@/components/fit";
 export function MuscleTargetsEditor({
   colors,
   fallbackMuscleGroup,
@@ -78,6 +79,7 @@ export function MuscleTargetsEditor({
   return (
     <section style={panelStyle(colors)}>
       <div
+        className="exercise-muscle-target-header"
         style={{
           alignItems: "center",
           display: "flex",
@@ -113,6 +115,7 @@ export function MuscleTargetsEditor({
         {targets.map((target, index) => (
           <div
             key={`${target.role}-${target.muscleGroup}-${index}`}
+            className="exercise-muscle-target-row"
             style={{
               background: colors.background,
               border: `1px solid ${colors.border}`,
@@ -124,46 +127,46 @@ export function MuscleTargetsEditor({
             }}
           >
             <FieldShell colors={colors} label="Muscle">
-              <select
-                  name={`exercise-muscle-target-${index}`}
-                  onChange={(event) =>
-                    updateTarget(index, { muscleGroup: event.target.value })
-                  }
-                style={inputStyle(colors)}
+              <FitSelect
+                compact
+                fullWidth
+                name={`exercise-muscle-target-${index}`}
+                onChange={(event) =>
+                  updateTarget(index, { muscleGroup: event.target.value })
+                }
+                options={[
+                  ...(activeDefinitions.some(
+                    (definition) => definition.key === target.muscleGroup,
+                  )
+                    ? []
+                    : [{
+                        label: `${getMuscleDefinitionLabel(target.muscleGroup, definitions)} archived/unknown`,
+                        value: target.muscleGroup,
+                      }]),
+                  ...activeDefinitions.map((definition) => ({
+                    label: definition.name,
+                    value: definition.key,
+                  })),
+                ]}
                 value={target.muscleGroup}
-              >
-                {activeDefinitions.some(
-                  (definition) => definition.key === target.muscleGroup,
-                ) ? null : (
-                  <option value={target.muscleGroup}>
-                    {getMuscleDefinitionLabel(target.muscleGroup, definitions)}
-                    {" "}archived/unknown
-                  </option>
-                )}
-                {activeDefinitions.map((definition) => (
-                  <option key={definition.key} value={definition.key}>
-                    {definition.name}
-                  </option>
-                ))}
-              </select>
+              />
             </FieldShell>
             <FieldShell colors={colors} label="Role">
-              <select
+              <FitSelect
+                compact
+                fullWidth
                 name={`exercise-muscle-role-${index}`}
                 onChange={(event) =>
                   updateTarget(index, {
                     role: event.target.value as ExerciseMuscleTargetRole,
                   })
                 }
-                style={inputStyle(colors)}
+                options={EXERCISE_MUSCLE_TARGET_ROLE_OPTIONS.map((role) => ({
+                  label: formatRole(role),
+                  value: role,
+                }))}
                 value={target.role}
-              >
-                {EXERCISE_MUSCLE_TARGET_ROLE_OPTIONS.map((role) => (
-                  <option key={role} value={role}>
-                    {formatRole(role)}
-                  </option>
-                ))}
-              </select>
+              />
             </FieldShell>
             <FieldShell colors={colors} label="Effort %">
               <input
@@ -250,6 +253,24 @@ export function MuscleTargetsEditor({
           </button>
         ) : null}
       </div>
+
+      <style>{`
+        @media (max-width: 680px) {
+          .exercise-muscle-target-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .exercise-muscle-target-row {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .exercise-muscle-target-row > button {
+            justify-self: stretch !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }

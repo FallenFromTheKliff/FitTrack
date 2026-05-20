@@ -37,6 +37,9 @@ const config = getDefaultConfig(appRoot);
 const extraBlockList = [
   /[\\/]playwright-core[\\/]\.local-browsers([\\/]|$)/,
   /[\\/]\.artifacts([\\/]|$)/,
+  /[\\/]\.cxx([\\/]|$)/,
+  /[\\/]android[\\/]app[\\/]build([\\/]|$)/,
+  /[\\/]android[\\/]build([\\/]|$)/,
   /[\\/]\.pytest_cache([\\/]|$)/,
   /[\\/]\.uv-cache([\\/]|$)/,
   /[\\/]\.uv-cache-local([\\/]|$)/,
@@ -57,6 +60,28 @@ const preferredMetroRuntimeRoot = uniqueExistingPaths([
   path.join(logicalAppRoot, "node_modules", "@expo", "metro-runtime"),
   path.join(appRoot, "node_modules", "@expo", "metro-runtime"),
 ])[0];
+const mobileSingletonResolverPaths = uniqueExistingPaths([
+  path.join(logicalAppRoot, "node_modules"),
+  path.join(appRoot, "node_modules"),
+]);
+const mobileReactRoot = safeResolveModule("react/package.json", mobileSingletonResolverPaths);
+const mobileReactNativeRoot = safeResolveModule(
+  "react-native/package.json",
+  mobileSingletonResolverPaths,
+);
+
+function resolveMobileSingleton(moduleName) {
+  if (
+    moduleName === "react" ||
+    moduleName.startsWith("react/") ||
+    moduleName === "react-native" ||
+    moduleName.startsWith("react-native/")
+  ) {
+    return safeResolveModule(moduleName, mobileSingletonResolverPaths);
+  }
+
+  return null;
+}
 
 config.watchFolders = uniqueExistingPaths([workspaceRoot]);
 
@@ -65,6 +90,16 @@ config.resolver.unstable_enableSymlinks = true;
 config.resolver.unstable_enablePackageExports = false;
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
+  ...(mobileReactRoot
+    ? {
+        react: path.dirname(mobileReactRoot),
+      }
+    : {}),
+  ...(mobileReactNativeRoot
+    ? {
+        "react-native": path.dirname(mobileReactNativeRoot),
+      }
+    : {}),
   ...(preferredMetroRuntimeRoot
     ? {
         "@expo/metro-runtime": preferredMetroRuntimeRoot,
@@ -72,6 +107,14 @@ config.resolver.extraNodeModules = {
     : {}),
 };
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const singletonEntry = resolveMobileSingleton(moduleName);
+  if (singletonEntry) {
+    return {
+      type: "sourceFile",
+      filePath: singletonEntry,
+    };
+  }
+
   if (moduleName === "@expo/metro-runtime" && metroRuntimeEntry) {
     return {
       type: "sourceFile",

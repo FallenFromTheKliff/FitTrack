@@ -33,6 +33,36 @@ import {
 } from './dto/admin.dto';
 
 const MANUAL_MEMBERSHIP_GRANT_PRICE = new Prisma.Decimal(400);
+const MANUALLY_VERIFIABLE_ACCOUNT_ROLES = new Set<UserRole>([
+  UserRole.admin,
+  UserRole.coach,
+  UserRole.member,
+  UserRole.staff,
+]);
+
+function canManuallyVerifyAccount(actingRole: UserRole, targetRole: UserRole) {
+  if (!MANUALLY_VERIFIABLE_ACCOUNT_ROLES.has(targetRole)) {
+    return false;
+  }
+
+  if (actingRole === UserRole.admin) {
+    return true;
+  }
+
+  if (actingRole === UserRole.staff) {
+    return targetRole !== UserRole.admin;
+  }
+
+  return false;
+}
+
+function getManualVerificationNotificationBody(role: UserRole) {
+  if (role === UserRole.member) {
+    return 'Your FitTrack account is verified. You can sign in as a non-member and subscribe when you are ready.';
+  }
+
+  return 'Your FitTrack team account is verified. You can sign in with your assigned role.';
+}
 
 function toFrontendRole(role: UserRole) {
   switch (role) {
@@ -977,23 +1007,33 @@ export class AdminUsersService {
       throw new NotFoundException('User not found');
     }
 
-    if (user.deletedAt) {
-      throw new BadRequestException('Archived users cannot be promoted');
-    }
-
-    if (user.role !== UserRole.member) {
-      throw new BadRequestException(
-        'Only member accounts can be promoted to verified non-member',
+    if (user.id === actingUserId) {
+      throw new ForbiddenException(
+        'You cannot manually verify your own account',
       );
     }
 
-    if (actingRole === UserRole.staff && user.role !== UserRole.member) {
-      throw new ForbiddenException('Staff accounts can only verify members');
+    if (user.deletedAt) {
+      throw new BadRequestException('Archived users cannot be verified');
+    }
+
+    if (!MANUALLY_VERIFIABLE_ACCOUNT_ROLES.has(user.role)) {
+      throw new BadRequestException(
+        'Only pending member and team accounts can be manually verified',
+      );
+    }
+
+    if (!canManuallyVerifyAccount(actingRole, user.role)) {
+      throw new ForbiddenException(
+        actingRole === UserRole.staff
+          ? 'Staff accounts cannot manually verify admin accounts'
+          : 'You do not have permission to manually verify this account',
+      );
     }
 
     if (user.status !== UserStatus.pending) {
       throw new BadRequestException(
-        'Only pending verification accounts can be promoted',
+        'Only pending verification accounts can be manually verified',
       );
     }
 
@@ -1041,8 +1081,9 @@ export class AdminUsersService {
       },
       after: {
         email_verified_at: updatedUser.email_verified_at?.toISOString() ?? null,
+        role: user.role,
         status: updatedUser.status,
-        tier: 'verified_non_member',
+        verification: 'manual',
       },
     });
 
@@ -1055,25 +1096,29 @@ export class AdminUsersService {
       targetUserId: user.id,
     });
 
+    const verificationBody = getManualVerificationNotificationBody(user.role);
+
     await this.notificationsService?.dispatch(
       user.id,
       NotificationType.system,
       {
         title: 'Account verified',
-        body: 'Your FitTrack account is verified. You can sign in as a non-member and subscribe when you are ready.',
+        body: verificationBody,
         data: {
           kind: 'account_verified_non_member',
+          role: user.role,
           verified_at: now.toISOString(),
+          verification: 'manual',
         },
         email: {
           subject: 'Your FitTrack account is verified',
-          html: '<p>Your FitTrack account is verified. You can sign in as a non-member and subscribe when you are ready.</p>',
+          html: `<p>${verificationBody}</p>`,
         },
       },
     );
 
     return {
-      message: 'Account promoted to verified non-member.',
+      message: 'Account manually verified.',
       user: {
         emailVerified: true,
         id: updatedUser.id,

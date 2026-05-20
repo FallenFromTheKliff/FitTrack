@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { Modal, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Clock3, Copy, QrCode, RefreshCw, ShieldX } from "lucide-react-native";
-import { toQR } from "toqr";
+import Svg, { Path, Rect } from "react-native-svg";
 
 import type { AttendanceQrCodeRecord } from "@fittrack/types";
 
@@ -11,10 +11,12 @@ import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransiti
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { AnimatedFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 type Props = {
   attendanceQr: AttendanceQrCodeRecord | null;
   countdownLabel: string;
+  errorMessage?: string | null;
   isRefreshing: boolean;
   isLoading: boolean;
   isVisible: boolean;
@@ -25,10 +27,126 @@ type Props = {
   refreshLabel: string;
 };
 
+type ToQrEncoder = (content: string | Uint8Array) => Uint8Array;
+type TextEncoderLikeConstructor = new () => {
+  encode(value?: string): Uint8Array;
+};
+
+let lazyToQr: ToQrEncoder | null = null;
+const QR_RENDER_SIZE = 220;
+const QR_QUIET_ZONE = 4;
+
+function encodeUtf8(value = "") {
+  const bytes: number[] = [];
+
+  for (let index = 0; index < value.length; index += 1) {
+    let codePoint = value.codePointAt(index) ?? 0;
+
+    if (codePoint > 0xffff) {
+      index += 1;
+    }
+
+    if (codePoint <= 0x7f) {
+      bytes.push(codePoint);
+    } else if (codePoint <= 0x7ff) {
+      bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
+    } else if (codePoint <= 0xffff) {
+      bytes.push(
+        0xe0 | (codePoint >> 12),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f)
+      );
+    } else {
+      codePoint = Math.min(codePoint, 0x10ffff);
+      bytes.push(
+        0xf0 | (codePoint >> 18),
+        0x80 | ((codePoint >> 12) & 0x3f),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f)
+      );
+    }
+  }
+
+  return Uint8Array.from(bytes);
+}
+
+function ensureTextEncoder() {
+  const runtimeGlobal = globalThis as unknown as {
+    TextEncoder?: TextEncoderLikeConstructor;
+  };
+
+  if (!runtimeGlobal.TextEncoder) {
+    runtimeGlobal.TextEncoder = class FitTrackTextEncoder {
+      encode(value = "") {
+        return encodeUtf8(value);
+      }
+    };
+  }
+}
+
+function getToQrEncoder() {
+  if (!lazyToQr) {
+    ensureTextEncoder();
+    lazyToQr = (require("toqr") as { toQR: ToQrEncoder }).toQR;
+  }
+
+  return lazyToQr;
+}
+
+function buildQrMatrix(value: string) {
+  try {
+    const matrix = getToQrEncoder()(value);
+    const dimension = Math.sqrt(matrix.length);
+
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      return null;
+    }
+
+    return { dimension, matrix };
+  } catch {
+    return null;
+  }
+}
+
+function buildQrPath(matrix: Uint8Array, dimension: number) {
+  const commands: string[] = [];
+
+  for (let rowIndex = 0; rowIndex < dimension; rowIndex += 1) {
+    for (let columnIndex = 0; columnIndex < dimension; columnIndex += 1) {
+      if (matrix[rowIndex * dimension + columnIndex] === 1) {
+        commands.push(
+          `M${columnIndex + QR_QUIET_ZONE} ${rowIndex + QR_QUIET_ZONE}h1v1h-1z`
+        );
+      }
+    }
+  }
+
+  return commands.join("");
+}
+
 function AttendanceQrMatrix({ value }: { value: string }) {
-  const matrix = useMemo(() => toQR(value), [value]);
-  const dimension = Math.sqrt(matrix.length);
-  const cellSize = Math.max(4, Math.floor(196 / dimension));
+  const qr = useMemo(() => buildQrMatrix(value), [value]);
+
+  if (!qr) {
+    return (
+      <View
+        style={{
+          alignSelf: "stretch",
+          borderRadius: 18,
+          padding: 16,
+          backgroundColor: "#FFFFFF",
+        }}
+      >
+        <AnimatedFitText style={{ color: "#111111", fontSize: 13, fontWeight: "700", textAlign: "center" }}>
+          QR renderer unavailable
+        </AnimatedFitText>
+      </View>
+    );
+  }
+
+  const { dimension, matrix } = qr;
+  const viewBoxSize = dimension + QR_QUIET_ZONE * 2;
+  const pathData = buildQrPath(matrix, dimension);
 
   return (
     <View
@@ -39,23 +157,14 @@ function AttendanceQrMatrix({ value }: { value: string }) {
         borderRadius: 20,
       }}
     >
-      {Array.from({ length: dimension }, (_, rowIndex) => (
-        <View key={`row-${rowIndex}`} style={{ flexDirection: "row" }}>
-          {Array.from({ length: dimension }, (_, columnIndex) => {
-            const isFilled = matrix[rowIndex * dimension + columnIndex] === 1;
-            return (
-              <View
-                key={`cell-${rowIndex}-${columnIndex}`}
-                style={{
-                  width: cellSize,
-                  height: cellSize,
-                  backgroundColor: isFilled ? "#111111" : "#FFFFFF",
-                }}
-              />
-            );
-          })}
-        </View>
-      ))}
+      <Svg
+        width={QR_RENDER_SIZE}
+        height={QR_RENDER_SIZE}
+        viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}
+      >
+        <Rect x="0" y="0" width={viewBoxSize} height={viewBoxSize} fill="#FFFFFF" />
+        <Path d={pathData} fill="#111111" />
+      </Svg>
     </View>
   );
 }
@@ -63,6 +172,7 @@ function AttendanceQrMatrix({ value }: { value: string }) {
 export default function AttendanceQrModal({
   attendanceQr,
   countdownLabel,
+  errorMessage,
   isRefreshing,
   isLoading,
   isVisible,
@@ -154,11 +264,11 @@ export default function AttendanceQrModal({
             </View>
           </View>
 
-          <ScrollView
+          <FitModalScrollView
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
             bounces={false}
             contentContainerStyle={{ padding: 18, gap: 16 }}
+            resetKey={isVisible}
           >
             {isLoading && !attendanceQr ? (
               <View
@@ -262,7 +372,9 @@ export default function AttendanceQrModal({
                   </AnimatedFitText>
                 </View>
                 <AnimatedFitText style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
-                  {attendanceQr?.reason ?? "This account does not currently have access to attendance QR check-in."}
+                  {attendanceQr?.reason ??
+                    errorMessage ??
+                    "This account does not currently have access to attendance QR check-in."}
                 </AnimatedFitText>
                 <FitButton
                   label="Refresh Status"
@@ -272,7 +384,7 @@ export default function AttendanceQrModal({
                 />
               </View>
             )}
-          </ScrollView>
+          </FitModalScrollView>
 
           <View
             style={{

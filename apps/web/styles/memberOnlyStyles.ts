@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { ThemeColors } from "@fittrack/ui/tokens";
 
 type Tone = "brand" | "danger" | "muted" | "success" | "warning";
+type Density = "normal" | "compact";
 
 export function getMemberOnlyToneColor(tone: Tone, colors: ThemeColors) {
   switch (tone) {
@@ -52,7 +53,7 @@ export function makeMemberOnlyStyles(colors: ThemeColors) {
       gap: 12,
       padding: 16,
     } as CSSProperties,
-    card: (selected: boolean, hasBorder: boolean, clickable: boolean): CSSProperties => ({
+    card: (selected: boolean, hasBorder: boolean, clickable: boolean, density: Density = "normal"): CSSProperties => ({
       alignItems: "center",
       backgroundColor: selected ? `${colors.brand}12` : colors.surface,
       borderBottomColor: hasBorder ? colors.border : "transparent",
@@ -71,33 +72,33 @@ export function makeMemberOnlyStyles(colors: ThemeColors) {
       color: colors.textPrimary,
       cursor: clickable ? "pointer" : "default",
       display: "flex",
-      gap: 12,
-      minHeight: 72,
-      padding: "14px 16px",
+      gap: density === "compact" ? 10 : 12,
+      minHeight: density === "compact" ? 54 : 72,
+      padding: density === "compact" ? "8px 12px" : "14px 16px",
       textAlign: "left",
       width: "100%",
     }),
-    cardIcon: (iconBg?: string, iconColor?: string): CSSProperties => ({
+    cardIcon: (iconBg?: string, iconColor?: string, density: Density = "normal"): CSSProperties => ({
       alignItems: "center",
       backgroundColor: iconBg ?? `${colors.brand}18`,
       border: `1px solid ${colors.border}`,
-      borderRadius: 12,
+      borderRadius: density === "compact" ? 9 : 12,
       color: iconColor ?? colors.brand,
       display: "flex",
       flexShrink: 0,
-      height: 44,
+      height: density === "compact" ? 34 : 44,
       justifyContent: "center",
-      width: 44,
+      width: density === "compact" ? 34 : 44,
     }),
-    cardIconLabel: (iconColor?: string): CSSProperties => ({
+    cardIconLabel: (iconColor?: string, density: Density = "normal"): CSSProperties => ({
       color: iconColor ?? colors.brand,
-      fontSize: 13,
+      fontSize: density === "compact" ? 12 : 13,
       fontWeight: 800,
     }),
-    cardBody: (hasSubtitle: boolean): CSSProperties => ({
+    cardBody: (hasSubtitle: boolean, density: Density = "normal"): CSSProperties => ({
       display: "grid",
       flex: 1,
-      gap: hasSubtitle ? 6 : 0,
+      gap: hasSubtitle ? (density === "compact" ? 4 : 6) : 0,
       minWidth: 0,
     }),
     cardTitleRow: {
@@ -144,14 +145,54 @@ export function makeMemberOnlyStyles(colors: ThemeColors) {
       minHeight: 96,
       padding: 14,
     } as CSSProperties,
+    statTileInline: {
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      border: `1px solid ${colors.border}`,
+      borderRadius: 14,
+      display: "grid",
+      gap: 14,
+      gridTemplateColumns: "48px minmax(0, 1fr)",
+      minHeight: 82,
+      padding: "14px 16px",
+    } as CSSProperties,
+    statTileIconPanel: (toneColor: string): CSSProperties => ({
+      alignItems: "center",
+      backgroundColor: `${toneColor}12`,
+      border: `1px solid ${toneColor}28`,
+      borderRadius: 12,
+      color: toneColor,
+      display: "flex",
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    }),
+    statTileBody: {
+      alignContent: "center",
+      display: "grid",
+      gap: 5,
+      minWidth: 0,
+    } as CSSProperties,
     statLabel: {
       color: colors.textMuted,
       fontSize: 12,
       fontWeight: 600,
     } as CSSProperties,
+    statLabelInline: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: 600,
+      lineHeight: 1.2,
+    } as CSSProperties,
     statValue: {
       color: colors.textPrimary,
       fontSize: 28,
+      fontWeight: 800,
+      lineHeight: 1,
+    } as CSSProperties,
+    statValueInline: {
+      color: colors.textPrimary,
+      fontSize: 30,
       fontWeight: 800,
       lineHeight: 1,
     } as CSSProperties,

@@ -46,7 +46,7 @@ export default function NoticeModal({
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={undefined}
+      onRequestClose={onClose}
     >
       <Animated.View style={[s.modalOverlay, backdropStyle]}>
         <Animated.View style={[s.container, cardStyle]}>

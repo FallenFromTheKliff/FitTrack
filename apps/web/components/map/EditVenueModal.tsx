@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { modalStyles } from "@/styles/modalStyles";
 import { VENUE_BOOKING_OPTIONS, VENUE_FLOOR_OPTIONS, VENUE_ICON_OPTIONS } from "@/data/facilities/venueFields";
-import type { VenueRecord } from "@/data/facilities/mapTypes";
+import { COLS, ROWS, type VenueRecord } from "@/data/facilities/mapTypes";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitSelect } from "@/components/fit/FitCard";
@@ -36,18 +36,86 @@ function validateVenueField(
   value: string,
   data: Record<string, string>,
 ) {
+  const trimmedValue = value.trim();
+
   if (
     REQUIRED_FIELDS.includes(name as (typeof REQUIRED_FIELDS)[number]) &&
-    !value.trim()
+    !trimmedValue
   ) {
     return "Required";
   }
 
-  if (name === "hourlyRate" && isVenueReservable(data)) {
-    const numericValue = Number(value.trim());
+  if (name === "capacity" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isInteger(numericValue) || numericValue <= 0) {
+      return "Capacity must be a whole number greater than zero.";
+    }
+  }
 
-    if (!value.trim() || !Number.isFinite(numericValue) || numericValue <= 0) {
+  if (name === "hourlyRate" && isVenueReservable(data)) {
+    const numericValue = Number(trimmedValue);
+
+    if (!trimmedValue || !Number.isFinite(numericValue) || numericValue <= 0) {
       return "Hourly rate is required for reservable venues.";
+    }
+  }
+
+  if (name === "hourlyRate" && !isVenueReservable(data) && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      return "Hourly rate must be zero or greater.";
+    }
+  }
+
+  if (name === "minimumHours" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isInteger(numericValue) || numericValue < 1) {
+      return "Minimum hours must be at least 1.";
+    }
+  }
+
+  if (name === "displayOrder" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isInteger(numericValue) || numericValue < 0) {
+      return "Display order must be zero or greater.";
+    }
+  }
+
+  if (name === "gridColumn" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > COLS) {
+      return `Column must be between 1 and ${COLS}.`;
+    }
+  }
+
+  if (name === "gridRow" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > ROWS) {
+      return `Row must be between 1 and ${ROWS}.`;
+    }
+  }
+
+  if (name === "gridWidth" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    const gridColumn = Number(data.gridColumn ?? "1");
+    if (
+      !Number.isInteger(numericValue) ||
+      numericValue < 1 ||
+      (Number.isFinite(gridColumn) && gridColumn + numericValue - 1 > COLS)
+    ) {
+      return `Width must keep the venue inside the ${COLS} column layout.`;
+    }
+  }
+
+  if (name === "gridHeight" && trimmedValue) {
+    const numericValue = Number(trimmedValue);
+    const gridRow = Number(data.gridRow ?? "1");
+    if (
+      !Number.isInteger(numericValue) ||
+      numericValue < 1 ||
+      (Number.isFinite(gridRow) && gridRow + numericValue - 1 > ROWS)
+    ) {
+      return `Height must keep the venue inside the ${ROWS} row layout.`;
     }
   }
 
@@ -148,6 +216,32 @@ export function EditVenueModal({
           nextErrors.hourlyRate = hourlyRateError;
         } else {
           delete nextErrors.hourlyRate;
+        }
+      }
+
+      if (name === "gridColumn" || name === "gridWidth") {
+        const widthError = validateVenueField(
+          "gridWidth",
+          nextData.gridWidth ?? "",
+          nextData,
+        );
+        if (widthError) {
+          nextErrors.gridWidth = widthError;
+        } else {
+          delete nextErrors.gridWidth;
+        }
+      }
+
+      if (name === "gridRow" || name === "gridHeight") {
+        const heightError = validateVenueField(
+          "gridHeight",
+          nextData.gridHeight ?? "",
+          nextData,
+        );
+        if (heightError) {
+          nextErrors.gridHeight = heightError;
+        } else {
+          delete nextErrors.gridHeight;
         }
       }
 

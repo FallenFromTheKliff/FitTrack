@@ -613,6 +613,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   const renderEquipmentDetailsContent = (
     equipment: NonNullable<typeof selectedManagementEquipment>,
     compact = false,
+    showAction = true,
+    showHeader = true,
   ) => {
     const Icon = equipment.icon;
     const remaining = controller.equipmentRemainingById[equipment.id] ?? null;
@@ -635,43 +637,45 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           textAlign: compact ? "center" : "left",
         }}
       >
-        <div
-          style={{
-            alignItems: "center",
-            display: compact ? "grid" : "flex",
-            gap: compact ? 8 : 12,
-            justifyItems: compact ? "center" : undefined,
-            minWidth: 0,
-          }}
-        >
-          <span
+        {showHeader ? (
+          <div
             style={{
-              width: compact ? 46 : 42,
-              height: compact ? 46 : 42,
-              borderRadius: 9,
-              display: "grid",
-              placeItems: "center",
-              backgroundColor: `${controller.colors.brand}18`,
+              alignItems: "center",
+              display: compact ? "grid" : "flex",
+              gap: compact ? 8 : 12,
+              justifyItems: compact ? "center" : undefined,
+              minWidth: 0,
             }}
           >
-            <Icon size={compact ? 22 : 21} color={equipment.color} />
-          </span>
-          <div style={{ minWidth: 0 }}>
-            <FitText style={{ display: "block", fontSize: compact ? 16 : 16, fontWeight: 850 }}>
-              {equipment.name}
-            </FitText>
-            <FitText
+            <span
               style={{
-                color: controller.colors.textSecondary,
-                display: "block",
-                fontSize: 12,
-                marginTop: 3,
+                width: compact ? 46 : 42,
+                height: compact ? 46 : 42,
+                borderRadius: 9,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: `${controller.colors.brand}18`,
               }}
             >
-              {equipment.category}
-            </FitText>
+              <Icon size={compact ? 22 : 21} color={equipment.color} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <FitText style={{ display: "block", fontSize: compact ? 16 : 16, fontWeight: 850 }}>
+                {equipment.name}
+              </FitText>
+              <FitText
+                style={{
+                  color: controller.colors.textSecondary,
+                  display: "block",
+                  fontSize: 12,
+                  marginTop: 3,
+                }}
+              >
+                {equipment.category}
+              </FitText>
+            </div>
           </div>
-        </div>
+        ) : null}
         <div
           style={{
             display: "grid",
@@ -703,16 +707,18 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             </div>
           ))}
         </div>
-        <FitButton
-          variant="primary"
-          label="Place Equipment"
-          icon={Dumbbell}
-          fullWidth
-          disabled={remaining !== null && remaining <= 0}
-          style={{ minHeight: compact ? 36 : 40 }}
-          textStyle={{ fontSize: 12, fontWeight: 800 }}
-          onClick={() => controller.handlePlaceEquipmentFromManager(equipment.id)}
-        />
+        {showAction ? (
+          <FitButton
+            variant="primary"
+            label="Place Equipment"
+            icon={Dumbbell}
+            fullWidth
+            disabled={remaining !== null && remaining <= 0}
+            style={{ minHeight: compact ? 36 : 40 }}
+            textStyle={{ fontSize: 12, fontWeight: 800 }}
+            onClick={() => controller.handlePlaceEquipmentFromManager(equipment.id)}
+          />
+        ) : null}
       </div>
     );
   };
@@ -996,11 +1002,26 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         onClose={() => setEquipmentModalOpen(false)}
         title={selectedManagementEquipment?.name ?? "Equipment details"}
         subtitle={selectedManagementEquipment?.category ?? "Placement details"}
+        icon={selectedManagementEquipment?.icon}
         maxWidth={460}
         closeAriaLabel="Close equipment details"
+        footer={selectedManagementEquipment ? (
+          <FitButton
+            variant="primary"
+            label="Place Equipment"
+            icon={Dumbbell}
+            disabled={
+              (controller.equipmentRemainingById[selectedManagementEquipment.id] ?? null) !== null &&
+              (controller.equipmentRemainingById[selectedManagementEquipment.id] ?? 0) <= 0
+            }
+            onClick={() => controller.handlePlaceEquipmentFromManager(selectedManagementEquipment.id)}
+            style={{ flex: 1 }}
+            textStyle={{ fontSize: 12, fontWeight: 800 }}
+          />
+        ) : undefined}
       >
         {selectedManagementEquipment
-          ? renderEquipmentDetailsContent(selectedManagementEquipment)
+          ? renderEquipmentDetailsContent(selectedManagementEquipment, false, false, false)
           : null}
       </FitModal>
       <FacilitiesArchiveModal

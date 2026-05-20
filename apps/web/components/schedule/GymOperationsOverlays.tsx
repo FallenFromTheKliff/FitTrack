@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { CalendarPlus, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -51,103 +51,118 @@ import {
   type StaffInitialPaymentStage,
 } from "./GymOperationsOverlayShared";
 
-type SearchableScheduleSelectProps = {
-  disabled?: boolean;
-  emptyLabel: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  placeholder: string;
-  searchValue: string;
-  selectedValue: string;
-  setSearchValue: (value: string) => void;
-};
+function filterScheduleOptions(
+  options: SelectOption[],
+  searchValue: string,
+  selectedValue: string,
+) {
+  const selectedOption = options.find((option) => option.value === selectedValue);
+  const normalizedSearch =
+    searchValue.trim().toLowerCase() === selectedOption?.label.toLowerCase()
+      ? ""
+      : searchValue.trim().toLowerCase();
+  const filteredOptions = (
+    normalizedSearch
+      ? options.filter((option) =>
+          option.label.toLowerCase().includes(normalizedSearch),
+        )
+      : options
+  ).slice(0, 30);
 
-function SearchableScheduleSelect({
-  disabled = false,
+  if (
+    selectedOption &&
+    !filteredOptions.some((option) => option.value === selectedOption.value)
+  ) {
+    return [selectedOption, ...filteredOptions];
+  }
+
+  return filteredOptions;
+}
+
+function ScheduleOptionPicker({
+  disabled,
   emptyLabel,
+  inputStyle,
   onChange,
+  onSearchChange,
   options,
   placeholder,
   searchValue,
   selectedValue,
-  setSearchValue,
-}: SearchableScheduleSelectProps) {
+}: {
+  disabled?: boolean;
+  emptyLabel: string;
+  inputStyle: CSSProperties;
+  onChange: (option: SelectOption) => void;
+  onSearchChange: (value: string) => void;
+  options: SelectOption[];
+  placeholder: string;
+  searchValue: string;
+  selectedValue: string;
+}) {
   const { colors } = useTheme();
-  const normalizedSearch = searchValue.trim().toLowerCase();
-  const filteredOptions = options
-    .filter((option) => option.label.toLowerCase().includes(normalizedSearch))
-    .slice(0, 8);
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div
-        style={{
-          ...modalFieldStyle(colors),
-          minHeight: 46,
-          padding: "0 12px",
-        }}
-      >
-        <FitTextInput
-          value={searchValue}
-          onChange={(event) => setSearchValue(event.target.value)}
-          placeholder={placeholder}
-          disabled={disabled}
-          style={{ fontSize: 13, fontWeight: 700 }}
-        />
-      </div>
+      <FitTextInput
+        value={searchValue}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        style={{ ...inputStyle, minHeight: 42, fontSize: 13, fontWeight: 700 }}
+      />
       <div
         style={{
           border: `1px solid ${colors.border}`,
-          borderRadius: 14,
+          borderRadius: 12,
           backgroundColor: colors.surfaceRaised,
+          maxHeight: 132,
+          minHeight: 44,
+          overflowY: "auto",
+          padding: 6,
           display: "grid",
           gap: 6,
-          maxHeight: 176,
-          overflowY: "auto",
-          padding: 8,
         }}
       >
-        {filteredOptions.length > 0 ? (
-          filteredOptions.map((option) => {
-            const isSelected = option.value === selectedValue;
+        {options.length > 0 ? (
+          options.map((option) => {
+            const selected = option.value === selectedValue;
+
             return (
               <button
-                key={option.value}
+                key={option.value || option.label}
                 type="button"
                 disabled={disabled}
-                onClick={() => {
-                  onChange(option.value);
-                  setSearchValue(option.label);
-                }}
+                onClick={() => onChange(option)}
                 style={{
-                  border: `1px solid ${isSelected ? colors.brand : colors.border}`,
-                  borderRadius: 10,
-                  backgroundColor: isSelected ? `${colors.brand}18` : colors.surface,
-                  color: isSelected ? colors.brand : colors.textPrimary,
+                  minHeight: 34,
+                  borderRadius: 8,
+                  border: `1px solid ${
+                    selected ? colors.brand : colors.border
+                  }`,
+                  backgroundColor: selected
+                    ? `${colors.brand}22`
+                    : colors.surface,
+                  color: selected ? colors.brand : colors.textPrimary,
                   cursor: disabled ? "not-allowed" : "pointer",
-                  font: "inherit",
-                  minHeight: 38,
-                  padding: "8px 10px",
+                  padding: "7px 10px",
                   textAlign: "left",
+                  fontSize: 13,
+                  fontWeight: selected ? 800 : 650,
                 }}
               >
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    color: isSelected ? colors.brand : colors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: isSelected ? 800 : 700,
-                  }}
-                >
-                  {option.label}
-                </FitText>
+                {option.label}
               </button>
             );
           })
         ) : (
           <FitText
             excludeGlobalScale
-            style={{ color: colors.textMuted, fontSize: 12, padding: 8 }}
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              padding: "8px 6px",
+            }}
           >
             {emptyLabel}
           </FitText>
@@ -275,7 +290,8 @@ export function GymOperationsCreateVenueBookingModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setMemberId((current) => current || memberOptions[0]?.value || "");
+    const defaultMemberId = memberOptions[0]?.value ?? "";
+    setMemberId((current) => current || defaultMemberId);
     setVenueId((current) => current || venueOptions[0]?.value || "");
     setCoachId("");
     setDate(getDefaultDateInput());
@@ -304,7 +320,6 @@ export function GymOperationsCreateVenueBookingModal({
       })),
     [startTime],
   );
-
   useEffect(() => {
     if (!venueEndOptions.some((option) => option.value === endTime)) {
       setEndTime(venueEndOptions[0]?.value ?? "");
@@ -392,53 +407,34 @@ export function GymOperationsCreateVenueBookingModal({
 
   return (
     <>
-    <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
+    <OverlayFrame
+      isOpen={isOpen}
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      title="Create venue booking"
+      subtitle="Use this for front-desk or operator-created reservations. The booking is persisted immediately into the shared venue booking table."
+      footer={
+        <FitButton
+          variant="primary"
+          label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
+          icon={CalendarPlus}
+          iconSize={15}
+          onClick={handleCreate}
+          disabled={!canSubmit || isSubmitting}
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      }
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 760,
-          maxWidth: "min(760px, calc(100vw - 48px))",
-          maxHeight: "min(760px, calc(100vh - 48px))",
-          overflow: "auto",
-          margin: "auto",
-          padding: 24,
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
           display: "grid",
-          gap: 20,
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
+          gap: 14,
           transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
           transition: shouldAnimate ? "transform 180ms ease" : "none",
         }}
       >
-        <div style={{ display: "grid", gap: 10 }}>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 30,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              lineHeight: 1.12,
-            }}
-          >
-            Create venue booking
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 14,
-              color: colors.textMuted,
-              lineHeight: 1.32,
-              maxWidth: 560,
-            }}
-          >
-            Use this for front-desk or operator-created reservations. The
-            booking is persisted immediately into the shared venue booking
-            table.
-          </FitText>
-        </div>
-
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
@@ -458,6 +454,7 @@ export function GymOperationsCreateVenueBookingModal({
                 value={memberId}
                 onChange={(event) => setMemberId(event.target.value)}
                 options={memberOptions}
+                placeholder="Select member"
                 compact
                 fullWidth
               />
@@ -690,33 +687,6 @@ export function GymOperationsCreateVenueBookingModal({
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label="CLOSE"
-            onClick={onClose}
-            disabled={isSubmitting}
-            style={actionPillStyle(colors)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-          <FitButton
-            variant="primary"
-            label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
-            icon={CalendarPlus}
-            iconSize={15}
-            onClick={handleCreate}
-            disabled={!canSubmit || isSubmitting}
-            style={actionPillStyle(colors, true)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-        </div>
         <CalendarModal
           isOpen={datePickerOpen}
           minDate={getDefaultDateInput()}
@@ -847,11 +817,16 @@ export function GymOperationsCreateCoachBookingModal({
 
   const selectedSlot =
     slotOptions.find((slot) => slot.value === slotValue) ?? null;
-  const selectedMemberOption = memberOptions.find(
-    (option) => option.value === memberId,
-  );
   const selectedCoachOption = coachOptions.find(
     (option) => option.value === coachId,
+  );
+  const filteredCoachMemberOptions = useMemo(
+    () => filterScheduleOptions(memberOptions, memberSearch, memberId),
+    [memberId, memberOptions, memberSearch],
+  );
+  const filteredCoachOptions = useMemo(
+    () => filterScheduleOptions(coachOptions, coachSearch, coachId),
+    [coachId, coachOptions, coachSearch],
   );
   const nextAvailableSlot = useMemo(
     () => findNextCoachSlot(coachAvailability),
@@ -921,28 +896,30 @@ export function GymOperationsCreateCoachBookingModal({
     <>
     <OverlayFrame
       isOpen={isOpen}
-      maxWidth={780}
-      onClose={isSubmitting ? () => {} : onClose}
-      subtitle="Create a front-desk coaching session without leaving the shared schedule."
+      onClose={onClose}
+      closeDisabled={isSubmitting}
       title="Create coach booking"
+      subtitle="Create a front-desk coaching session and record the initial cash payment from the shared schedule."
+      footer={
+        <FitButton
+          variant="primary"
+          label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
+          icon={CalendarPlus}
+          iconSize={15}
+          onClick={handleCreate}
+          disabled={!canSubmit || isSubmitting}
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      }
     >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: "100%",
-          maxWidth: "none",
-          maxHeight: "none",
-          overflow: "visible",
-          margin: 0,
-          padding: 0,
-          borderRadius: 0,
-          border: "none",
-          backgroundColor: "transparent",
           display: "grid",
           gap: 14,
-          boxShadow: "none",
-          transform: "none",
-          transition: shouldAnimate ? "opacity 160ms ease" : "none",
+          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
+          transition: shouldAnimate ? "transform 180ms ease" : "none",
         }}
       >
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
@@ -960,15 +937,19 @@ export function GymOperationsCreateCoachBookingModal({
               >
                 Member
               </FitText>
-              <SearchableScheduleSelect
+              <ScheduleOptionPicker
                 disabled={isSubmitting}
-                emptyLabel="No members found."
-                onChange={setMemberId}
-                options={memberOptions}
-                placeholder={selectedMemberOption?.label ?? "Search members"}
+                emptyLabel="No members found"
+                inputStyle={inputStyle}
+                onChange={(option) => {
+                  setMemberId(option.value);
+                  setMemberSearch(option.label);
+                }}
+                onSearchChange={setMemberSearch}
+                options={filteredCoachMemberOptions}
+                placeholder="Search members"
                 searchValue={memberSearch}
                 selectedValue={memberId}
-                setSearchValue={setMemberSearch}
               />
             </div>
             <div style={{ display: "grid", gap: 6 }}>
@@ -982,18 +963,20 @@ export function GymOperationsCreateCoachBookingModal({
               >
                 Coach
               </FitText>
-              <SearchableScheduleSelect
+              <ScheduleOptionPicker
                 disabled={isSubmitting}
-                emptyLabel="No coaches found."
-                onChange={(nextCoachId) => {
-                  setCoachId(nextCoachId);
+                emptyLabel="No coaches found"
+                inputStyle={inputStyle}
+                onChange={(option) => {
+                  setCoachId(option.value);
                   setSlotValue("");
+                  setCoachSearch(option.label);
                 }}
-                options={coachOptions}
-                placeholder={selectedCoachOption?.label ?? "Search coaches"}
+                onSearchChange={setCoachSearch}
+                options={filteredCoachOptions}
+                placeholder="Search coaches"
                 searchValue={coachSearch}
                 selectedValue={coachId}
-                setSearchValue={setCoachSearch}
               />
             </div>
           </div>
@@ -1231,33 +1214,6 @@ export function GymOperationsCreateCoachBookingModal({
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label="CLOSE"
-            onClick={onClose}
-            disabled={isSubmitting}
-            style={actionPillStyle(colors)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-          <FitButton
-            variant="primary"
-            label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
-            icon={CalendarPlus}
-            iconSize={15}
-            onClick={handleCreate}
-            disabled={!canSubmit || isSubmitting}
-            style={actionPillStyle(colors, true)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-        </div>
         <CalendarModal
           highlightedDates={highlightedCoachDates}
           isOpen={datePickerOpen}
@@ -1427,52 +1383,34 @@ export function GymOperationsCreateCoachModal({
 
   return (
     <>
-    <OverlayFrame isOpen={isOpen} onClose={isSubmitting ? () => {} : onClose}>
+    <OverlayFrame
+      isOpen={isOpen}
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      title="Create coach"
+      subtitle="Create a standalone coach record for Gym Operations. This does not create a mobile/member profile or login account."
+      footer={
+        <FitButton
+          variant="primary"
+          label={isSubmitting ? "CREATING..." : "CREATE COACH"}
+          icon={UserPlus}
+          iconSize={15}
+          onClick={handleCreate}
+          disabled={!canSubmit || isSubmitting}
+          style={actionPillStyle(colors, true)}
+          textStyle={{ fontSize: 13, fontWeight: 700 }}
+        />
+      }
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 760,
-          maxWidth: "min(760px, calc(100vw - 48px))",
-          maxHeight: "min(760px, calc(100vh - 48px))",
-          overflow: "auto",
-          margin: "auto",
-          padding: 24,
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
           display: "grid",
-          gap: 20,
-          boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
+          gap: 14,
           transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
           transition: shouldAnimate ? "transform 180ms ease" : "none",
         }}
       >
-        <div style={{ display: "grid", gap: 10 }}>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 30,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              lineHeight: 1.12,
-            }}
-          >
-            Create coach
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{
-              fontSize: 14,
-              color: colors.textMuted,
-              lineHeight: 1.32,
-              maxWidth: 560,
-            }}
-          >
-            Create a standalone coach record for Gym Operations. This does not
-            create a mobile/member profile or login account.
-          </FitText>
-        </div>
-
         <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
@@ -1730,33 +1668,6 @@ export function GymOperationsCreateCoachModal({
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label="CLOSE"
-            onClick={onClose}
-            disabled={isSubmitting}
-            style={actionPillStyle(colors)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-          <FitButton
-            variant="primary"
-            label={isSubmitting ? "CREATING..." : "CREATE COACH"}
-            icon={UserPlus}
-            iconSize={15}
-            onClick={handleCreate}
-            disabled={!canSubmit || isSubmitting}
-            style={actionPillStyle(colors, true)}
-            textStyle={{ fontSize: 13, fontWeight: 700 }}
-          />
-        </div>
       </div>
     </OverlayFrame>
     <ConfirmModal

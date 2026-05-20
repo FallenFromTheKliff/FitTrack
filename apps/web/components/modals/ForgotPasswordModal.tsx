@@ -23,6 +23,7 @@ import PasswordRequirements from "@/components/requirements/PasswordRequirements
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  portal?: "team" | "member";
 };
 
 function extractErrorMessage(error: unknown, fallback: string) {
@@ -48,7 +49,7 @@ function shouldBounceBackToOtp(error: unknown) {
   return error instanceof ApiClientError && typeof error.status === "number" && error.status < 500;
 }
 
-export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
+export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) {
   const { colors } = useTheme();
   const s = modalStyles(colors);
   const { message, showMessage } = useTimedMessage(2400);
@@ -122,7 +123,8 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     setSuccessText("");
     try {
       await forgotPasswordMutation.mutateAsync({
-        email: data.email?.trim() ?? ""
+        email: data.email?.trim() ?? "",
+        portal
       });
       setEmail(data.email?.trim() ?? "");
       showMessage("Verification code sent.");
@@ -139,7 +141,8 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
     try {
       const verification = await verifyResetOtpMutation.mutateAsync({
         email,
-        code: trimmedCode
+        code: trimmedCode,
+        portal
       });
       if (verification.verified === false) {
         return {
@@ -176,7 +179,8 @@ export default function ForgotPasswordModal({ isOpen, onClose }: Props) {
       const response = await resetPasswordMutation.mutateAsync({
         email,
         code,
-        new_password: data.newPassword ?? ""
+        new_password: data.newPassword ?? "",
+        portal
       });
       setSuccessText(response.message ?? "Password reset successful.");
       setTimeout(() => {

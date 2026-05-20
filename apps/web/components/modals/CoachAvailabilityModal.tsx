@@ -124,42 +124,20 @@ export default function CoachAvailabilityModal({
   return (
     <FitModal
       isOpen={isOpen}
-      onClose={isSaving ? () => {} : onClose}
+      onClose={onClose}
       title="Manage Coach Availability"
       subtitle={`${coachName} - ${slotCountLabel}`}
       maxWidth={720}
+      closeDisabled={isSaving}
       closeAriaLabel="Close coach availability editor"
       footer={
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            width: "100%",
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            label="CANCEL"
-            onClick={onClose}
-            disabled={isSaving}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <FitButton
-              variant="ghost"
-              label="ADD SLOT"
-              onClick={addSlot}
-              disabled={isSaving}
-            />
-            <FitButton
-              variant="primary"
-              label={isSaving ? "SAVING..." : "SAVE AVAILABILITY"}
-              onClick={() => void handleSave()}
-              disabled={isSaving}
-            />
-          </div>
-        </div>
+        <FitButton
+          variant="primary"
+          label={isSaving ? "SAVING..." : "SAVE AVAILABILITY"}
+          onClick={() => void handleSave()}
+          disabled={isSaving}
+          style={{ flex: 1 }}
+        />
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -182,6 +160,13 @@ export default function CoachAvailabilityModal({
             </FitText>
           </div>
         ) : null}
+        <FitButton
+          variant="ghost"
+          label="ADD SLOT"
+          onClick={addSlot}
+          disabled={isSaving}
+          style={{ justifySelf: "start" }}
+        />
         {slots.length === 0 ? (
           <div
             style={{
@@ -197,68 +182,70 @@ export default function CoachAvailabilityModal({
             </FitText>
           </div>
         ) : (
-          slots.map((slot, index) => (
-            <div
-              key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}-${index}`}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(150px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto",
-                gap: 10,
-                alignItems: "end",
-                borderRadius: 12,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surfaceRaised,
-                padding: 14,
-              }}
-            >
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
-                  Day
-                </FitText>
-                <FitSelect
-                  value={String(slot.dayOfWeek)}
-                  options={DAY_OPTIONS}
-                  onChange={(event) =>
-                    updateSlot(index, { dayOfWeek: Number(event.target.value) })
-                  }
-                  fullWidth
+          <>
+            {slots.map((slot, index) => (
+              <div
+                key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}-${index}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(150px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto",
+                  gap: 10,
+                  alignItems: "end",
+                  borderRadius: 12,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surfaceRaised,
+                  padding: 14,
+                }}
+              >
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Day
+                  </FitText>
+                  <FitSelect
+                    value={String(slot.dayOfWeek)}
+                    options={DAY_OPTIONS}
+                    onChange={(event) =>
+                      updateSlot(index, { dayOfWeek: Number(event.target.value) })
+                    }
+                    fullWidth
+                    disabled={isSaving}
+                  />
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Start
+                  </FitText>
+                  <FitTextInput
+                    type="time"
+                    value={slot.startTime}
+                    onChange={(event) =>
+                      updateSlot(index, { startTime: event.target.value })
+                    }
+                    disabled={isSaving}
+                  />
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    End
+                  </FitText>
+                  <FitTextInput
+                    type="time"
+                    value={slot.endTime}
+                    onChange={(event) =>
+                      updateSlot(index, { endTime: event.target.value })
+                    }
+                    disabled={isSaving}
+                  />
+                </div>
+                <FitButton
+                  variant="danger"
+                  label="REMOVE"
+                  onClick={() => removeSlot(index)}
                   disabled={isSaving}
                 />
               </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
-                  Start
-                </FitText>
-                <FitTextInput
-                  type="time"
-                  value={slot.startTime}
-                  onChange={(event) =>
-                    updateSlot(index, { startTime: event.target.value })
-                  }
-                  disabled={isSaving}
-                />
-              </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
-                  End
-                </FitText>
-                <FitTextInput
-                  type="time"
-                  value={slot.endTime}
-                  onChange={(event) =>
-                    updateSlot(index, { endTime: event.target.value })
-                  }
-                  disabled={isSaving}
-                />
-              </div>
-              <FitButton
-                variant="danger"
-                label="REMOVE"
-                onClick={() => removeSlot(index)}
-                disabled={isSaving}
-              />
-            </div>
-          ))
+            ))}
+          </>
         )}
       </div>
     </FitModal>

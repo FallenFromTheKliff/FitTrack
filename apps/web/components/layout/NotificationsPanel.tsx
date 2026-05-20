@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Bell } from "lucide-react";
 import type { NotificationRecord } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -69,13 +69,11 @@ export default function NotificationsPanel({
       <FitModal
         isOpen={isOpen}
         onClose={onClose}
-        title="Notifications panel"
+        title="Notifications"
+        subtitle={unreadCount > 0 ? `${unreadCount} unread` : "No unread notifications"}
+        icon={Bell}
         maxWidth={420}
         noScroll
-        hideHeaderText
-        hideCloseButton
-        hideHeaderDivider
-        headerStyle={{ display: "none" }}
         motionPreset="slide-right"
         overlayStyle={{
           ...s.notificationsBackdrop,
@@ -100,32 +98,25 @@ export default function NotificationsPanel({
           display: "flex",
           flexDirection: "column",
         }}
-      >
-        <div style={s.notificationsPanelHeader}>
-          <div>
-            <FitText as="h2" style={{ fontSize: 18, fontWeight: 700 }}>Notifications</FitText>
-            <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
-              {unreadCount > 0 ? `${unreadCount} unread` : "No unread notifications"}
-            </FitText>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        footer={
+          <>
             <FitButton
               variant="ghost"
               label="MARK ALL"
               onClick={() => void onMarkAllRead()}
               disabled={unreadCount === 0 || isBusy}
-              style={{ fontSize: 12 }}
+              style={{ flex: 1, fontSize: 12 }}
             />
             <FitButton
               variant="ghost"
               label="DELETE ALL"
               onClick={handleDeleteAll}
               disabled={notifications.length === 0 || isBusy}
-              style={{ fontSize: 12, color: colors.danger }}
+              style={{ flex: 1, fontSize: 12, color: colors.danger }}
             />
-            <FitButton variant="ghost" iconOnly icon={X} iconSize={16} onClick={onClose} style={s.notificationsCloseBtn} aria-label="Close notifications panel" />
-          </div>
-        </div>
+          </>
+        }
+      >
         <div style={s.notificationsListWrap}>
           {notifications.length === 0 ? (
             <div style={s.notificationsEmptyState}>

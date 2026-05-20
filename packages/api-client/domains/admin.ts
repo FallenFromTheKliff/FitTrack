@@ -527,7 +527,7 @@ export function createAdminApi(transport: ApiTransport) {
     verifyNonMember(id: string) {
       return unwrapResponse<VerifyNonMemberResult>(
         transport.patch(`/admin/users/${id}/verify-non-member`, {}),
-        "Unable to promote this account.",
+        "Unable to verify this account.",
       );
     },
     deleteUser(id: string) {

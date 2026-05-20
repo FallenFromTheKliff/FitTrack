@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
-  ScrollView,
   TextInput,
   View,
 } from "react-native";
@@ -10,6 +9,7 @@ import { WandSparkles, X } from "lucide-react-native";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import SkeletonRigPreview from "@/components/workout/SkeletonRigPreview";
 import { useTheme } from "@/contexts/ThemeContext";
 import type {
@@ -316,7 +316,10 @@ export default function ExerciseCreationReviewModal({
             })}
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 16 }}>
+          <FitModalScrollView
+            style={{ marginTop: 16 }}
+            resetKey={`${isVisible}-${activeTab}`}
+          >
             {activeTab === "rig" ? (
               <View>
                 <SkeletonRigPreview rig={draft?.evidence.rig ?? null} />
@@ -549,7 +552,7 @@ export default function ExerciseCreationReviewModal({
                 </View>
               </View>
             )}
-          </ScrollView>
+          </FitModalScrollView>
 
           {validationMessage ? (
             <FitText

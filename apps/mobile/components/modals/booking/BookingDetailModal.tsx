@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays } from "lucide-react-native";
 
@@ -15,6 +15,7 @@ import { getVenuePresentation, type VenueRecord } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
 import { FitButton, FitText } from "@/components/fit";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 export type DetailBooking = {
   amountDueNow?: number;
@@ -232,7 +233,7 @@ export default function BookingDetailModal({
       visible={isVisible}
       transparent
       animationType="none"
-      onRequestClose={() => undefined}
+      onRequestClose={onClose}
       statusBarTranslucent
     >
       <Animated.View style={[s.backdrop, backdropStyle]}>
@@ -251,9 +252,10 @@ export default function BookingDetailModal({
               </FitText>
             </View>
           </Animated.View>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
+          <FitModalScrollView
+            style={s.middle}
             contentContainerStyle={s.body}
+            resetKey={booking.id}
           >
             <View style={[s.resourceCard, localStyles.resourceIconCard]}>
               <View
@@ -442,7 +444,7 @@ export default function BookingDetailModal({
                   : ""}
               </FitText>
             </View>
-          </ScrollView>
+          </FitModalScrollView>
 
           <Animated.View style={[s.footer, footerBorderStyle]}>
             {actions.map((action) => (

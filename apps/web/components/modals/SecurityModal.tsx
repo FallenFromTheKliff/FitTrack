@@ -177,6 +177,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
         closeAriaLabel="Close change password modal"
         noScroll
         hideFooterDivider
+        contentStyle={{ display: "grid", gap: 12 }}
         footer={
           <FitButton
             variant="primary"
@@ -187,48 +188,46 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
           />
         }
       >
-        <div style={{ display: "grid", gap: 12 }}>
-          {renderPasswordField({
-            label: "Confirm Old Password",
-            value: currentPassword,
-            onChange: (value) => {
-              setCurrentPassword(value);
-              if (errors.currentPassword) setErrors((prev) => ({ ...prev, currentPassword: "" }));
-            },
-            show: showCurrentPassword,
-            onToggle: () => setShowCurrentPassword((prev) => !prev),
-            error: errors.currentPassword,
-            showLabel: "Show current password",
-            hideLabel: "Hide current password"
-          })}
-          {renderPasswordField({
-            label: "New Password",
-            value: newPassword,
-            onChange: (value) => {
-              setNewPassword(value);
-              if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: "" }));
-            },
-            show: showNewPassword,
-            onToggle: () => setShowNewPassword((prev) => !prev),
-            error: errors.newPassword,
-            showLabel: "Show new password",
-            hideLabel: "Hide new password",
-            extra: showRequirements ? <PasswordRequirements password={newPassword} onValidationChange={setIsPasswordValid} /> : undefined
-          })}
-          {renderPasswordField({
-            label: "Confirm New Password",
-            value: confirmNewPassword,
-            onChange: (value) => {
-              setConfirmNewPassword(value);
-              if (errors.confirmNewPassword) setErrors((prev) => ({ ...prev, confirmNewPassword: "" }));
-            },
-            show: showConfirmNewPassword,
-            onToggle: () => setShowConfirmNewPassword((prev) => !prev),
-            error: errors.confirmNewPassword,
-            showLabel: "Show confirm new password",
-            hideLabel: "Hide confirm new password"
-          })}
-        </div>
+        {renderPasswordField({
+          label: "Confirm Old Password",
+          value: currentPassword,
+          onChange: (value) => {
+            setCurrentPassword(value);
+            if (errors.currentPassword) setErrors((prev) => ({ ...prev, currentPassword: "" }));
+          },
+          show: showCurrentPassword,
+          onToggle: () => setShowCurrentPassword((prev) => !prev),
+          error: errors.currentPassword,
+          showLabel: "Show current password",
+          hideLabel: "Hide current password"
+        })}
+        {renderPasswordField({
+          label: "New Password",
+          value: newPassword,
+          onChange: (value) => {
+            setNewPassword(value);
+            if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: "" }));
+          },
+          show: showNewPassword,
+          onToggle: () => setShowNewPassword((prev) => !prev),
+          error: errors.newPassword,
+          showLabel: "Show new password",
+          hideLabel: "Hide new password",
+          extra: showRequirements ? <PasswordRequirements password={newPassword} onValidationChange={setIsPasswordValid} /> : undefined
+        })}
+        {renderPasswordField({
+          label: "Confirm New Password",
+          value: confirmNewPassword,
+          onChange: (value) => {
+            setConfirmNewPassword(value);
+            if (errors.confirmNewPassword) setErrors((prev) => ({ ...prev, confirmNewPassword: "" }));
+          },
+          show: showConfirmNewPassword,
+          onToggle: () => setShowConfirmNewPassword((prev) => !prev),
+          error: errors.confirmNewPassword,
+          showLabel: "Show confirm new password",
+          hideLabel: "Hide confirm new password"
+        })}
       </FitModal>
       <ConfirmModal
         isOpen={showLogoutConfirm}

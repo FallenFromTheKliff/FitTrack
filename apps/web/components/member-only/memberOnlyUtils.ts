@@ -110,7 +110,7 @@ export const FACILITY_BLUEPRINT_COPY: Record<
 };
 
 export const BOOKING_STATUS_FILTERS = [
-  { label: "All", value: "all" },
+  { label: "All Statuses", value: "all" },
   { label: "Pending", value: "pending" },
   { label: "Active", value: "confirmed" },
   { label: "Completed", value: "completed" },

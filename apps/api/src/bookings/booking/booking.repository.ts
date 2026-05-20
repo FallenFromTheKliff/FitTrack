@@ -18,6 +18,8 @@ export const ACTIVE_CAPACITY_BOOKING_STATUSES = [
   BookingStatus.confirmed,
   BookingStatus.balance_pending,
 ] as const;
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 type InitialBookingPaymentStage = Extract<
   PaymentStage,
   typeof PaymentStage.downpayment | typeof PaymentStage.full
@@ -232,11 +234,7 @@ export class BookingRepository extends BaseRepository {
     return this.paginateByUserIdWithDateRange<BookingWithAmenity>(
       this.prisma.amenityBooking,
       userId,
-      {
-        start_date: dto.start_date,
-        end_date: dto.end_date,
-        dateField: 'starts_at',
-      },
+      getGymDateRangeFilter(dto, 'starts_at'),
       {
         include: this.bookingWithAmenityInclude,
         orderBy: { starts_at: 'desc' },
@@ -249,11 +247,7 @@ export class BookingRepository extends BaseRepository {
     return this.paginateWithDateRange<AdminBookingListItem>(
       this.prisma.amenityBooking,
       {},
-      {
-        start_date: dto.start_date,
-        end_date: dto.end_date,
-        dateField: 'starts_at',
-      },
+      getGymDateRangeFilter(dto, 'starts_at'),
       {
         include: this.adminBookingInclude,
         orderBy: { starts_at: 'desc' },
@@ -660,4 +654,40 @@ export class BookingRepository extends BaseRepository {
       detail: 'The requested booking slot is no longer available.',
     });
   }
+}
+
+function getGymDateRangeFilter(
+  dto: DateRangeDTO,
+  dateField: string,
+): { start_date?: string; end_date?: string; dateField: string } {
+  return {
+    start_date: dto.start_date
+      ? normalizeGymDateBoundary(dto.start_date, 'start').toISOString()
+      : undefined,
+    end_date: dto.end_date
+      ? normalizeGymDateBoundary(dto.end_date, 'end').toISOString()
+      : undefined,
+    dateField,
+  };
+}
+
+function normalizeGymDateBoundary(
+  value: string,
+  boundary: 'start' | 'end',
+): Date {
+  if (!DATE_ONLY_PATTERN.test(value)) {
+    return new Date(value);
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const gymDayStartUtc = new Date(
+    Date.UTC(year, month - 1, day) -
+      GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+
+  if (boundary === 'start') {
+    return gymDayStartUtc;
+  }
+
+  return new Date(gymDayStartUtc.getTime() + 24 * 60 * 60 * 1000 - 1);
 }

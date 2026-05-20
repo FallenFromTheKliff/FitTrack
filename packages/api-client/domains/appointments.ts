@@ -23,7 +23,10 @@ export type AppointmentReviewSummary = {
 };
 
 export type AppointmentRecord = {
+  activePaymentId?: string | null;
+  activePaymentProvider?: "cash" | "paymongo" | null;
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
+  activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   amountDueNow?: number | null;
   assessmentReport?: string | null;
   balancePaidAt?: string | null;
@@ -92,7 +95,10 @@ export type AppointmentPaymentProvider = "cash" | "paymongo";
 export type AppointmentPaymentStage = "downpayment" | "full";
 
 type AppointmentApiRecord = {
+  active_payment_id?: string | null;
+  active_payment_provider?: "cash" | "paymongo" | null;
   active_payment_stage?: "balance" | "downpayment" | "full" | null;
+  active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach?: AppointmentCoachSummary | null;
@@ -225,7 +231,10 @@ function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
   const hasPaymentSummary = totalAmount > 0 && downpaymentAmount > 0;
 
   return {
+    activePaymentId: record.active_payment_id ?? null,
+    activePaymentProvider: record.active_payment_provider ?? null,
     activePaymentStage,
+    activePaymentStatus: record.active_payment_status ?? null,
     amountDueNow: hasPaymentSummary
       ? isFullPaymentFlow
         ? totalAmount

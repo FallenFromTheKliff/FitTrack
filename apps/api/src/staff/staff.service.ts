@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { AuthProvider, BookingStatus, UserRole } from '@prisma/client';
+import {
+  AuthProvider,
+  BookingStatus,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -85,17 +90,33 @@ function buildLinkedCoachIdentityValues(
   return values;
 }
 
+function getLinkedCoachDisplayName(
+  user: {
+    profile?: {
+      first_name?: string | null;
+      last_name?: string | null;
+    } | null;
+  } | null,
+) {
+  const firstName = normalizeOptionalString(user?.profile?.first_name);
+  const lastName = normalizeOptionalString(user?.profile?.last_name);
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
+  return fullName || null;
+}
+
 function normalizeStandaloneCoachDisplayName(
   value: string | null,
-  _linkedIdentityValues: Set<string>,
+  linkedUserDisplayName: string | null,
   index: number,
 ) {
   const displayName = normalizeOptionalString(value);
-  if (
-    displayName &&
-    !EMAIL_LIKE_PATTERN.test(displayName)
-  ) {
+  if (displayName && !EMAIL_LIKE_PATTERN.test(displayName)) {
     return displayName;
+  }
+
+  if (linkedUserDisplayName) {
+    return linkedUserDisplayName;
   }
 
   return `Coach Profile ${index + 1}`;
@@ -241,7 +262,15 @@ export class StaffService {
   }
 
   async getAllCoaches() {
+    await this.ensureProfilesForActiveCoachUsers();
+
     const coaches = await this.prisma.coachProfile.findMany({
+      where: {
+        user: {
+          role: UserRole.coach,
+          status: UserStatus.active,
+        },
+      },
       include: {
         availability_slots: {
           where: { is_active: true },
@@ -266,12 +295,17 @@ export class StaffService {
 
     return coaches.map((coach, index) => {
       const linkedIdentityValues = buildLinkedCoachIdentityValues(coach.user);
+      const linkedUserDisplayName = getLinkedCoachDisplayName(coach.user);
+      const primaryEmail = findIdentity(coach.user?.auth_identities ?? [], [
+        AuthProvider.email,
+        AuthProvider.google,
+      ]);
 
       return {
         id: coach.id,
         displayName: normalizeStandaloneCoachDisplayName(
           coach.display_name,
-          linkedIdentityValues,
+          linkedUserDisplayName,
           index,
         ),
         contactEmail: normalizeStandaloneCoachContact(
@@ -296,8 +330,69 @@ export class StaffService {
           endTime: this.toTimeString(slot.end_time),
           isAvailable: true,
         })),
-        user: null,
+        user: coach.user
+          ? {
+              id: coach.user.id,
+              email: primaryEmail?.identifier ?? '',
+              phone_no: coach.user.profile?.phone ?? null,
+              createdAt: coach.user.created_at.toISOString(),
+              profile: coach.user.profile
+                ? {
+                    firstName: coach.user.profile.first_name,
+                    lastName: coach.user.profile.last_name,
+                    dateOfBirth:
+                      coach.user.profile.date_of_birth?.toISOString() ?? null,
+                    gender: coach.user.profile.gender ?? null,
+                    activityLevel: coach.user.profile.activity_level ?? null,
+                    fitnessGoal: coach.user.profile.fitness_goal ?? null,
+                    currentWeightKg:
+                      coach.user.profile.weight_kg !== null
+                        ? Number(coach.user.profile.weight_kg)
+                        : null,
+                    heightCm:
+                      coach.user.profile.height_cm !== null
+                        ? Number(coach.user.profile.height_cm)
+                        : null,
+                    avatarUrl: coach.user.profile.avatar_url ?? null,
+                    membershipType: null,
+                  }
+                : null,
+            }
+          : null,
       };
+    });
+  }
+
+  private async ensureProfilesForActiveCoachUsers() {
+    const coachUsersWithoutProfiles = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.coach,
+        status: UserStatus.active,
+        coach_profile: {
+          is: null,
+        },
+      },
+      select: {
+        id: true,
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
+      },
+    });
+
+    if (coachUsersWithoutProfiles.length === 0) {
+      return;
+    }
+
+    await this.prisma.coachProfile.createMany({
+      data: coachUsersWithoutProfiles.map((user) => ({
+        user_id: user.id,
+        display_name: getLinkedCoachDisplayName(user),
+      })),
+      skipDuplicates: true,
     });
   }
 

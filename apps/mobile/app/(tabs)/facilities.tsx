@@ -207,22 +207,18 @@ export default function FacilitiesScreen() {
             onScroll={scrollHandler}
             scrollEventThrottle={16}
         >
-          <View style={s.sectionHeader}>
-            <View>
-              <FitText style={s.sectionTitle}>Gym Facilities</FitText>
-              <FitText style={s.sectionSubtitle}>{activeBlueprint.description}</FitText>
-            </View>
-            <FitButton
-              onPress={() => void doRefresh()}
-              variant="ghost"
-              icon={RefreshCw}
-              iconOnly
-              disabled={isRefreshing}
-              style={s.refreshBtn}
-            />
-          </View>
           <View style={s.floorToggleWrap}>
-            <FitText style={s.floorToggleLabel}>LEVEL</FitText>
+            <View style={s.floorToggleHeader}>
+              <FitText style={s.floorToggleLabel}>LEVEL</FitText>
+              <FitButton
+                onPress={() => void doRefresh()}
+                variant="ghost"
+                icon={RefreshCw}
+                iconOnly
+                disabled={isRefreshing}
+                style={s.refreshBtn}
+              />
+            </View>
             <View style={s.floorToggleRow}>
               {FACILITY_FLOORS.map((floor) => (
                 <FitButton
@@ -239,30 +235,6 @@ export default function FacilitiesScreen() {
               ))}
             </View>
           </View>
-          <View style={s.floorSnapshotCard}>
-            <View style={s.floorSnapshotHeader}>
-              <View style={s.floorSnapshotTitleWrap}>
-                <FitText style={s.floorSnapshotEyebrow}>{activeBlueprint.eyebrow}</FitText>
-                <FitText style={s.floorSnapshotTitle}>{floorSnapshot.title}</FitText>
-              </View>
-              <FitText style={s.floorSnapshotFloorLabel}>{activeFloorConfig.label}</FitText>
-            </View>
-            <FitText style={s.floorSnapshotBody}>{floorSnapshot.body}</FitText>
-            <View style={s.floorSnapshotMetrics}>
-              <View style={s.floorSnapshotMetricCard}>
-                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.zoneCount}</FitText>
-                <FitText style={s.floorSnapshotMetricLabel}>Mapped zones</FitText>
-              </View>
-              <View style={s.floorSnapshotMetricCard}>
-                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.reservableCount}</FitText>
-                <FitText style={s.floorSnapshotMetricLabel}>Reservable</FitText>
-              </View>
-              <View style={s.floorSnapshotMetricCard}>
-                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.supportCount}</FitText>
-                <FitText style={s.floorSnapshotMetricLabel}>Shared support</FitText>
-              </View>
-            </View>
-          </View>
           <View style={s.mapCanvas}>
             <View style={s.mapBlueprintLayer}>
               <View style={s.mapBlueprintTint} />
@@ -271,7 +243,7 @@ export default function FacilitiesScreen() {
               <View style={[s.mapBlueprintRouteVertical, { left: "22%" as never }]} />
               <View style={[s.mapBlueprintRouteVertical, { left: "78%" as never }]} />
               <View style={s.mapBlueprintCompass}>
-                <FitText style={s.mapBlueprintCompassEyebrow}>{activeBlueprint.eyebrow}</FitText>
+                <FitText style={s.mapBlueprintCompassEyebrow}>Map guide</FitText>
                 <FitText style={s.mapBlueprintCompassLabel}>{activeBlueprint.routeLabel}</FitText>
                 <FitText style={s.mapBlueprintCompassBody}>
                   Keep the highlighted path in view to stay oriented while scanning zones.
@@ -397,6 +369,31 @@ export default function FacilitiesScreen() {
               </View>
             )}
           </FitSection>
+          <View style={s.floorSnapshotCard}>
+            <View style={s.floorSnapshotHeader}>
+              <View style={s.floorSnapshotTitleWrap}>
+                <FitText style={s.floorSnapshotEyebrow}>{activeBlueprint.eyebrow}</FitText>
+                <FitText style={s.floorSnapshotTitle}>{floorSnapshot.title}</FitText>
+              </View>
+              <FitText style={s.floorSnapshotFloorLabel}>{activeFloorConfig.label}</FitText>
+            </View>
+            <FitText style={s.floorSnapshotBody}>{activeBlueprint.description}</FitText>
+            <FitText style={s.floorSnapshotBody}>{floorSnapshot.body}</FitText>
+            <View style={s.floorSnapshotMetrics}>
+              <View style={s.floorSnapshotMetricCard}>
+                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.zoneCount}</FitText>
+                <FitText style={s.floorSnapshotMetricLabel}>Mapped zones</FitText>
+              </View>
+              <View style={s.floorSnapshotMetricCard}>
+                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.reservableCount}</FitText>
+                <FitText style={s.floorSnapshotMetricLabel}>Reservable</FitText>
+              </View>
+              <View style={s.floorSnapshotMetricCard}>
+                <FitText style={s.floorSnapshotMetricValue}>{floorSnapshot.supportCount}</FitText>
+                <FitText style={s.floorSnapshotMetricLabel}>Shared support</FitText>
+              </View>
+            </View>
+          </View>
           <FitText style={s.mapTip}>
             Tap any venue zone to view details for {activeFloorConfig.label.toLowerCase()}. The blueprint layer is only an orientation aid, so live venue cards always stay in front.
           </FitText>

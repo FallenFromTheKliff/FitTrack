@@ -202,9 +202,6 @@ export class CoachSelfUpdateProfileDTO {
   @ApiPropertyOptional({ example: 'NASM-CPT' })
   certification?: string;
 
-  @ApiPropertyOptional({ example: 1200 })
-  hourly_rate?: number;
-
   @ApiPropertyOptional({ example: true })
   is_available_for_booking?: boolean;
 }

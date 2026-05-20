@@ -30,6 +30,7 @@ import { useProfilePage } from "@/hooks/profile/useProfile";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
+import FitPill from "@/components/fit/FitPill";
 import FitSection from "@/components/fit/FitSection";
 import { CalendarModal } from "@/components/modals";
 import {
@@ -62,7 +63,6 @@ import GymProfileSection from "@/components/profile/GymProfileSection";
 import CoachReceivedReviewsPanel from "@/components/profile/CoachReceivedReviewsPanel";
 import {
   coachSelfProfileQueryOptions,
-  invalidateCoachQueries,
   updateCoachProfileMutationOptions,
 } from "@fittrack/query";
 
@@ -75,14 +75,12 @@ const COACH_WEEKDAY_OPTIONS = [
   { label: "Fri", value: 5 },
   { label: "Sat", value: 6 },
 ];
+const COACH_WEEKDAY_LABELS = new Map(COACH_WEEKDAY_OPTIONS.map((day) => [day.value, day.label]));
 
 type CoachProfileFormState = {
   bio: string;
   displayName: string;
   hourlyRate: string;
-  scheduleDays: number[];
-  scheduleEndTime: string;
-  scheduleStartTime: string;
   scheduleType: "full_time" | "part_time";
   skills: string;
   specializations: string;
@@ -100,26 +98,41 @@ function splitCoachListInput(value: string) {
 }
 
 function createCoachProfileFormState(profile?: CoachProfileRecord | null): CoachProfileFormState {
-  const firstSlot = profile?.availability?.[0];
-  const scheduleDays = Array.from(
-    new Set(
-      (profile?.availability ?? [])
-        .map((slot) => Number(slot.dayOfWeek))
-        .filter((day) => Number.isInteger(day)),
-    ),
-  ).sort((left, right) => left - right);
-
   return {
     bio: profile?.bio ?? "",
     displayName: profile?.displayName ?? "",
     hourlyRate: profile?.hourlyRate != null ? String(profile.hourlyRate) : "",
-    scheduleDays,
-    scheduleEndTime: firstSlot?.endTime ?? "17:00",
-    scheduleStartTime: firstSlot?.startTime ?? "09:00",
     scheduleType: profile?.scheduleType ?? "part_time",
     skills: joinCoachListInput(profile?.certifications),
     specializations: joinCoachListInput(profile?.specialties),
   };
+}
+
+function formatCoachScheduleType(scheduleType?: CoachProfileRecord["scheduleType"] | null) {
+  return scheduleType === "full_time" ? "Full-time" : "Part-time";
+}
+
+function formatCoachHourlyRate(hourlyRate?: number | null) {
+  return hourlyRate != null && Number.isFinite(hourlyRate)
+    ? `PHP ${hourlyRate.toLocaleString("en-PH")}`
+    : "Unset";
+}
+
+function getCoachDisplayName(profile?: CoachProfileRecord | null, fallbackName?: string) {
+  return profile?.displayName?.trim() || fallbackName?.trim() || "Coach Profile";
+}
+
+function getCoachAvailability(profile?: CoachProfileRecord | null) {
+  return (profile?.availability ?? []).filter((slot) => slot.isAvailable !== false);
+}
+
+function formatCoachAvailabilitySlot(slot: NonNullable<CoachProfileRecord["availability"]>[number]) {
+  const day = COACH_WEEKDAY_LABELS.get(slot.dayOfWeek) ?? `Day ${slot.dayOfWeek}`;
+  return `${day} / ${slot.startTime} - ${slot.endTime}`;
+}
+
+function getCoachSpecialties(profile?: CoachProfileRecord | null) {
+  return (profile?.specialties ?? []).map((specialty) => specialty.trim()).filter(Boolean);
 }
 
 export default function ProfileSettingsPage() {
@@ -431,11 +444,229 @@ function MemberProfileBody() {
   );
 }
 
+function CoachProfileSnapshotPanel() {
+  const { colors } = useTheme();
+  const { user } = useAuth();
+  const fallbackName = [
+    user?.profile?.firstName?.trim(),
+    user?.profile?.lastName?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ") || user?.name;
+  const { data: coachProfile = null, isPending } = useQuery({
+    ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
+    enabled: user?.role === "COACH" && Boolean(user?.id),
+    staleTime: 60_000,
+  });
+  const availability = useMemo(() => getCoachAvailability(coachProfile), [coachProfile]);
+  const specialties = useMemo(() => getCoachSpecialties(coachProfile), [coachProfile]);
+  const displayName = getCoachDisplayName(coachProfile, fallbackName);
+  const contactLabel =
+    coachProfile?.contactEmail?.trim() ||
+    "No coach-profile contact email yet. Edit profile to add one.";
+  const isVisible = coachProfile?.isActive !== false;
+  const metrics = [
+    { label: "Weekly Slots", value: isPending ? "..." : availability.length },
+    {
+      label: "Schedule Type",
+      tone: colors.brand,
+      value: isPending ? "..." : formatCoachScheduleType(coachProfile?.scheduleType),
+    },
+    {
+      label: "Hourly Rate",
+      tone: coachProfile?.hourlyRate != null ? colors.brand : colors.textPrimary,
+      value: isPending ? "..." : formatCoachHourlyRate(coachProfile?.hourlyRate),
+    },
+    {
+      label: "Certifications",
+      tone: (coachProfile?.certifications?.length ?? 0) > 0 ? colors.success : colors.textPrimary,
+      value: isPending ? "..." : (coachProfile?.certifications?.length ?? 0),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 18,
+        display: "grid",
+        gap: 14,
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          alignItems: "flex-start",
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <FitText
+            excludeGlobalScale
+            style={{
+              color: colors.textPrimary,
+              fontSize: 24,
+              fontWeight: 900,
+              lineHeight: 1.05,
+              marginBottom: 6,
+            }}
+          >
+            {displayName}
+          </FitText>
+          <FitText
+            excludeGlobalScale
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              lineHeight: 1.4,
+            }}
+          >
+            {contactLabel}
+          </FitText>
+        </div>
+        <FitPill
+          mode="status"
+          label={isPending ? "LOADING" : isVisible ? "VISIBLE IN BOOKING" : "HIDDEN FROM BOOKING"}
+          color={isPending ? colors.textMuted : isVisible ? colors.brand : colors.warning}
+          fontSize={10}
+          fontWeight={800}
+          borderOpacity="35"
+          bgOpacity="14"
+          style={{ borderRadius: 6, flexShrink: 0 }}
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))" }}>
+        {metrics.map((metric) => (
+          <div
+            key={metric.label}
+            style={{
+              backgroundColor: colors.surfaceRaised,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
+              display: "grid",
+              gap: 12,
+              minHeight: 86,
+              padding: "12px 14px",
+            }}
+          >
+            <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 11, fontWeight: 800 }}>
+              {metric.label}
+            </FitText>
+            <FitText
+              excludeGlobalScale
+              style={{
+                color: metric.tone ?? colors.textPrimary,
+                fontSize: 20,
+                fontWeight: 900,
+                lineHeight: 1.1,
+                wordBreak: "break-word",
+              }}
+            >
+              {metric.value}
+            </FitText>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <div
+          style={{
+            backgroundColor: colors.surfaceRaised,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "grid",
+            gap: 10,
+            padding: "14px 16px",
+          }}
+        >
+          <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 800 }}>
+            Availability snapshot
+          </FitText>
+          {availability.length > 0 ? (
+            availability.slice(0, 4).map((slot) => (
+              <FitText
+                key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}`}
+                excludeGlobalScale
+                style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 1.45 }}
+              >
+                {formatCoachAvailabilitySlot(slot)}
+              </FitText>
+            ))
+          ) : (
+            <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 12, lineHeight: 1.45 }}>
+              No availability recorded yet.
+            </FitText>
+          )}
+        </div>
+
+        <div
+          style={{
+            backgroundColor: colors.surfaceRaised,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "grid",
+            gap: 10,
+            padding: "14px 16px",
+          }}
+        >
+          <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 800 }}>
+            Specialties
+          </FitText>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {specialties.length > 0 ? (
+              specialties.map((specialty, index) => (
+                <FitPill
+                  key={`${specialty}-${index}`}
+                  mode="status"
+                  label={specialty.toUpperCase()}
+                  color={index === 0 ? colors.brand : colors.textMuted}
+                  fontSize={9}
+                  fontWeight={800}
+                  borderOpacity="28"
+                  bgOpacity="12"
+                  style={{ borderRadius: 6 }}
+                />
+              ))
+            ) : (
+              <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 12, lineHeight: 1.45 }}>
+                No specialties recorded yet.
+              </FitText>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          backgroundColor: colors.surfaceRaised,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 8,
+          display: "grid",
+          gap: 10,
+          padding: "14px 16px",
+        }}
+      >
+        <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 800 }}>
+          Booking bio
+        </FitText>
+        <FitText excludeGlobalScale style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 1.5 }}>
+          {coachProfile?.bio?.trim() || "No booking bio recorded yet."}
+        </FitText>
+      </div>
+    </div>
+  );
+}
+
 function CoachProfileManagementPanel() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CoachProfileFormState>(() => createCoachProfileFormState());
+  const [isCoachProfileEditing, setIsCoachProfileEditing] = useState(false);
   const [message, setMessage] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
   const { data: coachProfile = null, isPending } = useQuery({
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
@@ -443,18 +674,12 @@ function CoachProfileManagementPanel() {
     staleTime: 60_000,
   });
   const updateProfileMutation = useMutation(updateCoachProfileMutationOptions(webApiClient, queryClient));
-  const updateAvailabilityMutation = useMutation({
-    mutationFn: (payload: {
-      slots: Array<{ dayOfWeek: number; endTime: string; startTime: string }>;
-    }) => webApiClient.coaches.replaceAvailability(payload),
-    onSuccess: async () => {
-      await invalidateCoachQueries(queryClient, user?.id, coachProfile?.id);
-    },
-  });
-  const isSaving = updateProfileMutation.isPending || updateAvailabilityMutation.isPending;
+  const isSaving = updateProfileMutation.isPending;
+  const coachProfileReadOnly = !isCoachProfileEditing || isPending || isSaving;
 
   useEffect(() => {
     setForm(createCoachProfileFormState(coachProfile));
+    setIsCoachProfileEditing(false);
   }, [coachProfile]);
 
   const setField = <K extends keyof CoachProfileFormState>(
@@ -463,25 +688,11 @@ function CoachProfileManagementPanel() {
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
-  const toggleScheduleDay = (day: number) => {
-    if (form.scheduleType === "full_time") return;
-    setForm((current) => {
-      const selected = current.scheduleDays.includes(day)
-        ? current.scheduleDays.filter((item) => item !== day)
-        : [...current.scheduleDays, day].sort((left, right) => left - right);
-      return { ...current, scheduleDays: selected };
-    });
-  };
   const handleSaveCoachProfile = async () => {
     if (!coachProfile || !user?.id) return;
 
-    const hourlyRate = Number(form.hourlyRate);
     if (!form.displayName.trim()) {
       setMessage({ tone: "danger", text: "Display name is required." });
-      return;
-    }
-    if (!Number.isFinite(hourlyRate) || hourlyRate < 0) {
-      setMessage({ tone: "danger", text: "Rate must be zero or greater." });
       return;
     }
 
@@ -489,15 +700,9 @@ function CoachProfileManagementPanel() {
       bio: form.bio,
       certifications: splitCoachListInput(form.skills),
       displayName: form.displayName.trim(),
-      hourlyRate,
       isAvailableForBooking: coachProfile.isActive,
       specialties: splitCoachListInput(form.specializations),
     };
-    const availabilitySlots = form.scheduleDays.map((dayOfWeek) => ({
-      dayOfWeek,
-      endTime: form.scheduleEndTime,
-      startTime: form.scheduleStartTime,
-    }));
 
     try {
       await updateProfileMutation.mutateAsync({
@@ -505,9 +710,7 @@ function CoachProfileManagementPanel() {
         payload: profilePayload,
         userId: user.id,
       });
-      if (form.scheduleType !== "full_time") {
-        await updateAvailabilityMutation.mutateAsync({ slots: availabilitySlots });
-      }
+      setIsCoachProfileEditing(false);
       setMessage({ tone: "success", text: "Coach profile updated." });
     } catch (error) {
       setMessage({
@@ -549,7 +752,7 @@ function CoachProfileManagementPanel() {
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Display Name</FitText>
           <FitTextInput
             value={form.displayName}
-            disabled={isPending || isSaving}
+            disabled={coachProfileReadOnly}
             onChange={(event) => setField("displayName", event.target.value)}
             style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
           />
@@ -559,7 +762,7 @@ function CoachProfileManagementPanel() {
           <FitTextInput
             value={form.skills}
             placeholder="CPR, Olympic lifting, mobility coaching"
-            disabled={isPending || isSaving}
+            disabled={coachProfileReadOnly}
             onChange={(event) => setField("skills", event.target.value)}
             style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
           />
@@ -569,7 +772,7 @@ function CoachProfileManagementPanel() {
           <FitTextInput
             value={form.specializations}
             placeholder="Strength and Conditioning"
-            disabled={isPending || isSaving}
+            disabled={coachProfileReadOnly}
             onChange={(event) => setField("specializations", event.target.value)}
             style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
           />
@@ -581,8 +784,7 @@ function CoachProfileManagementPanel() {
               type="number"
               min="0"
               value={form.hourlyRate}
-              disabled={isPending || isSaving}
-              onChange={(event) => setField("hourlyRate", event.target.value)}
+              disabled
               style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
             />
           </label>
@@ -611,7 +813,7 @@ function CoachProfileManagementPanel() {
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Bio</FitText>
           <textarea
             value={form.bio}
-            disabled={isPending || isSaving}
+            disabled={coachProfileReadOnly}
             onChange={(event) => setField("bio", event.target.value)}
             style={{
               backgroundColor: colors.surface,
@@ -624,62 +826,28 @@ function CoachProfileManagementPanel() {
             }}
           />
         </label>
-        <div style={{ display: "grid", gap: 8 }}>
-          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>
-            Available Schedule Slots
-          </FitText>
-          {form.scheduleType === "full_time" ? (
-            <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 1.5 }}>
-              Full-time working days and hours are managed by admin. These windows generate hourly member booking slots automatically.
-            </FitText>
-          ) : null}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {COACH_WEEKDAY_OPTIONS.map((day) => (
-              <button
-                key={day.value}
-                type="button"
-                disabled={isPending || isSaving || form.scheduleType === "full_time"}
-                onClick={() => toggleScheduleDay(day.value)}
-                style={{
-                  backgroundColor: form.scheduleDays.includes(day.value) ? colors.brand : colors.surface,
-                  border: `1px solid ${form.scheduleDays.includes(day.value) ? colors.brand : colors.border}`,
-                  borderRadius: 999,
-                  color: form.scheduleDays.includes(day.value) ? colors.onBrand : colors.textPrimary,
-                  cursor: isPending || isSaving || form.scheduleType === "full_time" ? "not-allowed" : "pointer",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  padding: "8px 12px",
-                }}
-              >
-                {day.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
-            <FitTextInput
-              type="time"
-              value={form.scheduleStartTime}
-              disabled={isPending || isSaving || form.scheduleType === "full_time"}
-              onChange={(event) => setField("scheduleStartTime", event.target.value)}
-              style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
-            />
-            <FitTextInput
-              type="time"
-              value={form.scheduleEndTime}
-              disabled={isPending || isSaving || form.scheduleType === "full_time"}
-              onChange={(event) => setField("scheduleEndTime", event.target.value)}
-              style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
-            />
-          </div>
-        </div>
-        <FitButton
-          variant="primary"
-          label={isSaving ? "SAVING..." : "SAVE COACH PROFILE"}
-          loading={isSaving}
-          disabled={isPending || isSaving || !coachProfile}
-          onClick={handleSaveCoachProfile}
-          fullWidth
-        />
+        {isCoachProfileEditing ? (
+          <FitButton
+            variant="primary"
+            label={isSaving ? "SAVING..." : "SAVE COACH PROFILE"}
+            loading={isSaving}
+            disabled={isPending || isSaving || !coachProfile}
+            onClick={handleSaveCoachProfile}
+            fullWidth
+          />
+        ) : (
+          <FitButton
+            variant="primary"
+            label="Edit Profile"
+            icon={Pencil}
+            disabled={isPending || isSaving || !coachProfile}
+            onClick={() => {
+              setMessage(null);
+              setIsCoachProfileEditing(true);
+            }}
+            fullWidth
+          />
+        )}
       </div>
     </div>
   );
@@ -910,9 +1078,10 @@ function OperationsProfileSettingsPage() {
                 </div>
               </div>
               <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+                {isCoach ? <CoachProfileSnapshotPanel /> : null}
                 {isCoach ? <CoachProfileManagementPanel /> : null}
                 {isCoach ? <CoachReceivedReviewsPanel /> : null}
-                <GymProfileSection canEdit={isAdmin} />
+                {!isCoach ? <GymProfileSection canEdit={isAdmin} /> : null}
               </div>
             </div>
           </div>

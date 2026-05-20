@@ -28,18 +28,21 @@ export const modalStyles = (colors: ThemeColors) => ({
     borderBottom: `1px solid ${colors.border}`,
     display: "flex",
     alignItems: "flex-start",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    gap: 16
   },
   headerLeft: {
     display: "flex",
     alignItems: "flex-start",
-    gap: 12
+    gap: 12,
+    minWidth: 0
   } as CSSProperties,
   headerText: {
     display: "flex",
     flexDirection: "column" as const,
     justifyContent: "center",
-    gap: 4
+    gap: 4,
+    minWidth: 0
   } as CSSProperties,
   headerIconWrap: {
     backgroundColor: colors.brand,

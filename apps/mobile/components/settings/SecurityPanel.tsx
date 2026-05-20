@@ -30,6 +30,7 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
   const { surfaceStyle } = useThemeTransition();
   const s = useMemo(() => makePrefModalStyles(colors), [colors]);
   const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
+  const [invalidCurrentPasswordNoticeVisible, setInvalidCurrentPasswordNoticeVisible] = useState(false);
   const [samePasswordNoticeVisible, setSamePasswordNoticeVisible] = useState(false);
   const [isLogoutLoading, setIsLogoutLoading] = useState(false);
   const [pendingChange, setPendingChange] = useState<ChangePasswordData | null>(null);
@@ -78,7 +79,9 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
       showStatus("Verifying request");
       const verified = await verifyCurrentPassword(pendingChange.currentPassword);
       if (!verified) {
-        showStatus("Current password is incorrect");
+        setPendingChange(null);
+        setIsLogoutConfirmVisible(false);
+        setInvalidCurrentPasswordNoticeVisible(true);
         setIsLogoutLoading(false);
         return;
       }
@@ -183,6 +186,13 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
         message="Choose a new password that is different from your current password."
         buttonLabel="Got It"
         onClose={() => setSamePasswordNoticeVisible(false)}
+      />
+      <NoticeModal
+        isVisible={invalidCurrentPasswordNoticeVisible}
+        title="Current Password Incorrect"
+        message="Enter your current password again before changing sensitive account information."
+        buttonLabel="Got It"
+        onClose={() => setInvalidCurrentPasswordNoticeVisible(false)}
       />
     </>
   );

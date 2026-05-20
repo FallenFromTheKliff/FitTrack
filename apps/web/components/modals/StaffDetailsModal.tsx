@@ -79,9 +79,9 @@ export default function StaffDetailsModal({
       iconNode={headerIcon}
       maxWidth={560}
       closeAriaLabel="Close coach profile"
+      contentStyle={{ display: "flex", flexDirection: "column", gap: 18 }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div
+      <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
@@ -317,7 +317,6 @@ export default function StaffDetailsModal({
             ))}
           </div>
         ) : null}
-      </div>
     </FitModal>
   );
 }

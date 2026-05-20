@@ -31,6 +31,7 @@ export type CoachDecision =
   | "accept_cash_balance"
   | "accept_cash_downpayment"
   | "accept_cash_full"
+  | "approve_payment"
   | "cancel"
   | "confirm"
   | "mark_complete"
@@ -79,8 +80,9 @@ export const PHONE_PATTERN = /^[+\d][\d\s().-]{6,39}$/;
 
 export const COACH_DECISION_LABELS: Record<CoachDecision, string> = {
   accept_cash_balance: "Accept cash balance",
-  accept_cash_downpayment: "Accept cash downpayment",
-  accept_cash_full: "Accept cash full payment",
+  accept_cash_downpayment: "Record cash downpayment",
+  accept_cash_full: "Record cash full payment",
+  approve_payment: "Approve submitted payment",
   cancel: "Cancel appointment",
   confirm: "Confirm session",
   mark_complete: "Mark complete",
@@ -303,6 +305,12 @@ export function buildStatusTone(status: string | undefined, colors: ThemeColors)
         color: colors.danger,
         label: "Cancelled",
       };
+    case "no_show":
+      return {
+        bg: `${colors.danger}18`,
+        color: colors.danger,
+        label: "No show",
+      };
     default:
       return {
         bg: `${colors.surfaceRaised}`,
@@ -374,9 +382,13 @@ export function modalTextAreaStyle(colors: ThemeColors): CSSProperties {
 export function actionPillStyle(colors: ThemeColors, active = false): CSSProperties {
   return {
     minHeight: 36,
-    borderRadius: 18,
+    borderRadius: 10,
     padding: "8px 14px",
     border: `1px solid ${active ? `${colors.brand}44` : colors.border}`,
     backgroundColor: active ? colors.brand : colors.surfaceRaised,
+    boxShadow: active ? `0 12px 22px -18px ${colors.brand}` : "none",
+    transform: active ? "translateY(-1px)" : "translateY(0)",
+    transition:
+      "background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease",
   };
 }

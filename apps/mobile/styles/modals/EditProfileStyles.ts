@@ -14,8 +14,6 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
-      flex: 1,
-      maxHeight: "88%",
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.border,
@@ -62,7 +60,8 @@ export function makeEditProfileModalStyles(colors: ThemeColors) {
       paddingVertical: 3
     },
     statusText: { fontSize: 11, fontWeight: "600" },
-    body: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+    scrollHost: { flex: 1, minHeight: 0 },
+    body: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28, gap: 10 },
     avatarRow: {
       alignItems: "center",
       justifyContent: "center",

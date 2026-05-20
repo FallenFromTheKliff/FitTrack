@@ -32,6 +32,7 @@ import {
   type InventoryRetailTableRow
 } from "@/hooks/inventory/useInventoryDashboard";
 import { WEB_API_BASE_URL } from "@/lib/api-client";
+import { getBrowserViewportState } from "@/utils/browserViewport";
 
 export const dynamic = "force-dynamic";
 
@@ -475,31 +476,37 @@ function RetailSaleModal({
       icon={ReceiptText}
       maxWidth={760}
       footer={
-        <div style={{ display: "flex", gap: 10, width: "100%", alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
-            <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
-              Sale total
-            </FitText>
-            <FitText as="p" style={{ fontSize: 20, fontWeight: 800 }}>
-              PHP{" "}
-              {saleTotal.toLocaleString("en-PH", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}
-            </FitText>
-          </div>
-          <FitButton
-            variant="primary"
-            label={isLoading ? "CONFIRMING SALE..." : "CONFIRM SALE"}
-            loading={isLoading}
-            disabled={hasValidationErrors}
-            onClick={submitSale}
-            style={{ minWidth: 180 }}
-          />
-        </div>
+        <FitButton
+          variant="primary"
+          label={isLoading ? "CONFIRMING SALE..." : "CONFIRM SALE"}
+          loading={isLoading}
+          disabled={hasValidationErrors}
+          onClick={submitSale}
+          style={{ minWidth: 180 }}
+        />
       }
       hideFooterDivider
     >
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: 16,
+          padding: 14,
+          backgroundColor: colors.surfaceRaised,
+          marginBottom: 12
+        }}
+      >
+        <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
+          Sale total
+        </FitText>
+        <FitText as="p" style={{ fontSize: 22, fontWeight: 800 }}>
+          PHP{" "}
+          {saleTotal.toLocaleString("en-PH", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}
+        </FitText>
+      </div>
       {products.length === 0 ? (
         <div
           style={{
@@ -734,12 +741,17 @@ export default function InventoryPage() {
 
   useEffect(() => {
     const evaluateDetailMode = () => {
-      setIsCompactDetail(window.innerWidth < 1040);
+      const { isBrowserWindowResized, viewportWidth } = getBrowserViewportState();
+      setIsCompactDetail(isBrowserWindowResized || viewportWidth < 1260);
     };
 
     evaluateDetailMode();
     window.addEventListener("resize", evaluateDetailMode);
-    return () => window.removeEventListener("resize", evaluateDetailMode);
+    window.visualViewport?.addEventListener("resize", evaluateDetailMode);
+    return () => {
+      window.removeEventListener("resize", evaluateDetailMode);
+      window.visualViewport?.removeEventListener("resize", evaluateDetailMode);
+    };
   }, []);
 
   useEffect(() => {

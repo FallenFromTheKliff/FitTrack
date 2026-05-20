@@ -283,17 +283,27 @@ function useGymOperationsPageState() {
     () => ({
       limit: 100,
       page: 1,
-      startDate: toYmd(visibleTimelineDays[0] ?? weekStart),
-      endDate: toYmd(
-        visibleTimelineDays[visibleTimelineDays.length - 1] ?? weekStart,
-      ),
+      ...(activeOperationsTab === "appointments"
+        ? {}
+        : {
+            startDate: toYmd(visibleTimelineDays[0] ?? weekStart),
+            endDate: toYmd(
+              visibleTimelineDays[visibleTimelineDays.length - 1] ?? weekStart,
+            ),
+          }),
       ...(coachFilterId ? { coachId: coachFilterId } : {}),
       ...(appointmentStatusFilter !== "all" &&
       appointmentStatusFilter !== "pending_full_payment"
         ? { status: appointmentStatusFilter }
         : {}),
     }),
-    [appointmentStatusFilter, coachFilterId, visibleTimelineDays, weekStart],
+    [
+      activeOperationsTab,
+      appointmentStatusFilter,
+      coachFilterId,
+      visibleTimelineDays,
+      weekStart,
+    ],
   );
 
   const rosterAppointmentFilters = useMemo(
@@ -468,7 +478,11 @@ function useGymOperationsPageState() {
     () =>
       (staffUsers as MemberRecord[])
         .filter((member) => {
-          const roleName = member.role?.name?.toUpperCase();
+          const role = (
+            member as MemberRecord & { role?: MemberRecord["role"] | string }
+          ).role;
+          const roleName =
+            typeof role === "string" ? role.toUpperCase() : role?.name?.toUpperCase();
           const status = (
             member as MemberRecord & { status?: string | null }
           ).status?.toLowerCase();
@@ -1432,16 +1446,22 @@ function useGymOperationsPageState() {
       });
 
       if (provider === "cash" && result.paymentId) {
-        await verifyPaymentMutation.mutateAsync({
-          affectedUserId: appointment.userId,
-          paymentId: result.paymentId,
-          payload: { action: "approve" },
-        });
         showFeedback(
           paymentStage === "full"
-            ? "Coach full cash payment accepted."
-            : "Coach cash downpayment accepted.",
+            ? "Coach full cash payment recorded for approval."
+            : "Coach cash downpayment recorded for approval.",
         );
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.staffAppointments(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.membershipReviewPayments(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.appointments(),
+          }),
+        ]);
         setAppointmentReviewTarget(null);
         return;
       }
@@ -1479,9 +1499,49 @@ function useGymOperationsPageState() {
       confirmLabel:
         provider === "cash"
           ? paymentStage === "full"
-            ? "ACCEPT CASH FULL"
-            : "ACCEPT CASH DOWNPAYMENT"
+            ? "RECORD CASH FULL"
+            : "RECORD CASH DOWNPAYMENT"
           : "OPEN PAYMONGO",
+    });
+  };
+
+  const executeApproveAppointmentPayment = async (
+    appointment: StaffAppointmentRecord,
+    paymentId: string,
+  ) => {
+    try {
+      await verifyPaymentMutation.mutateAsync({
+        affectedUserId: appointment.userId,
+        paymentId,
+        payload: { action: "approve" },
+      });
+      showFeedback("Coach appointment payment approved.");
+      setAppointmentReviewTarget(null);
+    } catch (error) {
+      showFeedback(
+        getErrorMessage(error, "Unable to approve coach payment."),
+        "danger",
+      );
+    }
+  };
+
+  const requestApproveAppointmentPayment = (
+    appointment: StaffAppointmentRecord,
+    paymentId: string,
+  ) => {
+    const paymentLabel =
+      appointment.activePaymentStage === "full"
+        ? "full payment"
+        : appointment.activePaymentStage === "balance"
+          ? "balance payment"
+          : "downpayment";
+    setPaymentConfirm({
+      kind: "coachPaymentApproval",
+      appointment,
+      paymentId,
+      title: "Approve coach payment",
+      message: `Approve the submitted ${paymentLabel} for this coach appointment? The session will move forward only after this approval is recorded.`,
+      confirmLabel: "APPROVE PAYMENT",
     });
   };
 
@@ -1912,6 +1972,12 @@ function useGymOperationsPageState() {
             paymentConfirm.provider,
           );
           break;
+        case "coachPaymentApproval":
+          await executeApproveAppointmentPayment(
+            paymentConfirm.appointment,
+            paymentConfirm.paymentId,
+          );
+          break;
         case "recurringCycle":
           await executeRecurringCyclePayment(
             paymentConfirm.cycle,
@@ -2084,7 +2150,8 @@ function useGymOperationsPageState() {
     recurringPlanAction, recurringPlanForm, recurringPlanInputInvalid,
     recurringPlanOpen, recurringPlanPreview, recurringPlanSessions,
     recurringRemainingCount, refreshGymOperationsData, replaceAvailabilityMutation,
-    requestCollectAppointmentBalance, requestCollectAppointmentInitialPayment, requestCollectVenueBalance,
+    requestApproveAppointmentPayment, requestCollectAppointmentBalance,
+    requestCollectAppointmentInitialPayment, requestCollectVenueBalance,
     requestRecurringCyclePayment, respondAppointmentMutation,
     respondAppointmentPending, rightScrollRef,
     rosterBookings, scheduleDayPart, scheduleLoading,

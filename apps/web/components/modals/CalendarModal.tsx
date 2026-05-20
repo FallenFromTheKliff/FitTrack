@@ -72,119 +72,9 @@ export default function CalendarModal({
       maxWidth={500}
       closeAriaLabel="Close calendar"
       noScroll
-    >
-      <div style={s.calendarPadding}>
-        <div style={s.calendarViewRow}>
-          {CALENDAR_VIEW_OPTIONS.map((option) => {
-            const isActive = option.value === currentView;
-            return (
-              <FitButton
-                key={option.value}
-                variant={isActive ? "primary" : "ghost"}
-                label={option.label}
-                onClick={() => setCurrentView(option.value)}
-                style={s.calendarViewBtn(isActive)}
-                aria-pressed={isActive}
-              />
-            );
-          })}
-        </div>
-        <div style={s.calendarBody}>
-          {currentView === "DAYS" && (
-            <>
-              <div style={{ ...s.calendarGrid, marginBottom: 8 }}>
-                {WEEK_DAYS.map((label) => (
-                  <FitText key={label} style={s.calendarWeekDay}>{label}</FitText>
-                ))}
-              </div>
-              <div style={s.calendarGrid}>
-                {dayCells.map((cell, index) => {
-                  if (!cell) return <div key={`empty-${index}`} style={s.calendarEmptyCell} />;
-                  const isSelected = cell.ymd === selectedYmd;
-                  const isToday = cell.ymd === todayYmd;
-                  const isDisabled = Boolean(minDateYmd && cell.ymd < minDateYmd);
-                  const isHighlighted = highlightedDateSet.has(cell.ymd);
-                  return (
-                    <FitButton
-                      key={cell.ymd}
-                      variant={isSelected ? "primary" : "ghost"}
-                      label={String(cell.dayNumber)}
-                      onClick={() => {
-                        if (isDisabled) return;
-                        onSelect(cell.ymd);
-                        onClose();
-                      }}
-                      disabled={isDisabled}
-                      style={{
-                        ...s.calendarDayBtn(isSelected, isToday),
-                        ...(isHighlighted && !isSelected
-                          ? {
-                              borderColor: colors.success,
-                              boxShadow: `inset 0 -3px 0 ${colors.success}`,
-                              color: colors.success,
-                            }
-                          : {}),
-                        ...(isDisabled
-                          ? {
-                              backgroundColor: colors.surface,
-                              color: colors.textMuted,
-                              opacity: 0.42,
-                            }
-                          : {}),
-                      }}
-                      aria-label={
-                        isDisabled
-                          ? `${cell.ymd} is unavailable`
-                          : `Select ${cell.ymd}`
-                      }
-                    />
-                  );
-                })}
-              </div>
-            </>
-          )}
-          {currentView === "MONTHS" && (
-            <div style={s.calendarMonthGrid}>
-              {MONTH_NAMES_SHORT.map((monthName, index) => {
-                const isActive = index === monthIndex;
-                return (
-                  <FitButton
-                    key={monthName}
-                    variant={isActive ? "primary" : "ghost"}
-                    label={monthName}
-                    onClick={() => {
-                      setCursor(new Date(year, index, 1));
-                      setCurrentView("DAYS");
-                    }}
-                    style={s.calendarPickerBtn(isActive)}
-                    aria-label={`Select ${MONTH_NAMES[index]}`}
-                  />
-                );
-              })}
-            </div>
-          )}
-          {currentView === "YEARS" && (
-            <div style={s.calendarYearGrid}>
-              {yearCells.map((value) => {
-                const isActive = value === year;
-                return (
-                  <FitButton
-                    key={value}
-                    variant={isActive ? "primary" : "ghost"}
-                    label={String(value)}
-                    onClick={() => {
-                      setCursor(new Date(value, monthIndex, 1));
-                      setCurrentView("MONTHS");
-                    }}
-                    style={s.calendarPickerBtn(isActive)}
-                    aria-label={`Select year ${value}`}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <div style={s.calendarFooter}>
+      contentStyle={s.calendarPadding}
+      footer={
+        <>
           <FitButton variant="ghost" onClick={() => onSelect("")} style={s.calendarClearBtn}>
             Clear
           </FitButton>
@@ -199,7 +89,120 @@ export default function CalendarModal({
           >
             Today
           </FitButton>
-        </div>
+        </>
+      }
+    >
+      <div style={s.calendarViewRow}>
+        {CALENDAR_VIEW_OPTIONS.map((option) => {
+          const isActive = option.value === currentView;
+          return (
+            <FitButton
+              key={option.value}
+              variant={isActive ? "primary" : "ghost"}
+              label={option.label}
+              onClick={() => setCurrentView(option.value)}
+              style={s.calendarViewBtn(isActive)}
+              aria-pressed={isActive}
+            />
+          );
+        })}
+      </div>
+      <div style={s.calendarBody}>
+        {currentView === "DAYS" && (
+          <>
+            <div style={{ ...s.calendarGrid, marginBottom: 8 }}>
+              {WEEK_DAYS.map((label) => (
+                <FitText key={label} style={s.calendarWeekDay}>{label}</FitText>
+              ))}
+            </div>
+            <div style={s.calendarGrid}>
+              {dayCells.map((cell, index) => {
+                if (!cell) return <div key={`empty-${index}`} style={s.calendarEmptyCell} />;
+                const isSelected = cell.ymd === selectedYmd;
+                const isToday = cell.ymd === todayYmd;
+                const isDisabled = Boolean(minDateYmd && cell.ymd < minDateYmd);
+                const isHighlighted = highlightedDateSet.has(cell.ymd);
+                const canShowHighlight =
+                  isHighlighted && !isSelected && !isDisabled && cell.ymd >= todayYmd;
+                return (
+                  <FitButton
+                    key={cell.ymd}
+                    variant={isSelected ? "primary" : "ghost"}
+                    label={String(cell.dayNumber)}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      onSelect(cell.ymd);
+                      onClose();
+                    }}
+                    disabled={isDisabled}
+                    style={{
+                      ...s.calendarDayBtn(isSelected, isToday),
+                      ...(canShowHighlight
+                        ? {
+                            borderColor: colors.success,
+                            boxShadow: `inset 0 -3px 0 ${colors.success}`,
+                            color: colors.success,
+                          }
+                        : {}),
+                      ...(isDisabled
+                        ? {
+                            backgroundColor: colors.surface,
+                            color: colors.textMuted,
+                            opacity: 0.42,
+                          }
+                        : {}),
+                    }}
+                    aria-label={
+                      isDisabled
+                        ? `${cell.ymd} is unavailable`
+                        : `Select ${cell.ymd}`
+                    }
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+        {currentView === "MONTHS" && (
+          <div style={s.calendarMonthGrid}>
+            {MONTH_NAMES_SHORT.map((monthName, index) => {
+              const isActive = index === monthIndex;
+              return (
+                <FitButton
+                  key={monthName}
+                  variant={isActive ? "primary" : "ghost"}
+                  label={monthName}
+                  onClick={() => {
+                    setCursor(new Date(year, index, 1));
+                    setCurrentView("DAYS");
+                  }}
+                  style={s.calendarPickerBtn(isActive)}
+                  aria-label={`Select ${MONTH_NAMES[index]}`}
+                />
+              );
+            })}
+          </div>
+        )}
+        {currentView === "YEARS" && (
+          <div style={s.calendarYearGrid}>
+            {yearCells.map((value) => {
+              const isActive = value === year;
+              return (
+                <FitButton
+                  key={value}
+                  variant={isActive ? "primary" : "ghost"}
+                  label={String(value)}
+                  onClick={() => {
+                    setCursor(new Date(value, monthIndex, 1));
+                    setCurrentView("MONTHS");
+                  }}
+                  style={s.calendarPickerBtn(isActive)}
+                  aria-label={`Select year ${value}`}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </FitModal>
   );

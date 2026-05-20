@@ -27,7 +27,7 @@ type Props = {
 };
 
 const FILTERS: Array<{ label: string; value: FacilitiesArchiveFilter }> = [
-  { label: "All", value: "all" },
+  { label: "All Archived", value: "all" },
   { label: "Venues", value: "venues" },
   { label: "Equipment", value: "equipment" },
 ];

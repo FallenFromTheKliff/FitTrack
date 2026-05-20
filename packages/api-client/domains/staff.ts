@@ -22,7 +22,10 @@ export type StaffAppointmentListParams = {
 };
 
 export type StaffAppointmentRecord = {
+  activePaymentId?: string | null;
+  activePaymentProvider?: "cash" | "paymongo" | null;
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
+  activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   amountDueNow?: number | null;
   assessmentReport?: string | null;
   balancePaidAt?: string | null;
@@ -41,6 +44,9 @@ export type StaffAppointmentRecord = {
   coachEarnings?: number | null;
   coachFeedback?: string | null;
   coachPayoutPaidAt?: string | null;
+  noShowAt?: string | null;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
   duration: number;
   gymRevenue?: number | null;
@@ -143,7 +149,10 @@ type StaffAppointmentCoachApiRecord = {
 };
 
 type StaffAppointmentApiRecord = {
+  active_payment_id?: string | null;
+  active_payment_provider?: "cash" | "paymongo" | null;
   active_payment_stage?: "balance" | "downpayment" | "full" | null;
+  active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach: StaffAppointmentCoachApiRecord;
@@ -156,6 +165,9 @@ type StaffAppointmentApiRecord = {
   coach_earnings?: number | string | null;
   coach_feedback?: string | null;
   coach_payout_paid_at?: string | null;
+  no_show_at?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
   completed_at?: string | null;
   gym_revenue?: number | string | null;
   id: string;
@@ -332,13 +344,19 @@ function mapStaffAppointment(
     (totalAmount ?? 0) > 0 && (downpaymentAmount ?? 0) > 0;
 
   return {
+    activePaymentId: record.active_payment_id ?? null,
+    activePaymentProvider: record.active_payment_provider ?? null,
     activePaymentStage,
+    activePaymentStatus: record.active_payment_status ?? null,
     id: record.id,
     userId: record.user_id,
     coachId: record.coach_id,
     coachEarnings: toNullableNumber(record.coach_earnings),
     coachFeedback: record.coach_feedback ?? null,
     coachPayoutPaidAt: record.coach_payout_paid_at ?? null,
+    noShowAt: record.no_show_at ?? null,
+    cancellationReason: record.cancellation_reason ?? null,
+    cancelledAt: record.cancelled_at ?? null,
     status: record.status,
     scheduledAt: record.scheduled_at,
     duration: record.duration_minutes,

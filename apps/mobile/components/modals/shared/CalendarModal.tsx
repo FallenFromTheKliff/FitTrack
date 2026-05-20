@@ -23,11 +23,12 @@ type Props = {
   defaultMonth?: number;
   blockedDates?: string[];
   highlightedDates?: string[];
+  onVisibleMonthChange?: (view: { month: number; year: number }) => void;
   onSelect: (date: string) => void;
   onClose: () => void;
 };
 
-export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, maxDate, defaultYear, defaultMonth, blockedDates = [], highlightedDates = [], onSelect, onClose }: Props) {
+export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blockPast = false, minDate, maxDate, defaultYear, defaultMonth, blockedDates = [], highlightedDates = [], onVisibleMonthChange, onSelect, onClose }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -80,6 +81,12 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
     return { dayNumber, ymd: formatDateYMD(nextDate) };
   });
 
+  useEffect(() => {
+    if (isVisible && currentView === "DAYS") {
+      onVisibleMonthChange?.({ month: viewMonth, year });
+    }
+  }, [currentView, isVisible, onVisibleMonthChange, viewMonth, year]);
+
   const navLabel =
     currentView === "DAYS"
       ? `${MONTH_NAMES[monthIndex]} ${year}`
@@ -116,7 +123,7 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
       visible={isVisible}
       transparent
       animationType="none"
-      onRequestClose={undefined}
+      onRequestClose={onClose}
       statusBarTranslucent
     >
       <Animated.View style={[s.backdrop, backdropStyle]}>
@@ -167,8 +174,10 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
                     const isBlocked = blockedDateSet.has(cell.ymd);
                     const isBeforeMin = minSelectable ? cell.ymd < minSelectable : false;
                     const isAfterMax = maxSelectable ? cell.ymd > maxSelectable : false;
-                    const isPast = blockPast && cell.ymd < todayStr;
+                    const isPastDate = cell.ymd < todayStr;
+                    const isPast = blockPast && isPastDate;
                     const isDisabled = isPast || isBeforeMin || isAfterMax;
+                    const canShowHighlight = !isSelected && !isDisabled && !isPastDate;
                     return (
                       <View key={cell.ymd} style={s.dayCell}>
                         <FitButton
@@ -179,10 +188,10 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
                           style={[
                             s.dayButton,
                             !isSelected && isToday ? { borderColor: colors.brand } : undefined,
-                            !isSelected && isHighlighted
+                            canShowHighlight && isHighlighted
                               ? { borderColor: colors.success, borderWidth: 1 }
                               : undefined,
-                            !isSelected && isBlocked
+                            canShowHighlight && isBlocked
                               ? { borderColor: colors.danger, borderWidth: 1 }
                               : undefined
                           ]}

@@ -14,14 +14,16 @@ type Props = {
   children: ReactNode;
   bare?: boolean;
   cardStyle?: StyleProp<ViewStyle>;
+  subtitle?: string;
 };
 
-export default React.memo(function FitSection({ heading, children, bare = false, cardStyle }: Props) {
+export default React.memo(function FitSection({ heading, children, bare = false, cardStyle, subtitle }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const s = React.useMemo(() => makeFitSectionStyles(colors), [colors]);
 
   const headingAnimStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
+  const subtitleAnimStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
   const cardAnimStyle = useAnimatedStyle(() => ({
     backgroundColor: ic.value.surface,
     borderColor: ic.value.border
@@ -34,6 +36,11 @@ export default React.memo(function FitSection({ heading, children, bare = false,
           {heading}
         </AnimatedFitText>
       )}
+      {subtitle ? (
+        <AnimatedFitText style={[s.subtitle, subtitleAnimStyle]}>
+          {subtitle}
+        </AnimatedFitText>
+      ) : null}
       {bare ? (
         <View>{children}</View>
       ) : (

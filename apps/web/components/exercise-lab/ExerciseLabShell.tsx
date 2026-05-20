@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { Dumbbell } from "lucide-react";
 
-import { FitButton, FitText } from "@/components/fit";
+import { FitText } from "@/components/fit";
 import { FitModal } from "@/components/modals";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -62,12 +62,9 @@ export function ExerciseLabDrawer({
       isOpen={isOpen}
       onClose={onClose}
       title={title}
+      icon={Dumbbell}
       maxWidth={DRAWER_WIDTH}
       noScroll
-      hideHeaderText
-      hideCloseButton
-      hideHeaderDivider
-      headerStyle={{ display: "none" }}
       overlayStyle={{
         alignItems: "stretch",
         justifyContent: "flex-end",
@@ -85,39 +82,18 @@ export function ExerciseLabDrawer({
         boxShadow: "-16px 0 40px rgba(0,0,0,0.28)",
       }}
       contentStyle={{
-        padding: 0,
+        padding: 20,
         overflow: "hidden",
       }}
     >
-      <aside
+      <div
         style={{
           height: "100%",
-          display: "grid",
-          gridTemplateRows: "auto 1fr",
-          padding: 20,
+          overflowY: "auto",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            paddingBottom: 16,
-            borderBottom: `1px solid ${colors.border}`,
-          }}
-        >
-          <FitText style={{ fontSize: 18, fontWeight: 800 }}>{title}</FitText>
-          <FitButton
-            aria-label="Close drawer"
-            icon={X}
-            iconOnly
-            variant="ghost"
-            onClick={onClose}
-          />
-        </div>
-        <div style={{ overflowY: "auto", paddingTop: 16 }}>{children}</div>
-      </aside>
+        {children}
+      </div>
     </FitModal>
   );
 }

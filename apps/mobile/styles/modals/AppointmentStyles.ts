@@ -17,12 +17,17 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
     card: {
       width: "100%",
       maxWidth: MAX_WIDTH,
+      height: "86%",
       maxHeight: "86%",
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       overflow: "hidden",
+    },
+    middle: {
+      flex: 1,
+      minHeight: 0,
     },
     header: {
       flexDirection: "row",
@@ -54,9 +59,10 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
       color: colors.textMuted,
     },
     body: {
+      flexGrow: 1,
       paddingHorizontal: 16,
       paddingTop: 14,
-      paddingBottom: 10,
+      paddingBottom: 24,
       gap: 12,
     },
     sectionLabel: {

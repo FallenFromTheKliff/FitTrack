@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type RefObject } from "react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, UsersRound } from "lucide-react";
 import type { StaffAppointmentRecord } from "@fittrack/api-client";
 import type { ThemeColors } from "@fittrack/types";
@@ -41,12 +43,22 @@ type CoachIconRailProps = {
   bookings: Booking[];
   colors: ThemeColors;
   filteredStaff: Resource[];
+  draggable?: boolean;
   maxHeight: number | null;
+  onStaffPreview?: (staffId: string) => void;
   onStaffClick: (staffId: string) => void;
   orientation?: "column" | "row";
   railRef: RefObject<HTMLElement | null>;
+  requireSecondClickToOpen?: boolean;
   selectedStaffId?: string | null;
 };
+
+const COACH_APPOINTMENT_GRID =
+  "minmax(220px, 1.25fr) minmax(170px, 0.9fr) minmax(210px, 1fr) minmax(100px, 0.42fr)";
+const COACH_APPOINTMENT_MIN_WIDTH = 720;
+const VENUE_BOOKING_GRID =
+  "minmax(220px, 1.2fr) minmax(180px, 0.95fr) minmax(210px, 1fr) minmax(100px, 0.42fr)";
+const VENUE_BOOKING_MIN_WIDTH = 740;
 
 export function CoachAppointmentsTable({
   appointments,
@@ -55,18 +67,18 @@ export function CoachAppointmentsTable({
 }: CoachAppointmentsTableProps) {
   const { settings } = useTheme();
   const canAnimate = settings.animationLevel !== "none";
-  const resultsHeight = 170;
+  const rowMinHeight = 58;
 
   if (appointments.length === 0) {
     return (
       <div
         style={{
-          minHeight: resultsHeight,
-          maxHeight: resultsHeight,
-          borderRadius: 18,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surface,
-          padding: "20px 22px",
+          minHeight: 170,
+          width: "100%",
+          borderRadius: 8,
+          border: `1px dashed ${colors.border}`,
+          backgroundColor: colors.surfaceRaised,
+          padding: "18px 20px",
           display: "flex",
           alignItems: "center",
         }}
@@ -81,24 +93,28 @@ export function CoachAppointmentsTable({
   return (
     <div
       style={{
-        minHeight: resultsHeight,
-        maxHeight: 360,
-        borderRadius: 8,
-        border: `1px solid ${colors.border}`,
-        backgroundColor: colors.surface,
-        padding: 10,
+        width: "100%",
+        maxWidth: "100%",
+        height: "100%",
+        minHeight: Math.max(170, appointments.length * rowMinHeight + 34),
         display: "grid",
-        gap: 8,
-        overflowY: "auto",
+        gridTemplateRows: `34px repeat(${appointments.length}, minmax(${rowMinHeight}px, 1fr))`,
+        borderTop: `1px solid ${colors.border}`,
+        borderBottom: `1px solid ${colors.border}`,
+        overflowX: "auto",
+        overflowY: "hidden",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "minmax(220px, 1.25fr) minmax(170px, 0.9fr) minmax(210px, 1fr) minmax(100px, 0.42fr)",
+          gridTemplateColumns: COACH_APPOINTMENT_GRID,
           gap: 10,
-          padding: "0 8px 4px",
+          alignItems: "center",
+          borderBottom: `1px solid ${colors.border}`,
+          minWidth: COACH_APPOINTMENT_MIN_WIDTH,
+          padding: "0 2px",
         }}
       >
         {["MEMBER", "COACH", "SCHEDULE", "ACTION"].map((label) => (
@@ -116,7 +132,7 @@ export function CoachAppointmentsTable({
           </FitText>
         ))}
       </div>
-      {appointments.map((appointment) => {
+      {appointments.map((appointment, index) => {
         const memberName = getPersonDisplayName(
           appointment.user?.profile,
           appointment.user?.email,
@@ -130,18 +146,19 @@ export function CoachAppointmentsTable({
             key={appointment.id}
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "minmax(220px, 1.25fr) minmax(170px, 0.9fr) minmax(210px, 1fr) minmax(100px, 0.42fr)",
+              gridTemplateColumns: COACH_APPOINTMENT_GRID,
               gap: 10,
               alignItems: "center",
-              minHeight: 58,
-              borderRadius: 8,
-              border: `1px solid ${colors.border}55`,
-              backgroundColor: colors.surfaceRaised,
-              padding: "10px 12px",
+              minHeight: rowMinHeight,
+              minWidth: COACH_APPOINTMENT_MIN_WIDTH,
+              borderBottom:
+                index === appointments.length - 1
+                  ? "none"
+                  : `1px solid ${colors.border}80`,
+              padding: "10px 2px",
               transition: canAnimate
-                ? "border-color 160ms ease, background-color 160ms ease"
-                : "border-color 160ms ease, background-color 160ms ease",
+                ? "background-color 160ms ease"
+                : "background-color 160ms ease",
             }}
           >
             <div
@@ -244,14 +261,23 @@ export function CoachAppointmentsTable({
                 fontWeight={700}
                 borderOpacity="35"
                 bgOpacity="14"
+                style={{ borderRadius: 6 }}
               />
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               {appointment.status === "cancelled" || appointment.status === "no_show" ? (
-                <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
-                  Closed
-                </FitText>
+                <FitButton
+                  variant="ghost"
+                  label="CLOSED"
+                  onClick={() => onOpenReview(appointment)}
+                  style={{
+                    minHeight: 30,
+                    padding: "6px 14px",
+                    borderRadius: 8,
+                  }}
+                  textStyle={{ fontSize: 11, fontWeight: 700 }}
+                />
               ) : (
                 <FitButton
                   variant={appointment.status === "pending_coach" ? "primary" : "ghost"}
@@ -260,7 +286,7 @@ export function CoachAppointmentsTable({
                   style={{
                     minHeight: 30,
                     padding: "6px 14px",
-                    borderRadius: 15,
+                    borderRadius: 8,
                   }}
                   textStyle={{ fontSize: 11, fontWeight: 700 }}
                 />
@@ -288,7 +314,7 @@ export function VenueBookingsTable({
         style={{
           minHeight: 170,
           maxHeight: 170,
-          borderRadius: 18,
+          borderRadius: 8,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.surface,
           padding: "20px 22px",
@@ -308,21 +334,24 @@ export function VenueBookingsTable({
       style={{
         minHeight: 170,
         maxHeight: 360,
+        maxWidth: "100%",
         borderRadius: 8,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
         padding: 10,
         display: "grid",
         gap: 8,
+        overflowX: "auto",
         overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "minmax(220px, 1.2fr) minmax(180px, 0.95fr) minmax(210px, 1fr) minmax(100px, 0.42fr)",
+          gridTemplateColumns: VENUE_BOOKING_GRID,
           gap: 10,
+          minWidth: VENUE_BOOKING_MIN_WIDTH,
           padding: "0 8px 4px",
         }}
       >
@@ -355,11 +384,11 @@ export function VenueBookingsTable({
             key={booking.id}
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "minmax(220px, 1.2fr) minmax(180px, 0.95fr) minmax(210px, 1fr) minmax(100px, 0.42fr)",
+              gridTemplateColumns: VENUE_BOOKING_GRID,
               gap: 10,
               alignItems: "center",
               minHeight: 58,
+              minWidth: VENUE_BOOKING_MIN_WIDTH,
               borderRadius: 8,
               border: `1px solid ${colors.border}55`,
               backgroundColor: colors.surfaceRaised,
@@ -436,6 +465,7 @@ export function VenueBookingsTable({
                 fontWeight={700}
                 borderOpacity="35"
                 bgOpacity="14"
+                style={{ borderRadius: 6 }}
               />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -455,7 +485,7 @@ export function VenueBookingsTable({
                   style={{
                     minHeight: 30,
                     padding: "6px 14px",
-                    borderRadius: 15,
+                    borderRadius: 8,
                   }}
                   textStyle={{ fontSize: 11, fontWeight: 700 }}
                 />
@@ -468,20 +498,143 @@ export function VenueBookingsTable({
   );
 }
 
+function CoachRailButton({
+  bookingCount,
+  colors,
+  draggable,
+  isSelected,
+  isVisible,
+  onPress,
+  showClickHint,
+  staff,
+  tone,
+}: {
+  bookingCount: number;
+  colors: ThemeColors;
+  draggable: boolean;
+  isSelected: boolean;
+  isVisible: boolean;
+  onPress: () => void;
+  showClickHint: boolean;
+  staff: Resource;
+  tone: string;
+}) {
+  const tileSize = 58;
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `coach:${staff.id}`,
+      data: {
+        kind: "coach",
+        coachId: staff.id,
+      },
+      disabled: !draggable,
+    });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      title={`${staff.name} - ${bookingCount} booking${bookingCount === 1 ? "" : "s"}`}
+      onClick={onPress}
+      {...(draggable ? listeners : {})}
+      {...(draggable ? attributes : {})}
+      style={{
+        width: tileSize,
+        height: tileSize,
+        border: "none",
+        backgroundColor: "transparent",
+        color: isSelected ? colors.brand : colors.textPrimary,
+        display: "grid",
+        placeItems: "center",
+        padding: 0,
+        cursor: draggable ? (isDragging ? "grabbing" : "grab") : "pointer",
+        opacity: isDragging ? 0.55 : 1,
+        position: "relative",
+        touchAction: draggable ? "none" : "auto",
+        transform: CSS.Translate.toString(transform),
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 5,
+          right: 5,
+          width: 9,
+          height: 9,
+          borderRadius: 999,
+          backgroundColor: tone,
+          border: `2px solid ${isSelected ? `${colors.brand}18` : colors.surface}`,
+          boxShadow: `0 0 0 3px ${tone}18`,
+          zIndex: 2,
+        }}
+        aria-hidden
+      />
+      <span
+        style={{
+          width: tileSize,
+          height: tileSize,
+          borderRadius: 8,
+          border: `1px solid ${isSelected ? `${colors.brand}55` : colors.border}`,
+          backgroundColor: isSelected ? `${colors.brand}18` : colors.surface,
+          boxShadow: isSelected ? `0 0 0 1px ${colors.brand}22 inset` : "none",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1,
+        }}
+      >
+        {staff.initials ?? staff.name.slice(0, 2).toUpperCase()}
+      </span>
+      {showClickHint ? (
+        <span
+          style={{
+            position: "absolute",
+            left: "calc(100% + 8px)",
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 82,
+            borderRadius: 6,
+            border: `1px solid ${colors.brand}33`,
+            backgroundColor: colors.surface,
+            color: colors.brand,
+            display: "grid",
+            fontSize: 8,
+            fontWeight: 800,
+            lineHeight: 1.05,
+            padding: "3px 2px",
+            textAlign: "center",
+            zIndex: 4,
+          }}
+        >
+          Click Again to View
+        </span>
+      ) : null}
+      {!isVisible ? (
+        <span className="sr-only">Hidden from booking</span>
+      ) : null}
+    </button>
+  );
+}
+
 export function CoachIconRail({
   bookings,
   colors,
+  draggable = false,
   filteredStaff,
   maxHeight,
+  onStaffPreview,
   onStaffClick,
   orientation = "column",
   railRef,
+  requireSecondClickToOpen = false,
   selectedStaffId,
 }: CoachIconRailProps) {
   const isRow = orientation === "row";
   const railHeight = isRow ? undefined : maxHeight ?? undefined;
   const coachRailPageSize = isRow ? 8 : 6;
   const [coachRailPage, setCoachRailPage] = useState(1);
+  const [pendingViewStaffId, setPendingViewStaffId] = useState<string | null>(null);
   const coachRailTotalPages = Math.max(1, Math.ceil(filteredStaff.length / coachRailPageSize));
   const showCoachRailPagination = coachRailTotalPages > 1;
   const coachRailPageNumbers = Array.from(
@@ -497,7 +650,7 @@ export function CoachIconRail({
     minWidth: 36,
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: 0,
   };
   const paginationPageStyle = (isActive: boolean) => ({
@@ -505,7 +658,7 @@ export function CoachIconRail({
     minWidth: 36,
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: 0,
     border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
     backgroundColor: isActive ? `${colors.brand}18` : colors.surfaceRaised,
@@ -516,6 +669,28 @@ export function CoachIconRail({
     if (coachRailPage <= coachRailTotalPages) return;
     setCoachRailPage(coachRailTotalPages);
   }, [coachRailPage, coachRailTotalPages]);
+
+  useEffect(() => {
+    if (!pendingViewStaffId) return;
+    const timeout = window.setTimeout(() => setPendingViewStaffId(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [pendingViewStaffId]);
+
+  const handleStaffPress = (staffId: string) => {
+    if (!requireSecondClickToOpen) {
+      onStaffClick(staffId);
+      return;
+    }
+
+    if (pendingViewStaffId === staffId) {
+      setPendingViewStaffId(null);
+      onStaffClick(staffId);
+      return;
+    }
+
+    setPendingViewStaffId(staffId);
+    onStaffPreview?.(staffId);
+  };
 
   return (
     <aside
@@ -533,12 +708,10 @@ export function CoachIconRail({
             ? "auto auto"
             : "auto"
           : showCoachRailPagination
-            ? "auto minmax(0, 1fr) auto"
-            : "auto minmax(0, 1fr)",
-        gridTemplateColumns: isRow
-          ? "56px minmax(0, 1fr)"
-          : undefined,
-        overflow: "hidden",
+            ? "56px minmax(0, 1fr) auto"
+            : "56px minmax(0, 1fr)",
+        gridTemplateColumns: isRow ? "56px minmax(0, 1fr)" : undefined,
+        overflow: "visible",
       }}
       aria-label="Coach icon rail"
     >
@@ -546,7 +719,8 @@ export function CoachIconRail({
         style={{
           minHeight: 56,
           padding: 8,
-          borderBottom: `1px solid ${colors.border}`,
+          borderBottom: isRow ? "none" : `1px solid ${colors.border}`,
+          borderRight: isRow ? `1px solid ${colors.border}` : "none",
           backgroundColor: colors.surfaceRaised,
           display: "grid",
           placeItems: "center",
@@ -569,13 +743,16 @@ export function CoachIconRail({
         </div>
       </div>
       <div
+        className="gym-operations-coach-rail-list"
         style={{
-          overflow: "hidden",
+          overflowX: isRow ? "auto" : "hidden",
+          overflowY: isRow ? "hidden" : "auto",
           padding: 8,
           display: "grid",
-          gap: 8,
+          gap: 10,
+          justifyItems: "center",
           gridAutoFlow: isRow ? "column" : "row",
-          gridAutoColumns: isRow ? "72px" : undefined,
+          gridAutoColumns: isRow ? "58px" : undefined,
           alignContent: "start",
           alignItems: isRow ? "center" : undefined,
         }}
@@ -592,54 +769,18 @@ export function CoachIconRail({
             const tone = !isVisible ? colors.textMuted : bookingCount >= 6 ? colors.warning : colors.brand;
 
             return (
-              <button
+              <CoachRailButton
                 key={staff.id}
-                type="button"
-                aria-pressed={isSelected}
-                title={`${staff.name} - ${bookingCount} booking${bookingCount === 1 ? "" : "s"}`}
-                onClick={() => onStaffClick(staff.id)}
-                style={{
-                  width: 72,
-                  minHeight: 62,
-                  borderRadius: 8,
-                  border: `1px solid ${isSelected ? colors.brand : colors.border}`,
-                  backgroundColor: isSelected ? `${colors.brand}14` : colors.surfaceRaised,
-                  color: isSelected ? colors.brand : colors.textPrimary,
-                  display: "grid",
-                  placeItems: "center",
-                  gap: 5,
-                  padding: "7px 5px",
-                  cursor: "pointer",
-                  boxShadow: isSelected ? `0 0 0 1px ${colors.brand}22 inset` : "none",
-                }}
-              >
-                <span
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 8,
-                    border: `1px solid ${isSelected ? `${colors.brand}55` : colors.border}`,
-                    backgroundColor: isSelected ? `${colors.brand}18` : colors.surface,
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    lineHeight: 1,
-                  }}
-                >
-                  {staff.initials ?? staff.name.slice(0, 2).toUpperCase()}
-                </span>
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 999,
-                    backgroundColor: tone,
-                    boxShadow: `0 0 0 3px ${tone}18`,
-                  }}
-                />
-              </button>
+                bookingCount={bookingCount}
+                colors={colors}
+                draggable={draggable}
+                isSelected={isSelected}
+                isVisible={isVisible}
+                onPress={() => handleStaffPress(staff.id)}
+                showClickHint={pendingViewStaffId === staff.id}
+                staff={staff}
+                tone={tone}
+              />
             );
           })
         ) : (
@@ -650,12 +791,13 @@ export function CoachIconRail({
       </div>
       {showCoachRailPagination ? (
         <div
+          className="gym-operations-coach-rail-pagination"
           style={{
             padding: 8,
             gridColumn: isRow ? "1 / -1" : undefined,
-            borderTop: isRow ? "none" : `1px solid ${colors.border}`,
+            borderTop: isRow ? `1px solid ${colors.border}` : `1px solid ${colors.border}`,
             borderLeft: "none",
-            borderBottom: isRow ? `1px solid ${colors.border}` : "none",
+            borderBottom: "none",
             backgroundColor: colors.surfaceRaised,
             display: "flex",
             flexDirection: "row",

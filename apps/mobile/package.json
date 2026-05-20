@@ -1,11 +1,13 @@
 {
   "name": "@fittrack/mobile",
   "version": "1.0.0",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "scripts": {
     "dev": "node ./scripts/start-dev.cjs",
     "dev:prime-android": "node ./scripts/prime-android-dev.cjs",
     "android": "node ./scripts/run-android.cjs",
+    "android:apk": "node ./scripts/build-android-apk.cjs",
+    "android:apk:install": "node ./scripts/build-android-apk.cjs --install",
     "ios": "node ./node_modules/expo/bin/cli run:ios",
     "web": "node ./scripts/start-web.cjs",
     "lint": "..\\web\\node_modules\\.bin\\eslint.cmd . --ext .ts,.tsx --config ..\\web\\eslint.config.mjs --rule no-empty:warn --rule @typescript-eslint/no-unused-expressions:warn --rule @typescript-eslint/no-require-imports:off",

@@ -22,6 +22,62 @@ export function makePrefModalStyles(colors: ThemeColors) {
       backgroundColor: colors.surface,
       overflow: "hidden"
     },
+    scrollContentWithCue: {
+      paddingBottom: 28
+    },
+    scrollContentWithFixedClose: {
+      paddingBottom: 20
+    },
+    scrollCue: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      bottom: 10,
+      boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
+      elevation: 7,
+      height: 34,
+      justifyContent: "center",
+      position: "absolute",
+      width: 34
+    },
+    scrollCueWithFixedClose: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      bottom: 78,
+      boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
+      elevation: 7,
+      height: 34,
+      justifyContent: "center",
+      position: "absolute",
+      width: 34
+    },
+    fixedCloseFooter: {
+      borderTopColor: colors.border,
+      borderTopWidth: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 12
+    },
+    fixedCloseButton: {
+      alignItems: "center",
+      backgroundColor: colors.brand,
+      borderRadius: R.md,
+      minHeight: 52,
+      justifyContent: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 14
+    },
+    fixedCloseText: {
+      color: colors.onBrand ?? "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "800"
+    },
     header: {
       flexDirection: "row",
       alignItems: "center",

@@ -24,7 +24,7 @@ export function useHomeFABItems(): FABMenuItem[] {
       icon: CalendarPlus,
       iconColor: colors.textSecondary,
       iconBg: colors.textSecondary + "22",
-      onPress: () => router.push("/(tabs)/bookings")
+      onPress: () => router.push("/(tabs)/bookings?openReservation=true")
     },
     {
       label: "Gym Map",

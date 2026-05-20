@@ -346,18 +346,17 @@ describe('AuthService', () => {
       user_id: 'user-1',
     });
 
-    await expect(
-      service.login(
-        { email: 'member@example.com', password: 'Password1!' },
-        'device',
-        '127.0.0.1',
-      ),
-    ).resolves.toMatchObject({
-      access_token: 'access-token',
-      user: expect.objectContaining({
-        id: 'user-1',
-      }),
-    });
+    const result = await service.login(
+      { email: 'member@example.com', password: 'Password1!' },
+      'device',
+      '127.0.0.1',
+    );
+
+    if ('otpRequired' in result) {
+      throw new Error('Expected a token login response.');
+    }
+    expect(result.access_token).toBe('access-token');
+    expect(result.user.id).toBe('user-1');
 
     expect(redis.del).toHaveBeenCalledWith(
       'auth:login_attempts:member@example.com',
@@ -365,6 +364,52 @@ describe('AuthService', () => {
     expect(redis.del).toHaveBeenCalledWith(
       'auth:login_lock:member@example.com',
     );
+  });
+
+  it('sends a verification OTP and returns otpRequired for unverified login accounts', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'staff-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'staff-1',
+      role: UserRole.staff,
+      status: UserStatus.pending,
+      email_verified_at: null,
+      profile: { first_name: 'Staff', last_name: 'One', avatar_url: null },
+    });
+    otpService.issueOtp.mockResolvedValue(undefined);
+
+    await expect(
+      service.login(
+        {
+          email: 'Staff@Example.com',
+          password: 'Password1!',
+          portal: 'team',
+        },
+        'device',
+        '127.0.0.1',
+      ),
+    ).resolves.toEqual({
+      otpRequired: true,
+      user_id: 'staff-1',
+      email: 'staff@example.com',
+      role: UserRole.staff,
+    });
+
+    expect(otpService.issueOtp).toHaveBeenCalledWith(
+      'staff-1',
+      'registration',
+      'email',
+      'staff@example.com',
+    );
+    expect(repo.createRefreshToken).not.toHaveBeenCalled();
+    expect(redis.del).toHaveBeenCalledWith(
+      'auth:login_attempts:staff@example.com',
+    );
+    expect(redis.del).toHaveBeenCalledWith('auth:login_lock:staff@example.com');
   });
 
   it('rejects team-portal login attempts for member accounts with invalid-credential semantics', async () => {
@@ -582,6 +627,58 @@ describe('AuthService', () => {
     expect(otpService.issueOtp).not.toHaveBeenCalled();
   });
 
+  it('rejects member password resets from the team portal without issuing an OTP', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'member-1',
+      provider: AuthProvider.email,
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'member-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+    });
+
+    await expect(
+      service.forgotPassword({
+        email: 'member@example.com',
+        portal: 'team',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
+  });
+
+  it('rejects team password resets from the member portal without issuing an OTP', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'staff-1',
+      provider: AuthProvider.email,
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'staff-1',
+      role: UserRole.staff,
+      status: UserStatus.active,
+    });
+
+    await expect(
+      service.forgotPassword({
+        email: 'staff@example.com',
+        portal: 'member',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
+  });
+
   it('verifies the current password for authenticated email accounts', async () => {
     repo.findAllIdentitiesForUser.mockResolvedValue([
       {
@@ -621,6 +718,34 @@ describe('AuthService', () => {
       'password_reset',
     );
     expect(otpService.consumeOtp).not.toHaveBeenCalled();
+  });
+
+  it('rejects wrong-portal reset OTP checks before validating the OTP', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'user-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+    });
+
+    await expect(
+      service.verifyResetOtp({
+        email: 'member@example.com',
+        code: '123456',
+        portal: 'team',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+
+    expect(otpService.assertOtpValid).not.toHaveBeenCalled();
   });
 
   it('changes the password and revokes active refresh tokens', async () => {
@@ -740,6 +865,37 @@ describe('AuthService', () => {
     expect(repo.revokeAllUserRefreshTokens).toHaveBeenCalledWith('user-1');
   });
 
+  it('rejects wrong-portal password resets before consuming the OTP', async () => {
+    repo.findIdentity.mockResolvedValue({
+      id: 'identity-1',
+      user_id: 'staff-1',
+      provider: AuthProvider.email,
+      credential_hash: await bcrypt.hash('Password1!', 4),
+    });
+    repo.findUserWithProfile.mockResolvedValue({
+      id: 'staff-1',
+      role: UserRole.staff,
+      status: UserStatus.active,
+    });
+
+    await expect(
+      service.resetPassword({
+        email: 'staff@example.com',
+        code: '123456',
+        new_password: 'Password2!',
+        portal: 'member',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        detail: 'Invalid credentials.',
+      },
+    });
+
+    expect(otpService.assertOtpValid).not.toHaveBeenCalled();
+    expect(otpService.consumeOtp).not.toHaveBeenCalled();
+    expect(repo.updateCredentialHash).not.toHaveBeenCalled();
+  });
+
   it('keeps resendOtp enumeration-safe when the user does not exist', async () => {
     repo.findUserById.mockResolvedValue(null);
 
@@ -750,7 +906,53 @@ describe('AuthService', () => {
     expect(otpService.issueOtp).not.toHaveBeenCalled();
   });
 
-  it('creates staff accounts as pending and issues registration OTP', async () => {
+  it('creates admin accounts as pending without issuing registration OTP', async () => {
+    repo.findIdentity.mockResolvedValue(null);
+    repo.createUserWithProfile.mockResolvedValue({ id: 'admin-2' });
+
+    const result = await service.adminCreateUser(
+      {
+        email: 'admin2@example.com',
+        password: 'Password1!',
+        first_name: 'Admin',
+        last_name: 'Two',
+        role: 'admin',
+      },
+      'admin-1',
+      UserRole.admin,
+      '127.0.0.1',
+    );
+
+    expect(result).toEqual({
+      user_id: 'admin-2',
+      email: 'admin2@example.com',
+      role: 'admin',
+    });
+    expect(repo.createUserWithProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: UserRole.admin,
+        status: UserStatus.pending,
+      }),
+    );
+    const createUserCalls = repo.createUserWithProfile.mock.calls as Array<
+      [
+        {
+          emailVerifiedAt?: Date;
+          qrCodeToken?: string;
+        },
+      ]
+    >;
+    const createUserArgs = createUserCalls[0]?.[0] as {
+      emailVerifiedAt?: Date;
+      qrCodeToken?: string;
+    };
+    expect(createUserArgs.emailVerifiedAt).toBeUndefined();
+    expect(createUserArgs.qrCodeToken).toBeUndefined();
+    expect(repo.markEmailIdentityVerified).not.toHaveBeenCalled();
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
+  });
+
+  it('creates staff accounts as pending without issuing registration OTP', async () => {
     repo.findIdentity.mockResolvedValue(null);
     repo.createUserWithProfile.mockResolvedValue({ id: 'staff-1' });
 
@@ -794,12 +996,7 @@ describe('AuthService', () => {
     expect(createUserArgs.emailVerifiedAt).toBeUndefined();
     expect(createUserArgs.qrCodeToken).toBeUndefined();
     expect(repo.markEmailIdentityVerified).not.toHaveBeenCalled();
-    expect(otpService.issueOtp).toHaveBeenCalledWith(
-      'staff-1',
-      'registration',
-      'email',
-      'staff@example.com',
-    );
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       USER_REGISTERED_EVENT,
       expect.anything(),
@@ -816,7 +1013,7 @@ describe('AuthService', () => {
     );
   });
 
-  it('creates member accounts as pending and issues registration OTP', async () => {
+  it('creates member accounts as pending without issuing registration OTP', async () => {
     repo.findIdentity.mockResolvedValue(null);
     repo.createUserWithProfile.mockResolvedValue({ id: 'member-1' });
 
@@ -859,12 +1056,7 @@ describe('AuthService', () => {
     expect(createUserArgs.emailVerifiedAt).toBeUndefined();
     expect(createUserArgs.qrCodeToken).toBeUndefined();
     expect(repo.markEmailIdentityVerified).not.toHaveBeenCalled();
-    expect(otpService.issueOtp).toHaveBeenCalledWith(
-      'member-1',
-      'registration',
-      'email',
-      'member@example.com',
-    );
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       USER_REGISTERED_EVENT,
       expect.anything(),
@@ -881,7 +1073,7 @@ describe('AuthService', () => {
     );
   });
 
-  it('creates coach accounts with a coach profile and registration OTP', async () => {
+  it('creates coach accounts with a coach profile without issuing registration OTP', async () => {
     repo.findIdentity.mockResolvedValue(null);
     repo.createUserWithProfile.mockResolvedValue({ id: 'coach-1' });
     repo.createCoachProfile.mockResolvedValue({ id: 'coach-profile-1' });
@@ -910,13 +1102,10 @@ describe('AuthService', () => {
         status: UserStatus.pending,
       }),
     );
-    expect(repo.createCoachProfile).toHaveBeenCalledWith('coach-1');
-    expect(otpService.issueOtp).toHaveBeenCalledWith(
-      'coach-1',
-      'registration',
-      'email',
-      'coach@example.com',
-    );
+    expect(repo.createCoachProfile).toHaveBeenCalledWith('coach-1', {
+      displayName: 'Coach One',
+    });
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
   });
 
   it('rejects staff attempts to create admin accounts', async () => {

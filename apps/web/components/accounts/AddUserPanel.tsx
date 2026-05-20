@@ -2,9 +2,10 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  ChevronUp,
   KeyRound,
   Lock,
   Mail,
@@ -74,44 +75,44 @@ const ROLE_OPTIONS = [
   {
     value: "member",
     label: "Member",
-    eyebrow: "OTP on create",
-    summary: "Starts pending until email verification.",
+    eyebrow: "Login verification",
+    summary: "Starts pending until login verification.",
     access: "Member app access",
-    state: "Pending verification",
-    automation: "OTP email is sent automatically",
+    state: "Not Verified",
+    automation: "OTP email is sent on first sign-in",
     icon: Users,
     note: "Member account with verification required before active use.",
   },
   {
     value: "staff",
     label: "Staff",
-    eyebrow: "OTP on create",
-    summary: "Starts pending until email verification.",
+    eyebrow: "Temporary password",
+    summary: "Starts pending until login verification.",
     access: "Operational admin access",
-    state: "Pending verification",
-    automation: "OTP email is sent automatically",
+    state: "Not Verified",
+    automation: "OTP email is sent on first sign-in",
     icon: UserCog,
     note: "Operational account with verification required before active use.",
   },
   {
     value: "coach",
     label: "Coach",
-    eyebrow: "OTP on create",
-    summary: "Starts pending until email verification.",
+    eyebrow: "Temporary password",
+    summary: "Starts pending until login verification.",
     access: "Coach web profile access",
-    state: "Pending verification",
-    automation: "OTP email is sent automatically",
+    state: "Not Verified",
+    automation: "OTP email is sent on first sign-in",
     icon: UserRound,
     note: "Coach account with verification required before active use.",
   },
   {
     value: "admin",
     label: "Admin",
-    eyebrow: "OTP on create",
-    summary: "Starts pending until email verification.",
+    eyebrow: "Temporary password",
+    summary: "Starts pending until login verification.",
     access: "Full admin access",
-    state: "Pending verification",
-    automation: "OTP email is sent automatically",
+    state: "Not Verified",
+    automation: "OTP email is sent on first sign-in",
     icon: ShieldCheck,
     note: "Full-access admin account with verification required before active use.",
   },
@@ -128,6 +129,7 @@ const FIELD_CARD_STYLE: CSSProperties = {
   padding: 12,
   borderRadius: 8,
 };
+const CREATE_PANE_SCROLL_MAX_HEIGHT = "calc(100dvh - 176px)";
 
 const PERSON_NAME_PATTERN = /^[\p{L}]+(?:[ '-][\p{L}]+)*$/u;
 const UPPERCASE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -237,6 +239,8 @@ export default function AddUserPanel({
   const { user } = useAuth();
   const { colors, onBrandTextColor } = useTheme();
   const [reviewData, setReviewData] = useState<AdminCreateUserData | null>(null);
+  const [roleOptionsOpen, setRoleOptionsOpen] = useState(false);
+  const roleOptionsPanelId = useId();
   const isStaffCreator = user?.role === "STAFF";
   const primaryActionTextColor = onBrandTextColor;
   const resolver = zodResolver(adminCreateUserSchema) as Resolver<AdminCreateUserFormValues>;
@@ -344,6 +348,8 @@ export default function AddUserPanel({
       password: passwordValue,
       phone: normalizedPhone,
     });
+  const reviewNextStepCopy =
+    "After confirmation, the account is created in Not Verified status. The verification OTP email is sent when the account holder signs in.";
 
   const reviewBlockers = useMemo(() => {
     const blockers: string[] = [];
@@ -458,7 +464,7 @@ export default function AddUserPanel({
             display: "grid",
             gap: 3,
             padding: "12px 14px",
-            borderRadius: 16,
+            borderRadius: 8,
             border: `1px solid ${colors.border}`,
             backgroundColor: `${colors.surface}d8`,
           }}
@@ -486,6 +492,8 @@ export default function AddUserPanel({
         display: "grid",
         gap: 0,
         boxShadow: "none",
+        height: "100%",
+        minHeight: 0,
       }}
     >
       <form
@@ -499,7 +507,7 @@ export default function AddUserPanel({
 
           openReviewStep();
         }}
-        style={{ display: "grid", gap: 10 }}
+        style={{ display: "grid", gap: 10, height: "100%", minHeight: 0 }}
       >
         <input type="hidden" {...register("role")} />
 
@@ -511,6 +519,8 @@ export default function AddUserPanel({
               gridTemplateColumns: "minmax(0, 1.15fr) minmax(300px, 0.85fr)",
               gap: 20,
               alignItems: "start",
+              height: "100%",
+              minHeight: 0,
             }}
           >
             <div
@@ -546,9 +556,7 @@ export default function AddUserPanel({
                   {
                     label: "Email",
                     value: reviewData?.email ?? "",
-                    detail: reviewRoleMeta.value === "member"
-                      ? "This address receives the verification OTP."
-                      : "This address can sign in immediately after creation.",
+                    detail: "This address receives the verification OTP when the account holder signs in.",
                   },
                   {
                     label: "Phone",
@@ -569,7 +577,7 @@ export default function AddUserPanel({
                       display: "grid",
                       gap: 4,
                       padding: "14px 16px",
-                      borderRadius: 18,
+                      borderRadius: 8,
                       border: `1px solid ${colors.border}`,
                       backgroundColor: `${colors.surface}dd`,
                     }}
@@ -592,7 +600,7 @@ export default function AddUserPanel({
                   display: "grid",
                   gap: 10,
                   padding: "14px 16px",
-                  borderRadius: 18,
+                  borderRadius: 8,
                   border: `1px solid ${colors.border}`,
                   backgroundColor: `${colors.surface}dd`,
                 }}
@@ -601,15 +609,25 @@ export default function AddUserPanel({
                   What happens next
                 </FitText>
                 <FitText style={{ fontSize: 13.5, lineHeight: 1.6, color: colors.textSecondary }}>
-                  After confirmation, the account is created in pending
-                  verification status and the OTP email is sent automatically.
+                  {reviewNextStepCopy}
                 </FitText>
               </div>
             </div>
 
             <div
               className="add-user-policy-column"
-              style={{ display: "grid", gap: 16, position: "sticky", top: 16, alignSelf: "start" }}
+              style={{
+                display: "grid",
+                gap: 16,
+                position: "sticky",
+                top: 16,
+                alignSelf: "start",
+                height: "100%",
+                minHeight: 0,
+                maxHeight: CREATE_PANE_SCROLL_MAX_HEIGHT,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
             >
               {renderSnapshotCard(
                 "Account snapshot",
@@ -650,114 +668,6 @@ export default function AddUserPanel({
         ) : (
           <>
             <div
-              className="add-user-role-shell"
-              style={{
-                display: "none",
-                gap: 10,
-                padding: 18,
-                borderRadius: 8,
-                border: `1px solid ${roleError ? colors.danger : colors.border}`,
-                backgroundColor: `${colors.surface}c7`,
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary }}>
-                  Account type
-                </FitText>
-                <FitText style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}>
-                  Choose what this person needs access to.
-                </FitText>
-              </div>
-              <div
-                className="add-user-role-grid"
-                role="tablist"
-                aria-label="Create account role selector"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${availableRoleOptions.length}, minmax(0, 1fr))`,
-                  gap: 10,
-                }}
-              >
-                {availableRoleOptions.map((option) => {
-                  const Icon = option.icon;
-                  const isActive = activeRole === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => {
-                        setValue("role", option.value, {
-                          shouldDirty: true,
-                          shouldTouch: true,
-                          shouldValidate: true,
-                        });
-                      }}
-                      className="add-user-role-option"
-                      style={{
-                        borderRadius: 8,
-                        border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
-                        background: isActive
-                          ? `linear-gradient(180deg, ${colors.brand}20 0%, ${colors.surfaceRaised} 100%)`
-                          : `${colors.surfaceRaised}cc`,
-                        padding: 12,
-                        display: "grid",
-                        gap: 10,
-                        textAlign: "left",
-                        boxShadow: isActive ? `0 22px 40px -28px ${colors.brand}` : "none",
-                        cursor: submitting ? "not-allowed" : "pointer",
-                        opacity: submitting ? 0.72 : 1,
-                      }}
-                      disabled={submitting}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                        <div
-                          style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: 8,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            border: `1px solid ${isActive ? `${colors.brand}44` : colors.border}`,
-                            backgroundColor: isActive ? `${colors.brand}18` : `${colors.surface}cc`,
-                            color: isActive ? colors.brand : colors.textMuted,
-                          }}
-                        >
-                          <Icon size={18} strokeWidth={2.1} />
-                        </div>
-                        <FitText
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: isActive ? colors.brand : colors.textMuted,
-                            letterSpacing: "0.08em",
-                          }}
-                        >
-                          {option.eyebrow}
-                        </FitText>
-                      </div>
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <FitText style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary }}>
-                          {option.label}
-                        </FitText>
-                        <FitText style={{ fontSize: 12, lineHeight: 1.45, color: colors.textSecondary }}>
-                          {option.summary}
-                        </FitText>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <FitText style={{ fontSize: 12, color: roleError ? colors.danger : colors.textMuted }}>
-                {roleError ?? (isStaffCreator
-                  ? `${activeRoleMeta.note} Staff can create staff and member accounts only.`
-                  : activeRoleMeta.note)}
-              </FitText>
-            </div>
-
-            <div
               className="add-user-workspace"
               style={{
                 display: "grid",
@@ -768,15 +678,17 @@ export default function AddUserPanel({
                 borderRadius: 8,
                 border: `1px solid ${colors.border}`,
                 backgroundColor: colors.surfaceRaised,
+                height: "100%",
+                minHeight: 0,
               }}
             >
               <div
                 className="create-account-card"
                 style={{
                   borderRadius: 8,
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surface,
-                  padding: 12,
+                  border: "none",
+                  backgroundColor: "transparent",
+                  padding: 0,
                   display: "grid",
                   gridTemplateColumns: "1fr",
                   gap: 10,
@@ -789,7 +701,7 @@ export default function AddUserPanel({
                 <FitButton
                   type="button"
                   variant="ghost"
-                  label={isReviewStep ? "Back to editing" : "Back to accounts"}
+                  label="Back"
                   icon={ArrowLeft}
                   iconSize={15}
                   onClick={() => {
@@ -864,14 +776,13 @@ export default function AddUserPanel({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr",
-                      gap: 5,
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 6,
                     }}
                   >
                     {[
                       ["Access", activeRoleMeta.access],
-                      ["State", activeRoleMeta.state],
-                      ["Automation", activeRoleMeta.automation],
+                      ["Status", activeRoleMeta.state],
                     ].map(([label, value]) => (
                       <div
                         key={label}
@@ -886,16 +797,20 @@ export default function AddUserPanel({
                           textAlign: "left",
                         }}
                       >
-                        <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted, letterSpacing: "0.05em" }}>
+                        <FitText style={{ fontSize: 10, fontWeight: 500, color: colors.textMuted, letterSpacing: "0.05em" }}>
                           {label}
                         </FitText>
-                        <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary, overflowWrap: "anywhere" }}>
+                        <FitText style={{ fontSize: 12, fontWeight: 500, color: colors.textSecondary, overflowWrap: "anywhere" }}>
                           {value}
                         </FitText>
                       </div>
                     ))}
                   </div>
+                  <FitText style={{ fontSize: 11.5, lineHeight: 1.45, color: colors.textSecondary, textAlign: "left" }}>
+                    {activeRoleMeta.automation}
+                  </FitText>
                   <div
+                    id={roleOptionsPanelId}
                     className="create-account-role-stack"
                     role="tablist"
                     aria-label="Create account role selector"
@@ -914,12 +829,20 @@ export default function AddUserPanel({
                           type="button"
                           role="tab"
                           aria-selected={isActive}
+                          aria-controls={isActive ? roleOptionsPanelId : undefined}
+                          aria-expanded={isActive ? roleOptionsOpen : undefined}
                           onClick={() => {
+                            if (isActive) {
+                              setRoleOptionsOpen((current) => !current);
+                              return;
+                            }
+
                             setValue("role", option.value, {
                               shouldDirty: true,
                               shouldTouch: true,
                               shouldValidate: true,
                             });
+                            setRoleOptionsOpen(false);
                           }}
                           disabled={submitting}
                           style={{
@@ -929,14 +852,15 @@ export default function AddUserPanel({
                             border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
                             backgroundColor: isActive ? `${colors.brand}16` : colors.surfaceRaised,
                             color: isActive ? colors.brand : colors.textPrimary,
-                            display: "grid",
-                            gridTemplateColumns: "32px minmax(0, 1fr)",
+                            display: isActive || roleOptionsOpen ? "grid" : "none",
+                            gridTemplateColumns: isActive ? "32px minmax(0, 1fr) auto" : "32px minmax(0, 1fr)",
                             alignItems: "center",
                             gap: 10,
                             padding: "7px 9px",
                             textAlign: "left",
                             cursor: submitting ? "not-allowed" : "pointer",
                             opacity: submitting ? 0.72 : 1,
+                            order: isActive ? -1 : undefined,
                           }}
                         >
                           <span
@@ -961,6 +885,17 @@ export default function AddUserPanel({
                               {option.summary}
                             </FitText>
                           </span>
+                          {isActive ? (
+                            <ChevronUp
+                              size={15}
+                              color={roleOptionsOpen ? colors.brand : colors.textMuted}
+                              style={{
+                                justifySelf: "end",
+                                transform: roleOptionsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                transition: "transform 180ms ease",
+                              }}
+                            />
+                          ) : null}
                         </button>
                       );
                     })}
@@ -972,14 +907,28 @@ export default function AddUserPanel({
                   </FitText>
                 </div>
               </div>
-              <div className="add-user-form-column" style={{ display: "grid", gap: 12 }}>
+              <div
+                className="add-user-form-column"
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  minHeight: 0,
+                  minWidth: 0,
+                  height: "100%",
+                  maxHeight: CREATE_PANE_SCROLL_MAX_HEIGHT,
+                  overflowY: "auto",
+                  paddingRight: 4,
+                }}
+              >
                 <div
                   className="add-user-card"
                   style={{
-                    ...FIELD_CARD_STYLE,
+                    display: "grid",
+                    gap: 10,
+                    padding: 0,
                     borderRadius: 8,
-                    border: `1px solid ${colors.border}`,
-                    backgroundColor: colors.surface,
+                    border: "none",
+                    backgroundColor: "transparent",
                   }}
                 >
                   <div style={{ display: "grid", gap: 4 }}>
@@ -994,7 +943,7 @@ export default function AddUserPanel({
                     style={{
                       display: "grid",
                       gap: 10,
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gridTemplateColumns: "1fr",
                     }}
                   >
                     <FitInputField
@@ -1098,18 +1047,17 @@ export default function AddUserPanel({
                 <div
                   className="add-user-card"
                   style={{
-                    ...FIELD_CARD_STYLE,
+                    display: "grid",
+                    gap: 10,
+                    padding: 0,
                     borderRadius: 8,
-                    border: `1px solid ${colors.border}`,
-                    backgroundColor: colors.surface,
+                    border: "none",
+                    backgroundColor: "transparent",
                   }}
                 >
-                  <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ display: "grid", gap: 2 }}>
                     <FitText style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary }}>
                       Sign-in details
-                    </FitText>
-                    <FitText style={{ fontSize: 12, lineHeight: 1.45, color: colors.textSecondary }}>
-                      Temporary credentials are only here until the person sets their own access.
                     </FitText>
                   </div>
                   <div
@@ -1153,9 +1101,6 @@ export default function AddUserPanel({
                     />
                   </div>
                   <div style={{ display: "grid", gap: 4 }}>
-                    <FitText style={{ fontSize: 11.5, lineHeight: 1.6, color: colors.textSecondary }}>
-                      Use 10+ characters with uppercase, lowercase, number, symbol, and no spaces.
-                    </FitText>
                     <FitText style={{ fontSize: 11.5, lineHeight: 1.6, color: passwordReady ? colors.success : colors.textMuted }}>
                       {formatPasswordStatus(passwordChecks)}
                     </FitText>
@@ -1212,66 +1157,36 @@ export default function AddUserPanel({
                       ))}
                     </div>
                   ) : null}
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <FitButton
+                      type="button"
+                      variant="ghost"
+                      label="Cancel"
+                      onClick={onBack}
+                      disabled={submitting}
+                    />
+                    <FitButton
+                      type="button"
+                      variant="primary"
+                      label="Create account"
+                      icon={UserPlus}
+                      iconSize={14}
+                      onClick={openReviewStep}
+                      disabled={submitting || !formReadyForReview}
+                      style={{
+                        backgroundColor: colors.brand,
+                        color: primaryActionTextColor,
+                        border: `1px solid ${colors.brand}`,
+                        boxShadow: `0 18px 34px -26px ${colors.brand}`,
+                      }}
+                      textStyle={{ color: primaryActionTextColor }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </>
         )}
-
-        {!isReviewStep ? (
-          <div
-            className="add-user-footer"
-                style={{
-                  position: "static",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 14,
-              flexWrap: "wrap",
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surface,
-              boxShadow: "none",
-            }}
-          >
-            <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
-              <FitText style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.08em" }}>
-                Ready to review
-              </FitText>
-              <FitText style={{ fontSize: 12.5, fontWeight: 700, color: colors.textPrimary }}>
-                {formReadyForReview
-                  ? "Create account now opens the review step before anything is submitted."
-                  : "Check the alert above to see exactly what is still blocking review."}
-              </FitText>
-            </div>
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <FitButton
-                type="button"
-                variant="ghost"
-                label="Cancel"
-                onClick={onBack}
-                disabled={submitting}
-              />
-              <FitButton
-                type="button"
-                variant="primary"
-                label="Create account"
-                icon={UserPlus}
-                iconSize={14}
-                onClick={openReviewStep}
-                disabled={submitting || !formReadyForReview}
-                style={{
-                  backgroundColor: colors.brand,
-                  color: primaryActionTextColor,
-                  border: `1px solid ${colors.brand}`,
-                  boxShadow: `0 18px 34px -26px ${colors.brand}`,
-                }}
-                textStyle={{ color: primaryActionTextColor }}
-              />
-            </div>
-          </div>
-        ) : null}
       </form>
       <style>{`
         .add-user-panel {
@@ -1281,8 +1196,7 @@ export default function AddUserPanel({
         .add-user-role-option,
         .add-user-card,
         .add-user-summary-card,
-        .create-account-card,
-        .add-user-footer {
+        .create-account-card {
           transition: border-color 140ms ease-out, background-color 140ms ease-out;
         }
 
@@ -1312,6 +1226,13 @@ export default function AddUserPanel({
           .add-user-policy-column {
             position: static !important;
           }
+
+          .add-user-form-column,
+          .add-user-policy-column {
+            max-height: none !important;
+            overflow-y: visible !important;
+            padding-right: 0 !important;
+          }
         }
 
         @media (max-width: 760px) {
@@ -1319,7 +1240,6 @@ export default function AddUserPanel({
             padding: 0 !important;
           }
 
-          .add-user-role-grid,
           .add-user-policy-column,
           .create-account-card,
           .add-user-password-shell {
@@ -1335,10 +1255,6 @@ export default function AddUserPanel({
           .create-account-card > div:last-child > div:last-child {
             grid-template-columns: 1fr !important;
           }
-
-          .add-user-footer {
-            padding: 14px !important;
-          }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1349,8 +1265,7 @@ export default function AddUserPanel({
           .add-user-role-option,
           .add-user-card,
           .add-user-summary-card,
-          .create-account-card,
-          .add-user-footer {
+          .create-account-card {
             transition: none !important;
           }
         }

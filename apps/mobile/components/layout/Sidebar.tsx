@@ -1,10 +1,12 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
-import { useRouter, useSegments } from "expo-router";
+import { type Href, useRouter, useSegments } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
+import { type TabKey } from "@fittrack/app-config";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { TIER_LABELS, TIER_LEVELS } from "@/data/member";
@@ -17,17 +19,32 @@ import FitButton from "@/components/fit/FitButton";
 import FitAvatarImage from "@/components/fit/FitAvatarImage";
 import { MOBILE_API_BASE_URL } from "@/lib/api-client";
 
-type NavItem = { label: string; icon: LucideIcon; route: string };
+export const SIDEBAR_NAV_LABELS_BY_TAB: Record<TabKey, string> = {
+  home: "Home",
+  facilities: "Facilities",
+  bookings: "Bookings",
+  assessments: "Assessments",
+  nutrition: "Nutrition",
+  mastery: "Muscle Mastery",
+  workout: "Workout",
+  chathistory: "BrodigyAI",
+  chatbot: "BrodigyAI",
+  profile: "Profile",
+  settings: "Settings"
+};
+
+type SidebarRoute = Href & string;
+type NavItem = { label: string; icon: LucideIcon; route: SidebarRoute };
 const NAV_ITEMS: NavItem[] = [
-  { label: "Home", icon: Home, route: "/(tabs)/home" },
-  { label: "Bookings", icon: CalendarDays, route: "/(tabs)/bookings" },
-  { label: "Assessments", icon: ClipboardCheck, route: "/(tabs)/assessments" },
-  { label: "Facilities", icon: Map, route: "/(tabs)/facilities" },
-  { label: "Nutrition", icon: Apple, route: "/(tabs)/nutrition" },
-  { label: "Muscle Mastery", icon: Trophy, route: "/(tabs)/mastery" },
-  { label: "Workout", icon: Dumbbell, route: "/(tabs)/workout" },
-  { label: "BrodigyAI", icon: Bot, route: "/(tabs)/chathistory" },
-  { label: "Settings", icon: Settings, route: "/(tabs)/settings" }
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.home, icon: Home, route: "/(tabs)/home" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.bookings, icon: CalendarDays, route: "/(tabs)/bookings" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.assessments, icon: ClipboardCheck, route: "/(tabs)/assessments" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.facilities, icon: Map, route: "/(tabs)/facilities" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.nutrition, icon: Apple, route: "/(tabs)/nutrition" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.mastery, icon: Trophy, route: "/(tabs)/mastery" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.workout, icon: Dumbbell, route: "/(tabs)/workout" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
 ];
 
 type Props = {
@@ -43,7 +60,9 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const { ic } = useThemeTransitionAnim();
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const s = useMemo(() => makeSidebarStyles(colors, activeIconColor), [colors, activeIconColor]);
+  const bottomPadding = Math.max(insets.bottom, 64) + 16;
 
   const slideAnim = useSharedValue(-SIDEBAR_WIDTH);
   const [isVisible, setIsVisible] = useState(isOpen);
@@ -74,7 +93,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
       slideAnim.value = -SIDEBAR_WIDTH;
       setIsVisible(false);
     }
-  }, [isOpen, shouldAnimate]);
+  }, [isOpen, shouldAnimate, slideAnim]);
 
   const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideAnim.value }] }));
   const sidebarBgStyle = useAnimatedStyle(() => ({
@@ -95,7 +114,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
     (route: string) => segments.includes(route.split("/").pop() as never),
     [segments]
   );
-  const navigateFromSidebar = useCallback((route: string) => {
+  const navigateFromSidebar = useCallback((route: SidebarRoute) => {
     if (isActive(route)) {
       onClose();
       return;
@@ -103,7 +122,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
     onClose();
     requestAnimationFrame(() => {
       startTransition(() => {
-        router.navigate(route as any);
+        router.navigate(route);
       });
     });
   }, [isActive, onClose, router]);
@@ -185,7 +204,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
                     />
                 );
               })}
-              <Animated.View style={[s.bottomSection, bottomBorderStyle]}>
+              <Animated.View style={[s.bottomSection, bottomBorderStyle, { paddingBottom: bottomPadding }]}>
                 <FitButton
                     label="Sign Out"
                     icon={LogOut}

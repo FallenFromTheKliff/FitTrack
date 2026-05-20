@@ -118,14 +118,26 @@ export default function DetailsModal({
       icon={FileText}
       hideFooterDivider
       footer={readOnly ? undefined : (
-        <FitButton
-          variant="primary"
-          label={submitLabel}
-          loading={isLoading}
-          onClick={handleSubmit}
-          disabled={disableSubmit}
-          style={{ flex: 1 }}
-        />
+        <>
+          {dangerLabel && onDanger ? (
+            <FitButton
+              variant="danger"
+              label={dangerLabel}
+              icon={dangerIcon}
+              onClick={onDanger}
+              disabled={dangerDisabled}
+              style={{ flex: 1 }}
+            />
+          ) : null}
+          <FitButton
+            variant="primary"
+            label={submitLabel}
+            loading={isLoading}
+            onClick={handleSubmit}
+            disabled={disableSubmit}
+            style={{ flex: 1 }}
+          />
+        </>
       )}
     >
       {readOnly && readOnlyBanner && (
@@ -218,17 +230,6 @@ export default function DetailsModal({
         );
       })}
       {children}
-      {!readOnly && dangerLabel && onDanger && (
-        <FitButton
-          variant="danger"
-          label={dangerLabel}
-          icon={dangerIcon}
-          fullWidth
-          onClick={onDanger}
-          disabled={dangerDisabled}
-          style={{ marginTop: 8 }}
-        />
-      )}
     </FitModal>
   );
 }

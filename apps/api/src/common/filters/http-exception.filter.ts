@@ -51,8 +51,25 @@ type MulterLikeError = Error & {
   code?: string;
 };
 
+const MULTER_ERROR_CODES = new Set([
+  'LIMIT_PART_COUNT',
+  'LIMIT_FILE_SIZE',
+  'LIMIT_FILE_COUNT',
+  'LIMIT_FIELD_KEY',
+  'LIMIT_FIELD_VALUE',
+  'LIMIT_FIELD_COUNT',
+  'LIMIT_UNEXPECTED_FILE',
+  'MISSING_FIELD_NAME',
+]);
+
 function isMulterLikeError(value: unknown): value is MulterLikeError {
-  return value instanceof Error && 'code' in value;
+  const code = (value as { code?: unknown }).code;
+
+  return (
+    value instanceof Error &&
+    typeof code === 'string' &&
+    MULTER_ERROR_CODES.has(code)
+  );
 }
 
 /**
@@ -80,7 +97,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
           ? exception.stack
           : isMulterLikeError(exception)
             ? exception.message
-            : 'Unknown error',
+            : exception instanceof Error
+              ? (exception.stack ?? exception.message)
+              : 'Unknown error',
       );
     }
 
@@ -121,15 +140,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
       };
     }
 
-    return {
-      status: HttpStatus.BAD_REQUEST,
-      body: {
-        type: 'BAD_REQUEST',
-        title: 'Invalid File Upload',
+    if (isMulterLikeError(exception)) {
+      return {
         status: HttpStatus.BAD_REQUEST,
-        detail: isMulterLikeError(exception)
-          ? exception.message
-          : 'Invalid file upload.',
+        body: {
+          type: 'BAD_REQUEST',
+          title: 'Invalid File Upload',
+          status: HttpStatus.BAD_REQUEST,
+          detail: exception.message || 'Invalid file upload.',
+        },
+      };
+    }
+
+    return {
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      body: {
+        type: 'INTERNAL_SERVER_ERROR',
+        title: 'Internal Server Error',
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        detail: 'An unexpected error occurred.',
       },
     };
   }

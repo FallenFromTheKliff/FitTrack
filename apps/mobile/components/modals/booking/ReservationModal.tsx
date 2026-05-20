@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Linking, Modal, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import {
   CalendarDays,
@@ -9,7 +9,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react-native";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   PAYMONGO_AVAILABILITY,
   WEEKDAY_NAMES,
@@ -42,6 +42,7 @@ import { FitButton, FitText, FitTextInput } from "@/components/fit";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import NoticeModal from "@/components/modals/shared/NoticeModal";
+import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import TimeSlotModal, {
   type TimeSlot,
 } from "@/components/modals/shared/TimeSlotModal";
@@ -137,6 +138,36 @@ function getUpcomingAvailableDates(coaches: CoachProfileRecord[]) {
   }
 
   return dates;
+}
+
+function getDateParts(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map((part) => Number(part));
+  return { day, month, year };
+}
+
+function formatDateKey(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getMonthDateKeys(year: number, month: number) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, index) =>
+    formatDateKey(year, month, index + 1),
+  );
+}
+
+function hasFutureAvailableVenueSlot(
+  dateKey: string,
+  slots: VenueAvailabilityRecord[],
+) {
+  const now = new Date();
+  const todayKey = getTodayString();
+
+  return slots.some((slot) => {
+    if (slot.status !== "available") return false;
+    if (dateKey !== todayKey) return true;
+    return new Date(slot.startTime) > now;
+  });
 }
 
 function coachCoversReservationWindow(
@@ -248,6 +279,10 @@ export default function ReservationModal({
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedVenue, setSelectedVenue] = useState<VenueRecord | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
+  const [calendarCursor, setCalendarCursor] = useState(() => {
+    const initialDate = getDateParts(getTodayString());
+    return { month: initialDate.month, year: initialDate.year };
+  });
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [isPaymongoNoticeOpen, setIsPaymongoNoticeOpen] = useState(false);
   const [reservationConfirmation, setReservationConfirmation] =
@@ -296,9 +331,56 @@ export default function ReservationModal({
       ),
     [coaches, date, endTime, startTime],
   );
-  const highlightedCoachDates = useMemo(
+  const fallbackCoachAvailabilityDates = useMemo(
     () => getUpcomingAvailableDates(coaches),
     [coaches],
+  );
+  const calendarDateKeys = useMemo(
+    () => getMonthDateKeys(calendarCursor.year, calendarCursor.month),
+    [calendarCursor.month, calendarCursor.year],
+  );
+  const venueCalendarQueries = useQueries({
+    queries: calendarDateKeys.map((dateKey) => ({
+      ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
+        mobileApiClient,
+        selectedVenue?.id,
+        dateKey,
+      ),
+      enabled: isVisible && isCalOpen && Boolean(selectedVenue),
+      staleTime: 30_000,
+    })),
+  });
+  const { blockedVenueDates, highlightedVenueDates } = useMemo(() => {
+    const highlightedDates: string[] = [];
+    const blockedDates: string[] = [];
+
+    venueCalendarQueries.forEach((query, index) => {
+      const dateKey = calendarDateKeys[index];
+      const slots = query.data as VenueAvailabilityRecord[] | undefined;
+      if (!dateKey || !slots) return;
+
+      if (hasFutureAvailableVenueSlot(dateKey, slots)) {
+        highlightedDates.push(dateKey);
+        return;
+      }
+
+      blockedDates.push(dateKey);
+    });
+
+    return { blockedVenueDates: blockedDates, highlightedVenueDates: highlightedDates };
+  }, [calendarDateKeys, venueCalendarQueries]);
+  const calendarHighlightedDates =
+    selectedVenue != null ? highlightedVenueDates : fallbackCoachAvailabilityDates;
+  const calendarBlockedDates = selectedVenue != null ? blockedVenueDates : [];
+  const handleCalendarMonthChange = useCallback(
+    (view: { month: number; year: number }) => {
+      setCalendarCursor((current) =>
+        current.month === view.month && current.year === view.year
+          ? current
+          : view,
+      );
+    },
+    [],
   );
 
   const { data: availability = [] } = useQuery({
@@ -673,7 +755,9 @@ export default function ReservationModal({
           isVisible &&
           reservationConfirmation == null &&
           successNotice == null &&
-          !isPaymongoNoticeOpen
+          !isPaymongoNoticeOpen &&
+          !isCalOpen &&
+          !isTimeOpen
         }
         transparent
         animationType="none"
@@ -695,9 +779,10 @@ export default function ReservationModal({
               </FitText>
             </View>
           </Animated.View>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
+          <FitModalScrollView
+            style={s.middle}
             contentContainerStyle={s.body}
+            resetKey={isVisible}
           >
             <FitText style={s.sectionLabel}>DATE</FitText>
             <Pressable
@@ -1165,7 +1250,7 @@ export default function ReservationModal({
             {notes.length === 0 ? (
               <FitText style={s.notesEmptyHint}>Tap + to add a note</FitText>
             ) : null}
-          </ScrollView>
+          </FitModalScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton
               label="Cancel"
@@ -1224,7 +1309,9 @@ export default function ReservationModal({
         blockPast
         defaultYear={new Date().getFullYear()}
         defaultMonth={new Date().getMonth() + 1}
-        highlightedDates={highlightedCoachDates}
+        blockedDates={calendarBlockedDates}
+        highlightedDates={calendarHighlightedDates}
+        onVisibleMonthChange={handleCalendarMonthChange}
         onSelect={(selectedDate) => {
           setDate(selectedDate);
           setIsCalOpen(false);

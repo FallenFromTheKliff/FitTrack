@@ -1,5 +1,6 @@
 import {
   coerceAuthPhilippineMobileInput,
+  adminCreateUserSchema,
   formatAuthPhilippineMobileDigits,
   isSupportedAuthPhilippineMobileNumber,
   normalizeAuthPhilippineMobileNumber,
@@ -63,6 +64,26 @@ describe('auth phone normalization helpers', () => {
         confirmPassword: 'Password1!',
       }).success,
     ).toBe(false);
+  });
+
+  it('keeps admin-created account phone optional after repeated parsing', () => {
+    const basePayload = {
+      firstName: 'Fit',
+      lastName: 'Track',
+      email: 'staff@gmail.com',
+      password: 'Password1!',
+      role: 'staff' as const,
+    };
+
+    expect(adminCreateUserSchema.parse(basePayload).phone_no).toBeUndefined();
+
+    const parsedBlankPhone = adminCreateUserSchema.parse({
+      ...basePayload,
+      phone_no: '',
+    });
+
+    expect(parsedBlankPhone.phone_no).toBeUndefined();
+    expect(adminCreateUserSchema.parse(parsedBlankPhone).phone_no).toBeUndefined();
   });
 
   it('coerces raw input to the correct prefix mode and stored value', () => {

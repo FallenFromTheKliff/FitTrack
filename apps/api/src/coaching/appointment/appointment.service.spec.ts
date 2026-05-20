@@ -597,8 +597,11 @@ describe('AppointmentService', () => {
     await service.cancelAppointment('staff-1', UserRole.staff, 'appt-1', {
       reason: 'Manual front desk cancellation.',
     });
+    await service.cancelAppointment('coach-user-1', UserRole.coach, 'appt-1', {
+      reason: 'Coach unavailable.',
+    });
 
-    expect(repo.updateAppointment).toHaveBeenCalledTimes(2);
+    expect(repo.updateAppointment).toHaveBeenCalledTimes(3);
     expect(eventEmitter.emit).toHaveBeenCalledWith(
       'audit.log',
       expect.objectContaining({
@@ -700,6 +703,40 @@ describe('AppointmentService', () => {
       checkout_url: 'https://checkout.paymongo.test/cs_1',
       payment_id: 'payment-1',
     });
+  });
+
+  it('blocks initial payment while a paid appointment is still awaiting approval', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+    repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'pending_coach',
+      is_free_session: false,
+      total_amount: new Prisma.Decimal('1200'),
+      downpayment_amount: new Prisma.Decimal('360'),
+      balance_amount: new Prisma.Decimal('840'),
+      downpayment_paid_at: null,
+      balance_paid_at: null,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
+      duration_minutes: 60,
+      coach: { id: 'coach-1', user_id: 'coach-user-1' },
+    });
+
+    await expect(
+      service.initiateDownpayment(
+        'member-1',
+        UserRole.member,
+        'appt-1',
+        { provider: PaymentProvider.paymongo },
+        '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b2',
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+
+    expect(
+      paymentRepository.findLatestPaymentForPayableStage,
+    ).not.toHaveBeenCalled();
+    expect(paymentRepository.createPayment).not.toHaveBeenCalled();
   });
 
   it('lets staff collect a full cash payment for any member appointment using the actual total amount', async () => {
@@ -861,6 +898,41 @@ describe('AppointmentService', () => {
       expect.objectContaining({
         appointmentId: 'appt-1',
       }),
+    );
+  });
+
+  it('ignores completed coaching payments while the appointment still awaits approval', async () => {
+    paymentRepository.findPaymentByIdOrThrow.mockResolvedValue({
+      id: 'payment-1',
+      payment_stage: PaymentStage.downpayment,
+    });
+    repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'pending_coach',
+      is_free_session: false,
+      downpayment_amount: new Prisma.Decimal('360'),
+      balance_amount: new Prisma.Decimal('840'),
+      downpayment_paid_at: null,
+      balance_paid_at: null,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
+      duration_minutes: 60,
+      coach: { id: 'coach-1', user_id: 'coach-user-1' },
+    });
+
+    await service.handlePaymentCompleted({
+      paymentId: 'payment-1',
+      userId: 'member-1',
+      payableType: PayableType.coaching,
+      payableId: 'appt-1',
+      amount: '360',
+    });
+
+    expect(repo.updateAppointment).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+      APPOINTMENT_CONFIRMED_EVENT,
+      expect.anything(),
     );
   });
 

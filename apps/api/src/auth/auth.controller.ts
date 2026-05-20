@@ -27,8 +27,10 @@ import { JwtAuthGuard } from '../common/guards';
 import { RolesGuard } from '../common/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import type {
+  InternalLoginResponse,
   InternalTokenPairResponse,
   JwtPayload,
+  LoginOtpChallengeResponse,
 } from './types/jwt-payload.type';
 import { GoogleProfile } from './strategies/google.strategy';
 import type {
@@ -79,6 +81,12 @@ function stripRefreshToken(result: InternalTokenPairResponse) {
     refresh_token: result._refresh_token,
     user: result.user,
   };
+}
+
+function isLoginOtpChallenge(
+  result: InternalLoginResponse,
+): result is LoginOtpChallengeResponse {
+  return 'otpRequired' in result && result.otpRequired === true;
 }
 
 function getHeaderValue(
@@ -145,7 +153,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email + password.' })
   @ApiResponse({
     status: 200,
-    description: 'TokenPairResponse + HttpOnly cookie.',
+    description: 'TokenPairResponse + HttpOnly cookie, or OTP challenge.',
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
   @ApiResponse({ status: 423, description: 'Account locked.' })
@@ -158,6 +166,10 @@ export class AuthController {
   ) {
     const { deviceInfo, ip } = extractDeviceAndIp(req);
     const result = await this.authService.login(dto, deviceInfo, ip);
+    if (isLoginOtpChallenge(result)) {
+      return result;
+    }
+
     setRefreshCookie(res, result._refresh_token);
     return stripRefreshToken(result);
   }

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -34,7 +34,6 @@ import type {
   ActiveNutritionProfileRecord,
   Booking,
   DailyNutritionSummaryRecord,
-  FitnessLeaderboardEntryRecord,
   FitnessMasteryRank,
   MuscleMasteryRecord,
   WorkoutSessionSummaryRecord
@@ -52,7 +51,6 @@ import { makeHomeStyles, makeScreenStyles } from "@/styles/shared/ScreenStyles";
 import { getTodayString } from "@/data/bookings";
 import { toMobileBookings } from "@/utils/venueBookings";
 
-import FitButton from "@/components/fit/FitButton";
 import FitCard from "@/components/fit/FitCard";
 import FitSection from "@/components/fit/FitSection";
 import { AnimatedFitText, FitText } from "@/components/fit/FitText";
@@ -65,6 +63,7 @@ type HomeStatCard = {
 };
 
 type HomeSnapshotRow = {
+  icon: LucideIcon;
   label: string;
   progress?: number;
   subtitle: string;
@@ -243,13 +242,15 @@ export default function HomeScreen() {
     enabled: isFocused && !!user?.id && hasMemberCardAccess
   });
 
-  const venues = venuesQuery.data ?? [];
-  const bookingRecords = bookingsQuery.data ?? [];
+  const venues = useMemo(() => venuesQuery.data ?? [], [venuesQuery.data]);
+  const bookingRecords = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
   const bookings = useMemo(() => toMobileBookings(bookingRecords, venues), [bookingRecords, venues]);
   const todayBookings = useMemo(
     () => bookings.filter((booking) => booking.date === todayString && booking.status !== "cancelled"),
     [bookings, todayString]
   );
+  const visibleTodayBookings = useMemo(() => todayBookings.slice(0, 4), [todayBookings]);
+  const hiddenTodayBookingsCount = Math.max(todayBookings.length - visibleTodayBookings.length, 0);
   const selectedVenue = useMemo(
     () => venues.find((venue) => String(venue.id) === selectedBooking?.resourceId) ?? null,
     [selectedBooking?.resourceId, venues]
@@ -325,6 +326,7 @@ export default function HomeScreen() {
     if (hasMemberCardAccess) {
       return [
         {
+          icon: Target,
           label: "Nutrition Target",
           subtitle: targetCalories !== null
             ? `Logged ${loggedCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal today.`
@@ -336,6 +338,7 @@ export default function HomeScreen() {
           progress: targetCalories !== null ? clampProgress(loggedCalories / targetCalories) : undefined
         },
         {
+          icon: Dumbbell,
           label: "Workout Momentum",
           subtitle: `${completedSessionsLast7Days} completed session${completedSessionsLast7Days === 1 ? "" : "s"} across ${activeDaysLast7Days} active day${activeDaysLast7Days === 1 ? "" : "s"} in the last 7 days, with a current ${currentStreakDays}-day streak.`,
           trailingLabel: highestRankEntry?.rankDisplay ?? "Unranked",
@@ -343,6 +346,7 @@ export default function HomeScreen() {
           progress: clampProgress(completedSessionsLast7Days / 4)
         },
         {
+          icon: Trophy,
           label: "Muscle Mastery",
           subtitle: mastery.length > 0
             ? `${mastery.length} tracked muscle group${mastery.length === 1 ? "" : "s"}. ${highestRankEntry?.muscleGroup ?? "Your top group"} leads the board right now.`
@@ -362,18 +366,21 @@ export default function HomeScreen() {
 
     return [
       {
+        icon: ShieldCheck,
         label: "Member Access",
         subtitle: accessSubtitle,
         trailingLabel: memberAccessLabel,
         trailingLabelColor: memberAccessColor
       },
       {
+        icon: Sparkles,
         label: "Assistant Access",
         subtitle: "BrodigyAI chat and history stay aligned with the same member-card gate used across the mobile member stack.",
         trailingLabel: hasMemberCardAccess ? "Open" : "Locked",
         trailingLabelColor: hasMemberCardAccess ? colors.success : colors.textMuted
       },
       {
+        icon: User,
         label: "Next Step",
         subtitle: membershipCardStatus === "pending_verification"
           ? "Stay on standby while staff reviews the payment and activates the card."
@@ -595,7 +602,21 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={s.sectionWrap}>
-            <FitSection heading="SCHEDULE FOR TODAY">
+            <Animated.View style={[s.badgeBanner, surfaceStyle]}>
+              <View style={s.badgeIconBox}>
+                <pinnedGoalCard.icon size={22} color={colors.brand} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FitText style={s.badgeBannerTitle}>{pinnedGoalCard.title}</FitText>
+                <FitText style={s.badgeBannerBody}>{pinnedGoalCard.body}</FitText>
+              </View>
+            </Animated.View>
+          </View>
+          <View style={s.sectionWrap}>
+            <FitSection
+              heading="SCHEDULE FOR TODAY"
+              subtitle="Use the home FAB when you want to book a venue or coach slot."
+            >
               {bookingsLoading ? (
                 <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
                   <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
@@ -612,32 +633,28 @@ export default function HomeScreen() {
                 <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
                   <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
                   <FitText style={{ fontSize: 14, color: colors.textMuted }}>No bookings scheduled for today</FitText>
-                  <View style={{ width: "100%", marginTop: 10 }}>
-                    <FitButton
-                      label="Book Now"
-                      onPress={() => router.push("/(tabs)/bookings?openReservation=true")}
-                    />
-                  </View>
                 </View>
               ) : (
-                <ScrollView
-                  scrollEnabled={todayBookings.length > 2}
-                  showsVerticalScrollIndicator={false}
-                  style={{ maxHeight: 232 }}
-                  nestedScrollEnabled
-                >
-                  {todayBookings.map((booking, index) => (
+                <View>
+                  {visibleTodayBookings.map((booking, index) => (
                     <FitCard
                       key={booking.id}
                       icon={booking.resourceType === "trainer" ? User : CalendarDays}
                       iconSize={18}
                       label={booking.resourceName}
                       subtitle={`${formatBookingDate(booking.date)} - ${booking.startTime && booking.endTime ? `${booking.startTime} - ${booking.endTime}` : booking.time}`}
-                      hasBorder={index < todayBookings.length - 1}
+                      hasBorder={index < visibleTodayBookings.length - 1 || hiddenTodayBookingsCount > 0}
                       onPress={() => setSelectedBooking(booking)}
                     />
                   ))}
-                </ScrollView>
+                  {hiddenTodayBookingsCount > 0 ? (
+                    <View style={s.scheduleOverflowNote}>
+                      <FitText style={s.scheduleOverflowText}>
+                        {hiddenTodayBookingsCount} more booking{hiddenTodayBookingsCount === 1 ? "" : "s"} today. Check Bookings to see the rest.
+                      </FitText>
+                    </View>
+                  ) : null}
+                </View>
               )}
             </FitSection>
           </View>
@@ -646,6 +663,8 @@ export default function HomeScreen() {
               {snapshotRows.map((row, index) => (
                 <FitCard
                   key={row.label}
+                  icon={row.icon}
+                  iconSize={18}
                   label={row.label}
                   subtitle={row.subtitle}
                   trailingLabel={row.trailingLabel}
@@ -658,7 +677,7 @@ export default function HomeScreen() {
             </FitSection>
           </View>
           <View style={s.sectionWrap}>
-            <FitSection heading="WORKOUT SUGGESTIONS">
+            <FitSection heading="WORKOUT SUGGESTIONS" bare>
               <View style={s.quickGrid}>
                 {quickActions.map((action) => (
                   <Pressable
@@ -677,17 +696,6 @@ export default function HomeScreen() {
                 ))}
               </View>
             </FitSection>
-          </View>
-          <View style={s.sectionWrap}>
-            <Animated.View style={[s.badgeBanner, surfaceStyle]}>
-              <View style={s.badgeIconBox}>
-                <pinnedGoalCard.icon size={22} color={colors.brand} strokeWidth={2} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <FitText style={s.badgeBannerTitle}>{pinnedGoalCard.title}</FitText>
-                <FitText style={s.badgeBannerBody}>{pinnedGoalCard.body}</FitText>
-              </View>
-            </Animated.View>
           </View>
         </Animated.View>
       </Animated.ScrollView>
