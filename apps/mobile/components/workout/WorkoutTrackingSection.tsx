@@ -3,6 +3,7 @@ import { Platform, View } from "react-native";
 import {
   Circle,
   Cpu,
+  Dumbbell,
   Pause,
   Play,
   RefreshCw,
@@ -39,6 +40,7 @@ type WorkoutTrackingSectionProps = {
   countdownValue: number | null;
   currentAngle: number | null;
   currentKeypoints: PoseKeypointRecord[] | null;
+  currentLoadLabel: string | null;
   currentPhase: string;
   equipmentDetected: boolean;
   equipmentDetectionBoxes: PoseEquipmentDetectionBoxRecord[];
@@ -81,6 +83,7 @@ export function WorkoutTrackingSection({
   countdownValue,
   currentAngle,
   currentKeypoints,
+  currentLoadLabel,
   currentPhase,
   equipmentDetected,
   equipmentDetectionBoxes,
@@ -297,9 +300,17 @@ export function WorkoutTrackingSection({
                 textStyle={s.cameraToggleText}
               />
             ) : null}
-            <View style={s.kcalPill}>
-              <Cpu size={13} color={colors.brand} strokeWidth={2} />
-              <FitText style={s.kcalText}>{calories} kcal</FitText>
+            <View style={s.metricPillStack}>
+              <View style={s.kcalPill}>
+                <Cpu size={13} color={colors.brand} strokeWidth={2} />
+                <FitText style={s.kcalText}>{calories} kcal</FitText>
+              </View>
+              {currentLoadLabel ? (
+                <View style={s.currentLoadPill}>
+                  <Dumbbell size={13} color={colors.brand} strokeWidth={2} />
+                  <FitText style={s.currentLoadText}>{currentLoadLabel}</FitText>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>

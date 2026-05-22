@@ -19,6 +19,7 @@ import {
   BadgePercent,
   ClipboardList,
   Trophy,
+  Medal,
   WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -94,6 +95,12 @@ const MANAGEMENT_NAV_SECTIONS: NavSection[] = [
         label: "Gamification",
         icon: Trophy,
         pageKey: "gamification",
+      },
+      {
+        href: "/milestones",
+        label: "Milestones",
+        icon: Medal,
+        pageKey: "milestones",
       },
       {
         href: "/exercise-lab",

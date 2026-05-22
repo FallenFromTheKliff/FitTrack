@@ -193,7 +193,7 @@ function useExerciseLabPageState() {
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
     if (requestedTab === "milestones") {
-      router.replace("/gamification?tab=milestones", { scroll: false });
+      router.replace("/milestones", { scroll: false });
       return;
     }
     if (

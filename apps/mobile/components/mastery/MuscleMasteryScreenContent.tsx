@@ -10,6 +10,7 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Dumbbell,
   Lock,
   RefreshCw,
@@ -208,6 +209,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       flexWrap: "wrap",
       gap: 8,
     },
+    milestoneReviewHint: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      marginTop: 2,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    milestoneReviewHintText: {
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 17,
+    },
     milestoneTitle: {
       color: colors.textPrimary,
       fontSize: 15,
@@ -323,12 +336,16 @@ function formatTitle(value: string) {
 function getMilestoneStatusLabel(milestone: FitnessMilestoneProgressRecord) {
   if (milestone.status === "claimed") return "Claimed";
   if (milestone.status === "unlocked") return "Unlocked";
+  if (milestone.status === "pending_review") return "Pending review";
+  if (milestone.status === "rejected") return "Needs proof";
   return "Locked";
 }
 
 function getMilestoneIcon(milestone: FitnessMilestoneProgressRecord): LucideIcon {
   if (milestone.status === "claimed") return Trophy;
   if (milestone.status === "unlocked") return Sparkles;
+  if (milestone.status === "pending_review") return ClipboardCheck;
+  if (milestone.status === "rejected") return Sparkles;
   return Lock;
 }
 
@@ -338,6 +355,8 @@ function getMilestoneTone(
 ) {
   if (milestone.status === "claimed") return colors.success ?? colors.brand;
   if (milestone.status === "unlocked") return colors.brand;
+  if (milestone.status === "pending_review") return colors.warning;
+  if (milestone.status === "rejected") return colors.danger;
   return colors.textMuted;
 }
 
@@ -540,6 +559,13 @@ export default function MuscleMasteryScreenContent({
             const Icon = getMilestoneIcon(milestone);
             const tone = getMilestoneTone(milestone, colors);
             const canClaim = milestone.status === "unlocked";
+            const needsReview = milestone.status === "pending_review";
+            const wasRejected = milestone.status === "rejected";
+            const reviewHint = needsReview
+              ? "Waiting for staff or admin approval."
+              : wasRejected
+                ? "Proof was rejected. Submit a new photo or video proof."
+                : null;
 
             return (
               <View
@@ -575,9 +601,24 @@ export default function MuscleMasteryScreenContent({
                     {milestone.targetValue.toLocaleString("en-US")}
                   </FitText>
                   <FitText style={[styles.progressMeta, { color: tone }]}>
-                    {getMilestoneStatusLabel(milestone)}
+                      {getMilestoneStatusLabel(milestone)}
                   </FitText>
                 </View>
+                {reviewHint ? (
+                  <View
+                    style={[
+                      styles.milestoneReviewHint,
+                      {
+                        backgroundColor: tone + "12",
+                        borderColor: tone + "55",
+                      },
+                    ]}
+                  >
+                    <FitText style={[styles.milestoneReviewHintText, { color: tone }]}>
+                      {reviewHint}
+                    </FitText>
+                  </View>
+                ) : null}
                 <View
                   style={{
                     backgroundColor: colors.border,

@@ -4,6 +4,8 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type {
+  AdminMilestoneDefinitionListParams,
+  AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
   ApiClient,
   CreateExerciseDraftProposalInput,
@@ -19,13 +21,16 @@ import type {
   FitnessMilestoneListParams,
   LogWorkoutSetInput,
   MuscleDefinitionListParams,
+  ReviewFitnessMilestoneEvidenceInput,
   StartPoseSessionInput,
   StartWorkoutSessionInput,
+  SubmitFitnessMilestoneEvidenceInput,
   TrainingPlanListParams,
   UpdateFitnessRankingProfileInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
+  UpsertAdminMilestoneDefinitionInput,
   WorkoutSessionListParams,
 } from "@fittrack/api-client";
 import { invalidateFitnessQueries, invalidateFitnessPoseQuery } from "./cache";
@@ -358,12 +363,148 @@ export function fitnessMilestonesQueryOptions(
   });
 }
 
+export function adminMilestonesQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  params?: AdminMilestoneDefinitionListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessAdminMilestones(params),
+    queryFn: () => client.fitness.listAdminMilestones(params),
+  });
+}
+
+export function adminMilestoneEvidenceQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  params?: AdminMilestoneEvidenceListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessAdminMilestoneEvidence(params),
+    queryFn: () => client.fitness.listMilestoneEvidence(params),
+  });
+}
+
 export function fitnessAchievementReviewsQueryOptions(
   client: Pick<ApiClient, "fitness">,
 ) {
   return queryOptions({
     queryKey: queryKeys.fitnessAchievementReviews(),
     queryFn: () => client.fitness.listAchievementReviews(),
+  });
+}
+
+export function createAdminMilestoneMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (payload: UpsertAdminMilestoneDefinitionInput) =>
+      client.fitness.createAdminMilestone(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessAdminMilestones(),
+      });
+    },
+  });
+}
+
+export function updateAdminMilestoneMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      milestoneDefinitionId,
+      payload,
+    }: {
+      milestoneDefinitionId: string;
+      payload: UpsertAdminMilestoneDefinitionInput;
+    }) => client.fitness.updateAdminMilestone(milestoneDefinitionId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessAdminMilestones(),
+      });
+    },
+  });
+}
+
+export function archiveAdminMilestoneMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (milestoneDefinitionId: string) =>
+      client.fitness.archiveAdminMilestone(milestoneDefinitionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessAdminMilestones(),
+      });
+    },
+  });
+}
+
+export function restoreAdminMilestoneMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (milestoneDefinitionId: string) =>
+      client.fitness.restoreAdminMilestone(milestoneDefinitionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessAdminMilestones(),
+      });
+    },
+  });
+}
+
+export function submitFitnessMilestoneEvidenceMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      milestoneDefinitionId,
+      payload,
+    }: {
+      milestoneDefinitionId: string;
+      payload: SubmitFitnessMilestoneEvidenceInput;
+    }) => client.fitness.submitMilestoneEvidence(milestoneDefinitionId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessAdminMilestoneEvidence(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessMilestones(),
+      });
+    },
+  });
+}
+
+export function reviewFitnessMilestoneEvidenceMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      evidenceSubmissionId,
+      payload,
+    }: {
+      evidenceSubmissionId: string;
+      payload: ReviewFitnessMilestoneEvidenceInput;
+    }) => client.fitness.reviewMilestoneEvidence(evidenceSubmissionId, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.fitnessAdminMilestoneEvidence(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.fitnessAdminMilestones(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.fitnessMilestones(),
+        }),
+      ]);
+    },
   });
 }
 

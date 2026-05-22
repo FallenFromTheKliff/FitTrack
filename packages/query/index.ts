@@ -27,7 +27,10 @@ export {
   recurringCoachingPlanSessionsQueryOptions,
   updateRecurringCoachingSessionMutationOptions,
 } from "./recurring-coaching-plans";
-export { uploadImageMutationOptions } from "./files";
+export {
+  uploadImageMutationOptions,
+  uploadMilestoneEvidenceMutationOptions,
+} from "./files";
 export {
   analyticsAttendanceQueryOptions,
   analyticsCoachesQueryOptions,
@@ -115,12 +118,16 @@ export {
   processBookingBalanceMutationOptions,
 } from "./bookings";
 export {
+  adminMilestoneEvidenceQueryOptions,
+  adminMilestonesQueryOptions,
   analyzePoseSessionMutationOptions,
+  archiveAdminMilestoneMutationOptions,
   archiveMuscleDefinitionMutationOptions,
   cancelWorkoutSessionMutationOptions,
   completeWorkoutSessionMutationOptions,
   createExerciseDraftProposalMutationOptions,
   createExerciseReviewSubmissionMutationOptions,
+  createAdminMilestoneMutationOptions,
   createFitnessExerciseMutationOptions,
   createMuscleDefinitionMutationOptions,
   claimFitnessMilestoneMutationOptions,
@@ -137,14 +144,18 @@ export {
   fitnessSessionsQueryOptions,
   finalizePoseSessionMutationOptions,
   logWorkoutSetMutationOptions,
+  restoreAdminMilestoneMutationOptions,
+  reviewFitnessMilestoneEvidenceMutationOptions,
   fitnessIntegritySummaryQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
   startPoseSessionMutationOptions,
   startWorkoutSessionMutationOptions,
+  submitFitnessMilestoneEvidenceMutationOptions,
   fitnessMilestonesQueryOptions,
   fitnessProgressionProfileQueryOptions,
   fitnessRankingProfileQueryOptions,
   fitnessSeasonStandingQueryOptions,
+  updateAdminMilestoneMutationOptions,
   updateFitnessRankingProfileMutationOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,

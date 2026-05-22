@@ -30,6 +30,9 @@ import {
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
   AdminManualExpGrantDTO,
+  AdminMilestoneDefinitionDTO,
+  AdminMilestoneDefinitionFilterDTO,
+  AdminMilestoneDefinitionResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
@@ -53,6 +56,27 @@ function singleEnvelopeSchema(itemSchemaRef: string) {
   };
 }
 
+function paginatedEnvelopeSchema(itemSchemaRef: string) {
+  return {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: itemSchemaRef },
+      },
+      meta: {
+        type: 'object',
+        properties: {
+          page: { type: 'number', example: 1 },
+          limit: { type: 'number', example: 20 },
+          total: { type: 'number', example: 1 },
+          total_pages: { type: 'number', example: 1 },
+        },
+      },
+    },
+  };
+}
+
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @ApiExtraModels(
@@ -65,6 +89,7 @@ function singleEnvelopeSchema(itemSchemaRef: string) {
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideResponseDTO,
   AdminIntegrityCaseResponseDTO,
+  AdminMilestoneDefinitionResponseDTO,
 )
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.admin)
@@ -106,6 +131,130 @@ export class GamificationAdminController {
   })
   listSeasons() {
     return this.gamificationService.listAdminSeasons();
+  }
+
+  @Get('milestones')
+  @ApiOperation({
+    summary: 'List milestone definitions for admin management.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone definitions loaded.',
+    schema: paginatedEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  listMilestones(@Query() dto: AdminMilestoneDefinitionFilterDTO) {
+    return this.gamificationService.listAdminMilestoneDefinitions(dto);
+  }
+
+  @Post('milestones')
+  @ApiOperation({
+    summary: 'Create a milestone definition.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Milestone definition created.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  createMilestone(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AdminMilestoneDefinitionDTO,
+  ) {
+    return this.gamificationService.createAdminMilestoneDefinition(
+      user.sub,
+      dto,
+    );
+  }
+
+  @Get('milestones/:milestoneDefinitionId')
+  @ApiOperation({
+    summary: 'Load one milestone definition.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone definition loaded.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  getMilestone(
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+  ) {
+    return this.gamificationService.getAdminMilestoneDefinition(
+      milestoneDefinitionId,
+    );
+  }
+
+  @Patch('milestones/:milestoneDefinitionId')
+  @ApiOperation({
+    summary: 'Update a milestone definition.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone definition updated.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  updateMilestone(
+    @CurrentUser() user: JwtPayload,
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+    @Body() dto: AdminMilestoneDefinitionDTO,
+  ) {
+    return this.gamificationService.updateAdminMilestoneDefinition(
+      user.sub,
+      milestoneDefinitionId,
+      dto,
+    );
+  }
+
+  @Patch('milestones/:milestoneDefinitionId/archive')
+  @ApiOperation({
+    summary: 'Archive a milestone definition without deleting history.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone definition archived.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  archiveMilestone(
+    @CurrentUser() user: JwtPayload,
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+  ) {
+    return this.gamificationService.archiveAdminMilestoneDefinition(
+      user.sub,
+      milestoneDefinitionId,
+    );
+  }
+
+  @Patch('milestones/:milestoneDefinitionId/restore')
+  @ApiOperation({
+    summary: 'Restore an archived milestone definition.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone definition restored.',
+    schema: singleEnvelopeSchema(
+      getSchemaPath(AdminMilestoneDefinitionResponseDTO),
+    ),
+  })
+  restoreMilestone(
+    @CurrentUser() user: JwtPayload,
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+  ) {
+    return this.gamificationService.restoreAdminMilestoneDefinition(
+      user.sub,
+      milestoneDefinitionId,
+    );
   }
 
   @Get('season-standings')

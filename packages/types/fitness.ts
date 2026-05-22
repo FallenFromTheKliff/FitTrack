@@ -43,16 +43,41 @@ export type FitnessMilestoneCategory =
   | "consistency"
   | "season"
   | "creator"
-  | "governance";
+  | "governance"
+  | "nutrition"
+  | "coaching"
+  | "booking"
+  | "ai"
+  | "weighted_lifting"
+  | "attendance";
 export type FitnessMilestoneTriggerType =
   | "source_event"
   | "summary_threshold"
   | "streak"
-  | "manual";
+  | "manual"
+  | "composite";
 export type FitnessMilestoneProgressStatus =
   | "in_progress"
+  | "pending_review"
+  | "rejected"
   | "unlocked"
   | "claimed";
+export type FitnessMilestoneDefinitionStatus = "draft" | "active" | "archived";
+export type FitnessMilestoneVerificationPolicy =
+  | "auto"
+  | "manual_required"
+  | "auto_then_review"
+  | "staff_attested";
+export type FitnessMilestoneEvidenceRequirement =
+  | "none"
+  | "image"
+  | "video"
+  | "image_or_video";
+export type FitnessMilestoneEvidenceType = "image" | "video";
+export type FitnessMilestoneEvidenceSubmissionStatus =
+  | "pending"
+  | "approved"
+  | "rejected";
 export type FitnessAchievementReviewStatus =
   | "Pending"
   | "Approved"
@@ -73,7 +98,26 @@ export type FitnessIntegrityCaseStatus =
   | "escalated";
 export type FitnessProgressionSourceType =
   | "workout_session_completed"
-  | "pose_session_finalized";
+  | "workout_session_invalidated"
+  | "pose_session_finalized"
+  | "pose_session_flagged"
+  | "rep_log_accepted"
+  | "rep_log_rejected"
+  | "weighted_exercise_logged"
+  | "nutrition_log_created"
+  | "nutrition_log_updated"
+  | "nutrition_log_deleted"
+  | "coaching_appointment_completed"
+  | "coaching_appointment_no_show"
+  | "venue_booking_completed"
+  | "venue_booking_no_show"
+  | "ai_chat_message_sent"
+  | "ai_action_completed"
+  | "gym_chat_message_sent"
+  | "milestone_evidence_submitted"
+  | "milestone_evidence_approved"
+  | "milestone_evidence_rejected"
+  | "moderation_action";
 export type FitnessProgressionSourceStatus =
   | "pending"
   | "applied"
@@ -206,6 +250,26 @@ export type FitnessLeaderboardListParams = {
 
 export type FitnessMilestoneListParams = {
   includeLocked?: boolean;
+};
+
+export type AdminMilestoneDefinitionListParams = {
+  category?: FitnessMilestoneCategory | "all";
+  evidenceRequirement?: FitnessMilestoneEvidenceRequirement | "all";
+  includeArchived?: boolean;
+  limit?: number;
+  page?: number;
+  search?: string;
+  sort?: "created_at" | "updated_at" | "title" | "sort_order";
+  status?: FitnessMilestoneDefinitionStatus | "all";
+  triggerType?: FitnessMilestoneTriggerType | "all";
+  verificationPolicy?: FitnessMilestoneVerificationPolicy | "all";
+};
+
+export type AdminMilestoneEvidenceListParams = {
+  limit?: number;
+  page?: number;
+  search?: string;
+  status?: FitnessMilestoneEvidenceSubmissionStatus | "all";
 };
 
 export type FitnessProgressionSourceListParams = {
@@ -993,9 +1057,12 @@ export type FitnessSeasonStandingRecord = {
 export type FitnessMilestoneProgressRecord = {
   category: FitnessMilestoneCategory;
   claimedAt: string | null;
+  conditionPayload?: Record<string, unknown> | null;
   description: string | null;
+  evidenceRequirement?: FitnessMilestoneEvidenceRequirement;
   isHidden: boolean;
   key: string;
+  latestEvidenceSubmission?: FitnessMilestoneEvidenceSubmissionRecord | null;
   milestoneDefinitionId: string;
   progressPercent: number;
   progressValue: number;
@@ -1006,6 +1073,91 @@ export type FitnessMilestoneProgressRecord = {
   triggerType: FitnessMilestoneTriggerType;
   unlockedAt: string | null;
   updatedAt: string | null;
+  verificationPolicy?: FitnessMilestoneVerificationPolicy;
+};
+
+export type AdminMilestoneDefinitionRecord = {
+  archivedAt: string | null;
+  archivedByUserId: string | null;
+  category: FitnessMilestoneCategory;
+  conditionPayload: Record<string, unknown> | null;
+  createdAt: string;
+  createdByUserId: string | null;
+  description: string | null;
+  endsAt: string | null;
+  evidenceRequirement: FitnessMilestoneEvidenceRequirement;
+  id: string;
+  isActive: boolean;
+  isHidden: boolean;
+  key: string;
+  pendingReviewCount: number;
+  progressCount: number;
+  rewardPayload: Record<string, unknown> | null;
+  sortOrder: number;
+  startsAt: string | null;
+  status: FitnessMilestoneDefinitionStatus;
+  title: string;
+  triggerType: FitnessMilestoneTriggerType;
+  unlockedCount: number;
+  updatedAt: string;
+  updatedByUserId: string | null;
+  verificationPolicy: FitnessMilestoneVerificationPolicy;
+};
+
+export type UpsertAdminMilestoneDefinitionInput = {
+  category: FitnessMilestoneCategory;
+  conditionPayload?: Record<string, unknown> | null;
+  description?: string | null;
+  endsAt?: string | null;
+  evidenceRequirement?: FitnessMilestoneEvidenceRequirement;
+  isHidden?: boolean;
+  key: string;
+  rewardPayload?: Record<string, unknown> | null;
+  sortOrder?: number;
+  startsAt?: string | null;
+  status?: FitnessMilestoneDefinitionStatus;
+  title: string;
+  triggerType: FitnessMilestoneTriggerType;
+  verificationPolicy?: FitnessMilestoneVerificationPolicy;
+};
+
+export type FitnessMilestoneEvidenceSubmissionRecord = {
+  caption: string | null;
+  createdAt: string;
+  evidenceType: FitnessMilestoneEvidenceType;
+  fileKey: string | null;
+  fileUrl: string;
+  id: string;
+  memberEmail?: string | null;
+  memberInitials?: string | null;
+  memberName?: string | null;
+  milestoneDefinitionId: string;
+  milestoneKey?: string;
+  milestoneTitle?: string;
+  mimeType: string;
+  originalFilename: string | null;
+  reviewerNotes: string | null;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  sizeBytes: number;
+  status: FitnessMilestoneEvidenceSubmissionStatus;
+  updatedAt: string;
+  userId: string;
+};
+
+export type SubmitFitnessMilestoneEvidenceInput = {
+  caption?: string | null;
+  evidenceType: FitnessMilestoneEvidenceType;
+  fileKey?: string | null;
+  fileUrl: string;
+  mimeType: string;
+  originalFilename?: string | null;
+  sizeBytes: number;
+};
+
+export type ReviewFitnessMilestoneEvidenceInput = {
+  reviewerNotes?: string | null;
+  status: Extract<FitnessMilestoneEvidenceSubmissionStatus, "approved" | "rejected">;
 };
 
 export type FitnessAchievementReviewRecord = {

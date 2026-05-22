@@ -26,6 +26,8 @@ import {
   MilestoneProgressStatus,
   ModerationActionType,
   NutritionUnit,
+  OtpChannel,
+  OtpPurpose,
   PayableType,
   PaymentProvider,
   PaymentStage,
@@ -244,6 +246,18 @@ function planByName(name: MembershipPlanSeed['name']) {
   return plan;
 }
 
+function accountStatus(account: TestAccount) {
+  return account.status ?? UserStatus.active;
+}
+
+function accountVerifiedAt(account: TestAccount, fallback: Date) {
+  return account.emailVerified === false ? null : fallback;
+}
+
+function accountArchivedAt(account: TestAccount) {
+  return account.archivedAt ? new Date(account.archivedAt) : null;
+}
+
 async function ensureTestAccount(
   account: TestAccount,
 ): Promise<EnsuredAccount> {
@@ -260,6 +274,8 @@ async function ensureTestAccount(
 
   const userId = existingIdentity?.user_id ?? seedId(`user:${account.key}`);
   const verifiedAt = new Date();
+  const emailVerifiedAt = accountVerifiedAt(account, verifiedAt);
+  const archivedAt = accountArchivedAt(account);
   const credentialHash = await bcrypt.hash(
     account.password,
     PASSWORD_HASH_ROUNDS,
@@ -269,16 +285,19 @@ async function ensureTestAccount(
     where: { id: userId },
     update: {
       role: account.role,
-      status: UserStatus.active,
-      deletedAt: null,
-      email_verified_at: verifiedAt,
+      status: accountStatus(account),
+      deletedAt: archivedAt,
+      email_verified_at: emailVerifiedAt,
+      phone_verified_at: emailVerifiedAt,
       qr_code_token: randomUUID(),
     },
     create: {
       id: userId,
       role: account.role,
-      status: UserStatus.active,
-      email_verified_at: verifiedAt,
+      status: accountStatus(account),
+      deletedAt: archivedAt,
+      email_verified_at: emailVerifiedAt,
+      phone_verified_at: emailVerifiedAt,
       qr_code_token: randomUUID(),
     },
   });
@@ -288,7 +307,7 @@ async function ensureTestAccount(
       where: { id: existingIdentity.id },
       data: {
         credential_hash: credentialHash,
-        verified_at: verifiedAt,
+        verified_at: emailVerifiedAt,
         is_primary: true,
       },
     });
@@ -300,7 +319,7 @@ async function ensureTestAccount(
         provider: AuthProvider.email,
         identifier: account.email,
         credential_hash: credentialHash,
-        verified_at: verifiedAt,
+        verified_at: emailVerifiedAt,
         is_primary: true,
       },
     });
@@ -1028,6 +1047,28 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
     });
   }
 
+  if (memberActiveId && coachProfiles['coach']) {
+    appointmentSeeds.push({
+      id: seedId('coach-appointment:member-active:coach:completed'),
+      userId: memberActiveId,
+      coachId: coachProfiles['coach'],
+      status: AppointmentStatus.completed,
+      scheduledAt: upcomingAt(-5, 14),
+      durationMinutes: 60,
+      totalAmount: new Prisma.Decimal('875'),
+      downpaymentAmount: new Prisma.Decimal('875'),
+      balanceAmount: new Prisma.Decimal('0'),
+      gymRevenue: new Prisma.Decimal('175'),
+      coachEarnings: new Prisma.Decimal('700'),
+      downpaymentPaidAt: upcomingAt(-6, 10),
+      balancePaidAt: upcomingAt(-6, 10),
+      completedAt: upcomingAt(-5, 15),
+      memberNotes: 'Strength onboarding session with the main coach account.',
+      sessionNotes:
+        'Baseline squat and hinge review completed for coach portal history.',
+    });
+  }
+
   if (memberPremiumId && coachProfiles['member-nomembership']) {
     appointmentSeeds.push({
       id: seedId(
@@ -1439,6 +1480,9 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
     await prisma.accountDeletionRequest.deleteMany({
       where: { userId: userId },
     });
+    await prisma.otpVerification.deleteMany({
+      where: { user_id: userId },
+    });
 
     const now = new Date();
 
@@ -1651,6 +1695,45 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
       continue;
     }
 
+    if (account.key === 'member-unverified') {
+      await prisma.membershipCard.deleteMany({
+        where: { user_id: userId },
+      });
+      await prisma.otpVerification.create({
+        data: {
+          id: seedId('otp:member-unverified:email-registration'),
+          user_id: userId,
+          channel: OtpChannel.email,
+          purpose: OtpPurpose.registration,
+          code_hash: 'seeded-qa-unverified-email-code-hash',
+          expires_at: analyticsAt({ daysAgo: -1, hour: 23 }),
+          attempts: 0,
+          consumed_at: null,
+        },
+      });
+      continue;
+    }
+
+    if (account.key === 'member-archived') {
+      await prisma.membershipCard.deleteMany({
+        where: { user_id: userId },
+      });
+      await prisma.accountDeletionRequest.create({
+        data: {
+          id: seedId('deletion-request:member-archived'),
+          userId,
+          reason:
+            'Seeded archived account for restore and account-edit QA coverage.',
+          status: AccountDeletionRequestStatus.approved,
+          reviewedBy: adminUserId,
+          reviewedAt: accountArchivedAt(account) ?? now,
+          reviewNotes:
+            'Approved seeded archive state; safe to restore during QA.',
+        },
+      });
+      continue;
+    }
+
     await prisma.membershipCard.deleteMany({
       where: { user_id: userId },
     });
@@ -1777,6 +1860,63 @@ async function ensureNutritionFixtures(
       tdeeCalories: '1720.00',
       waistCm: '74.00',
       weightKg: '58.00',
+    },
+    'member-unverified': {
+      age: 26,
+      activityLevel: ActivityLevel.light,
+      bmrCalories: '1510.00',
+      bodyFatPct: '23.40',
+      carbsG: '210.00',
+      chestCm: '91.00',
+      dateOfBirth: '1999-08-18',
+      fatG: '62.00',
+      fitnessGoal: FitnessGoal.maintenance,
+      gender: Gender.other,
+      heightCm: '167.00',
+      muscleMassKg: '43.50',
+      proteinG: '126.00',
+      targetCalories: '2010.00',
+      tdeeCalories: '2010.00',
+      waistCm: '77.00',
+      weightKg: '64.00',
+    },
+    'member-archived': {
+      age: 33,
+      activityLevel: ActivityLevel.moderate,
+      bmrCalories: '1608.00',
+      bodyFatPct: '21.30',
+      carbsG: '240.00',
+      chestCm: '97.00',
+      dateOfBirth: '1992-03-09',
+      fatG: '65.00',
+      fitnessGoal: FitnessGoal.cutting,
+      gender: Gender.female,
+      heightCm: '169.00',
+      muscleMassKg: '45.20',
+      proteinG: '148.00',
+      targetCalories: '2140.00',
+      tdeeCalories: '2280.00',
+      waistCm: '79.00',
+      weightKg: '69.00',
+    },
+    'member-suspended': {
+      age: 28,
+      activityLevel: ActivityLevel.active,
+      bmrCalories: '1815.00',
+      bodyFatPct: '18.10',
+      carbsG: '320.00',
+      chestCm: '101.00',
+      dateOfBirth: '1997-12-06',
+      fatG: '75.00',
+      fitnessGoal: FitnessGoal.bulking,
+      gender: Gender.male,
+      heightCm: '178.00',
+      muscleMassKg: '56.00',
+      proteinG: '168.00',
+      targetCalories: '2865.00',
+      tdeeCalories: '2865.00',
+      waistCm: '82.00',
+      weightKg: '76.00',
     },
     'member-expired': {
       age: 35,
@@ -4085,8 +4225,8 @@ async function ensureFeatureCoverageFixtures(
     memberNoMembershipId,
     memberExpiredId,
   ].filter((userId): userId is string => Boolean(userId));
-  const baselineUserIds = ensuredAccounts.map(({ userId }) => userId);
   const staffCoachId = coachProfiles['staff'] ?? null;
+  const mainCoachId = coachProfiles['coach'] ?? null;
   const conditioningCoachId = coachProfiles['member-nomembership'] ?? null;
 
   if (!adminUserId || !staffUserId || !memberActiveId || !memberPremiumId) {
@@ -4220,7 +4360,23 @@ async function ensureFeatureCoverageFixtures(
           : []),
       ],
     });
+  }
 
+  if (mainCoachId) {
+    await prisma.coachClientRelationship.create({
+      data: {
+        id: seedId('coach-client:main:member-active'),
+        coach_id: mainCoachId,
+        member_id: memberActiveId,
+        notes:
+          'Active relationship for the main coach login to inspect member coaching history.',
+        started_at: analyticsAt({ daysAgo: 30, hour: 10 }),
+        status: RelationshipStatus.active,
+      },
+    });
+  }
+
+  if (staffCoachId) {
     const recurringPlanId = seedId('recurring-plan:member-premium:staff');
     await prisma.recurringCoachingPlan.create({
       data: {
@@ -5169,10 +5325,22 @@ async function ensureFeatureCoverageFixtures(
     });
   }
 
-  await prisma.user.updateMany({
-    where: { id: { in: baselineUserIds } },
-    data: { status: UserStatus.active },
-  });
+  for (const { account, userId } of ensuredAccounts) {
+    const data: Prisma.UserUpdateInput = {
+      deletedAt: accountArchivedAt(account),
+      status: accountStatus(account),
+    };
+
+    if (account.emailVerified === false) {
+      data.email_verified_at = null;
+      data.phone_verified_at = null;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+  }
 }
 
 async function buildCounts() {

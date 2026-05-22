@@ -563,8 +563,12 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     },
     previewTopRightCluster: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
       gap: 8
+    },
+    metricPillStack: {
+      alignItems: "flex-end",
+      gap: 6
     },
     cameraToggleButton: {
       minHeight: 0,
@@ -613,6 +617,16 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       paddingVertical: 5
     },
     kcalText: { fontSize: 13, fontWeight: "600", color: "#FFFFFF" },
+    currentLoadPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      borderRadius: R.lg,
+      paddingHorizontal: 10,
+      paddingVertical: 5
+    },
+    currentLoadText: { fontSize: 13, fontWeight: "700", color: "#FFFFFF" },
     sectionLabel: { fontSize: 15, fontWeight: "600", color: colors.textPrimary, marginBottom: 10 },
     presetField: { marginBottom: 16 },
     presetHint: { fontSize: 12, color: colors.textMuted, marginTop: -8, marginBottom: 16 },

@@ -181,6 +181,9 @@ const WEIGHTED_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "band",
   "mixed",
 ]);
+const KG_PER_POUND = 0.45359237;
+const MAX_WORKOUT_LOAD_KG = 1000;
+const MIN_WORKOUT_LOAD_SLIDER_VALUE = 1;
 const EXERCISE_NAME_ALIAS_GROUPS = [
   ["barbell back squat", "back squat", "squat"],
   ["dumbbell bench press", "bench press", "dumbbell bench"],
@@ -198,6 +201,92 @@ const NORMALIZED_EXERCISE_ALIAS_GROUPS = EXERCISE_NAME_ALIAS_GROUPS.map(
       value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " "),
     ),
 );
+
+type WorkoutLoadUnit = "kg" | "lb";
+
+function formatWorkoutLoadNumber(value: number) {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatWorkoutLoadValue(weightKg: number | null, unit: WorkoutLoadUnit) {
+  if (weightKg === null) return "";
+  const displayValue = unit === "kg" ? weightKg : weightKg / KG_PER_POUND;
+  return formatWorkoutLoadNumber(displayValue);
+}
+
+function getWorkoutLoadSliderMax(unit: WorkoutLoadUnit) {
+  return unit === "kg"
+    ? MAX_WORKOUT_LOAD_KG
+    : Math.floor(MAX_WORKOUT_LOAD_KG / KG_PER_POUND);
+}
+
+function clampWorkoutLoadSliderValue(value: number, unit: WorkoutLoadUnit) {
+  return Math.min(
+    getWorkoutLoadSliderMax(unit),
+    Math.max(MIN_WORKOUT_LOAD_SLIDER_VALUE, Math.round(value)),
+  );
+}
+
+function getWorkoutLoadDisplayValue(weightKg: number | null, unit: WorkoutLoadUnit) {
+  if (weightKg === null) return null;
+  return unit === "kg" ? weightKg : weightKg / KG_PER_POUND;
+}
+
+function getWorkoutLoadSliderValue(
+  inputValue: string,
+  savedWeightKg: number | null,
+  unit: WorkoutLoadUnit,
+) {
+  const parsedInputValue = Number(inputValue.trim());
+  if (Number.isFinite(parsedInputValue) && parsedInputValue > 0) {
+    return clampWorkoutLoadSliderValue(parsedInputValue, unit);
+  }
+
+  const savedDisplayValue = getWorkoutLoadDisplayValue(savedWeightKg, unit);
+  if (savedDisplayValue !== null) {
+    return clampWorkoutLoadSliderValue(savedDisplayValue, unit);
+  }
+
+  return MIN_WORKOUT_LOAD_SLIDER_VALUE;
+}
+
+function isWeightedEquipmentContext(context: PoseEquipmentContext | null) {
+  return context !== null && WEIGHTED_EQUIPMENT_CONTEXTS.has(context);
+}
+
+function parseWorkoutLoadInput(value: string, unit: WorkoutLoadUnit) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return { error: null, weightKg: null };
+  }
+
+  const numericValue = Number(trimmedValue);
+  if (!Number.isFinite(numericValue)) {
+    return { error: "Enter a valid load.", weightKg: null };
+  }
+  if (numericValue <= 0) {
+    return { error: "Load must be greater than 0.", weightKg: null };
+  }
+
+  const weightKg = Number(
+    (unit === "kg" ? numericValue : numericValue * KG_PER_POUND).toFixed(2),
+  );
+  if (weightKg > MAX_WORKOUT_LOAD_KG) {
+    return {
+      error: `Load must be ${MAX_WORKOUT_LOAD_KG} kg or less.`,
+      weightKg: null,
+    };
+  }
+
+  return { error: null, weightKg };
+}
+
+function sanitizeWorkoutLoadInput(value: string) {
+  const cleanedValue = value.replace(/[^0-9.]/g, "");
+  const [wholePart = "", ...decimalParts] = cleanedValue.split(".");
+  if (decimalParts.length === 0) return wholePart;
+  return `${wholePart}.${decimalParts.join("").slice(0, 2)}`;
+}
 
 function getPointDistance(
   a: PoseKeypointRecord | undefined,
@@ -1120,6 +1209,13 @@ export function useWorkoutLiveController() {
   const [confirmedExerciseLabel, setConfirmedExerciseLabel] = useState<
     string | null
   >(null);
+  const [workoutLoadInputValue, setWorkoutLoadInputValue] = useState("");
+  const [workoutLoadInputUnit, setWorkoutLoadInputUnit] =
+    useState<WorkoutLoadUnit>("kg");
+  const [workoutLoadInputError, setWorkoutLoadInputError] = useState<
+    string | null
+  >(null);
+  const [workoutLoadKg, setWorkoutLoadKg] = useState<number | null>(null);
   const [nativeLandmarksActive, setNativeLandmarksActive] = useState(false);
   const [poseStatusOverride, setPoseStatusOverride] = useState<string | null>(
     null,
@@ -1177,6 +1273,7 @@ export function useWorkoutLiveController() {
   const framesSinceAnalyzeRef = useRef(0);
   const trackingReliabilityNotifiedRef = useRef(false);
   const confirmedExerciseLabelRef = useRef<string | null>(null);
+  const workoutLoadKgRef = useRef<number | null>(null);
   const movementContractRef = useRef<PoseMovementContractRecord | null>(null);
   const poseSessionIdRef = useRef<string | null>(null);
   const isRecordingRef = useRef(false);
@@ -1203,6 +1300,64 @@ export function useWorkoutLiveController() {
         : nextValue;
     liveRepCountRef.current = resolvedValue;
     setReps(resolvedValue);
+  };
+
+  const setTrackedWorkoutLoadKg = (nextValue: number | null) => {
+    workoutLoadKgRef.current = nextValue;
+    setWorkoutLoadKg(nextValue);
+  };
+
+  const resetWorkoutLoadInput = () => {
+    setWorkoutLoadInputValue("");
+    setWorkoutLoadInputError(null);
+    setTrackedWorkoutLoadKg(null);
+  };
+
+  const handleChangeWorkoutLoadInputValue = (value: string) => {
+    const nextValue = sanitizeWorkoutLoadInput(value);
+    const parsed = parseWorkoutLoadInput(nextValue, workoutLoadInputUnit);
+    setWorkoutLoadInputValue(nextValue);
+    setWorkoutLoadInputError(parsed.error);
+  };
+
+  const handleChangeWorkoutLoadInputUnit = (unit: WorkoutLoadUnit) => {
+    if (unit === workoutLoadInputUnit) return;
+    setWorkoutLoadInputUnit(unit);
+    setWorkoutLoadInputValue(
+      formatWorkoutLoadValue(workoutLoadKgRef.current, unit),
+    );
+    setWorkoutLoadInputError(null);
+  };
+
+  const handleApplyWorkoutLoadInput = () => {
+    const parsed = parseWorkoutLoadInput(
+      workoutLoadInputValue,
+      workoutLoadInputUnit,
+    );
+    setWorkoutLoadInputError(parsed.error);
+    if (parsed.error) return;
+    if (parsed.weightKg === null) {
+      showMessage("Enter a load before applying it.");
+      return;
+    }
+    setTrackedWorkoutLoadKg(parsed.weightKg);
+    showMessage(
+      `Load set to ${formatWorkoutLoadValue(parsed.weightKg, workoutLoadInputUnit)} ${workoutLoadInputUnit}.`,
+    );
+  };
+
+  const handleChangeWorkoutLoadSliderValue = (value: number) => {
+    const nextValue = formatWorkoutLoadNumber(
+      clampWorkoutLoadSliderValue(value, workoutLoadInputUnit),
+    );
+    const parsed = parseWorkoutLoadInput(nextValue, workoutLoadInputUnit);
+    setWorkoutLoadInputValue(nextValue);
+    setWorkoutLoadInputError(parsed.error);
+  };
+
+  const handleClearWorkoutLoadInput = () => {
+    resetWorkoutLoadInput();
+    showMessage("Load cleared.");
   };
 
   const rememberExerciseCreationFrame = (frame: PoseSequenceFrameRecord) => {
@@ -1589,6 +1744,22 @@ export function useWorkoutLiveController() {
       : requiresEquipmentSnapshot && equipmentProviderEnabled === false
         ? ["equipment_provider_unavailable"]
         : [];
+  const isWeightedTrackingExercise = isWeightedEquipmentContext(
+    declaredExerciseEquipmentContext,
+  );
+  const workoutLoadInputVisible =
+    !!trackingExerciseLabel && isWeightedTrackingExercise;
+  const workoutLoadInputSavedLabel =
+    workoutLoadKg === null
+      ? null
+      : `${formatWorkoutLoadValue(workoutLoadKg, workoutLoadInputUnit)} ${workoutLoadInputUnit}`;
+  const workoutLoadSliderMin = MIN_WORKOUT_LOAD_SLIDER_VALUE;
+  const workoutLoadSliderMax = getWorkoutLoadSliderMax(workoutLoadInputUnit);
+  const workoutLoadSliderValue = getWorkoutLoadSliderValue(
+    workoutLoadInputValue,
+    workoutLoadKg,
+    workoutLoadInputUnit,
+  );
   const equipmentSnapshotActive =
     !isWebPoseRuntime &&
     isRecording &&
@@ -2671,6 +2842,13 @@ export function useWorkoutLiveController() {
       return;
     }
 
+    const previousLabel = confirmedExerciseLabelRef.current;
+    if (
+      previousLabel !== nextLabel ||
+      !isWeightedEquipmentContext(inferExerciseEquipmentContext(nextLabel))
+    ) {
+      resetWorkoutLoadInput();
+    }
     confirmedExerciseLabelRef.current = nextLabel;
     setConfirmedExerciseLabel(nextLabel);
     setDetectedExerciseName(nextLabel);
@@ -2722,13 +2900,16 @@ export function useWorkoutLiveController() {
 
   const handleSelectExerciseReference = (label: string) => {
     handleConfirmExerciseLabel(label);
-    setIsExerciseModalOpen(false);
+    if (!isWeightedEquipmentContext(inferExerciseEquipmentContext(label))) {
+      setIsExerciseModalOpen(false);
+    }
   };
 
   const handleUseAutoDetection = () => {
     confirmedExerciseLabelRef.current = null;
     setConfirmedExerciseLabel(null);
     setDetectedExerciseName(null);
+    resetWorkoutLoadInput();
     resetEquipmentDetectionState();
     setCustomExerciseLabel("");
     movementContractRef.current = null;
@@ -2893,6 +3074,7 @@ export function useWorkoutLiveController() {
 
     try {
       let finalizedReps = reps;
+      let finalizedLoadInputKg: number | null = null;
       let finalizedDetectedExerciseName =
         detectedExerciseName ?? confirmedExerciseLabelRef.current ?? null;
       if (poseSessionId) {
@@ -2903,6 +3085,11 @@ export function useWorkoutLiveController() {
         const finalizedDeclaredEquipmentContext = inferExerciseEquipmentContext(
           finalizedEquipmentContextLabel,
         );
+        finalizedLoadInputKg = isWeightedEquipmentContext(
+          finalizedDeclaredEquipmentContext,
+        )
+          ? workoutLoadKgRef.current
+          : null;
         const finalizedRequiresEquipmentSnapshot =
           requiresVisualEquipmentContext(finalizedDeclaredEquipmentContext);
         const finalizedProviderEquipmentFresh =
@@ -2981,6 +3168,7 @@ export function useWorkoutLiveController() {
             formFeedback: poseFeedback,
             movementContract: movementContractRef.current,
             rawAngleData: repEngineStateRef.current.rawAngleData,
+            weightInputKg: finalizedLoadInputKg,
           },
         });
         finalizedReps = finalizedPose.repCountAi;
@@ -3027,6 +3215,12 @@ export function useWorkoutLiveController() {
         );
       const loggedExercise = detectedExerciseMatch ?? selectedExercise;
       if (activeWorkoutId && loggedExercise) {
+        const loggedExerciseContext = inferExerciseEquipmentContext(
+          finalizedTrackingLabel ?? loggedExercise.label,
+        );
+        const loggedWeightKg = isWeightedEquipmentContext(loggedExerciseContext)
+          ? workoutLoadKgRef.current
+          : null;
         await logWorkoutSetMutation.mutateAsync({
           sessionId: activeWorkoutId,
           userId: user?.id,
@@ -3035,6 +3229,7 @@ export function useWorkoutLiveController() {
             exerciseId: loggedExercise.exerciseId,
             ...(poseSessionId ? { poseSessionId } : {}),
             ...(finalizedReps > 0 ? { repsCompleted: finalizedReps } : {}),
+            ...(loggedWeightKg !== null ? { weightKg: loggedWeightKg } : {}),
             setNumber: 1,
           },
         });
@@ -3058,6 +3253,7 @@ export function useWorkoutLiveController() {
       setAcceptedFps(null);
       setDetectedExerciseName(null);
       setConfirmedExerciseLabel(null);
+      resetWorkoutLoadInput();
       resetEquipmentDetectionState();
       confirmedExerciseLabelRef.current = null;
       setCustomExerciseLabel("");
@@ -3204,6 +3400,11 @@ export function useWorkoutLiveController() {
     onUpdateExerciseCreationDraft: setExerciseCreationDraft,
     onSubmitExerciseCreationDraft: handleSubmitExerciseCreationDraft,
     onUseAutoDetection: handleUseAutoDetection,
+    onApplyWorkoutLoadInput: handleApplyWorkoutLoadInput,
+    onChangeWorkoutLoadInputUnit: handleChangeWorkoutLoadInputUnit,
+    onChangeWorkoutLoadInputValue: handleChangeWorkoutLoadInputValue,
+    onChangeWorkoutLoadSliderValue: handleChangeWorkoutLoadSliderValue,
+    onClearWorkoutLoadInput: handleClearWorkoutLoadInput,
     opacity,
     permissionGranted,
     isTrackingReady: !trackingDisabledReason && !isPoseModelLoading,
@@ -3215,6 +3416,14 @@ export function useWorkoutLiveController() {
           ? "No live training plan yet. Manual tracking can still use the shared exercise catalog."
           : "No live training plan or exercise catalog is loaded on this stack yet.",
     selectedTrackingExerciseLabel: confirmedExerciseLabel,
+    workoutLoadInputError,
+    workoutLoadInputSavedLabel,
+    workoutLoadInputUnit,
+    workoutLoadInputValue,
+    workoutLoadInputVisible,
+    workoutLoadSliderMax,
+    workoutLoadSliderMin,
+    workoutLoadSliderValue,
     poseStatusText: poseStatusOverride
       ? poseStatusOverride
       : poseSessionId

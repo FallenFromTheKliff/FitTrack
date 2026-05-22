@@ -44,6 +44,7 @@ export function WorkoutLiveScreen() {
             countdownValue={controller.countdownValue}
             currentAngle={controller.currentAngle}
             currentKeypoints={controller.currentKeypoints}
+            currentLoadLabel={controller.workoutLoadInputSavedLabel}
             currentPhase={controller.currentPhase}
             equipmentDetected={controller.equipmentDetected}
             equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
@@ -108,6 +109,19 @@ export function WorkoutLiveScreen() {
         emptyMessage={controller.exerciseModalEmptyMessage}
         isVisible={controller.isExerciseModalOpen}
         isLoading={controller.exercisesLoading}
+        loadInputError={controller.workoutLoadInputError}
+        loadInputSavedLabel={controller.workoutLoadInputSavedLabel}
+        loadInputUnit={controller.workoutLoadInputUnit}
+        loadInputValue={controller.workoutLoadInputValue}
+        loadInputVisible={controller.workoutLoadInputVisible}
+        loadSliderMax={controller.workoutLoadSliderMax}
+        loadSliderMin={controller.workoutLoadSliderMin}
+        loadSliderValue={controller.workoutLoadSliderValue}
+        onApplyLoadInput={controller.onApplyWorkoutLoadInput}
+        onChangeLoadInputUnit={controller.onChangeWorkoutLoadInputUnit}
+        onChangeLoadInputValue={controller.onChangeWorkoutLoadInputValue}
+        onChangeLoadSliderValue={controller.onChangeWorkoutLoadSliderValue}
+        onClearLoadInput={controller.onClearWorkoutLoadInput}
         onSelectReference={controller.onSelectExerciseReference}
         references={controller.exerciseReferences}
         onClose={controller.onCloseExerciseModal}

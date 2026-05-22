@@ -26,9 +26,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
   AchievementReviewResponseDTO,
+  AdminMilestoneEvidenceFilterDTO,
   IntegritySummaryResponseDTO,
   LeaderboardEntryResponseDTO,
   MasteryFilterDTO,
+  MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
   MuscleMasteryResponseDTO,
@@ -36,7 +38,9 @@ import {
   ProgressionSourceListFilterDTO,
   ProgressionSourceSummaryResponseDTO,
   RankingProfileResponseDTO,
+  ReviewMilestoneEvidenceDTO,
   SeasonStandingResponseDTO,
+  SubmitMilestoneEvidenceDTO,
   UpdateRankingProfileDTO,
 } from './dto/gamification.dto';
 import { GamificationService } from './gamification.service';
@@ -84,6 +88,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   RankingProfileResponseDTO,
   SeasonStandingResponseDTO,
   MilestoneProgressResponseDTO,
+  MilestoneEvidenceSubmissionResponseDTO,
   IntegritySummaryResponseDTO,
 )
 @Controller('fitness')
@@ -209,6 +214,56 @@ export class GamificationController {
     return this.gamificationService.listAchievementReviews();
   }
 
+  @Get('milestone-evidence')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List member-submitted milestone proof for staff review.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone evidence records returned.',
+    schema: paginatedEnvelopeSchema(
+      getSchemaPath(MilestoneEvidenceSubmissionResponseDTO),
+    ),
+  })
+  listMilestoneEvidence(@Query() dto: AdminMilestoneEvidenceFilterDTO) {
+    return this.gamificationService.listMilestoneEvidenceSubmissions(dto);
+  }
+
+  @Patch('milestone-evidence/:evidenceSubmissionId/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Approve or reject a submitted milestone proof item.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Milestone evidence reviewed.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          $ref: getSchemaPath(MilestoneEvidenceSubmissionResponseDTO),
+        },
+      },
+    },
+  })
+  reviewMilestoneEvidence(
+    @CurrentUser() user: JwtPayload,
+    @Param('evidenceSubmissionId', ParseUUIDPipe)
+    evidenceSubmissionId: string,
+    @Body() dto: ReviewMilestoneEvidenceDTO,
+  ) {
+    return this.gamificationService.reviewMilestoneEvidence(
+      user.sub,
+      evidenceSubmissionId,
+      dto,
+    );
+  }
+
   @Get('milestones')
   @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
   @ApiBearerAuth('access-token')
@@ -223,9 +278,11 @@ export class GamificationController {
   })
   listMilestones(
     @CurrentUser() user: JwtPayload,
-    @Query() dto: MilestoneListFilterDTO,
+    @Query() dto?: MilestoneListFilterDTO,
   ) {
-    return this.gamificationService.getMilestoneProgress(user.sub, dto);
+    return dto
+      ? this.gamificationService.getMilestoneProgress(user.sub, dto)
+      : this.gamificationService.getMilestoneProgress(user.sub);
   }
 
   @Post('milestones/:milestoneDefinitionId/claim')
@@ -252,6 +309,37 @@ export class GamificationController {
     return this.gamificationService.claimMilestone(
       user.sub,
       milestoneDefinitionId,
+    );
+  }
+
+  @Post('milestones/:milestoneDefinitionId/evidence')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Submit image or MP4 evidence for a manual milestone.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Milestone evidence submitted for review.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          $ref: getSchemaPath(MilestoneEvidenceSubmissionResponseDTO),
+        },
+      },
+    },
+  })
+  submitMilestoneEvidence(
+    @CurrentUser() user: JwtPayload,
+    @Param('milestoneDefinitionId', ParseUUIDPipe)
+    milestoneDefinitionId: string,
+    @Body() dto: SubmitMilestoneEvidenceDTO,
+  ) {
+    return this.gamificationService.submitMilestoneEvidence(
+      user.sub,
+      milestoneDefinitionId,
+      dto,
     );
   }
 

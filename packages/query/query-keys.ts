@@ -476,6 +476,14 @@ const fitnessKeys = {
       : params
         ? (["fitness", "milestones", params] as const)
         : (["fitness", "milestones"] as const),
+  adminMilestones: (params?: Record<string, unknown>) =>
+    params
+      ? (["fitness", "admin-milestones", params] as const)
+      : (["fitness", "admin-milestones"] as const),
+  adminMilestoneEvidence: (params?: Record<string, unknown>) =>
+    params
+      ? (["fitness", "admin-milestone-evidence", params] as const)
+      : (["fitness", "admin-milestone-evidence"] as const),
   achievementReviews: () => ["fitness", "achievement-reviews"] as const,
   integritySummary: (userId?: string) =>
     userId
@@ -583,6 +591,8 @@ export const queryKeys = {
   fitnessRankingProfile: fitnessKeys.rankingProfile,
   fitnessSeasonStanding: fitnessKeys.seasonStanding,
   fitnessMilestones: fitnessKeys.milestones,
+  fitnessAdminMilestones: fitnessKeys.adminMilestones,
+  fitnessAdminMilestoneEvidence: fitnessKeys.adminMilestoneEvidence,
   fitnessAchievementReviews: fitnessKeys.achievementReviews,
   fitnessIntegritySummary: fitnessKeys.integritySummary,
   fitnessPoseSession: fitnessKeys.poseSession,

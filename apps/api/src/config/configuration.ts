@@ -2,6 +2,7 @@ import { registerAs } from '@nestjs/config';
 import {
   DEFAULT_R2_MIN_FREE_BYTES,
   DEFAULT_R2_STORAGE_LIMIT_BYTES,
+  DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES,
   DEFAULT_UPLOAD_MAX_FILE_SIZE_BYTES,
   parseEnvBoolean,
   parseEnvInteger,
@@ -159,6 +160,10 @@ export const filesConfig = registerAs('files', () => ({
   uploadMaxFileSizeBytes: parseEnvInteger(
     process.env.UPLOAD_MAX_FILE_SIZE_BYTES,
     DEFAULT_UPLOAD_MAX_FILE_SIZE_BYTES,
+  ),
+  milestoneEvidenceVideoMaxFileSizeBytes: parseEnvInteger(
+    process.env.MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES,
+    DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES,
   ),
 }));
 

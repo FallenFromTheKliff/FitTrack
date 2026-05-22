@@ -370,6 +370,7 @@ function AdminGamificationPage() {
   const fadeIn = useFadeIn({ duration: 240 });
   const themeTransition = useThemeTransition();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<GamificationTab>("overview");
   const [confirmationState, setConfirmationState] =
@@ -451,9 +452,10 @@ function AdminGamificationPage() {
       seasonFilterParams,
     ),
   );
-  const milestoneReviewsQuery = useQuery(
-    fitnessAchievementReviewsQueryOptions(webApiClient),
-  );
+  const milestoneReviewsQuery = useQuery({
+    ...fitnessAchievementReviewsQueryOptions(webApiClient),
+    enabled: false,
+  });
   const seasonMutation = useMutation(
     updateAdminGamificationSeasonStatusMutationOptions(
       webApiClient,
@@ -477,9 +479,9 @@ function AdminGamificationPage() {
   );
   useEffect(() => {
     if (searchParams.get("tab") === "milestones") {
-      setActiveTab("milestones");
+      router.replace("/milestones");
     }
-  }, [searchParams]);
+  }, [router, searchParams]);
 
   useEffect(() => {
     const reviews = milestoneReviewsQuery.data ?? [];
@@ -898,7 +900,6 @@ function AdminGamificationPage() {
         >
           {[
             { label: "Governance Overview", value: "overview" as const },
-            { label: "Milestone Management", value: "milestones" as const },
           ].map((tab) => {
             const isActive = activeTab === tab.value;
             return (

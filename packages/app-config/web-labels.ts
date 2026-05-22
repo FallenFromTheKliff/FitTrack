@@ -5,6 +5,7 @@ export type PageKey =
   | "schedule"
   | "exercise-lab"
   | "gamification"
+  | "milestones"
   | "gym-actions"
   | "memberships-promos"
   | "facilities"
@@ -33,6 +34,7 @@ export const PAGE_NAMES: Record<PageKey, string> = {
   schedule: "Gym Operations",
   "exercise-lab": "Exercise Lab",
   gamification: "Gamification",
+  milestones: "Milestones",
   "gym-actions": "Gym Actions",
   "memberships-promos": "Membership",
   facilities: "Facilities",
@@ -62,6 +64,7 @@ export const PAGE_SUBTITLES: Record<PageKey, string> = {
   schedule: "Manage schedules, coaches, appointments, and booking operations.",
   "exercise-lab": "Admin eyes on form, approvals, and every legit rep!",
   gamification: "Keep the leaderboard fair and the win streaks firing!",
+  milestones: "Build, review, and govern milestone rules across FitTrack.",
   "gym-actions": "Staff crew, keep payments, logs, and floor moves tight!",
   "memberships-promos": "Admin mode, keep plans pumping and promos ready!",
   facilities: "Staff check, keep every training zone ready to rip!",

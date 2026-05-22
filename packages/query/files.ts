@@ -6,3 +6,12 @@ export function uploadImageMutationOptions(client: Pick<ApiClient, "files">) {
     mutationFn: (payload: FormData) => client.files.uploadImage(payload)
   });
 }
+
+export function uploadMilestoneEvidenceMutationOptions(
+  client: Pick<ApiClient, "files">
+) {
+  return mutationOptions({
+    mutationFn: (payload: FormData) =>
+      client.files.uploadMilestoneEvidence(payload)
+  });
+}

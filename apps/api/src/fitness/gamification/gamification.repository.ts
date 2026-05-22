@@ -1,13 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AppointmentStatus,
   AuthProvider,
+  BookingStatus,
   CreatorState,
   ExerciseReviewSubmissionStatus,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
   MasteryRank,
+  MilestoneCategory,
+  MilestoneDefinitionStatus,
+  MilestoneEvidenceRequirement,
+  MilestoneEvidenceSubmissionStatus,
+  MilestoneEvidenceType,
   MilestoneProgressStatus,
   MilestoneTriggerType,
+  MilestoneVerificationPolicy,
   ModerationActionType,
   ProgressionGrantStatus,
   ProgressionGrantType,
@@ -130,6 +138,34 @@ export type AchievementReviewRecord = Prisma.UserMilestoneProgressGetPayload<{
     };
   };
 }>;
+
+export type AdminMilestoneDefinitionRecord =
+  Prisma.MilestoneDefinitionGetPayload<{
+    include: {
+      _count: {
+        select: {
+          evidence_submissions: true;
+          user_progress: true;
+        };
+      };
+    };
+  }> & {
+    pending_review_count: number;
+    unlocked_count: number;
+  };
+
+export type MilestoneEvidenceSubmissionRecord =
+  Prisma.MilestoneEvidenceSubmissionGetPayload<{
+    include: {
+      milestone_definition: true;
+      user: {
+        include: {
+          auth_identities: true;
+          profile: true;
+        };
+      };
+    };
+  }>;
 
 export type IntegrityCaseRecord = Prisma.IntegrityCaseGetPayload<object>;
 
@@ -315,12 +351,22 @@ interface DerivedStreakState {
 }
 
 interface MilestoneEvaluationSnapshot {
+  aiActionCount: number;
+  aiChatMessageCount: number;
+  bookingNoShowCount: number;
+  completedCoachAppointments: number;
+  completedVenueBookings: number;
   completedWorkoutSessions: number;
   currentSeasonPoints: number;
   currentStreak: number;
+  gymChatMessageCount: number;
   longestStreak: number;
+  maxWeightKg: number;
+  noShowCoachAppointments: number;
+  nutritionLogCount: number;
   totalXp: number;
   trackedMuscleGroups: number;
+  weightedExerciseLogs: number;
 }
 
 const DAY_IN_MS = 86_400_000;
@@ -446,6 +492,8 @@ function readMilestoneMetric(
       return 'current_streak';
     case MilestoneTriggerType.summary_threshold:
       return 'total_xp';
+    case MilestoneTriggerType.composite:
+      return 'total_xp';
     default:
       return '';
   }
@@ -457,6 +505,20 @@ function resolveMilestoneObservedValue(
   snapshot: MilestoneEvaluationSnapshot,
 ): number | null {
   switch (metric) {
+    case 'ai_action_count':
+    case 'brodigy_ai_actions':
+      return snapshot.aiActionCount;
+    case 'ai_chat_messages':
+    case 'brodigy_ai_messages':
+      return snapshot.aiChatMessageCount;
+    case 'booking_no_shows':
+      return snapshot.bookingNoShowCount;
+    case 'coaching_appointments_completed':
+    case 'completed_coach_appointments':
+      return snapshot.completedCoachAppointments;
+    case 'venue_bookings_completed':
+    case 'completed_venue_bookings':
+      return snapshot.completedVenueBookings;
     case 'completed_workout_sessions':
       return snapshot.completedWorkoutSessions;
     case 'current_season_points':
@@ -464,15 +526,150 @@ function resolveMilestoneObservedValue(
       return snapshot.currentSeasonPoints;
     case 'current_streak':
       return snapshot.currentStreak;
+    case 'gym_chat_messages':
+      return snapshot.gymChatMessageCount;
     case 'longest_streak':
       return snapshot.longestStreak;
+    case 'max_weight_kg':
+      return snapshot.maxWeightKg;
+    case 'coaching_no_shows':
+    case 'no_show_coach_appointments':
+      return snapshot.noShowCoachAppointments;
+    case 'nutrition_logs':
+    case 'nutrition_log_count':
+      return snapshot.nutritionLogCount;
     case 'total_xp':
       return snapshot.totalXp;
     case 'tracked_muscle_groups':
       return snapshot.trackedMuscleGroups;
+    case 'weighted_exercise_logs':
+    case 'weighted_lift_count':
+      return snapshot.weightedExerciseLogs;
     default:
       return triggerType === MilestoneTriggerType.manual ? null : null;
   }
+}
+
+type MilestoneEvaluationResult = {
+  metric: string;
+  observedValue: number | null;
+  targetValue: number;
+  unlocked: boolean;
+};
+
+function compareMilestoneValue(input: {
+  observedValue: number;
+  operator: string;
+  payload: Record<string, unknown>;
+  targetValue: number;
+}): boolean {
+  switch (input.operator) {
+    case 'eq':
+      return input.observedValue === input.targetValue;
+    case 'gt':
+      return input.observedValue > input.targetValue;
+    case 'lt':
+      return input.observedValue < input.targetValue;
+    case 'lte':
+      return input.observedValue <= input.targetValue;
+    case 'between': {
+      const min =
+        typeof input.payload.min === 'number'
+          ? input.payload.min
+          : input.targetValue;
+      const max =
+        typeof input.payload.max === 'number'
+          ? input.payload.max
+          : input.targetValue;
+      return input.observedValue >= min && input.observedValue <= max;
+    }
+    case 'gte':
+    default:
+      return input.observedValue >= input.targetValue;
+  }
+}
+
+function evaluateMilestoneCondition(
+  triggerType: MilestoneTriggerType,
+  conditionPayload: Prisma.JsonValue | null,
+  snapshot: MilestoneEvaluationSnapshot,
+): MilestoneEvaluationResult {
+  const payload = toJsonObject(conditionPayload) ?? {};
+  const allConditions = Array.isArray(payload.all) ? payload.all : null;
+  const anyConditions = Array.isArray(payload.any) ? payload.any : null;
+
+  if (allConditions?.length) {
+    const results = allConditions.map((condition) =>
+      evaluateMilestoneCondition(
+        triggerType,
+        condition as Prisma.JsonValue,
+        snapshot,
+      ),
+    );
+    const primary = results[0] ?? {
+      metric: '',
+      observedValue: null,
+      targetValue: 1,
+      unlocked: false,
+    };
+    return {
+      ...primary,
+      unlocked: results.every((result) => result.unlocked),
+    };
+  }
+
+  if (anyConditions?.length) {
+    const results = anyConditions.map((condition) =>
+      evaluateMilestoneCondition(
+        triggerType,
+        condition as Prisma.JsonValue,
+        snapshot,
+      ),
+    );
+    const primary = results.find((result) => result.unlocked) ??
+      results[0] ?? {
+        metric: '',
+        observedValue: null,
+        targetValue: 1,
+        unlocked: false,
+      };
+    return {
+      ...primary,
+      unlocked: results.some((result) => result.unlocked),
+    };
+  }
+
+  const metric = readMilestoneMetric(triggerType, conditionPayload);
+  const targetValue = readMilestoneTargetValue(conditionPayload);
+  const observedValue = resolveMilestoneObservedValue(
+    triggerType,
+    metric,
+    snapshot,
+  );
+
+  if (observedValue === null) {
+    return {
+      metric,
+      observedValue,
+      targetValue,
+      unlocked: false,
+    };
+  }
+
+  const operator =
+    typeof payload.operator === 'string' ? payload.operator : 'gte';
+
+  return {
+    metric,
+    observedValue,
+    targetValue,
+    unlocked: compareMilestoneValue({
+      observedValue,
+      operator,
+      payload,
+      targetValue,
+    }),
+  };
 }
 
 async function buildMilestoneSnapshot(
@@ -485,7 +682,19 @@ async function buildMilestoneSnapshot(
     userId: string;
   },
 ): Promise<MilestoneEvaluationSnapshot> {
-  const [trackedMuscleGroups, completedWorkoutSessions] = await Promise.all([
+  const [
+    trackedMuscleGroups,
+    completedWorkoutSessions,
+    weightedExerciseAggregate,
+    nutritionLogCount,
+    completedCoachAppointments,
+    noShowCoachAppointments,
+    completedVenueBookings,
+    bookingNoShowCount,
+    aiChatMessageCount,
+    aiActionCount,
+    gymChatMessageCount,
+  ] = await Promise.all([
     tx.muscleMasteryProgress.count({
       where: { user_id: input.userId },
     }),
@@ -496,15 +705,90 @@ async function buildMilestoneSnapshot(
         source_status: ProgressionSourceStatus.applied,
       },
     }),
+    tx.exerciseLog.aggregate({
+      where: {
+        user_id: input.userId,
+        weight_kg: {
+          gt: 0,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _max: {
+        weight_kg: true,
+      },
+    }),
+    tx.nutritionLog.count({
+      where: { user_id: input.userId },
+    }),
+    tx.coachAppointment.count({
+      where: {
+        user_id: input.userId,
+        status: AppointmentStatus.completed,
+      },
+    }),
+    tx.coachAppointment.count({
+      where: {
+        user_id: input.userId,
+        status: AppointmentStatus.no_show,
+      },
+    }),
+    tx.amenityBooking.count({
+      where: {
+        user_id: input.userId,
+        status: BookingStatus.completed,
+      },
+    }),
+    tx.amenityBooking.count({
+      where: {
+        user_id: input.userId,
+        status: BookingStatus.no_show,
+      },
+    }),
+    tx.aiChatMessage.count({
+      where: {
+        session: {
+          user_id: input.userId,
+        },
+      },
+    }),
+    tx.aiChatMessage.count({
+      where: {
+        action_triggered: {
+          not: null,
+        },
+        session: {
+          user_id: input.userId,
+        },
+      },
+    }),
+    tx.gymChatMessage.count({
+      where: {
+        session: {
+          user_id: input.userId,
+        },
+      },
+    }),
   ]);
 
   return {
+    aiActionCount,
+    aiChatMessageCount,
+    bookingNoShowCount,
+    completedCoachAppointments,
+    completedVenueBookings,
     completedWorkoutSessions,
     currentSeasonPoints: input.currentSeasonPoints,
     currentStreak: input.currentStreak,
+    gymChatMessageCount,
     longestStreak: input.longestStreak,
+    maxWeightKg: Number(weightedExerciseAggregate._max.weight_kg ?? 0),
+    noShowCoachAppointments,
+    nutritionLogCount,
     totalXp: input.totalXp,
     trackedMuscleGroups,
+    weightedExerciseLogs: weightedExerciseAggregate._count._all,
   };
 }
 
@@ -522,6 +806,7 @@ async function syncMilestoneProgress(
     where: {
       is_active: true,
       retired_at: null,
+      status: MilestoneDefinitionStatus.active,
     },
     include: {
       user_progress: {
@@ -534,48 +819,50 @@ async function syncMilestoneProgress(
   });
 
   for (const milestone of milestoneRecords) {
-    const metric = readMilestoneMetric(
+    const evaluation = evaluateMilestoneCondition(
       milestone.trigger_type,
       milestone.condition_payload,
-    );
-    const observedValue = resolveMilestoneObservedValue(
-      milestone.trigger_type,
-      metric,
       input.snapshot,
     );
 
-    if (observedValue === null) {
+    if (evaluation.observedValue === null) {
       continue;
     }
 
     const existingProgress = milestone.user_progress[0] ?? null;
-    const targetValue = readMilestoneTargetValue(milestone.condition_payload);
     const isAlreadyUnlocked =
       existingProgress?.status === MilestoneProgressStatus.unlocked ||
       existingProgress?.status === MilestoneProgressStatus.claimed;
     const nextProgressValue = isAlreadyUnlocked
-      ? Math.max(existingProgress?.progress_value ?? 0, targetValue)
-      : Math.max(0, observedValue);
-    const hasUnlocked = isAlreadyUnlocked || nextProgressValue >= targetValue;
+      ? Math.max(existingProgress?.progress_value ?? 0, evaluation.targetValue)
+      : Math.max(0, evaluation.observedValue);
+    const hasUnlocked = isAlreadyUnlocked || evaluation.unlocked;
     const nextStatus =
       existingProgress?.status === MilestoneProgressStatus.claimed
         ? MilestoneProgressStatus.claimed
+        : existingProgress?.status === MilestoneProgressStatus.rejected
+          ? MilestoneProgressStatus.rejected
         : hasUnlocked
-          ? MilestoneProgressStatus.unlocked
+          ? milestone.verification_policy === MilestoneVerificationPolicy.auto
+            ? MilestoneProgressStatus.unlocked
+            : MilestoneProgressStatus.pending_review
           : MilestoneProgressStatus.in_progress;
     const nextUnlockedAt =
-      existingProgress?.unlocked_at ?? (hasUnlocked ? input.evaluatedAt : null);
+      existingProgress?.unlocked_at ??
+      (nextStatus === MilestoneProgressStatus.unlocked
+        ? input.evaluatedAt
+        : null);
 
     if (!existingProgress && nextProgressValue <= 0) {
       continue;
     }
 
     const progressPayload = {
-      last_observed_value: observedValue,
-      metric,
+      last_observed_value: evaluation.observedValue,
+      metric: evaluation.metric,
       source_event_id: input.sourceEventId ?? null,
       source_type: input.sourceType,
-      target: targetValue,
+      target: evaluation.targetValue,
     } satisfies Prisma.JsonObject;
 
     if (!existingProgress) {
@@ -1336,6 +1623,7 @@ export class GamificationRepository extends BaseRepository {
       where: {
         is_active: true,
         retired_at: null,
+        status: MilestoneDefinitionStatus.active,
       },
       include: {
         user_progress: {
@@ -1364,6 +1652,7 @@ export class GamificationRepository extends BaseRepository {
         milestone_definition: {
           is_active: true,
           retired_at: null,
+          status: MilestoneDefinitionStatus.active,
         },
         user: {
           deletedAt: null,
@@ -1401,6 +1690,7 @@ export class GamificationRepository extends BaseRepository {
         id: milestoneDefinitionId,
         is_active: true,
         retired_at: null,
+        status: MilestoneDefinitionStatus.active,
       },
       include: {
         user_progress: {
@@ -1448,6 +1738,685 @@ export class GamificationRepository extends BaseRepository {
         },
       },
     });
+  }
+
+  async syncMilestoneProgressForUser(input: {
+    sourceEventId?: string | null;
+    sourceType?: ProgressionSourceType;
+    userId: string;
+  }): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const profile = await tx.userProgressionProfile.findUnique({
+        where: { user_id: input.userId },
+      });
+      const snapshot = await buildMilestoneSnapshot(tx, {
+        currentSeasonPoints: profile?.current_season_points ?? 0,
+        currentStreak: profile?.current_streak ?? 0,
+        longestStreak: profile?.longest_streak ?? 0,
+        totalXp: profile?.total_xp ?? 0,
+        userId: input.userId,
+      });
+
+      await syncMilestoneProgress(tx, {
+        evaluatedAt: new Date(),
+        snapshot,
+        sourceEventId: input.sourceEventId ?? null,
+        sourceType: input.sourceType ?? ProgressionSourceType.moderation_action,
+        userId: input.userId,
+      });
+    });
+  }
+
+  async listAdminMilestoneDefinitions(input: {
+    category?: MilestoneCategory;
+    evidenceRequirement?: MilestoneEvidenceRequirement;
+    includeArchived?: boolean;
+    limit?: number;
+    page?: number;
+    search?: string;
+    sort?: 'created_at' | 'updated_at' | 'title' | 'sort_order';
+    status?: MilestoneDefinitionStatus;
+    triggerType?: MilestoneTriggerType;
+    verificationPolicy?: MilestoneVerificationPolicy;
+  }): Promise<PaginatedResult<AdminMilestoneDefinitionRecord>> {
+    const search = input.search?.trim();
+    const where: Prisma.MilestoneDefinitionWhereInput = {
+      ...(input.includeArchived
+        ? {}
+        : {
+            status: { not: MilestoneDefinitionStatus.archived },
+            retired_at: null,
+          }),
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.category ? { category: input.category } : {}),
+      ...(input.triggerType ? { trigger_type: input.triggerType } : {}),
+      ...(input.verificationPolicy
+        ? { verification_policy: input.verificationPolicy }
+        : {}),
+      ...(input.evidenceRequirement
+        ? { evidence_requirement: input.evidenceRequirement }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { key: { contains: search, mode: 'insensitive' } },
+              { title: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const orderBy: Prisma.MilestoneDefinitionOrderByWithRelationInput[] =
+      input.sort === 'title'
+        ? [{ title: 'asc' }]
+        : input.sort === 'sort_order'
+          ? [{ sort_order: 'asc' }, { title: 'asc' }]
+          : input.sort === 'created_at'
+            ? [{ created_at: 'desc' }]
+            : [{ updated_at: 'desc' }];
+
+    const result = await this.paginate<
+      Prisma.MilestoneDefinitionGetPayload<{
+        include: {
+          _count: {
+            select: {
+              evidence_submissions: true;
+              user_progress: true;
+            };
+          };
+        };
+      }>
+    >(
+      this.prisma.milestoneDefinition,
+      {
+        where,
+        orderBy,
+        include: {
+          _count: {
+            select: {
+              evidence_submissions: true,
+              user_progress: true,
+            },
+          },
+        },
+      },
+      { limit: input.limit, page: input.page },
+    );
+
+    return {
+      ...result,
+      data: await this.withAdminMilestoneCounts(result.data),
+    };
+  }
+
+  async getAdminMilestoneDefinition(
+    milestoneDefinitionId: string,
+  ): Promise<AdminMilestoneDefinitionRecord | null> {
+    const record = await this.prisma.milestoneDefinition.findUnique({
+      where: { id: milestoneDefinitionId },
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true,
+            user_progress: true,
+          },
+        },
+      },
+    });
+
+    if (!record) return null;
+    return (await this.withAdminMilestoneCounts([record]))[0] ?? null;
+  }
+
+  async createAdminMilestoneDefinition(input: {
+    actorUserId: string;
+    category: MilestoneCategory;
+    conditionPayload?: Record<string, unknown> | null;
+    description?: string | null;
+    endsAt?: Date | null;
+    evidenceRequirement?: MilestoneEvidenceRequirement;
+    isHidden?: boolean;
+    key: string;
+    rewardPayload?: Record<string, unknown> | null;
+    sortOrder?: number;
+    startsAt?: Date | null;
+    status?: MilestoneDefinitionStatus;
+    title: string;
+    triggerType: MilestoneTriggerType;
+    verificationPolicy?: MilestoneVerificationPolicy;
+  }): Promise<AdminMilestoneDefinitionRecord> {
+    const status = input.status ?? MilestoneDefinitionStatus.active;
+    const now = new Date();
+    const record = await this.prisma.milestoneDefinition.create({
+      data: {
+        key: input.key,
+        title: input.title,
+        description: input.description ?? null,
+        category: input.category,
+        trigger_type: input.triggerType,
+        condition_payload:
+          input.conditionPayload === undefined
+            ? Prisma.JsonNull
+            : (input.conditionPayload as Prisma.InputJsonValue),
+        reward_payload:
+          input.rewardPayload === undefined
+            ? Prisma.JsonNull
+            : (input.rewardPayload as Prisma.InputJsonValue),
+        status,
+        verification_policy:
+          input.verificationPolicy ?? MilestoneVerificationPolicy.auto,
+        evidence_requirement:
+          input.evidenceRequirement ?? MilestoneEvidenceRequirement.none,
+        is_active: status === MilestoneDefinitionStatus.active,
+        is_hidden: input.isHidden ?? false,
+        sort_order: input.sortOrder ?? 0,
+        starts_at: input.startsAt ?? null,
+        ends_at: input.endsAt ?? null,
+        retired_at:
+          status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_at:
+          status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_by_user_id:
+          status === MilestoneDefinitionStatus.archived
+            ? input.actorUserId
+            : null,
+        created_by_user_id: input.actorUserId,
+        updated_by_user_id: input.actorUserId,
+      },
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true,
+            user_progress: true,
+          },
+        },
+      },
+    });
+
+    return (await this.withAdminMilestoneCounts([record]))[0];
+  }
+
+  async updateAdminMilestoneDefinition(input: {
+    actorUserId: string;
+    category: MilestoneCategory;
+    conditionPayload?: Record<string, unknown> | null;
+    description?: string | null;
+    endsAt?: Date | null;
+    evidenceRequirement?: MilestoneEvidenceRequirement;
+    id: string;
+    isHidden?: boolean;
+    key: string;
+    rewardPayload?: Record<string, unknown> | null;
+    sortOrder?: number;
+    startsAt?: Date | null;
+    status?: MilestoneDefinitionStatus;
+    title: string;
+    triggerType: MilestoneTriggerType;
+    verificationPolicy?: MilestoneVerificationPolicy;
+  }): Promise<AdminMilestoneDefinitionRecord> {
+    const status = input.status ?? MilestoneDefinitionStatus.active;
+    const now = new Date();
+    const record = await this.prisma.milestoneDefinition.update({
+      where: { id: input.id },
+      data: {
+        key: input.key,
+        title: input.title,
+        description: input.description ?? null,
+        category: input.category,
+        trigger_type: input.triggerType,
+        condition_payload:
+          input.conditionPayload === undefined
+            ? Prisma.JsonNull
+            : (input.conditionPayload as Prisma.InputJsonValue),
+        reward_payload:
+          input.rewardPayload === undefined
+            ? Prisma.JsonNull
+            : (input.rewardPayload as Prisma.InputJsonValue),
+        status,
+        verification_policy:
+          input.verificationPolicy ?? MilestoneVerificationPolicy.auto,
+        evidence_requirement:
+          input.evidenceRequirement ?? MilestoneEvidenceRequirement.none,
+        is_active: status === MilestoneDefinitionStatus.active,
+        is_hidden: input.isHidden ?? false,
+        sort_order: input.sortOrder ?? 0,
+        starts_at: input.startsAt ?? null,
+        ends_at: input.endsAt ?? null,
+        retired_at:
+          status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_at:
+          status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_by_user_id:
+          status === MilestoneDefinitionStatus.archived
+            ? input.actorUserId
+            : null,
+        updated_by_user_id: input.actorUserId,
+      },
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true,
+            user_progress: true,
+          },
+        },
+      },
+    });
+
+    return (await this.withAdminMilestoneCounts([record]))[0];
+  }
+
+  async archiveAdminMilestoneDefinition(input: {
+    actorUserId: string;
+    id: string;
+  }): Promise<AdminMilestoneDefinitionRecord> {
+    const now = new Date();
+    const record = await this.prisma.milestoneDefinition.update({
+      where: { id: input.id },
+      data: {
+        archived_at: now,
+        archived_by_user_id: input.actorUserId,
+        is_active: false,
+        retired_at: now,
+        status: MilestoneDefinitionStatus.archived,
+        updated_by_user_id: input.actorUserId,
+      },
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true,
+            user_progress: true,
+          },
+        },
+      },
+    });
+
+    return (await this.withAdminMilestoneCounts([record]))[0];
+  }
+
+  async restoreAdminMilestoneDefinition(input: {
+    actorUserId: string;
+    id: string;
+  }): Promise<AdminMilestoneDefinitionRecord> {
+    const record = await this.prisma.milestoneDefinition.update({
+      where: { id: input.id },
+      data: {
+        archived_at: null,
+        archived_by_user_id: null,
+        is_active: true,
+        retired_at: null,
+        status: MilestoneDefinitionStatus.active,
+        updated_by_user_id: input.actorUserId,
+      },
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true,
+            user_progress: true,
+          },
+        },
+      },
+    });
+
+    return (await this.withAdminMilestoneCounts([record]))[0];
+  }
+
+  async listMilestoneEvidenceSubmissions(input: {
+    limit?: number;
+    page?: number;
+    search?: string;
+    status?: MilestoneEvidenceSubmissionStatus;
+  }): Promise<PaginatedResult<MilestoneEvidenceSubmissionRecord>> {
+    const search = input.search?.trim();
+    const where: Prisma.MilestoneEvidenceSubmissionWhereInput = {
+      ...(input.status ? { status: input.status } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                milestone_definition: {
+                  title: { contains: search, mode: 'insensitive' },
+                },
+              },
+              {
+                milestone_definition: {
+                  key: { contains: search, mode: 'insensitive' },
+                },
+              },
+              {
+                user: {
+                  auth_identities: {
+                    some: {
+                      identifier: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                },
+              },
+              {
+                user: {
+                  profile: {
+                    first_name: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                user: {
+                  profile: {
+                    last_name: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    return this.paginate<MilestoneEvidenceSubmissionRecord>(
+      this.prisma.milestoneEvidenceSubmission,
+      {
+        where,
+        orderBy: [{ status: 'asc' }, { created_at: 'desc' }],
+        include: {
+          milestone_definition: true,
+          user: {
+            include: {
+              auth_identities: {
+                where: { provider: AuthProvider.email },
+                orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+              },
+              profile: true,
+            },
+          },
+        },
+      },
+      { limit: input.limit, page: input.page },
+    );
+  }
+
+  async submitMilestoneEvidence(input: {
+    caption?: string | null;
+    evidenceType: MilestoneEvidenceType;
+    fileKey?: string | null;
+    fileUrl: string;
+    milestoneDefinitionId: string;
+    mimeType: string;
+    originalFilename?: string | null;
+    sizeBytes: number;
+    userId: string;
+  }): Promise<MilestoneEvidenceSubmissionRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const definition = await tx.milestoneDefinition.findFirstOrThrow({
+        where: {
+          id: input.milestoneDefinitionId,
+          is_active: true,
+          retired_at: null,
+          status: MilestoneDefinitionStatus.active,
+        },
+      });
+      const existingProgress = await tx.userMilestoneProgress.findUnique({
+        where: {
+          user_id_milestone_definition_id: {
+            user_id: input.userId,
+            milestone_definition_id: definition.id,
+          },
+        },
+      });
+      const now = new Date();
+      const nextStatus =
+        existingProgress?.status === MilestoneProgressStatus.claimed ||
+        existingProgress?.status === MilestoneProgressStatus.unlocked
+          ? existingProgress.status
+          : MilestoneProgressStatus.pending_review;
+      const progress = existingProgress
+        ? await tx.userMilestoneProgress.update({
+            where: { id: existingProgress.id },
+            data: {
+              status: nextStatus,
+              progress_payload: mergeJsonObject(
+                existingProgress.progress_payload,
+                {
+                  latest_evidence_submitted_at: now.toISOString(),
+                },
+              ),
+            },
+          })
+        : await tx.userMilestoneProgress.create({
+            data: {
+              user_id: input.userId,
+              milestone_definition_id: definition.id,
+              status: nextStatus,
+              progress_value: 0,
+              progress_payload: {
+                latest_evidence_submitted_at: now.toISOString(),
+              },
+            },
+          });
+
+      const evidence = await tx.milestoneEvidenceSubmission.create({
+        data: {
+          user_id: input.userId,
+          milestone_definition_id: definition.id,
+          milestone_progress_id: progress.id,
+          status: MilestoneEvidenceSubmissionStatus.pending,
+          evidence_type: input.evidenceType,
+          file_url: input.fileUrl,
+          file_key: input.fileKey ?? null,
+          mime_type: input.mimeType,
+          size_bytes: input.sizeBytes,
+          original_filename: input.originalFilename ?? null,
+          caption: input.caption ?? null,
+        },
+      });
+
+      await tx.progressionSourceEvent.upsert({
+        where: {
+          source_type_source_id: {
+            source_type: ProgressionSourceType.milestone_evidence_submitted,
+            source_id: evidence.id,
+          },
+        },
+        create: {
+          user_id: input.userId,
+          source_type: ProgressionSourceType.milestone_evidence_submitted,
+          source_id: evidence.id,
+          source_status: ProgressionSourceStatus.applied,
+          source_context: {
+            evidence_submission_id: evidence.id,
+            milestone_definition_id: definition.id,
+          },
+          processed_at: now,
+        },
+        update: {
+          source_status: ProgressionSourceStatus.applied,
+          processed_at: now,
+        },
+      });
+
+      return tx.milestoneEvidenceSubmission.findUniqueOrThrow({
+        where: { id: evidence.id },
+        include: {
+          milestone_definition: true,
+          user: {
+            include: {
+              auth_identities: {
+                where: { provider: AuthProvider.email },
+                orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+              },
+              profile: true,
+            },
+          },
+        },
+      });
+    });
+  }
+
+  async reviewMilestoneEvidence(input: {
+    evidenceSubmissionId: string;
+    reviewerNotes?: string | null;
+    reviewerUserId: string;
+    status: Extract<
+      MilestoneEvidenceSubmissionStatus,
+      'approved' | 'rejected'
+    >;
+  }): Promise<MilestoneEvidenceSubmissionRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const evidence = await tx.milestoneEvidenceSubmission.findUniqueOrThrow({
+        where: { id: input.evidenceSubmissionId },
+      });
+      const now = new Date();
+      const nextProgressStatus =
+        input.status === MilestoneEvidenceSubmissionStatus.approved
+          ? MilestoneProgressStatus.unlocked
+          : MilestoneProgressStatus.rejected;
+
+      await tx.milestoneEvidenceSubmission.update({
+        where: { id: evidence.id },
+        data: {
+          status: input.status,
+          reviewed_at: now,
+          reviewed_by_user_id: input.reviewerUserId,
+          reviewer_notes: input.reviewerNotes ?? null,
+        },
+      });
+
+      const progress = evidence.milestone_progress_id
+        ? await tx.userMilestoneProgress.findUnique({
+            where: { id: evidence.milestone_progress_id },
+          })
+        : await tx.userMilestoneProgress.findUnique({
+            where: {
+              user_id_milestone_definition_id: {
+                user_id: evidence.user_id,
+                milestone_definition_id: evidence.milestone_definition_id,
+              },
+            },
+          });
+
+      if (progress) {
+        await tx.userMilestoneProgress.update({
+          where: { id: progress.id },
+          data: {
+            status:
+              progress.status === MilestoneProgressStatus.claimed
+                ? progress.status
+                : nextProgressStatus,
+            progress_payload: mergeJsonObject(progress.progress_payload, {
+              latest_evidence_review_id: evidence.id,
+              latest_evidence_reviewed_at: now.toISOString(),
+              latest_evidence_status: input.status,
+            }),
+            unlocked_at:
+              input.status === MilestoneEvidenceSubmissionStatus.approved
+                ? (progress.unlocked_at ?? now)
+                : progress.unlocked_at,
+          },
+        });
+      }
+
+      await tx.progressionSourceEvent.upsert({
+        where: {
+          source_type_source_id: {
+            source_type:
+              input.status === MilestoneEvidenceSubmissionStatus.approved
+                ? ProgressionSourceType.milestone_evidence_approved
+                : ProgressionSourceType.milestone_evidence_rejected,
+            source_id: evidence.id,
+          },
+        },
+        create: {
+          user_id: evidence.user_id,
+          source_type:
+            input.status === MilestoneEvidenceSubmissionStatus.approved
+              ? ProgressionSourceType.milestone_evidence_approved
+              : ProgressionSourceType.milestone_evidence_rejected,
+          source_id: evidence.id,
+          source_status: ProgressionSourceStatus.applied,
+          source_context: {
+            evidence_submission_id: evidence.id,
+            milestone_definition_id: evidence.milestone_definition_id,
+            reviewer_user_id: input.reviewerUserId,
+          },
+          processed_at: now,
+        },
+        update: {
+          source_status: ProgressionSourceStatus.applied,
+          processed_at: now,
+        },
+      });
+
+      return tx.milestoneEvidenceSubmission.findUniqueOrThrow({
+        where: { id: evidence.id },
+        include: {
+          milestone_definition: true,
+          user: {
+            include: {
+              auth_identities: {
+                where: { provider: AuthProvider.email },
+                orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+              },
+              profile: true,
+            },
+          },
+        },
+      });
+    });
+  }
+
+  private async withAdminMilestoneCounts(
+    records: Prisma.MilestoneDefinitionGetPayload<{
+      include: {
+        _count: {
+          select: {
+            evidence_submissions: true;
+            user_progress: true;
+          };
+        };
+      };
+    }>[],
+  ): Promise<AdminMilestoneDefinitionRecord[]> {
+    const ids = records.map((record) => record.id);
+    if (!ids.length) return [];
+
+    const [unlockedCounts, pendingReviewCounts] = await Promise.all([
+      this.prisma.userMilestoneProgress.groupBy({
+        by: ['milestone_definition_id'],
+        where: {
+          milestone_definition_id: { in: ids },
+          status: {
+            in: [
+              MilestoneProgressStatus.unlocked,
+              MilestoneProgressStatus.claimed,
+            ],
+          },
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.milestoneEvidenceSubmission.groupBy({
+        by: ['milestone_definition_id'],
+        where: {
+          milestone_definition_id: { in: ids },
+          status: MilestoneEvidenceSubmissionStatus.pending,
+        },
+        _count: { _all: true },
+      }),
+    ]);
+    const unlockedById = new Map(
+      unlockedCounts.map((count) => [
+        count.milestone_definition_id,
+        count._count._all,
+      ]),
+    );
+    const pendingById = new Map(
+      pendingReviewCounts.map((count) => [
+        count.milestone_definition_id,
+        count._count._all,
+      ]),
+    );
+
+    return records.map((record) => ({
+      ...record,
+      pending_review_count: pendingById.get(record.id) ?? 0,
+      unlocked_count: unlockedById.get(record.id) ?? 0,
+    }));
   }
 
   async getIntegritySummary(userId: string): Promise<IntegritySummaryRecord> {

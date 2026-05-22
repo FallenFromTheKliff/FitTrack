@@ -1,5 +1,14 @@
-import { useMemo, useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  View,
+  type AccessibilityActionEvent,
+  type GestureResponderEvent,
+  type LayoutChangeEvent
+} from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Dumbbell, SlidersHorizontal } from "lucide-react-native";
 
@@ -10,7 +19,7 @@ import { useDebounce } from "@fittrack/hooks";
 import { makeExerciseModalStyles } from "@/styles/modals/ExerciseStyles";
 import { EXERCISE_REFERENCES, type ExerciseReference } from "@/data/exercises";
 
-import { FitText } from "@/components/fit/FitText";
+import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitSearch from "@/components/fit/FitSearch";
 import FitButton from "@/components/fit/FitButton";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
@@ -22,27 +31,161 @@ const LEVEL_OPTIONS: { label: string; value: "all" | ExerciseReference["level"] 
   { label: "Advanced", value: "Advanced" }
 ];
 
+type LoadInputUnit = "kg" | "lb";
+
 type Props = {
   currentSelectionLabel?: string | null;
   emptyMessage?: string;
   isLoading?: boolean;
   isVisible: boolean;
+  loadInputError?: string | null;
+  loadInputSavedLabel?: string | null;
+  loadInputUnit?: LoadInputUnit;
+  loadInputValue?: string;
+  loadInputVisible?: boolean;
+  loadSliderMax?: number;
+  loadSliderMin?: number;
+  loadSliderValue?: number;
   onClose: () => void;
   onCreateFromSession?: () => void;
   createFromSessionDisabled?: boolean;
+  onApplyLoadInput?: () => void;
+  onChangeLoadInputUnit?: (unit: LoadInputUnit) => void;
+  onChangeLoadInputValue?: (value: string) => void;
+  onChangeLoadSliderValue?: (value: number) => void;
+  onClearLoadInput?: () => void;
   onSelectReference?: (label: string) => void;
   onUseAutoDetect?: () => void;
   references?: ExerciseReference[];
 };
+
+type ExerciseModalStyles = ReturnType<typeof makeExerciseModalStyles>;
+
+type LoadSliderProps = {
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  s: ExerciseModalStyles;
+  unit: LoadInputUnit;
+  value: number;
+};
+
+function LoadSlider({ max, min, onChange, s, unit, value }: LoadSliderProps) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const boundedMax = Math.max(min, max);
+  const boundedValue = Math.min(boundedMax, Math.max(min, value));
+  const progress =
+    boundedMax === min ? 0 : (boundedValue - min) / (boundedMax - min);
+  const accessibilityValueText = `${boundedValue} ${unit}`;
+  const webSliderAriaProps =
+    Platform.OS === "web"
+      ? {
+          "aria-valuemax": boundedMax,
+          "aria-valuemin": min,
+          "aria-valuenow": boundedValue,
+          "aria-valuetext": accessibilityValueText
+        }
+      : {};
+
+  const handleTrackLayout = useCallback((event: LayoutChangeEvent) => {
+    setTrackWidth(event.nativeEvent.layout.width);
+  }, []);
+
+  const updateFromX = useCallback(
+    (x: number) => {
+      if (trackWidth <= 0) return;
+      const ratio = Math.min(1, Math.max(0, x / trackWidth));
+      onChange(Math.round(min + ratio * (boundedMax - min)));
+    },
+    [boundedMax, min, onChange, trackWidth],
+  );
+
+  const updateFromEvent = useCallback(
+    (event: GestureResponderEvent) => {
+      updateFromX(event.nativeEvent.locationX);
+    },
+    [updateFromX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: updateFromEvent,
+        onPanResponderMove: updateFromEvent
+      }),
+    [updateFromEvent],
+  );
+
+  const handleAccessibilityAction = useCallback(
+    (event: AccessibilityActionEvent) => {
+      const delta = event.nativeEvent.actionName === "increment" ? 1 : -1;
+      onChange(Math.min(boundedMax, Math.max(min, boundedValue + delta)));
+    },
+    [boundedMax, boundedValue, min, onChange],
+  );
+
+  return (
+    <View style={s.loadSliderWrap}>
+      <View style={s.loadSliderHeader}>
+        <FitText style={s.loadSliderLabel}>Current load</FitText>
+        <FitText style={s.loadSliderValue}>
+          {boundedValue} {unit}
+        </FitText>
+      </View>
+      <View
+        accessibilityActions={[{ name: "decrement" }, { name: "increment" }]}
+        accessibilityLabel="Current load"
+        accessibilityRole="adjustable"
+        accessibilityValue={{
+          min,
+          max: boundedMax,
+          now: boundedValue,
+          text: accessibilityValueText
+        }}
+        onAccessibilityAction={handleAccessibilityAction}
+        onLayout={handleTrackLayout}
+        style={s.loadSliderTrack}
+        {...webSliderAriaProps}
+        {...panResponder.panHandlers}
+      >
+        <View style={[s.loadSliderFill, { width: `${progress * 100}%` }]} />
+        <View style={[s.loadSliderThumb, { left: `${progress * 100}%` }]} />
+      </View>
+      <View style={s.loadSliderScaleRow}>
+        <FitText style={s.loadSliderLimit}>
+          {min} {unit}
+        </FitText>
+        <FitText style={s.loadSliderLimit}>
+          {boundedMax} {unit}
+        </FitText>
+      </View>
+    </View>
+  );
+}
 
 export default function ExerciseModal({
   currentSelectionLabel = null,
   emptyMessage = "No exercises match your search.",
   isLoading = false,
   isVisible,
+  loadInputError = null,
+  loadInputSavedLabel = null,
+  loadInputUnit = "kg",
+  loadInputValue = "",
+  loadInputVisible = false,
+  loadSliderMax = 1000,
+  loadSliderMin = 1,
+  loadSliderValue = 1,
   onClose,
   onCreateFromSession,
   createFromSessionDisabled = false,
+  onApplyLoadInput,
+  onChangeLoadInputUnit,
+  onChangeLoadInputValue,
+  onChangeLoadSliderValue,
+  onClearLoadInput,
   onSelectReference,
   onUseAutoDetect,
   references
@@ -54,6 +197,7 @@ export default function ExerciseModal({
   const [query, setQuery] = useState("");
   const [activeLevel, setActiveLevel] = useState<"all" | ExerciseReference["level"]>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isLoadInputOpen, setIsLoadInputOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 250);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
@@ -70,6 +214,16 @@ export default function ExerciseModal({
   };
 
   const sourceReferences = references ?? EXERCISE_REFERENCES;
+  const canEditLoadInput =
+    loadInputVisible &&
+    !!onApplyLoadInput &&
+    !!onChangeLoadInputUnit &&
+    !!onChangeLoadInputValue &&
+    !!onClearLoadInput;
+  const canUseLoadSlider = canEditLoadInput && !!onChangeLoadSliderValue;
+  const loadButtonLabel = loadInputSavedLabel
+    ? `Load ${loadInputSavedLabel}`
+    : "Set Load";
 
   const filteredReferences = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
@@ -82,6 +236,19 @@ export default function ExerciseModal({
       return matchesLevel && matchesSearch;
     });
   }, [activeLevel, debouncedQuery, sourceReferences]);
+
+  useEffect(() => {
+    if (!isVisible || !canEditLoadInput) {
+      setIsLoadInputOpen(false);
+    }
+  }, [canEditLoadInput, isVisible]);
+
+  const handleApplyLoadInput = () => {
+    onApplyLoadInput?.();
+    if (!loadInputError && loadInputValue.trim().length > 0) {
+      setIsLoadInputOpen(false);
+    }
+  };
 
   return (
       <Modal
@@ -205,6 +372,84 @@ export default function ExerciseModal({
                 );
               })}
             </FitModalScrollView>
+            {canEditLoadInput && isLoadInputOpen ? (
+              <View style={s.loadPanel}>
+                <View
+                  style={[
+                    s.loadInputWrap,
+                    loadInputError ? { borderColor: colors.danger } : null
+                  ]}
+                >
+                  <Dumbbell size={16} color={colors.textMuted} strokeWidth={2} />
+                  <FitTextInput
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={handleApplyLoadInput}
+                    placeholder={`Load in ${loadInputUnit}`}
+                    style={s.loadTextInput}
+                    value={loadInputValue}
+                    onChangeText={(value) => onChangeLoadInputValue?.(value)}
+                  />
+                </View>
+                <View style={s.loadUnitRow}>
+                  {(["kg", "lb"] as const).map((unit) => {
+                    const isActive = loadInputUnit === unit;
+                    return (
+                      <Pressable
+                        key={unit}
+                        onPress={() => onChangeLoadInputUnit?.(unit)}
+                        style={[
+                          s.loadUnitChip,
+                          isActive && {
+                            backgroundColor: colors.brand,
+                            borderColor: colors.brand
+                          }
+                        ]}
+                      >
+                        <FitText
+                          style={[
+                            s.loadUnitText,
+                            isActive && { color: colors.onBrand ?? "#FFFFFF" }
+                          ]}
+                        >
+                          {unit}
+                        </FitText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {canUseLoadSlider ? (
+                  <LoadSlider
+                    max={loadSliderMax}
+                    min={loadSliderMin}
+                    onChange={onChangeLoadSliderValue}
+                    s={s}
+                    unit={loadInputUnit}
+                    value={loadSliderValue}
+                  />
+                ) : null}
+                {loadInputError ? (
+                  <FitText style={s.loadErrorText}>{loadInputError}</FitText>
+                ) : loadInputSavedLabel ? (
+                  <FitText style={s.loadSavedText}>{loadInputSavedLabel}</FitText>
+                ) : null}
+                <View style={s.loadActions}>
+                  <FitButton
+                    label="Clear"
+                    variant="ghost"
+                    onPress={() => onClearLoadInput?.()}
+                    style={s.footerAction}
+                  />
+                  <FitButton
+                    label="Apply"
+                    variant="ghost"
+                    disabled={!!loadInputError || loadInputValue.trim().length === 0}
+                    onPress={handleApplyLoadInput}
+                    style={s.footerAction}
+                  />
+                </View>
+              </View>
+            ) : null}
             <View style={s.footer}>
               {onCreateFromSession ? (
                 <FitButton
@@ -212,7 +457,15 @@ export default function ExerciseModal({
                   label="Create Draft"
                   variant="ghost"
                   onPress={onCreateFromSession}
-                  style={{ flex: 1 }}
+                  style={s.footerAction}
+                />
+              ) : null}
+              {canEditLoadInput ? (
+                <FitButton
+                  label={loadButtonLabel}
+                  variant="ghost"
+                  onPress={() => setIsLoadInputOpen((open) => !open)}
+                  style={s.footerAction}
                 />
               ) : null}
               {onUseAutoDetect ? (
@@ -220,10 +473,10 @@ export default function ExerciseModal({
                   label="Auto Detect"
                   variant="ghost"
                   onPress={onUseAutoDetect}
-                  style={{ flex: 1 }}
+                  style={s.footerAction}
                 />
               ) : null}
-              <FitButton label="Close" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
+              <FitButton label="Close" variant="ghost" onPress={onClose} style={s.footerAction} />
             </View>
           </Animated.View>
         </Animated.View>

@@ -24,7 +24,7 @@ import {
 import { Public } from '../auth/public.decorator/public.decorator';
 import { JwtAuthGuard } from '../common/guards';
 import { FilesService } from './files.service';
-import { UploadedImageFile } from './files.types';
+import { UploadedImageFile, UploadedStorageFile } from './files.types';
 
 @ApiTags('Files')
 @Controller('files')
@@ -53,6 +53,38 @@ export class FilesController {
   })
   uploadFile(@UploadedFile() file: UploadedImageFile | undefined) {
     return this.filesService.uploadImage(file);
+  }
+
+  @Post('milestone-evidence')
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload milestone proof evidence to shared storage.',
+  })
+  @ApiResponse({ status: 201, description: 'Evidence uploaded successfully.' })
+  @ApiResponse({
+    status: 413,
+    description: 'File exceeds the configured milestone evidence limit.',
+  })
+  @ApiResponse({
+    status: 415,
+    description: 'Only JPEG, PNG, and MP4 evidence files are supported.',
+  })
+  uploadMilestoneEvidence(
+    @UploadedFile() file: UploadedStorageFile | undefined,
+  ) {
+    return this.filesService.uploadMilestoneEvidence(file);
   }
 
   @Get('render')

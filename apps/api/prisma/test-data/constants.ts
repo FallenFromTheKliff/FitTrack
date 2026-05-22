@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import { resolve } from 'node:path';
 import { v5 as uuidv5 } from 'uuid';
 
@@ -24,6 +24,9 @@ export type TestAccount = {
   password: string;
   phone: string;
   role: UserRole;
+  archivedAt?: string;
+  emailVerified?: boolean;
+  status?: UserStatus;
 };
 
 export const TEST_ACCOUNTS: readonly TestAccount[] = [
@@ -138,6 +141,41 @@ export const TEST_ACCOUNTS: readonly TestAccount[] = [
     phone: '+639110000010',
   },
   {
+    key: 'member-unverified',
+    label: 'Member Unverified',
+    role: UserRole.member,
+    email: `seed.member.unverified@${TEST_DATA_EMAIL_DOMAIN}`,
+    password: 'SeedMember!2026',
+    firstName: 'Mika',
+    lastName: 'Unverified',
+    phone: '+639110000011',
+    emailVerified: false,
+    status: UserStatus.pending,
+  },
+  {
+    key: 'member-archived',
+    label: 'Member Archived',
+    role: UserRole.member,
+    email: `seed.member.archived@${TEST_DATA_EMAIL_DOMAIN}`,
+    password: 'SeedMember!2026',
+    firstName: 'Tala',
+    lastName: 'Archived',
+    phone: '+639110000012',
+    archivedAt: '2026-05-01T09:00:00.000Z',
+    status: UserStatus.active,
+  },
+  {
+    key: 'member-suspended',
+    label: 'Member Suspended',
+    role: UserRole.member,
+    email: `seed.member.suspended@${TEST_DATA_EMAIL_DOMAIN}`,
+    password: 'SeedMember!2026',
+    firstName: 'Kian',
+    lastName: 'Suspended',
+    phone: '+639110000016',
+    status: UserStatus.suspended,
+  },
+  {
     key: 'member-expired',
     label: 'Member Expired',
     role: UserRole.member,
@@ -190,7 +228,7 @@ export const MANUAL_TEST_PATHS: readonly ManualTestPath[] = [
     credentialKey: 'coach',
     route: '/coach/dashboard',
     expected:
-      'Confirm the web shell authenticates the coach and shows the Coach Portal navigation with empty dedicated pages.',
+      'Confirm the web shell authenticates the coach and shows Coach Portal navigation, active availability, client history, and a completed seeded appointment.',
   },
   {
     area: 'mobile-bookings',
@@ -233,6 +271,27 @@ export const MANUAL_TEST_PATHS: readonly ManualTestPath[] = [
     route: '/(tabs)/profile',
     expected:
       'Verify the non-member purchase and upsell states without an active membership card, subscription, or payment in flight.',
+  },
+  {
+    area: 'admin-unverified-account',
+    credentialKey: 'admin',
+    route: '/accounts',
+    expected:
+      'Find seed.member.unverified@fittrack.com and verify the pending, email-unverified account controls.',
+  },
+  {
+    area: 'admin-archived-account',
+    credentialKey: 'admin',
+    route: '/accounts',
+    expected:
+      'Find seed.member.archived@fittrack.com and verify restore/edit actions for archived users.',
+  },
+  {
+    area: 'admin-suspended-account',
+    credentialKey: 'admin',
+    route: '/accounts',
+    expected:
+      'Find seed.member.suspended@fittrack.com and verify suspended-account status editing.',
   },
 ];
 

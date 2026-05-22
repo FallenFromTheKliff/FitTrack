@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { FitnessGoal, PlanSource, SessionStatus } from '@prisma/client';
 
 export class StartSessionDTO {
@@ -31,8 +31,12 @@ export class LogExerciseSetDTO {
   @ApiPropertyOptional({ example: 40, nullable: true })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({}, { message: 'weight_kg must be a number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 },
+    { message: 'weight_kg must be a finite number' },
+  )
   @Min(0, { message: 'weight_kg must be at least 0' })
+  @Max(1000, { message: 'weight_kg must not exceed 1000' })
   weight_kg?: number;
 
   @ApiPropertyOptional({ example: 45, nullable: true })

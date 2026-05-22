@@ -65,12 +65,64 @@ function readManifest(manifestPath) {
     return null;
   }
 
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  let content;
+  try {
+    content = fs.readFileSync(manifestPath, 'utf8');
+  } catch (error) {
+    console.warn(
+      `Ignoring unreadable dev stack manifest at ${manifestPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
+
+  const parseSource = content.includes('\0')
+    ? content.replaceAll('\0', '')
+    : content;
+
+  if (parseSource.trim().length === 0) {
+    console.warn(`Ignoring empty dev stack manifest at ${manifestPath}.`);
+    return null;
+  }
+
+  try {
+    return JSON.parse(parseSource);
+  } catch (error) {
+    console.warn(
+      `Ignoring invalid dev stack manifest at ${manifestPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
 }
 
 function writeManifest(manifestPath, payload) {
   ensureDirectory(path.dirname(manifestPath));
-  fs.writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  const tempPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
+  try {
+    fs.renameSync(tempPath, manifestPath);
+  } catch (error) {
+    try {
+      if (fs.existsSync(manifestPath)) {
+        fs.unlinkSync(manifestPath);
+      }
+      fs.renameSync(tempPath, manifestPath);
+    } catch (fallbackError) {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch {
+        // Best effort cleanup only.
+      }
+
+      throw fallbackError;
+    }
+  }
 }
 
 function removeManifest(manifestPath) {

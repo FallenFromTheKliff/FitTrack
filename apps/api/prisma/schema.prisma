@@ -77,6 +77,11 @@ model User {
   progression_profile         UserProgressionProfile?
   seasonal_standings          SeasonalStanding[]
   milestone_progress          UserMilestoneProgress[]
+  milestone_evidence_submissions MilestoneEvidenceSubmission[] @relation("milestone_evidence_submitter")
+  milestone_evidence_reviews     MilestoneEvidenceSubmission[] @relation("milestone_evidence_reviewer")
+  milestone_definitions_created  MilestoneDefinition[]         @relation("milestone_definition_creator")
+  milestone_definitions_updated  MilestoneDefinition[]         @relation("milestone_definition_updater")
+  milestone_definitions_archived MilestoneDefinition[]         @relation("milestone_definition_archiver")
   ranking_profile             RankingProfile?
   integrity_profile           IntegrityProfile?
   integrity_cases             IntegrityCase[]
@@ -1294,23 +1299,39 @@ model SeasonalStanding {
 }
 
 model MilestoneDefinition {
-  id                String               @id @default(uuid()) @db.Uuid
-  key               String               @unique @db.VarChar(120)
-  title             String               @db.VarChar(160)
-  description       String?
-  category          MilestoneCategory
-  trigger_type      MilestoneTriggerType
-  condition_payload Json?
-  reward_payload    Json?
-  is_active         Boolean              @default(true)
-  is_hidden         Boolean              @default(false)
-  retired_at        DateTime?            @db.Timestamptz(6)
-  created_at        DateTime             @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime             @updatedAt @db.Timestamptz(6)
+  id                    String                       @id @default(uuid()) @db.Uuid
+  key                   String                       @unique @db.VarChar(120)
+  title                 String                       @db.VarChar(160)
+  description           String?
+  category              MilestoneCategory
+  trigger_type          MilestoneTriggerType
+  condition_payload     Json?
+  reward_payload        Json?
+  status                MilestoneDefinitionStatus    @default(active)
+  verification_policy   MilestoneVerificationPolicy  @default(auto)
+  evidence_requirement  MilestoneEvidenceRequirement @default(none)
+  is_active             Boolean                      @default(true)
+  is_hidden             Boolean                      @default(false)
+  sort_order            Int                          @default(0)
+  starts_at             DateTime?                    @db.Timestamptz(6)
+  ends_at               DateTime?                    @db.Timestamptz(6)
+  retired_at            DateTime?                    @db.Timestamptz(6)
+  archived_at           DateTime?                    @db.Timestamptz(6)
+  archived_by_user_id   String?                      @db.Uuid
+  created_by_user_id    String?                      @db.Uuid
+  updated_by_user_id    String?                      @db.Uuid
+  created_at            DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                     @updatedAt @db.Timestamptz(6)
 
-  user_progress UserMilestoneProgress[]
+  user_progress        UserMilestoneProgress[]
+  evidence_submissions MilestoneEvidenceSubmission[]
+  archived_by          User?                         @relation("milestone_definition_archiver", fields: [archived_by_user_id], references: [id], onDelete: SetNull)
+  created_by           User?                         @relation("milestone_definition_creator", fields: [created_by_user_id], references: [id], onDelete: SetNull)
+  updated_by           User?                         @relation("milestone_definition_updater", fields: [updated_by_user_id], references: [id], onDelete: SetNull)
 
-  @@index([category, is_active])
+  @@index([category, status])
+  @@index([is_active, retired_at])
+  @@index([verification_policy, evidence_requirement])
   @@map("milestone_definitions")
 }
 
@@ -1328,10 +1349,41 @@ model UserMilestoneProgress {
 
   user                 User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   milestone_definition MilestoneDefinition @relation(fields: [milestone_definition_id], references: [id], onDelete: Cascade)
+  evidence_submissions MilestoneEvidenceSubmission[]
 
   @@unique([user_id, milestone_definition_id])
   @@index([status, unlocked_at])
   @@map("user_milestone_progress")
+}
+
+model MilestoneEvidenceSubmission {
+  id                      String                            @id @default(uuid()) @db.Uuid
+  user_id                 String                            @db.Uuid
+  milestone_definition_id String                            @db.Uuid
+  milestone_progress_id   String?                           @db.Uuid
+  status                  MilestoneEvidenceSubmissionStatus @default(pending)
+  evidence_type           MilestoneEvidenceType
+  file_url                String
+  file_key                String?                           @db.VarChar(500)
+  mime_type               String                            @db.VarChar(100)
+  size_bytes              Int
+  original_filename       String?                           @db.VarChar(255)
+  caption                 String?
+  reviewer_notes          String?
+  reviewed_at             DateTime?                         @db.Timestamptz(6)
+  reviewed_by_user_id     String?                           @db.Uuid
+  created_at              DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                          @updatedAt @db.Timestamptz(6)
+
+  user                 User                   @relation("milestone_evidence_submitter", fields: [user_id], references: [id], onDelete: Cascade)
+  milestone_definition MilestoneDefinition    @relation(fields: [milestone_definition_id], references: [id], onDelete: Cascade)
+  milestone_progress   UserMilestoneProgress? @relation(fields: [milestone_progress_id], references: [id], onDelete: SetNull)
+  reviewer             User?                  @relation("milestone_evidence_reviewer", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([milestone_definition_id, status])
+  @@index([status, created_at])
+  @@map("milestone_evidence_submissions")
 }
 
 model RankingProfile {
@@ -1455,6 +1507,20 @@ enum ProgressionSourceType {
   pose_session_flagged
   rep_log_accepted
   rep_log_rejected
+  weighted_exercise_logged
+  nutrition_log_created
+  nutrition_log_updated
+  nutrition_log_deleted
+  coaching_appointment_completed
+  coaching_appointment_no_show
+  venue_booking_completed
+  venue_booking_no_show
+  ai_chat_message_sent
+  ai_action_completed
+  gym_chat_message_sent
+  milestone_evidence_submitted
+  milestone_evidence_approved
+  milestone_evidence_rejected
   moderation_action
 }
 
@@ -1492,6 +1558,12 @@ enum MilestoneCategory {
   season
   creator
   governance
+  nutrition
+  coaching
+  booking
+  ai
+  weighted_lifting
+  attendance
 }
 
 enum MilestoneTriggerType {
@@ -1499,12 +1571,46 @@ enum MilestoneTriggerType {
   summary_threshold
   streak
   manual
+  composite
 }
 
 enum MilestoneProgressStatus {
   in_progress
+  pending_review
+  rejected
   unlocked
   claimed
+}
+
+enum MilestoneDefinitionStatus {
+  draft
+  active
+  archived
+}
+
+enum MilestoneVerificationPolicy {
+  auto
+  manual_required
+  auto_then_review
+  staff_attested
+}
+
+enum MilestoneEvidenceRequirement {
+  none
+  image
+  video
+  image_or_video
+}
+
+enum MilestoneEvidenceType {
+  image
+  video
+}
+
+enum MilestoneEvidenceSubmissionStatus {
+  pending
+  approved
+  rejected
 }
 
 enum RankingVisibility {

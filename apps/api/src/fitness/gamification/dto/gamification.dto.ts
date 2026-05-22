@@ -5,8 +5,13 @@ import {
   IntegrityRiskLevel,
   MasteryRank,
   MilestoneCategory,
+  MilestoneDefinitionStatus,
+  MilestoneEvidenceRequirement,
+  MilestoneEvidenceSubmissionStatus,
+  MilestoneEvidenceType,
   MilestoneProgressStatus,
   MilestoneTriggerType,
+  MilestoneVerificationPolicy,
   ModerationActionType,
   ProgressionGrantStatus,
   ProgressionSourceStatus,
@@ -20,6 +25,7 @@ import {
   IsBoolean,
   IsObject,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -411,6 +417,21 @@ export class MilestoneProgressResponseDTO {
   })
   trigger_type: MilestoneTriggerType;
 
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  condition_payload: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    enum: MilestoneVerificationPolicy,
+    example: MilestoneVerificationPolicy.auto,
+  })
+  verification_policy?: MilestoneVerificationPolicy;
+
+  @ApiPropertyOptional({
+    enum: MilestoneEvidenceRequirement,
+    example: MilestoneEvidenceRequirement.none,
+  })
+  evidence_requirement?: MilestoneEvidenceRequirement;
+
   @ApiProperty({ example: 1 })
   target_value: number;
 
@@ -505,6 +526,438 @@ export class AchievementReviewResponseDTO {
 
   @ApiPropertyOptional({ example: 'Claimed by the member.' })
   reviewer_notes?: string;
+}
+
+export class MilestoneEvidenceSubmissionResponseDTO {
+  @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
+  id: string;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  user_id: string;
+
+  @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
+  milestone_definition_id: string;
+
+  @ApiPropertyOptional({ example: 'first-workout-complete' })
+  milestone_key?: string;
+
+  @ApiPropertyOptional({ example: 'First Workout Complete' })
+  milestone_title?: string;
+
+  @ApiPropertyOptional({ example: 'Casey Reyes', nullable: true })
+  member_name?: string | null;
+
+  @ApiPropertyOptional({ example: 'CR', nullable: true })
+  member_initials?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'member.active@fittrack.com',
+    nullable: true,
+  })
+  member_email?: string | null;
+
+  @ApiProperty({
+    enum: MilestoneEvidenceSubmissionStatus,
+    example: MilestoneEvidenceSubmissionStatus.pending,
+  })
+  status: MilestoneEvidenceSubmissionStatus;
+
+  @ApiProperty({
+    enum: MilestoneEvidenceType,
+    example: MilestoneEvidenceType.image,
+  })
+  evidence_type: MilestoneEvidenceType;
+
+  @ApiProperty({ example: 'https://cdn.fittrack.test/milestone-proof.png' })
+  file_url: string;
+
+  @ApiPropertyOptional({
+    example: 'milestone-evidence/2026/05/proof.png',
+    nullable: true,
+  })
+  file_key: string | null;
+
+  @ApiProperty({ example: 'image/png' })
+  mime_type: string;
+
+  @ApiProperty({ example: 458120 })
+  size_bytes: number;
+
+  @ApiPropertyOptional({ example: 'proof.png', nullable: true })
+  original_filename: string | null;
+
+  @ApiPropertyOptional({ example: 'Coach signed lift log.', nullable: true })
+  caption: string | null;
+
+  @ApiPropertyOptional({ example: 'Clear evidence.', nullable: true })
+  reviewer_notes: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-05-22T09:30:00.000Z',
+    nullable: true,
+  })
+  reviewed_at: string | null;
+
+  @ApiPropertyOptional({
+    example: '11111111-1111-4111-8111-111111111111',
+    nullable: true,
+  })
+  reviewed_by_user_id: string | null;
+
+  @ApiProperty({ example: '2026-05-22T09:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-05-22T09:00:00.000Z' })
+  updated_at: string;
+}
+
+export class AdminMilestoneDefinitionResponseDTO {
+  @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
+  id: string;
+
+  @ApiProperty({ example: 'first-workout-complete' })
+  key: string;
+
+  @ApiProperty({ example: 'First Workout Complete' })
+  title: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Complete your first tracked workout.',
+    nullable: true,
+  })
+  description: string | null;
+
+  @ApiProperty({ enum: MilestoneCategory, example: MilestoneCategory.training })
+  category: MilestoneCategory;
+
+  @ApiProperty({
+    enum: MilestoneTriggerType,
+    example: MilestoneTriggerType.source_event,
+  })
+  trigger_type: MilestoneTriggerType;
+
+  @ApiProperty({
+    enum: MilestoneDefinitionStatus,
+    example: MilestoneDefinitionStatus.active,
+  })
+  status: MilestoneDefinitionStatus;
+
+  @ApiProperty({
+    enum: MilestoneVerificationPolicy,
+    example: MilestoneVerificationPolicy.auto,
+  })
+  verification_policy: MilestoneVerificationPolicy;
+
+  @ApiProperty({
+    enum: MilestoneEvidenceRequirement,
+    example: MilestoneEvidenceRequirement.none,
+  })
+  evidence_requirement: MilestoneEvidenceRequirement;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  condition_payload: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  reward_payload: Record<string, unknown> | null;
+
+  @ApiProperty({ example: true })
+  is_active: boolean;
+
+  @ApiProperty({ example: false })
+  is_hidden: boolean;
+
+  @ApiProperty({ example: 10 })
+  sort_order: number;
+
+  @ApiProperty({ example: 128 })
+  progress_count: number;
+
+  @ApiProperty({ example: 72 })
+  unlocked_count: number;
+
+  @ApiProperty({ example: 4 })
+  pending_review_count: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-05-01T00:00:00.000Z',
+    nullable: true,
+  })
+  starts_at: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-06-01T00:00:00.000Z',
+    nullable: true,
+  })
+  ends_at: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  archived_at: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  archived_by_user_id: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  created_by_user_id: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  updated_by_user_id: string | null;
+
+  @ApiProperty({ example: '2026-05-22T09:00:00.000Z' })
+  created_at: string;
+
+  @ApiProperty({ example: '2026-05-22T09:00:00.000Z' })
+  updated_at: string;
+}
+
+export class AdminMilestoneDefinitionFilterDTO extends PaginationDTO {
+  @ApiPropertyOptional({ example: 'workout' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(120, { message: 'search must not exceed 120 characters' })
+  search?: string;
+
+  @ApiPropertyOptional({ enum: MilestoneDefinitionStatus })
+  @IsOptional()
+  @IsEnum(MilestoneDefinitionStatus, {
+    message: `status must be one of: ${Object.values(MilestoneDefinitionStatus).join(', ')}`,
+  })
+  status?: MilestoneDefinitionStatus;
+
+  @ApiPropertyOptional({ enum: MilestoneCategory })
+  @IsOptional()
+  @IsEnum(MilestoneCategory, {
+    message: `category must be one of: ${Object.values(MilestoneCategory).join(', ')}`,
+  })
+  category?: MilestoneCategory;
+
+  @ApiPropertyOptional({ enum: MilestoneTriggerType })
+  @IsOptional()
+  @IsEnum(MilestoneTriggerType, {
+    message: `trigger_type must be one of: ${Object.values(MilestoneTriggerType).join(', ')}`,
+  })
+  trigger_type?: MilestoneTriggerType;
+
+  @ApiPropertyOptional({ enum: MilestoneVerificationPolicy })
+  @IsOptional()
+  @IsEnum(MilestoneVerificationPolicy, {
+    message: `verification_policy must be one of: ${Object.values(MilestoneVerificationPolicy).join(', ')}`,
+  })
+  verification_policy?: MilestoneVerificationPolicy;
+
+  @ApiPropertyOptional({ enum: MilestoneEvidenceRequirement })
+  @IsOptional()
+  @IsEnum(MilestoneEvidenceRequirement, {
+    message: `evidence_requirement must be one of: ${Object.values(MilestoneEvidenceRequirement).join(', ')}`,
+  })
+  evidence_requirement?: MilestoneEvidenceRequirement;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean({ message: 'include_archived must be a boolean' })
+  include_archived?: boolean;
+
+  @ApiPropertyOptional({
+    enum: ['created_at', 'updated_at', 'title', 'sort_order'],
+    example: 'updated_at',
+  })
+  @IsOptional()
+  @IsIn(['created_at', 'updated_at', 'title', 'sort_order'], {
+    message: 'sort must be one of: created_at, updated_at, title, sort_order',
+  })
+  sort?: 'created_at' | 'updated_at' | 'title' | 'sort_order';
+}
+
+export class AdminMilestoneDefinitionDTO {
+  @ApiProperty({ example: 'first-workout-complete' })
+  @TrimString()
+  @IsString({ message: 'key must be a string' })
+  @MinLength(3, { message: 'key must be at least 3 characters' })
+  @MaxLength(120, { message: 'key must not exceed 120 characters' })
+  key: string;
+
+  @ApiProperty({ example: 'First Workout Complete' })
+  @TrimString()
+  @IsString({ message: 'title must be a string' })
+  @MinLength(3, { message: 'title must be at least 3 characters' })
+  @MaxLength(160, { message: 'title must not exceed 160 characters' })
+  title: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  @MaxLength(1000, { message: 'description must not exceed 1000 characters' })
+  description?: string | null;
+
+  @ApiProperty({ enum: MilestoneCategory })
+  @IsEnum(MilestoneCategory, {
+    message: `category must be one of: ${Object.values(MilestoneCategory).join(', ')}`,
+  })
+  category: MilestoneCategory;
+
+  @ApiProperty({ enum: MilestoneTriggerType })
+  @IsEnum(MilestoneTriggerType, {
+    message: `trigger_type must be one of: ${Object.values(MilestoneTriggerType).join(', ')}`,
+  })
+  trigger_type: MilestoneTriggerType;
+
+  @ApiPropertyOptional({ enum: MilestoneDefinitionStatus })
+  @IsOptional()
+  @IsEnum(MilestoneDefinitionStatus, {
+    message: `status must be one of: ${Object.values(MilestoneDefinitionStatus).join(', ')}`,
+  })
+  status?: MilestoneDefinitionStatus;
+
+  @ApiPropertyOptional({ enum: MilestoneVerificationPolicy })
+  @IsOptional()
+  @IsEnum(MilestoneVerificationPolicy, {
+    message: `verification_policy must be one of: ${Object.values(MilestoneVerificationPolicy).join(', ')}`,
+  })
+  verification_policy?: MilestoneVerificationPolicy;
+
+  @ApiPropertyOptional({ enum: MilestoneEvidenceRequirement })
+  @IsOptional()
+  @IsEnum(MilestoneEvidenceRequirement, {
+    message: `evidence_requirement must be one of: ${Object.values(MilestoneEvidenceRequirement).join(', ')}`,
+  })
+  evidence_requirement?: MilestoneEvidenceRequirement;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  @IsOptional()
+  @IsObject({ message: 'condition_payload must be an object' })
+  condition_payload?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  @IsOptional()
+  @IsObject({ message: 'reward_payload must be an object' })
+  reward_payload?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean({ message: 'is_hidden must be a boolean' })
+  is_hidden?: boolean;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @IsInt({ message: 'sort_order must be an integer' })
+  @Min(0, { message: 'sort_order must be zero or greater' })
+  @Max(100000, { message: 'sort_order must be 100000 or less' })
+  sort_order?: number;
+
+  @ApiPropertyOptional({ example: '2026-05-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsString({ message: 'starts_at must be an ISO date string' })
+  starts_at?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-06-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsString({ message: 'ends_at must be an ISO date string' })
+  ends_at?: string | null;
+}
+
+export class SubmitMilestoneEvidenceDTO {
+  @ApiProperty({ enum: MilestoneEvidenceType })
+  @IsEnum(MilestoneEvidenceType, {
+    message: `evidence_type must be one of: ${Object.values(MilestoneEvidenceType).join(', ')}`,
+  })
+  evidence_type: MilestoneEvidenceType;
+
+  @ApiProperty({ example: 'https://cdn.fittrack.test/milestone-proof.mp4' })
+  @TrimString()
+  @IsString({ message: 'file_url must be a string' })
+  @MaxLength(2000, { message: 'file_url must not exceed 2000 characters' })
+  file_url: string;
+
+  @ApiPropertyOptional({ example: 'milestone-evidence/2026/05/proof.mp4' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'file_key must be a string' })
+  @MaxLength(500, { message: 'file_key must not exceed 500 characters' })
+  file_key?: string | null;
+
+  @ApiProperty({ example: 'video/mp4' })
+  @TrimString()
+  @IsString({ message: 'mime_type must be a string' })
+  @MaxLength(100, { message: 'mime_type must not exceed 100 characters' })
+  mime_type: string;
+
+  @ApiProperty({ example: 10485760 })
+  @IsInt({ message: 'size_bytes must be an integer' })
+  @Min(1, { message: 'size_bytes must be greater than zero' })
+  @Max(25 * 1024 * 1024, {
+    message: 'size_bytes must be 25 MiB or smaller',
+  })
+  size_bytes: number;
+
+  @ApiPropertyOptional({ example: 'proof.mp4' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'original_filename must be a string' })
+  @MaxLength(255, {
+    message: 'original_filename must not exceed 255 characters',
+  })
+  original_filename?: string | null;
+
+  @ApiPropertyOptional({ example: 'Coach signed lift log.' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'caption must be a string' })
+  @MaxLength(1000, { message: 'caption must not exceed 1000 characters' })
+  caption?: string | null;
+}
+
+export class AdminMilestoneEvidenceFilterDTO extends PaginationDTO {
+  @ApiPropertyOptional({ example: 'casey' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(120, { message: 'search must not exceed 120 characters' })
+  search?: string;
+
+  @ApiPropertyOptional({ enum: MilestoneEvidenceSubmissionStatus })
+  @IsOptional()
+  @IsEnum(MilestoneEvidenceSubmissionStatus, {
+    message: `status must be one of: ${Object.values(MilestoneEvidenceSubmissionStatus).join(', ')}`,
+  })
+  status?: MilestoneEvidenceSubmissionStatus;
+}
+
+export class ReviewMilestoneEvidenceDTO {
+  @ApiProperty({
+    enum: [
+      MilestoneEvidenceSubmissionStatus.approved,
+      MilestoneEvidenceSubmissionStatus.rejected,
+    ],
+    example: MilestoneEvidenceSubmissionStatus.approved,
+  })
+  @IsIn(
+    [
+      MilestoneEvidenceSubmissionStatus.approved,
+      MilestoneEvidenceSubmissionStatus.rejected,
+    ],
+    {
+      message: 'status must be approved or rejected',
+    },
+  )
+  status: Extract<
+    MilestoneEvidenceSubmissionStatus,
+    'approved' | 'rejected'
+  >;
+
+  @ApiPropertyOptional({ example: 'Clear evidence.' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'reviewer_notes must be a string' })
+  @MaxLength(1000, {
+    message: 'reviewer_notes must not exceed 1000 characters',
+  })
+  reviewer_notes?: string | null;
 }
 
 export class MilestoneListFilterDTO {

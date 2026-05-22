@@ -12,6 +12,7 @@ import {
   IsOptional,
   IsObject,
   IsString,
+  Max,
   Min,
   MaxLength,
   ValidateNested,
@@ -213,10 +214,11 @@ export class FinalizePoseSessionDTO {
   @ApiPropertyOptional({ example: 40, nullable: true })
   @IsOptional()
   @IsNumber(
-    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 },
     { message: 'weight_input_kg must be a finite number' },
   )
   @Min(0, { message: 'weight_input_kg must be at least 0' })
+  @Max(1000, { message: 'weight_input_kg must not exceed 1000' })
   weight_input_kg?: number | null;
 }
 

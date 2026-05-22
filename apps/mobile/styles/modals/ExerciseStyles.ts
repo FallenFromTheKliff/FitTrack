@@ -166,10 +166,123 @@ export function makeExerciseModalStyles(colors: ThemeColors) {
     },
     footer: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 10,
       padding: 16,
       borderTopWidth: 1,
       borderTopColor: colors.border
+    },
+    footerAction: {
+      flex: 1,
+      minWidth: 116
+    },
+    loadPanel: {
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.surface
+    },
+    loadInputWrap: {
+      minHeight: 50,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      paddingHorizontal: 12
+    },
+    loadTextInput: {
+      paddingHorizontal: 0,
+      paddingVertical: 12
+    },
+    loadUnitRow: {
+      flexDirection: "row",
+      gap: 8
+    },
+    loadUnitChip: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      paddingVertical: 9
+    },
+    loadUnitText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: "800",
+      textTransform: "uppercase"
+    },
+    loadSliderWrap: {
+      gap: 8,
+      paddingVertical: 2
+    },
+    loadSliderHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12
+    },
+    loadSliderLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    loadSliderValue: {
+      color: colors.brand,
+      fontSize: 13,
+      fontWeight: "800"
+    },
+    loadSliderTrack: {
+      height: 28,
+      justifyContent: "center",
+      position: "relative" as const
+    },
+    loadSliderFill: {
+      backgroundColor: colors.brand,
+      borderRadius: 999,
+      height: 6
+    },
+    loadSliderThumb: {
+      position: "absolute" as const,
+      top: 5,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      borderWidth: 2,
+      borderColor: colors.surface,
+      backgroundColor: colors.brand,
+      boxShadow: "0 2px 5px rgba(0,0,0,0.25)",
+      transform: [{ translateX: -9 }]
+    },
+    loadSliderScaleRow: {
+      flexDirection: "row",
+      justifyContent: "space-between"
+    },
+    loadSliderLimit: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "600"
+    },
+    loadErrorText: {
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: "600"
+    },
+    loadSavedText: {
+      color: colors.brand,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    loadActions: {
+      flexDirection: "row",
+      gap: 10
     }
   });
 }

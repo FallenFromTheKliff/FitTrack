@@ -12,7 +12,12 @@ import {
   IntegrityCaseStatus,
   IntegrityRiskLevel,
   type MasteryRank,
+  MilestoneDefinitionStatus,
+  MilestoneEvidenceRequirement,
+  MilestoneEvidenceSubmissionStatus,
+  MilestoneEvidenceType,
   MilestoneProgressStatus,
+  MilestoneVerificationPolicy,
   ModerationActionType,
   type MuscleMasteryProgress,
   Prisma,
@@ -44,6 +49,10 @@ import {
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
+  AdminMilestoneDefinitionDTO,
+  AdminMilestoneDefinitionFilterDTO,
+  AdminMilestoneDefinitionResponseDTO,
+  AdminMilestoneEvidenceFilterDTO,
   AdminManualExpGrantDTO,
   AchievementReviewResponseDTO,
   AdminProgressionGrantResponseDTO,
@@ -57,6 +66,7 @@ import {
   CreateIntegrityCaseDTO,
   LeaderboardEntryResponseDTO,
   MasteryFilterDTO,
+  MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
   MuscleMasteryResponseDTO,
@@ -64,8 +74,10 @@ import {
   ProgressionSourceListFilterDTO,
   ProgressionSourceSummaryResponseDTO,
   RankingProfileResponseDTO,
+  ReviewMilestoneEvidenceDTO,
   ResolveIntegrityCaseDTO,
   SeasonStandingResponseDTO,
+  SubmitMilestoneEvidenceDTO,
   UpdateRankingProfileDTO,
 } from './dto/gamification.dto';
 import {
@@ -83,12 +95,14 @@ import {
   GamificationRepository,
   type ActiveSeasonStandingRecord,
   type AdminGamificationOverviewRecord,
+  type AdminMilestoneDefinitionRecord,
   type AdminSeasonListRecord,
   type AdminSeasonStandingRecord,
   type CreatorStateUpdateResult,
   type GrantModerationResult,
   type IntegrityCaseMutationResult,
   type IntegritySummaryRecord,
+  type MilestoneEvidenceSubmissionRecord,
   type MilestoneProgressRecord,
   type ProgressionSourceEventRecord,
   type ProgressionGrantRecord,
@@ -98,6 +112,7 @@ import {
   type SeasonStatusUpdateResult,
   type WorkoutProgressionDeltaRecord,
 } from './gamification.repository';
+import { DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES } from '../../config/runtime-settings';
 
 export interface MuscleMasteryDelta {
   xp: number;
@@ -126,6 +141,12 @@ const ADMIN_RANKING_GOVERNANCE_STATUSES = new Set<RankingGovernanceStatus>([
   RankingGovernanceStatus.normal,
   RankingGovernanceStatus.hidden_by_admin,
   RankingGovernanceStatus.disqualified,
+]);
+
+const MILESTONE_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MILESTONE_EVIDENCE_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
 ]);
 
 function toJsonObject(value: unknown): Record<string, unknown> | null {
@@ -381,6 +402,7 @@ export class GamificationService {
     userId: string,
     dto?: MilestoneListFilterDTO,
   ): Promise<MilestoneProgressResponseDTO[]> {
+    await this.repo.syncMilestoneProgressForUser({ userId });
     const milestones = await this.repo.listMilestoneProgress(userId);
     void dto;
 
@@ -401,6 +423,183 @@ export class GamificationService {
   async listAchievementReviews(): Promise<AchievementReviewResponseDTO[]> {
     const reviews = await this.repo.listAchievementReviews();
     return reviews.map((review) => this.toAchievementReviewResponse(review));
+  }
+
+  async listAdminMilestoneDefinitions(
+    dto: AdminMilestoneDefinitionFilterDTO,
+  ): Promise<PaginatedResult<AdminMilestoneDefinitionResponseDTO>> {
+    const result = await this.repo.listAdminMilestoneDefinitions({
+      category: dto.category,
+      evidenceRequirement: dto.evidence_requirement,
+      includeArchived: dto.include_archived,
+      limit: dto.limit,
+      page: dto.page,
+      search: dto.search,
+      sort: dto.sort,
+      status: dto.status,
+      triggerType: dto.trigger_type,
+      verificationPolicy: dto.verification_policy,
+    });
+
+    return {
+      ...result,
+      data: result.data.map((record) =>
+        this.toAdminMilestoneDefinitionResponse(record),
+      ),
+    };
+  }
+
+  async getAdminMilestoneDefinition(
+    milestoneDefinitionId: string,
+  ): Promise<AdminMilestoneDefinitionResponseDTO> {
+    const record =
+      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+
+    if (!record) {
+      throw new NotFoundException('Milestone definition was not found.');
+    }
+
+    return this.toAdminMilestoneDefinitionResponse(record);
+  }
+
+  async createAdminMilestoneDefinition(
+    actorUserId: string,
+    dto: AdminMilestoneDefinitionDTO,
+  ): Promise<AdminMilestoneDefinitionResponseDTO> {
+    const normalized = this.normalizeMilestoneDefinitionInput(dto);
+    const record = await this.repo.createAdminMilestoneDefinition({
+      actorUserId,
+      ...normalized,
+    });
+
+    return this.toAdminMilestoneDefinitionResponse(record);
+  }
+
+  async updateAdminMilestoneDefinition(
+    actorUserId: string,
+    milestoneDefinitionId: string,
+    dto: AdminMilestoneDefinitionDTO,
+  ): Promise<AdminMilestoneDefinitionResponseDTO> {
+    const existing =
+      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+
+    if (!existing) {
+      throw new NotFoundException('Milestone definition was not found.');
+    }
+
+    const normalized = this.normalizeMilestoneDefinitionInput(dto);
+    const record = await this.repo.updateAdminMilestoneDefinition({
+      actorUserId,
+      id: milestoneDefinitionId,
+      ...normalized,
+    });
+
+    return this.toAdminMilestoneDefinitionResponse(record);
+  }
+
+  async archiveAdminMilestoneDefinition(
+    actorUserId: string,
+    milestoneDefinitionId: string,
+  ): Promise<AdminMilestoneDefinitionResponseDTO> {
+    const existing =
+      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+
+    if (!existing) {
+      throw new NotFoundException('Milestone definition was not found.');
+    }
+
+    const record = await this.repo.archiveAdminMilestoneDefinition({
+      actorUserId,
+      id: milestoneDefinitionId,
+    });
+
+    return this.toAdminMilestoneDefinitionResponse(record);
+  }
+
+  async restoreAdminMilestoneDefinition(
+    actorUserId: string,
+    milestoneDefinitionId: string,
+  ): Promise<AdminMilestoneDefinitionResponseDTO> {
+    const existing =
+      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+
+    if (!existing) {
+      throw new NotFoundException('Milestone definition was not found.');
+    }
+
+    const record = await this.repo.restoreAdminMilestoneDefinition({
+      actorUserId,
+      id: milestoneDefinitionId,
+    });
+
+    return this.toAdminMilestoneDefinitionResponse(record);
+  }
+
+  async listMilestoneEvidenceSubmissions(
+    dto: AdminMilestoneEvidenceFilterDTO,
+  ): Promise<PaginatedResult<MilestoneEvidenceSubmissionResponseDTO>> {
+    const result = await this.repo.listMilestoneEvidenceSubmissions({
+      limit: dto.limit,
+      page: dto.page,
+      search: dto.search,
+      status: dto.status,
+    });
+
+    return {
+      ...result,
+      data: result.data.map((record) =>
+        this.toMilestoneEvidenceSubmissionResponse(record),
+      ),
+    };
+  }
+
+  async submitMilestoneEvidence(
+    userId: string,
+    milestoneDefinitionId: string,
+    dto: SubmitMilestoneEvidenceDTO,
+  ): Promise<MilestoneEvidenceSubmissionResponseDTO> {
+    const definition =
+      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+
+    if (
+      !definition ||
+      !definition.is_active ||
+      definition.status !== MilestoneDefinitionStatus.active ||
+      definition.retired_at !== null
+    ) {
+      throw new NotFoundException('Milestone definition was not found.');
+    }
+
+    this.validateMilestoneEvidenceSubmission(dto, definition);
+
+    const record = await this.repo.submitMilestoneEvidence({
+      caption: dto.caption,
+      evidenceType: dto.evidence_type,
+      fileKey: dto.file_key,
+      fileUrl: dto.file_url,
+      milestoneDefinitionId,
+      mimeType: dto.mime_type,
+      originalFilename: dto.original_filename,
+      sizeBytes: dto.size_bytes,
+      userId,
+    });
+
+    return this.toMilestoneEvidenceSubmissionResponse(record);
+  }
+
+  async reviewMilestoneEvidence(
+    reviewerUserId: string,
+    evidenceSubmissionId: string,
+    dto: ReviewMilestoneEvidenceDTO,
+  ): Promise<MilestoneEvidenceSubmissionResponseDTO> {
+    const record = await this.repo.reviewMilestoneEvidence({
+      evidenceSubmissionId,
+      reviewerNotes: dto.reviewer_notes,
+      reviewerUserId,
+      status: dto.status,
+    });
+
+    return this.toMilestoneEvidenceSubmissionResponse(record);
   }
 
   async claimMilestone(
@@ -425,14 +624,14 @@ export class GamificationService {
       throw new NotFoundException('Milestone was not found.');
     }
 
-    if (!progress || progress.status === MilestoneProgressStatus.in_progress) {
-      throw new BadRequestException(
-        'Milestone must be unlocked before it can be claimed.',
-      );
-    }
-
     if (progress.status === MilestoneProgressStatus.claimed) {
       return this.toMilestoneProgressResponse(milestone);
+    }
+
+    if (progress.status !== MilestoneProgressStatus.unlocked) {
+      throw new BadRequestException(
+        'Milestone must be unlocked and approved before it can be claimed.',
+      );
     }
 
     const claimed = await this.repo.claimMilestoneProgress(
@@ -888,6 +1087,9 @@ export class GamificationService {
       description: milestone.description ?? null,
       category: milestone.category,
       trigger_type: milestone.trigger_type,
+      condition_payload: this.toJsonObject(milestone.condition_payload),
+      verification_policy: milestone.verification_policy,
+      evidence_requirement: milestone.evidence_requirement,
       target_value: targetValue,
       progress_value: progressValue,
       progress_percent: Math.min(
@@ -944,6 +1146,241 @@ export class GamificationService {
       reviewed_at: record.claimed_at?.toISOString(),
       reviewer_notes: isClaimed ? 'Claimed by the member.' : '',
     };
+  }
+
+  private toAdminMilestoneDefinitionResponse(
+    record: AdminMilestoneDefinitionRecord,
+  ): AdminMilestoneDefinitionResponseDTO {
+    return {
+      id: record.id,
+      key: record.key,
+      title: record.title,
+      description: record.description ?? null,
+      category: record.category,
+      trigger_type: record.trigger_type,
+      status: record.status,
+      verification_policy: record.verification_policy,
+      evidence_requirement: record.evidence_requirement,
+      condition_payload: this.toJsonObject(record.condition_payload),
+      reward_payload: this.toJsonObject(record.reward_payload),
+      is_active: record.is_active,
+      is_hidden: record.is_hidden,
+      sort_order: record.sort_order,
+      progress_count: record._count.user_progress,
+      unlocked_count: record.unlocked_count,
+      pending_review_count: record.pending_review_count,
+      starts_at: record.starts_at?.toISOString() ?? null,
+      ends_at: record.ends_at?.toISOString() ?? null,
+      archived_at: record.archived_at?.toISOString() ?? null,
+      archived_by_user_id: record.archived_by_user_id,
+      created_by_user_id: record.created_by_user_id,
+      updated_by_user_id: record.updated_by_user_id,
+      created_at: record.created_at.toISOString(),
+      updated_at: record.updated_at.toISOString(),
+    };
+  }
+
+  private toMilestoneEvidenceSubmissionResponse(
+    record: MilestoneEvidenceSubmissionRecord,
+  ): MilestoneEvidenceSubmissionResponseDTO {
+    const memberName = this.formatUserName(record.user);
+    const memberEmail =
+      record.user.auth_identities.find((identity) => identity.is_primary)
+        ?.identifier ??
+      record.user.auth_identities[0]?.identifier ??
+      null;
+
+    return {
+      id: record.id,
+      user_id: record.user_id,
+      milestone_definition_id: record.milestone_definition_id,
+      milestone_key: record.milestone_definition.key,
+      milestone_title: record.milestone_definition.title,
+      member_name: memberName,
+      member_initials: this.buildInitials(memberName),
+      member_email: memberEmail,
+      status: record.status,
+      evidence_type: record.evidence_type,
+      file_url: record.file_url,
+      file_key: record.file_key,
+      mime_type: record.mime_type,
+      size_bytes: record.size_bytes,
+      original_filename: record.original_filename,
+      caption: record.caption,
+      reviewer_notes: record.reviewer_notes,
+      reviewed_at: record.reviewed_at?.toISOString() ?? null,
+      reviewed_by_user_id: record.reviewed_by_user_id,
+      created_at: record.created_at.toISOString(),
+      updated_at: record.updated_at.toISOString(),
+    };
+  }
+
+  private normalizeMilestoneDefinitionInput(dto: AdminMilestoneDefinitionDTO) {
+    const startsAt = this.parseOptionalDate(dto.starts_at, 'starts_at');
+    const endsAt = this.parseOptionalDate(dto.ends_at, 'ends_at');
+
+    if (startsAt && endsAt && startsAt > endsAt) {
+      throw new BadRequestException('starts_at must be before ends_at.');
+    }
+
+    if (!MILESTONE_KEY_PATTERN.test(dto.key)) {
+      throw new BadRequestException(
+        'key must be lowercase kebab-case, for example first-weighted-lift.',
+      );
+    }
+
+    const evidenceRequirement =
+      dto.evidence_requirement ?? MilestoneEvidenceRequirement.none;
+    const verificationPolicy =
+      dto.verification_policy ??
+      (evidenceRequirement === MilestoneEvidenceRequirement.none
+        ? MilestoneVerificationPolicy.auto
+        : MilestoneVerificationPolicy.manual_required);
+
+    this.validateMilestoneDefinitionContract(
+      dto.condition_payload,
+      verificationPolicy,
+      evidenceRequirement,
+    );
+
+    return {
+      category: dto.category,
+      conditionPayload: dto.condition_payload ?? null,
+      description: dto.description ?? null,
+      endsAt,
+      evidenceRequirement,
+      isHidden: dto.is_hidden ?? false,
+      key: dto.key,
+      rewardPayload: dto.reward_payload ?? null,
+      sortOrder: dto.sort_order ?? 0,
+      startsAt,
+      status: dto.status ?? MilestoneDefinitionStatus.active,
+      title: dto.title,
+      triggerType: dto.trigger_type,
+      verificationPolicy,
+    };
+  }
+
+  private parseOptionalDate(
+    value: string | null | undefined,
+    fieldName: string,
+  ): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`${fieldName} must be a valid ISO date.`);
+    }
+
+    return parsed;
+  }
+
+  private validateMilestoneDefinitionContract(
+    conditionPayload: Record<string, unknown> | null | undefined,
+    verificationPolicy: MilestoneVerificationPolicy,
+    evidenceRequirement: MilestoneEvidenceRequirement,
+  ): void {
+    const hasComposite =
+      Array.isArray(conditionPayload?.all) ||
+      Array.isArray(conditionPayload?.any);
+    const hasTarget =
+      typeof conditionPayload?.target === 'number' ||
+      typeof conditionPayload?.value === 'number' ||
+      typeof conditionPayload?.min === 'number' ||
+      typeof conditionPayload?.max === 'number';
+
+    if (!conditionPayload || (!hasComposite && !hasTarget)) {
+      throw new BadRequestException(
+        'condition_payload must include target, value, min/max, all, or any.',
+      );
+    }
+
+    if (
+      verificationPolicy === MilestoneVerificationPolicy.auto &&
+      evidenceRequirement !== MilestoneEvidenceRequirement.none
+    ) {
+      throw new BadRequestException(
+        'evidence_requirement requires manual_required, auto_then_review, or staff_attested verification.',
+      );
+    }
+
+    if (
+      verificationPolicy !== MilestoneVerificationPolicy.auto &&
+      evidenceRequirement === MilestoneEvidenceRequirement.none
+    ) {
+      throw new BadRequestException(
+        'manual milestone verification must require image, video, or image_or_video evidence.',
+      );
+    }
+  }
+
+  private validateMilestoneEvidenceSubmission(
+    dto: SubmitMilestoneEvidenceDTO,
+    definition: AdminMilestoneDefinitionRecord,
+  ): void {
+    if (
+      definition.evidence_requirement === MilestoneEvidenceRequirement.none
+    ) {
+      throw new BadRequestException(
+        'This milestone does not accept manual evidence.',
+      );
+    }
+
+    if (
+      definition.evidence_requirement === MilestoneEvidenceRequirement.image &&
+      dto.evidence_type !== MilestoneEvidenceType.image
+    ) {
+      throw new BadRequestException('This milestone requires image evidence.');
+    }
+
+    if (
+      definition.evidence_requirement === MilestoneEvidenceRequirement.video &&
+      dto.evidence_type !== MilestoneEvidenceType.video
+    ) {
+      throw new BadRequestException('This milestone requires video evidence.');
+    }
+
+    if (
+      dto.evidence_type === MilestoneEvidenceType.image &&
+      !MILESTONE_EVIDENCE_IMAGE_MIME_TYPES.has(dto.mime_type)
+    ) {
+      throw new BadRequestException(
+        'Image milestone evidence must be JPEG or PNG.',
+      );
+    }
+
+    if (
+      dto.evidence_type === MilestoneEvidenceType.video &&
+      dto.mime_type !== 'video/mp4'
+    ) {
+      throw new BadRequestException('Video milestone evidence must be MP4.');
+    }
+
+    if (
+      dto.evidence_type === MilestoneEvidenceType.video &&
+      dto.size_bytes >
+        DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES
+    ) {
+      throw new BadRequestException(
+        'Video milestone evidence must be 15 MiB or smaller.',
+      );
+    }
+
+    this.assertPublicFileUrl(dto.file_url);
+  }
+
+  private assertPublicFileUrl(value: string): void {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('unsupported protocol');
+      }
+    } catch {
+      throw new BadRequestException('file_url must be a valid HTTP URL.');
+    }
   }
 
   private toIntegritySummaryResponse(

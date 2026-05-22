@@ -1,4 +1,7 @@
 import type {
+  AdminMilestoneDefinitionListParams,
+  AdminMilestoneDefinitionRecord,
+  AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
   CreateExerciseDraftProposalInput,
   CreateExerciseReviewSubmissionInput,
@@ -31,6 +34,7 @@ import type {
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
   FitnessMilestoneListParams,
+  FitnessMilestoneEvidenceSubmissionRecord,
   FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
@@ -50,13 +54,16 @@ import type {
   PoseFrameAnalysisRecord,
   PoseKeypointRecord,
   PoseSessionRecord,
+  ReviewFitnessMilestoneEvidenceInput,
   StartPoseSessionInput,
   StartedPoseSessionRecord,
   StartWorkoutSessionInput,
+  SubmitFitnessMilestoneEvidenceInput,
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
   UpdateFitnessRankingProfileInput,
+  UpsertAdminMilestoneDefinitionInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
@@ -68,6 +75,9 @@ import { unwrapPaginatedResponse, unwrapResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 
 export type {
+  AdminMilestoneDefinitionListParams,
+  AdminMilestoneDefinitionRecord,
+  AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
   CreateExerciseDraftProposalInput,
   CreateExerciseReviewSubmissionInput,
@@ -95,6 +105,7 @@ export type {
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
   FitnessMilestoneListParams,
+  FitnessMilestoneEvidenceSubmissionRecord,
   FitnessMilestoneProgressRecord,
   FitnessMasteryListParams,
   FitnessMasteryRank,
@@ -118,13 +129,16 @@ export type {
   PoseProgressionDisposition,
   PoseSessionRecord,
   PoseSessionQualityState,
+  ReviewFitnessMilestoneEvidenceInput,
   StartPoseSessionInput,
   StartedPoseSessionRecord,
   StartWorkoutSessionInput,
+  SubmitFitnessMilestoneEvidenceInput,
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
   UpdateFitnessRankingProfileInput,
+  UpsertAdminMilestoneDefinitionInput,
   UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
@@ -513,8 +527,11 @@ type SeasonStandingApiRecord = {
 type MilestoneProgressApiRecord = {
   category: FitnessMilestoneProgressRecord["category"];
   claimed_at: string | null;
+  condition_payload?: Record<string, unknown> | null;
   description: string | null;
+  evidence_requirement?: FitnessMilestoneProgressRecord["evidenceRequirement"];
   is_hidden: boolean;
+  latest_evidence_submission?: MilestoneEvidenceSubmissionApiRecord | null;
   key: string;
   milestone_definition_id: string;
   progress_percent: number;
@@ -526,6 +543,59 @@ type MilestoneProgressApiRecord = {
   trigger_type: FitnessMilestoneProgressRecord["triggerType"];
   unlocked_at: string | null;
   updated_at: string | null;
+  verification_policy?: FitnessMilestoneProgressRecord["verificationPolicy"];
+};
+
+type AdminMilestoneDefinitionApiRecord = {
+  archived_at: string | null;
+  archived_by_user_id: string | null;
+  category: AdminMilestoneDefinitionRecord["category"];
+  condition_payload: Record<string, unknown> | null;
+  created_at: string;
+  created_by_user_id: string | null;
+  description: string | null;
+  ends_at: string | null;
+  evidence_requirement: AdminMilestoneDefinitionRecord["evidenceRequirement"];
+  id: string;
+  is_active: boolean;
+  is_hidden: boolean;
+  key: string;
+  pending_review_count: number;
+  progress_count: number;
+  reward_payload: Record<string, unknown> | null;
+  sort_order: number;
+  starts_at: string | null;
+  status: AdminMilestoneDefinitionRecord["status"];
+  title: string;
+  trigger_type: AdminMilestoneDefinitionRecord["triggerType"];
+  unlocked_count: number;
+  updated_at: string;
+  updated_by_user_id: string | null;
+  verification_policy: AdminMilestoneDefinitionRecord["verificationPolicy"];
+};
+
+type MilestoneEvidenceSubmissionApiRecord = {
+  caption: string | null;
+  created_at: string;
+  evidence_type: FitnessMilestoneEvidenceSubmissionRecord["evidenceType"];
+  file_key: string | null;
+  file_url: string;
+  id: string;
+  member_email?: string | null;
+  member_initials?: string | null;
+  member_name?: string | null;
+  milestone_definition_id: string;
+  milestone_key?: string;
+  milestone_title?: string;
+  mime_type: string;
+  original_filename: string | null;
+  reviewer_notes: string | null;
+  reviewed_at: string | null;
+  reviewed_by_user_id: string | null;
+  size_bytes: number;
+  status: FitnessMilestoneEvidenceSubmissionRecord["status"];
+  updated_at: string;
+  user_id: string;
 };
 
 type AchievementReviewApiRecord = {
@@ -1103,9 +1173,14 @@ function mapMilestoneProgress(
   return {
     category: record.category,
     claimedAt: record.claimed_at,
+    conditionPayload: record.condition_payload ?? null,
     description: record.description,
+    evidenceRequirement: record.evidence_requirement,
     isHidden: record.is_hidden,
     key: record.key,
+    latestEvidenceSubmission: record.latest_evidence_submission
+      ? mapMilestoneEvidenceSubmission(record.latest_evidence_submission)
+      : null,
     milestoneDefinitionId: record.milestone_definition_id,
     progressPercent: record.progress_percent,
     progressValue: record.progress_value,
@@ -1116,6 +1191,67 @@ function mapMilestoneProgress(
     triggerType: record.trigger_type,
     unlockedAt: record.unlocked_at,
     updatedAt: record.updated_at,
+    verificationPolicy: record.verification_policy,
+  };
+}
+
+function mapAdminMilestoneDefinition(
+  record: AdminMilestoneDefinitionApiRecord,
+): AdminMilestoneDefinitionRecord {
+  return {
+    archivedAt: record.archived_at,
+    archivedByUserId: record.archived_by_user_id,
+    category: record.category,
+    conditionPayload: record.condition_payload,
+    createdAt: record.created_at,
+    createdByUserId: record.created_by_user_id,
+    description: record.description,
+    endsAt: record.ends_at,
+    evidenceRequirement: record.evidence_requirement,
+    id: record.id,
+    isActive: record.is_active,
+    isHidden: record.is_hidden,
+    key: record.key,
+    pendingReviewCount: record.pending_review_count,
+    progressCount: record.progress_count,
+    rewardPayload: record.reward_payload,
+    sortOrder: record.sort_order,
+    startsAt: record.starts_at,
+    status: record.status,
+    title: record.title,
+    triggerType: record.trigger_type,
+    unlockedCount: record.unlocked_count,
+    updatedAt: record.updated_at,
+    updatedByUserId: record.updated_by_user_id,
+    verificationPolicy: record.verification_policy,
+  };
+}
+
+function mapMilestoneEvidenceSubmission(
+  record: MilestoneEvidenceSubmissionApiRecord,
+): FitnessMilestoneEvidenceSubmissionRecord {
+  return {
+    caption: record.caption,
+    createdAt: record.created_at,
+    evidenceType: record.evidence_type,
+    fileKey: record.file_key,
+    fileUrl: record.file_url,
+    id: record.id,
+    memberEmail: record.member_email,
+    memberInitials: record.member_initials,
+    memberName: record.member_name,
+    milestoneDefinitionId: record.milestone_definition_id,
+    milestoneKey: record.milestone_key,
+    milestoneTitle: record.milestone_title,
+    mimeType: record.mime_type,
+    originalFilename: record.original_filename,
+    reviewerNotes: record.reviewer_notes,
+    reviewedAt: record.reviewed_at,
+    reviewedByUserId: record.reviewed_by_user_id,
+    sizeBytes: record.size_bytes,
+    status: record.status,
+    updatedAt: record.updated_at,
+    userId: record.user_id,
   };
 }
 
@@ -1377,6 +1513,92 @@ function toSessionListParams(params?: WorkoutSessionListParams) {
 function toMilestoneListParams(params?: FitnessMilestoneListParams) {
   return {
     ...(params?.includeLocked ? { include_locked: true } : {}),
+  };
+}
+
+function toAdminMilestoneDefinitionParams(
+  params?: AdminMilestoneDefinitionListParams,
+) {
+  return {
+    ...(params?.category && params.category !== "all"
+      ? { category: params.category }
+      : {}),
+    ...(params?.evidenceRequirement && params.evidenceRequirement !== "all"
+      ? { evidence_requirement: params.evidenceRequirement }
+      : {}),
+    ...(params?.includeArchived !== undefined
+      ? { include_archived: params.includeArchived }
+      : {}),
+    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params?.page !== undefined ? { page: params.page } : {}),
+    ...(params?.search ? { search: params.search } : {}),
+    ...(params?.sort ? { sort: params.sort } : {}),
+    ...(params?.status && params.status !== "all"
+      ? { status: params.status }
+      : {}),
+    ...(params?.triggerType && params.triggerType !== "all"
+      ? { trigger_type: params.triggerType }
+      : {}),
+    ...(params?.verificationPolicy && params.verificationPolicy !== "all"
+      ? { verification_policy: params.verificationPolicy }
+      : {}),
+  };
+}
+
+function toAdminMilestoneEvidenceParams(
+  params?: AdminMilestoneEvidenceListParams,
+) {
+  return {
+    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params?.page !== undefined ? { page: params.page } : {}),
+    ...(params?.search ? { search: params.search } : {}),
+    ...(params?.status && params.status !== "all"
+      ? { status: params.status }
+      : {}),
+  };
+}
+
+function toAdminMilestoneDefinitionPayload(
+  input: UpsertAdminMilestoneDefinitionInput,
+) {
+  return {
+    category: input.category,
+    condition_payload: input.conditionPayload,
+    description: input.description,
+    ends_at: input.endsAt,
+    evidence_requirement: input.evidenceRequirement,
+    is_hidden: input.isHidden,
+    key: input.key,
+    reward_payload: input.rewardPayload,
+    sort_order: input.sortOrder,
+    starts_at: input.startsAt,
+    status: input.status,
+    title: input.title,
+    trigger_type: input.triggerType,
+    verification_policy: input.verificationPolicy,
+  };
+}
+
+function toSubmitMilestoneEvidencePayload(
+  input: SubmitFitnessMilestoneEvidenceInput,
+) {
+  return {
+    caption: input.caption,
+    evidence_type: input.evidenceType,
+    file_key: input.fileKey,
+    file_url: input.fileUrl,
+    mime_type: input.mimeType,
+    original_filename: input.originalFilename,
+    size_bytes: input.sizeBytes,
+  };
+}
+
+function toReviewMilestoneEvidencePayload(
+  input: ReviewFitnessMilestoneEvidenceInput,
+) {
+  return {
+    reviewer_notes: input.reviewerNotes,
+    status: input.status,
   };
 }
 
@@ -1652,6 +1874,78 @@ export function createFitnessApi(transport: ApiTransport) {
         )
       ).map(mapMilestoneProgress);
     },
+    async listAdminMilestones(
+      params?: AdminMilestoneDefinitionListParams,
+    ): Promise<FitnessPaginatedResult<AdminMilestoneDefinitionRecord>> {
+      const result = await unwrapPaginatedResponse<AdminMilestoneDefinitionApiRecord>(
+        transport.get("/admin/gamification/milestones", {
+          params: toAdminMilestoneDefinitionParams(params),
+        }),
+        "Unable to load milestone definitions.",
+      );
+
+      return {
+        ...result,
+        data: result.data.map(mapAdminMilestoneDefinition),
+      };
+    },
+    async getAdminMilestone(milestoneDefinitionId: string) {
+      return mapAdminMilestoneDefinition(
+        await unwrapResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.get(
+            `/admin/gamification/milestones/${milestoneDefinitionId}`,
+          ),
+          "Unable to load milestone definition.",
+        ),
+      );
+    },
+    async createAdminMilestone(input: UpsertAdminMilestoneDefinitionInput) {
+      return mapAdminMilestoneDefinition(
+        await unwrapResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.post(
+            "/admin/gamification/milestones",
+            toAdminMilestoneDefinitionPayload(input),
+          ),
+          "Unable to create milestone definition.",
+        ),
+      );
+    },
+    async updateAdminMilestone(
+      milestoneDefinitionId: string,
+      input: UpsertAdminMilestoneDefinitionInput,
+    ) {
+      return mapAdminMilestoneDefinition(
+        await unwrapResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.patch(
+            `/admin/gamification/milestones/${milestoneDefinitionId}`,
+            toAdminMilestoneDefinitionPayload(input),
+          ),
+          "Unable to update milestone definition.",
+        ),
+      );
+    },
+    async archiveAdminMilestone(milestoneDefinitionId: string) {
+      return mapAdminMilestoneDefinition(
+        await unwrapResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.patch(
+            `/admin/gamification/milestones/${milestoneDefinitionId}/archive`,
+            {},
+          ),
+          "Unable to archive milestone definition.",
+        ),
+      );
+    },
+    async restoreAdminMilestone(milestoneDefinitionId: string) {
+      return mapAdminMilestoneDefinition(
+        await unwrapResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.patch(
+            `/admin/gamification/milestones/${milestoneDefinitionId}/restore`,
+            {},
+          ),
+          "Unable to restore milestone definition.",
+        ),
+      );
+    },
     async listAchievementReviews() {
       return (
         await unwrapResponse<AchievementReviewApiRecord[]>(
@@ -1659,6 +1953,50 @@ export function createFitnessApi(transport: ApiTransport) {
           "Unable to load milestone review records.",
         )
       ).map(mapAchievementReview);
+    },
+    async listMilestoneEvidence(
+      params?: AdminMilestoneEvidenceListParams,
+    ): Promise<FitnessPaginatedResult<FitnessMilestoneEvidenceSubmissionRecord>> {
+      const result =
+        await unwrapPaginatedResponse<MilestoneEvidenceSubmissionApiRecord>(
+          transport.get("/fitness/milestone-evidence", {
+            params: toAdminMilestoneEvidenceParams(params),
+          }),
+          "Unable to load milestone evidence.",
+        );
+
+      return {
+        ...result,
+        data: result.data.map(mapMilestoneEvidenceSubmission),
+      };
+    },
+    async submitMilestoneEvidence(
+      milestoneDefinitionId: string,
+      input: SubmitFitnessMilestoneEvidenceInput,
+    ) {
+      return mapMilestoneEvidenceSubmission(
+        await unwrapResponse<MilestoneEvidenceSubmissionApiRecord>(
+          transport.post(
+            `/fitness/milestones/${milestoneDefinitionId}/evidence`,
+            toSubmitMilestoneEvidencePayload(input),
+          ),
+          "Unable to submit milestone evidence.",
+        ),
+      );
+    },
+    async reviewMilestoneEvidence(
+      evidenceSubmissionId: string,
+      input: ReviewFitnessMilestoneEvidenceInput,
+    ) {
+      return mapMilestoneEvidenceSubmission(
+        await unwrapResponse<MilestoneEvidenceSubmissionApiRecord>(
+          transport.patch(
+            `/fitness/milestone-evidence/${evidenceSubmissionId}/review`,
+            toReviewMilestoneEvidencePayload(input),
+          ),
+          "Unable to review milestone evidence.",
+        ),
+      );
     },
     async claimMilestone(milestoneDefinitionId: string) {
       return mapMilestoneProgress(

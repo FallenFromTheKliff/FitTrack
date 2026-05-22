@@ -145,6 +145,8 @@ function sortMilestones(
   const statusWeight = {
     claimed: 3,
     unlocked: 2,
+    pending_review: 2,
+    rejected: 1,
     in_progress: 1,
   };
   const statusDelta = statusWeight[right.status] - statusWeight[left.status];

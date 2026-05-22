@@ -5,6 +5,16 @@ export interface UploadedImageFile {
   buffer: Buffer;
 }
 
+export type UploadedStorageFile = UploadedImageFile;
+
+export interface UploadedFileResult {
+  file_key: string;
+  mime_type: string;
+  original_filename: string;
+  size_bytes: number;
+  url: string;
+}
+
 export interface StorageUploadInput {
   key: string;
   body: Buffer;
