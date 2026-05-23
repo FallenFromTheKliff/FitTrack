@@ -1,6 +1,12 @@
 import type { MemberDirectoryFilters } from "@fittrack/types";
 
 type BookingScope = "all" | "pending";
+type BookingListFilters = {
+  endDate?: string;
+  limit?: number;
+  page?: number;
+  startDate?: string;
+};
 type StaffAppointmentFilters = {
   coachId?: string;
   endDate?: string;
@@ -25,7 +31,10 @@ const adminKeys = {
       ? (["admin", "members", filters] as const)
       : (["admin", "members"] as const),
   deletionRequests: () => ["admin", "deletion-requests"] as const,
-  bookings: () => ["admin", "bookings"] as const,
+  bookings: (filters?: BookingListFilters) =>
+    filters
+      ? (["admin", "bookings", filters] as const)
+      : (["admin", "bookings"] as const),
   activeBookings: () => ["admin", "bookings", "active"] as const,
   gamificationOverview: () => ["admin", "gamification", "overview"] as const,
   gamificationSeasons: () => ["admin", "gamification", "seasons"] as const,
@@ -46,10 +55,14 @@ const adminKeys = {
 
 const staffKeys = {
   dashboardStats: () => ["staff", "dashboard", "stats"] as const,
-  bookings: (scope?: BookingScope) =>
+  bookings: (scope?: BookingScope, filters?: BookingListFilters) =>
     scope
-      ? (["staff", "bookings", scope] as const)
-      : (["staff", "bookings"] as const),
+      ? filters
+        ? (["staff", "bookings", scope, filters] as const)
+        : (["staff", "bookings", scope] as const)
+      : filters
+        ? (["staff", "bookings", filters] as const)
+        : (["staff", "bookings"] as const),
   bookingDetail: (bookingId?: string) =>
     bookingId
       ? (["staff", "bookings", bookingId] as const)

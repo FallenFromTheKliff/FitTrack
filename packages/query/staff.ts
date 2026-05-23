@@ -15,6 +15,13 @@ import {
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
+type BookingListFilters = {
+  endDate?: string;
+  limit?: number;
+  page?: number;
+  startDate?: string;
+};
+
 export function staffDashboardStatsQueryOptions<T>(client: Pick<ApiClient, "staff">) {
   return queryOptions({
     queryKey: queryKeys.staffDashboardStats(),
@@ -36,10 +43,14 @@ export function staffCoachesQueryOptions(client: Pick<ApiClient, "staff">) {
   });
 }
 
-export function staffBookingsQueryOptions<T>(client: Pick<ApiClient, "staff">, scope?: "all" | "pending") {
+export function staffBookingsQueryOptions<T>(
+  client: Pick<ApiClient, "staff">,
+  scope?: "all" | "pending",
+  filters?: BookingListFilters,
+) {
   return queryOptions({
-    queryKey: queryKeys.staffBookings(scope),
-    queryFn: () => client.staff.listBookings<T>()
+    queryKey: queryKeys.staffBookings(scope, filters),
+    queryFn: () => client.staff.listBookings<T>(filters)
   });
 }
 

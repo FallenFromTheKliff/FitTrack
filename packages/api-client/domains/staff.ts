@@ -9,7 +9,11 @@ import {
   unwrapResponse,
   unwrapVoidResponse,
 } from "../request";
-import { mapAmenityBookingToVenueBookingRecord } from "./bookings";
+import {
+  mapAmenityBookingToVenueBookingRecord,
+  toVenueBookingListParams,
+  type VenueBookingListParams,
+} from "./bookings";
 import type { UpdateCoachProfilePayload } from "./coaches";
 
 export type StaffAppointmentListParams = {
@@ -543,9 +547,11 @@ export function createStaffApi(transport: ApiTransport) {
         "Unable to create coach.",
       );
     },
-    async listBookings<T>() {
+    async listBookings<T>(params?: VenueBookingListParams) {
       const data = await unwrapResponse<T[]>(
-        transport.get("/bookings/amenity?limit=100"),
+        transport.get("/bookings/amenity", {
+          params: toVenueBookingListParams({ limit: 100, ...params }),
+        }),
         "Unable to load staff bookings.",
       );
       return data.map((record) =>

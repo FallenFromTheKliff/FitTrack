@@ -64,7 +64,7 @@ type Props = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const MOBILE_ROLE_GATE = {
-  allowedRoles: ["USER"] as const,
+  allowedRoles: ["USER", "COACH"] as const,
   deniedMessage: "This account can't access the mobile app.",
 };
 

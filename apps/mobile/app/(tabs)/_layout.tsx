@@ -75,7 +75,11 @@ function TabsLayoutInner() {
 
   const activeTab: TabKey = TAB_ROUTES.find((r) => segments.includes(r as never)) ?? "home";
   const activeHelpContent = getMobileHelpContent(activeTab);
-  const activeHelpTitle = `Help - ${SIDEBAR_NAV_LABELS_BY_TAB[activeTab]}`;
+  const activeHelpTitle = `Help - ${
+    user?.role === "COACH" && activeTab === "bookings"
+      ? "Sessions"
+      : SIDEBAR_NAV_LABELS_BY_TAB[activeTab]
+  }`;
   const isAutoHelpEligible = AUTO_HELP_TABS.includes(activeTab);
   const isChatScreen = segments.includes("chatbot" as never);
   const showBackButton = isChatScreen;
@@ -100,7 +104,7 @@ function TabsLayoutInner() {
       router.replace("/(auth)/login");
       return;
     }
-    if (user?.role !== "USER") {
+    if (user?.role !== "USER" && user?.role !== "COACH") {
       router.replace("/(auth)/login");
     }
   }, [isAuthenticated, isLoading, router, user?.role]);

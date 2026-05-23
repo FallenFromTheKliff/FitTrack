@@ -33,7 +33,7 @@ export const LEGAL_INFO_CARDS = [
   },
   {
     title: "Privacy Policy",
-    body: "We collect only the data necessary to provide your gym experience. Your information is never sold to third parties. You may request deletion of your account at any time."
+    body: "We collect only the data necessary to provide your gym experience. Your data will only be used for account security, membership access, booking records, coaching support, payments, service notifications, and legally required gym operations. Your information is never sold to third parties. You may request deletion of your account at any time."
   },
   {
     title: "Version",

@@ -180,6 +180,11 @@ function toGymWallClockIso(date: string, time: string) {
   ).toISOString();
 }
 
+function timeValueToMinutes(value: string) {
+  const [hour = 0, minute = 0] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
 function getUpcomingAvailableDates(dayValues: Array<number | string>) {
   const availableDays = new Set<number>();
   dayValues.forEach((dayValue) => {
@@ -333,6 +338,10 @@ export default function AppointmentModal({
   );
   const isSelectedCoachDateBooked =
     selectedCoach != null && bookedCoachDateSet.has(selectedDate);
+  const currentMinutes = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, [isTimeOpen, isVisible, selectedDate]);
 
   const slotOptions = useMemo<SlotOption[]>(() => {
     if (!availability?.availability) {
@@ -346,14 +355,18 @@ export default function AppointmentModal({
       "full_time",
     )
       .filter(
-        (slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek),
+        (slot) =>
+          slot.isAvailable &&
+          matchesDay(selectedDate, slot.dayOfWeek) &&
+          (selectedDate !== getTodayString() ||
+            timeValueToMinutes(slot.startTime) > currentMinutes),
       )
       .map((slot) => ({
         label: to12HourLabel(slot.startTime),
         startTime: slot.startTime,
         durationMin: slot.durationMinutes,
       }));
-  }, [availability, bookedCoachDateSet, selectedDate]);
+  }, [availability, bookedCoachDateSet, currentMinutes, selectedDate]);
   const highlightedCoachDates = useMemo(
     () =>
       getUpcomingAvailableDates(

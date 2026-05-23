@@ -138,6 +138,13 @@ export type BookingBalanceCheckoutResponse = {
   status: string;
 };
 
+export type VenueBookingListParams = {
+  endDate?: string;
+  limit?: number;
+  page?: number;
+  startDate?: string;
+};
+
 function legacyVenueIdFromAmenityName(name?: string | null) {
   const normalized = (name ?? "").trim().toLowerCase();
   if (normalized.includes("basketball")) return -103;
@@ -183,6 +190,17 @@ function toAmountNumber(value?: number | string | null) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+export function toVenueBookingListParams(params?: VenueBookingListParams) {
+  if (!params) return undefined;
+
+  return {
+    ...(params.page !== undefined ? { page: params.page } : {}),
+    ...(params.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params.startDate ? { start_date: params.startDate } : {}),
+    ...(params.endDate ? { end_date: params.endDate } : {}),
+  };
 }
 
 function createIdempotencyKey() {

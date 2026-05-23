@@ -164,6 +164,31 @@ describe('BookingService', () => {
     });
   });
 
+  it('rejects booking windows that cross the gym calendar day', async () => {
+    paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
+
+    try {
+      await service.createBooking(
+        'member-1',
+        {
+          amenity_id: 'amenity-1',
+          starts_at: '2099-03-24T15:30:00.000Z',
+          ends_at: '2099-03-24T16:30:00.000Z',
+          provider: PaymentProvider.paymongo,
+        },
+        '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      );
+      throw new Error('Expected booking window validation to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);
+      expect((error as HttpException).getResponse()).toMatchObject({
+        detail: 'Bookings must start and end on the same gym calendar day.',
+      });
+    }
+
+    expect(amenityRepository.findActiveAmenityByIdOrThrow).not.toHaveBeenCalled();
+  });
+
   it('marks slots unavailable when active bookings reach amenity capacity', async () => {
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
       id: 'amenity-1',

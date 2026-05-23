@@ -39,6 +39,7 @@ export const TIME_SLOTS: TimeSlot[] = [
 
 export const STATUS_COLORS: Record<string, string> = {
   pending: "#3B82F6",
+  pending_coach: "#3B82F6",
   pending_downpayment: "#F59E0B",
   pending_payment: "#F59E0B",
   pending_full_payment: "#F59E0B",

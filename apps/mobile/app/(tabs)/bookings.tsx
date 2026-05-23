@@ -33,6 +33,7 @@ import { useIsFocused } from "@react-navigation/native";
 import type {
   AppointmentRecord,
   AppointmentPaymentStage,
+  CoachAppointmentScheduleRecord,
   VenueBookingRecord,
 } from "@fittrack/api-client";
 
@@ -41,6 +42,10 @@ import {
   bookingsQueryOptions,
   cancelAppointmentMutationOptions,
   cancelBookingMutationOptions,
+  coachScheduleQueryOptions,
+  completeCoachAppointmentMutationOptions,
+  confirmCoachAppointmentMutationOptions,
+  declineCoachAppointmentMutationOptions,
   payAppointmentDownpaymentMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
@@ -94,6 +99,7 @@ const MEMBER_SECTION_OPTIONS = [
   { label: "Reservations", value: "bookings" },
   { label: "Appointments", value: "appointments" },
 ];
+const COACH_SECTION_OPTIONS = [{ label: "Sessions", value: "appointments" }];
 
 type BookingSection = "bookings" | "appointments";
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
@@ -106,6 +112,10 @@ type PendingAppointmentPayment = {
 type PendingCancellation = {
   booking: DetailBooking;
   type: "appointment" | "reservation";
+};
+type PendingCoachAction = {
+  action: "complete" | "confirm" | "decline";
+  booking: DetailBooking;
 };
 
 function formatStatusLabel(status: string) {
@@ -127,11 +137,26 @@ function formatStatusLabel(status: string) {
     .join(" ");
 }
 
+function getAppointmentMemberName(
+  appointment: Pick<CoachAppointmentScheduleRecord, "user" | "userId">,
+) {
+  const firstName = appointment.user?.profile?.firstName?.trim() ?? "";
+  const lastName = appointment.user?.profile?.lastName?.trim() ?? "";
+  const profileName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return (
+    profileName ||
+    appointment.user?.email?.trim() ||
+    appointment.userId ||
+    "Member"
+  );
+}
+
 export default function BookingsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
   const isUserRole = user?.role === "USER";
+  const isCoachRole = user?.role === "COACH";
   const {
     isFabOpen,
     setFabOpen,
@@ -166,6 +191,8 @@ export default function BookingsScreen() {
     useState<PendingAppointmentPayment | null>(null);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
+  const [pendingCoachAction, setPendingCoachAction] =
+    useState<PendingCoachAction | null>(null);
   const [reviewTarget, setReviewTarget] = useState<DetailBooking | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
@@ -204,6 +231,20 @@ export default function BookingsScreen() {
     ...appointmentsQueryOptions<AppointmentRecord>(mobileApiClient, user?.id),
     enabled: isFocused && !!user?.id && isUserRole,
     staleTime: 60_000,
+    gcTime: 300_000,
+  });
+  const {
+    data: coachScheduleRaw = [],
+    isLoading: coachScheduleLoading,
+    error: coachScheduleError,
+    refetch: refetchCoachSchedule,
+  } = useQuery({
+    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(
+      mobileApiClient,
+      user?.id,
+    ),
+    enabled: isFocused && !!user?.id && isCoachRole,
+    staleTime: 30_000,
     gcTime: 300_000,
   });
 
@@ -280,10 +321,65 @@ export default function BookingsScreen() {
       }),
     [appointmentsRaw],
   );
+  const coachAppointments = useMemo<DetailBooking[]>(
+    () =>
+      coachScheduleRaw.map((appointment) => {
+        const { startLabel, endLabel, date } = toDateTimeRange(
+          appointment.scheduledAt,
+          appointment.duration,
+        );
+        const memberName = getAppointmentMemberName(appointment);
+        const normalizedStatus =
+          appointment.status === "pending_payment" &&
+          appointment.activePaymentStage === "full"
+            ? "pending_full_payment"
+            : appointment.status === "pending_payment" &&
+                appointment.activePaymentStage === "downpayment"
+              ? "pending_downpayment"
+              : appointment.status === "confirmed" &&
+                  Number(appointment.remainingBalance ?? 0) > 0 &&
+                  !appointment.balancePaidAt
+                ? "pending_full_payment"
+                : normalizeBookingStatus(appointment.status);
+
+        return {
+          amountDueNow: appointment.amountDueNow ?? undefined,
+          assessmentReport: appointment.assessmentReport,
+          bookingType: appointment.recurringPlanId ? "recurring" : "single",
+          coachFeedback: appointment.coachFeedback,
+          coachId: appointment.coachId,
+          coachReviewComment: appointment.review?.comment ?? null,
+          coachReviewRating: appointment.review?.rating ?? null,
+          description: appointment.notes ?? undefined,
+          id: appointment.id,
+          paymentPlan: appointment.totalAmount ? "full" : "free",
+          recurringPlanId: appointment.recurringPlanId ?? null,
+          remainingBalance: appointment.remainingBalance ?? undefined,
+          resourceId: appointment.userId,
+          resourceName: memberName,
+          sessionNotes: appointment.sessionNotes,
+          time: `${startLabel} - ${endLabel}`,
+          startTime: startLabel,
+          endTime: endLabel,
+          date,
+          status: normalizedStatus,
+          price: Number(appointment.totalAmount ?? appointment.coachEarnings ?? 0),
+          participantLabel: "Member",
+          participantName: memberName,
+          detailTitle: "Coach Session Details",
+          detailSubtitle: appointment.recurringPlanId
+            ? `${memberName} / Recurring`
+            : memberName,
+          totalAmount: appointment.totalAmount ?? undefined,
+        };
+      }),
+    [coachScheduleRaw],
+  );
+  const displayAppointments = isCoachRole ? coachAppointments : appointments;
 
   const appointmentTimelines = useMemo(() => {
     const byPlan = new Map<string, DetailBooking[]>();
-    appointments.forEach((appointment) => {
+    displayAppointments.forEach((appointment) => {
       if (!appointment.recurringPlanId) return;
       const existing = byPlan.get(appointment.recurringPlanId) ?? [];
       existing.push(appointment);
@@ -314,11 +410,11 @@ export default function BookingsScreen() {
         })),
       ]),
     );
-  }, [appointments, colors.textMuted]);
+  }, [colors.textMuted, displayAppointments]);
 
   const appointmentsWithTimeline = useMemo(
     () =>
-      appointments.map((appointment) => ({
+      displayAppointments.map((appointment) => ({
         ...appointment,
         timelineItems: appointment.recurringPlanId
           ? appointmentTimelines.get(appointment.recurringPlanId)
@@ -353,20 +449,31 @@ export default function BookingsScreen() {
                 : []),
             ],
       })),
-    [appointmentTimelines, appointments, colors.textMuted, colors.warning],
+    [appointmentTimelines, colors.textMuted, colors.warning, displayAppointments],
   );
 
   const isLoading =
     activeSection === "bookings"
       ? venuesLoading || bookingsLoading
+      : isCoachRole
+        ? coachScheduleLoading
       : appointmentsLoading;
   const errorText = useMemo(() => {
     if (activeSection === "bookings" && (venuesError || bookingsError))
       return "Unable to load reservations.";
+    if (activeSection === "appointments" && isCoachRole && coachScheduleError)
+      return "Unable to load coach sessions.";
     if (activeSection === "appointments" && appointmentsError)
       return "Unable to load appointments.";
     return "";
-  }, [activeSection, appointmentsError, bookingsError, venuesError]);
+  }, [
+    activeSection,
+    appointmentsError,
+    bookingsError,
+    coachScheduleError,
+    isCoachRole,
+    venuesError,
+  ]);
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -402,6 +509,12 @@ export default function BookingsScreen() {
   ]);
 
   useEffect(() => {
+    if (isCoachRole && activeSection !== "appointments") {
+      setActiveSection("appointments");
+    }
+  }, [activeSection, isCoachRole]);
+
+  useEffect(() => {
     if (!isFocused || !user?.id || !isUserRole) return;
     void refetch();
     void refetchAppointments();
@@ -411,6 +524,17 @@ export default function BookingsScreen() {
     isUserRole,
     refetch,
     refetchAppointments,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    if (!isFocused || !user?.id || !isCoachRole) return;
+    void refetchCoachSchedule();
+  }, [
+    bookingRefreshTick,
+    isCoachRole,
+    isFocused,
+    refetchCoachSchedule,
     user?.id,
   ]);
 
@@ -460,6 +584,19 @@ export default function BookingsScreen() {
   const submitCoachReviewMutation = useMutation(
     submitCoachReviewMutationOptions(mobileApiClient, queryClient),
   );
+  const confirmCoachAppointmentMutation = useMutation(
+    confirmCoachAppointmentMutationOptions(mobileApiClient, queryClient),
+  );
+  const declineCoachAppointmentMutation = useMutation(
+    declineCoachAppointmentMutationOptions(mobileApiClient, queryClient),
+  );
+  const completeCoachAppointmentMutation = useMutation(
+    completeCoachAppointmentMutationOptions(mobileApiClient, queryClient),
+  );
+  const coachActionLoading =
+    confirmCoachAppointmentMutation.isPending ||
+    declineCoachAppointmentMutation.isPending ||
+    completeCoachAppointmentMutation.isPending;
 
   const cancellingReservationLabel = useLoadingText(
     "CANCELLING",
@@ -472,6 +609,10 @@ export default function BookingsScreen() {
   const openingPaymongoLabel = useLoadingText(
     "OPENING PAYMONGO",
     payAppointmentMutation.isPending,
+  );
+  const coachActionLoadingLabel = useLoadingText(
+    "UPDATING",
+    coachActionLoading,
   );
 
   const handleSubmitAppointmentPayment = useCallback(
@@ -545,7 +686,7 @@ export default function BookingsScreen() {
       try {
         await cancelAppointmentMutation.mutateAsync({
           appointmentId: booking.id,
-          cancelReason: "Cancelled by user",
+          cancelReason: isCoachRole ? "Cancelled by coach" : "Cancelled by user",
           userId: user?.id,
         });
         setPendingCancellation(null);
@@ -554,7 +695,7 @@ export default function BookingsScreen() {
         setIsCancelling(false);
       }
     },
-    [cancelAppointmentMutation, user?.id],
+    [cancelAppointmentMutation, isCoachRole, user?.id],
   );
 
   const handleCancelReservation = useCallback((booking: DetailBooking) => {
@@ -574,6 +715,47 @@ export default function BookingsScreen() {
     }
     setPendingCancellation({ booking, type: "appointment" });
   }, []);
+
+  const handleCoachAction = useCallback(
+    (booking: DetailBooking, action: PendingCoachAction["action"]) => {
+      if (coachActionLoading) return;
+      setPendingCoachAction({ booking, action });
+    },
+    [coachActionLoading],
+  );
+
+  const executeCoachAction = useCallback(async () => {
+    if (!pendingCoachAction) return;
+    const { action, booking } = pendingCoachAction;
+
+    if (action === "confirm") {
+      await confirmCoachAppointmentMutation.mutateAsync({
+        appointmentId: booking.id,
+        userId: user?.id,
+      });
+    } else if (action === "decline") {
+      await declineCoachAppointmentMutation.mutateAsync({
+        appointmentId: booking.id,
+        reason: "Declined by coach.",
+        userId: user?.id,
+      });
+    } else {
+      await completeCoachAppointmentMutation.mutateAsync({
+        appointmentId: booking.id,
+        sessionNotes: "Completed from mobile coach sessions.",
+        userId: user?.id,
+      });
+    }
+
+    setPendingCoachAction(null);
+    setDetailBooking(null);
+  }, [
+    completeCoachAppointmentMutation,
+    confirmCoachAppointmentMutation,
+    declineCoachAppointmentMutation,
+    pendingCoachAction,
+    user?.id,
+  ]);
 
   const handleOpenCoachReview = useCallback((booking: DetailBooking) => {
     if (!booking.coachId || booking.coachReviewRating) return;
@@ -633,6 +815,7 @@ export default function BookingsScreen() {
       result = result.filter((booking) =>
         statusFilter === "pending"
           ? booking.status === "pending" ||
+            booking.status === "pending_coach" ||
             booking.status === "pending_downpayment" ||
             booking.status === "pending_payment" ||
             booking.status === "pending_full_payment"
@@ -683,6 +866,70 @@ export default function BookingsScreen() {
           loadingLabel: cancellingReservationLabel,
         },
       ];
+    }
+    if (isCoachRole) {
+      const isFinal =
+        detailBooking.status === "cancelled" ||
+        detailBooking.status === "completed" ||
+        detailBooking.status === "declined" ||
+        detailBooking.status === "no_show";
+      const actions = [];
+
+      if (detailBooking.status === "pending_coach") {
+        actions.push(
+          {
+            key: "confirm-session",
+            label: "Confirm Session",
+            variant: "primary" as const,
+            icon: CheckCircle2,
+            onPress: (booking: DetailBooking) =>
+              handleCoachAction(booking, "confirm"),
+            disabled: coachActionLoading || isCancelling,
+            loading: confirmCoachAppointmentMutation.isPending,
+            loadingLabel: coachActionLoadingLabel,
+          },
+          {
+            key: "decline-session",
+            label: "Decline Session",
+            variant: "danger" as const,
+            icon: CircleOff,
+            onPress: (booking: DetailBooking) =>
+              handleCoachAction(booking, "decline"),
+            disabled: coachActionLoading || isCancelling,
+            loading: declineCoachAppointmentMutation.isPending,
+            loadingLabel: coachActionLoadingLabel,
+          },
+        );
+      }
+
+      if (detailBooking.status === "confirmed") {
+        actions.push({
+          key: "complete-session",
+          label: "Complete Session",
+          variant: "primary" as const,
+          icon: CheckCircle2,
+          onPress: (booking: DetailBooking) =>
+            handleCoachAction(booking, "complete"),
+          disabled: coachActionLoading || isCancelling,
+          loading: completeCoachAppointmentMutation.isPending,
+          loadingLabel: coachActionLoadingLabel,
+        });
+      }
+
+      if (!isFinal) {
+        actions.push({
+          key: "cancel-session",
+          label: isCancelling ? cancellingAppointmentLabel : "Cancel Session",
+          variant: "danger" as const,
+          icon: CircleOff,
+          onPress: handleCancelAppointment,
+          disabled: coachActionLoading || isCancelling,
+          loading: isCancelling,
+          loadingLabel: cancellingAppointmentLabel,
+        });
+      }
+
+      return actions;
     }
     if (
       detailBooking.status === "pending_payment" ||
@@ -802,18 +1049,25 @@ export default function BookingsScreen() {
     activeSection,
     cancellingAppointmentLabel,
     cancellingReservationLabel,
+    coachActionLoading,
+    coachActionLoadingLabel,
+    completeCoachAppointmentMutation.isPending,
+    confirmCoachAppointmentMutation.isPending,
+    declineCoachAppointmentMutation.isPending,
     detailBooking,
+    handleCoachAction,
     handleCancelAppointment,
     handleCancelReservation,
     handleOpenCoachReview,
     isCancelling,
+    isCoachRole,
     openingPaymongoLabel,
     payAppointmentMutation,
     submitCoachReviewMutation.isPending,
     user?.id,
   ]);
 
-  const sectionOptions = MEMBER_SECTION_OPTIONS;
+  const sectionOptions = isCoachRole ? COACH_SECTION_OPTIONS : MEMBER_SECTION_OPTIONS;
   const chipOptions = FILTER_OPTIONS;
 
   return (
@@ -973,7 +1227,8 @@ export default function BookingsScreen() {
           !!detailBooking &&
           reviewTarget == null &&
           pendingAppointmentPayment == null &&
-          pendingCancellation == null
+          pendingCancellation == null &&
+          pendingCoachAction == null
         }
         booking={detailBooking}
         venue={detailVenue}
@@ -1177,6 +1432,44 @@ export default function BookingsScreen() {
             return;
           }
           void executeCancelReservation(pendingCancellation.booking);
+        }}
+      />
+      <ConfirmModal
+        isVisible={pendingCoachAction != null}
+        title={
+          pendingCoachAction?.action === "confirm"
+            ? "Confirm session?"
+            : pendingCoachAction?.action === "complete"
+              ? "Complete session?"
+              : "Decline session?"
+        }
+        message={
+          pendingCoachAction
+            ? `${formatStatusLabel(pendingCoachAction.action)} ${
+                pendingCoachAction.booking.resourceName
+              } on ${formatBookingDate(
+                pendingCoachAction.booking.date,
+              )}? This updates the coach session immediately.`
+            : ""
+        }
+        yesLabel={
+          pendingCoachAction?.action === "confirm"
+            ? "Confirm"
+            : pendingCoachAction?.action === "complete"
+              ? "Complete"
+              : "Decline"
+        }
+        noLabel="Go Back"
+        isDestructive={pendingCoachAction?.action === "decline"}
+        isLoading={coachActionLoading}
+        loadingLabel={coachActionLoadingLabel}
+        loadingTitle="Updating session"
+        onNo={() => {
+          if (coachActionLoading) return;
+          setPendingCoachAction(null);
+        }}
+        onYes={() => {
+          void executeCoachAction();
         }}
       />
       {isUserRole ? (

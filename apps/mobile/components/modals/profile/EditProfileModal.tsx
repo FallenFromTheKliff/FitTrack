@@ -100,7 +100,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const s = useMemo(() => makeEditProfileModalStyles(colors), [colors]);
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const isCoach = false;
+  const isCoach = user?.role === "COACH";
   const updateProfileMutation = useMutation(updateProfileMutationOptions(mobileApiClient));
   const updatePhoneMutation = useMutation(updatePhoneMutationOptions(mobileApiClient));
   const uploadImageMutation = useMutation(uploadImageMutationOptions(mobileApiClient));

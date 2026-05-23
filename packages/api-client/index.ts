@@ -104,6 +104,7 @@ export type {
 export type {
   BookingBalancePaymentProvider,
   CreateBookingPayload,
+  VenueBookingListParams,
   VenueBookingRecord,
 } from "./domains/bookings";
 export type {

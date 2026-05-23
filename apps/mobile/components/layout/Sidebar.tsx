@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { type Href, useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings } from "lucide-react-native";
+import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings, User } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 import { type TabKey } from "@fittrack/app-config";
@@ -43,6 +43,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: SIDEBAR_NAV_LABELS_BY_TAB.nutrition, icon: Apple, route: "/(tabs)/nutrition" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.mastery, icon: Trophy, route: "/(tabs)/mastery" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.workout, icon: Dumbbell, route: "/(tabs)/workout" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
+  { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
+];
+const COACH_NAV_ITEMS: NavItem[] = [
+  { label: "Coach Home", icon: Home, route: "/(tabs)/home" },
+  { label: "Sessions", icon: CalendarDays, route: "/(tabs)/bookings" },
+  { label: "Coach Profile", icon: User, route: "/(tabs)/profile" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
 ];
@@ -135,9 +142,11 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
     apiBaseUrl: MOBILE_API_BASE_URL,
     assetUrl: user?.avatarUri
   });
-  const tierLabel = user?.tier ? TIER_LABELS[user.tier] : "Fit Starter";
+  const isCoach = user?.role === "COACH";
+  const tierLabel = isCoach ? "Coach" : user?.tier ? TIER_LABELS[user.tier] : "Fit Starter";
   const tierLevel = user?.tier ? TIER_LEVELS[user.tier] : 1;
   const ic2 = activeIconColor ?? colors.brand;
+  const navItems = isCoach ? COACH_NAV_ITEMS : NAV_ITEMS;
 
   return (
       <Modal
@@ -179,17 +188,19 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
                       {user?.name ?? "Member"}
                     </AnimatedFitText>
                     <AnimatedFitText style={[s.profileTierRow, tierStyle]} numberOfLines={1}>
-                      {tierLabel}{" \u2022 "}Level {tierLevel}
+                      {isCoach ? "Coach Portal" : `${tierLabel} - Level ${tierLevel}`}
                     </AnimatedFitText>
                     <View style={s.profileManageHint}>
                       <Settings size={11} color={ic2} strokeWidth={2} />
-                      <FitText style={s.profileManageHintText}>Manage Profile Details</FitText>
+                      <FitText style={s.profileManageHintText}>
+                        {isCoach ? "Manage Coach Profile" : "Manage Profile Details"}
+                      </FitText>
                     </View>
                   </View>
                 </Animated.View>
               </Pressable>
               <Animated.View style={[s.navSeparator, separatorStyle]} />
-              {NAV_ITEMS.map(({ label, icon, route }) => {
+              {navItems.map(({ label, icon, route }) => {
                 const active = isActive(route);
                 return (
                     <FitButton

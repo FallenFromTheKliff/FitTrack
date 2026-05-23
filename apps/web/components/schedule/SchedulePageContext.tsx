@@ -123,6 +123,8 @@ function useGymOperationsPageState() {
     confirmBooking,
     noShowBooking,
     rejectBooking,
+    bookingDateRange,
+    setBookingDateRange,
     rawBookings,
     isLoading: scheduleLoading,
   } = useSchedule();
@@ -221,6 +223,8 @@ function useGymOperationsPageState() {
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState("all");
   const [venueFilterId, setVenueFilterId] = useState("all");
   const [venueStatusFilter, setVenueStatusFilter] = useState("all");
+  const [venueStartCalendarOpen, setVenueStartCalendarOpen] = useState(false);
+  const [venueEndCalendarOpen, setVenueEndCalendarOpen] = useState(false);
   const [availabilityEditorCoachId, setAvailabilityEditorCoachId] = useState<
     string | null
   >(null);
@@ -999,6 +1003,56 @@ function useGymOperationsPageState() {
         ?.label ?? "this venue",
     [venueFilterId, venueFilterOptions],
   );
+  const venueBookingDateLabel =
+    bookingDateRange.startDate && bookingDateRange.endDate
+      ? `${bookingDateRange.startDate} to ${bookingDateRange.endDate}`
+      : bookingDateRange.startDate
+        ? bookingDateRange.startDate
+        : bookingDateRange.endDate
+          ? `Until ${bookingDateRange.endDate}`
+          : "All dates";
+
+  const handleVenueStartDateSelect = (ymd: string) => {
+    if (!ymd) {
+      setBookingDateRange((current) => ({
+        ...current,
+        startDate: undefined,
+      }));
+      setVenueStartCalendarOpen(false);
+      return;
+    }
+
+    setBookingDateRange((current) => ({
+      ...current,
+      startDate: ymd,
+      endDate:
+        current.endDate && current.endDate < ymd ? ymd : current.endDate,
+    }));
+  };
+
+  const handleVenueEndDateSelect = (ymd: string) => {
+    if (!ymd) {
+      setBookingDateRange((current) => ({
+        ...current,
+        endDate: undefined,
+      }));
+      setVenueEndCalendarOpen(false);
+      return;
+    }
+
+    setBookingDateRange((current) => ({
+      ...current,
+      startDate:
+        current.startDate && current.startDate > ymd
+          ? ymd
+          : current.startDate,
+      endDate: ymd,
+    }));
+  };
+
+  const clearVenueBookingDateRange = () => {
+    setBookingDateRange({});
+  };
 
   const filteredVenueBookings = useMemo(
     () =>
@@ -1015,9 +1069,25 @@ function useGymOperationsPageState() {
         ) {
           return false;
         }
+        const bookingDate = booking.startTime.slice(0, 10);
+        if (
+          bookingDateRange.startDate &&
+          bookingDate < bookingDateRange.startDate
+        ) {
+          return false;
+        }
+        if (bookingDateRange.endDate && bookingDate > bookingDateRange.endDate) {
+          return false;
+        }
         return true;
       }),
-    [rawBookings, venueFilterId, venueStatusFilter],
+    [
+      bookingDateRange.endDate,
+      bookingDateRange.startDate,
+      rawBookings,
+      venueFilterId,
+      venueStatusFilter,
+    ],
   );
 
   const venueBookingSummary = useMemo(
@@ -2120,6 +2190,7 @@ function useGymOperationsPageState() {
     appointmentReviewReadiness, appointmentReviewTarget, appointmentsLoading,
     appointmentStatusFilter, appointmentSummary, availabilityEditorCoach,
     blockDetailOpen, bookableVenueOptions, bulkUpdateRecurringSessionsMutation,
+    bookingDateRange,
     calendarOpen, canAnimate, cancelAppointmentMutation,
     cancelRecurringPlanMutation, canManageCoaching, coachAppointments,
     coachDetailsOpen, coachFilterId, coachOptions,
@@ -2137,6 +2208,7 @@ function useGymOperationsPageState() {
     handleConfirmAppointment, handleConfirmPaymentAction, handleConfirmRecurringPlan,
     handleCreateCoach, handleCreateCoachBooking, handleCreateVenueBooking,
     handleDragEnd, handleDragStart, handleNoShowVenueBooking,
+    handleVenueEndDateSelect, handleVenueStartDateSelect,
     handlePreviewRecurringPlan, handleRecurringFutureUpdate, handleRecurringPlanCancel,
     handleRecurringSessionReschedule, handleRecurringSessionSkip, handleRejectAppointment,
     handleRejectVenueBooking, handleSaveAppointmentFeedback, handleSaveAvailability, handleSaveCoachProfile,
@@ -2157,6 +2229,7 @@ function useGymOperationsPageState() {
     rosterBookings, scheduleDayPart, scheduleLoading,
     scheduleRangeMode, scheduleRosterMaxHeight, scheduleTimelineMaxHeight,
     selectedCoachProfile, selectedCoachRoster, selectedVenueFilterLabel,
+    venueBookingDateLabel, clearVenueBookingDateRange,
     isAdmin, isCoach,
     sensors, setActiveBlock, setActiveCoachId,
     setActiveOperationsTab, setActiveScheduleSurfaceTab, setAppointmentReviewTarget,
@@ -2168,12 +2241,14 @@ function useGymOperationsPageState() {
     setRecurringActionTime, setRecurringPlanAction, setRecurringPlanForm,
     setRecurringPlanOpen, setRecurringPlanPreview, setScheduleDayPart,
     setScheduleRangeMode, setSlideKey, setVenueFilterId,
-    setVenueReviewTarget, setVenueStatusFilter, setWeekStart,
+    setVenueEndCalendarOpen, setVenueReviewTarget, setVenueStartCalendarOpen,
+    setVenueStatusFilter, setWeekStart,
     slideStyle, themeTransition, toggleRecurringActionDay,
     toggleRecurringPlanDay, updateCoachProfileMutation,
     updateCoachProfilePending, updateRecurringSessionMutation,
-    venueBookingSummary, venueFilterId, venueFilterOptions,
-    venueReviewTarget, venueStatusFilter, verifyPaymentMutation,
+    venueBookingSummary, venueEndCalendarOpen, venueFilterId,
+    venueFilterOptions, venueReviewTarget, venueStartCalendarOpen,
+    venueStatusFilter, verifyPaymentMutation,
     visibleTimelineDays, visibleTimelineHours, weekStart,
   };
 }

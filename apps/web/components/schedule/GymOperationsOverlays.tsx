@@ -304,14 +304,26 @@ export function GymOperationsCreateVenueBookingModal({
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions, venueOptions]);
 
+  const currentMinutes = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, [date, datePickerOpen, isOpen]);
   const venueStartOptions = useMemo(
     () =>
-      VENUE_SLOT_OPTIONS.map((value) => ({
+      VENUE_SLOT_OPTIONS.filter(
+        (value) =>
+          date !== getDefaultDateInput() || toMinutes(value) > currentMinutes,
+      ).map((value) => ({
         label: formatSlotLabel(value),
         value,
       })),
-    [],
+    [currentMinutes, date],
   );
+  useEffect(() => {
+    if (!venueStartOptions.some((option) => option.value === startTime)) {
+      setStartTime(venueStartOptions[0]?.value ?? "");
+    }
+  }, [startTime, venueStartOptions]);
   const venueEndOptions = useMemo(
     () =>
       VENUE_SLOT_OPTIONS.filter((value) => value > startTime).map((value) => ({
@@ -355,6 +367,9 @@ export function GymOperationsCreateVenueBookingModal({
   const remainingBalance = roundCurrency(
     Math.max(estimatedBookingTotal - amountDueNow, 0),
   );
+  const isVenueWindowInFuture =
+    Boolean(startTime) &&
+    (date !== getDefaultDateInput() || toMinutes(startTime) > currentMinutes);
   const canSubmit =
     Boolean(memberId) &&
     Boolean(venueId) &&
@@ -362,6 +377,7 @@ export function GymOperationsCreateVenueBookingModal({
     Boolean(startTime) &&
     Boolean(endTime) &&
     endTime > startTime &&
+    isVenueWindowInFuture &&
     !hasConflict;
 
   const submitVenueBooking = () => {
@@ -388,6 +404,10 @@ export function GymOperationsCreateVenueBookingModal({
     }
     if (!date || !startTime || !endTime || endTime <= startTime) {
       setErrorText("Select a valid date and time window.");
+      return;
+    }
+    if (!isVenueWindowInFuture) {
+      setErrorText("Same-day bookings must use a future start time.");
       return;
     }
     if (hasConflict) {
@@ -788,6 +808,11 @@ export function GymOperationsCreateCoachBookingModal({
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions]);
 
+  const currentMinutes = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, []);
+
   const slotOptions = useMemo(() => {
     if (!coachAvailability?.availability) {
       return [];
@@ -797,7 +822,13 @@ export function GymOperationsCreateCoachBookingModal({
       coachAvailability.availability,
       coachAvailability.scheduleType,
     )
-      .filter((slot) => slot.isAvailable && matchesDay(date, slot.dayOfWeek))
+      .filter(
+        (slot) =>
+          slot.isAvailable &&
+          matchesDay(date, slot.dayOfWeek) &&
+          (date !== getDefaultDateInput() ||
+            toMinutes(slot.startTime) > currentMinutes),
+      )
       .map((slot) => {
         const durationMinutes = slot.durationMinutes;
         return {
@@ -807,7 +838,12 @@ export function GymOperationsCreateCoachBookingModal({
           value: `${slot.startTime}|${durationMinutes}`,
         };
       });
-  }, [coachAvailability?.availability, coachAvailability?.scheduleType, date]);
+  }, [
+    coachAvailability?.availability,
+    coachAvailability?.scheduleType,
+    currentMinutes,
+    date,
+  ]);
 
   useEffect(() => {
     if (!slotOptions.some((slot) => slot.value === slotValue)) {

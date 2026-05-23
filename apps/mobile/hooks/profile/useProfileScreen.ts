@@ -201,7 +201,7 @@ export function useProfileScreen() {
   const queryClient = useQueryClient();
   const isMounted = useRef(true);
   const { message: statusMessage, showMessage } = useTimedMessage(2400);
-  const isCoach = false;
+  const isCoach = user?.role === "COACH";
   const isMember = user?.role === "USER";
   const membershipCard = user?.membershipCard ?? null;
   const membershipCardStatus = membershipCard?.status ?? "none";

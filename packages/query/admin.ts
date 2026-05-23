@@ -40,6 +40,13 @@ type CreateUserPayload = {
   phone_no?: string;
 };
 
+type BookingListFilters = {
+  endDate?: string;
+  limit?: number;
+  page?: number;
+  startDate?: string;
+};
+
 export function adminMembersQueryOptions(
   client: Pick<ApiClient, "admin">,
   filters?: MemberDirectoryFilters,
@@ -59,10 +66,13 @@ export function adminDeletionRequestsQueryOptions<T>(
   });
 }
 
-export function adminBookingsQueryOptions<T>(client: Pick<ApiClient, "admin">) {
+export function adminBookingsQueryOptions<T>(
+  client: Pick<ApiClient, "admin">,
+  filters?: BookingListFilters,
+) {
   return queryOptions({
-    queryKey: queryKeys.adminBookings(),
-    queryFn: () => client.admin.listBookings<T>(),
+    queryKey: queryKeys.adminBookings(filters),
+    queryFn: () => client.admin.listBookings<T>(filters),
   });
 }
 

@@ -28,7 +28,11 @@ import {
   unwrapResponse,
   unwrapVoidResponse,
 } from "../request";
-import { mapAmenityBookingToVenueBookingRecord } from "./bookings";
+import {
+  mapAmenityBookingToVenueBookingRecord,
+  toVenueBookingListParams,
+  type VenueBookingListParams,
+} from "./bookings";
 
 export type {
   AdminGamificationCreatorStateInput,
@@ -570,9 +574,11 @@ export function createAdminApi(transport: ApiTransport) {
         "Unable to upgrade user to coach.",
       );
     },
-    async listBookings<T>() {
+    async listBookings<T>(params?: VenueBookingListParams) {
       const data = await unwrapResponse<T[]>(
-        transport.get("/bookings/amenity?limit=100"),
+        transport.get("/bookings/amenity", {
+          params: toVenueBookingListParams({ limit: 100, ...params }),
+        }),
         "Unable to load bookings.",
       );
       return data.map((record) =>

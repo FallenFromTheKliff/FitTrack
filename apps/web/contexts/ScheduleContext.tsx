@@ -1,5 +1,14 @@
 "use client";
-import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { VenueBookingRecord as ApiVenueBookingRecord } from "@fittrack/api-client";
 import {
@@ -50,10 +59,17 @@ export type ScheduleBooking = {
   raw: VenueBookingRecord;
 };
 
+export type BookingDateRange = {
+  endDate?: string;
+  startDate?: string;
+};
+
 export interface IScheduleContext {
   bookings: ScheduleBooking[];
   rawBookings: VenueBookingRecord[];
+  bookingDateRange: BookingDateRange;
   isLoading: boolean;
+  setBookingDateRange: Dispatch<SetStateAction<BookingDateRange>>;
   addBooking: (booking: Booking) => void;
   removeBooking: (bookingId: string) => void;
   updateBooking: (bookingId: string, updates: Partial<Booking>) => void;
@@ -74,6 +90,9 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const controller = useMemo(() => createScheduleController(), []);
   const isAdmin = user?.role === "ADMIN";
   const isStaff = user?.role === "STAFF";
+  const [bookingDateRange, setBookingDateRange] = useState<BookingDateRange>(
+    {},
+  );
   const statusColors: Record<VenueBookingRecord["status"], string> = {
     pending: colors.warning,
     pending_downpayment: colors.warning,
@@ -85,14 +104,33 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
     completed: colors.textMuted,
     no_show: colors.danger
   };
+  const bookingListFilters = useMemo(
+    () => ({
+      limit: 100,
+      ...(bookingDateRange.startDate
+        ? { startDate: bookingDateRange.startDate }
+        : {}),
+      ...(bookingDateRange.endDate
+        ? { endDate: bookingDateRange.endDate }
+        : {}),
+    }),
+    [bookingDateRange.endDate, bookingDateRange.startDate],
+  );
 
   const staffBookingsQuery = useQuery({
-    ...staffBookingsQueryOptions<VenueBookingRecord>(webApiClient, "all"),
+    ...staffBookingsQueryOptions<VenueBookingRecord>(
+      webApiClient,
+      "all",
+      bookingListFilters,
+    ),
     enabled: isStaff,
     staleTime: 30_000
   });
   const adminBookingsQuery = useQuery({
-    ...adminBookingsQueryOptions<VenueBookingRecord>(webApiClient),
+    ...adminBookingsQueryOptions<VenueBookingRecord>(
+      webApiClient,
+      bookingListFilters,
+    ),
     enabled: isAdmin,
     staleTime: 30_000
   });
@@ -220,10 +258,12 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
 
   return (
     <ScheduleContext.Provider value={{
-      bookings,
-      rawBookings,
-      isLoading,
-      addBooking,
+    bookings,
+    bookingDateRange,
+    rawBookings,
+    isLoading,
+    setBookingDateRange,
+    addBooking,
       removeBooking,
       updateBooking,
       clearBookings,

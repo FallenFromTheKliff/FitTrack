@@ -20,9 +20,13 @@ import {
   Zap,
   type LucideIcon
 } from "lucide-react-native";
-import type { VenueBookingRecord } from "@fittrack/api-client";
+import type {
+  CoachAppointmentScheduleRecord,
+  VenueBookingRecord,
+} from "@fittrack/api-client";
 import {
   bookingsQueryOptions,
+  coachScheduleQueryOptions,
   fitnessLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
   fitnessSessionsQueryOptions,
@@ -39,6 +43,7 @@ import type {
   WorkoutSessionSummaryRecord
 } from "@fittrack/types";
 import { formatBookingDate, formatTodayLong } from "@fittrack/utils";
+import { toDateTimeRange } from "@fittrack/app-core";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -48,7 +53,7 @@ import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useHomeFABItems } from "@/hooks/home/useHomeFABItems";
 import { mobileApiClient } from "@/lib/api-client";
 import { makeHomeStyles, makeScreenStyles } from "@/styles/shared/ScreenStyles";
-import { getTodayString } from "@/data/bookings";
+import { STATUS_COLORS, getTodayString } from "@/data/bookings";
 import { toMobileBookings } from "@/utils/venueBookings";
 
 import FitCard from "@/components/fit/FitCard";
@@ -103,6 +108,18 @@ function getLocalDayKey(dateLike: string) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function getCoachMemberName(appointment: CoachAppointmentScheduleRecord) {
+  const firstName = appointment.user?.profile?.firstName?.trim() ?? "";
+  const lastName = appointment.user?.profile?.lastName?.trim() ?? "";
+  const profileName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return (
+    profileName ||
+    appointment.user?.email?.trim() ||
+    appointment.userId ||
+    "Member"
+  );
 }
 
 function resolveHighestRank(mastery: MuscleMasteryRecord[]) {
@@ -175,6 +192,8 @@ export default function HomeScreen() {
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeHomeStyles(colors), [colors]);
+  const isCoach = user?.role === "COACH";
+  const isMember = user?.role === "USER";
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const { registerFAB, unregisterFAB } = useFABState();
@@ -189,9 +208,9 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      registerFAB({ screenIcon: Zap, menuItems, scrollY, visible: true });
+      registerFAB({ screenIcon: Zap, menuItems, scrollY, visible: isMember });
       return () => unregisterFAB();
-    }, [menuItems, registerFAB, scrollY, unregisterFAB])
+    }, [isMember, menuItems, registerFAB, scrollY, unregisterFAB])
   );
 
   const firstName = user?.name?.split(" ")[0] ?? "Member";
@@ -215,31 +234,39 @@ export default function HomeScreen() {
 
   const venuesQuery = useQuery({
     ...venuesQueryOptions(mobileApiClient, user?.id),
-    enabled: isFocused && !!user?.id
+    enabled: isFocused && !!user?.id && isMember
   });
   const bookingsQuery = useQuery({
     ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
-    enabled: isFocused && !!user?.id
+    enabled: isFocused && !!user?.id && isMember
+  });
+  const coachScheduleQuery = useQuery({
+    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(
+      mobileApiClient,
+      user?.id
+    ),
+    enabled: isFocused && !!user?.id && isCoach,
+    staleTime: 30_000
   });
   const nutritionTargetQuery = useQuery({
     ...nutritionActiveTdeeQueryOptions<ActiveNutritionProfileRecord | null>(mobileApiClient, user?.id),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: isFocused && !!user?.id && isMember && hasMemberCardAccess
   });
   const nutritionSummaryQuery = useQuery({
     ...nutritionDailySummaryQueryOptions<DailyNutritionSummaryRecord>(mobileApiClient, user?.id, todayString),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: isFocused && !!user?.id && isMember && hasMemberCardAccess
   });
   const masteryQuery = useQuery({
     ...fitnessMasteryQueryOptions(mobileApiClient, user?.id),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: isFocused && !!user?.id && isMember && hasMemberCardAccess
   });
   const leaderboardQuery = useQuery({
     ...fitnessLeaderboardQueryOptions(mobileApiClient, user?.id, { limit: 5, page: 1 }),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: isFocused && !!user?.id && isMember && hasMemberCardAccess
   });
   const sessionsQuery = useQuery({
     ...fitnessSessionsQueryOptions(mobileApiClient, user?.id, { limit: 50, page: 1 }),
-    enabled: isFocused && !!user?.id && hasMemberCardAccess
+    enabled: isFocused && !!user?.id && isMember && hasMemberCardAccess
   });
 
   const venues = useMemo(() => venuesQuery.data ?? [], [venuesQuery.data]);
@@ -296,6 +323,63 @@ export default function HomeScreen() {
     (leaderboardQuery.error as Error | null)?.message ??
     (sessionsQuery.error as Error | null)?.message ??
     null;
+  const coachAppointments = useMemo(
+    () => coachScheduleQuery.data ?? [],
+    [coachScheduleQuery.data]
+  );
+  const coachTodayAppointments = useMemo(
+    () =>
+      coachAppointments.filter(
+        (appointment) =>
+          getLocalDayKey(appointment.scheduledAt) === todayString &&
+          appointment.status !== "cancelled"
+      ),
+    [coachAppointments, todayString]
+  );
+  const visibleCoachTodayAppointments = useMemo(
+    () => coachTodayAppointments.slice(0, 4),
+    [coachTodayAppointments]
+  );
+  const hiddenCoachTodayCount = Math.max(
+    coachTodayAppointments.length - visibleCoachTodayAppointments.length,
+    0
+  );
+  const coachClientCount = useMemo(
+    () =>
+      new Set(
+        coachAppointments
+          .map((appointment) => appointment.userId)
+          .filter(Boolean)
+      ).size,
+    [coachAppointments]
+  );
+  const coachCompletedCount = coachAppointments.filter(
+    (appointment) => appointment.status === "completed"
+  ).length;
+  const coachPendingCount = coachAppointments.filter(
+    (appointment) => appointment.status === "pending_coach"
+  ).length;
+  const coachEarnings = coachAppointments
+    .filter((appointment) => appointment.status === "completed")
+    .reduce((sum, appointment) => sum + Number(appointment.coachEarnings ?? 0), 0);
+  const coachStats = useMemo<HomeStatCard[]>(
+    () => [
+      { icon: User, label: "Clients", value: String(coachClientCount) },
+      { icon: CalendarDays, label: "Sessions", value: String(coachAppointments.length) },
+      { icon: Sparkles, label: "Pending", value: String(coachPendingCount) },
+      {
+        icon: Trophy,
+        label: "Earnings",
+        value: `PHP ${coachEarnings.toLocaleString("en-PH")}`,
+      },
+    ],
+    [
+      coachAppointments.length,
+      coachClientCount,
+      coachEarnings,
+      coachPendingCount,
+    ]
+  );
 
   const statCards = useMemo<HomeStatCard[]>(() => {
     if (hasMemberCardAccess) {
@@ -568,6 +652,154 @@ export default function HomeScreen() {
   }));
   const greetingNameStyle = useAnimatedStyle(() => ({ color: ic.value.textPrimary }));
   const greetingDateStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
+
+  if (isCoach) {
+    return (
+      <View style={[base.screen, !isFocused && { display: "none" }]}>
+        <Animated.ScrollView
+          style={[base.content, screenStyle]}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        >
+          <Animated.View style={contentStyle}>
+            <View style={s.greeting}>
+              <AnimatedFitText style={[s.greetingName, greetingNameStyle]}>
+                Welcome Back, {firstName}!
+              </AnimatedFitText>
+              <AnimatedFitText style={[s.greetingDate, greetingDateStyle]}>
+                {formatTodayLong()} - {currentTimeLabel}
+              </AnimatedFitText>
+            </View>
+            {coachScheduleQuery.error ? (
+              <FitText style={{ fontSize: 12, color: colors.warning, marginBottom: 12 }}>
+                {(coachScheduleQuery.error as Error).message}
+              </FitText>
+            ) : null}
+            <View style={s.statsOuter}>
+              <View style={s.statsGrid}>
+                {coachStats.map((card) => (
+                  <Animated.View key={card.label} style={[s.statCard, surfaceStyle]}>
+                    <FitCard icon={card.icon} label={card.label} statValue={card.value} iconSize={18} />
+                  </Animated.View>
+                ))}
+              </View>
+            </View>
+            <View style={s.sectionWrap}>
+              <Animated.View style={[s.badgeBanner, surfaceStyle]}>
+                <View style={s.badgeIconBox}>
+                  <CalendarDays size={22} color={colors.brand} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <FitText style={s.badgeBannerTitle}>
+                    Coach sessions are live
+                  </FitText>
+                  <FitText style={s.badgeBannerBody}>
+                    Confirm, complete, or cancel assigned sessions from Bookings.
+                    Profile manages your coach details and availability.
+                  </FitText>
+                </View>
+              </Animated.View>
+            </View>
+            <View style={s.sectionWrap}>
+              <FitSection
+                heading="TODAY'S COACHING SCHEDULE"
+                subtitle="Tap Bookings to open the full coach session queue."
+              >
+                {coachScheduleQuery.isPending ? (
+                  <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
+                    <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
+                    <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+                      Loading coach sessions...
+                    </FitText>
+                  </View>
+                ) : coachTodayAppointments.length === 0 ? (
+                  <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
+                    <CalendarDays size={28} color={colors.textMuted} strokeWidth={1.5} />
+                    <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+                      No coach sessions scheduled for today
+                    </FitText>
+                  </View>
+                ) : (
+                  <View>
+                    {visibleCoachTodayAppointments.map((appointment, index) => {
+                      const { startLabel, endLabel, date } = toDateTimeRange(
+                        appointment.scheduledAt,
+                        appointment.duration
+                      );
+                      const status = appointment.status ?? "pending";
+                      const statusLabel = status
+                        .split("_")
+                        .filter(Boolean)
+                        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                        .join(" ");
+                      return (
+                        <FitCard
+                          key={appointment.id}
+                          icon={User}
+                          iconSize={18}
+                          label={getCoachMemberName(appointment)}
+                          subtitle={`${formatBookingDate(date)} - ${startLabel} - ${endLabel}`}
+                          trailingLabel={statusLabel}
+                          trailingLabelColor={STATUS_COLORS[status] ?? colors.textMuted}
+                          hasBorder={index < visibleCoachTodayAppointments.length - 1 || hiddenCoachTodayCount > 0}
+                          onPress={() => router.push("/(tabs)/bookings")}
+                        />
+                      );
+                    })}
+                    {hiddenCoachTodayCount > 0 ? (
+                      <View style={s.scheduleOverflowNote}>
+                        <FitText style={s.scheduleOverflowText}>
+                          {hiddenCoachTodayCount} more session{hiddenCoachTodayCount === 1 ? "" : "s"} today. Check Bookings to see the rest.
+                        </FitText>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+              </FitSection>
+            </View>
+            <View style={s.sectionWrap}>
+              <FitSection heading="COACH ACTIONS" bare>
+                <View style={s.quickGrid}>
+                  {[
+                    {
+                      key: "sessions",
+                      icon: CalendarDays,
+                      label: "Manage Sessions",
+                      subtitle: "Open confirmations, completions, and cancellations.",
+                      onPress: () => router.push("/(tabs)/bookings"),
+                    },
+                    {
+                      key: "profile",
+                      icon: User,
+                      label: "Coach Profile",
+                      subtitle: "Update availability, rate, specialties, and bio.",
+                      onPress: () => router.push("/(tabs)/profile"),
+                    },
+                  ].map((action) => (
+                    <Pressable
+                      key={action.key}
+                      onPress={action.onPress}
+                      style={s.quickCard}
+                    >
+                      <View style={[s.quickIconBox, { backgroundColor: colors.brand + "18" }]}>
+                        <action.icon size={20} color={colors.brand} strokeWidth={1.8} />
+                      </View>
+                      <View>
+                        <FitText style={s.quickLabel}>{action.label}</FitText>
+                        <FitText style={s.quickSub}>{action.subtitle}</FitText>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </FitSection>
+            </View>
+          </Animated.View>
+        </Animated.ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={[base.screen, !isFocused && { display: "none" }]}>

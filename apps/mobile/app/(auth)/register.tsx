@@ -347,7 +347,7 @@ export default function RegisterScreen() {
       <ConfirmModal
         isVisible={showTermsModal}
         title="Accept Terms and Privacy Policy?"
-        message="Before creating your account, review and accept SertFit Gym's account creation terms and data privacy policy. FitTrack stores registration details, contact information, verification status, and app activity needed to run your gym account."
+        message="Before creating your account, review and accept SertFit Gym's account creation terms and data privacy policy. FitTrack stores registration details, contact information, verification status, and app activity needed to run your gym account. Your data will only be used for account security, membership access, booking records, coaching support, payments, service notifications, and legally required gym operations."
         yesLabel="I AGREE"
         noLabel="NOT NOW"
         yesIcon={ShieldCheck}

@@ -50,8 +50,9 @@ export default function FirstLoginPrivacyGate({
             FitTrack stores your account details, contact information,
             verification status, bookings, attendance, payments, workout
             activity, and app usage needed to operate your gym account. Your
-            data is used for account security, membership access, booking
-            records, coaching support, payments, and service notifications.
+            data will only be used for account security, membership access,
+            booking records, coaching support, payments, service
+            notifications, and legally required gym operations.
           </FitText>
         </View>
         <View style={s.infoCard}>

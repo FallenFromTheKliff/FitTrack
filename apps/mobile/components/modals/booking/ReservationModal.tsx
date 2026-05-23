@@ -471,6 +471,10 @@ export default function ReservationModal({
   const paymentProvider =
     paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
   const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const currentMinutes = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, [date, isTimeOpen, isVisible]);
   const confirmButtonLabel = isFreeReservation
     ? "Confirm Reservation"
     : paymentOption === "paymongo_downpayment" && canUsePaymongo
@@ -528,6 +532,23 @@ export default function ReservationModal({
     }
     return result;
   }, [startTime]);
+  const startSlots = useMemo(
+    () =>
+      date === getTodayString()
+        ? TIME_SLOTS.filter((slot) => timeToMinutes(slot.time) > currentMinutes)
+        : TIME_SLOTS,
+    [currentMinutes, date],
+  );
+  const isSelectedStartInPast =
+    date === getTodayString() &&
+    startTime !== "" &&
+    timeToMinutes(startTime) <= currentMinutes;
+
+  useEffect(() => {
+    if (!isSelectedStartInPast) return;
+    setStartTime("");
+    setEndTime("");
+  }, [isSelectedStartInPast]);
 
   const hasConflict = useMemo(() => {
     if (!selectedVenue || !date || !startTime || !endTime) return false;
@@ -600,6 +621,8 @@ export default function ReservationModal({
     !!selectedVenue &&
     !!startTime &&
     !!endTime &&
+    reservationHours > 0 &&
+    !isSelectedStartInPast &&
     !hasConflict &&
     coachMatchesWindow;
 
@@ -868,6 +891,11 @@ export default function ReservationModal({
             {startTime === "" || endTime === "" ? (
               <FitText style={s.validationHint}>
                 Start and end time are required
+              </FitText>
+            ) : null}
+            {isSelectedStartInPast ? (
+              <FitText style={s.unavailableText}>
+                Same-day reservations must use a future start time.
               </FitText>
             ) : null}
             {hasConflict ? (
@@ -1320,7 +1348,7 @@ export default function ReservationModal({
       />
       <TimeSlotModal
         isVisible={isTimeOpen}
-        slots={timeTarget === "start" ? TIME_SLOTS : endSlots}
+        slots={timeTarget === "start" ? startSlots : endSlots}
         selectedTime={timeTarget === "start" ? startTime : endTime}
         onSelect={handleTimePick}
         onClose={() => setIsTimeOpen(false)}

@@ -116,6 +116,7 @@ function GymOperationsPageBody() {
     appointmentSummary,
     availabilityEditorCoach,
     blockDetailOpen,
+    bookingDateRange,
     bookableVenueOptions,
     bulkUpdateRecurringSessionsMutation,
     calendarOpen,
@@ -178,6 +179,8 @@ function GymOperationsPageBody() {
     handleRejectVenueBooking,
     handleSaveAppointmentFeedback,
     handleSaveAvailability,
+    handleVenueEndDateSelect,
+    handleVenueStartDateSelect,
     handleSaveCoachProfile,
     handleMarkCoachPayoutPaid,
     handleSetCoachBookingVisibility,
@@ -258,7 +261,9 @@ function GymOperationsPageBody() {
     setScheduleRangeMode,
     setSlideKey,
     setVenueFilterId,
+    setVenueEndCalendarOpen,
     setVenueReviewTarget,
+    setVenueStartCalendarOpen,
     setVenueStatusFilter,
     setWeekStart,
     slideStyle,
@@ -267,15 +272,19 @@ function GymOperationsPageBody() {
     toggleRecurringPlanDay,
     updateCoachProfilePending,
     updateRecurringSessionMutation,
+    venueBookingDateLabel,
     venueBookingSummary,
+    venueEndCalendarOpen,
     venueFilterId,
     venueFilterOptions,
     venueReviewTarget,
+    venueStartCalendarOpen,
     venueStatusFilter,
     verifyPaymentMutation,
     visibleTimelineDays,
     visibleTimelineHours,
     weekStart,
+    clearVenueBookingDateRange,
   } = useGymOperationsPage();
 
   const selectedCoachCompletedAppointments = coachAppointments.filter(
@@ -805,7 +814,55 @@ function GymOperationsPageBody() {
                           fullWidth
                         />
                       </OperationsControlField>
+                      <OperationsControlField label="Start Date" minWidth={160}>
+                        <FitButton
+                          variant="ghost"
+                          icon={CalendarDays}
+                          iconSize={15}
+                          label={bookingDateRange.startDate ?? "Any date"}
+                          onClick={() => setVenueStartCalendarOpen(true)}
+                          style={{
+                            justifyContent: "flex-start",
+                            minHeight: 34,
+                            width: "100%",
+                          }}
+                        />
+                      </OperationsControlField>
+                      <OperationsControlField label="End Date" minWidth={160}>
+                        <FitButton
+                          variant="ghost"
+                          icon={CalendarDays}
+                          iconSize={15}
+                          label={bookingDateRange.endDate ?? "Any date"}
+                          onClick={() => setVenueEndCalendarOpen(true)}
+                          style={{
+                            justifyContent: "flex-start",
+                            minHeight: 34,
+                            width: "100%",
+                          }}
+                        />
+                      </OperationsControlField>
+                      {bookingDateRange.startDate || bookingDateRange.endDate ? (
+                        <FitButton
+                          variant="ghost"
+                          label="Clear Dates"
+                          onClick={clearVenueBookingDateRange}
+                          style={{
+                            minHeight: 34,
+                            alignSelf: "flex-end",
+                          }}
+                        />
+                      ) : null}
                     </div>
+                    <FitText
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        marginTop: 8,
+                      }}
+                    >
+                      Showing venue bookings for {venueBookingDateLabel}.
+                    </FitText>
                   </div>
                   <OperationsMetricGrid>
                     <OperationsMetricCard
@@ -1710,6 +1767,20 @@ function GymOperationsPageBody() {
             }
           }}
           onClose={() => setCalendarOpen(false)}
+        />
+        <CalendarModal
+          isOpen={venueStartCalendarOpen}
+          minDate={null}
+          selectedDate={bookingDateRange.startDate}
+          onSelect={handleVenueStartDateSelect}
+          onClose={() => setVenueStartCalendarOpen(false)}
+        />
+        <CalendarModal
+          isOpen={venueEndCalendarOpen}
+          minDate={bookingDateRange.startDate ?? null}
+          selectedDate={bookingDateRange.endDate}
+          onSelect={handleVenueEndDateSelect}
+          onClose={() => setVenueEndCalendarOpen(false)}
         />
         <RecurringPlanCreateModal
           coachOptions={coachOptions}

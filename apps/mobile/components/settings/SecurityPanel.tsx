@@ -231,7 +231,8 @@ export function PrivacyPanel({ onClose }: { onClose: () => void }) {
           <View style={s.toggleInfo}>
             <FitText style={s.toggleLabel}>Usage Analytics</FitText>
             <FitText style={s.toggleHint}>
-              Help improve FitTrack with anonymous data
+              Anonymous usage data will only be used to improve FitTrack
+              reliability and gym service quality.
             </FitText>
           </View>
           <FitSquareToggle
@@ -248,7 +249,8 @@ export function PrivacyPanel({ onClose }: { onClose: () => void }) {
         <FitText style={s.infoCardTitle}>Data Export</FitText>
         <FitText style={s.infoCardHint}>
           Request a copy of all your FitTrack data including workouts, bookings,
-          and profile history.
+          and profile history. Your data will only be used for your account,
+          gym operations, and legally required service records.
         </FitText>
         <FitButton
           label="Request Export"

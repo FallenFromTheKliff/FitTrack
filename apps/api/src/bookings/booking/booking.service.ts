@@ -65,6 +65,7 @@ const SLOT_INTERVAL_MS = SLOT_INTERVAL_MINUTES * 60 * 1000;
 const SLOTS_PER_DAY = (24 * 60) / SLOT_INTERVAL_MINUTES;
 const BOOKING_LOCK_TTL_SECONDS = 10;
 const DOWNPAYMENT_RATE = new Prisma.Decimal('0.30');
+const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 type BookingWindow = Pick<AmenityBooking, 'starts_at' | 'ends_at'>;
 type BookingAmounts = {
@@ -1327,6 +1328,12 @@ function parseBookingSchedule(
     throw invalidBookingWindowError('ends_at must be after starts_at.');
   }
 
+  if (toGymDateKey(startsAt) !== toGymDateKey(endsAt)) {
+    throw invalidBookingWindowError(
+      'Bookings must start and end on the same gym calendar day.',
+    );
+  }
+
   if (!isThirtyMinuteBoundary(startsAt) || !isThirtyMinuteBoundary(endsAt)) {
     throw invalidBookingWindowError(
       'starts_at and ends_at must align to 30-minute slot boundaries.',
@@ -1429,6 +1436,16 @@ function isThirtyMinuteBoundary(value: Date): boolean {
     value.getUTCMilliseconds() === 0 &&
     value.getUTCMinutes() % SLOT_INTERVAL_MINUTES === 0
   );
+}
+
+function toGymDateKey(value: Date): string {
+  const gymTime = new Date(
+    value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+  const year = gymTime.getUTCFullYear();
+  const month = String(gymTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(gymTime.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function invalidBookingWindowError(detail: string): BadRequestException {
