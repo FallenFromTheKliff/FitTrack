@@ -1,9 +1,9 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import Animated, { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
-import { type Href, useRouter, useSegments } from "expo-router";
+import { type Href, useGlobalSearchParams, useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings, User } from "lucide-react-native";
+import { Home, Map, CalendarDays, ClipboardCheck, Apple, Trophy, Dumbbell, Bot, LogOut, Settings, Users, LineChart } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 import { type TabKey } from "@fittrack/app-config";
@@ -34,7 +34,12 @@ export const SIDEBAR_NAV_LABELS_BY_TAB: Record<TabKey, string> = {
 };
 
 type SidebarRoute = Href & string;
-type NavItem = { label: string; icon: LucideIcon; route: SidebarRoute };
+type NavItem = {
+  coachView?: "clients" | "appointments" | "earnings";
+  icon: LucideIcon;
+  label: string;
+  route: SidebarRoute;
+};
 const NAV_ITEMS: NavItem[] = [
   { label: SIDEBAR_NAV_LABELS_BY_TAB.home, icon: Home, route: "/(tabs)/home" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.bookings, icon: CalendarDays, route: "/(tabs)/bookings" },
@@ -47,12 +52,22 @@ const NAV_ITEMS: NavItem[] = [
   { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
 ];
 const COACH_NAV_ITEMS: NavItem[] = [
-  { label: "Coach Home", icon: Home, route: "/(tabs)/home" },
-  { label: "Sessions", icon: CalendarDays, route: "/(tabs)/bookings" },
-  { label: "Coach Profile", icon: User, route: "/(tabs)/profile" },
+  { label: "Dashboard", icon: Home, route: "/(tabs)/home" },
+  { label: "Clients", icon: Users, route: "/(tabs)/bookings?coachView=clients", coachView: "clients" },
+  { label: "Sessions", icon: CalendarDays, route: "/(tabs)/bookings?coachView=appointments", coachView: "appointments" },
+  { label: "Earnings", icon: LineChart, route: "/(tabs)/bookings?coachView=earnings", coachView: "earnings" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
   { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
 ];
+
+function getSearchParamValue(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getCoachViewFromRoute(route: string) {
+  const match = route.match(/[?&]coachView=([^&]+)/);
+  return match?.[1] as NavItem["coachView"] | undefined;
+}
 
 type Props = {
   isOpen: boolean;
@@ -67,9 +82,12 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const { ic } = useThemeTransitionAnim();
   const router = useRouter();
   const segments = useSegments();
+  const searchParams = useGlobalSearchParams<{ coachView?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeSidebarStyles(colors, activeIconColor), [colors, activeIconColor]);
   const bottomPadding = Math.max(insets.bottom, 64) + 16;
+  const isCoach = user?.role === "COACH";
+  const activeCoachView = getSearchParamValue(searchParams.coachView) ?? "appointments";
 
   const slideAnim = useSharedValue(-SIDEBAR_WIDTH);
   const [isVisible, setIsVisible] = useState(isOpen);
@@ -118,8 +136,17 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const bottomBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
   const isActive = useCallback(
-    (route: string) => segments.includes(route.split("/").pop() as never),
-    [segments]
+    (route: string) => {
+      const routePath = route.split("?")[0] ?? route;
+      const routeLeaf = routePath.split("/").pop();
+      if (!segments.includes(routeLeaf as never)) return false;
+
+      const routeCoachView = getCoachViewFromRoute(route);
+      if (routeCoachView) return activeCoachView === routeCoachView;
+
+      return true;
+    },
+    [activeCoachView, segments]
   );
   const navigateFromSidebar = useCallback((route: SidebarRoute) => {
     if (isActive(route)) {
@@ -142,7 +169,6 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
     apiBaseUrl: MOBILE_API_BASE_URL,
     assetUrl: user?.avatarUri
   });
-  const isCoach = user?.role === "COACH";
   const tierLabel = isCoach ? "Coach" : user?.tier ? TIER_LABELS[user.tier] : "Fit Starter";
   const tierLevel = user?.tier ? TIER_LEVELS[user.tier] : 1;
   const ic2 = activeIconColor ?? colors.brand;
@@ -193,7 +219,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
                     <View style={s.profileManageHint}>
                       <Settings size={11} color={ic2} strokeWidth={2} />
                       <FitText style={s.profileManageHintText}>
-                        {isCoach ? "Manage Coach Profile" : "Manage Profile Details"}
+                        Manage Profile Details
                       </FitText>
                     </View>
                   </View>

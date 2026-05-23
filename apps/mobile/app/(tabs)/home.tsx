@@ -12,11 +12,13 @@ import {
   CalendarDays,
   Dumbbell,
   Flame,
+  LineChart,
   ShieldCheck,
   Sparkles,
   Target,
   Trophy,
   User,
+  Users,
   Zap,
   type LucideIcon
 } from "lucide-react-native";
@@ -353,22 +355,15 @@ export default function HomeScreen() {
       ).size,
     [coachAppointments]
   );
-  const coachCompletedCount = coachAppointments.filter(
-    (appointment) => appointment.status === "completed"
-  ).length;
-  const coachPendingCount = coachAppointments.filter(
-    (appointment) => appointment.status === "pending_coach"
-  ).length;
   const coachEarnings = coachAppointments
     .filter((appointment) => appointment.status === "completed")
     .reduce((sum, appointment) => sum + Number(appointment.coachEarnings ?? 0), 0);
   const coachStats = useMemo<HomeStatCard[]>(
     () => [
-      { icon: User, label: "Clients", value: String(coachClientCount) },
+      { icon: Users, label: "Clients", value: String(coachClientCount) },
       { icon: CalendarDays, label: "Sessions", value: String(coachAppointments.length) },
-      { icon: Sparkles, label: "Pending", value: String(coachPendingCount) },
       {
-        icon: Trophy,
+        icon: LineChart,
         label: "Earnings",
         value: `PHP ${coachEarnings.toLocaleString("en-PH")}`,
       },
@@ -377,7 +372,6 @@ export default function HomeScreen() {
       coachAppointments.length,
       coachClientCount,
       coachEarnings,
-      coachPendingCount,
     ]
   );
 
@@ -687,20 +681,47 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={s.sectionWrap}>
-              <Animated.View style={[s.badgeBanner, surfaceStyle]}>
-                <View style={s.badgeIconBox}>
-                  <CalendarDays size={22} color={colors.brand} strokeWidth={2} />
+              <FitSection heading="COACH ACTIONS" bare>
+                <View style={s.quickGrid}>
+                  {[
+                    {
+                      key: "clients",
+                      icon: Users,
+                      label: "Clients",
+                      subtitle: "Review member profiles and client readiness.",
+                      onPress: () => router.push("/(tabs)/bookings?coachView=clients"),
+                    },
+                    {
+                      key: "sessions",
+                      icon: CalendarDays,
+                      label: "Sessions",
+                      subtitle: "Track coaching appointments and session status.",
+                      onPress: () => router.push("/(tabs)/bookings?coachView=appointments"),
+                    },
+                    {
+                      key: "earnings",
+                      icon: LineChart,
+                      label: "Earnings",
+                      subtitle: "Review completed coaching work and expected earnings.",
+                      onPress: () => router.push("/(tabs)/bookings?coachView=earnings"),
+                    },
+                  ].map((action) => (
+                    <Pressable
+                      key={action.key}
+                      onPress={action.onPress}
+                      style={s.quickCard}
+                    >
+                      <View style={[s.quickIconBox, { backgroundColor: colors.brand + "18" }]}>
+                        <action.icon size={20} color={colors.brand} strokeWidth={1.8} />
+                      </View>
+                      <View>
+                        <FitText style={s.quickLabel}>{action.label}</FitText>
+                        <FitText style={s.quickSub}>{action.subtitle}</FitText>
+                      </View>
+                    </Pressable>
+                  ))}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <FitText style={s.badgeBannerTitle}>
-                    Coach sessions are live
-                  </FitText>
-                  <FitText style={s.badgeBannerBody}>
-                    Confirm, complete, or cancel assigned sessions from Bookings.
-                    Profile manages your coach details and availability.
-                  </FitText>
-                </View>
-              </Animated.View>
+              </FitSection>
             </View>
             <View style={s.sectionWrap}>
               <FitSection
@@ -744,7 +765,7 @@ export default function HomeScreen() {
                           trailingLabel={statusLabel}
                           trailingLabelColor={STATUS_COLORS[status] ?? colors.textMuted}
                           hasBorder={index < visibleCoachTodayAppointments.length - 1 || hiddenCoachTodayCount > 0}
-                          onPress={() => router.push("/(tabs)/bookings")}
+                          onPress={() => router.push("/(tabs)/bookings?coachView=appointments")}
                         />
                       );
                     })}
@@ -757,42 +778,6 @@ export default function HomeScreen() {
                     ) : null}
                   </View>
                 )}
-              </FitSection>
-            </View>
-            <View style={s.sectionWrap}>
-              <FitSection heading="COACH ACTIONS" bare>
-                <View style={s.quickGrid}>
-                  {[
-                    {
-                      key: "sessions",
-                      icon: CalendarDays,
-                      label: "Manage Sessions",
-                      subtitle: "Open confirmations, completions, and cancellations.",
-                      onPress: () => router.push("/(tabs)/bookings"),
-                    },
-                    {
-                      key: "profile",
-                      icon: User,
-                      label: "Coach Profile",
-                      subtitle: "Update availability, rate, specialties, and bio.",
-                      onPress: () => router.push("/(tabs)/profile"),
-                    },
-                  ].map((action) => (
-                    <Pressable
-                      key={action.key}
-                      onPress={action.onPress}
-                      style={s.quickCard}
-                    >
-                      <View style={[s.quickIconBox, { backgroundColor: colors.brand + "18" }]}>
-                        <action.icon size={20} color={colors.brand} strokeWidth={1.8} />
-                      </View>
-                      <View>
-                        <FitText style={s.quickLabel}>{action.label}</FitText>
-                        <FitText style={s.quickSub}>{action.subtitle}</FitText>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
               </FitSection>
             </View>
           </Animated.View>

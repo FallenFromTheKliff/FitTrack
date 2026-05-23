@@ -3,6 +3,7 @@ import {
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -12,7 +13,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Activity,
   Bell,
@@ -20,8 +21,10 @@ import {
   CalendarDays,
   CalendarPlus,
   Dumbbell,
+  LineChart,
   Swords,
   Users,
+  WalletCards,
   SlidersHorizontal,
   CheckCircle2,
   CircleOff,
@@ -99,11 +102,35 @@ const MEMBER_SECTION_OPTIONS = [
   { label: "Reservations", value: "bookings" },
   { label: "Appointments", value: "appointments" },
 ];
-const COACH_SECTION_OPTIONS = [{ label: "Sessions", value: "appointments" }];
+const COACH_SECTION_OPTIONS = [
+  { label: "Clients", value: "clients" },
+  { label: "Sessions", value: "appointments" },
+  { label: "Earnings", value: "earnings" },
+];
+const COACH_CLIENT_DETAIL_TABS = [
+  { label: "Overview", value: "overview" },
+  { label: "Schedule", value: "schedule" },
+  { label: "Feedback", value: "feedback" },
+] as const;
 
-type BookingSection = "bookings" | "appointments";
+type BookingSection = "bookings" | "appointments" | "clients" | "earnings";
+type CoachSection = Extract<BookingSection, "clients" | "appointments" | "earnings">;
+type CoachClientDetailTab = (typeof COACH_CLIENT_DETAIL_TABS)[number]["value"];
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
 type AppointmentPaymentProvider = "cash" | "paymongo";
+type CoachClientSummary = {
+  completedCount: number;
+  email: string;
+  id: string;
+  lastSession?: DetailBooking;
+  name: string;
+  nextSession?: DetailBooking;
+  pendingCount: number;
+  readinessColor: string;
+  readinessLabel: string;
+  sessions: DetailBooking[];
+  sessionCount: number;
+};
 type PendingAppointmentPayment = {
   booking: DetailBooking;
   provider: AppointmentPaymentProvider;
@@ -151,10 +178,93 @@ function getAppointmentMemberName(
   );
 }
 
+function getAppointmentMemberEmail(
+  appointment: Pick<CoachAppointmentScheduleRecord, "user">,
+) {
+  return appointment.user?.email?.trim() ?? "";
+}
+
+function getSearchParamValue(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getCoachSection(value?: string): CoachSection | null {
+  if (value === "clients" || value === "appointments" || value === "earnings") {
+    return value;
+  }
+  return null;
+}
+
+function getNormalizedCoachAppointmentStatus(
+  appointment: Pick<
+    CoachAppointmentScheduleRecord,
+    "activePaymentStage" | "balancePaidAt" | "remainingBalance" | "status"
+  >,
+) {
+  if (
+    appointment.status === "pending_payment" &&
+    appointment.activePaymentStage === "full"
+  ) {
+    return "pending_full_payment";
+  }
+  if (
+    appointment.status === "pending_payment" &&
+    appointment.activePaymentStage === "downpayment"
+  ) {
+    return "pending_downpayment";
+  }
+  if (
+    appointment.status === "confirmed" &&
+    Number(appointment.remainingBalance ?? 0) > 0 &&
+    !appointment.balancePaidAt
+  ) {
+    return "pending_full_payment";
+  }
+  return normalizeBookingStatus(appointment.status);
+}
+
+function isPendingStatus(status: string) {
+  return (
+    status === "pending" ||
+    status === "pending_coach" ||
+    status === "pending_downpayment" ||
+    status === "pending_payment" ||
+    status === "pending_full_payment"
+  );
+}
+
+function formatPeso(value: number) {
+  return `PHP ${value.toLocaleString("en-PH")}`;
+}
+
+function getClientInitials(name: string) {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return (parts[0]?.[0] ?? "M") + (parts[1]?.[0] ?? "C");
+}
+
+function isFinalSessionStatus(status: string) {
+  return (
+    status === "cancelled" ||
+    status === "completed" ||
+    status === "declined" ||
+    status === "no_show"
+  );
+}
+
+function getSessionTimeLabel(session: DetailBooking) {
+  return session.startTime && session.endTime
+    ? `${session.startTime} - ${session.endTime}`
+    : session.time;
+}
+
 export default function BookingsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
+  const router = useRouter();
   const isUserRole = user?.role === "USER";
   const isCoachRole = user?.role === "COACH";
   const {
@@ -170,7 +280,10 @@ export default function BookingsScreen() {
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeBookingsScreenStyles(colors), [colors]);
 
-  const params = useLocalSearchParams<{ openReservation?: string }>();
+  const params = useLocalSearchParams<{
+    coachView?: string | string[];
+    openReservation?: string;
+  }>();
   const isFrozen = user?.status === "frozen";
   const queryClient = useQueryClient();
 
@@ -187,6 +300,11 @@ export default function BookingsScreen() {
   const [detailBooking, setDetailBooking] = useState<DetailBooking | null>(
     null,
   );
+  const [clientDetail, setClientDetail] = useState<CoachClientSummary | null>(
+    null,
+  );
+  const [clientDetailTab, setClientDetailTab] =
+    useState<CoachClientDetailTab>("overview");
   const [pendingAppointmentPayment, setPendingAppointmentPayment] =
     useState<PendingAppointmentPayment | null>(null);
   const [pendingCancellation, setPendingCancellation] =
@@ -329,18 +447,7 @@ export default function BookingsScreen() {
           appointment.duration,
         );
         const memberName = getAppointmentMemberName(appointment);
-        const normalizedStatus =
-          appointment.status === "pending_payment" &&
-          appointment.activePaymentStage === "full"
-            ? "pending_full_payment"
-            : appointment.status === "pending_payment" &&
-                appointment.activePaymentStage === "downpayment"
-              ? "pending_downpayment"
-              : appointment.status === "confirmed" &&
-                  Number(appointment.remainingBalance ?? 0) > 0 &&
-                  !appointment.balancePaidAt
-                ? "pending_full_payment"
-                : normalizeBookingStatus(appointment.status);
+        const normalizedStatus = getNormalizedCoachAppointmentStatus(appointment);
 
         return {
           amountDueNow: appointment.amountDueNow ?? undefined,
@@ -452,6 +559,33 @@ export default function BookingsScreen() {
     [appointmentTimelines, colors.textMuted, colors.warning, displayAppointments],
   );
 
+  const todayString = getTodayString();
+  const coachEarningsByAppointmentId = useMemo(() => {
+    const earningsById = new Map<string, number>();
+    coachScheduleRaw.forEach((appointment) => {
+      earningsById.set(appointment.id, Number(appointment.coachEarnings ?? 0));
+    });
+    return earningsById;
+  }, [coachScheduleRaw]);
+
+  const coachMemberEmailById = useMemo(() => {
+    const emailById = new Map<string, string>();
+    coachScheduleRaw.forEach((appointment) => {
+      if (!appointment.userId) return;
+      emailById.set(appointment.userId, getAppointmentMemberEmail(appointment));
+    });
+    return emailById;
+  }, [coachScheduleRaw]);
+
+  const coachEarningsItems = useMemo(
+    () =>
+      appointmentsWithTimeline.filter(
+        (appointment) =>
+          appointment.status === "completed" || appointment.status === "no_show",
+      ),
+    [appointmentsWithTimeline],
+  );
+
   const isLoading =
     activeSection === "bookings"
       ? venuesLoading || bookingsLoading
@@ -461,7 +595,13 @@ export default function BookingsScreen() {
   const errorText = useMemo(() => {
     if (activeSection === "bookings" && (venuesError || bookingsError))
       return "Unable to load reservations.";
-    if (activeSection === "appointments" && isCoachRole && coachScheduleError)
+    if (
+      isCoachRole &&
+      (activeSection === "appointments" ||
+        activeSection === "clients" ||
+        activeSection === "earnings") &&
+      coachScheduleError
+    )
       return "Unable to load coach sessions.";
     if (activeSection === "appointments" && appointmentsError)
       return "Unable to load appointments.";
@@ -509,10 +649,30 @@ export default function BookingsScreen() {
   ]);
 
   useEffect(() => {
-    if (isCoachRole && activeSection !== "appointments") {
-      setActiveSection("appointments");
+    if (!isCoachRole) return;
+
+    const requestedSection = getCoachSection(
+      getSearchParamValue(params.coachView),
+    );
+    const nextSection =
+      requestedSection ?? (activeSection === "bookings" ? "appointments" : activeSection);
+
+    if (activeSection !== nextSection) {
+      setActiveSection(nextSection);
     }
-  }, [activeSection, isCoachRole]);
+  }, [activeSection, isCoachRole, params.coachView]);
+
+  const handleSectionChange = useCallback(
+    (value: string) => {
+      const nextSection = value as BookingSection;
+      setActiveSection(nextSection);
+      if (isCoachRole) {
+        const coachSection = getCoachSection(nextSection);
+        if (coachSection) router.setParams({ coachView: coachSection });
+      }
+    },
+    [isCoachRole, router],
+  );
 
   useEffect(() => {
     if (!isFocused || !user?.id || !isUserRole) return;
@@ -806,19 +966,17 @@ export default function BookingsScreen() {
   ]);
 
   const activeItems = useMemo(() => {
-    return activeSection === "bookings" ? reservations : appointmentsWithTimeline;
-  }, [activeSection, appointmentsWithTimeline, reservations]);
+    if (activeSection === "bookings") return reservations;
+    if (activeSection === "earnings") return coachEarningsItems;
+    return appointmentsWithTimeline;
+  }, [activeSection, appointmentsWithTimeline, coachEarningsItems, reservations]);
 
   const filtered = useMemo(() => {
     let result = activeItems;
     if (statusFilter !== "all")
       result = result.filter((booking) =>
         statusFilter === "pending"
-          ? booking.status === "pending" ||
-            booking.status === "pending_coach" ||
-            booking.status === "pending_downpayment" ||
-            booking.status === "pending_payment" ||
-            booking.status === "pending_full_payment"
+          ? isPendingStatus(booking.status)
           : booking.status === statusFilter,
       );
     if (startDate)
@@ -835,8 +993,158 @@ export default function BookingsScreen() {
     return result;
   }, [activeItems, debouncedSearchQuery, endDate, startDate, statusFilter]);
 
+  const coachSessionsForClientSummary = useMemo(() => {
+    let result = appointmentsWithTimeline;
+    if (statusFilter !== "all") {
+      result = result.filter((booking) =>
+        statusFilter === "pending"
+          ? isPendingStatus(booking.status)
+          : booking.status === statusFilter,
+      );
+    }
+    if (startDate) result = result.filter((booking) => booking.date >= startDate);
+    if (endDate) result = result.filter((booking) => booking.date <= endDate);
+    return result;
+  }, [appointmentsWithTimeline, endDate, startDate, statusFilter]);
+
+  const coachClientSummaries = useMemo<CoachClientSummary[]>(() => {
+    const byClient = new Map<string, DetailBooking[]>();
+    coachSessionsForClientSummary.forEach((appointment) => {
+      const clientId = appointment.resourceId || appointment.participantName || appointment.id;
+      const existing = byClient.get(clientId) ?? [];
+      existing.push(appointment);
+      byClient.set(clientId, existing);
+    });
+
+    return Array.from(byClient.entries())
+      .map(([clientId, sessions]) => {
+        const sortedSessions = [...sessions].sort((left, right) =>
+          `${left.date} ${left.startTime ?? left.time}`.localeCompare(
+            `${right.date} ${right.startTime ?? right.time}`,
+          ),
+        );
+        const nextSession = sortedSessions.find(
+          (session) =>
+            session.date >= todayString &&
+            session.status !== "cancelled" &&
+            session.status !== "completed" &&
+            session.status !== "declined" &&
+            session.status !== "no_show",
+        );
+        const lastSession = [...sortedSessions]
+          .reverse()
+          .find((session) => session.date <= todayString);
+        const completedCount = sessions.filter(
+          (session) => session.status === "completed",
+        ).length;
+        const pendingCount = sessions.filter((session) =>
+          isPendingStatus(session.status),
+        ).length;
+        const needsCoachReply = sessions.some(
+          (session) => session.status === "pending_coach",
+        );
+        const readinessLabel = needsCoachReply
+          ? "Needs Reply"
+          : pendingCount > 0
+            ? "Pending"
+            : nextSession
+              ? "Active"
+              : completedCount > 0
+                ? "Ready"
+                : "New";
+        const readinessColor = needsCoachReply
+          ? colors.warning
+          : pendingCount > 0
+            ? colors.warning
+            : nextSession
+              ? colors.success
+              : completedCount > 0
+                ? colors.brand
+                : colors.textMuted;
+
+        return {
+          completedCount,
+          email: coachMemberEmailById.get(clientId) ?? "",
+          id: clientId,
+          lastSession,
+          name: sortedSessions[0]?.resourceName ?? "Member",
+          nextSession,
+          pendingCount,
+          readinessColor,
+          readinessLabel,
+          sessions: sortedSessions,
+          sessionCount: sessions.length,
+        };
+      })
+      .sort((left, right) => {
+        const leftNext = left.nextSession
+          ? `${left.nextSession.date} ${left.nextSession.startTime ?? left.nextSession.time}`
+          : "9999";
+        const rightNext = right.nextSession
+          ? `${right.nextSession.date} ${right.nextSession.startTime ?? right.nextSession.time}`
+          : "9999";
+        if (leftNext !== rightNext) return leftNext.localeCompare(rightNext);
+        return left.name.localeCompare(right.name);
+      });
+  }, [
+    coachMemberEmailById,
+    coachSessionsForClientSummary,
+    colors.brand,
+    colors.success,
+    colors.textMuted,
+    colors.warning,
+    todayString,
+  ]);
+
+  const filteredCoachClients = useMemo(() => {
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) return coachClientSummaries;
+    return coachClientSummaries.filter(
+      (client) =>
+        client.name.toLowerCase().includes(query) ||
+        client.email.toLowerCase().includes(query),
+    );
+  }, [coachClientSummaries, debouncedSearchQuery]);
+
+  const coachEarningsSummary = useMemo(() => {
+    const earningsSource =
+      activeSection === "earnings" ? filtered : coachEarningsItems;
+    const currentMonthKey = todayString.slice(0, 7);
+    const completedItems = earningsSource.filter(
+      (appointment) => appointment.status === "completed",
+    );
+    const totalEarned = completedItems.reduce(
+      (sum, appointment) =>
+        sum + (coachEarningsByAppointmentId.get(appointment.id) ?? 0),
+      0,
+    );
+    const monthlyEarned = completedItems
+      .filter((appointment) => appointment.date.startsWith(currentMonthKey))
+      .reduce(
+        (sum, appointment) =>
+          sum + (coachEarningsByAppointmentId.get(appointment.id) ?? 0),
+        0,
+      );
+
+    return {
+      monthlyEarned,
+      resolvedCount: earningsSource.length,
+      totalEarned,
+    };
+  }, [
+    activeSection,
+    coachEarningsByAppointmentId,
+    coachEarningsItems,
+    filtered,
+    todayString,
+  ]);
+
   const grouped = groupItemsByDate(filtered, "asc");
-  const isEmpty = !isLoading && filtered.length === 0;
+  const isEmpty =
+    !isLoading &&
+    (activeSection === "clients" && isCoachRole
+      ? filteredCoachClients.length === 0
+      : filtered.length === 0);
   const startLabel = startDate ? formatGroupLabel(startDate) : "All Dates";
   const endLabel = endDate ? formatGroupLabel(endDate) : "Due Date";
   const detailVenue = useMemo(
@@ -845,6 +1153,17 @@ export default function BookingsScreen() {
       null,
     [detailBooking?.resourceId, venues],
   );
+  const clientDetailSessions = clientDetail?.sessions ?? [];
+  const clientLatestSession =
+    clientDetailSessions.length > 0
+      ? clientDetailSessions[clientDetailSessions.length - 1]
+      : undefined;
+  const clientSessionRecord =
+    clientLatestSession ?? clientDetail?.nextSession ?? clientDetail?.lastSession;
+  const clientNextCount = clientDetailSessions.filter(
+    (session) =>
+      session.date >= todayString && !isFinalSessionStatus(session.status),
+  ).length;
 
   const detailActions = useMemo(() => {
     if (!detailBooking) return [];
@@ -1069,6 +1388,62 @@ export default function BookingsScreen() {
 
   const sectionOptions = isCoachRole ? COACH_SECTION_OPTIONS : MEMBER_SECTION_OPTIONS;
   const chipOptions = FILTER_OPTIONS;
+  const searchPlaceholder =
+    activeSection === "clients"
+      ? "Search clients..."
+      : activeSection === "earnings"
+        ? "Search earnings..."
+        : isCoachRole
+          ? "Search sessions..."
+          : activeSection === "appointments"
+            ? "Search appointments..."
+            : "Search bookings...";
+  const EmptyStateIcon =
+    activeSection === "clients"
+      ? Users
+      : activeSection === "earnings"
+        ? LineChart
+        : CalendarDays;
+  const loadingTitle =
+    activeSection === "bookings"
+      ? "Loading reservations"
+      : activeSection === "clients"
+        ? "Loading clients"
+        : activeSection === "earnings"
+          ? "Loading earnings"
+          : isCoachRole
+            ? "Loading sessions"
+            : "Loading appointments";
+  const unavailableTitle =
+    activeSection === "bookings"
+      ? "Reservations unavailable"
+      : activeSection === "clients"
+        ? "Clients unavailable"
+        : activeSection === "earnings"
+          ? "Earnings unavailable"
+          : isCoachRole
+            ? "Sessions unavailable"
+            : "Appointments unavailable";
+  const emptyTitle =
+    activeSection === "bookings"
+      ? "No reservations"
+      : activeSection === "clients"
+        ? "No clients found"
+        : activeSection === "earnings"
+          ? "No earnings found"
+          : isCoachRole
+            ? "No sessions found"
+            : "No appointments found";
+  const emptyHint =
+    activeSection === "bookings"
+      ? "Your reservations will appear here"
+      : activeSection === "clients"
+        ? "Client profiles appear after assigned coach sessions."
+        : activeSection === "earnings"
+          ? "Completed coach sessions will appear here."
+          : isCoachRole
+            ? "Coach sessions will appear here"
+            : "Your trainer appointments will appear here";
 
   return (
     <View style={[base.screen, !isFocused && { display: "none" }]}>
@@ -1077,7 +1452,7 @@ export default function BookingsScreen() {
           <View style={s.searchRow}>
             <View style={s.searchFieldWrap}>
               <FitSearch
-                placeholder="Search bookings..."
+                placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 isFabOpen={isFabOpen}
@@ -1103,7 +1478,7 @@ export default function BookingsScreen() {
           isOpen={isFilterOpen}
           topChipOptions={sectionOptions}
           activeTopChip={activeSection}
-          onTopChipChange={(value) => setActiveSection(value as BookingSection)}
+          onTopChipChange={handleSectionChange}
           topChipLabel="View"
           chipOptions={chipOptions}
           activeChip={statusFilter}
@@ -1134,97 +1509,179 @@ export default function BookingsScreen() {
         <Animated.View style={contentStyle}>
           {isLoading ? (
             <View style={s.emptyState}>
-              <CalendarDays
+              <EmptyStateIcon
                 size={40}
                 color={colors.textMuted}
                 strokeWidth={1.5}
               />
-              <FitText style={s.emptyTitle}>
-                {activeSection === "bookings"
-                  ? "Loading reservations"
-                  : "Loading appointments"}
-              </FitText>
+              <FitText style={s.emptyTitle}>{loadingTitle}</FitText>
               <FitText style={s.emptyHint}>Please wait a moment</FitText>
             </View>
           ) : errorText ? (
             <View style={s.emptyState}>
-              <CalendarDays
+              <EmptyStateIcon
                 size={40}
                 color={colors.textMuted}
                 strokeWidth={1.5}
               />
-              <FitText style={s.emptyTitle}>
-                {activeSection === "bookings"
-                  ? "Reservations unavailable"
-                  : "Appointments unavailable"}
-              </FitText>
+              <FitText style={s.emptyTitle}>{unavailableTitle}</FitText>
               <FitText style={s.emptyHint}>{errorText}</FitText>
             </View>
           ) : isEmpty ? (
             <View style={s.emptyState}>
-              <CalendarDays
+              <EmptyStateIcon
                 size={40}
                 color={colors.textMuted}
                 strokeWidth={1.5}
               />
-              <FitText style={s.emptyTitle}>
-                {activeSection === "bookings"
-                  ? "No reservations"
-                  : "No appointments found"}
-              </FitText>
-              <FitText style={s.emptyHint}>
-                {activeSection === "bookings"
-                  ? "Your reservations will appear here"
-                  : "Your trainer appointments will appear here"}
-              </FitText>
+              <FitText style={s.emptyTitle}>{emptyTitle}</FitText>
+              <FitText style={s.emptyHint}>{emptyHint}</FitText>
+            </View>
+          ) : activeSection === "clients" && isCoachRole ? (
+            <View style={s.group}>
+              <Animated.View style={[s.groupDivider, dividerStyle]} />
+              <FitText style={s.groupLabel}>CLIENTS</FitText>
+              <View style={s.groupCards}>
+                {filteredCoachClients.map((client, index) => {
+                  const sessionSummary = `${client.sessionCount} session${
+                    client.sessionCount === 1 ? "" : "s"
+                  }`;
+                  const timingSummary = client.nextSession
+                    ? `Next ${formatBookingDate(client.nextSession.date)}`
+                    : client.lastSession
+                      ? `Last ${formatBookingDate(client.lastSession.date)}`
+                      : "No dated sessions";
+                  const subtitle = client.email
+                    ? `${client.email} | ${sessionSummary} | ${timingSummary}`
+                    : `${sessionSummary} | ${timingSummary}`;
+
+                  return (
+                    <View key={client.id} style={s.cardRow}>
+                      <View style={s.cardWrap}>
+                        <FitCard
+                          icon={Users}
+                          iconSize={18}
+                          label={client.name}
+                          subtitle={subtitle}
+                          trailingLabel={client.readinessLabel}
+                          trailingLabelColor={client.readinessColor}
+                          hasBorder={index < filteredCoachClients.length - 1}
+                          onPress={() => {
+                            setClientDetail(client);
+                            setClientDetailTab("overview");
+                          }}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           ) : (
-            grouped.map(([dateKey, dateBookings]) => (
-              <View key={dateKey} style={s.group}>
-                <Animated.View style={[s.groupDivider, dividerStyle]} />
-                <FitText style={s.groupLabel}>
-                  {formatGroupLabel(dateKey)}
-                </FitText>
-                <View style={s.groupCards}>
-                  {dateBookings.map((booking) => {
-                    const amenityIcon =
-                      AMENITY_ICONS[booking.resourceName] ??
-                      DEFAULT_AMENITY_ICON;
-                    const detailSubtitle =
-                      booking.startTime && booking.endTime
-                        ? `${booking.startTime} - ${booking.endTime}`
-                        : booking.time;
-                    return (
-                      <View key={booking.id} style={s.cardRow}>
-                        <View style={s.cardWrap}>
-                          <FitCard
-                            icon={
-                              activeSection === "appointments"
-                                ? Users
-                                : amenityIcon
-                            }
-                            iconSize={18}
-                            label={booking.resourceName}
-                            subtitle={`${formatBookingDate(booking.date)} | ${detailSubtitle}`}
-                            trailingLabel={formatStatusLabel(booking.status)}
-                            trailingLabelColor={
-                              STATUS_COLORS[booking.status] ?? colors.textMuted
-                            }
-                            onPress={() => setDetailBooking(booking)}
-                          />
-                        </View>
-                      </View>
-                    );
-                  })}
+            <>
+              {activeSection === "earnings" && isCoachRole ? (
+                <View style={s.group}>
+                  <Animated.View style={[s.groupDivider, dividerStyle]} />
+                  <FitText style={s.groupLabel}>EARNINGS SUMMARY</FitText>
+                  <View style={s.groupCards}>
+                    <FitCard
+                      icon={WalletCards}
+                      iconSize={18}
+                      label="Total Earnings This Month"
+                      subtitle="Completed coach sessions in the current month."
+                      trailingLabel={formatPeso(coachEarningsSummary.monthlyEarned)}
+                      trailingLabelColor={colors.brand}
+                      hasBorder
+                      noChevron
+                    />
+                    <FitCard
+                      icon={LineChart}
+                      iconSize={18}
+                      label="Total Earnings All Time"
+                      subtitle="Completed coach sessions in the selected view."
+                      trailingLabel={formatPeso(coachEarningsSummary.totalEarned)}
+                      trailingLabelColor={colors.brand}
+                      hasBorder
+                      noChevron
+                    />
+                    <FitCard
+                      icon={CalendarCheck}
+                      iconSize={18}
+                      label="Resolved Sessions"
+                      subtitle="Completed and no-show sessions shown below."
+                      trailingLabel={String(coachEarningsSummary.resolvedCount)}
+                      trailingLabelColor={colors.success}
+                      noChevron
+                    />
+                  </View>
                 </View>
-              </View>
-            ))
+              ) : null}
+              {grouped.map(([dateKey, dateBookings]) => (
+                <View key={dateKey} style={s.group}>
+                  <Animated.View style={[s.groupDivider, dividerStyle]} />
+                  <FitText style={s.groupLabel}>
+                    {formatGroupLabel(dateKey)}
+                  </FitText>
+                  <View style={s.groupCards}>
+                    {dateBookings.map((booking) => {
+                      const amenityIcon =
+                        AMENITY_ICONS[booking.resourceName] ??
+                        DEFAULT_AMENITY_ICON;
+                      const detailSubtitle =
+                        booking.startTime && booking.endTime
+                          ? `${booking.startTime} - ${booking.endTime}`
+                          : booking.time;
+                      const isEarningsView =
+                        activeSection === "earnings" && isCoachRole;
+                      return (
+                        <View key={booking.id} style={s.cardRow}>
+                          <View style={s.cardWrap}>
+                            <FitCard
+                              icon={
+                                isEarningsView
+                                  ? WalletCards
+                                  : activeSection === "appointments"
+                                    ? Users
+                                    : amenityIcon
+                              }
+                              iconSize={18}
+                              label={booking.resourceName}
+                              subtitle={`${formatBookingDate(booking.date)} | ${detailSubtitle}${
+                                isEarningsView
+                                  ? ` | ${formatStatusLabel(booking.status)}`
+                                  : ""
+                              }`}
+                              trailingLabel={
+                                isEarningsView
+                                  ? formatPeso(
+                                      coachEarningsByAppointmentId.get(booking.id) ?? 0,
+                                    )
+                                  : formatStatusLabel(booking.status)
+                              }
+                              trailingLabelColor={
+                                isEarningsView
+                                  ? booking.status === "completed"
+                                    ? colors.brand
+                                    : colors.textMuted
+                                  : STATUS_COLORS[booking.status] ?? colors.textMuted
+                              }
+                              onPress={() => setDetailBooking(booking)}
+                            />
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </>
           )}
         </Animated.View>
       </Animated.ScrollView>
       <BookingDetailModal
         isVisible={
           !!detailBooking &&
+          clientDetail == null &&
           reviewTarget == null &&
           pendingAppointmentPayment == null &&
           pendingCancellation == null &&
@@ -1235,6 +1692,323 @@ export default function BookingsScreen() {
         onClose={() => setDetailBooking(null)}
         actions={detailActions}
       />
+      <Modal
+        visible={clientDetail != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClientDetail(null)}
+      >
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.52)",
+              justifyContent: "center",
+              padding: 18,
+            },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: 22,
+              borderWidth: 1,
+              maxHeight: "88%",
+              maxWidth: 430,
+              overflow: "hidden",
+              width: "100%",
+            }}
+          >
+            {clientDetail ? (
+              <ScrollView
+                contentContainerStyle={{ gap: 16, padding: 16 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={{ alignItems: "center", gap: 10 }}>
+                  <View
+                    style={{
+                      alignItems: "center",
+                      backgroundColor: colors.surfaceRaised,
+                      borderColor: colors.border,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      height: 72,
+                      justifyContent: "center",
+                      width: 72,
+                    }}
+                  >
+                    <FitText
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 28,
+                        fontWeight: "900",
+                      }}
+                    >
+                      {getClientInitials(clientDetail.name)}
+                    </FitText>
+                  </View>
+                  <View style={{ alignItems: "center", gap: 3 }}>
+                    <FitText
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: "900",
+                        textAlign: "center",
+                      }}
+                    >
+                      {clientDetail.name}
+                    </FitText>
+                    {clientDetail.email ? (
+                      <FitText
+                        style={{
+                          color: colors.textMuted,
+                          fontSize: 12,
+                          textAlign: "center",
+                        }}
+                      >
+                        {clientDetail.email}
+                      </FitText>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {COACH_CLIENT_DETAIL_TABS.map((tab) => {
+                    const isActive = clientDetailTab === tab.value;
+                    return (
+                      <Pressable
+                        key={tab.value}
+                        onPress={() => setClientDetailTab(tab.value)}
+                        style={{
+                          alignItems: "center",
+                          backgroundColor: isActive
+                            ? colors.brand + "22"
+                            : colors.surfaceRaised,
+                          borderColor: isActive ? colors.brand : colors.border,
+                          borderRadius: 9,
+                          borderWidth: 1,
+                          flex: 1,
+                          minHeight: 42,
+                          justifyContent: "center",
+                          paddingHorizontal: 8,
+                        }}
+                      >
+                        <FitText
+                          style={{
+                            color: isActive ? colors.brand : colors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: "800",
+                          }}
+                        >
+                          {tab.label}
+                        </FitText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {clientDetailTab === "overview" ? (
+                  <View style={{ gap: 12 }}>
+                    <FitText
+                      style={{
+                        color: colors.brand,
+                        fontSize: 13,
+                        fontWeight: "900",
+                      }}
+                    >
+                      COACHING OVERVIEW
+                    </FitText>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {[
+                        { label: "SESSIONS", value: clientDetail.sessionCount },
+                        { label: "DONE", value: clientDetail.completedCount },
+                        { label: "NEXT", value: clientNextCount },
+                      ].map((item) => (
+                        <View
+                          key={item.label}
+                          style={{
+                            backgroundColor: colors.surfaceRaised,
+                            borderColor: colors.border,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            flex: 1,
+                            gap: 8,
+                            padding: 12,
+                          }}
+                        >
+                          <FitText
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 10,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {item.label}
+                          </FitText>
+                          <FitText
+                            style={{
+                              color: colors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: "900",
+                            }}
+                          >
+                            {item.value}
+                          </FitText>
+                        </View>
+                      ))}
+                    </View>
+                    <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                      Latest session:{" "}
+                      <FitText
+                        style={{
+                          color: colors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {clientLatestSession
+                          ? `${formatBookingDate(clientLatestSession.date)}, ${getSessionTimeLabel(clientLatestSession).split(" - ")[0]}`
+                          : "Not scheduled"}
+                      </FitText>
+                    </FitText>
+                    <View style={{ gap: 8 }}>
+                      <FitText
+                        style={{
+                          color: colors.textMuted,
+                          fontSize: 12,
+                          fontWeight: "800",
+                        }}
+                      >
+                        Session record
+                      </FitText>
+                      {clientSessionRecord ? (
+                        <FitCard
+                          icon={CalendarDays}
+                          iconSize={18}
+                          label={`${formatBookingDate(clientSessionRecord.date)}, ${getSessionTimeLabel(clientSessionRecord).split(" - ")[0]}`}
+                          subtitle={`Notes: ${
+                            clientSessionRecord.sessionNotes ||
+                            clientSessionRecord.description ||
+                            "Not added"
+                          } | Feedback: ${
+                            clientSessionRecord.coachFeedback || "Not added"
+                          } | Assessment: ${
+                            clientSessionRecord.assessmentReport || "Not added"
+                          }`}
+                          trailingLabel={formatStatusLabel(clientSessionRecord.status)}
+                          trailingLabelColor={
+                            STATUS_COLORS[clientSessionRecord.status] ??
+                            colors.textMuted
+                          }
+                          noChevron
+                        />
+                      ) : (
+                        <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                          No session record found.
+                        </FitText>
+                      )}
+                    </View>
+                  </View>
+                ) : null}
+
+                {clientDetailTab === "schedule" ? (
+                  <View style={{ gap: 10 }}>
+                    <FitText
+                      style={{
+                        color: colors.brand,
+                        fontSize: 13,
+                        fontWeight: "900",
+                      }}
+                    >
+                      SCHEDULE
+                    </FitText>
+                    <View style={s.groupCards}>
+                      {clientDetailSessions.map((session, index) => (
+                        <FitCard
+                          key={session.id}
+                          icon={CalendarDays}
+                          iconSize={18}
+                          label={formatBookingDate(session.date)}
+                          subtitle={`${getSessionTimeLabel(session)} | ${
+                            session.sessionNotes ||
+                            session.description ||
+                            "No notes"
+                          }`}
+                          trailingLabel={formatStatusLabel(session.status)}
+                          trailingLabelColor={
+                            STATUS_COLORS[session.status] ?? colors.textMuted
+                          }
+                          hasBorder={index < clientDetailSessions.length - 1}
+                          noChevron
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {clientDetailTab === "feedback" ? (
+                  <View style={{ gap: 10 }}>
+                    <FitText
+                      style={{
+                        color: colors.brand,
+                        fontSize: 13,
+                        fontWeight: "900",
+                      }}
+                    >
+                      FEEDBACK
+                    </FitText>
+                    <View style={s.groupCards}>
+                      {clientDetailSessions.map((session, index) => (
+                        <FitCard
+                          key={session.id}
+                          icon={CheckCircle2}
+                          iconSize={18}
+                          label={formatBookingDate(session.date)}
+                          subtitle={`Feedback: ${
+                            session.coachFeedback || "Not added"
+                          } | Assessment: ${
+                            session.assessmentReport || "Not added"
+                          }`}
+                          trailingLabel={formatStatusLabel(session.status)}
+                          trailingLabelColor={
+                            STATUS_COLORS[session.status] ?? colors.textMuted
+                          }
+                          hasBorder={index < clientDetailSessions.length - 1}
+                          noChevron
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  onPress={() => setClientDetail(null)}
+                  style={{
+                    alignItems: "center",
+                    borderColor: colors.brand,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    minHeight: 44,
+                    justifyContent: "center",
+                  }}
+                >
+                  <FitText
+                    style={{
+                      color: colors.brand,
+                      fontSize: 13,
+                      fontWeight: "900",
+                    }}
+                  >
+                    CLOSE
+                  </FitText>
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={reviewTarget != null}
         transparent

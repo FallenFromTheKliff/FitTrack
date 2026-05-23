@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { Tabs, useRouter, useSegments } from "expo-router";
+import { Tabs, useGlobalSearchParams, useRouter, useSegments } from "expo-router";
 import { Bell, HelpCircle, LogOut } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -43,12 +43,28 @@ const s = StyleSheet.create({
   screenArea: { flex: 1 }
 });
 
+function getSearchParamValue(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getCoachModuleLabel(activeTab: TabKey, coachView?: string) {
+  if (activeTab === "home") return "Dashboard";
+  if (activeTab === "bookings") {
+    if (coachView === "clients") return "Clients";
+    if (coachView === "earnings") return "Earnings";
+    return "Sessions";
+  }
+  if (activeTab === "chathistory" || activeTab === "chatbot") return "BrodigyAI";
+  return SIDEBAR_NAV_LABELS_BY_TAB[activeTab];
+}
+
 function TabsLayoutInner() {
   const { isAuthenticated, isLoading, logout, user } = useAuth();
   const { settings } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const router = useRouter();
   const segments = useSegments();
+  const searchParams = useGlobalSearchParams<{ coachView?: string | string[] }>();
   const {
     isFabOpen,
     setFabOpen,
@@ -75,9 +91,10 @@ function TabsLayoutInner() {
 
   const activeTab: TabKey = TAB_ROUTES.find((r) => segments.includes(r as never)) ?? "home";
   const activeHelpContent = getMobileHelpContent(activeTab);
+  const activeCoachView = getSearchParamValue(searchParams.coachView);
   const activeHelpTitle = `Help - ${
-    user?.role === "COACH" && activeTab === "bookings"
-      ? "Sessions"
+    user?.role === "COACH"
+      ? getCoachModuleLabel(activeTab, activeCoachView)
       : SIDEBAR_NAV_LABELS_BY_TAB[activeTab]
   }`;
   const isAutoHelpEligible = AUTO_HELP_TABS.includes(activeTab);
