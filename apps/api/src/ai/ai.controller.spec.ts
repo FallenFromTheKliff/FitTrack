@@ -111,9 +111,10 @@ describe('AiController', () => {
     'getChatMessages',
     'archiveSession',
     'restoreSession',
-  ] as const)('allows only admins and members to %s', (methodName) => {
+  ] as const)('allows admins, coaches, and members to %s', (methodName) => {
     expect(getRolesMetadata(methodName)).toEqual([
       UserRole.admin,
+      UserRole.coach,
       UserRole.member,
     ]);
   });

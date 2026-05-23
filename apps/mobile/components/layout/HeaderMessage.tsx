@@ -39,6 +39,9 @@ function getCoachSubtitle(activeTab: TabKey, coachView?: string) {
     if (coachView === "earnings") return "Review completed coaching work and expected earnings.";
     return "Track coaching appointments and session status.";
   }
+  if (activeTab === "chathistory" || activeTab === "chatbot") {
+    return "Ask BrodigyAI for focused guidance without leaving the mobile portal.";
+  }
   return TAB_SUBTITLES[activeTab];
 }
 

@@ -62,14 +62,17 @@ export default function ChatHistoryScreen() {
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeBookingsScreenStyles(colors), [colors]);
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
-  const hasMemberCardAccess = user?.membershipAccess === "member";
-  const isMemberLocked = !!user && !hasMemberCardAccess;
+  const isCoachRole = user?.role === "COACH";
+  const hasBrodigyAccess = isCoachRole || user?.membershipAccess === "member";
+  const isMemberLocked = !!user && !hasBrodigyAccess;
   const memberLockStatusLabel = membershipCardStatus === "pending_verification"
     ? "Pending verification"
     : membershipCardStatus === "revoked"
       ? "Revoked"
-      : hasMemberCardAccess
-        ? "Member"
+      : hasBrodigyAccess
+        ? isCoachRole
+          ? "Coach"
+          : "Member"
         : "Non-member";
   const memberLockMessage = membershipCardStatus === "pending_verification"
     ? "Your membership card payment is waiting for verification. BrodigyAI history unlocks as soon as the card becomes active."
@@ -94,7 +97,7 @@ export default function ChatHistoryScreen() {
 
   const sessionsQuery = useQuery({
     ...aiChatSessionsQueryOptions(mobileApiClient, { limit: 100 }),
-    enabled: isFocused && hasMemberCardAccess
+    enabled: isFocused && hasBrodigyAccess
   });
   const archiveMutation = useMutation(
     archiveAiChatSessionMutationOptions(mobileApiClient, queryClient, user?.id)

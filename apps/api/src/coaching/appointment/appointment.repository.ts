@@ -264,8 +264,6 @@ export class AppointmentRepository extends BaseRepository {
         },
       },
       'CoachProfile',
-      undefined,
-      { id: true },
     );
   }
 
@@ -366,9 +364,8 @@ export class AppointmentRepository extends BaseRepository {
         );
 
         return (
-          toGymDateKey(existingStartsAt) === toGymDateKey(input.scheduledAt) ||
-          (existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
-            existingEndsAt.getTime() > input.scheduledAt.getTime())
+          existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
+          existingEndsAt.getTime() > input.scheduledAt.getTime()
         );
       });
 
@@ -455,9 +452,8 @@ export class AppointmentRepository extends BaseRepository {
         );
 
         return (
-          toGymDateKey(existingStartsAt) === toGymDateKey(input.scheduledAt) ||
-          (existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
-            existingEndsAt.getTime() > input.scheduledAt.getTime())
+          existingStartsAt.getTime() < input.appointmentEndsAt.getTime() &&
+          existingEndsAt.getTime() > input.scheduledAt.getTime()
         );
       });
 
@@ -691,7 +687,7 @@ export class AppointmentRepository extends BaseRepository {
       title: 'Schedule Conflict',
       status: 409,
       detail:
-        'The requested coach already has an active appointment on this gym day.',
+        'The requested coach already has an active appointment that overlaps this time window.',
     });
   }
 }

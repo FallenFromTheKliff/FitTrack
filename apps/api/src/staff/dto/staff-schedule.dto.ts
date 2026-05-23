@@ -21,7 +21,7 @@ export enum CreateStaffInitialPaymentStage {
 
 export class CreateStaffVenueBookingDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
-  @IsUUID('4', { message: 'member_id must be a valid UUID' })
+  @IsUUID('all', { message: 'member_id must be a valid UUID' })
   member_id: string;
 
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
@@ -68,7 +68,7 @@ export class CreateStaffVenueBookingDTO {
 
 export class CreateStaffCoachBookingDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
-  @IsUUID('4', { message: 'member_id must be a valid UUID' })
+  @IsUUID('all', { message: 'member_id must be a valid UUID' })
   member_id: string;
 
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })

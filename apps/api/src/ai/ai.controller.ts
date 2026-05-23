@@ -99,7 +99,7 @@ export class AiController {
   @Post('chat')
   @Throttle({ default: { limit: 10, ttl: 60 } })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: AIChatDTO })
   @ApiOperation({
@@ -129,7 +129,7 @@ export class AiController {
 
   @Get('chat/sessions')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: "List the authenticated user's AI chat sessions.",
@@ -148,7 +148,7 @@ export class AiController {
 
   @Get('chat/sessions/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a single owned AI chat session.',
@@ -175,7 +175,7 @@ export class AiController {
 
   @Get('chat/sessions/:id/messages')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List owned message history for an AI chat session.',
@@ -203,7 +203,7 @@ export class AiController {
 
   @Delete('chat/sessions/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Soft delete an owned AI chat session.',
@@ -227,7 +227,7 @@ export class AiController {
 
   @Patch('chat/sessions/:id/restore')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.member)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Restore a soft-deleted owned AI chat session.',

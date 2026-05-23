@@ -37,6 +37,8 @@ import type {
   AppointmentRecord,
   AppointmentPaymentStage,
   CoachAppointmentScheduleRecord,
+  CreateCoachManagedAppointmentPayload,
+  SubmitCoachAppointmentFeedbackPayload,
   VenueBookingRecord,
 } from "@fittrack/api-client";
 
@@ -49,6 +51,7 @@ import {
   completeCoachAppointmentMutationOptions,
   confirmCoachAppointmentMutationOptions,
   declineCoachAppointmentMutationOptions,
+  invalidateCoachScheduleQueries,
   payAppointmentDownpaymentMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
@@ -112,10 +115,17 @@ const COACH_CLIENT_DETAIL_TABS = [
   { label: "Schedule", value: "schedule" },
   { label: "Feedback", value: "feedback" },
 ] as const;
+const COACH_CLIENT_DURATION_OPTIONS = [
+  { label: "30 minutes", value: 30 },
+  { label: "45 minutes", value: 45 },
+  { label: "60 minutes", value: 60 },
+  { label: "90 minutes", value: 90 },
+] as const;
 
 type BookingSection = "bookings" | "appointments" | "clients" | "earnings";
 type CoachSection = Extract<BookingSection, "clients" | "appointments" | "earnings">;
 type CoachClientDetailTab = (typeof COACH_CLIENT_DETAIL_TABS)[number]["value"];
+type CoachClientFormMessage = { tone: "error" | "success"; text: string };
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
 type AppointmentPaymentProvider = "cash" | "paymongo";
 type CoachClientSummary = {
@@ -260,6 +270,51 @@ function getSessionTimeLabel(session: DetailBooking) {
     : session.time;
 }
 
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function toTimeInputValue(date: Date) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function getDefaultCoachScheduleInputs() {
+  const nextSlot = new Date();
+  nextSlot.setSeconds(0, 0);
+  nextSlot.setMinutes(0);
+  nextSlot.setHours(nextSlot.getHours() + 2);
+  return {
+    date: toDateInputValue(nextSlot),
+    time: toTimeInputValue(nextSlot),
+  };
+}
+
+function buildLocalScheduleDate(dateValue: string, timeValue: string) {
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeValue.trim());
+  const [year, month, day] = dateValue.split("-").map(Number);
+  if (!timeMatch || !year || !month || !day) return null;
+
+  return new Date(
+    year,
+    month - 1,
+    day,
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+    0,
+    0,
+  );
+}
+
+function getCoachFormErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
+
 export default function BookingsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -316,6 +371,30 @@ export default function BookingsScreen() {
   const [reviewComment, setReviewComment] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
   const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
+  const defaultCoachScheduleInputs = useMemo(
+    () => getDefaultCoachScheduleInputs(),
+    [],
+  );
+  const [clientScheduleDate, setClientScheduleDate] = useState(
+    defaultCoachScheduleInputs.date,
+  );
+  const [clientScheduleTime, setClientScheduleTime] = useState(
+    defaultCoachScheduleInputs.time,
+  );
+  const [clientScheduleDuration, setClientScheduleDuration] = useState("60");
+  const [clientScheduleNotes, setClientScheduleNotes] = useState("");
+  const [clientScheduleMessage, setClientScheduleMessage] =
+    useState<CoachClientFormMessage | null>(null);
+  const [isClientScheduleCalendarOpen, setIsClientScheduleCalendarOpen] =
+    useState(false);
+  const [
+    selectedClientFeedbackAppointmentId,
+    setSelectedClientFeedbackAppointmentId,
+  ] = useState("");
+  const [clientCoachFeedback, setClientCoachFeedback] = useState("");
+  const [clientAssessmentReport, setClientAssessmentReport] = useState("");
+  const [clientFeedbackMessage, setClientFeedbackMessage] =
+    useState<CoachClientFormMessage | null>(null);
 
   const {
     data: venues = [],
@@ -753,6 +832,25 @@ export default function BookingsScreen() {
   const completeCoachAppointmentMutation = useMutation(
     completeCoachAppointmentMutationOptions(mobileApiClient, queryClient),
   );
+  const createClientAppointmentMutation = useMutation({
+    mutationFn: (payload: CreateCoachManagedAppointmentPayload) =>
+      mobileApiClient.coaches.createManagedAppointment(payload),
+    onSuccess: async () => {
+      await invalidateCoachScheduleQueries(queryClient, user?.id);
+    },
+  });
+  const submitClientFeedbackMutation = useMutation({
+    mutationFn: ({
+      appointmentId,
+      payload,
+    }: {
+      appointmentId: string;
+      payload: SubmitCoachAppointmentFeedbackPayload;
+    }) => mobileApiClient.coaches.submitAppointmentFeedback(appointmentId, payload),
+    onSuccess: async () => {
+      await invalidateCoachScheduleQueries(queryClient, user?.id);
+    },
+  });
   const coachActionLoading =
     confirmCoachAppointmentMutation.isPending ||
     declineCoachAppointmentMutation.isPending ||
@@ -965,6 +1063,141 @@ export default function BookingsScreen() {
     user?.id,
   ]);
 
+  const handleCreateClientAppointment = useCallback(async () => {
+    if (!clientDetail?.id) return;
+    const durationMinutes = Number(clientScheduleDuration);
+    const scheduledAt = buildLocalScheduleDate(
+      clientScheduleDate,
+      clientScheduleTime,
+    );
+
+    if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+      setClientScheduleMessage({
+        tone: "error",
+        text: "Enter a valid date and 24-hour time.",
+      });
+      return;
+    }
+
+    if (scheduledAt.getTime() <= Date.now()) {
+      setClientScheduleMessage({
+        tone: "error",
+        text: "Choose a future schedule time.",
+      });
+      return;
+    }
+
+    if (
+      !COACH_CLIENT_DURATION_OPTIONS.some(
+        (option) => option.value === durationMinutes,
+      )
+    ) {
+      setClientScheduleMessage({
+        tone: "error",
+        text: "Choose a valid duration.",
+      });
+      return;
+    }
+
+    setClientScheduleMessage(null);
+
+    try {
+      await createClientAppointmentMutation.mutateAsync({
+        durationMinutes,
+        memberId: clientDetail.id,
+        memberNotes: clientScheduleNotes.trim() || undefined,
+        scheduledAt: scheduledAt.toISOString(),
+      });
+      await refetchCoachSchedule();
+      setClientScheduleNotes("");
+      setClientScheduleMessage({
+        tone: "success",
+        text: "Appointment scheduled.",
+      });
+    } catch (error) {
+      setClientScheduleMessage({
+        tone: "error",
+        text: getCoachFormErrorMessage(
+          error,
+          "Unable to schedule appointment.",
+        ),
+      });
+    }
+  }, [
+    clientDetail?.id,
+    clientScheduleDate,
+    clientScheduleDuration,
+    clientScheduleNotes,
+    clientScheduleTime,
+    createClientAppointmentMutation,
+    refetchCoachSchedule,
+  ]);
+
+  const handleSubmitClientFeedback = useCallback(async () => {
+    if (!selectedClientFeedbackAppointmentId) {
+      setClientFeedbackMessage({
+        tone: "error",
+        text: "Choose a completed session first.",
+      });
+      return;
+    }
+
+    const feedback = clientCoachFeedback.trim();
+    const assessment = clientAssessmentReport.trim();
+
+    if (!feedback) {
+      setClientFeedbackMessage({
+        tone: "error",
+        text: "Coach feedback is required.",
+      });
+      return;
+    }
+
+    setClientFeedbackMessage(null);
+
+    try {
+      await submitClientFeedbackMutation.mutateAsync({
+        appointmentId: selectedClientFeedbackAppointmentId,
+        payload: {
+          coachFeedback: feedback,
+          assessmentReport: assessment || undefined,
+        },
+      });
+      await refetchCoachSchedule();
+      setClientDetail((current) =>
+        current
+          ? {
+              ...current,
+              sessions: current.sessions.map((session) =>
+                session.id === selectedClientFeedbackAppointmentId
+                  ? {
+                      ...session,
+                      assessmentReport: assessment || undefined,
+                      coachFeedback: feedback,
+                    }
+                  : session,
+              ),
+            }
+          : current,
+      );
+      setClientFeedbackMessage({
+        tone: "success",
+        text: "Client feedback saved.",
+      });
+    } catch (error) {
+      setClientFeedbackMessage({
+        tone: "error",
+        text: getCoachFormErrorMessage(error, "Unable to save feedback."),
+      });
+    }
+  }, [
+    clientAssessmentReport,
+    clientCoachFeedback,
+    refetchCoachSchedule,
+    selectedClientFeedbackAppointmentId,
+    submitClientFeedbackMutation,
+  ]);
+
   const activeItems = useMemo(() => {
     if (activeSection === "bookings") return reservations;
     if (activeSection === "earnings") return coachEarningsItems;
@@ -1164,6 +1397,58 @@ export default function BookingsScreen() {
     (session) =>
       session.date >= todayString && !isFinalSessionStatus(session.status),
   ).length;
+  const completedClientSessions = useMemo(
+    () =>
+      clientDetailSessions.filter(
+        (session) => session.status === "completed",
+      ),
+    [clientDetailSessions],
+  );
+
+  useEffect(() => {
+    if (!clientDetail) return;
+    const refreshedClient = coachClientSummaries.find(
+      (client) => client.id === clientDetail.id,
+    );
+    if (refreshedClient && refreshedClient !== clientDetail) {
+      setClientDetail(refreshedClient);
+    }
+  }, [clientDetail, clientDetail?.id, coachClientSummaries]);
+
+  useEffect(() => {
+    if (!clientDetail) {
+      setSelectedClientFeedbackAppointmentId("");
+      setClientScheduleMessage(null);
+      setClientFeedbackMessage(null);
+      return;
+    }
+
+    const nextInputs = getDefaultCoachScheduleInputs();
+    setClientScheduleDate(nextInputs.date);
+    setClientScheduleTime(nextInputs.time);
+    setClientScheduleDuration("60");
+    setClientScheduleNotes("");
+    setClientScheduleMessage(null);
+    setClientFeedbackMessage(null);
+
+    const firstCompletedSession =
+      clientDetail.sessions.find((session) => session.status === "completed") ??
+      null;
+    setSelectedClientFeedbackAppointmentId(firstCompletedSession?.id ?? "");
+    setClientCoachFeedback(firstCompletedSession?.coachFeedback ?? "");
+    setClientAssessmentReport(firstCompletedSession?.assessmentReport ?? "");
+  }, [clientDetail?.id]);
+
+  useEffect(() => {
+    if (!selectedClientFeedbackAppointmentId) return;
+    const selectedSession = completedClientSessions.find(
+      (session) => session.id === selectedClientFeedbackAppointmentId,
+    );
+    if (!selectedSession) return;
+    setClientCoachFeedback(selectedSession.coachFeedback ?? "");
+    setClientAssessmentReport(selectedSession.assessmentReport ?? "");
+    setClientFeedbackMessage(null);
+  }, [completedClientSessions, selectedClientFeedbackAppointmentId]);
 
   const detailActions = useMemo(() => {
     if (!detailBooking) return [];
@@ -1914,7 +2199,7 @@ export default function BookingsScreen() {
                 ) : null}
 
                 {clientDetailTab === "schedule" ? (
-                  <View style={{ gap: 10 }}>
+                  <View style={{ gap: 14 }}>
                     <FitText
                       style={{
                         color: colors.brand,
@@ -1922,34 +2207,254 @@ export default function BookingsScreen() {
                         fontWeight: "900",
                       }}
                     >
-                      SCHEDULE
+                      SCHEDULE NEW APPOINTMENT
+                    </FitText>
+                    <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                      Creates a confirmed appointment for this client using your
+                      current coach availability.
+                    </FitText>
+                    <View style={{ gap: 10 }}>
+                      <View style={{ gap: 6 }}>
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "900",
+                          }}
+                        >
+                          DATE
+                        </FitText>
+                        <Pressable
+                          onPress={() => setIsClientScheduleCalendarOpen(true)}
+                          style={{
+                            borderColor: colors.border,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            justifyContent: "center",
+                            minHeight: 44,
+                            paddingHorizontal: 12,
+                          }}
+                        >
+                          <FitText
+                            style={{
+                              color: colors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {formatBookingDate(clientScheduleDate)}
+                          </FitText>
+                        </Pressable>
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "900",
+                          }}
+                        >
+                          TIME
+                        </FitText>
+                        <TextInput
+                          value={clientScheduleTime}
+                          onChangeText={(value) => {
+                            setClientScheduleTime(value);
+                            setClientScheduleMessage(null);
+                          }}
+                          placeholder="17:00"
+                          placeholderTextColor={colors.textMuted}
+                          style={{
+                            borderColor: colors.border,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: "700",
+                            minHeight: 44,
+                            paddingHorizontal: 12,
+                          }}
+                        />
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "900",
+                          }}
+                        >
+                          DURATION
+                        </FitText>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                          {COACH_CLIENT_DURATION_OPTIONS.map((option) => {
+                            const isActive =
+                              clientScheduleDuration === String(option.value);
+                            return (
+                              <Pressable
+                                key={option.value}
+                                onPress={() => {
+                                  setClientScheduleDuration(String(option.value));
+                                  setClientScheduleMessage(null);
+                                }}
+                                style={{
+                                  backgroundColor: isActive
+                                    ? colors.brand + "22"
+                                    : colors.surfaceRaised,
+                                  borderColor: isActive
+                                    ? colors.brand
+                                    : colors.border,
+                                  borderRadius: 10,
+                                  borderWidth: 1,
+                                  minHeight: 42,
+                                  justifyContent: "center",
+                                  paddingHorizontal: 12,
+                                }}
+                              >
+                                <FitText
+                                  style={{
+                                    color: isActive
+                                      ? colors.brand
+                                      : colors.textPrimary,
+                                    fontSize: 12,
+                                    fontWeight: "800",
+                                  }}
+                                >
+                                  {option.label}
+                                </FitText>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "900",
+                          }}
+                        >
+                          SESSION NOTES
+                        </FitText>
+                        <TextInput
+                          value={clientScheduleNotes}
+                          onChangeText={(value) => {
+                            setClientScheduleNotes(value);
+                            setClientScheduleMessage(null);
+                          }}
+                          multiline
+                          placeholder="Add session focus, reminders, or prep notes."
+                          placeholderTextColor={colors.textMuted}
+                          style={{
+                            borderColor: colors.border,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                            minHeight: 76,
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            textAlignVertical: "top",
+                          }}
+                        />
+                      </View>
+                      {clientScheduleMessage ? (
+                        <FitText
+                          style={{
+                            color:
+                              clientScheduleMessage.tone === "success"
+                                ? colors.success
+                                : colors.danger,
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {clientScheduleMessage.text}
+                        </FitText>
+                      ) : null}
+                      <Pressable
+                        disabled={createClientAppointmentMutation.isPending}
+                        onPress={() => {
+                          void handleCreateClientAppointment();
+                        }}
+                        style={{
+                          alignItems: "center",
+                          backgroundColor: colors.brand,
+                          borderRadius: 12,
+                          justifyContent: "center",
+                          minHeight: 46,
+                          opacity: createClientAppointmentMutation.isPending
+                            ? 0.65
+                            : 1,
+                        }}
+                      >
+                        <FitText
+                          style={{
+                            color: colors.onBrand ?? "#FFFFFF",
+                            fontSize: 12,
+                            fontWeight: "900",
+                          }}
+                        >
+                          {createClientAppointmentMutation.isPending
+                            ? "SCHEDULING"
+                            : "SCHEDULE APPOINTMENT"}
+                        </FitText>
+                      </Pressable>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: colors.border,
+                        height: StyleSheet.hairlineWidth,
+                      }}
+                    />
+                    <FitText
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        fontWeight: "900",
+                      }}
+                    >
+                      SESSION HISTORY
                     </FitText>
                     <View style={s.groupCards}>
-                      {clientDetailSessions.map((session, index) => (
-                        <FitCard
-                          key={session.id}
-                          icon={CalendarDays}
-                          iconSize={18}
-                          label={formatBookingDate(session.date)}
-                          subtitle={`${getSessionTimeLabel(session)} | ${
-                            session.sessionNotes ||
-                            session.description ||
-                            "No notes"
-                          }`}
-                          trailingLabel={formatStatusLabel(session.status)}
-                          trailingLabelColor={
-                            STATUS_COLORS[session.status] ?? colors.textMuted
-                          }
-                          hasBorder={index < clientDetailSessions.length - 1}
-                          noChevron
-                        />
-                      ))}
+                      {clientDetailSessions.length > 0 ? (
+                        clientDetailSessions.map((session, index) => (
+                          <FitCard
+                            key={session.id}
+                            icon={CalendarDays}
+                            iconSize={18}
+                            label={formatBookingDate(session.date)}
+                            subtitle={`${getSessionTimeLabel(session)} | ${
+                              session.sessionNotes ||
+                              session.description ||
+                              "No notes"
+                            }`}
+                            trailingLabel={formatStatusLabel(session.status)}
+                            trailingLabelColor={
+                              STATUS_COLORS[session.status] ?? colors.textMuted
+                            }
+                            hasBorder={index < clientDetailSessions.length - 1}
+                            noChevron
+                          />
+                        ))
+                      ) : (
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 13,
+                            padding: 14,
+                          }}
+                        >
+                          No sessions found for this client.
+                        </FitText>
+                      )}
                     </View>
                   </View>
                 ) : null}
 
                 {clientDetailTab === "feedback" ? (
-                  <View style={{ gap: 10 }}>
+                  <View style={{ gap: 14 }}>
                     <FitText
                       style={{
                         color: colors.brand,
@@ -1957,28 +2462,212 @@ export default function BookingsScreen() {
                         fontWeight: "900",
                       }}
                     >
-                      FEEDBACK
+                      CLIENT FEEDBACK
+                    </FitText>
+                    <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                      Save coach feedback and assessment notes for completed
+                      sessions.
+                    </FitText>
+                    {completedClientSessions.length > 0 ? (
+                      <>
+                        <View style={{ gap: 8 }}>
+                          <FitText
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 11,
+                              fontWeight: "900",
+                            }}
+                          >
+                            COMPLETED SESSION
+                          </FitText>
+                          <View style={s.groupCards}>
+                            {completedClientSessions.map((session, index) => (
+                              <FitCard
+                                key={session.id}
+                                icon={CheckCircle2}
+                                iconSize={18}
+                                label={`${formatBookingDate(session.date)}, ${getSessionTimeLabel(session).split(" - ")[0]}`}
+                                subtitle={
+                                  session.sessionNotes ||
+                                  session.description ||
+                                  "No notes"
+                                }
+                                selected={
+                                  selectedClientFeedbackAppointmentId ===
+                                  session.id
+                                }
+                                hasBorder={
+                                  index < completedClientSessions.length - 1
+                                }
+                                onPress={() =>
+                                  setSelectedClientFeedbackAppointmentId(
+                                    session.id,
+                                  )
+                                }
+                              />
+                            ))}
+                          </View>
+                        </View>
+                        <View style={{ gap: 6 }}>
+                          <FitText
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 11,
+                              fontWeight: "900",
+                            }}
+                          >
+                            COACH FEEDBACK
+                          </FitText>
+                          <TextInput
+                            value={clientCoachFeedback}
+                            onChangeText={(value) => {
+                              setClientCoachFeedback(value);
+                              setClientFeedbackMessage(null);
+                            }}
+                            multiline
+                            placeholder="Add client-facing coaching notes."
+                            placeholderTextColor={colors.textMuted}
+                            style={{
+                              borderColor: colors.border,
+                              borderRadius: 10,
+                              borderWidth: 1,
+                              color: colors.textPrimary,
+                              fontSize: 13,
+                              minHeight: 86,
+                              paddingHorizontal: 12,
+                              paddingVertical: 10,
+                              textAlignVertical: "top",
+                            }}
+                          />
+                        </View>
+                        <View style={{ gap: 6 }}>
+                          <FitText
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 11,
+                              fontWeight: "900",
+                            }}
+                          >
+                            ASSESSMENT REPORT
+                          </FitText>
+                          <TextInput
+                            value={clientAssessmentReport}
+                            onChangeText={(value) => {
+                              setClientAssessmentReport(value);
+                              setClientFeedbackMessage(null);
+                            }}
+                            multiline
+                            placeholder="Add movement assessment or progress notes."
+                            placeholderTextColor={colors.textMuted}
+                            style={{
+                              borderColor: colors.border,
+                              borderRadius: 10,
+                              borderWidth: 1,
+                              color: colors.textPrimary,
+                              fontSize: 13,
+                              minHeight: 86,
+                              paddingHorizontal: 12,
+                              paddingVertical: 10,
+                              textAlignVertical: "top",
+                            }}
+                          />
+                        </View>
+                        {clientFeedbackMessage ? (
+                          <FitText
+                            style={{
+                              color:
+                                clientFeedbackMessage.tone === "success"
+                                  ? colors.success
+                                  : colors.danger,
+                              fontSize: 12,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {clientFeedbackMessage.text}
+                          </FitText>
+                        ) : null}
+                        <Pressable
+                          disabled={submitClientFeedbackMutation.isPending}
+                          onPress={() => {
+                            void handleSubmitClientFeedback();
+                          }}
+                          style={{
+                            alignItems: "center",
+                            backgroundColor: colors.brand,
+                            borderRadius: 12,
+                            justifyContent: "center",
+                            minHeight: 46,
+                            opacity: submitClientFeedbackMutation.isPending
+                              ? 0.65
+                              : 1,
+                          }}
+                        >
+                          <FitText
+                            style={{
+                              color: colors.onBrand ?? "#FFFFFF",
+                              fontSize: 12,
+                              fontWeight: "900",
+                            }}
+                          >
+                            {submitClientFeedbackMutation.isPending
+                              ? "SAVING"
+                              : "SAVE CLIENT FEEDBACK"}
+                          </FitText>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                        Feedback unlocks once this client has a completed
+                        session.
+                      </FitText>
+                    )}
+                    <View
+                      style={{
+                        backgroundColor: colors.border,
+                        height: StyleSheet.hairlineWidth,
+                      }}
+                    />
+                    <FitText
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        fontWeight: "900",
+                      }}
+                    >
+                      FEEDBACK HISTORY
                     </FitText>
                     <View style={s.groupCards}>
-                      {clientDetailSessions.map((session, index) => (
-                        <FitCard
-                          key={session.id}
-                          icon={CheckCircle2}
-                          iconSize={18}
-                          label={formatBookingDate(session.date)}
-                          subtitle={`Feedback: ${
-                            session.coachFeedback || "Not added"
-                          } | Assessment: ${
-                            session.assessmentReport || "Not added"
-                          }`}
-                          trailingLabel={formatStatusLabel(session.status)}
-                          trailingLabelColor={
-                            STATUS_COLORS[session.status] ?? colors.textMuted
-                          }
-                          hasBorder={index < clientDetailSessions.length - 1}
-                          noChevron
-                        />
-                      ))}
+                      {clientDetailSessions.length > 0 ? (
+                        clientDetailSessions.map((session, index) => (
+                          <FitCard
+                            key={session.id}
+                            icon={CheckCircle2}
+                            iconSize={18}
+                            label={formatBookingDate(session.date)}
+                            subtitle={`Feedback: ${
+                              session.coachFeedback || "Not added"
+                            } | Assessment: ${
+                              session.assessmentReport || "Not added"
+                            }`}
+                            trailingLabel={formatStatusLabel(session.status)}
+                            trailingLabelColor={
+                              STATUS_COLORS[session.status] ?? colors.textMuted
+                            }
+                            hasBorder={index < clientDetailSessions.length - 1}
+                            noChevron
+                          />
+                        ))
+                      ) : (
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 13,
+                            padding: 14,
+                          }}
+                        >
+                          No feedback history found.
+                        </FitText>
+                      )}
                     </View>
                   </View>
                 ) : null}
@@ -2256,6 +2945,19 @@ export default function BookingsScreen() {
           }}
         />
       ) : null}
+      <CalendarModal
+        isVisible={isClientScheduleCalendarOpen}
+        selectedDate={clientScheduleDate}
+        minDate={getTodayString()}
+        defaultYear={new Date().getFullYear()}
+        defaultMonth={new Date().getMonth() + 1}
+        onSelect={(date) => {
+          setClientScheduleDate(date);
+          setClientScheduleMessage(null);
+          setIsClientScheduleCalendarOpen(false);
+        }}
+        onClose={() => setIsClientScheduleCalendarOpen(false)}
+      />
       <CalendarModal
         isVisible={isStartCalOpen}
         selectedDate={startDate}

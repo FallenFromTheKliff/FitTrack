@@ -220,9 +220,8 @@ export class CoachRepository extends BaseRepository {
       );
 
       return (
-        toGymDateKey(existingStartsAt) === toGymDateKey(startsAt) ||
-        (existingStartsAt.getTime() < endsAt.getTime() &&
-          existingEndsAt.getTime() > startsAt.getTime())
+        existingStartsAt.getTime() < endsAt.getTime() &&
+        existingEndsAt.getTime() > startsAt.getTime()
       );
     });
   }

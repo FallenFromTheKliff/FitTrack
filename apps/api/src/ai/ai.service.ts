@@ -401,7 +401,7 @@ export class AiService {
   }
 
   private resolveAssistantScope(actorRole: UserRole): AssistantScope {
-    if (actorRole === UserRole.admin) {
+    if (actorRole === UserRole.admin || actorRole === UserRole.coach) {
       return 'admin_business';
     }
 
@@ -414,7 +414,7 @@ export class AiService {
         type: 'FORBIDDEN',
         title: 'BrodigyAI Access Denied',
         status: HttpStatus.FORBIDDEN,
-        detail: 'BrodigyAI is available to admins and members only.',
+        detail: 'BrodigyAI is available to admins, coaches, and members only.',
       },
       HttpStatus.FORBIDDEN,
     );
@@ -1068,10 +1068,10 @@ export class AiService {
       version: 'v1',
       domain: 'chat',
       persona: isAdminBusiness
-        ? 'FitTrack admin business assistant: concise, operational, and grounded in gym management workflows.'
+        ? 'FitTrack business operations assistant: concise, operational, and grounded in gym management workflows.'
         : 'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
       objective: isAdminBusiness
-        ? 'Help admins reason about business operations, analytics interpretation, staffing, inventory, members as accounts, and management decisions without inventing live KPI values.'
+        ? 'Help authorized operators reason about business operations, analytics interpretation, staffing, inventory, members as accounts, and management decisions without inventing live KPI values.'
         : 'Help the user make the safest useful next step inside FitTrack without inventing profile facts or overpromising.',
       responseStyle: [
         'Keep replies brief and practical.',
@@ -1085,7 +1085,7 @@ export class AiService {
         ? [
             'Answer only gym business, admin, and operations questions.',
             'Do not provide workout programming, fitness coaching, macros, TDEE changes, or meal logging.',
-            'Do not invent live KPI values; direct admins to Analytics or Generate Insights for source-of-truth numbers.',
+            'Do not invent live KPI values; direct users to Analytics or Generate Insights for source-of-truth numbers.',
             'Keep the reply grounded in the visible context and recent conversation.',
           ]
         : [
@@ -1101,8 +1101,8 @@ export class AiService {
           : ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE'],
         triggerNotes: isAdminBusiness
           ? [
-              'Always return NONE for admin business chat.',
-              'Point admins to Analytics or Generate Insights for live metric generation.',
+              'Always return NONE for business operations chat.',
+              'Point users to Analytics or Generate Insights for live metric generation.',
             ]
           : [
               'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',

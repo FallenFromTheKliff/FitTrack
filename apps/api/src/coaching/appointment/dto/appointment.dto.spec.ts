@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import {
   CancelAppointmentDTO,
   CreateAppointmentDTO,
+  CreateCoachManagedAppointmentDTO,
   RespondAppointmentDTO,
   SetAvailabilityDTO,
 } from './appointment.dto';
@@ -44,6 +45,18 @@ describe('Appointment DTOs', () => {
         'duration_minutes must be at least 30',
       ]),
     );
+  });
+
+  it('accepts deterministic member UUIDs for coach-managed appointments', async () => {
+    const dto = plainToInstance(CreateCoachManagedAppointmentDTO, {
+      member_id: '145595c3-d3a8-5d41-b1a2-ca29ba0d78a2',
+      scheduled_at: '2026-04-01T08:00:00.000Z',
+      duration_minutes: 60,
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
   });
 
   it('validates coach response and cancellation note payloads', async () => {

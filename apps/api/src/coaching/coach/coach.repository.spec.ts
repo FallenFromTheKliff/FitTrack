@@ -179,6 +179,21 @@ describe('CoachRepository', () => {
     });
   });
 
+  it('allows reservation add-ons when same-day coach appointments do not overlap', async () => {
+    const startsAt = new Date('2099-03-23T08:30:00.000Z');
+    const endsAt = new Date('2099-03-23T09:30:00.000Z');
+    coachAppointment.findMany.mockResolvedValue([
+      {
+        scheduled_at: new Date('2099-03-23T10:00:00.000Z'),
+        duration_minutes: 60,
+      },
+    ]);
+
+    await expect(
+      repo.hasActiveAppointmentConflict('coach-1', startsAt, endsAt),
+    ).resolves.toBe(false);
+  });
+
   it('detects overlapping coach-linked venue bookings for reservation add-ons', async () => {
     const startsAt = new Date('2099-03-23T08:30:00.000Z');
     const endsAt = new Date('2099-03-23T09:30:00.000Z');

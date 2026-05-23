@@ -123,7 +123,7 @@ export class CreateAppointmentDTO {
 
 export class CreateCoachManagedAppointmentDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
-  @IsUUID('4', { message: 'member_id must be a valid UUID' })
+  @IsUUID('all', { message: 'member_id must be a valid UUID' })
   member_id: string;
 
   @ApiProperty({ example: '2026-04-01T08:00:00.000Z' })

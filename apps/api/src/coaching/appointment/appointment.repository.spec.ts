@@ -72,6 +72,26 @@ describe('AppointmentRepository', () => {
     });
   });
 
+  it('loads the active coach profile id by user id', async () => {
+    coachProfile.findFirst.mockResolvedValue({ id: 'coach-1' });
+
+    await expect(
+      repo.findCoachByUserIdOrThrow('coach-user-1'),
+    ).resolves.toEqual({ id: 'coach-1' });
+
+    expect(coachProfile.findFirst).toHaveBeenCalledWith({
+      where: {
+        user_id: 'coach-user-1',
+        user: {
+          role: 'coach',
+          status: 'active',
+        },
+      },
+      include: undefined,
+      orderBy: undefined,
+    });
+  });
+
   it('creates pending coach appointments when slot and conflict checks pass', async () => {
     prisma.$transaction.mockImplementation(
       async (callback: (tx: typeof prisma) => Promise<unknown>) =>
@@ -182,6 +202,41 @@ describe('AppointmentRepository', () => {
         coachEarnings: new Prisma.Decimal('960.00'),
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('allows another appointment on the same gym day when time windows do not overlap', async () => {
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof prisma) => Promise<unknown>) =>
+        callback(prisma),
+    );
+    coachAvailabilitySlot.findFirst.mockResolvedValue({ id: 'slot-1' });
+    coachAppointment.findMany.mockResolvedValue([
+      {
+        id: 'appt-existing',
+        scheduled_at: new Date('2099-04-01T10:00:00.000Z'),
+        duration_minutes: 60,
+      },
+    ]);
+    coachAppointment.create.mockResolvedValue({ id: 'appt-1' });
+
+    await repo.createPendingAppointment({
+      userId: 'member-1',
+      coachId: 'coach-1',
+      scheduledAt: new Date('2099-04-01T08:00:00.000Z'),
+      appointmentEndsAt: new Date('2099-04-01T09:00:00.000Z'),
+      dayOfWeek: 3,
+      slotStart: new Date(Date.UTC(1970, 0, 1, 8, 0, 0, 0)),
+      slotEnd: new Date(Date.UTC(1970, 0, 1, 9, 0, 0, 0)),
+      durationMinutes: 60,
+      isFreeSession: false,
+      totalAmount: new Prisma.Decimal('1200.00'),
+      downpaymentAmount: new Prisma.Decimal('360.00'),
+      balanceAmount: new Prisma.Decimal('840.00'),
+      gymRevenue: new Prisma.Decimal('240.00'),
+      coachEarnings: new Prisma.Decimal('960.00'),
+    });
+
+    expect(coachAppointment.create).toHaveBeenCalled();
   });
 
   it('loads paginated member appointments by scheduled date range', async () => {

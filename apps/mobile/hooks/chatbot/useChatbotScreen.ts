@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiClientError } from "@fittrack/api-client";
 import {
   MOBILE_GREETING_MESSAGE,
+  WEB_GREETING_MESSAGE,
   getAiChatErrorMessage,
   getAiSessionDisplayTitle
 } from "@fittrack/app-config";
@@ -55,20 +56,24 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const isFrozen = user?.status === "frozen";
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
-  const hasMemberCardAccess = user?.membershipAccess === "member";
-  const isMemberLocked = !!user && !hasMemberCardAccess;
+  const isCoachRole = user?.role === "COACH";
+  const hasBrodigyAccess = isCoachRole || user?.membershipAccess === "member";
+  const isMemberLocked = !!user && !hasBrodigyAccess;
   const memberLockStatusLabel = membershipCardStatus === "pending_verification"
     ? "Pending verification"
     : membershipCardStatus === "revoked"
       ? "Revoked"
-      : hasMemberCardAccess
-        ? "Member"
+      : hasBrodigyAccess
+        ? isCoachRole
+          ? "Coach"
+          : "Member"
         : "Non-member";
   const memberLockMessage = membershipCardStatus === "pending_verification"
     ? "Your membership card payment is waiting for verification. BrodigyAI unlocks as soon as the card becomes active."
     : membershipCardStatus === "revoked"
       ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
       : "BrodigyAI chat unlocks after this account has an active membership card.";
+  const greetingMessage = isCoachRole ? WEB_GREETING_MESSAGE : MOBILE_GREETING_MESSAGE;
 
   useEffect(() => {
     setActiveSessionId(requestedSessionId);
@@ -76,18 +81,18 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
 
   const sessionsQuery = useQuery({
     ...aiChatSessionsQueryOptions(mobileApiClient, { limit: 50 }),
-    enabled: isFocused
+    enabled: isFocused && hasBrodigyAccess
   });
   const sessions = sessionsQuery.data?.data ?? [];
 
   const sessionQuery = useQuery({
     ...aiChatSessionQueryOptions(mobileApiClient, activeSessionId ?? ""),
-    enabled: isFocused && !!activeSessionId && !sessions.some((session) => session.id === activeSessionId)
+    enabled: isFocused && hasBrodigyAccess && !!activeSessionId && !sessions.some((session) => session.id === activeSessionId)
   });
 
   const messagesQuery = useQuery({
     ...aiChatMessagesQueryOptions(mobileApiClient, activeSessionId ?? "", { limit: 100 }),
-    enabled: isFocused && !!activeSessionId
+    enabled: isFocused && hasBrodigyAccess && !!activeSessionId
   });
 
   const sendMutation = useMutation(aiChatMutationOptions(mobileApiClient, queryClient, user?.id));
@@ -102,7 +107,7 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
     }));
 
     if (liveMessages.length === 0) {
-      liveMessages.push({ id: "greeting", text: MOBILE_GREETING_MESSAGE, from: "ai" });
+      liveMessages.push({ id: "greeting", text: greetingMessage, from: "ai" });
     }
 
     if (pendingMessage) {
@@ -110,7 +115,7 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
     }
 
     return liveMessages;
-  }, [messagesQuery.data, pendingMessage]);
+  }, [greetingMessage, messagesQuery.data, pendingMessage]);
 
   const send = async () => {
     if (isFrozen || isMemberLocked || isSessionDeleted) return;

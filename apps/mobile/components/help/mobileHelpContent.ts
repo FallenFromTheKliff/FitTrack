@@ -1169,17 +1169,17 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
       "These cards explain the chat states and visible controls without overstating what the assistant can change for you.",
     detailCards: [
       {
-        title: "Membership access",
-        subtitle: "Locked chat states before member access is allowed.",
+        title: "Access state",
+        subtitle: "Locked chat states before BrodigyAI access is allowed.",
         details: [
-          "A locked chat displays the membership-card gate when access is not available.",
+          "A locked chat displays the access gate when the current role is not allowed to use BrodigyAI.",
           "No normal chat action is shown until the account is allowed to use the assistant.",
           "Use the visible access route rather than typing into a disabled composer.",
         ],
         terms: [
           {
-            label: "Membership gate",
-            value: "The locked chat state shown until member access is available.",
+            label: "Access gate",
+            value: "The locked chat state shown until BrodigyAI access is available.",
           },
         ],
       },
