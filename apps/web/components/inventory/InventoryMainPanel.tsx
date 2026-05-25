@@ -52,6 +52,8 @@ import type {
 } from "@/hooks/inventory/useInventoryDashboard";
 
 type InventoryMainPanelProps = {
+  canManageInventoryCatalog: boolean;
+  canPerformInventoryOperations: boolean;
   colors: IThemeContext["colors"];
   inventory: ReturnType<typeof useInventoryDashboard>;
   isCompactDetail: boolean;
@@ -448,6 +450,8 @@ function getEquipmentColumns(
 }
 
 export function InventoryMainPanel({
+  canManageInventoryCatalog,
+  canPerformInventoryOperations,
   colors,
   inventory,
   isCompactDetail,
@@ -506,27 +510,59 @@ export function InventoryMainPanel({
   );
   const inspectorCommandActions: InventoryInspectorAction[] = isRetail
     ? [
-        {
-          disabled: inventory.retailSaleProductOptions.length === 0,
-          icon: ReceiptText,
-          label: "Record Sale",
-          onClick: () => inventory.openRetailSale(selectedRetail?.id),
-          variant: "primary",
-        },
-        {
-          icon: Plus,
-          label: "Add Product",
-          onClick: inventory.openCreateRetail,
-          variant: "primary",
-        },
+        ...(canPerformInventoryOperations
+          ? [
+              {
+                disabled: inventory.retailSaleProductOptions.length === 0,
+                icon: ReceiptText,
+                label: "Record Sale",
+                onClick: () => inventory.openRetailSale(selectedRetail?.id),
+                variant: "primary" as const,
+              },
+              ...(selectedRetail
+                ? [
+                    {
+                      icon: RefreshCw,
+                      label: "Restock Item",
+                      onClick: () => inventory.openRetailRestock(selectedRetail.id),
+                      variant: "ghost" as const,
+                    },
+                  ]
+                : []),
+            ]
+          : []),
+        ...(canManageInventoryCatalog
+          ? [
+              {
+                icon: Plus,
+                label: "Add Product",
+                onClick: inventory.openCreateRetail,
+                variant: "primary" as const,
+              },
+            ]
+          : []),
       ]
     : [
-        {
-          icon: Plus,
-          label: "Add Equipment",
-          onClick: inventory.openCreateEquipment,
-          variant: "primary",
-        },
+        ...(canPerformInventoryOperations && selectedEquipment
+          ? [
+              {
+                icon: Wrench,
+                label: "Record Writeoff",
+                onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
+                variant: "primary" as const,
+              },
+            ]
+          : []),
+        ...(canManageInventoryCatalog
+          ? [
+              {
+                icon: Plus,
+                label: "Add Equipment",
+                onClick: inventory.openCreateEquipment,
+                variant: "primary" as const,
+              },
+            ]
+          : []),
       ];
 
   const directoryToolbar = (
@@ -639,7 +675,7 @@ export function InventoryMainPanel({
         </div>
       </div>
 
-      {isCompactDetail ? (
+      {isCompactDetail && inspectorCommandActions.length > 0 ? (
         <InventoryInspectorCommandRow actions={inspectorCommandActions} colors={colors} />
       ) : null}
     </div>
@@ -729,7 +765,9 @@ export function InventoryMainPanel({
             minHeight: 0,
           }}
         >
-          <InventoryInspectorCommandRow actions={inspectorCommandActions} colors={colors} />
+          {inspectorCommandActions.length > 0 ? (
+            <InventoryInspectorCommandRow actions={inspectorCommandActions} colors={colors} />
+          ) : null}
           {isRetail ? (
             <InventoryInspectorPanel
               ariaLabel="Retail inventory details"
@@ -739,25 +777,33 @@ export function InventoryMainPanel({
                   <InventoryInspectorFooter
                     colors={colors}
                     actions={[
-                      {
-                        icon: RefreshCw,
-                        label: "Restock Item",
-                        onClick: () => inventory.openRetailRestock(selectedRetail.id),
-                        variant: "ghost",
-                      },
-                      {
-                        icon: Edit3,
-                        label: "Edit Details",
-                        onClick: () => onOpenDetailEditor("retail"),
-                        variant: "ghost",
-                      },
-                      {
-                        fullWidth: true,
-                        icon: Archive,
-                        label: "Archive Item",
-                        onClick: () => inventory.openRetailArchive(selectedRetail.id),
-                        variant: "danger",
-                      },
+                      ...(canPerformInventoryOperations
+                        ? [
+                            {
+                              icon: RefreshCw,
+                              label: "Restock Item",
+                              onClick: () => inventory.openRetailRestock(selectedRetail.id),
+                              variant: "ghost" as const,
+                            },
+                          ]
+                        : []),
+                      ...(canManageInventoryCatalog
+                        ? [
+                            {
+                              icon: Edit3,
+                              label: "Edit Details",
+                              onClick: () => onOpenDetailEditor("retail"),
+                              variant: "ghost" as const,
+                            },
+                            {
+                              fullWidth: true,
+                              icon: Archive,
+                              label: "Archive Item",
+                              onClick: () => inventory.openRetailArchive(selectedRetail.id),
+                              variant: "danger" as const,
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 ) : null
@@ -782,25 +828,33 @@ export function InventoryMainPanel({
                   <InventoryInspectorFooter
                     colors={colors}
                     actions={[
-                      {
-                        icon: Wrench,
-                        label: "Record Writeoff",
-                        onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
-                        variant: "primary",
-                      },
-                      {
-                        icon: Edit3,
-                        label: "Edit Details",
-                        onClick: () => onOpenDetailEditor("equipment"),
-                        variant: "ghost",
-                      },
-                      {
-                        fullWidth: true,
-                        icon: Archive,
-                        label: "Archive Equipment",
-                        onClick: () => inventory.openEquipmentArchive(selectedEquipment.id),
-                        variant: "danger",
-                      },
+                      ...(canPerformInventoryOperations
+                        ? [
+                            {
+                              icon: Wrench,
+                              label: "Record Writeoff",
+                              onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
+                              variant: "primary" as const,
+                            },
+                          ]
+                        : []),
+                      ...(canManageInventoryCatalog
+                        ? [
+                            {
+                              icon: Edit3,
+                              label: "Edit Details",
+                              onClick: () => onOpenDetailEditor("equipment"),
+                              variant: "ghost" as const,
+                            },
+                            {
+                              fullWidth: true,
+                              icon: Archive,
+                              label: "Archive Equipment",
+                              onClick: () => inventory.openEquipmentArchive(selectedEquipment.id),
+                              variant: "danger" as const,
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 ) : null
@@ -1170,13 +1224,12 @@ function InventoryDirectoryPanel<T extends { id: string }>({
         }
 
         .inventory-directory-panel__row {
-          transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+          transition: background-color 120ms ease, box-shadow 120ms ease;
         }
 
         .inventory-directory-panel__row:hover {
           background-color: ${colors.brand}0d !important;
           box-shadow: 3px 0 0 ${colors.brand}66 inset;
-          transform: translateX(1px);
         }
 
         .inventory-directory-panel__row:focus-visible {
@@ -1201,12 +1254,11 @@ function InventoryDirectoryPanel<T extends { id: string }>({
         .inventory-directory-panel__mobile-card {
           cursor: pointer;
           outline: none;
-          transition: filter 140ms ease, transform 140ms ease;
+          transition: filter 140ms ease;
         }
 
         .inventory-directory-panel__mobile-card:hover {
           filter: brightness(1.02);
-          transform: translateY(-1px);
         }
 
         .inventory-directory-panel__mobile-card:hover > .inventory-mobile-card {

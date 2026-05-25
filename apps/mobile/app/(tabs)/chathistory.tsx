@@ -149,6 +149,13 @@ export default function ChatHistoryScreen() {
     setIsEndCalOpen(false);
   };
 
+  const handleStatusFilterChange = useCallback((nextStatus: string) => {
+    if (nextStatus !== "active" && nextStatus !== "all" && nextStatus !== "deleted") return;
+    setStatusFilter(nextStatus);
+    setDeleteMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
   const toggleSelect = (id: string) => {
     const target = filteredSessions.find((session) => session.id === id);
     if (target && !target.isActive) return;
@@ -275,6 +282,9 @@ export default function ChatHistoryScreen() {
         </View>
         <FitFilter
           isOpen={isFilterOpen}
+          chipOptions={CHAT_STATUS_FILTERS}
+          activeChip={statusFilter}
+          onChipChange={handleStatusFilterChange}
           showDateRange
           startDate={startDate}
           endDate={endDate}
@@ -285,25 +295,6 @@ export default function ChatHistoryScreen() {
           onStartDateReset={() => setStartDate("")}
           onEndDateReset={() => setEndDate("")}
         />
-        <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 18, paddingBottom: 12 }}>
-          {CHAT_STATUS_FILTERS.map((filter) => {
-            const isActive = statusFilter === filter.value;
-            return (
-              <FitButton
-                key={filter.value}
-                label={filter.label}
-                variant={isActive ? "primary" : "ghost"}
-                onPress={() => {
-                  setStatusFilter(filter.value);
-                  setDeleteMode(false);
-                  setSelectedIds(new Set());
-                }}
-                style={{ flex: 1, paddingVertical: 9 }}
-                textStyle={{ fontSize: 13 }}
-              />
-            );
-          })}
-        </View>
       </Animated.View>
       <Animated.ScrollView
         style={[base.content, screenStyle]}

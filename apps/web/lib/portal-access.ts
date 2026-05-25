@@ -32,7 +32,7 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     milestones: ["ADMIN"],
     "gym-actions": WEB_MANAGEMENT_ROLES,
     "memberships-promos": WEB_MANAGEMENT_ROLES,
-    ai: [...WEB_MANAGEMENT_ROLES, ...WEB_COACH_ROLES],
+    ai: ["ADMIN", ...WEB_COACH_ROLES, ...WEB_MEMBER_ROLES],
     facilities: ["ADMIN"],
     inventory: ["ADMIN", "STAFF"],
     analytics: ["ADMIN"],

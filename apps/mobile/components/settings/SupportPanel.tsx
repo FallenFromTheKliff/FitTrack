@@ -1,19 +1,25 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { submitAppFeedbackMutationOptions } from "@fittrack/query";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import Animated from "react-native-reanimated";
 import { useThemeTransition } from "@/hooks/animations/core/useThemeTransition";
 import { mobileApiClient } from "@/lib/api-client";
+import {
+  isAutomaticHelpEnabled,
+  setAutomaticHelpEnabled as setAutomaticHelpEnabledPreference,
+} from "@/lib/help-preferences";
 import { HELP_FAQS, LEGAL_INFO_CARDS } from "@/data/settings";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
+import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
 
 type FeedbackFormValues = {
   category: "bug_report" | "feature_request" | "general_feedback";
@@ -27,9 +33,15 @@ const FEEDBACK_CATEGORY_OPTIONS = [
 ] as const;
 
 export function HelpPanel({ onClose }: { onClose: () => void }) {
-  const { colors } = useTheme();
+  const { colors, settings } = useTheme();
+  const { user } = useAuth();
   const { surfaceStyle, textMutedStyle } = useThemeTransition();
   const s = useMemo(() => makePrefModalStyles(colors), [colors]);
+  const [automaticHelpEnabled, setAutomaticHelpEnabled] = useState(true);
+  const [automaticHelpStatus, setAutomaticHelpStatus] = useState<{
+    text: string;
+    tone: "danger" | "success";
+  } | null>(null);
   const [feedbackState, setFeedbackState] = useState<{
     text: string;
     tone: "danger" | "success";
@@ -50,6 +62,45 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
   });
   const feedbackCategory = watch("category");
   const feedbackMessage = watch("message");
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let isMounted = true;
+
+    isAutomaticHelpEnabled(user.id)
+      .then((enabled) => {
+        if (isMounted) setAutomaticHelpEnabled(enabled);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const handleAutomaticHelpToggle = (nextValue: boolean) => {
+    setAutomaticHelpEnabled(nextValue);
+    setAutomaticHelpStatus(null);
+
+    if (!user?.id) return;
+
+    setAutomaticHelpEnabledPreference(user.id, nextValue)
+      .then(() => {
+        setAutomaticHelpStatus({
+          text: nextValue
+            ? "All automatic Help Modals are restored."
+            : "Automatic Help Modals are off for all supported screens.",
+          tone: "success",
+        });
+      })
+      .catch(() => {
+        setAutomaticHelpEnabled(!nextValue);
+        setAutomaticHelpStatus({
+          text: "Automatic Help Modals could not be updated right now.",
+          tone: "danger",
+        });
+      });
+  };
 
   const handleFeedbackSubmit = handleSubmit(async ({ category, message }) => {
     const trimmedMessage = message.trim();
@@ -78,6 +129,41 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <Animated.View style={[s.body, surfaceStyle]}>
+      <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>AUTOMATIC HELP</AnimatedFitText>
+      <View style={s.infoCard}>
+        <View style={s.toggleRow}>
+          <View style={s.toggleInfo}>
+            <FitText style={s.toggleLabel}>Automatic Help Modals</FitText>
+            <FitText style={s.toggleHint}>
+              Show every supported Help guide automatically.
+            </FitText>
+          </View>
+          <FitSquareToggle
+            value={automaticHelpEnabled}
+            onValueChange={handleAutomaticHelpToggle}
+            activeColor={colors.brand}
+            inactiveColor={colors.border}
+            useAnimations={settings.animationLevel === "full"}
+          />
+        </View>
+        <FitText style={s.infoCardHint}>
+          Off means at least one automatic Help prompt is hidden. Turning this on restores every supported screen.
+        </FitText>
+        {automaticHelpStatus ? (
+          <FitText
+            style={{
+              color:
+                automaticHelpStatus.tone === "success"
+                  ? colors.brand
+                  : colors.danger,
+              fontSize: 13,
+              fontWeight: "600",
+            }}
+          >
+            {automaticHelpStatus.text}
+          </FitText>
+        ) : null}
+      </View>
       <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>FREQUENTLY ASKED</AnimatedFitText>
       {HELP_FAQS.map((item, i) => (
         <View key={i} style={s.infoCard}>
@@ -90,7 +176,7 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
         <FitText style={s.infoCardHint}>
           Share bugs, missing help, or anything that made the mobile experience harder than it should be.
         </FitText>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View style={s.feedbackCategoryRow}>
           {FEEDBACK_CATEGORY_OPTIONS.map((option) => (
             <FitButton
               key={option.value}
@@ -101,6 +187,8 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
                 if (feedbackState) setFeedbackState(null);
               }}
               disabled={feedbackMutation.isPending}
+              style={s.feedbackCategoryButton}
+              textStyle={s.feedbackCategoryButtonText}
             />
           ))}
         </View>
@@ -144,7 +232,13 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
         ) : null}
       </View>
       <View style={s.footer}>
-        <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
+        <FitButton
+          label="Close"
+          variant="ghost"
+          onPress={onClose}
+          flex={1}
+          textStyle={s.feedbackFooterButtonText}
+        />
         <FitButton
           label="Send Feedback"
           variant="primary"
@@ -153,6 +247,7 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
           loading={feedbackMutation.isPending}
           loadingLabel="Sending Feedback"
           flex={1}
+          textStyle={s.feedbackFooterButtonText}
         />
       </View>
     </Animated.View>

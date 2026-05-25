@@ -144,9 +144,32 @@ export default function FacilitiesScreen() {
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorVenues = floorVenues[activeFloor];
   const venueZones = useMemo(() => activeFloorVenues.map(getVenuePresentation), [activeFloorVenues]);
+  const venueZoneStacks = useMemo(() => {
+    const groups = new Map<string, string[]>();
+
+    venueZones.forEach((venue) => {
+      const venueId = venue.mapId ?? venue.id;
+      const geometryKey = [
+        venue.gridColumn,
+        venue.gridRow,
+        venue.gridWidth,
+        venue.gridHeight
+      ].join(":");
+      groups.set(geometryKey, [...(groups.get(geometryKey) ?? []), venueId]);
+    });
+
+    const stacks = new Map<string, { count: number; index: number }>();
+    groups.forEach((venueIds) => {
+      venueIds.forEach((venueId, index) => {
+        stacks.set(venueId, { count: venueIds.length, index });
+      });
+    });
+
+    return stacks;
+  }, [venueZones]);
   const activeBlueprint = FACILITY_BLUEPRINT_COPY[activeFloor];
   const activeVenue = useMemo(
-      () => venueZones.find((venue) => venue.mapId === selectedVenueMapId) ?? null,
+      () => venueZones.find((venue) => (venue.mapId ?? venue.id) === selectedVenueMapId) ?? null,
       [selectedVenueMapId, venueZones]
   );
   const nextMappedFloor = useMemo(
@@ -183,7 +206,7 @@ export default function FacilitiesScreen() {
   }));
 
   useEffect(() => {
-    if (selectedVenueMapId && !venueZones.some((venue) => venue.mapId === selectedVenueMapId)) {
+    if (selectedVenueMapId && !venueZones.some((venue) => (venue.mapId ?? venue.id) === selectedVenueMapId)) {
       setSelectedVenueMapId(null);
     }
   }, [selectedVenueMapId, venueZones]);
@@ -319,21 +342,32 @@ export default function FacilitiesScreen() {
             ) : (
               venueZones.map((venue) => {
                 const Icon = getVenueIcon(venue.iconKey);
-                const isSelected = selectedVenueMapId === venue.mapId;
+                const venueId = venue.mapId ?? venue.id;
+                const isSelected = selectedVenueMapId === venueId;
+                const zoneStack = venueZoneStacks.get(venueId) ?? { count: 1, index: 0 };
+                const stackedGridHeight = venue.gridHeight / zoneStack.count;
+                const stackedGridRow = venue.gridRow + stackedGridHeight * zoneStack.index;
+                const venueAccessLabel =
+                    zoneStack.count > 1
+                        ? `Open ${venue.name} details, zone ${zoneStack.index + 1} of ${zoneStack.count}`
+                        : `Open ${venue.name} details`;
                 return (
                     <Pressable
-                        key={venue.mapId ?? venue.id}
+                        key={venueId}
+                        accessibilityLabel={venueAccessLabel}
+                        accessibilityRole="button"
+                        hitSlop={6}
                         style={[
                           s.mapZone,
                           {
                             left: `${((venue.gridColumn - 1) / GRID_COLUMNS) * 100}%` as never,
-                            top: `${((venue.gridRow - 1) / GRID_ROWS) * 100}%` as never,
+                            top: `${((stackedGridRow - 1) / GRID_ROWS) * 100}%` as never,
                             width: `${(venue.gridWidth / GRID_COLUMNS) * 100}%` as never,
-                            height: `${(venue.gridHeight / GRID_ROWS) * 100}%` as never,
+                            height: `${(stackedGridHeight / GRID_ROWS) * 100}%` as never,
                             borderColor: isSelected ? colors.brand : colors.brand + "66"
                           }
                         ]}
-                        onPress={() => setSelectedVenueMapId(venue.mapId ?? venue.id)}
+                        onPress={() => setSelectedVenueMapId(venueId)}
                     >
                       <View style={s.mapZoneBackdrop} />
                       <View style={s.mapZoneBadge}>

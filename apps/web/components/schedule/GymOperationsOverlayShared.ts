@@ -54,26 +54,23 @@ export type OverlayConfirmation = {
 };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const GYM_TIME_ZONE = "Asia/Manila";
 
 export const WEEKDAY_OPTIONS = WEEKDAY_LABELS.map((label, index) => ({
   label,
   value: String(index),
 }));
 
-export const VENUE_SLOT_OPTIONS = [
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-  "20:00",
-];
+export const COACH_SPECIALTY_OPTIONS = [
+  { label: "Strength", value: "Strength" },
+  { label: "Conditioning", value: "Conditioning" },
+  { label: "Mobility", value: "Mobility" },
+  { label: "Boxing", value: "Boxing" },
+  { label: "HIIT", value: "HIIT" },
+  { label: "Weight Loss", value: "Weight Loss" },
+  { label: "Rehab", value: "Rehab" },
+  { label: "Nutrition", value: "Nutrition" },
+] as const;
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PHONE_PATTERN = /^[+\d][\d\s().-]{6,39}$/;
@@ -139,6 +136,31 @@ export function formatCompactDate(value: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function getGymDateKey(value: Date | string | null | undefined) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: GYM_TIME_ZONE,
+    year: "numeric",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+export function canCancelUntilDayBefore(
+  scheduledAt: Date | string | null | undefined,
+  now: Date = new Date(),
+) {
+  const scheduledDay = getGymDateKey(scheduledAt);
+  const today = getGymDateKey(now);
+  return Boolean(scheduledDay && today && today < scheduledDay);
 }
 
 export function hasVenueWindowConflict(
@@ -250,7 +272,21 @@ export function formatVenueWindow(booking: VenueBookingRecord) {
 }
 
 export function getDefaultDateInput() {
-  return new Date().toISOString().slice(0, 10);
+  return getGymDateKey(new Date());
+}
+
+export function getCurrentGymMinutes(now: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: GYM_TIME_ZONE,
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value ?? 0,
+  );
+  return hour * 60 + minute;
 }
 
 export function toIsoString(date: string, time: string) {
@@ -322,36 +358,44 @@ export function buildStatusTone(status: string | undefined, colors: ThemeColors)
 
 export function overlaySurfaceStyle(colors: ThemeColors): CSSProperties {
   return {
-    backgroundColor: colors.surface,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 18,
-    padding: 22,
     display: "grid",
     gap: 12,
+    minWidth: 0,
+    backgroundColor: "transparent",
+    border: "none",
+    borderRadius: 0,
+    boxShadow: "none",
+    padding: 0,
   };
 }
 
 export function bookingAmountCardStyle(colors: ThemeColors): CSSProperties {
   return {
-    minHeight: 96,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceRaised,
-    padding: 14,
     display: "grid",
     alignContent: "space-between",
     gap: 8,
+    minHeight: 78,
+    minWidth: 0,
+    backgroundColor: "transparent",
+    border: "none",
+    borderTop: `1px solid ${colors.border}`,
+    borderRadius: 0,
+    boxShadow: "none",
+    padding: "12px 0 0",
   };
 }
 
 export function metricChipStyle(colors: ThemeColors): CSSProperties {
   return {
-    border: `1px solid ${colors.border}`,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceRaised,
-    padding: 12,
     display: "grid",
     gap: 4,
+    minWidth: 0,
+    backgroundColor: "transparent",
+    border: "none",
+    borderTop: `1px solid ${colors.border}`,
+    borderRadius: 0,
+    boxShadow: "none",
+    padding: "10px 0 0",
   };
 }
 
@@ -387,8 +431,7 @@ export function actionPillStyle(colors: ThemeColors, active = false): CSSPropert
     border: `1px solid ${active ? `${colors.brand}44` : colors.border}`,
     backgroundColor: active ? colors.brand : colors.surfaceRaised,
     boxShadow: active ? `0 12px 22px -18px ${colors.brand}` : "none",
-    transform: active ? "translateY(-1px)" : "translateY(0)",
     transition:
-      "background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease",
+      "background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
   };
 }

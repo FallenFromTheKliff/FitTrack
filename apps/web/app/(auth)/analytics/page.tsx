@@ -27,20 +27,19 @@ import {
 } from "recharts";
 import type { CoachAppointmentScheduleRecord } from "@fittrack/api-client";
 import { coachScheduleQueryOptions } from "@fittrack/query";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import {
-  ANALYTICS_ATTENDANCE_FILTER_OPTIONS,
   formatCompactMoney,
   formatDateTime,
   formatFullMoney,
 } from "@/app/(auth)/analytics/helpers";
 import {
   FitButton,
-  FitChartContainer,
   FitPagination,
   FitPill,
   FitSection,
@@ -53,7 +52,7 @@ import {
   useAnalyticsSectionFilter,
 } from "@/contexts/AnalyticsSectionFilterContext";
 import { useAnalyticsDashboard } from "@/hooks/analytics/useAnalyticsDashboard";
-import { webApiClient } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -87,10 +86,9 @@ const SYSTEM_ALERTS_PAGE_SIZE = 6;
 const PDF_EXPORT_SECTION_DESCRIPTIONS: Record<string, string> = {
   activities: "Recent admin activity and operational movement.",
   alerts: "Inventory and equipment alerts that need attention.",
-  attendance: "Check-in totals, trend context, and peak usage windows.",
   daily: "Daily business signals and quick operational notes.",
   inventory: "Stock, equipment, and fulfillment indicators.",
-  kpis: "High-level performance cards for the report period.",
+  kpis: "Performance, attendance, booking, coach, and feedback indicators.",
   recommendations: "AI-recommended actions tied to the latest insight.",
   revenue: "Revenue totals, trend performance, and revenue mix.",
 };
@@ -117,6 +115,29 @@ function getAlertIcon(kind: string) {
 
 function getAlertLaneLabel(kind: string) {
   return kind === "maintenance_due" ? "Equipment warning" : "Inventory warning";
+}
+
+function hasPaidCoachEarningsEvidence(
+  appointment: CoachAppointmentScheduleRecord,
+) {
+  if (appointment.coachPayoutPaidAt || appointment.balancePaidAt) return true;
+  if (appointment.activePaymentStatus !== "completed") return false;
+
+  if (appointment.activePaymentStage === "downpayment") {
+    const remainingBalance = Number(appointment.remainingBalance ?? 0);
+    return Number.isFinite(remainingBalance) && remainingBalance <= 0;
+  }
+
+  return true;
+}
+
+function isPaidCompletedCoachAppointment(
+  appointment: CoachAppointmentScheduleRecord,
+) {
+  return (
+    appointment.status === "completed" &&
+    hasPaidCoachEarningsEvidence(appointment)
+  );
 }
 
 function getAppointmentAmount(appointment: CoachAppointmentScheduleRecord) {
@@ -216,13 +237,15 @@ function CoachEarningsPage() {
     staleTime: 30_000,
   });
   const appointments = appointmentsQuery.data ?? [];
-  const completedAppointments = appointments.filter(
-    (appointment) => appointment.status === "completed",
+  const paidCompletedAppointments = appointments.filter(
+    isPaidCompletedCoachAppointment,
   );
-  const resolvedAppointments = appointments.filter(
+  const completedAppointmentsAwaitingPayment = appointments.filter(
     (appointment) =>
-      appointment.status === "completed" || appointment.status === "no_show",
+      appointment.status === "completed" &&
+      !hasPaidCoachEarningsEvidence(appointment),
   );
+  const resolvedAppointments = paidCompletedAppointments;
   const earningsPageCount = Math.max(
     1,
     Math.ceil(resolvedAppointments.length / COACH_EARNINGS_PAGE_SIZE),
@@ -247,20 +270,32 @@ function CoachEarningsPage() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   }, []);
-  const completedAppointmentsThisMonth = completedAppointments.filter(
+  const recentMonthsStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  }, []);
+  const paidCompletedAppointmentsThisMonth = paidCompletedAppointments.filter(
     (appointment) => new Date(appointment.scheduledAt) >= monthStart,
   );
+  const paidCompletedAppointmentsRecentMonths =
+    paidCompletedAppointments.filter(
+      (appointment) => new Date(appointment.scheduledAt) >= recentMonthsStart,
+    );
   const upcomingAppointments = appointments.filter(
     (appointment) =>
       appointment.status !== "cancelled" &&
       appointment.status !== "completed" &&
       appointment.status !== "no_show",
   );
-  const earnedTotal = completedAppointments.reduce(
+  const earnedTotal = paidCompletedAppointments.reduce(
     (sum, appointment) => sum + getAppointmentAmount(appointment),
     0,
   );
-  const earnedThisMonth = completedAppointmentsThisMonth.reduce(
+  const earnedThisMonth = paidCompletedAppointmentsThisMonth.reduce(
+    (sum, appointment) => sum + getAppointmentAmount(appointment),
+    0,
+  );
+  const earnedRecentMonths = paidCompletedAppointmentsRecentMonths.reduce(
     (sum, appointment) => sum + getAppointmentAmount(appointment),
     0,
   );
@@ -329,19 +364,26 @@ function CoachEarningsPage() {
             {
               label: "Total Earnings This Month",
               value: formatCompactMoney(earnedThisMonth),
-              helper: "Coach commission from completed sessions this month.",
+              helper:
+                "Coach commission from paid completed sessions this month.",
               isEarnings: true,
             },
             {
               label: "Total Earnings All Time",
               value: formatCompactMoney(earnedTotal),
-              helper: "Coach commission from all completed sessions.",
+              helper: "Coach commission from all paid completed sessions.",
               isEarnings: true,
             },
             {
-              label: "Completed Sessions This Month",
-              value: String(completedAppointmentsThisMonth.length),
-              helper: `${upcomingAppointments.length} upcoming or pending session${upcomingAppointments.length === 1 ? "" : "s"}.`,
+              label: "Paid Sessions This Month",
+              value: String(paidCompletedAppointmentsThisMonth.length),
+              helper: `${completedAppointmentsAwaitingPayment.length} completed session${completedAppointmentsAwaitingPayment.length === 1 ? "" : "s"} awaiting payment confirmation.`,
+            },
+            {
+              label: "Past 3 Months Earnings",
+              value: formatCompactMoney(earnedRecentMonths),
+              helper: `${paidCompletedAppointmentsRecentMonths.length} paid session${paidCompletedAppointmentsRecentMonths.length === 1 ? "" : "s"} across recent months; ${upcomingAppointments.length} upcoming or open.`,
+              isEarnings: true,
             },
           ].map((item) => (
             <div key={item.label} style={cardStyle}>
@@ -417,7 +459,7 @@ function CoachEarningsPage() {
                   marginTop: 4,
                 }}
               >
-                This coach view stays scoped to your own session records.
+                Only paid, completed sessions are shown here; pending payments stay with staff.
               </FitText>
             </div>
             <FitButton
@@ -481,28 +523,37 @@ function CoachEarningsPage() {
                         padding: "7px 12px 8px",
                       }}
                     >
-                      {["MEMBER", "SESSION", "CLOSED", "TOTAL", "EARNINGS", "PAYOUT"].map(
-                        (heading) => {
-                          const isStatusColumn = heading === "PAYOUT";
+                      {[
+                        "MEMBER",
+                        "SESSION",
+                        "CLOSED",
+                        "TOTAL",
+                        "EARNINGS",
+                        "STATUS",
+                      ].map((heading) => {
+                        const isStatusColumn = heading === "STATUS";
 
-                          return (
-                            <FitText
-                              key={heading}
-                              data-status-header={isStatusColumn ? "true" : undefined}
-                              style={{
-                                color: colors.textMuted,
-                                fontSize: 10.5,
-                                fontWeight: 700,
-                                justifySelf: isStatusColumn ? "center" : undefined,
-                                letterSpacing: "0.05em",
-                                textAlign: isStatusColumn ? "center" : undefined,
-                              }}
-                            >
-                              {heading}
-                            </FitText>
-                          );
-                        },
-                      )}
+                        return (
+                          <FitText
+                            key={heading}
+                            data-status-header={
+                              isStatusColumn ? "true" : undefined
+                            }
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              justifySelf: isStatusColumn
+                                ? "center"
+                                : undefined,
+                              letterSpacing: "0.05em",
+                              textAlign: isStatusColumn ? "center" : undefined,
+                            }}
+                          >
+                            {heading}
+                          </FitText>
+                        );
+                      })}
                     </div>
                     <div
                       className="members-directory-panel__rows"
@@ -514,20 +565,19 @@ function CoachEarningsPage() {
                       }}
                     >
                       {visibleResolvedAppointments.map((appointment, index) => {
-                        const isNoShow = appointment.status === "no_show";
-                        const statusLabel = isNoShow
-                          ? "No show"
-                          : appointment.coachPayoutPaidAt
-                            ? "Paid"
-                            : "Pending";
-                        const statusTone = isNoShow
-                          ? colors.danger
-                          : appointment.coachPayoutPaidAt
-                            ? colors.success
-                            : colors.warning;
-                        const commission = isNoShow
-                          ? formatCompactMoney(0)
-                          : formatCompactMoney(getAppointmentAmount(appointment));
+                        const statusLabel = appointment.coachPayoutPaidAt
+                          ? "Paid"
+                          : "Confirmed";
+                        const statusTone = appointment.coachPayoutPaidAt
+                          ? colors.success
+                          : colors.brand;
+                        const commission = formatCompactMoney(
+                          getAppointmentAmount(appointment),
+                        );
+                        const memberAvatarUrl = buildRenderableAssetUrl({
+                          apiBaseUrl: WEB_API_BASE_URL,
+                          assetUrl: appointment.user?.profile?.avatarUrl ?? null,
+                        });
 
                         return (
                           <div
@@ -594,10 +644,10 @@ function CoachEarningsPage() {
                                   >
                                     {getAppointmentMemberInitials(appointment)}
                                   </FitText>
-                                  {appointment.user?.profile?.avatarUrl ? (
+                                  {memberAvatarUrl ? (
                                     <img
                                       alt={`${getAppointmentMemberName(appointment)} avatar`}
-                                      src={appointment.user.profile.avatarUrl}
+                                      src={memberAvatarUrl}
                                       onError={(event) => {
                                         event.currentTarget.style.display = "none";
                                       }}
@@ -733,7 +783,7 @@ function CoachEarningsPage() {
                         lineHeight: 1.6,
                       }}
                     >
-                      Completed and no-show coaching sessions will appear here after they are closed.
+                      Paid completed coaching sessions will appear here after staff confirms payment.
                     </FitText>
                   </div>
                 )}
@@ -755,20 +805,15 @@ function CoachEarningsPage() {
                   </div>
                 ) : resolvedAppointments.length > 0 ? (
                   visibleResolvedAppointments.map((appointment) => {
-                    const isNoShow = appointment.status === "no_show";
-                    const statusLabel = isNoShow
-                      ? "No show"
-                      : appointment.coachPayoutPaidAt
-                        ? "Paid"
-                        : "Pending";
-                    const statusTone = isNoShow
-                      ? colors.danger
-                      : appointment.coachPayoutPaidAt
-                        ? colors.success
-                        : colors.warning;
-                    const commission = isNoShow
-                      ? formatCompactMoney(0)
-                      : formatCompactMoney(getAppointmentAmount(appointment));
+                    const statusLabel = appointment.coachPayoutPaidAt
+                      ? "Paid"
+                      : "Confirmed";
+                    const statusTone = appointment.coachPayoutPaidAt
+                      ? colors.success
+                      : colors.brand;
+                    const commission = formatCompactMoney(
+                      getAppointmentAmount(appointment),
+                    );
 
                     return (
                       <div
@@ -886,7 +931,7 @@ function CoachEarningsPage() {
                         lineHeight: 1.6,
                       }}
                     >
-                      Completed and no-show coaching sessions will appear here after they are closed.
+                      Paid completed coaching sessions will appear here after staff confirms payment.
                     </FitText>
                   </div>
                 )}
@@ -919,7 +964,7 @@ function CoachEarningsPage() {
                       Showing {earningsPageStart} - {earningsPageEnd} of {resolvedAppointments.length}
                     </FitText>
                     <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                      Closed coach sessions and payout state
+                      Paid coach sessions and confirmation state
                     </FitText>
                   </div>
                   <FitPagination
@@ -951,13 +996,12 @@ function CoachEarningsPage() {
               }
 
               .members-directory-panel__row {
-                transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+                transition: background-color 120ms ease, box-shadow 120ms ease;
               }
 
               .members-directory-panel__row:hover {
                 background-color: ${colors.brand}0d !important;
                 box-shadow: 3px 0 0 ${colors.brand}66 inset;
-                transform: translateX(1px);
               }
 
               .members-directory-panel__cell,
@@ -984,12 +1028,11 @@ function CoachEarningsPage() {
               .members-directory-panel__mobile-card {
                 cursor: pointer;
                 outline: none;
-                transition: filter 140ms ease, transform 140ms ease;
+                transition: filter 140ms ease;
               }
 
               .members-directory-panel__mobile-card:hover {
                 filter: brightness(1.02);
-                transform: translateY(-1px);
               }
 
               @media (max-width: 1259px) {
@@ -1190,8 +1233,29 @@ function AdminAnalyticsPage() {
       helper: "Operational events captured in the last 24 hours.",
       icon: TrendingUp,
     },
+    {
+      label: "Live Alerts",
+      value: systemAlerts.length,
+      helper: "Inventory and equipment warnings waiting for staff action.",
+      icon: AlertTriangle,
+    },
+    {
+      label: "Peak Check-in Window",
+      value: analytics.attendance?.peakHours[0]?.hourLabel ?? "No peak yet",
+      helper: analytics.attendance?.peakHours[0]
+        ? `${analytics.attendance.peakHours[0].checkIns} check-ins in the current attendance window.`
+        : "No attendance peak has been recorded in the current window.",
+      icon: BarChart3,
+    },
+    {
+      label: "Revenue Window",
+      value: analytics.revenueLoading ? "--" : formatCompactMoney(selectedRevenueValue),
+      helper: `${selectedRevenueLabel} in the selected revenue window.`,
+      icon: BarChart3,
+    },
   ];
 
+  const peakAttendanceWindow = analytics.attendance?.peakHours[0] ?? null;
   const performanceKpis = [
     {
       icon: BarChart3,
@@ -1228,6 +1292,18 @@ function AdminAnalyticsPage() {
       icon: Clock3,
       label: "All-Time Check-ins",
       value: String(analytics.snapshot?.performanceKpis.checkIns ?? 0),
+    },
+    {
+      icon: Clock3,
+      label: `${analytics.attendanceFilterLabel} Check-ins`,
+      value: String(analytics.attendance?.totalCheckIns ?? 0),
+    },
+    {
+      icon: BarChart3,
+      label: "Peak Check-in Window",
+      value: peakAttendanceWindow
+        ? `${peakAttendanceWindow.hourLabel} - ${peakAttendanceWindow.checkIns}`
+        : "No peak yet",
     },
     {
       icon: Sparkles,
@@ -1576,6 +1652,70 @@ function AdminAnalyticsPage() {
           </div>
         ) : null}
 
+        {shouldShowSection("kpis") ? (
+        <div id="analytics-kpis" className="analytics-anchor-section">
+          <FitSection heading="Performance KPIs" bare>
+            <div style={{ marginBottom: 6 }}>
+              <FitText
+                as="p"
+                style={{
+                  fontSize: 10.5,
+                  color: colors.textMuted,
+                  lineHeight: 1.35,
+                }}
+              >
+                Revenue, attendance, booking, coach, and feedback signals are
+                grouped for the current operations readout.
+              </FitText>
+            </div>
+            <div className="analytics-card-grid analytics-card-grid--three">
+              {performanceKpis.map((kpi) => (
+                <div
+                  key={kpi.label}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: panelRadius,
+                    background: analyticsSectionGradient,
+                    padding: 12,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    className="analytics-inline-icon-row"
+                    style={{ gap: 10 }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: controlRadius,
+                        backgroundColor: colors.surfaceRaised,
+                        color: colors.brand,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <kpi.icon size={16} />
+                    </div>
+                    <FitText
+                      as="p"
+                      style={{ fontSize: 12, color: colors.textMuted }}
+                    >
+                      {kpi.label}
+                    </FitText>
+                  </div>
+                  <FitText as="p" style={{ fontSize: 22, fontWeight: 800 }}>
+                    {analytics.snapshotLoading ? "--" : kpi.value}
+                  </FitText>
+                </div>
+              ))}
+            </div>
+          </FitSection>
+        </div>
+        ) : null}
+
         {shouldShowSection("alerts") ? (
           <div id="analytics-alerts" className="analytics-operations-stack">
             <FitSection
@@ -1782,71 +1922,6 @@ function AdminAnalyticsPage() {
               </div>
             ))}
           </div>
-          </FitSection>
-        </div>
-        ) : null}
-
-        {shouldShowSection("kpis") ? (
-        <div id="analytics-kpis" className="analytics-anchor-section">
-          <FitSection heading="Performance KPIs" bare>
-            <div style={{ marginBottom: 6 }}>
-              <FitText
-                as="p"
-                style={{
-                  fontSize: 10.5,
-                  color: colors.textMuted,
-                  lineHeight: 1.35,
-                }}
-              >
-                These KPI cards are all-time business totals. They do not use
-                the same window as the revenue chart or generated insight panel
-                below.
-              </FitText>
-            </div>
-            <div className="analytics-card-grid analytics-card-grid--three">
-              {performanceKpis.map((kpi) => (
-                <div
-                  key={kpi.label}
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: panelRadius,
-                    background: analyticsSectionGradient,
-                    padding: 12,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
-                  <div
-                    className="analytics-inline-icon-row"
-                    style={{ gap: 10 }}
-                  >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: controlRadius,
-                        backgroundColor: colors.surfaceRaised,
-                        color: colors.brand,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <kpi.icon size={16} />
-                    </div>
-                    <FitText
-                      as="p"
-                      style={{ fontSize: 12, color: colors.textMuted }}
-                    >
-                      {kpi.label}
-                    </FitText>
-                  </div>
-                  <FitText as="p" style={{ fontSize: 22, fontWeight: 800 }}>
-                    {analytics.snapshotLoading ? "--" : kpi.value}
-                  </FitText>
-                </div>
-              ))}
-            </div>
           </FitSection>
         </div>
         ) : null}
@@ -2070,165 +2145,6 @@ function AdminAnalyticsPage() {
         </div>
         ) : null}
 
-        {shouldShowSection("attendance") ? (
-        <div id="analytics-attendance" className="analytics-anchor-section">
-          <FitSection
-          heading="Attendance"
-          bare
-          action={
-            <div className="analytics-filter-row">
-              {ANALYTICS_ATTENDANCE_FILTER_OPTIONS.map((option) => (
-                <FitButton
-                  key={option.value}
-                  variant="chip"
-                  active={analytics.attendanceFilter === option.value}
-                  label={option.label}
-                  onClick={() => analytics.setAttendanceFilter(option.value)}
-                />
-              ))}
-            </div>
-          }
-        >
-          <div className="analytics-attendance-grid">
-            <FitChartContainer
-              hideHeading
-              sectionClassName="analytics-attendance-chart-card mb-0"
-              height="100%"
-              contentPadding="12px"
-              chartStyle={{ height: "100%" }}
-              minWidth={1}
-              minHeight={1}
-              initialDimension={{ width: 720, height: 356 }}
-            >
-              <BarChart data={analytics.attendanceSeries}>
-                <CartesianGrid
-                  stroke={`${colors.border}88`}
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  stroke={colors.textMuted}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: colors.surface,
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: controlRadius,
-                  }}
-                />
-                <Bar
-                  dataKey="checkIns"
-                  fill={colors.brand}
-                  radius={[8, 8, 0, 0]}
-                  cursor="pointer"
-                  onClick={(_data, index) => {
-                    const entry = analytics.attendanceSeries[index];
-                    if (!entry?.bucketStart || !entry.label) return;
-                    analytics.handleSelectAttendancePoint(
-                      entry.bucketStart,
-                      entry.label,
-                    );
-                  }}
-                />
-              </BarChart>
-            </FitChartContainer>
-
-            <div
-              className="analytics-attendance-summary-card"
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: panelRadius,
-                background: analyticsSectionGradient,
-                padding: 14,
-                display: "grid",
-                gap: 12,
-                height: 380,
-              }}
-            >
-              <div>
-                <FitText
-                  as="p"
-                  style={{ fontSize: 12, color: colors.textMuted }}
-                >
-                  Total Check-ins
-                </FitText>
-                <FitText
-                  as="p"
-                  style={{ fontSize: 26, fontWeight: 700, marginTop: 4 }}
-                >
-                  {analytics.attendanceLoading
-                    ? "--"
-                    : (analytics.attendance?.totalCheckIns ?? 0)}
-                </FitText>
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <div className="analytics-inline-icon-row" style={{ gap: 10 }}>
-                  <AlertTriangle size={16} color={colors.warning} />
-                  <FitText as="p" style={{ fontSize: 13, fontWeight: 700 }}>
-                    Daily Peak Hours
-                  </FitText>
-                </div>
-                <div className="analytics-peak-grid">
-                  {(analytics.attendance?.peakHours ?? []).map((peak) => (
-                    <button
-                      key={peak.hourLabel}
-                      type="button"
-                      onClick={() => {
-                        const fallbackBucket =
-                          analytics.attendanceSeries[
-                            analytics.attendanceSeries.length - 1
-                          ];
-                        analytics.handleSelectAttendancePoint(
-                          fallbackBucket?.bucketStart ??
-                            analytics.attendance?.series[0]?.bucketStart ??
-                            new Date().toISOString(),
-                          `${peak.hourLabel} peak hour`,
-                        );
-                      }}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: controlRadius,
-                        background: analyticsRaisedGradient,
-                        padding: 10,
-                        textAlign: "left",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <FitText
-                        as="p"
-                        style={{ fontSize: 12, color: colors.textMuted }}
-                      >
-                        {peak.hourLabel}
-                      </FitText>
-                      <FitText
-                        as="p"
-                        style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}
-                      >
-                        {peak.checkIns}
-                      </FitText>
-                    </button>
-                  ))}
-                </div>
-                <FitText
-                  as="p"
-                  style={{
-                    fontSize: 12,
-                    color: colors.textMuted,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  Click a bar or peak-hour figure to open the detailed
-                  attendance breakdown for that time slice.
-                </FitText>
-              </div>
-            </div>
-          </div>
-          </FitSection>
-        </div>
-        ) : null}
       </div>
 
       <FitModal
@@ -2537,28 +2453,23 @@ function AdminAnalyticsPage() {
 
         .analytics-shell--all #analytics-alerts {
           grid-column: 1 / -1;
-          grid-row: 3;
+          grid-row: 4;
           align-self: start;
         }
 
         .analytics-shell--all #analytics-daily {
           grid-column: 1 / -1;
-          grid-row: 4;
+          grid-row: 5;
         }
 
         .analytics-shell--all #analytics-kpis {
           grid-column: 1 / -1;
-          grid-row: 5;
+          grid-row: 3;
         }
 
         .analytics-shell--all #analytics-revenue {
           grid-column: 1 / -1;
           grid-row: 6;
-        }
-
-        .analytics-shell--all #analytics-attendance {
-          grid-column: 1 / -1;
-          grid-row: 7;
         }
 
         .analytics-shell:not(.analytics-shell--all) {
@@ -2908,8 +2819,7 @@ function AdminAnalyticsPage() {
           #analytics-alerts,
           #analytics-daily,
           #analytics-kpis,
-          #analytics-revenue,
-          #analytics-attendance {
+          #analytics-revenue {
             grid-column: 1 / -1;
           }
 

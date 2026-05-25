@@ -1,6 +1,8 @@
 import {
   AuthProvider,
   BookingStatus,
+  MembershipCardSource,
+  MembershipCardStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -68,11 +70,13 @@ describe('StaffService', () => {
       {
         id: 'user-1',
         role: UserRole.staff,
+        status: UserStatus.active,
         email_verified_at: new Date('2026-04-01T00:00:00.000Z'),
         phone_verified_at: null,
         deletedAt: null,
         created_at: new Date('2026-03-01T00:00:00.000Z'),
         updated_at: new Date('2026-03-02T00:00:00.000Z'),
+        membership_card: null,
         auth_identities: [
           {
             provider: AuthProvider.google,
@@ -106,8 +110,10 @@ describe('StaffService', () => {
         email: 'staff.fittrack@gmail.com',
         phone_no: null,
         role: { id: 2, name: 'STAFF' },
+        status: UserStatus.active,
         emailVerified: true,
         phoneVerified: false,
+        membershipCard: null,
         deletedAt: null,
         createdAt: '2026-03-01T00:00:00.000Z',
         updatedAt: '2026-03-02T00:00:00.000Z',
@@ -124,6 +130,68 @@ describe('StaffService', () => {
           membershipType: null,
         },
       },
+    ]);
+  });
+
+  it('includes active membership card data for staff booking member filters', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'member-1',
+        role: UserRole.member,
+        status: UserStatus.active,
+        email_verified_at: new Date('2026-04-01T00:00:00.000Z'),
+        phone_verified_at: null,
+        deletedAt: null,
+        created_at: new Date('2026-03-01T00:00:00.000Z'),
+        updated_at: new Date('2026-03-02T00:00:00.000Z'),
+        membership_card: {
+          activated_at: new Date('2026-03-01T00:00:00.000Z'),
+          purchased_at: new Date('2026-03-01T00:00:00.000Z'),
+          revoke_reason: null,
+          revoked_at: null,
+          source: MembershipCardSource.admin_grant,
+          status: MembershipCardStatus.active,
+          updated_at: new Date('2026-03-02T00:00:00.000Z'),
+          verified_at: new Date('2026-03-01T00:00:00.000Z'),
+        },
+        auth_identities: [
+          {
+            provider: AuthProvider.email,
+            identifier: 'member@fittrack.test',
+            is_primary: true,
+          },
+        ],
+        profile: {
+          first_name: 'Active',
+          last_name: 'Member',
+          date_of_birth: null,
+          gender: null,
+          activity_level: null,
+          fitness_goal: null,
+          weight_kg: null,
+          height_cm: null,
+          avatar_url: null,
+          phone: null,
+        },
+      },
+    ]);
+
+    await expect(service.getAllUsers()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'member-1',
+        role: { id: 4, name: 'USER' },
+        status: UserStatus.active,
+        membershipCard: {
+          activatedAt: '2026-03-01T00:00:00.000Z',
+          purchasedAt: '2026-03-01T00:00:00.000Z',
+          revokeReason: null,
+          revokedAt: null,
+          source: MembershipCardSource.admin_grant,
+          status: MembershipCardStatus.active,
+          updatedAt: '2026-03-02T00:00:00.000Z',
+          verifiedAt: '2026-03-01T00:00:00.000Z',
+        },
+      }),
     ]);
   });
 

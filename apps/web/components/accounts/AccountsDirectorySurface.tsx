@@ -26,7 +26,7 @@ import {
 } from "@/components/accounts/accountComponentUtils";
 
 import AccountsInspectorSurface from "./AccountsInspectorSurface";
-import { useAccountsPage } from "./AccountsPageContext";
+import { useAccountsPage, type CoachClientPanelMode } from "./AccountsPageContext";
 
 export default function AccountsDirectorySurface() {
   const { colors } = useTheme();
@@ -38,13 +38,13 @@ export default function AccountsDirectorySurface() {
     activeCoachSessionStatus,
     activeStatus,
     activeTier,
+    coachClientPanelMode,
     directoryEmptyMessage,
     directoryPageSize,
     editTarget,
     filtered,
     isAdmin,
     isCoach,
-    isCreateMode,
     isTerminationRequestsView,
     openInspector,
     page,
@@ -59,6 +59,7 @@ export default function AccountsDirectorySurface() {
     setActiveCoachSessionStatus,
     setActiveStatus,
     setActiveTier,
+    setCoachClientPanelMode,
     setPage,
     setQ,
     setViewMode,
@@ -127,8 +128,6 @@ export default function AccountsDirectorySurface() {
 
     return byClient;
   }, [coachAppointments]);
-
-  if (isCreateMode) return null;
 
   const coachMembershipStatusOptions = [
     { label: "All Clients", value: "all" },
@@ -813,21 +812,73 @@ export default function AccountsDirectorySurface() {
     );
   };
 
-  const directoryToolbar = (
+  const coachClientModeTabs = isCoach ? (
     <div
-      className={isCoach ? "members-directory-toolbar members-directory-toolbar-coach" : "members-directory-toolbar"}
+      role="tablist"
+      aria-label="Coach client workspace"
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: isCoach ? "nowrap" : "wrap",
-        gap: isCoach ? 8 : 10,
-        minHeight: isCoach ? 38 : 40,
+        display: "grid",
+        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        gap: 8,
         minWidth: 0,
-        overflowX: isCoach ? "auto" : undefined,
-        overflowY: isCoach ? "hidden" : undefined,
       }}
     >
+      {[
+        ["overview", "Client"],
+        ["schedule", "Schedule"],
+        ["feedback", "Feedback"],
+      ].map(([mode, label]) => {
+        const typedMode = mode as CoachClientPanelMode;
+        const isActive = coachClientPanelMode === typedMode;
+
+        return (
+          <button
+            key={mode}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => setCoachClientPanelMode(typedMode)}
+            style={{
+              minHeight: 36,
+              borderRadius: 8,
+              border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
+              backgroundColor: isActive ? `${colors.brand}14` : colors.surface,
+              color: isActive ? colors.brand : colors.textSecondary,
+              cursor: "pointer",
+              padding: "7px 10px",
+              boxShadow: isActive ? `0 0 0 1px ${colors.brand}18 inset` : "none",
+            }}
+          >
+            <FitText
+              as="span"
+              excludeGlobalScale
+              style={{ fontSize: 11, fontWeight: 850, lineHeight: 1 }}
+            >
+              {label}
+            </FitText>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
+  const directoryToolbar = (
+    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+      {coachClientModeTabs}
+      <div
+        className={isCoach ? "members-directory-toolbar members-directory-toolbar-coach" : "members-directory-toolbar"}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: isCoach ? "nowrap" : "wrap",
+          gap: isCoach ? 8 : 10,
+          minHeight: isCoach ? 38 : 40,
+          minWidth: 0,
+          overflowX: isCoach ? "auto" : undefined,
+          overflowY: isCoach ? "hidden" : undefined,
+        }}
+      >
       <div
         className="members-directory-toolbar-left"
         style={{
@@ -1097,6 +1148,7 @@ export default function AccountsDirectorySurface() {
         ) : null}
       </div>
     </div>
+    </div>
   );
 
   return (
@@ -1108,8 +1160,8 @@ export default function AccountsDirectorySurface() {
         gap: 12,
         gridTemplateColumns: "minmax(0, 1fr) minmax(284px, 0.36fr)",
         alignItems: "stretch",
-        height: "calc(100vh - 154px)",
-        minHeight: 600,
+        height: "100%",
+        minHeight: 0,
         width: "100%",
         marginRight: 0,
         padding: 0,

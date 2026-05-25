@@ -478,7 +478,10 @@ export class BookingService {
         resolveStaffInitialPaymentStage(dto.payment_stage),
         linkedCoach,
       );
-      if (!amounts.totalAmount.equals(0)) {
+      if (
+        !amounts.totalAmount.equals(0) &&
+        amounts.paymentStage !== PaymentStage.full
+      ) {
         const initiation =
           await this.bookingRepository.createPendingBookingWithPayment({
             userId,
@@ -683,6 +686,8 @@ export class BookingService {
       );
     }
 
+    assertBookingCancellationWindow(booking.starts_at);
+
     const cancelledAt = new Date();
     await this.bookingRepository.cancelBooking(bookingId, cancelledAt);
 
@@ -714,9 +719,7 @@ export class BookingService {
     actorUserId: string,
   ): Promise<void> {
     const booking =
-      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(
-        bookingId,
-      );
+      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
 
     if (booking.status !== BookingStatus.confirmed) {
       throw new HttpException(
@@ -778,9 +781,7 @@ export class BookingService {
     reason?: string,
   ): Promise<void> {
     const booking =
-      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(
-        bookingId,
-      );
+      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
 
     if (
       booking.status === BookingStatus.cancelled ||
@@ -798,6 +799,8 @@ export class BookingService {
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
+
+    assertBookingCancellationWindow(booking.starts_at);
 
     const cancelledAt = new Date();
     await this.bookingRepository.cancelBooking(bookingId, cancelledAt);
@@ -1164,7 +1167,6 @@ export class BookingService {
         detail: 'This booking already has a recorded balance payment.',
       });
     }
-
   }
 
   async markBookingNoShowAsStaff(
@@ -1172,9 +1174,7 @@ export class BookingService {
     actorUserId: string,
   ): Promise<void> {
     const booking =
-      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(
-        bookingId,
-      );
+      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
 
     if (booking.status !== BookingStatus.confirmed) {
       throw new HttpException(
@@ -1446,6 +1446,23 @@ function toGymDateKey(value: Date): string {
   const month = String(gymTime.getUTCMonth() + 1).padStart(2, '0');
   const day = String(gymTime.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function assertBookingCancellationWindow(startsAt: Date): void {
+  if (toGymDateKey(new Date()) < toGymDateKey(startsAt)) {
+    return;
+  }
+
+  throw new HttpException(
+    {
+      type: 'BUSINESS_RULE_VIOLATION',
+      title: 'Booking Cannot Be Cancelled',
+      status: 422,
+      detail:
+        'Venue bookings can only be cancelled until the day before the booking date.',
+    },
+    HttpStatus.UNPROCESSABLE_ENTITY,
+  );
 }
 
 function invalidBookingWindowError(detail: string): BadRequestException {

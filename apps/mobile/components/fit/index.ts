@@ -6,6 +6,7 @@ export { default as FitFAB } from "./FitFAB";
 export { default as FitFABMenu } from "./FitFABMenu";
 export { default as FitFilter } from "./FitFilter";
 export { default as FitInputField } from "./FitInputField";
+export { default as FitPager } from "./FitPager";
 export { default as FitSearch } from "./FitSearch";
 export { default as FitSection } from "./FitSection";
 export { FitSquareToggle } from "./FitSquareToggle";

@@ -43,7 +43,11 @@ import {
   CoachIconRail,
   VenueBookingsTable,
 } from "@/components/schedule/OperationsTables";
-import { getCoachDisplayName } from "@/components/schedule/operationsUtils";
+import {
+  getAppointmentStatusColor,
+  getCoachDisplayName,
+  getReadableStatus,
+} from "@/components/schedule/operationsUtils";
 import { WeeklyTimeline } from "@/components/schedule";
 
 import {
@@ -54,7 +58,6 @@ import {
   OperationsLoadingBlock,
   OperationsMetricCard,
   OperationsMetricGrid,
-  SCHEDULE_DAY_PART_OPTIONS,
   SCHEDULE_SURFACE_TABS,
   STATUS_OPTIONS,
   VENUE_STATUS_OPTIONS,
@@ -222,7 +225,6 @@ function GymOperationsPageBody() {
     respondAppointmentPending,
     rightScrollRef,
     rosterBookings,
-    scheduleDayPart,
     scheduleLoading,
     scheduleRangeMode,
     scheduleRosterMaxHeight,
@@ -257,7 +259,6 @@ function GymOperationsPageBody() {
     setRecurringPlanForm,
     setRecurringPlanOpen,
     setRecurringPlanPreview,
-    setScheduleDayPart,
     setScheduleRangeMode,
     setSlideKey,
     setVenueFilterId,
@@ -391,7 +392,7 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                {activeScheduleSurfaceTab === "coach-schedule" && !isCoach ? (
+                {activeScheduleSurfaceTab === "coach-schedule" && isAdmin ? (
                   <FitButton
                     variant="primary"
                     label="RECURRING PLAN"
@@ -414,29 +415,31 @@ function GymOperationsPageBody() {
                     textStyle={{ fontSize: 11, fontWeight: 800 }}
                   />
                 ) : null}
-                <FitButton
-                  variant="primary"
-                  label={
-                    activeScheduleSurfaceTab === "venue-bookings"
-                      ? "NEW VENUE BOOKING"
-                      : "NEW COACH BOOKING"
-                  }
-                  icon={CalendarPlus}
-                  iconSize={15}
-                  onClick={() =>
-                    activeScheduleSurfaceTab === "venue-bookings"
-                      ? setCreateVenueBookingOpen(true)
-                      : setCreateCoachBookingOpen(true)
-                  }
-                  style={{
-                    minHeight: 38,
-                    borderRadius: 8,
-                    padding: "8px 16px",
-                    backgroundColor: colors.brand,
-                    color: colors.onBrand,
-                  }}
-                  textStyle={{ fontSize: 12, fontWeight: 800 }}
-                />
+                {canManageCoaching ? (
+                  <FitButton
+                    variant="primary"
+                    label={
+                      activeScheduleSurfaceTab === "venue-bookings"
+                        ? "NEW VENUE BOOKING"
+                        : "NEW COACH BOOKING"
+                    }
+                    icon={CalendarPlus}
+                    iconSize={15}
+                    onClick={() =>
+                      activeScheduleSurfaceTab === "venue-bookings"
+                        ? setCreateVenueBookingOpen(true)
+                        : setCreateCoachBookingOpen(true)
+                    }
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 8,
+                      padding: "8px 16px",
+                      backgroundColor: colors.brand,
+                      color: colors.onBrand,
+                    }}
+                    textStyle={{ fontSize: 12, fontWeight: 800 }}
+                  />
+                ) : null}
               </>
             ) : activeOperationsTab === "appointments" ? (
               <>
@@ -458,21 +461,23 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                <FitButton
-                  variant="primary"
-                  label="CREATE COACH BOOKING"
-                  icon={CalendarPlus}
-                  iconSize={15}
-                  onClick={() => setCreateCoachBookingOpen(true)}
-                  style={{
-                    minHeight: 38,
-                    borderRadius: 8,
-                    padding: "8px 16px",
-                    backgroundColor: colors.brand,
-                    color: colors.onBrand,
-                  }}
-                  textStyle={{ fontSize: 12, fontWeight: 800 }}
-                />
+                {canManageCoaching ? (
+                  <FitButton
+                    variant="primary"
+                    label="CREATE COACH BOOKING"
+                    icon={CalendarPlus}
+                    iconSize={15}
+                    onClick={() => setCreateCoachBookingOpen(true)}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 8,
+                      padding: "8px 16px",
+                      backgroundColor: colors.brand,
+                      color: colors.onBrand,
+                    }}
+                    textStyle={{ fontSize: 12, fontWeight: 800 }}
+                  />
+                ) : null}
               </>
             ) : (
               <>
@@ -580,14 +585,9 @@ function GymOperationsPageBody() {
                       }}
                       aria-label="Schedule legend"
                     >
-                      {[
-                        ["CLASS", colors.brand],
-                        ["PT", "#7C3AED"],
-                        ["EVENT", "#0EA5E9"],
-                        ["MAINTENANCE", "#22C55E"],
-                      ].map(([label, color]) => (
+                      {STATUS_OPTIONS.filter((option) => option.value !== "all").map((option) => (
                         <div
-                          key={label}
+                          key={option.value}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -599,7 +599,7 @@ function GymOperationsPageBody() {
                               width: 8,
                               height: 8,
                               borderRadius: 2,
-                              backgroundColor: color,
+                              backgroundColor: getAppointmentStatusColor(option.value, colors),
                             }}
                           />
                           <FitText
@@ -610,7 +610,7 @@ function GymOperationsPageBody() {
                               color: colors.textSecondary,
                             }}
                           >
-                            {label}
+                            {getReadableStatus(option.value)}
                           </FitText>
                         </div>
                       ))}
@@ -668,6 +668,19 @@ function GymOperationsPageBody() {
                             : "Pick day"
                         }
                       />
+                      {isCoach ? (
+                        <OperationsControlField label="Status" minWidth={154}>
+                          <FitSelect
+                            compact
+                            fullWidth
+                            value={appointmentStatusFilter}
+                            onChange={(event) =>
+                              setAppointmentStatusFilter(event.target.value || "all")
+                            }
+                            options={STATUS_OPTIONS}
+                          />
+                        </OperationsControlField>
+                      ) : null}
                       <FitButton
                         variant="ghost"
                         iconOnly
@@ -705,12 +718,6 @@ function GymOperationsPageBody() {
                           fontSize: 10,
                           fontWeight: 800,
                         }}
-                      />
-                      <FitPill
-                        options={SCHEDULE_DAY_PART_OPTIONS}
-                        active={scheduleDayPart}
-                        onChange={setScheduleDayPart}
-                        style={{ minHeight: 32, padding: 3, borderRadius: 8 }}
                       />
                     </div>
                   </div>
@@ -1400,26 +1407,10 @@ function GymOperationsPageBody() {
                       />
                       <FitButton
                         variant="ghost"
-                        label="VIEW PROFILE"
+                        label="EDIT PROFILE"
                         onClick={() => {
-                          if (!selectedCoachRoster) return;
-                          setActiveCoachId(selectedCoachRoster.id);
-                          setCoachDetailsOpen(true);
-                        }}
-                        disabled={!selectedCoachRoster}
-                        style={{
-                          minHeight: 36,
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                        }}
-                        textStyle={{ fontSize: 11, fontWeight: 700 }}
-                      />
-                      <FitButton
-                        variant="ghost"
-                        label="OPEN IN SCHEDULE"
-                        onClick={() => {
-                          setActiveOperationsTab("schedule");
-                          setActiveScheduleSurfaceTab("coach-schedule");
+                          if (!selectedCoachProfile) return;
+                          setProfileEditorCoachId(selectedCoachProfile.id);
                         }}
                         disabled={!selectedCoachProfile}
                         style={{
@@ -1788,7 +1779,7 @@ function GymOperationsPageBody() {
           inputInvalid={recurringPlanInputInvalid}
           isBusy={recurringCreateBusy}
           isCreatePending={createRecurringPlanMutation.isPending}
-          isOpen={recurringPlanOpen}
+          isOpen={isAdmin && recurringPlanOpen}
           memberOptions={memberOptions}
           onClose={() => setRecurringPlanOpen(false)}
           onConfirm={(skipConflicts) => void handleConfirmRecurringPlan(skipConflicts)}
@@ -1883,9 +1874,10 @@ function GymOperationsPageBody() {
           onPayRecurringCycle={(cycle, provider) =>
             requestRecurringCyclePayment(cycle, provider)
           }
+          canManageRecurringPlan={isAdmin}
         />
         <RecurringPlanActionModal
-          action={recurringPlanAction}
+          action={isAdmin ? recurringPlanAction : null}
           coachOptions={coachOptions}
           completedCount={recurringCompletedCount}
           isBusy={recurringActionBusy}
@@ -1910,7 +1902,7 @@ function GymOperationsPageBody() {
           setSelectedTime={setRecurringActionTime}
         />
         <GymOperationsCreateVenueBookingModal
-          isOpen={createVenueBookingOpen}
+          isOpen={canManageCoaching && createVenueBookingOpen}
           isSubmitting={createVenueBookingMutation.isPending}
           onClose={() => setCreateVenueBookingOpen(false)}
           onCreate={(payload) => void handleCreateVenueBooking(payload)}
@@ -1919,7 +1911,7 @@ function GymOperationsPageBody() {
           venueOptions={bookableVenueOptions}
         />
         <GymOperationsCreateCoachBookingModal
-          isOpen={createCoachBookingOpen}
+          isOpen={canManageCoaching && createCoachBookingOpen}
           isSubmitting={createCoachBookingMutation.isPending}
           onClose={() => setCreateCoachBookingOpen(false)}
           onCreate={(payload) => void handleCreateCoachBooking(payload)}
@@ -1927,7 +1919,7 @@ function GymOperationsPageBody() {
           coachOptions={coachOptions}
         />
         <GymOperationsCreateCoachModal
-          isOpen={createCoachOpen}
+          isOpen={isAdmin && createCoachOpen}
           isSubmitting={createCoachMutation.isPending}
           onClose={() => setCreateCoachOpen(false)}
           onCreate={(payload) => void handleCreateCoach(payload)}

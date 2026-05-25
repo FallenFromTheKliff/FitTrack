@@ -40,24 +40,61 @@ type NavItem = {
   label: string;
   route: SidebarRoute;
 };
-const NAV_ITEMS: NavItem[] = [
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.home, icon: Home, route: "/(tabs)/home" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.bookings, icon: CalendarDays, route: "/(tabs)/bookings" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.assessments, icon: ClipboardCheck, route: "/(tabs)/assessments" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.facilities, icon: Map, route: "/(tabs)/facilities" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.nutrition, icon: Apple, route: "/(tabs)/nutrition" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.mastery, icon: Trophy, route: "/(tabs)/mastery" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.workout, icon: Dumbbell, route: "/(tabs)/workout" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
+
+type NavSection = {
+  items: NavItem[];
+  label: string;
+};
+
+const MEMBER_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Main",
+    items: [
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.home, icon: Home, route: "/(tabs)/home" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.bookings, icon: CalendarDays, route: "/(tabs)/bookings" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.assessments, icon: ClipboardCheck, route: "/(tabs)/assessments" },
+    ],
+  },
+  {
+    label: "Fitness",
+    items: [
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.facilities, icon: Map, route: "/(tabs)/facilities" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.nutrition, icon: Apple, route: "/(tabs)/nutrition" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.mastery, icon: Trophy, route: "/(tabs)/mastery" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.workout, icon: Dumbbell, route: "/(tabs)/workout" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" },
+    ],
+  },
 ];
-const COACH_NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", icon: Home, route: "/(tabs)/home" },
-  { label: "Clients", icon: Users, route: "/(tabs)/bookings?coachView=clients", coachView: "clients" },
-  { label: "Sessions", icon: CalendarDays, route: "/(tabs)/bookings?coachView=appointments", coachView: "appointments" },
-  { label: "Earnings", icon: LineChart, route: "/(tabs)/bookings?coachView=earnings", coachView: "earnings" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
-  { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" }
+
+const COACH_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Main",
+    items: [
+      { label: "Dashboard", icon: Home, route: "/(tabs)/home" },
+    ],
+  },
+  {
+    label: "Coaching",
+    items: [
+      { label: "Clients", icon: Users, route: "/(tabs)/bookings?coachView=clients", coachView: "clients" },
+      { label: "Sessions", icon: CalendarDays, route: "/(tabs)/bookings?coachView=appointments", coachView: "appointments" },
+      { label: "Earnings", icon: LineChart, route: "/(tabs)/bookings?coachView=earnings", coachView: "earnings" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.chathistory, icon: Bot, route: "/(tabs)/chathistory" },
+      { label: SIDEBAR_NAV_LABELS_BY_TAB.settings, icon: Settings, route: "/(tabs)/settings" },
+    ],
+  },
 ];
 
 function getSearchParamValue(value?: string | string[]) {
@@ -85,7 +122,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const searchParams = useGlobalSearchParams<{ coachView?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeSidebarStyles(colors, activeIconColor), [colors, activeIconColor]);
-  const bottomPadding = Math.max(insets.bottom, 64) + 16;
+  const bottomPadding = Math.max(insets.bottom, 6);
   const isCoach = user?.role === "COACH";
   const activeCoachView = getSearchParamValue(searchParams.coachView) ?? "appointments";
 
@@ -172,7 +209,7 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
   const tierLabel = isCoach ? "Coach" : user?.tier ? TIER_LABELS[user.tier] : "Fit Starter";
   const tierLevel = user?.tier ? TIER_LEVELS[user.tier] : 1;
   const ic2 = activeIconColor ?? colors.brand;
-  const navItems = isCoach ? COACH_NAV_ITEMS : NAV_ITEMS;
+  const navSections = isCoach ? COACH_NAV_SECTIONS : MEMBER_NAV_SECTIONS;
 
   return (
       <Modal
@@ -226,28 +263,40 @@ export default function Sidebar({ isOpen, onClose, onLogoutPress }: Props) {
                 </Animated.View>
               </Pressable>
               <Animated.View style={[s.navSeparator, separatorStyle]} />
-              {navItems.map(({ label, icon, route }) => {
-                const active = isActive(route);
-                return (
-                    <FitButton
-                        key={route}
-                        label={label}
-                        icon={icon}
-                        iconSize={24}
-                        variant={active ? "navActive" : "nav"}
-                        showTrailing={active}
-                        onPress={() => navigateFromSidebar(route)}
-                        style={s.navItem}
-                    />
-                );
-              })}
+              <View style={s.navList}>
+                {navSections.map((section) => (
+                  <View key={section.label} style={s.navSection}>
+                    <FitText style={s.navSectionLabel}>{section.label}</FitText>
+                    <View style={s.navSectionItems}>
+                      {section.items.map(({ label, icon, route }) => {
+                        const active = isActive(route);
+                        return (
+                            <FitButton
+                                key={route}
+                                label={label}
+                                icon={icon}
+                                iconSize={20}
+                                variant={active ? "navActive" : "nav"}
+                                showTrailing={active}
+                                onPress={() => navigateFromSidebar(route)}
+                                style={s.navItem}
+                                textStyle={active ? s.navTextActive : s.navText}
+                            />
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </View>
               <Animated.View style={[s.bottomSection, bottomBorderStyle, { paddingBottom: bottomPadding }]}>
                 <FitButton
-                    label="Sign Out"
+                    label="SIGN OUT"
                     icon={LogOut}
-                    iconSize={24}
+                    iconSize={22}
                     variant="sidebarLogout"
                     onPress={onLogoutPress}
+                    style={s.logoutItem}
+                    textStyle={s.logoutText}
                 />
               </Animated.View>
             </Animated.View>

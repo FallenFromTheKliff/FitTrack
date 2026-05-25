@@ -1,4 +1,4 @@
-import { Clipboard, Linking, Platform } from "react-native";
+import { Clipboard, Platform } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -193,6 +193,11 @@ function getFutureRemainingMs(isoString?: string | null) {
   return Math.max(0, timestamp - Date.now());
 }
 
+type MembershipPaymentConfirmation = {
+  message: string;
+  title: string;
+};
+
 export function useProfileScreen() {
   const router = useRouter();
   const { user, updateUser } = useAuth();
@@ -223,6 +228,8 @@ export function useProfileScreen() {
   const [isAvailabilityDeleting, setIsAvailabilityDeleting] = useState(false);
   const [isAvailabilityTimeOpen, setIsAvailabilityTimeOpen] = useState(false);
   const [availabilityTimeTarget, setAvailabilityTimeTarget] = useState<"start" | "end">("start");
+  const [membershipPaymentConfirmation, setMembershipPaymentConfirmation] =
+    useState<MembershipPaymentConfirmation | null>(null);
   const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<MembershipPaymentProvider | null>(null);
   const [rankingPrivacyTarget, setRankingPrivacyTarget] = useState<FitnessRankingVisibility | null>(null);
 
@@ -604,16 +611,20 @@ export function useProfileScreen() {
       await refreshAuthUserFromProfile();
       showMessage(result.message);
 
-      if (result.checkoutUrl) {
-        void Linking.openURL(result.checkoutUrl);
-      }
+      setMembershipPaymentConfirmation({
+        title: provider === "paymongo" ? "Payment confirmed" : "Cash payment submitted",
+        message:
+          provider === "paymongo"
+            ? `Testing payment for the ${membershipCardPriceLabel} membership card was confirmed in FitTrack. Stay on Profile while front desk verification updates the member-card status.`
+            : "Your cash membership-card request was recorded for front desk verification. Stay on Profile to track the member-card status.",
+      });
     } catch (error: unknown) {
       showMessage(
         error instanceof Error
           ? error.message
           : provider === "cash"
             ? "Unable to request cash verification for the membership card."
-            : "Unable to start membership-card checkout."
+            : "Unable to confirm the membership-card payment."
       );
     } finally {
       if (isMounted.current) {
@@ -625,6 +636,7 @@ export function useProfileScreen() {
     purchaseMembershipCardMutation,
     refreshAuthUserFromProfile,
     showMessage,
+    membershipCardPriceLabel,
     user?.id
   ]);
 
@@ -821,6 +833,7 @@ export function useProfileScreen() {
     memberAccessLabel,
     memberAccessSummary,
     membershipCardPriceLabel,
+    membershipPaymentConfirmation,
     membershipCardPurchaseProvider,
     membershipCard,
     attendanceQrError: (attendanceQrQuery.error as Error | null)?.message ?? null,
@@ -842,6 +855,7 @@ export function useProfileScreen() {
     setEditVisible,
     setIsAvailabilityEditorOpen,
     setIsAvailabilityTimeOpen,
+    setMembershipPaymentConfirmation,
     setRankingPrivacyTarget,
     setTerminateVisible,
     statusMessage,

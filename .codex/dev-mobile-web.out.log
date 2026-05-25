@@ -1,0 +1,47 @@
+
+> fittrack@ dev:mobile:web C:\Stuffs\VSCodeworks\Personal\FitTrack
+> pnpm --dir apps/mobile run web -- --port 8081
+
+
+> @fittrack/mobile@1.0.0 web C:\Stuffs\VSCodeworks\Personal\FitTrack\apps\mobile
+> node ./scripts/start-web.cjs "--" "--port" "8081"
+
+[fittrack-mobile-web] Local API: http://127.0.0.1:3001/v1
+Starting project at C:\Stuffs\VSCodeworks\Personal\FitTrack\apps\mobile
+Expo Autolinking module resolution enabled
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web Bundled 1980ms apps\mobile\index.ts (3936 modules)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 141ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 101ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 90ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 117ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 95ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 109ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 91ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 96ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 98ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web apps\mobile\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 93ms apps\mobile\index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console

@@ -29,21 +29,35 @@ const PAGE_COPY = {
     badge: "Team Portal",
     cardSubtitle: "Gym Team Portal",
     emailPlaceholder: "team@fittrack.com",
-    heroAccent: "FITTRACK.",
+    heroTitle: "Ready to start the clock?",
     subtitle:
-      "Sign in with your FitTrack team account for admin, staff, or coach tools.",
+      "Welcome back, FitTrack team. Admins, staff, and coaches can jump into the tools that keep SertFit moving.",
+    showBadge: true,
   },
   member: {
-    badge: "Member Portal",
-    cardSubtitle: "Member Web Portal",
+    badge: "",
+    cardSubtitle: "Welcome to FitTrack!",
     emailPlaceholder: "member@fittrack.com",
-    heroAccent: "MEMBER ACCESS.",
-    subtitle:
-      "Sign in to view your bookings, facility map, workouts, and profile from the web.",
+    heroTitle: "Ready? Let's get started!",
+    subtitle: "Welcome to FitTrack!",
+    showBadge: false,
   },
 } as const;
 
 type LoginPortalVariant = keyof typeof PAGE_COPY;
+
+const LOGIN_SLASH_IMAGES = [
+  LOGIN_BACKGROUND_IMAGE_URL,
+  "url(https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80)",
+  "url(https://images.unsplash.com/photo-1534258936925-c58bed479fcb?w=1200&q=80)",
+  "url(https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1200&q=80)",
+  "url(https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=1200&q=80)",
+] as const;
+
+const MEMBER_LOGIN_SLASH_IMAGES = [
+  "url(https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1400&q=80)",
+  "url(https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=1400&q=80)",
+] as const;
 
 function getPortalLandingPath(role?: Role) {
   return getWebPortalFallbackPath(role);
@@ -59,6 +73,54 @@ function getLoginItemTransition(shouldAnimate: boolean, index: number) {
     duration: 0.4,
     ease: "easeOut" as const,
   };
+}
+
+function LoginSlashBackground({ variant }: { variant: LoginPortalVariant }) {
+  const orderedImages = variant === "team"
+    ? LOGIN_SLASH_IMAGES
+    : MEMBER_LOGIN_SLASH_IMAGES;
+  const isMember = variant === "member";
+
+  return (
+    <div
+      aria-hidden="true"
+      className="login-slash-background"
+      style={{
+        display: "grid",
+        gridTemplateColumns: isMember
+          ? "repeat(2, minmax(260px, 1fr))"
+          : "repeat(5, minmax(160px, 1fr))",
+        inset: 0,
+        overflow: "hidden",
+        position: "fixed",
+        zIndex: 0,
+      }}
+    >
+      {orderedImages.map((image, index) => (
+        <span
+          key={`${variant}-${index}`}
+          style={{
+            backgroundColor: "rgba(255,255,255,0.05)",
+            backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.76)), ${image}`,
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+            clipPath: isMember
+              ? index === 0
+                ? "polygon(0 0, 100% 0, 84% 100%, 0 100%)"
+                : "polygon(16% 0, 100% 0, 100% 100%, 0 100%)"
+              : index % 2 === 0
+                ? "polygon(18% 0, 100% 0, 82% 100%, 0 100%)"
+                : "polygon(0 0, 100% 0, 100% 100%, 18% 100%)",
+            filter: "saturate(0.85) contrast(1.08)",
+            marginLeft: index === 0 ? 0 : isMember ? "-10vw" : "-7vw",
+            minHeight: "100vh",
+            opacity: variant === "team" ? 0.78 : 0.7,
+            width: index === 0 ? "100%" : isMember ? "calc(100% + 10vw)" : "calc(100% + 7vw)",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function AdminLoginPage({
@@ -146,20 +208,19 @@ export function AdminLoginPage({
 
   return (
     <div className={themeTransition} style={styles.screen}>
-      <div
-        style={{
-          ...styles.bgOverlay,
-          backgroundImage: LOGIN_BACKGROUND_IMAGE_URL,
-        }}
-      />
-      <div style={styles.content}>
+      <div style={styles.bgOverlay} />
+      <LoginSlashBackground variant={variant} />
+      <div className={`login-content login-portal-${variant}`} style={styles.content}>
         <div className="hero-panel" style={styles.heroPanel}>
-          <div style={styles.heroPanelInner}>
+          <div
+            className="hero-panel-inner"
+            style={{
+              ...styles.heroPanelInner,
+              maxWidth: variant === "team" ? 680 : styles.heroPanelInner.maxWidth,
+            }}
+          >
             <FitText as="h1" style={styles.heroTitle}>
-              Welcome Back,
-            </FitText>
-              <FitText as="h1" style={styles.heroTitleAccent}>
-              {copy.heroAccent}
+              {copy.heroTitle}
             </FitText>
             <FitText as="p" style={styles.heroSubtitle}>
               {copy.subtitle}
@@ -168,20 +229,10 @@ export function AdminLoginPage({
         </div>
 
         <div className="login-card" style={styles.card}>
+          <Link className="auth-back-link" href="/" style={styles.backLink}>
+            &lt; Back to FitTrack
+          </Link>
           <div style={styles.cardInner}>
-            <Link
-              href="/"
-              style={{
-                alignSelf: "flex-start",
-                color: colors.textMuted,
-                fontSize: 13,
-                fontWeight: 800,
-                marginBottom: 18,
-                textDecoration: "none",
-              }}
-            >
-              Back to FitTrack
-            </Link>
             <div style={styles.cardHeader}>
               <motion.div
                 animate={{ opacity: 1, y: 0 }}
@@ -217,14 +268,16 @@ export function AdminLoginPage({
                 </FitText>
               </motion.div>
 
-              <motion.span
-                animate={{ opacity: 1, y: 0 }}
-                initial={itemInitial}
-                style={styles.badge}
-                transition={itemTransition(2)}
-              >
-                {copy.badge}
-              </motion.span>
+              {copy.showBadge ? (
+                <motion.span
+                  animate={{ opacity: 1, y: 0 }}
+                  initial={itemInitial}
+                  style={styles.badge}
+                  transition={itemTransition(2)}
+                >
+                  {copy.badge}
+                </motion.span>
+              ) : null}
             </div>
 
             <div style={styles.fields}>
@@ -350,6 +403,22 @@ export function AdminLoginPage({
       />
 
       <style>{`
+        .auth-back-link {
+          transition: color 160ms ease, text-shadow 160ms ease, filter 160ms ease;
+        }
+
+        .auth-back-link:hover,
+        .auth-back-link:focus-visible {
+          color: ${colors.brand} !important;
+          filter: drop-shadow(0 0 10px ${colors.brand}66);
+          outline: 0;
+          text-shadow: 0 0 16px ${colors.brand}88;
+        }
+
+        .hero-panel {
+          transition: opacity 240ms ease, flex-basis 240ms ease, padding 240ms ease;
+        }
+
         @media (min-width: 900px) {
           .hero-panel {
             display: flex !important;
@@ -357,6 +426,46 @@ export function AdminLoginPage({
             justify-content: flex-start;
             padding-right: 0;
             padding-left: 0;
+          }
+        }
+
+        @media (min-width: 900px) and (max-width: 1120px) {
+          .hero-panel {
+            flex: 0 1 44vw !important;
+          }
+
+          .hero-panel-inner {
+            max-width: 540px !important;
+          }
+        }
+
+        @media (max-width: 980px), (max-height: 560px) {
+          .login-content {
+            justify-content: center !important;
+          }
+
+          .hero-panel {
+            flex: 0 0 0 !important;
+            min-width: 0 !important;
+            opacity: 0 !important;
+            overflow: hidden !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            pointer-events: none !important;
+          }
+
+          .login-card {
+            margin: 0 auto !important;
+          }
+        }
+
+        @media (max-width: 899px) {
+          .login-content {
+            justify-content: center !important;
+          }
+
+          .login-card {
+            margin: 0 auto !important;
           }
         }
 
@@ -370,6 +479,14 @@ export function AdminLoginPage({
           .hero-panel {
             padding-left: 32px !important;
             padding-right: 18px !important;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .login-slash-background {
+            grid-auto-columns: minmax(150px, 48vw) !important;
+            grid-auto-flow: column !important;
+            grid-template-columns: none !important;
           }
         }
       `}</style>

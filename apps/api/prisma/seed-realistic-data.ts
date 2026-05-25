@@ -803,7 +803,7 @@ async function ensureAccount(account: RealisticAccount) {
       height_cm: heightCm !== null ? money(heightCm) : null,
       activity_level: activityLevel,
       fitness_goal: fitnessGoal,
-      avatar_url: `https://cdn.fittrack.local/avatars/${account.key}.png`,
+      avatar_url: null,
     },
     create: {
       id: id(`profile:${account.key}`),
@@ -817,7 +817,7 @@ async function ensureAccount(account: RealisticAccount) {
       height_cm: heightCm !== null ? money(heightCm) : null,
       activity_level: activityLevel,
       fitness_goal: fitnessGoal,
-      avatar_url: `https://cdn.fittrack.local/avatars/${account.key}.png`,
+      avatar_url: null,
     },
   });
 
@@ -1093,7 +1093,7 @@ async function ensureMembershipsAndPayments() {
     verified_by: accountId.staff,
     verified_at: nowPlusDays(-27, 9),
     screenshot_url:
-      'https://cdn.fittrack.local/payments/subscription-active.jpg',
+      null,
     gateway_metadata: json({ source: 'front_desk_cash' }),
   });
 
@@ -1171,11 +1171,11 @@ async function ensureFacilitiesAndCoaching() {
   const floorMedia = [
     {
       floor_id: 'floor-1',
-      image_url: 'https://cdn.fittrack.local/facilities/floor-1.png',
+      image_url: null,
     },
     {
       floor_id: 'floor-2',
-      image_url: 'https://cdn.fittrack.local/facilities/floor-2.png',
+      image_url: null,
     },
   ];
 
@@ -1201,7 +1201,7 @@ async function ensureFacilitiesAndCoaching() {
       grid_row: 1,
       grid_width: 6,
       grid_height: 4,
-      image_url: 'https://cdn.fittrack.local/facilities/basketball-court.jpg',
+      image_url: null,
       is_reservable: true,
       display_order: 1,
       floor_id: 'floor-1',
@@ -1221,7 +1221,7 @@ async function ensureFacilitiesAndCoaching() {
       grid_row: 3,
       grid_width: 5,
       grid_height: 4,
-      image_url: 'https://cdn.fittrack.local/facilities/boxing-ring.jpg',
+      image_url: null,
       is_reservable: true,
       display_order: 2,
       floor_id: 'floor-1',
@@ -1241,7 +1241,7 @@ async function ensureFacilitiesAndCoaching() {
       grid_row: 2,
       grid_width: 8,
       grid_height: 5,
-      image_url: 'https://cdn.fittrack.local/facilities/studio.jpg',
+      image_url: null,
       is_reservable: true,
       display_order: 3,
       floor_id: 'floor-2',
@@ -1685,7 +1685,7 @@ async function ensureFacilitiesAndCoaching() {
     amount: money(500),
     provider: PaymentProvider.cash,
     status: PaymentStatus.awaiting_verification,
-    screenshot_url: 'https://cdn.fittrack.local/payments/recurring-cycle.jpg',
+    screenshot_url: null,
   });
 
   for (let index = 0; index < 4; index += 1) {
@@ -1784,8 +1784,8 @@ async function ensureFitnessAndTraining() {
       category: ExerciseCategory.strength,
       description: 'Barbell squat with controlled depth and bracing.',
       instructions: 'Brace, descend to depth, drive through mid-foot.',
-      video_url: 'https://cdn.fittrack.local/exercises/back-squat.mp4',
-      image_url: 'https://cdn.fittrack.local/exercises/back-squat.jpg',
+      video_url: null,
+      image_url: null,
       is_active: true,
     },
     {
@@ -2482,7 +2482,7 @@ async function ensureInventoryAndSales() {
       cost: money(52),
       stock_quantity: 44,
       reorder_threshold: 12,
-      image_url: 'https://cdn.fittrack.local/inventory/whey-sachet.jpg',
+      image_url: null,
       is_active: true,
     },
     {
@@ -2495,7 +2495,7 @@ async function ensureInventoryAndSales() {
       stock_quantity: 8,
       reorder_threshold: 10,
       last_low_stock_alert_at: nowPlusDays(-1, 7),
-      image_url: 'https://cdn.fittrack.local/inventory/electrolyte-water.jpg',
+      image_url: null,
       is_active: true,
     },
   ];
@@ -2578,7 +2578,7 @@ async function ensureInventoryAndSales() {
     update: {
       name: 'Adjustable Bench',
       description: 'Commercial adjustable bench for free-weight area.',
-      image_url: 'https://cdn.fittrack.local/equipment/adjustable-bench.jpg',
+      image_url: null,
       quantity_total: 4,
       quantity_current: 3,
       unit: 'benches',
@@ -2588,7 +2588,7 @@ async function ensureInventoryAndSales() {
       id: id('equipment-item:adjustable-bench'),
       name: 'Adjustable Bench',
       description: 'Commercial adjustable bench for free-weight area.',
-      image_url: 'https://cdn.fittrack.local/equipment/adjustable-bench.jpg',
+      image_url: null,
       quantity_total: 4,
       quantity_current: 3,
       unit: 'benches',
@@ -3249,7 +3249,7 @@ async function ensureBulkOperationalData() {
           : PaymentStatus.processing,
       screenshot_url:
         index % 2 === 0
-          ? 'https://cdn.fittrack.local/payments/pending-membership-card.jpg'
+            ? null
           : null,
     });
   }

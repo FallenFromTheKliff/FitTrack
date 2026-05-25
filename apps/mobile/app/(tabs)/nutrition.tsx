@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { Bot, Flame, Plus, Target, UtensilsCrossed } from "lucide-react-native";
+import { Bot, Flame, Info, Plus, Target, UtensilsCrossed } from "lucide-react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
@@ -27,8 +27,8 @@ import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeNutritionStyles } from "@/styles/shared/ScreenStyles";
 import { mobileApiClient } from "@/lib/api-client";
+import FeatureHeader from "@/components/layout/FeatureHeader";
 
-import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import FitCard from "@/components/fit/FitCard";
 import { FitText } from "@/components/fit/FitText";
@@ -255,7 +255,8 @@ export default function NutritionScreen() {
     unregisterFAB,
     fireOpenGoals,
     openGoalsSignal,
-    resetSignal
+    resetSignal,
+    setFabOpen
   } = useFABState();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
@@ -376,11 +377,23 @@ export default function NutritionScreen() {
   const menuItems: FABMenuItem[] = useMemo(() => {
     if (isFrozen) return [];
     const targetAction: FABMenuItem = {
-      label: hasGoal ? "Recalculate Nutrition Target" : "Create Nutrition Goal",
+      label: hasGoal ? "Target" : "Create Target",
+      sub: hasGoal ? "Update calories" : "Set macros",
       icon: Target,
       iconColor: colors.brand,
       iconBg: colors.brand + "18",
       onPress: fireOpenGoals
+    };
+    const logAction: FABMenuItem = {
+      label: "Log Meal",
+      sub: "Add today's food",
+      icon: Plus,
+      iconColor: colors.success,
+      iconBg: colors.success + "18",
+      onPress: () => {
+        setFabOpen(false);
+        setLogVisible(true);
+      }
     };
 
     if (!isMember) {
@@ -389,8 +402,8 @@ export default function NutritionScreen() {
 
     const chatAction: FABMenuItem = hasMemberCardAccess
       ? {
-          label: "Launch BrodigyAI Mini-Chat",
-          sub: "Nutrition-focused coaching with today's live totals",
+          label: "BrodigyAI",
+          sub: "Nutrition chat",
           icon: Bot,
           iconColor: colors.brand,
           iconBg: colors.brand + "18",
@@ -403,23 +416,25 @@ export default function NutritionScreen() {
         }
       : {
           label: membershipCardStatus === "pending_verification"
-            ? "BrodigyAI Unlock Pending"
+            ? "Chat Pending"
             : membershipCardStatus === "revoked"
-              ? "Repair BrodigyAI Access"
-              : "Unlock BrodigyAI Chat",
+              ? "Repair Chat"
+              : "Unlock Chat",
           sub: membershipCardStatus === "pending_verification"
-            ? "Chat opens as soon as staff verifies your membership card"
+            ? "Awaiting card check"
             : membershipCardStatus === "revoked"
-              ? "Open Profile to restore your member-card access"
-              : "Buy or restore a membership card from Profile first",
+              ? "Open Profile"
+              : "Needs member card",
           icon: Bot,
           iconColor: colors.warning,
           iconBg: colors.warning + "18",
           onPress: () => router.push("/(tabs)/profile")
         };
 
-    return [chatAction, targetAction];
-  }, [colors.brand, colors.warning, fireOpenGoals, hasGoal, hasMemberCardAccess, isFrozen, isMember, membershipCardStatus, router]);
+    return canUseNutritionLogging
+      ? [chatAction, logAction, targetAction]
+      : [chatAction, targetAction];
+  }, [canUseNutritionLogging, colors.brand, colors.success, colors.warning, fireOpenGoals, hasGoal, hasMemberCardAccess, isFrozen, isMember, membershipCardStatus, router, setFabOpen]);
 
   useEffect(() => {
     if (openGoalsSignal && !isFrozen) {
@@ -445,6 +460,69 @@ export default function NutritionScreen() {
 
   return (
     <Animated.View style={base.screen}>
+      <FeatureHeader
+        icon={UtensilsCrossed}
+        iconMode="none"
+      >
+        <View style={s.headerSummary}>
+          <View style={s.headerTopRow}>
+            <View style={s.headerTitleStack}>
+              <FitText style={s.headerGoalName}>
+                {hasGoal ? goalLabel.toUpperCase() : "TARGET SETUP"}
+              </FitText>
+              <FitText style={s.headerCaloriesLabel}>TODAY'S CALORIES</FitText>
+            </View>
+            <View style={s.headerFlameIcon}>
+              <Flame size={30} color={colors.brand} strokeWidth={2.2} />
+            </View>
+          </View>
+          <FitText style={s.headerCaloriesValue}>
+            {isNutritionLoading ? "--" : today.toFixed(0)}
+          </FitText>
+          <FitText style={s.headerCaloriesTarget}>
+            {target > 0 ? `/ ${target.toFixed(0)} kcal` : "No active backend target yet"}
+          </FitText>
+          {target > 0 ? (
+            <>
+              <View style={s.headerCaloriesBar}>
+                <View
+                  style={[
+                    s.headerCaloriesBarFill,
+                    { width: `${Math.min(1, today / target) * 100}%` },
+                  ]}
+                />
+              </View>
+              <FitText style={s.headerCaloriesRemaining}>
+                {calorieDelta >= 0
+                  ? `${calorieDelta.toFixed(0)} kcal remaining`
+                  : `${Math.abs(calorieDelta).toFixed(0)} kcal over target`}
+              </FitText>
+              {!isFrozen ? (
+                <View style={s.headerHintRow}>
+                  <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
+                  <FitText style={s.headerCaloriesHint}>
+                    Use the FAB to update this target.
+                  </FitText>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <FitText style={s.headerCaloriesRemaining}>
+                Save your profile metrics and goal to unlock the live nutrition summary.
+              </FitText>
+              {!isFrozen ? (
+                <View style={s.headerHintRow}>
+                  <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
+                  <FitText style={s.headerCaloriesHint}>
+                    Use the FAB to set your target.
+                  </FitText>
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+      </FeatureHeader>
       <Animated.ScrollView
         style={[base.content, screenStyle]}
         contentContainerStyle={base.scrollContent}
@@ -453,63 +531,7 @@ export default function NutritionScreen() {
         scrollEventThrottle={16}
       >
         <Animated.View style={contentStyle}>
-          <View style={hasGoal ? s.caloriesCardActive : s.caloriesCard}>
-            {hasGoal ? (
-              <FitText style={s.caloriesGoalName}>{goalLabel.toUpperCase()}</FitText>
-            ) : null}
-            <FitText style={hasGoal ? s.caloriesLabelActive : s.caloriesLabel}>TODAY'S CALORIES</FitText>
-            <FitText style={hasGoal ? s.caloriesValueActive : s.caloriesValue}>
-              {isNutritionLoading ? "--" : today.toFixed(0)}
-            </FitText>
-            <FitText style={hasGoal ? s.caloriesTargetActive : s.caloriesTarget}>
-              {target > 0 ? `/ ${target.toFixed(0)} kcal` : "No active backend target yet"}
-            </FitText>
-            <View style={hasGoal ? s.caloriesFlameCircleActive : s.caloriesFlameCircle}>
-              <Flame size={16} color={hasGoal ? colors.onBrand : colors.brand} strokeWidth={2} />
-            </View>
-            {target > 0 ? (
-              <>
-                <View style={hasGoal ? s.caloriesBarActive : s.caloriesBar}>
-                  <View
-                    style={[
-                      hasGoal ? s.caloriesBarFillActive : s.caloriesBarFill,
-                      { width: `${Math.min(1, today / target) * 100}%` }
-                    ]}
-                  />
-                </View>
-                <FitText style={hasGoal ? s.caloriesRemainingActive : s.caloriesRemaining}>
-                  {calorieDelta >= 0
-                    ? `${calorieDelta.toFixed(0)} kcal remaining`
-                    : `${Math.abs(calorieDelta).toFixed(0)} kcal over target`}
-                </FitText>
-                {!isFrozen ? (
-                  <FitButton
-                    label="Recalculate Target"
-                    icon={Target}
-                    variant={hasGoal ? "ghost" : "primary"}
-                    onPress={() => setGoalsVisible(true)}
-                    style={{ marginTop: 12 }}
-                  />
-                ) : null}
-              </>
-            ) : (
-              <>
-                <FitText style={hasGoal ? s.caloriesRemainingActive : s.caloriesRemaining}>
-                  Save your profile metrics and goal to unlock the live nutrition summary.
-                </FitText>
-                {!isFrozen ? (
-                  <FitButton
-                    label="Set Nutrition Target"
-                    variant={hasGoal ? "ghost" : "primary"}
-                    onPress={() => setGoalsVisible(true)}
-                    style={{ marginTop: 12 }}
-                  />
-                ) : null}
-              </>
-            )}
-          </View>
-
-          <FitSection heading="Target Status">
+          <FitSection heading="Target Status" bare>
             <View style={s.cardList}>
               <FitCard
                 icon={Target}
@@ -578,7 +600,7 @@ export default function NutritionScreen() {
             </View>
           </FitSection>
 
-          <FitSection heading="Today's Nutrition Log">
+          <FitSection heading="Today's Nutrition Log" bare>
             {!canUseNutritionLogging ? (
               <PremiumFeatureGate
                 eyebrow="ACTIVE MEMBER REQUIRED"
@@ -589,17 +611,19 @@ export default function NutritionScreen() {
                 message={memberAccessSummary}
               />
             ) : nutritionLogs.data.length > 0 ? (
-              nutritionLogs.data.map((entry, index) => (
-                <FitCard
-                  key={entry.id}
-                  label={`${entry.mealName} - ${entry.foodItem}`}
-                  subtitle={formatNutritionLogSubtitle(entry)}
-                  trailingLabel={`${entry.quantity.toFixed(0)} ${entry.unit}`}
-                  trailingLabelColor={colors.brand}
-                  hasBorder={index < nutritionLogs.data.length - 1}
-                  noChevron
-                />
-              ))
+              <View style={s.cardList}>
+                {nutritionLogs.data.map((entry, index) => (
+                  <FitCard
+                    key={entry.id}
+                    label={`${entry.mealName} - ${entry.foodItem}`}
+                    subtitle={formatNutritionLogSubtitle(entry)}
+                    trailingLabel={`${entry.quantity.toFixed(0)} ${entry.unit}`}
+                    trailingLabelColor={colors.brand}
+                    hasBorder={index < nutritionLogs.data.length - 1}
+                    noChevron
+                  />
+                ))}
+              </View>
             ) : (
               <View style={s.contentCard}>
                 <FitText style={s.matchBadge}>NO LOGS YET</FitText>
@@ -610,13 +634,12 @@ export default function NutritionScreen() {
               </View>
             )}
             {!isFrozen && canUseNutritionLogging ? (
-              <FitButton
-                label="Log Meal"
-                icon={Plus}
-                variant="primary"
-                onPress={() => setLogVisible(true)}
-                style={{ marginTop: 12 }}
-              />
+              <View style={s.logFabHintRow}>
+                <Info size={14} color={colors.textMuted} strokeWidth={2} />
+                <FitText style={s.logFabHint}>
+                  Use the FAB to log meals.
+                </FitText>
+              </View>
             ) : null}
           </FitSection>
 

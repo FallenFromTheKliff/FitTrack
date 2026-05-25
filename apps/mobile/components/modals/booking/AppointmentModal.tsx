@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -10,11 +9,7 @@ import {
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CheckCircle, Clock, Users } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  isPaymongoCheckoutEnabled,
-  PAYMONGO_AVAILABILITY,
-  WEEKDAY_NAMES,
-} from "@fittrack/app-config";
+import { WEEKDAY_NAMES } from "@fittrack/app-config";
 
 import type { CoachAvailabilityResponse } from "@fittrack/api-client";
 import type { CoachProfileRecord } from "@fittrack/types";
@@ -22,7 +17,6 @@ import {
   activeCoachesQueryOptions,
   coachAvailabilityQueryOptions,
   createAppointmentMutationOptions,
-  payAppointmentDownpaymentMutationOptions,
 } from "@fittrack/query";
 import {
   expandCoachAvailabilitySlots,
@@ -58,21 +52,10 @@ type CoachRecord = CoachProfileRecord;
 
 type AppointmentStep = "coach" | "time";
 type AppointmentPlanMode = "single" | "pack" | "recurring";
-type AppointmentPaymentOption =
-  | "cash_downpayment"
-  | "cash_full"
-  | "paymongo_downpayment";
 type AppointmentConfirmationState = {
   message: string;
   title: string;
   yesLabel: string;
-};
-type PaymentOptionCard = {
-  body: string;
-  disabled?: boolean;
-  key: AppointmentPaymentOption;
-  subtitle: string;
-  title: string;
 };
 type PlanOptionCard = {
   body: string;
@@ -244,24 +227,17 @@ export default function AppointmentModal({
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeAppointmentModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
-  const canUsePaymongo = isPaymongoCheckoutEnabled();
-  const defaultPaymentOption: AppointmentPaymentOption = canUsePaymongo
-    ? "paymongo_downpayment"
-    : "cash_downpayment";
   const [step, setStep] = useState<AppointmentStep>("coach");
   const [planMode, setPlanMode] = useState<AppointmentPlanMode>("single");
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [selectedSlotLabel, setSelectedSlotLabel] = useState("");
-  const [paymentOption, setPaymentOption] =
-    useState<AppointmentPaymentOption>(defaultPaymentOption);
   const [appointmentConfirmation, setAppointmentConfirmation] =
     useState<AppointmentConfirmationState | null>(null);
   const [successNotice, setSuccessNotice] = useState<{
     message: string;
     title: string;
   } | null>(null);
-  const [isPaymongoNoticeOpen, setIsPaymongoNoticeOpen] = useState(false);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -338,10 +314,8 @@ export default function AppointmentModal({
   );
   const isSelectedCoachDateBooked =
     selectedCoach != null && bookedCoachDateSet.has(selectedDate);
-  const currentMinutes = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  }, [isTimeOpen, isVisible, selectedDate]);
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const slotOptions = useMemo<SlotOption[]>(() => {
     if (!availability?.availability) {
@@ -396,22 +370,24 @@ export default function AppointmentModal({
   const createAppointmentMutation = useMutation(
     createAppointmentMutationOptions(mobileApiClient, queryClient),
   );
-  const payAppointmentMutation = useMutation(
-    payAppointmentDownpaymentMutationOptions(mobileApiClient, queryClient),
-  );
 
   const bookingLabel = useLoadingText(
-    "BOOKING APPOINTMENT",
-    createAppointmentMutation.isPending || payAppointmentMutation.isPending,
+    "SENDING REQUEST",
+    createAppointmentMutation.isPending,
   );
 
+  const selectedCoachRate = useMemo(() => {
+    if (!selectedCoach || selectedCoach.hourlyRate == null) return null;
+    const rate = Number(selectedCoach.hourlyRate);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+  }, [selectedCoach]);
+  const hasSelectedSlot = selectedSlot != null;
+  const hasValidCoachRate = selectedCoachRate != null;
   const estimatedTotalAmount = useMemo(() => {
-    if (!selectedCoach || !selectedSlot) return 0;
-    const rate = Number(selectedCoach.hourlyRate ?? 0);
-    if (!Number.isFinite(rate) || rate <= 0) return 0;
+    if (!selectedSlot || selectedCoachRate == null) return 0;
     const slotHours = selectedSlot.durationMin / 60;
-    return roundCurrency(rate * slotHours);
-  }, [selectedCoach, selectedSlot]);
+    return roundCurrency(selectedCoachRate * slotHours);
+  }, [selectedCoachRate, selectedSlot]);
   const selectedPlan = useMemo(
     () =>
       PLAN_OPTION_CARDS.find((option) => option.key === planMode) ??
@@ -426,86 +402,44 @@ export default function AppointmentModal({
     () => roundCurrency(Math.max(0, estimatedTotalAmount - splitAmountDueNow)),
     [estimatedTotalAmount, splitAmountDueNow],
   );
-  const isFreeAppointment = estimatedTotalAmount <= 0;
-  const amountDueNow =
-    paymentOption === "cash_full"
-      ? estimatedTotalAmount
-      : splitAmountDueNow;
-  const remainingBalance =
-    paymentOption === "cash_full" ? 0 : splitRemainingBalance;
-  const paymentProvider =
-    paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
-  const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
-  const paymentOptionSummary = useMemo(() => {
-    if (isFreeAppointment) {
+  const canShowPaymentBreakdown = hasSelectedSlot && hasValidCoachRate;
+  const totalAmountLabel = canShowPaymentBreakdown
+    ? formatCurrency(estimatedTotalAmount)
+    : "Pending";
+  const downpaymentLabel = canShowPaymentBreakdown
+    ? formatCurrency(splitAmountDueNow)
+    : "Pending";
+  const remainingBalanceLabel = canShowPaymentBreakdown
+    ? formatCurrency(splitRemainingBalance)
+    : "Pending";
+  const paymentEstimateSummary = useMemo(() => {
+    if (!hasSelectedSlot) {
       return {
-        body: "This coach session currently prices at PHP 0, so no upfront payment is required.",
-        eyebrow: "Free access",
-        title: "No checkout required",
+        body: "Choose a live available slot before FitTrack calculates pricing.",
+        eyebrow: "Slot required",
+        title: "Payment estimate pending",
       };
     }
 
-    if (paymentOption === "cash_full") {
+    if (!hasValidCoachRate) {
       return {
-        body: `Submit a full cash payment request for ${formatCurrency(estimatedTotalAmount)}. Staff will still verify the payment before the session is treated as fully paid.`,
-        eyebrow: "Cash",
-        title: "Full payment",
-      };
-    }
-
-    if (paymentOption === "cash_downpayment") {
-      return {
-        body: `Submit a cash downpayment now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the session date.`,
-        eyebrow: "Cash",
-        title: "Split payment",
+        body: "This coach does not have a valid session rate yet. Staff must update the coach profile before members can book.",
+        eyebrow: "Rate pending",
+        title: "Request locked",
       };
     }
 
     return {
-      body: `Start PayMongo checkout for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the session date.`,
-      eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
-      title: "Online downpayment",
+      body: `Estimated total is ${formatCurrency(estimatedTotalAmount)}. After the coach accepts, open Bookings to choose PayMongo or cash for the ${formatCurrency(splitAmountDueNow)} downpayment or full payment.`,
+      eyebrow: "After coach acceptance",
+      title: "Payment unlocks later",
     };
   }, [
-    canUsePaymongo,
     estimatedTotalAmount,
-    isFreeAppointment,
-    paymentOption,
+    hasSelectedSlot,
+    hasValidCoachRate,
     splitAmountDueNow,
-    splitRemainingBalance,
   ]);
-  const paymentOptionCards = useMemo<PaymentOptionCard[]>(
-    () => [
-      {
-        body: canUsePaymongo
-          ? `Pay now ${formatCurrency(splitAmountDueNow)}`
-          : "PayMongo is unavailable right now.",
-        disabled: !canUsePaymongo,
-        key: "paymongo_downpayment",
-        subtitle: `Leave ${formatCurrency(splitRemainingBalance)} for later.`,
-        title: "PayMongo Downpayment",
-      },
-      {
-        body: `Pay now ${formatCurrency(splitAmountDueNow)}`,
-        key: "cash_downpayment",
-        subtitle: `Settle ${formatCurrency(splitRemainingBalance)} on or after the session date.`,
-        title: "Cash Downpayment",
-      },
-      {
-        body: `Pay now ${formatCurrency(estimatedTotalAmount)}`,
-        key: "cash_full",
-        subtitle:
-          "No remaining balance after staff verifies the payment.",
-        title: "Cash Full Payment",
-      },
-    ],
-    [
-      canUsePaymongo,
-      estimatedTotalAmount,
-      splitAmountDueNow,
-      splitRemainingBalance,
-    ],
-  );
 
   const backdropStyle = useAnimatedStyle(() => ({
     backgroundColor: ic.value.overlay,
@@ -557,10 +491,7 @@ export default function AppointmentModal({
   ]);
 
   const resetAndClose = () => {
-    if (
-      createAppointmentMutation.isPending ||
-      payAppointmentMutation.isPending
-    ) {
+    if (createAppointmentMutation.isPending) {
       return;
     }
     setStep("coach");
@@ -568,10 +499,8 @@ export default function AppointmentModal({
     setPlanMode("single");
     setSelectedDate(getTodayString());
     setSelectedSlotLabel("");
-    setPaymentOption(defaultPaymentOption);
     setAppointmentConfirmation(null);
     setSuccessNotice(null);
-    setIsPaymongoNoticeOpen(false);
     setIsCalOpen(false);
     setIsTimeOpen(false);
     setErrorText("");
@@ -592,22 +521,17 @@ export default function AppointmentModal({
       setErrorText("Select both date and time.");
       return;
     }
+    if (!hasValidCoachRate) {
+      setErrorText("This coach does not have a valid session rate yet.");
+      return;
+    }
     if (isSelectedCoachDateBooked) {
       setErrorText("This coach already has a booking on the selected date.");
       return;
     }
-    if (
-      !isFreeAppointment &&
-      paymentProvider === "paymongo" &&
-      !canUsePaymongo
-    ) {
-      setIsPaymongoNoticeOpen(true);
-      return;
-    }
     setErrorText("");
-    let appointmentId: string | null = null;
     try {
-      const createdAppointment = await createAppointmentMutation.mutateAsync({
+      await createAppointmentMutation.mutateAsync({
         payload: {
           coachId: String(selectedCoach.id),
           scheduledAt: toGymWallClockIso(selectedDate, selectedSlot.startTime),
@@ -616,52 +540,11 @@ export default function AppointmentModal({
           sessionCount: selectedPlan.sessionCount,
         },
       });
-      appointmentId = createdAppointment.id;
-
-      if (isFreeAppointment) {
-        onSuccess?.();
-        setSuccessNotice({
-          title: "Appointment confirmed",
-          message: `${getCoachName(selectedCoach)} is now reserved for ${formatBookingDate(selectedDate)} at ${selectedSlot.label}.`,
-        });
-        setAppointmentConfirmation(null);
-        setStep("coach");
-        setSelectedCoachId(null);
-        setPlanMode("single");
-        setSelectedDate(getTodayString());
-        setSelectedSlotLabel("");
-        setPaymentOption(defaultPaymentOption);
-        setErrorText("");
-        return;
-      }
-
-      const paymentResult = await payAppointmentMutation.mutateAsync({
-        appointmentId: createdAppointment.id,
-        paymentStage,
-        provider: paymentProvider,
-      });
-
-      if (paymentResult.checkoutUrl) {
-        onSuccess?.();
-        setAppointmentConfirmation(null);
-        resetAndClose();
-        void Linking.openURL(paymentResult.checkoutUrl);
-        return;
-      }
-
-      const successTitle =
-        paymentOption === "cash_full"
-          ? "Cash payment submitted"
-          : "Downpayment submitted";
-      const successMessage =
-        paymentOption === "cash_full"
-          ? `Your coach appointment is pending staff verification for the full cash payment of ${formatCurrency(estimatedTotalAmount)}.`
-          : `Your coach appointment is pending staff verification for the upfront ${formatCurrency(amountDueNow)}. The remaining ${formatCurrency(remainingBalance)} can be collected on or after ${formatBookingDate(selectedDate)}.`;
 
       onSuccess?.();
       setSuccessNotice({
-        title: successTitle,
-        message: successMessage,
+        title: "Coach request sent",
+        message: `${getCoachName(selectedCoach)} received your ${selectedPlan.title.toLowerCase()} request for ${formatBookingDate(selectedDate)} at ${selectedSlot.label}. Payment options will appear in Bookings after the coach accepts.`,
       });
       setAppointmentConfirmation(null);
       setStep("coach");
@@ -669,17 +552,10 @@ export default function AppointmentModal({
       setPlanMode("single");
       setSelectedDate(getTodayString());
       setSelectedSlotLabel("");
-      setPaymentOption(defaultPaymentOption);
       setErrorText("");
     } catch (error: unknown) {
       setErrorText(
-        appointmentId
-          ? error instanceof Error
-            ? `${error.message} The appointment was created, but payment did not finish. You can continue payment from the booking details.`
-            : "The appointment was created, but payment did not finish. You can continue payment from the booking details."
-          : error instanceof Error
-            ? error.message
-            : "Unable to book appointment.",
+        error instanceof Error ? error.message : "Unable to request appointment.",
       );
     }
   };
@@ -687,6 +563,10 @@ export default function AppointmentModal({
   const handleConfirm = () => {
     if (!selectedCoach || !selectedSlot) {
       setErrorText("Select both date and time.");
+      return;
+    }
+    if (!hasValidCoachRate) {
+      setErrorText("This coach does not have a valid session rate yet.");
       return;
     }
     if (isSelectedCoachDateBooked) {
@@ -703,37 +583,10 @@ export default function AppointmentModal({
           ? "This reserves the first session and flags the booking as a 3-session pack request for staff confirmation."
           : "This reserves the first session and flags the booking as a recurring coach plan request for admin confirmation.";
 
-    if (isFreeAppointment) {
-      setAppointmentConfirmation({
-        title: "Confirm coach appointment?",
-        message: `Book ${coachName} for ${scheduleLabel}. ${planCopy} No upfront payment will be collected for this session.`,
-        yesLabel: "Confirm Appointment",
-      });
-      return;
-    }
-
-    if (paymentOption === "paymongo_downpayment") {
-      setAppointmentConfirmation({
-        title: "Continue to PayMongo?",
-        message: `You are about to start PayMongo checkout for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. ${planCopy} The remaining ${formatCurrency(remainingBalance)} stays due on or after the session date.`,
-        yesLabel: "Continue to PayMongo",
-      });
-      return;
-    }
-
-    if (paymentOption === "cash_full") {
-      setAppointmentConfirmation({
-        title: "Submit full cash payment?",
-        message: `Submit a full cash payment request for ${formatCurrency(estimatedTotalAmount)} for ${coachName} on ${scheduleLabel}. ${planCopy} Staff will still verify the payment before it is treated as fully paid.`,
-        yesLabel: "Submit Full Payment",
-      });
-      return;
-    }
-
     setAppointmentConfirmation({
-      title: "Submit cash downpayment?",
-      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${coachName} on ${scheduleLabel}. ${planCopy} The remaining ${formatCurrency(remainingBalance)} will stay due on or after the session date.`,
-      yesLabel: "Submit Downpayment",
+      title: "Send coach request?",
+      message: `Request ${coachName} for ${scheduleLabel}. ${planCopy} Estimated total is ${formatCurrency(estimatedTotalAmount)}. Payment options become available in Bookings after the coach accepts.`,
+      yesLabel: "Send Request",
     });
   };
 
@@ -744,7 +597,6 @@ export default function AppointmentModal({
           isVisible &&
           appointmentConfirmation == null &&
           successNotice == null &&
-          !isPaymongoNoticeOpen &&
           !isCalOpen &&
           !isTimeOpen
         }
@@ -1125,94 +977,36 @@ export default function AppointmentModal({
                     <View style={s.paymentHeaderRow}>
                       <View>
                         <FitText style={s.previewSectionTitle}>
-                          PAYMENT OPTIONS
+                          PAYMENT ESTIMATE
                         </FitText>
                         <FitText style={s.helperText}>
-                          Choose how this coach appointment should be charged.
+                          Payment options unlock after the coach accepts this request.
                         </FitText>
                       </View>
                     </View>
-                    <View style={s.paymentOptionList}>
-                      {paymentOptionCards.map((option) => {
-                        const isActive = paymentOption === option.key;
-                        return (
-                          <Pressable
-                            key={option.key}
-                            style={[
-                              s.paymentOptionCard,
-                              isActive && {
-                                borderColor: colors.brand,
-                                backgroundColor: colors.brand + "12",
-                              },
-                              option.disabled && s.paymentOptionCardDisabled,
-                            ]}
-                            onPress={() => {
-                              if (option.disabled) return;
-                              setPaymentOption(option.key);
-                              setErrorText("");
-                            }}
-                            disabled={option.disabled}
-                          >
-                            <View style={{ flex: 1, gap: 4 }}>
-                              <FitText
-                                style={[
-                                  s.paymentOptionTitle,
-                                  option.disabled && s.paymentOptionTitleDisabled,
-                                ]}
-                              >
-                                {option.title}
-                              </FitText>
-                              <FitText
-                                style={[
-                                  s.paymentOptionBody,
-                                  option.disabled && s.paymentOptionBodyDisabled,
-                                ]}
-                              >
-                                {option.body}
-                              </FitText>
-                              <FitText
-                                style={[
-                                  s.paymentOptionBody,
-                                  option.disabled && s.paymentOptionBodyDisabled,
-                                ]}
-                              >
-                                {option.subtitle}
-                              </FitText>
-                            </View>
-                            {isActive ? (
-                              <CheckCircle
-                                size={18}
-                                color={colors.brand}
-                                strokeWidth={2}
-                              />
-                            ) : null}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
                     <View style={s.paymentSummaryCard}>
                       <FitText style={s.previewSectionTitle}>
-                        {paymentOptionSummary.eyebrow}
+                        {paymentEstimateSummary.eyebrow}
                       </FitText>
                       <FitText style={s.previewTitle}>
-                        {paymentOptionSummary.title}
+                        {paymentEstimateSummary.title}
                       </FitText>
                       <FitText style={s.previewPlainText}>
-                        {paymentOptionSummary.body}
+                        {paymentEstimateSummary.body}
                       </FitText>
                       <View style={s.paymentBreakdownRow}>
                         <View style={s.paymentBreakdownColumn}>
                           <FitText style={s.previewSectionTitle}>TOTAL</FitText>
                           <FitText style={s.paymentBreakdownValue}>
-                            {formatCurrency(estimatedTotalAmount)}
+                            {totalAmountLabel}
                           </FitText>
                         </View>
                         <View style={s.paymentBreakdownColumn}>
                           <FitText style={s.previewSectionTitle}>
-                            DUE NOW
+                            DOWNPAYMENT
                           </FitText>
                           <FitText style={s.paymentBreakdownValue}>
-                            {formatCurrency(amountDueNow)}
+                            {downpaymentLabel}
                           </FitText>
                         </View>
                         <View style={s.paymentBreakdownColumn}>
@@ -1220,7 +1014,7 @@ export default function AppointmentModal({
                             REMAINING
                           </FitText>
                           <FitText style={s.paymentBreakdownValue}>
-                            {formatCurrency(remainingBalance)}
+                            {remainingBalanceLabel}
                           </FitText>
                         </View>
                       </View>
@@ -1249,15 +1043,12 @@ export default function AppointmentModal({
                 disabled={
                   step === "time"
                     ? !selectedSlot ||
+                      !hasValidCoachRate ||
                       isSelectedCoachDateBooked ||
-                      createAppointmentMutation.isPending ||
-                      payAppointmentMutation.isPending
+                      createAppointmentMutation.isPending
                     : !selectedCoach || coachesLoading
                 }
-                loading={
-                  createAppointmentMutation.isPending ||
-                  payAppointmentMutation.isPending
-                }
+                loading={createAppointmentMutation.isPending}
                 flex={2}
               />
             </Animated.View>
@@ -1291,13 +1082,6 @@ export default function AppointmentModal({
         onClose={() => setIsTimeOpen(false)}
       />
       <NoticeModal
-        isVisible={isPaymongoNoticeOpen}
-        title={PAYMONGO_AVAILABILITY.modalTitle}
-        message={PAYMONGO_AVAILABILITY.modalBody}
-        buttonLabel="Got it"
-        onClose={() => setIsPaymongoNoticeOpen(false)}
-      />
-      <NoticeModal
         isVisible={successNotice != null}
         title={successNotice?.title ?? "Appointment updated"}
         message={successNotice?.message ?? ""}
@@ -1313,16 +1097,11 @@ export default function AppointmentModal({
         message={appointmentConfirmation?.message ?? ""}
         yesLabel={appointmentConfirmation?.yesLabel ?? "Confirm"}
         noLabel="Cancel"
-        isLoading={
-          createAppointmentMutation.isPending || payAppointmentMutation.isPending
-        }
+        isLoading={createAppointmentMutation.isPending}
         loadingLabel={bookingLabel}
         loadingTitle="Submitting appointment"
         onNo={() => {
-          if (
-            createAppointmentMutation.isPending ||
-            payAppointmentMutation.isPending
-          ) {
+          if (createAppointmentMutation.isPending) {
             return;
           }
           setAppointmentConfirmation(null);

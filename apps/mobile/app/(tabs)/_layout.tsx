@@ -4,7 +4,6 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-na
 import { Tabs, useGlobalSearchParams, useRouter, useSegments } from "expo-router";
 import { Bell, HelpCircle, LogOut } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notificationUnreadCountQueryOptions } from "@fittrack/query";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,10 +18,17 @@ import Sidebar, { SIDEBAR_NAV_LABELS_BY_TAB } from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header";
 import SettingsModal from "@/components/modals/settings/SettingsModal";
 import NotificationInboxPanel from "@/components/settings/NotificationInboxPanel";
+import AutoHelpDismissCheckbox from "@/components/help/AutoHelpDismissCheckbox";
 import MobileHelpPanel from "@/components/help/MobileHelpPanel";
 import { getMobileHelpContent } from "@/components/help/mobileHelpContent";
 import { ConfirmModal, ReservationModal } from "@/components/modals";
 import { mobileApiClient } from "@/lib/api-client";
+import {
+  AUTO_HELP_TABS,
+  dismissAutoHelpForAll,
+  dismissAutoHelpForTab,
+  isAutoHelpDismissed,
+} from "@/lib/help-preferences";
 
 const TAB_ROUTES: TabKey[] = [
   "home", "facilities", "bookings", "assessments", "nutrition", "mastery", "workout",
@@ -34,9 +40,6 @@ const TAB_SCREEN_OPTIONS = {
   tabBarStyle: { display: "none" as const },
   detachInactiveScreens: true
 };
-
-const AUTO_HELP_TABS: TabKey[] = ["nutrition", "mastery", "workout", "chatbot"];
-const AUTO_HELP_STORAGE_PREFIX = "fittrack:auto-help-dismissed:";
 
 const s = StyleSheet.create({
   container: { flex: 1 },
@@ -82,6 +85,8 @@ function TabsLayoutInner() {
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [helpVisible, setHelpVisible] = useState(false);
   const [autoHelpTab, setAutoHelpTab] = useState<TabKey | null>(null);
+  const [neverAutoHelpChecked, setNeverAutoHelpChecked] = useState(false);
+  const [helpDismissScopeVisible, setHelpDismissScopeVisible] = useState(false);
 
   const { opacity } = usePassageAnim();
   const entranceStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
@@ -129,11 +134,10 @@ function TabsLayoutInner() {
   useEffect(() => {
     if (!user?.id || !isAutoHelpEligible) return;
     let isMounted = true;
-    const storageKey = `${AUTO_HELP_STORAGE_PREFIX}${user.id}:${activeTab}`;
-
-    AsyncStorage.getItem(storageKey)
-      .then((value) => {
-        if (!isMounted || value === "1") return;
+    isAutoHelpDismissed(user.id, activeTab)
+      .then((dismissed) => {
+        if (!isMounted || dismissed) return;
+        setNeverAutoHelpChecked(false);
         setAutoHelpTab(activeTab);
         setHelpVisible(true);
       })
@@ -151,6 +155,42 @@ function TabsLayoutInner() {
 
   const handleFabPress = (nowOpen: boolean) => {
     setFabOpen(nowOpen);
+  };
+
+  const closeHelp = () => {
+    setHelpVisible(false);
+    setAutoHelpTab(null);
+    setNeverAutoHelpChecked(false);
+  };
+
+  const handleHelpClose = () => {
+    if (
+      neverAutoHelpChecked &&
+      autoHelpTab === activeTab &&
+      isAutoHelpEligible &&
+      user?.id
+    ) {
+      setHelpDismissScopeVisible(true);
+      return;
+    }
+
+    closeHelp();
+  };
+
+  const handleDismissCurrentHelp = async () => {
+    if (user?.id && autoHelpTab) {
+      await dismissAutoHelpForTab(user.id, autoHelpTab);
+    }
+    setHelpDismissScopeVisible(false);
+    closeHelp();
+  };
+
+  const handleDismissAllHelp = async () => {
+    if (user?.id) {
+      await dismissAutoHelpForAll(user.id);
+    }
+    setHelpDismissScopeVisible(false);
+    closeHelp();
   };
 
   if (isLoading || !isAuthenticated) return null;
@@ -171,6 +211,7 @@ function TabsLayoutInner() {
         onMenuPress={handleMenuPress}
         onHelpPress={() => {
           setAutoHelpTab(null);
+          setNeverAutoHelpChecked(false);
           setHelpVisible(true);
         }}
         onNotificationsPress={() => setNotificationsVisible(true)}
@@ -254,7 +295,6 @@ function TabsLayoutInner() {
         visible={notificationsVisible}
         title="Notifications"
         icon={Bell}
-        showScrollHint
         onClose={() => setNotificationsVisible(false)}
       >
         <NotificationInboxPanel onClose={() => setNotificationsVisible(false)} />
@@ -263,29 +303,36 @@ function TabsLayoutInner() {
         visible={helpVisible}
         title={activeHelpTitle}
         icon={HelpCircle}
-        hideHeaderClose
         showFixedCloseButton
         showScrollHint
-        onClose={() => {
-          setHelpVisible(false);
-          setAutoHelpTab(null);
-        }}
+        fixedFooterAccessory={
+          autoHelpTab === activeTab && isAutoHelpEligible ? (
+            <AutoHelpDismissCheckbox
+              checked={neverAutoHelpChecked}
+              onToggle={() => setNeverAutoHelpChecked((checked) => !checked)}
+            />
+          ) : undefined
+        }
+        onClose={handleHelpClose}
       >
-        <MobileHelpPanel
-          content={activeHelpContent}
-          showNeverShowAgain={autoHelpTab === activeTab && isAutoHelpEligible}
-          onNeverShowAgain={() => {
-            if (user?.id) {
-              void AsyncStorage.setItem(
-                `${AUTO_HELP_STORAGE_PREFIX}${user.id}:${activeTab}`,
-                "1",
-              );
-            }
-            setHelpVisible(false);
-            setAutoHelpTab(null);
+        <MobileHelpPanel content={activeHelpContent} />
+      </SettingsModal>
+      {helpDismissScopeVisible ? (
+        <ConfirmModal
+          isVisible={helpDismissScopeVisible}
+          title="Hide automatic Help?"
+          message="Apply this choice to every automatic Help modal or only this screen? You can turn automatic Help back on in Settings."
+          yesLabel="All Help"
+          noLabel="Just This"
+          yesIcon={HelpCircle}
+          onNo={() => {
+            void handleDismissCurrentHelp();
+          }}
+          onYes={() => {
+            void handleDismissAllHelp();
           }}
         />
-      </SettingsModal>
+      ) : null}
     </Animated.View>
   );
 }

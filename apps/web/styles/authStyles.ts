@@ -6,14 +6,14 @@ export function authStyles(colors: ThemeColors) {
     screen: {
       minHeight: "100vh",
       display: "flex",
-      backgroundColor: colors.base
+      backgroundColor: "#050505",
+      overflow: "hidden"
     } as CSSProperties,
     bgOverlay: {
       position: "fixed",
       inset: 0,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      filter: "brightness(0.25)",
+      background:
+        "radial-gradient(circle at 12% 18%, rgba(255,122,0,0.16), transparent 28%), linear-gradient(135deg, rgba(0,0,0,0.98), rgba(0,0,0,0.76))",
       zIndex: 0
     } as CSSProperties,
     content: {
@@ -87,10 +87,11 @@ export function authStyles(colors: ThemeColors) {
       letterSpacing: 0.4
     } as CSSProperties,
     card: {
-      backgroundColor: `${colors.surface}CC`,
+      backgroundColor: `color-mix(in srgb, ${colors.surface} 78%, black)`,
       border: `1px solid ${colors.border}`,
       borderRadius: 0,
       padding: "48px 41px",
+      position: "relative",
       width: "min(100%, 560px)",
       maxWidth: 560,
       minWidth: 320,
@@ -98,8 +99,19 @@ export function authStyles(colors: ThemeColors) {
       display: "flex",
       flexDirection: "column",
       justifyContent: "center",
-      backdropFilter: "blur(4px)",
+      backdropFilter: "blur(10px)",
+      boxShadow: "0 0 90px rgba(0,0,0,0.45)",
       flexShrink: 0
+    } as CSSProperties,
+    backLink: {
+      position: "absolute",
+      left: 28,
+      top: 26,
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: 800,
+      textDecoration: "none",
+      zIndex: 2
     } as CSSProperties,
     cardInner: {
       width: "100%",

@@ -15,6 +15,7 @@ import {
   COACH_DECISION_LABELS,
   actionPillStyle,
   buildStatusTone,
+  canCancelUntilDayBefore,
   formatAppointmentWindow,
   formatCompactDate,
   formatPeso,
@@ -30,6 +31,7 @@ import {
 export function GymOperationsCoachAppointmentModal({
   appointment,
   billingCycles = [],
+  canManageRecurringPlan = false,
   coachReadiness,
   isOpen,
   isCoachView = false,
@@ -50,6 +52,7 @@ export function GymOperationsCoachAppointmentModal({
 }: {
   appointment: StaffAppointmentRecord | null;
   billingCycles?: RecurringCoachingBillingCycleRecord[];
+  canManageRecurringPlan?: boolean;
   coachReadiness: CoachReadinessSummary;
   isOpen: boolean;
   isCoachView?: boolean;
@@ -89,6 +92,9 @@ export function GymOperationsCoachAppointmentModal({
   const canConfirm = status === "pending_coach";
   const canComplete = status === "confirmed";
   const canCollectInitialPayment = status === "pending_payment";
+  const canCancelAppointment = canCancelUntilDayBefore(
+    appointment?.scheduledAt,
+  );
   const hasAwaitingPayment =
     status === "pending_payment" &&
     appointment?.activePaymentStatus === "awaiting_verification" &&
@@ -189,6 +195,10 @@ export function GymOperationsCoachAppointmentModal({
         ? colors.success
         : colors.warning
       : colors.textMuted;
+  const isTerminalStatus =
+    status === "cancelled" || status === "completed" || status === "no_show";
+  const cancellationClosed =
+    Boolean(appointment) && !isTerminalStatus && !canCancelAppointment;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -196,7 +206,13 @@ export function GymOperationsCoachAppointmentModal({
     setAssessmentReport(appointment?.assessmentReport ?? "");
     setCoachFeedback(appointment?.coachFeedback ?? "");
     setSessionNotes(appointment?.sessionNotes ?? "");
-  }, [isOpen, appointment?.id]);
+  }, [
+    isOpen,
+    appointment?.assessmentReport,
+    appointment?.coachFeedback,
+    appointment?.id,
+    appointment?.sessionNotes,
+  ]);
 
   const title = isCoachView
     ? canConfirm
@@ -209,14 +225,17 @@ export function GymOperationsCoachAppointmentModal({
       : "Review the current session state and resolve your coach-side action."
     : "Verify payment, booking status, and remaining balances without switching away from Gym Operations.";
   const coachDecisionOptions = useMemo<CoachDecision[]>(() => {
+    const withCancel = (options: CoachDecision[]): CoachDecision[] =>
+      canCancelAppointment ? [...options, "cancel"] : options;
+
     if (isCoachView) {
-      if (canConfirm) return ["confirm", "reject", "cancel"];
-      if (canComplete) return ["mark_complete", "cancel"];
-      if (status === "cancelled" || status === "completed" || status === "no_show") return [];
-      return ["cancel"];
+      if (canConfirm) return withCancel(["confirm", "reject"]);
+      if (canComplete) return withCancel(["mark_complete"]);
+      if (isTerminalStatus) return [];
+      return canCancelAppointment ? ["cancel"] : [];
     }
     if (canConfirm) {
-      return ["confirm", "reject", "cancel"];
+      return withCancel(["confirm", "reject"]);
     }
     if (canComplete) {
       const options: CoachDecision[] = [];
@@ -225,40 +244,39 @@ export function GymOperationsCoachAppointmentModal({
       } else {
         options.push("mark_complete");
       }
-      options.push("cancel");
-      return options;
+      return withCancel(options);
     }
     if (canCollectInitialPayment) {
       if (hasAwaitingPayment) {
-        return ["approve_payment", "cancel"];
+        return withCancel(["approve_payment"]);
       }
       if (hasUnresolvedPaymentRequest) {
-        return ["cancel"];
+        return canCancelAppointment ? ["cancel"] : [];
       }
       if (appointment?.activePaymentStage === "full") {
-        return ["accept_cash_full", "cancel"];
+        return withCancel(["accept_cash_full"]);
       }
       if (appointment?.activePaymentStage === "downpayment") {
-        return ["paymongo_downpayment", "accept_cash_downpayment", "cancel"];
+        return withCancel(["paymongo_downpayment", "accept_cash_downpayment"]);
       }
-      return [
+      return withCancel([
         "paymongo_downpayment",
         "accept_cash_downpayment",
         "accept_cash_full",
-        "cancel",
-      ];
+      ]);
     }
-    if (status === "cancelled" || status === "no_show") return [];
-    return ["cancel"];
+    if (isTerminalStatus) return [];
+    return canCancelAppointment ? ["cancel"] : [];
   }, [
     appointment?.activePaymentStage,
+    canCancelAppointment,
     canCollectBalance,
     canCollectInitialPayment,
     canComplete,
     canConfirm,
     hasAwaitingPayment,
     hasUnresolvedPaymentRequest,
-    status,
+    isTerminalStatus,
     isCoachView,
   ]);
 
@@ -305,6 +323,7 @@ export function GymOperationsCoachAppointmentModal({
         onReject(note.trim());
         return;
       case "cancel":
+        if (!canCancelAppointment) return;
         onCancelAppointment(note.trim());
         return;
     }
@@ -323,7 +342,8 @@ export function GymOperationsCoachAppointmentModal({
       coachDecision === "accept_cash_full") &&
       !onCollectInitialPayment) ||
     (coachDecision === "approve_payment" &&
-      (!onApprovePayment || !appointment?.activePaymentId));
+      (!onApprovePayment || !appointment?.activePaymentId)) ||
+    !coachDecisionOptions.includes(coachDecision);
 
   return (
     <OverlayFrame
@@ -607,11 +627,10 @@ export function GymOperationsCoachAppointmentModal({
             </FitText>
             <div
               style={{
-                borderRadius: 14,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surfaceRaised,
+                borderTop: `1px solid ${colors.border}`,
+                backgroundColor: "transparent",
                 minHeight: 76,
-                padding: 12,
+                paddingTop: 10,
               }}
             >
               <FitTextArea
@@ -799,7 +818,7 @@ export function GymOperationsCoachAppointmentModal({
           </div>
         ) : null}
 
-        {isRecurring && !isCoachView ? (
+        {canManageRecurringPlan && isRecurring && !isCoachView ? (
           <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
             <div style={{ display: "grid", gap: 4 }}>
               <FitText
@@ -820,6 +839,20 @@ export function GymOperationsCoachAppointmentModal({
                 stays fixed for the block, while due now and remaining show the
                 next collectable slice.
               </FitText>
+              {cancellationClosed ? (
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    color: colors.warning,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Cancellation is closed for this session. Coach appointments
+                  can only be cancelled until the day before{" "}
+                  {scheduleWindow.dateLabel}.
+                </FitText>
+              ) : null}
             </div>
             <div
               style={{
@@ -918,10 +951,9 @@ export function GymOperationsCoachAppointmentModal({
                       gridTemplateColumns: "1fr auto",
                       gap: 12,
                       alignItems: "center",
-                      padding: "10px 12px",
-                      borderRadius: 14,
-                      border: `1px solid ${colors.border}`,
-                      backgroundColor: colors.surfaceRaised,
+                      padding: "10px 0 0",
+                      borderTop: `1px solid ${colors.border}`,
+                      backgroundColor: "transparent",
                     }}
                   >
                     <FitText
@@ -964,10 +996,9 @@ export function GymOperationsCoachAppointmentModal({
                 style={{
                   display: "grid",
                   gap: 8,
-                  padding: 12,
-                  borderRadius: 16,
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surfaceRaised,
+                  padding: "12px 0 0",
+                  borderTop: `1px solid ${colors.border}`,
+                  backgroundColor: "transparent",
                 }}
               >
                 <FitText
@@ -1037,10 +1068,9 @@ export function GymOperationsCoachAppointmentModal({
               style={{
                 display: "grid",
                 gap: 8,
-                padding: 12,
-                borderRadius: 16,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surfaceRaised,
+                padding: "12px 0 0",
+                borderTop: `1px solid ${colors.border}`,
+                backgroundColor: "transparent",
               }}
             >
               <FitText
@@ -1084,7 +1114,11 @@ export function GymOperationsCoachAppointmentModal({
                 variant="ghost"
                 label="CANCEL PLAN"
                 onClick={onCancelRecurringPlan}
-                disabled={isSubmitting || !onCancelRecurringPlan}
+                disabled={
+                  isSubmitting ||
+                  !onCancelRecurringPlan ||
+                  !canCancelAppointment
+                }
                 style={actionPillStyle(colors)}
                 textStyle={{
                   fontSize: 13,
@@ -1113,6 +1147,19 @@ export function GymOperationsCoachAppointmentModal({
               ? "Select one action, then submit it. Payment, rejection, completion, and cancellation no longer compete as separate decision buttons."
               : "Select the payment or status action that matches the member's verified booking state."}
           </FitText>
+          {cancellationClosed ? (
+            <FitText
+              excludeGlobalScale
+              style={{
+                fontSize: 12,
+                color: colors.warning,
+                lineHeight: 1.35,
+              }}
+            >
+              Cancellation is closed for this session. Coach appointments can
+              only be cancelled until the day before {scheduleWindow.dateLabel}.
+            </FitText>
+          ) : null}
           <div
             style={{
               display: "grid",
@@ -1147,7 +1194,9 @@ export function GymOperationsCoachAppointmentModal({
               excludeGlobalScale
               style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}
             >
-              This session is already resolved. Review the client details, member review, and coach reply above.
+              {cancellationClosed
+                ? `Cancellation is closed because coach appointments can only be cancelled until the day before ${scheduleWindow.dateLabel}.`
+                : "This session is already resolved. Review the client details, member review, and coach reply above."}
             </FitText>
           </div>
         )}

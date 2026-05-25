@@ -23,11 +23,15 @@ describe('AppointmentRepository', () => {
     updateMany: jest.fn(),
     count: jest.fn(),
   };
+  const payment = {
+    create: jest.fn(),
+  };
 
   const prisma = {
     coachProfile,
     coachAvailabilitySlot,
     coachAppointment,
+    payment,
     $transaction: jest.fn(),
   };
 
@@ -239,6 +243,74 @@ describe('AppointmentRepository', () => {
     expect(coachAppointment.create).toHaveBeenCalled();
   });
 
+  it('confirms staff-created full-cash appointments immediately', async () => {
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof prisma) => Promise<unknown>) =>
+        callback(prisma),
+    );
+    coachAvailabilitySlot.findFirst.mockResolvedValue({ id: 'slot-1' });
+    coachAppointment.findMany.mockResolvedValue([]);
+    coachAppointment.create.mockResolvedValue({ id: 'appt-1' });
+
+    await repo.createConfirmedManualAppointment({
+      userId: 'member-1',
+      coachId: 'coach-1',
+      scheduledAt: new Date('2099-04-01T08:00:00.000Z'),
+      appointmentEndsAt: new Date('2099-04-01T09:00:00.000Z'),
+      dayOfWeek: 3,
+      slotStart: new Date(Date.UTC(1970, 0, 1, 8, 0, 0, 0)),
+      slotEnd: new Date(Date.UTC(1970, 0, 1, 9, 0, 0, 0)),
+      durationMinutes: 60,
+      totalAmount: new Prisma.Decimal('1200.00'),
+      downpaymentAmount: new Prisma.Decimal('360.00'),
+      balanceAmount: new Prisma.Decimal('840.00'),
+      gymRevenue: new Prisma.Decimal('240.00'),
+      coachEarnings: new Prisma.Decimal('960.00'),
+      idempotencyKey: 'manual-full-cash-1',
+      paymentAmount: new Prisma.Decimal('1200.00'),
+      paymentStage: 'full' as never,
+      verifiedBy: 'staff-1',
+    });
+
+    const appointmentCreateCalls = coachAppointment.create.mock.calls as Array<
+      [
+        {
+          data: {
+            balance_paid_at: Date | null;
+            downpayment_paid_at: Date | null;
+            status: string;
+          };
+        },
+      ]
+    >;
+    const appointmentCreateData = appointmentCreateCalls[0]?.[0].data;
+
+    expect(appointmentCreateData?.status).toBe('confirmed');
+    expect(appointmentCreateData?.downpayment_paid_at).toBeInstanceOf(Date);
+    expect(appointmentCreateData?.balance_paid_at).toBeInstanceOf(Date);
+
+    const paymentCreateCalls = payment.create.mock.calls as Array<
+      [
+        {
+          data: {
+            payment_stage: string;
+            status: string;
+            verified_at: Date | null;
+            verifier: { connect: { id: string } };
+          };
+        },
+      ]
+    >;
+    const paymentCreateData = paymentCreateCalls[0]?.[0].data;
+
+    expect(paymentCreateData?.payment_stage).toBe('full');
+    expect(paymentCreateData?.status).toBe('completed');
+    expect(paymentCreateData?.verified_at).toBeInstanceOf(Date);
+    expect(paymentCreateData?.verifier).toEqual({
+      connect: { id: 'staff-1' },
+    });
+  });
+
   it('loads paginated member appointments by scheduled date range', async () => {
     coachAppointment.findMany.mockResolvedValue([]);
     coachAppointment.count.mockResolvedValue(0);
@@ -250,7 +322,24 @@ describe('AppointmentRepository', () => {
       end_date: '2099-04-30',
     });
 
-    expect(coachAppointment.findMany).toHaveBeenCalledWith({
+    const findManyCalls = coachAppointment.findMany.mock.calls as Array<
+      [
+        {
+          include: Record<string, unknown>;
+          orderBy: { scheduled_at: string };
+          select: undefined;
+          skip: number;
+          take: number;
+          where: {
+            scheduled_at: { gte: Date; lte: Date };
+            user_id: string;
+          };
+        },
+      ]
+    >;
+    const findManyArgs = findManyCalls[0]?.[0];
+
+    expect(findManyArgs).toEqual({
       where: {
         user_id: 'member-1',
         scheduled_at: {
@@ -259,14 +348,13 @@ describe('AppointmentRepository', () => {
         },
       },
       orderBy: { scheduled_at: 'desc' },
-      include: expect.objectContaining({
-        coach: expect.any(Object),
-        review: expect.any(Object),
-      }),
+      include: findManyArgs?.include,
       select: undefined,
       skip: 5,
       take: 5,
     });
+    expect(findManyArgs?.include.coach).toBeDefined();
+    expect(findManyArgs?.include.review).toBeDefined();
   });
 
   it('updates appointment lifecycle state by id', async () => {

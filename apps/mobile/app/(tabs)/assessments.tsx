@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   MessageSquareText,
   NotebookText,
+  SlidersHorizontal,
   Star,
 } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -17,16 +18,16 @@ import type { AppointmentRecord } from "@fittrack/api-client";
 import { appointmentsQueryOptions } from "@fittrack/query";
 import type { ThemeColors } from "@fittrack/types";
 import { R } from "@fittrack/ui/tokens";
+import { formatGroupLabel, groupItemsByDate } from "@fittrack/utils";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useFABState } from "@/contexts/FABStateContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
-import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { mobileApiClient } from "@/lib/api-client";
-import { makeScreenStyles } from "@/styles/shared/ScreenStyles";
+import { makeBookingsScreenStyles, makeScreenStyles } from "@/styles/shared/ScreenStyles";
 
-import { FitText } from "@/components/fit";
+import { FitFilter, FitPager, FitSearch, FitText } from "@/components/fit";
 
 type AssessmentTimelineItem = {
   body: string;
@@ -36,6 +37,7 @@ type AssessmentTimelineItem = {
 
 type AssessmentCardModel = {
   coachName: string;
+  date: string;
   id: string;
   scheduledAt: string;
   status: string;
@@ -50,6 +52,7 @@ const FILTER_OPTIONS: Array<{ label: string; value: AssessmentFilter }> = [
   { label: "Coach replies", value: "coach_reply" },
   { label: "My coach ratings", value: "member_rating" },
 ];
+const ASSESSMENTS_PAGE_SIZE = 4;
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -118,6 +121,7 @@ function buildAssessmentCards(appointments: AppointmentRecord[]) {
   return appointments
     .map<AssessmentCardModel>((appointment) => ({
       coachName: getCoachName(appointment),
+      date: appointment.scheduledAt.slice(0, 10),
       id: appointment.id,
       scheduledAt: appointment.scheduledAt,
       status: formatStatus(appointment.status),
@@ -135,14 +139,16 @@ export default function AssessmentsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { registerFAB, setFabOpen, unregisterFAB } = useFABState();
-  const { ic } = useThemeTransitionAnim();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
+  const controls = useMemo(() => makeBookingsScreenStyles(colors), [colors]);
   const s = useMemo(() => makeStyles(colors), [colors]);
   const scrollY = useSharedValue(0);
   const isMember = user?.role === "USER";
   const [coachSearch, setCoachSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<AssessmentFilter>("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [assessmentPage, setAssessmentPage] = useState(1);
 
   const appointmentsQuery = useQuery({
     ...appointmentsQueryOptions<AppointmentRecord>(mobileApiClient, user?.id),
@@ -169,6 +175,27 @@ export default function AssessmentsScreen() {
       .filter((card) => card.timeline.length > 0)
       .filter((card) => !search || card.coachName.toLowerCase().includes(search));
   }, [activeFilter, appointmentsQuery.data, coachSearch]);
+  const assessmentTotalPages = Math.max(
+    1,
+    Math.ceil(assessmentCards.length / ASSESSMENTS_PAGE_SIZE),
+  );
+  const safeAssessmentPage = Math.min(assessmentPage, assessmentTotalPages);
+  const pagedAssessmentCards = useMemo(() => {
+    const start = (safeAssessmentPage - 1) * ASSESSMENTS_PAGE_SIZE;
+    return assessmentCards.slice(start, start + ASSESSMENTS_PAGE_SIZE);
+  }, [assessmentCards, safeAssessmentPage]);
+  const groupedAssessmentCards = useMemo(
+    () => groupItemsByDate(pagedAssessmentCards, "desc"),
+    [pagedAssessmentCards],
+  );
+
+  useEffect(() => {
+    setAssessmentPage(1);
+  }, [activeFilter, coachSearch]);
+
+  useEffect(() => {
+    setAssessmentPage((current) => Math.min(current, assessmentTotalPages));
+  }, [assessmentTotalPages]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -193,16 +220,50 @@ export default function AssessmentsScreen() {
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
-  const iconStyle = useAnimatedStyle(() => ({
-    backgroundColor: ic.value.surfaceRaised,
-    borderColor: ic.value.border,
-  }));
 
   const isLoading = appointmentsQuery.isLoading || appointmentsQuery.isFetching;
   const errorMessage = (appointmentsQuery.error as Error | null)?.message;
 
   return (
     <Animated.View style={[base.screen, { backgroundColor: colors.base }]}>
+      <Animated.View style={[controls.searchAnimWrap, contentStyle]}>
+        <View style={controls.searchWrap}>
+          <View style={controls.searchRow}>
+            <View style={controls.searchFieldWrap}>
+              <FitSearch
+                placeholder="Search coach name..."
+                value={coachSearch}
+                onChangeText={setCoachSearch}
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: isFilterOpen }}
+              hitSlop={8}
+              onPress={() => {
+                setIsFilterOpen((open) => !open);
+                setFabOpen(false);
+              }}
+              style={s.filterButtonHost}
+            >
+              <SlidersHorizontal
+                size={20}
+                color={isFilterOpen ? colors.brand : colors.textMuted}
+                strokeWidth={2}
+              />
+            </Pressable>
+          </View>
+        </View>
+        <FitFilter
+          isOpen={isFilterOpen}
+          chipOptions={FILTER_OPTIONS}
+          activeChip={activeFilter}
+          onChipChange={(value) => {
+            setActiveFilter(value as AssessmentFilter);
+            setIsFilterOpen(false);
+          }}
+        />
+      </Animated.View>
       <Animated.ScrollView
         contentContainerStyle={base.scrollContent}
         onScroll={scrollHandler}
@@ -212,50 +273,6 @@ export default function AssessmentsScreen() {
         style={[base.content, screenStyle]}
       >
         <Animated.View style={contentStyle}>
-          <View style={s.heroCard}>
-            <Animated.View style={[s.heroIcon, iconStyle]}>
-              <ClipboardCheck size={24} color={colors.brand} strokeWidth={2} />
-            </Animated.View>
-            <View style={s.heroText}>
-              <FitText style={s.heroKicker}>COACHING RECORD</FitText>
-              <FitText style={s.heroTitle}>Assessments</FitText>
-              <FitText style={s.heroBody}>
-                Coach notes, session reports, and your submitted ratings are kept together here.
-              </FitText>
-            </View>
-          </View>
-
-          <View style={s.filterCard}>
-            <TextInput
-              value={coachSearch}
-              onChangeText={setCoachSearch}
-              placeholder="Search coach name..."
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={s.searchInput}
-            />
-            <View style={s.filterRow}>
-              {FILTER_OPTIONS.map((option) => {
-                const isActive = activeFilter === option.value;
-
-                return (
-                  <Pressable
-                    key={option.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                    onPress={() => setActiveFilter(option.value)}
-                    style={[s.filterPill, isActive ? s.filterPillActive : null]}
-                  >
-                    <FitText style={[s.filterPillText, isActive ? s.filterPillTextActive : null]}>
-                      {option.label}
-                    </FitText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
           {isLoading ? (
             <View style={s.emptyState}>
               <ActivityIndicator color={colors.brand} />
@@ -277,54 +294,68 @@ export default function AssessmentsScreen() {
             </View>
           ) : (
             <View style={s.cardStack}>
-              {assessmentCards.map((assessment) => (
-                <View key={assessment.id} style={s.assessmentCard}>
-                  <View style={s.cardHeader}>
-                    <View style={s.cardTitleGroup}>
-                      <FitText style={s.cardTitle}>{assessment.coachName}</FitText>
-                      <FitText style={s.cardSubtitle}>
-                        {formatDateTime(assessment.scheduledAt)}
-                      </FitText>
-                    </View>
-                    <View style={s.statusPill}>
-                      <FitText style={s.statusText}>{assessment.status}</FitText>
-                    </View>
-                  </View>
-
-                  <View style={s.timeline}>
-                    {assessment.timeline.map((item, index) => (
-                      <View
-                        key={`${assessment.id}-${item.label}-${index}`}
-                        style={[
-                          s.timelineItem,
-                          index < assessment.timeline.length - 1
-                            ? s.timelineDivider
-                            : undefined,
-                        ]}
-                      >
-                        <View style={s.timelineIcon}>
-                          {item.tone === "member" ? (
-                            <Star
-                              fill={colors.warning}
-                              size={15}
-                              color={colors.warning}
-                              strokeWidth={2}
-                            />
-                          ) : item.tone === "coach" ? (
-                            <MessageSquareText size={16} color={colors.brand} strokeWidth={2} />
-                          ) : (
-                            <NotebookText size={16} color={colors.success} strokeWidth={2} />
-                          )}
+              {groupedAssessmentCards.map(([dateKey, assessments]) => (
+                <View key={dateKey} style={s.dateGroup}>
+                  <FitText style={s.groupLabel}>{formatGroupLabel(dateKey)}</FitText>
+                  <View style={s.groupCards}>
+                    {assessments.map((assessment) => (
+                      <View key={assessment.id} style={s.assessmentCard}>
+                        <View style={s.cardHeader}>
+                          <View style={s.cardTitleGroup}>
+                            <FitText style={s.cardTitle}>{assessment.coachName}</FitText>
+                            <FitText style={s.cardSubtitle}>
+                              {formatDateTime(assessment.scheduledAt)}
+                            </FitText>
+                          </View>
+                          <View style={s.statusPill}>
+                            <FitText style={s.statusText}>{assessment.status}</FitText>
+                          </View>
                         </View>
-                        <View style={s.timelineCopy}>
-                          <FitText style={s.timelineLabel}>{item.label}</FitText>
-                          <FitText style={s.timelineBody}>{item.body}</FitText>
+
+                        <View style={s.timeline}>
+                          {assessment.timeline.map((item, index) => (
+                            <View
+                              key={`${assessment.id}-${item.label}-${index}`}
+                              style={[
+                                s.timelineItem,
+                                index < assessment.timeline.length - 1
+                                  ? s.timelineDivider
+                                  : undefined,
+                              ]}
+                            >
+                              <View style={s.timelineIcon}>
+                                {item.tone === "member" ? (
+                                  <Star
+                                    fill={colors.warning}
+                                    size={15}
+                                    color={colors.warning}
+                                    strokeWidth={2}
+                                  />
+                                ) : item.tone === "coach" ? (
+                                  <MessageSquareText size={16} color={colors.brand} strokeWidth={2} />
+                                ) : (
+                                  <NotebookText size={16} color={colors.success} strokeWidth={2} />
+                                )}
+                              </View>
+                              <View style={s.timelineCopy}>
+                                <FitText style={s.timelineLabel}>{item.label}</FitText>
+                                <FitText style={s.timelineBody}>{item.body}</FitText>
+                              </View>
+                            </View>
+                          ))}
                         </View>
                       </View>
                     ))}
                   </View>
                 </View>
               ))}
+              {assessmentTotalPages > 1 ? (
+                <FitPager
+                  currentPage={safeAssessmentPage}
+                  onPageChange={setAssessmentPage}
+                  totalPages={assessmentTotalPages}
+                />
+              ) : null}
             </View>
           )}
         </Animated.View>
@@ -369,72 +400,27 @@ function makeStyles(colors: ThemeColors) {
       paddingTop: 48,
     },
     emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: "700" },
-    filterCard: {
-      backgroundColor: colors.surface,
-      borderColor: colors.border,
-      borderRadius: R.xl,
-      borderWidth: 1,
-      gap: 10,
-      marginBottom: 16,
-      padding: 12,
+    dateGroup: {
+      gap: 8,
     },
-    filterPill: {
-      backgroundColor: colors.surfaceRaised,
-      borderColor: colors.border,
-      borderRadius: 999,
-      borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+    filterButtonHost: {
+      paddingLeft: 10,
+      paddingVertical: 6,
     },
-    filterPillActive: {
-      backgroundColor: colors.brand + "1F",
-      borderColor: colors.brand,
+    groupCards: {
+      gap: 12,
     },
-    filterPillText: { color: colors.textSecondary, fontSize: 12, fontWeight: "700" },
-    filterPillTextActive: { color: colors.brand },
-    filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    heroBody: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
-    heroCard: {
-      alignItems: "center",
-      backgroundColor: colors.surface,
-      borderColor: colors.border,
-      borderRadius: R.xl,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 14,
-      marginBottom: 16,
-      padding: 16,
-    },
-    heroIcon: {
-      alignItems: "center",
-      borderRadius: R.lg,
-      borderWidth: 1,
-      height: 48,
-      justifyContent: "center",
-      width: 48,
-    },
-    heroKicker: {
-      color: colors.brand,
-      fontSize: 11,
+    groupLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
-    },
-    heroText: { flex: 1, gap: 3 },
-    heroTitle: { color: colors.textPrimary, fontSize: 22, fontWeight: "800" },
-    searchInput: {
-      backgroundColor: colors.surfaceRaised,
-      borderColor: colors.border,
-      borderRadius: R.lg,
-      borderWidth: 1,
-      color: colors.textPrimary,
-      fontSize: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: 2,
     },
     statusPill: {
       backgroundColor: colors.brand + "1F",
       borderColor: colors.brand,
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       paddingHorizontal: 10,
       paddingVertical: 5,

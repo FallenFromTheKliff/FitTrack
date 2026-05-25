@@ -20,6 +20,7 @@ import {
   getMilestoneSecondaryTag,
   type MilestoneScope,
 } from "./exerciseLabShared";
+import { ExerciseLabModeNavigation } from "./ExerciseLabModeNavigation";
 
 type Props = {
   canAnimate: boolean;
@@ -28,6 +29,7 @@ type Props = {
   filteredMilestones: AchievementReviewRecord[];
   fullMotion: boolean;
   isCompact: boolean;
+  milestoneDecisionPending: boolean;
   milestoneNotes: string;
   milestoneScope: MilestoneScope;
   milestoneWorkbenchMotionKey: string;
@@ -48,6 +50,7 @@ export function ExerciseLabMilestoneSurface({
   filteredMilestones,
   fullMotion,
   isCompact,
+  milestoneDecisionPending,
   milestoneNotes,
   milestoneScope,
   milestoneWorkbenchMotionKey,
@@ -83,7 +86,7 @@ export function ExerciseLabMilestoneSurface({
           boxShadow: "0 12px 24px rgba(0,0,0,0.14)",
           display: "grid",
           gap: 10,
-          gridTemplateRows: "auto auto auto minmax(0, 1fr)",
+          gridTemplateRows: "auto auto auto auto minmax(0, 1fr)",
           maxHeight: reviewViewportHeight,
           minHeight: 0,
           padding: 12,
@@ -97,6 +100,8 @@ export function ExerciseLabMilestoneSurface({
             member progression claims awaiting moderation
           </FitText>
         </div>
+
+        <ExerciseLabModeNavigation />
 
         <FitPill
           mode="toggle"
@@ -543,7 +548,10 @@ export function ExerciseLabMilestoneSurface({
                     }}
                   >
                     <MilestoneActionButton
-                      disabled={selectedMilestone.status !== "Pending"}
+                      disabled={
+                        milestoneDecisionPending ||
+                        selectedMilestone.status !== "Pending"
+                      }
                       label="Approve claim"
                       sublabel="mark milestone earned"
                       variant="primary"
@@ -556,7 +564,10 @@ export function ExerciseLabMilestoneSurface({
                       onClick={onOpenClosedMilestones}
                     />
                     <MilestoneActionButton
-                      disabled={selectedMilestone.status !== "Pending"}
+                      disabled={
+                        milestoneDecisionPending ||
+                        selectedMilestone.status !== "Pending"
+                      }
                       label="Reject claim"
                       sublabel="decline submission"
                       variant="ghost"

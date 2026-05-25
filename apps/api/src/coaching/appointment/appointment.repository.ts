@@ -464,12 +464,14 @@ export class AppointmentRepository extends BaseRepository {
       const paidAt = new Date();
       const paymentStage = input.paymentStage ?? PaymentStage.full;
       const isFreeSession = input.totalAmount.equals(0);
+      const isFullPayment = paymentStage === PaymentStage.full;
+      const isConfirmedOnCreate = isFreeSession || isFullPayment;
 
       const appointment = await tx.coachAppointment.create({
         data: {
           user: { connect: { id: input.userId } },
           coach: { connect: { id: input.coachId } },
-          status: isFreeSession
+          status: isConfirmedOnCreate
             ? AppointmentStatus.confirmed
             : AppointmentStatus.pending_payment,
           is_free_session: isFreeSession,
@@ -480,8 +482,8 @@ export class AppointmentRepository extends BaseRepository {
           balance_amount: input.balanceAmount,
           gym_revenue: input.gymRevenue,
           coach_earnings: input.coachEarnings,
-          downpayment_paid_at: isFreeSession ? paidAt : null,
-          balance_paid_at: isFreeSession ? paidAt : null,
+          downpayment_paid_at: isConfirmedOnCreate ? paidAt : null,
+          balance_paid_at: isConfirmedOnCreate ? paidAt : null,
           member_notes: input.memberNotes ?? null,
         },
       });
@@ -496,10 +498,10 @@ export class AppointmentRepository extends BaseRepository {
           amount: input.paymentAmount ?? input.totalAmount,
           provider: PaymentProvider.cash,
           idempotency_key: input.idempotencyKey,
-          status: isFreeSession
+          status: isConfirmedOnCreate
             ? PaymentStatus.completed
             : PaymentStatus.awaiting_verification,
-          verified_at: isFreeSession ? paidAt : null,
+          verified_at: isConfirmedOnCreate ? paidAt : null,
         },
       });
 
@@ -696,10 +698,6 @@ function toGymWallClockDate(value: Date): Date {
   return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
 }
 
-function toGymDateKey(value: Date): string {
-  return toGymWallClockDate(value).toISOString().slice(0, 10);
-}
-
 function getGymDateRangeFilter(
   dto: DateRangeDTO,
   dateField: string,
@@ -725,8 +723,7 @@ function normalizeGymDateBoundary(
 
   const [year, month, day] = value.split('-').map(Number);
   const gymDayStartUtc = new Date(
-    Date.UTC(year, month - 1, day) -
-      GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+    Date.UTC(year, month - 1, day) - GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
   );
 
   if (boundary === 'start') {

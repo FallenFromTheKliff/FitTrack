@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { VenueBookingRecord } from "@/contexts/ScheduleContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -12,6 +12,7 @@ import {
   VENUE_DECISION_LABELS,
   actionPillStyle,
   buildStatusTone,
+  canCancelUntilDayBefore,
   formatPeso,
   formatVenueWindow,
   getPersonDisplayName,
@@ -86,21 +87,26 @@ export function GymOperationsVenueBookingModal({
   const canCollectBalance =
     (booking?.status === "confirmed" || booking?.status === "balance_pending") &&
     hasOutstandingBalance;
+  const canCancelBooking = canCancelUntilDayBefore(booking?.startTime);
   const isTerminal =
     booking?.status === "cancelled" ||
     booking?.status === "completed" ||
     booking?.status === "no_show";
+  const cancellationClosed =
+    Boolean(booking) && !isTerminal && !canCancelBooking;
   const isConfirmedSettled =
     booking?.status === "confirmed" &&
     !hasOutstandingBalance &&
     Number(remainingBalance ?? 0) <= 0;
-  const visibleDecisionOptions: VenueDecision[] = isTerminal
-    ? []
-    : canCollectBalance
-      ? ["collect_cash_balance", "paymongo_balance", "cancel"]
+  const visibleDecisionOptions = useMemo<VenueDecision[]>(() => {
+    if (isTerminal) return [];
+    const baseOptions: VenueDecision[] = canCollectBalance
+      ? ["collect_cash_balance", "paymongo_balance"]
       : isConfirmedSettled
-        ? ["mark_complete", "cancel", "no_show"]
-        : ["approve", "reject", "cancel"];
+        ? ["mark_complete", "no_show"]
+        : ["approve", "reject"];
+    return canCancelBooking ? [...baseOptions, "cancel"] : baseOptions;
+  }, [canCancelBooking, canCollectBalance, isConfirmedSettled, isTerminal]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,11 +115,17 @@ export function GymOperationsVenueBookingModal({
         ? "collect_cash_balance"
         : isConfirmedSettled
           ? "mark_complete"
-          : "approve",
+          : visibleDecisionOptions[0] ?? "approve",
     );
     setNote("");
     setDecisionConfirm(null);
-  }, [isOpen, booking?.id, canCollectBalance, isConfirmedSettled]);
+  }, [
+    isOpen,
+    booking?.id,
+    canCollectBalance,
+    isConfirmedSettled,
+    visibleDecisionOptions,
+  ]);
 
   const applyDecision = () => {
     const trimmed = note.trim();
@@ -135,6 +147,7 @@ export function GymOperationsVenueBookingModal({
       return;
     }
     if (decision === "cancel") {
+      if (!canCancelBooking) return;
       onCancel?.(trimmed);
       return;
     }
@@ -196,7 +209,8 @@ export function GymOperationsVenueBookingModal({
             visibleDecisionOptions.length === 0 ||
             ((decision === "collect_cash_balance" ||
               decision === "paymongo_balance") &&
-              !onCollectBalance)
+              !onCollectBalance) ||
+            !visibleDecisionOptions.includes(decision)
           }
           style={actionPillStyle(colors, true)}
           textStyle={{ fontSize: 13, fontWeight: 700 }}
@@ -282,7 +296,9 @@ export function GymOperationsVenueBookingModal({
             style={{ fontSize: 12, color: colors.textMuted }}
           >
             {booking?.status === "pending"
-              ? "Needs review because occupancy pressure is high and adjacent venue load is building."
+              ? approvalAlsoVerifiesPayment
+                ? "Review the submitted payment and booking window before approving this venue request."
+                : "Review the booking window before approving this venue request."
               : "Use this review surface to document the final facilities decision."}
           </FitText>
         </div>
@@ -327,19 +343,19 @@ export function GymOperationsVenueBookingModal({
                 color: colors.textPrimary,
               }}
             >
-              Conflict context
+              Live booking context
             </FitText>
             <FitText
               excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.warning }}
+              style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}
             >
-              Occupancy pressure: medium-high
+              {windowSummary.dateLabel} / {windowSummary.timeLabel}
             </FitText>
             <FitText
               excludeGlobalScale
               style={{ fontSize: 12, color: colors.textMuted }}
             >
-              Adjacent booking: Boxing Ring / 7:30 PM
+              Status: {tone.label}
             </FitText>
             <FitText
               excludeGlobalScale
@@ -349,7 +365,9 @@ export function GymOperationsVenueBookingModal({
                 lineHeight: 1.35,
               }}
             >
-              Front desk note: keep setup turnover under 10 mins.
+              {booking?.purpose?.trim()
+                ? `Member note: ${booking.purpose.trim()}`
+                : "No member note was submitted for this venue booking."}
             </FitText>
             <FitButton
               variant="ghost"
@@ -385,6 +403,19 @@ export function GymOperationsVenueBookingModal({
                   ? "Accept the submitted payment, or send it back for reschedule/rejection without leaving Gym Operations."
                   : "Approve, reschedule, or reject without leaving Gym Operations."}
             </FitText>
+            {cancellationClosed ? (
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  color: colors.warning,
+                  lineHeight: 1.35,
+                }}
+              >
+                Cancellation is closed for this booking. Venue bookings can only
+                be cancelled until the day before {windowSummary.dateLabel}.
+              </FitText>
+            ) : null}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {isTerminal ? (
                 <FitButton
@@ -431,11 +462,10 @@ export function GymOperationsVenueBookingModal({
           </FitText>
           <div
             style={{
-              borderRadius: 14,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surfaceRaised,
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: "transparent",
               minHeight: 56,
-              padding: 12,
+              paddingTop: 10,
             }}
           >
             <FitTextArea

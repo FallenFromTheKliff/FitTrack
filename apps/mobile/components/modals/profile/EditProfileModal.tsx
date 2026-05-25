@@ -401,7 +401,6 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             nestedScrollEnabled
-            showsVerticalScrollIndicator
             contentContainerStyle={s.body}
             resetKey={`${isVisible}-${activeTab}`}
           >

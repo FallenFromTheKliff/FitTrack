@@ -331,11 +331,13 @@ export default function HomeScreen() {
   );
   const coachTodayAppointments = useMemo(
     () =>
-      coachAppointments.filter(
-        (appointment) =>
-          getLocalDayKey(appointment.scheduledAt) === todayString &&
-          appointment.status !== "cancelled"
-      ),
+      coachAppointments
+        .filter(
+          (appointment) =>
+            getLocalDayKey(appointment.scheduledAt) === todayString &&
+            appointment.status !== "cancelled"
+        )
+        .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()),
     [coachAppointments, todayString]
   );
   const visibleCoachTodayAppointments = useMemo(
@@ -360,18 +362,27 @@ export default function HomeScreen() {
     .reduce((sum, appointment) => sum + Number(appointment.coachEarnings ?? 0), 0);
   const coachStats = useMemo<HomeStatCard[]>(
     () => [
-      { icon: Users, label: "Clients", value: String(coachClientCount) },
-      { icon: CalendarDays, label: "Sessions", value: String(coachAppointments.length) },
+      {
+        icon: Users,
+        label: "Clients",
+        value: coachScheduleQuery.isPending ? "--" : String(coachClientCount)
+      },
+      {
+        icon: CalendarDays,
+        label: "Sessions",
+        value: coachScheduleQuery.isPending ? "--" : String(coachAppointments.length)
+      },
       {
         icon: LineChart,
         label: "Earnings",
-        value: `PHP ${coachEarnings.toLocaleString("en-PH")}`,
+        value: coachScheduleQuery.isPending ? "--" : `PHP ${coachEarnings.toLocaleString("en-PH")}`,
       },
     ],
     [
       coachAppointments.length,
       coachClientCount,
       coachEarnings,
+      coachScheduleQuery.isPending,
     ]
   );
 
@@ -681,52 +692,9 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={s.sectionWrap}>
-              <FitSection heading="COACH ACTIONS" bare>
-                <View style={s.quickGrid}>
-                  {[
-                    {
-                      key: "clients",
-                      icon: Users,
-                      label: "Clients",
-                      subtitle: "Review member profiles and client readiness.",
-                      onPress: () => router.push("/(tabs)/bookings?coachView=clients"),
-                    },
-                    {
-                      key: "sessions",
-                      icon: CalendarDays,
-                      label: "Sessions",
-                      subtitle: "Track coaching appointments and session status.",
-                      onPress: () => router.push("/(tabs)/bookings?coachView=appointments"),
-                    },
-                    {
-                      key: "earnings",
-                      icon: LineChart,
-                      label: "Earnings",
-                      subtitle: "Review completed coaching work and expected earnings.",
-                      onPress: () => router.push("/(tabs)/bookings?coachView=earnings"),
-                    },
-                  ].map((action) => (
-                    <Pressable
-                      key={action.key}
-                      onPress={action.onPress}
-                      style={s.quickCard}
-                    >
-                      <View style={[s.quickIconBox, { backgroundColor: colors.brand + "18" }]}>
-                        <action.icon size={20} color={colors.brand} strokeWidth={1.8} />
-                      </View>
-                      <View>
-                        <FitText style={s.quickLabel}>{action.label}</FitText>
-                        <FitText style={s.quickSub}>{action.subtitle}</FitText>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              </FitSection>
-            </View>
-            <View style={s.sectionWrap}>
               <FitSection
-                heading="TODAY'S COACHING SCHEDULE"
-                subtitle="Tap Bookings to open the full coach session queue."
+                heading="TODAY'S BOOKINGS"
+                subtitle="Tap a session to open the full coach appointment queue."
               >
                 {coachScheduleQuery.isPending ? (
                   <View style={{ alignItems: "center", paddingVertical: 20, gap: 6 }}>
@@ -761,7 +729,7 @@ export default function HomeScreen() {
                           icon={User}
                           iconSize={18}
                           label={getCoachMemberName(appointment)}
-                          subtitle={`${formatBookingDate(date)} - ${startLabel} - ${endLabel}`}
+                          subtitle={`${formatBookingDate(date)} | ${startLabel} - ${endLabel}`}
                           trailingLabel={statusLabel}
                           trailingLabelColor={STATUS_COLORS[status] ?? colors.textMuted}
                           hasBorder={index < visibleCoachTodayAppointments.length - 1 || hiddenCoachTodayCount > 0}
@@ -801,7 +769,7 @@ export default function HomeScreen() {
               Welcome Back, {firstName}!
             </AnimatedFitText>
             <AnimatedFitText style={[s.greetingDate, greetingDateStyle]}>
-              {formatTodayLong()} • {currentTimeLabel}
+              {formatTodayLong()} | {currentTimeLabel}
             </AnimatedFitText>
           </View>
           {bookingsErrorMessage || memberSnapshotError ? (

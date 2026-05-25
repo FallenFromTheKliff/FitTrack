@@ -500,8 +500,8 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
         subtitle: "Coach-name search plus record-type filters.",
         details: [
           "Search narrows the list by coach name.",
-          "The filter options include All, Coach assessments, Coach replies, and My coach ratings.",
-          "Use filters when you only want one kind of entry instead of scanning the full timeline.",
+          "The filter buttons include All, Coach assessments, Coach replies, and My coach ratings.",
+          "Use the filter buttons when you only want one kind of entry instead of scanning the full timeline.",
         ],
         terms: [
           {
@@ -555,9 +555,9 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
       "Start with Today's Calories to see whether you still have calories remaining or have moved over target.",
       "Use Target Status, Macro Breakdown, and Today's Nutrition Log to understand what changed and what needs attention next.",
       "Tap a help card below for a plain-English guide to each Nutrition section.",
-      "Use the Nutrition FAB for target setup, target recalculation, or BrodigyAI/access actions when those options appear.",
-      "Use Set Nutrition Target or Recalculate Target when your body metrics, activity level, or goal changes.",
-      "Use Log Meal when premium nutrition logging is available so today's totals can update from what you actually ate.",
+      "Use the Nutrition FAB for BrodigyAI/access actions, Log Meal, and target setup or updates when those options appear.",
+      "Use Create Nutrition Goal or Recalculate Nutrition Target when your body metrics, activity level, or goal changes.",
+      "Use the FAB's Log Meal action when nutrition logging is available so today's totals can update from what you actually ate.",
     ],
     detailTitle: "Nutrition sections",
     detailIntro:
@@ -645,7 +645,7 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
           "Today's Nutrition Log now sits directly below Macro Breakdown so saved meals stay close to the macro bars they affect.",
           "The section lists meals saved for the current date when premium nutrition logging is available.",
           "Each saved meal row shows meal name, food item, calories, protein, carbs, fat, quantity, and unit.",
-          "Tapping Log Meal first opens a meal chooser with search at the top. Pick a previous meal to prefill the form for today, or use New Log Meal at the bottom above Cancel to start from a blank entry. The meal form has a Back button so you can return to the chooser without closing the flow.",
+          "Opening Log Meal from the Nutrition FAB first shows a meal chooser with search at the top. Pick a previous meal to prefill the form for today, or use New Log Meal at the bottom above Cancel to start from a blank entry. The meal form has a Back button so you can return to the chooser without closing the flow.",
           "Saving a log sends it to the live backend, closes the modal on success, and refreshes nutrition queries so today's calories, macro bars, and recommendations can update.",
         ],
         terms: [
@@ -689,10 +689,10 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
         ],
       },
       {
-        title: "FAB - Launch BrodigyAI Mini-Chat",
+        title: "FAB - BrodigyAI",
         subtitle: "Open nutrition-focused chat guidance when member-card access is active.",
         details: [
-          "Launch BrodigyAI Mini-Chat appears for member accounts with active member-card access.",
+          "BrodigyAI appears for member accounts with active member-card access.",
           "It opens BrodigyAI from Nutrition context so today's live totals can guide the conversation.",
           "Use it when you want coaching language around what your Nutrition screen is already showing.",
         ],
@@ -749,6 +749,21 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
         ],
       },
       {
+        title: "FAB - Log Meal",
+        subtitle: "Save food from the quick-action menu.",
+        details: [
+          "Log Meal appears in the Nutrition FAB when meal logging is available for the account.",
+          "It opens the meal logging flow without adding a separate button inside Today's Nutrition Log.",
+          "Use it after checking the log list so today's calories, macros, and recommendations can refresh from the meal you save.",
+        ],
+        terms: [
+          {
+            label: "Meal log",
+            value: "A saved food entry that updates today's nutrition totals.",
+          },
+        ],
+      },
+      {
         title: "FAB - Create Nutrition Goal",
         subtitle: "Start the target setup flow when no active goal exists.",
         details: [
@@ -786,25 +801,26 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
     description:
       "New to the gym side of FitTrack? Muscle Mastery is your progress map: it turns your tracked workouts into EXP, muscle tiers, achievements, and season standing so you can see what is growing and what to train next.",
     steps: [
-      "Start with Summary to read the Snapshot, top muscle, active season, and Quick Links.",
-      "Tap the Mastery Views tabs to switch between Summary, Milestones, Muscle EXP, and Leaderboard.",
+      "Start with the orange header summary for your current streak, total EXP, and EXP progress.",
+      "Use the four tabs to switch between Summary, Milestones, Muscle EXP, and Leaderboard.",
       "Tap a help card below to expand one detailed guide at a time for the matching Muscle Mastery section.",
-      "Use Open Workout, Open Nutrition, or Ask BrodigyAI when the data suggests a next training, food, or guidance step.",
+      "Use the Muscle Mastery FAB for Workout, Nutrition, or BrodigyAI shortcuts when the data suggests a next training, food, or guidance step.",
       "If a Progress Status review notice appears, some gains may stay pending until the integrity review closes.",
     ],
     detailTitle: "Mastery views",
     detailIntro:
-      "These cards match the Muscle Mastery tabs. Tap one when you want a plain-English guide to the numbers on screen.",
+      "These cards match the current Muscle Mastery surfaces. Tap one when you want a plain-English guide to the numbers on screen.",
     detailCards: [
       {
-        title: "Summary",
-        subtitle: "Snapshot, top muscle, Progress Status, and Quick Links.",
+        title: "Header Summary",
+        subtitle: "Day streak, total EXP, and EXP progress.",
         details: [
-          "Snapshot reads from your progression profile, season standing, and muscle EXP records. Total EXP is your confirmed progression total, or the sum of muscle EXP when the profile total is not available.",
-          "Current Streak shows the streak count on your progression profile. It rises when eligible progress continues and resets according to the progression rules owned by the backend.",
+          "The header summary keeps the screen compact by showing your current streak and total EXP first.",
+          "Use the Summary tab for top muscle context, season standing, and other progression details.",
+          "Total EXP is your confirmed progression total, or the sum of muscle EXP when the profile total is not available.",
           "Season Points and Season Rank come from the active season standing. Rank can show a number, Unranked, Hidden, Under review, or No active season depending on standing, privacy, and integrity status.",
           "The top muscle card is the muscle group with the most EXP. Its subtitle shows EXP and total volume in kilograms, while the tier label shows the current backend rank display for that muscle.",
-          "Quick Links are action shortcuts: Open Workout creates new tracked progress evidence, Open Nutrition helps align food goals with training focus, and Ask BrodigyAI opens a new chat from Muscle Mastery context.",
+          "The Muscle Mastery FAB carries quick navigation: Workout creates new tracked progress evidence, Nutrition helps align food goals with training focus, and BrodigyAI opens a new chat from Muscle Mastery context.",
         ],
         terms: [
           {
@@ -853,7 +869,7 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
           "Muscle EXP lists the muscle mastery records returned for your member account, sorted from highest EXP to lowest EXP.",
           "Each muscle group card shows EXP, total volume in kilograms, and its current tier. The visible tiers are Bronze, Silver, Gold, Platinum, and Adamantite.",
           "EXP and volume increase when eligible tracked workout progression is processed for the muscle group. The backend owns the exact EXP and tier thresholds, so the app displays the confirmed rankDisplay rather than guessing formulas.",
-          "When enough confirmed EXP lands for a muscle group, its tier can rise. Use the rank chips to filter by tier and the search field to find a specific muscle group.",
+          "When enough confirmed EXP lands for a muscle group, its tier can rise. Use the rank filter buttons to filter by tier and the search field to find a specific muscle group.",
           "You can use this view to set training and nutrition intent: bring up lagging muscles with workouts, protect leading muscles with recovery, and use Nutrition when a goal needs food support.",
         ],
         terms: [
@@ -1459,13 +1475,18 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
       },
       {
         title: "Support",
-        subtitle: "Help Center, feedback form, and Terms.",
+        subtitle: "Automatic Help Modals, FAQs, feedback form, and Terms.",
         details: [
-          "Help Center shows FAQs for common support questions.",
+          "Help Center shows the Automatic Help Modals toggle and FAQs for common support questions.",
+          "Turn Automatic Help Modals on when you want supported screens to open their Help guide automatically again.",
           "The feedback form supports Bug Report, Feature Request, and General Feedback, includes a message limit, and uses Send Feedback to submit.",
           "Terms shows policy cards for the app's rules and usage expectations.",
         ],
         terms: [
+          {
+            label: "Automatic Help",
+            value: "Guided Help that can open automatically on supported screens.",
+          },
           {
             label: "App feedback",
             value: "A bug report, feature request, or general message sent through Settings.",

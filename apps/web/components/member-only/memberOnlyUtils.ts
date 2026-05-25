@@ -16,6 +16,7 @@ import type {
 } from "@fittrack/types";
 
 export type MemberBookingItem = Booking & {
+  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   amountDueNow?: number;
   bookingType?: "recurring" | "single";
   coachId?: string;
@@ -134,19 +135,6 @@ const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
   adamantite: 5,
 };
 
-export type NutritionFoodCatalogItem = {
-  id: string;
-  name: string;
-  serving: string;
-  calories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-  focus: Array<"balance" | "carbs" | "fat" | "protein">;
-  initials: string;
-  highlight: string;
-};
-
 export type NutritionGuidanceAlertTone = "brand" | "success" | "warning";
 export type NutritionGuidanceAlert = {
   id: string;
@@ -156,80 +144,11 @@ export type NutritionGuidanceAlert = {
   message: string;
 };
 
-export const CURATED_FOOD_CATALOG: NutritionFoodCatalogItem[] = [
-  {
-    id: "greek-yogurt-power-cup",
-    name: "Greek Yogurt Power Cup",
-    serving: "170 g cup",
-    calories: 170,
-    proteinG: 17,
-    carbsG: 12,
-    fatG: 4,
-    focus: ["protein", "balance"],
-    initials: "GY",
-    highlight: "Fast protein support without blowing up your calories.",
-  },
-  {
-    id: "chicken-adobo-rice-bowl",
-    name: "Chicken Adobo Rice Bowl",
-    serving: "1 bowl",
-    calories: 420,
-    proteinG: 35,
-    carbsG: 42,
-    fatG: 12,
-    focus: ["protein", "carbs"],
-    initials: "CA",
-    highlight: "Balanced post-lift meal when both protein and carbs are lagging.",
-  },
-  {
-    id: "banana-oat-recovery-cup",
-    name: "Banana Oat Recovery Cup",
-    serving: "1 cup",
-    calories: 310,
-    proteinG: 8,
-    carbsG: 58,
-    fatG: 6,
-    focus: ["carbs"],
-    initials: "BO",
-    highlight: "Simple carb refill for low-energy or low-glycogen days.",
-  },
-  {
-    id: "peanut-butter-toast-stack",
-    name: "Peanut Butter Toast Stack",
-    serving: "2 slices",
-    calories: 290,
-    proteinG: 11,
-    carbsG: 26,
-    fatG: 16,
-    focus: ["fat", "carbs"],
-    initials: "PB",
-    highlight: "Useful when you need a compact calorie bump and healthy fats.",
-  },
-  {
-    id: "tuna-pandesal-pair",
-    name: "Tuna Pandesal Pair",
-    serving: "2 rolls",
-    calories: 250,
-    proteinG: 24,
-    carbsG: 22,
-    fatG: 7,
-    focus: ["protein"],
-    initials: "TP",
-    highlight: "Quick high-protein option that still feels like a real snack.",
-  },
-  {
-    id: "avocado-egg-wrap",
-    name: "Avocado Egg Wrap",
-    serving: "1 wrap",
-    calories: 360,
-    proteinG: 18,
-    carbsG: 24,
-    fatG: 20,
-    focus: ["fat", "balance"],
-    initials: "AE",
-    highlight: "Helps round out fats while keeping the meal satisfying.",
-  },
-];
+type NutritionMacroFocus = "balance" | "carbs" | "fat" | "protein";
+type RecommendedNutritionLog = NutritionLogRecord & {
+  focus: NutritionMacroFocus;
+  score: number;
+};
 
 export function getTodayString() {
   const date = new Date();
@@ -381,6 +300,7 @@ export function toMemberAppointment(appointment: AppointmentLikeRecord): MemberB
           : normalizeBookingStatus(appointment.status);
 
   return {
+    activePaymentStage: appointment.activePaymentStage ?? null,
     amountDueNow: appointment.amountDueNow ?? undefined,
     bookingType: appointment.recurringPlanId ? "recurring" : "single",
     coachId: appointment.coachId ?? undefined,
@@ -514,7 +434,7 @@ export function getNutritionGuidanceAlerts(
       tone: "brand",
       eyebrow: "LOW MACRO",
       title: `${topMacroGap.delta.toFixed(0)}g of ${topMacroGap.label} still missing`,
-      message: `Bias the next meal toward ${topMacroGap.label}. The recommendation shelf below is sorted to close that gap first.`,
+      message: `Bias the next meal toward ${topMacroGap.label}. The saved-meal shelf below is sorted to close that gap first.`,
     });
   } else if (topMacroGap.delta < -topMacroGap.threshold) {
     alerts.push({
@@ -531,41 +451,94 @@ export function getNutritionGuidanceAlerts(
       eyebrow: "BALANCED MACROS",
       title: "Macro split is holding together",
       message:
-        "Protein, carbs, and fats are all living near target. Use the food catalog as a stable starter shelf instead of trying to fix a big imbalance.",
+        "Protein, carbs, and fats are all living near target. Use recent saved meals as a stable starter shelf instead of trying to fix a big imbalance.",
     });
   }
 
   return alerts;
 }
 
-export function getRecommendedFoodCatalogItems(
+function getNutritionLogMacroValue(entry: NutritionLogRecord, focus: NutritionMacroFocus) {
+  switch (focus) {
+    case "protein":
+      return entry.proteinG;
+    case "carbs":
+      return entry.carbsG;
+    case "fat":
+      return entry.fatG;
+    default:
+      return 0;
+  }
+}
+
+function getDominantNutritionLogFocus(entry: NutritionLogRecord): NutritionMacroFocus {
+  const macroCalories = [
+    { focus: "protein" as const, value: entry.proteinG * 4 },
+    { focus: "carbs" as const, value: entry.carbsG * 4 },
+    { focus: "fat" as const, value: entry.fatG * 9 },
+  ].sort((left, right) => right.value - left.value);
+  const total = macroCalories.reduce((sum, macro) => sum + macro.value, 0);
+
+  if (!total || macroCalories[0].value / total < 0.4) return "balance";
+  return macroCalories[0].focus;
+}
+
+function getRecommendedNutritionLogFocus(
+  entry: NutritionLogRecord,
+  positiveGaps: ReturnType<typeof getMacroGaps>,
+): NutritionMacroFocus {
+  const topMatch = positiveGaps
+    .map((gap, index) => ({
+      focus: gap.key,
+      value: getNutritionLogMacroValue(entry, gap.key) * (positiveGaps.length - index),
+    }))
+    .sort((left, right) => right.value - left.value)[0];
+
+  return topMatch && topMatch.value > 0 ? topMatch.focus : getDominantNutritionLogFocus(entry);
+}
+
+export function getRecommendedSavedMealLogs(
+  logs: NutritionLogRecord[],
   logged: NutritionMacroTotalsRecord,
   target: NutritionMacroTotalsRecord | null,
   limit = 3,
 ) {
-  const defaultShelf = CURATED_FOOD_CATALOG.filter((item) => item.focus.includes("balance")).slice(0, limit);
-  if (!target) return defaultShelf.length > 0 ? defaultShelf : CURATED_FOOD_CATALOG.slice(0, limit);
+  const seen = new Set<string>();
+  const uniqueLogs = logs.filter((entry) => {
+    const key = [
+      entry.mealName,
+      entry.foodItem.trim().toLowerCase(),
+      entry.calories,
+      entry.proteinG,
+      entry.carbsG,
+      entry.fatG,
+      entry.quantity,
+      entry.unit,
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const positiveGaps = target ? getMacroGaps(logged, target).filter((gap) => gap.delta > gap.threshold / 2) : [];
 
-  const positiveGaps = getMacroGaps(logged, target).filter((gap) => gap.delta > gap.threshold / 2);
-  if (positiveGaps.length === 0) return defaultShelf.length > 0 ? defaultShelf : CURATED_FOOD_CATALOG.slice(0, limit);
-
-  return CURATED_FOOD_CATALOG
-    .map((item, index) => ({
-      item,
-      index,
-      score: positiveGaps.reduce((score, gap, gapIndex) => {
-        if (!item.focus.includes(gap.key)) return score;
-        return score + (positiveGaps.length - gapIndex + 1);
-      }, item.focus.includes("balance") ? 1 : 0),
+  return uniqueLogs
+    .map((entry, index): RecommendedNutritionLog => ({
+      ...entry,
+      focus: getRecommendedNutritionLogFocus(entry, positiveGaps),
+      score: positiveGaps.length
+        ? positiveGaps.reduce(
+            (total, gap, gapIndex) =>
+              total + getNutritionLogMacroValue(entry, gap.key) * (positiveGaps.length - gapIndex + 1),
+            0,
+          )
+        : uniqueLogs.length - index,
     }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score || left.item.calories - right.item.calories || left.index - right.index)
-    .slice(0, limit)
-    .map((entry) => entry.item);
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit);
 }
 
-export function getFoodTrailingLabel(item: NutritionFoodCatalogItem) {
-  switch (item.focus[0]) {
+export function getFoodTrailingLabel(item: RecommendedNutritionLog) {
+  switch (item.focus) {
     case "protein":
       return "PROTEIN";
     case "carbs":
@@ -577,8 +550,8 @@ export function getFoodTrailingLabel(item: NutritionFoodCatalogItem) {
   }
 }
 
-export function formatFoodSubtitle(item: NutritionFoodCatalogItem) {
-  return `${item.serving} | ${item.calories.toFixed(0)} kcal | P ${item.proteinG.toFixed(0)} C ${item.carbsG.toFixed(0)} F ${item.fatG.toFixed(0)} | ${item.highlight}`;
+export function formatFoodSubtitle(item: RecommendedNutritionLog) {
+  return `${formatShortDateTime(item.logDate)} | ${formatNutritionLogSubtitle(item)} | ${item.quantity.toFixed(0)} ${item.unit}`;
 }
 
 export function getActiveNutritionTotals(

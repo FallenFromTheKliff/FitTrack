@@ -67,7 +67,7 @@ const BACKGROUND_LINES = Array.from({ length: 4 }, (_, index) => index);
 const BACKGROUND_WORDS = Array.from({ length: 24 }, (_, index) =>
   index % 2 === 0 ? "FITTRACK" : "SERTFIT",
 );
-const SIGN_OUT_BOTTOM_GAP = 10;
+const SIGN_OUT_BOTTOM_GAP = 31;
 const LOGOUT_REDIRECT_STORAGE_KEY = "fittrack.logoutRedirectPath";
 const FIXED_HEIGHT_PAGE_KEYS = new Set<PageKey>([
   "coach-dashboard",

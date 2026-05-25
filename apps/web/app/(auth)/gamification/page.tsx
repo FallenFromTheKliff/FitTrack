@@ -156,6 +156,15 @@ function getMemberDisplayName(member: MemberRecord) {
   return fullName || member.email;
 }
 
+function isManualExpEligibleMember(member: MemberRecord) {
+  const status = member.status?.toLowerCase();
+  return (
+    (!status || status === "active") &&
+    member.membershipCard?.status === "active" &&
+    !member.deletedAt
+  );
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -414,6 +423,10 @@ function AdminGamificationPage() {
   const membersQuery = useQuery(
     adminMembersQueryOptions(webApiClient, { role: "member" }),
   );
+  const manualExpEligibleMembers = useMemo(
+    () => (membersQuery.data ?? []).filter(isManualExpEligibleMember),
+    [membersQuery.data],
+  );
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
       includeArchived: seasonIncludeArchived,
@@ -505,13 +518,17 @@ function AdminGamificationPage() {
   ]);
 
   useEffect(() => {
-    const members = membersQuery.data ?? [];
-    setManualExpDraft((current) =>
-      current.userId || members.length === 0
-        ? current
-        : { ...current, userId: members[0].id },
-    );
-  }, [membersQuery.data]);
+    const members = manualExpEligibleMembers;
+    setManualExpDraft((current) => {
+      if (members.length === 0) {
+        return current.userId ? { ...current, userId: "" } : current;
+      }
+      if (current.userId && members.some((member) => member.id === current.userId)) {
+        return current;
+      }
+      return { ...current, userId: members[0].id };
+    });
+  }, [manualExpEligibleMembers]);
 
   const overview = overviewQuery.data;
   const activeSeasonActions = useMemo(
@@ -631,17 +648,17 @@ function AdminGamificationPage() {
 
   const submitManualExpGrant = () => {
     const amount = Number(manualExpDraft.amount);
-    const selectedMember = (membersQuery.data ?? []).find(
+    const selectedMember = manualExpEligibleMembers.find(
       (member) => member.id === manualExpDraft.userId,
     );
     const rationale = manualExpDraft.rationale.trim();
 
-    if (!manualExpDraft.userId || !Number.isInteger(amount) || amount < 1) {
+    if (!manualExpDraft.userId || !selectedMember || !Number.isInteger(amount) || amount < 1) {
       setConfirmationState({
         confirmIcon: ShieldAlert,
         confirmLabel: "Close",
         message:
-          "Choose a member and enter a whole-number EXP amount before applying a manual grant.",
+          "Choose an active member with verified membership-card access and enter a whole-number EXP amount before applying a manual grant.",
         title: "Manual EXP Needs A Valid Amount",
         onConfirm: () => undefined,
       });
@@ -1129,7 +1146,7 @@ function AdminGamificationPage() {
           <ManualExpGrantPanel
             draft={manualExpDraft}
             isLoading={manualExpMutation.isPending}
-            members={membersQuery.data ?? []}
+            members={manualExpEligibleMembers}
             onDraftChange={setManualExpDraft}
             onSubmit={submitManualExpGrant}
             style={overviewBottomCardStyle}
@@ -2085,8 +2102,9 @@ function ManualExpGrantPanel({
       <div style={{ display: "grid", gap: 10 }}>
         <div>
           <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-            Post-session allocation for members who completed coach work without
-            camera tracking.
+            Post-session allocation for active members with verified
+            membership-card access who completed coach work without camera
+            tracking.
           </FitText>
         </div>
         <FitDropdown
@@ -2094,7 +2112,7 @@ function ManualExpGrantPanel({
           value={draft.userId}
           options={memberOptions}
           placeholder={
-            members.length === 0 ? "No members loaded" : "Select member"
+            members.length === 0 ? "No eligible members loaded" : "Select member"
           }
           disabled={members.length === 0}
           onChange={(userId) => updateDraft({ userId })}

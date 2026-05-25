@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Activity, RefreshCcw, Search } from "lucide-react";
+import { Activity, CalendarRange, RefreshCcw, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   AuditLogRecord,
@@ -20,6 +20,7 @@ import {
 } from "@fittrack/query";
 import type { AnalyticsRecentActivityRecord } from "@fittrack/types";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -40,7 +41,12 @@ export const dynamic = "force-dynamic";
 
 type TransactionKind = "all" | "payment" | "sale" | "booking" | "coaching";
 type AuditKind = "all" | "User" | "MembershipCard" | "Equipment" | "Payment";
-type GymActionSectionFilter = "all" | "transactions" | "audit" | "recent";
+type GymActionSectionFilter = "recent" | "transactions" | "audit";
+
+type DateRangeFilter = {
+  from: string;
+  to: string;
+};
 
 type TransactionRow = {
   actor: string;
@@ -58,10 +64,9 @@ const GYM_ACTION_SECTION_OPTIONS: Array<{
   key: GymActionSectionFilter;
   label: string;
 }> = [
-  { key: "all", label: "All Sections" },
+  { key: "recent", label: "Recent Activity" },
   { key: "transactions", label: "Transaction History" },
   { key: "audit", label: "Audit Log" },
-  { key: "recent", label: "Recent Activity" },
 ];
 
 function formatDateTime(value?: string | null) {
@@ -128,26 +133,67 @@ function matchesSearch(values: Array<string | number | null | undefined>, search
   return values.some((value) => String(value ?? "").toLowerCase().includes(query));
 }
 
+function matchesDateRange(value: string | null | undefined, range: DateRangeFilter) {
+  if (!range.from && !range.to) return true;
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  const from = range.from ? new Date(`${range.from}T00:00:00`).getTime() : null;
+  const to = range.to ? new Date(`${range.to}T23:59:59.999`).getTime() : null;
+  return (from == null || timestamp >= from) && (to == null || timestamp <= to);
+}
+
+function getFilterOptions(values: string[], allLabel: string) {
+  const uniqueValues = Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
+    labelize(left).localeCompare(labelize(right)),
+  );
+  return [
+    { label: allLabel, value: "all" },
+    ...uniqueValues.map((value) => ({ label: labelize(value), value })),
+  ];
+}
+
 function paginate<T>(items: T[], page: number) {
   const start = (page - 1) * PAGE_SIZE;
   return items.slice(start, start + PAGE_SIZE);
 }
 
 export default function GymActionsPage() {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const fadeIn = useFadeIn({ duration: 220 });
   const themeTransition = useThemeTransition();
+  const isAdmin = user?.role === "ADMIN";
   const [transactionSearch, setTransactionSearch] = useState("");
   const [transactionKind, setTransactionKind] = useState<TransactionKind>("all");
+  const [transactionStatus, setTransactionStatus] = useState("all");
+  const [transactionDateRange, setTransactionDateRange] = useState<DateRangeFilter>({
+    from: "",
+    to: "",
+  });
   const [transactionPage, setTransactionPage] = useState(1);
   const [auditSearch, setAuditSearch] = useState("");
   const [auditKind, setAuditKind] = useState<AuditKind>("all");
+  const [auditStatus, setAuditStatus] = useState("all");
+  const [auditDateRange, setAuditDateRange] = useState<DateRangeFilter>({
+    from: "",
+    to: "",
+  });
   const [auditPage, setAuditPage] = useState(1);
+  const [recentSearch, setRecentSearch] = useState("");
+  const [recentStatus, setRecentStatus] = useState("all");
+  const [recentDateRange, setRecentDateRange] = useState<DateRangeFilter>({
+    from: "",
+    to: "",
+  });
   const [recentPage, setRecentPage] = useState(1);
   const [sectionFilter, setSectionFilter] =
-    useState<GymActionSectionFilter>("all");
+    useState<GymActionSectionFilter>("recent");
 
-  const snapshotQuery = useQuery(analyticsSnapshotQueryOptions(webApiClient));
+  const snapshotQuery = useQuery({
+    ...analyticsSnapshotQueryOptions(webApiClient),
+    enabled: isAdmin,
+  });
   const auditQuery = useQuery(auditLogsQueryOptions(webApiClient, { limit: 100, page: 1 }));
   const paymentsQuery = useQuery(
     reviewMembershipPaymentsQueryOptions(webApiClient, { limit: 100, page: 1 }),
@@ -220,10 +266,16 @@ export default function GymActionsPage() {
   const filteredTransactions = transactions.filter(
     (row) =>
       (transactionKind === "all" || row.kind === transactionKind) &&
+      (transactionStatus === "all" || row.status === transactionStatus) &&
+      matchesDateRange(row.createdAt, transactionDateRange) &&
       matchesSearch(
         [row.actor, row.amount, row.description, row.status, row.title],
         transactionSearch,
       ),
+  );
+  const transactionStatusOptions = useMemo(
+    () => getFilterOptions(transactions.map((row) => row.status), "All statuses"),
+    [transactions],
   );
   const transactionTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE));
   const transactionRows = paginate(
@@ -231,29 +283,98 @@ export default function GymActionsPage() {
     Math.min(transactionPage, transactionTotalPages),
   );
 
-  const auditLogs = auditQuery.data?.data ?? [];
+  const auditLogs = useMemo(() => auditQuery.data?.data ?? [], [auditQuery.data?.data]);
   const filteredAuditLogs = auditLogs.filter(
     (log) =>
       (auditKind === "all" || log.entity === auditKind) &&
+      (auditStatus === "all" || log.actor?.status === auditStatus) &&
+      matchesDateRange(log.created_at, auditDateRange) &&
       matchesSearch(
         [
           log.action,
           log.entity,
           log.entity_id,
           log.id,
+          log.actor?.status,
           log.user_id,
           profileName(log.actor?.profile),
         ],
         auditSearch,
       ),
   );
+  const auditStatusOptions = useMemo(
+    () =>
+      getFilterOptions(
+        auditLogs.map((log) => log.actor?.status ?? "").filter(Boolean),
+        "All actor statuses",
+      ),
+    [auditLogs],
+  );
   const auditTotalPages = Math.max(1, Math.ceil(filteredAuditLogs.length / PAGE_SIZE));
   const auditRows = paginate(filteredAuditLogs, Math.min(auditPage, auditTotalPages));
-  const recentActivities = snapshotQuery.data?.recentActivities ?? [];
-  const recentTotalPages = Math.max(1, Math.ceil(recentActivities.length / PAGE_SIZE));
-  const recentRows = paginate(recentActivities, Math.min(recentPage, recentTotalPages));
+  const staffSafeRecentActivities = useMemo<AnalyticsRecentActivityRecord[]>(
+    () =>
+      [
+        ...transactions.map((row) => ({
+          actorName: row.actor,
+          description: row.description,
+          entityId: row.id,
+          entityLabel: labelize(row.kind),
+          id: `transaction-${row.kind}-${row.id}`,
+          kind: row.kind,
+          occurredAt: row.createdAt,
+          status: row.status,
+          title: row.title,
+        })),
+        ...auditLogs.map((log) => ({
+          actorName: profileName(log.actor?.profile) || log.user_id || "System",
+          description: `${labelize(log.entity)} ${log.entity_id ?? ""}`.trim(),
+          entityId: log.entity_id ?? log.id,
+          entityLabel: labelize(log.entity),
+          id: `audit-${log.id}`,
+          kind: log.entity,
+          occurredAt: log.created_at,
+          status: log.actor?.status ? labelize(log.actor.status) : labelize(log.action),
+          title: labelize(log.action),
+        })),
+      ].sort(
+        (left, right) =>
+          new Date(right.occurredAt).getTime() -
+          new Date(left.occurredAt).getTime(),
+      ),
+    [auditLogs, transactions],
+  );
+  const recentActivities = useMemo(
+    () =>
+      isAdmin
+        ? (snapshotQuery.data?.recentActivities ?? [])
+        : staffSafeRecentActivities,
+    [isAdmin, snapshotQuery.data?.recentActivities, staffSafeRecentActivities],
+  );
+  const filteredRecentActivities = recentActivities.filter(
+    (activity) =>
+      (recentStatus === "all" || activity.status === recentStatus) &&
+      matchesDateRange(activity.occurredAt, recentDateRange) &&
+      matchesSearch(
+        [activity.actorName, activity.description, activity.status, activity.title],
+        recentSearch,
+      ),
+  );
+  const recentStatusOptions = useMemo(
+    () => getFilterOptions(recentActivities.map((activity) => activity.status), "All statuses"),
+    [recentActivities],
+  );
+  const recentTotalPages = Math.max(1, Math.ceil(filteredRecentActivities.length / PAGE_SIZE));
+  const recentRows = paginate(filteredRecentActivities, Math.min(recentPage, recentTotalPages));
+  const recentLoading = isAdmin
+    ? snapshotQuery.isFetching
+    : auditQuery.isFetching ||
+      paymentsQuery.isFetching ||
+      salesQuery.isFetching ||
+      bookingsQuery.isFetching ||
+      appointmentsQuery.isFetching;
   const isBusy =
-    snapshotQuery.isFetching ||
+    (isAdmin && snapshotQuery.isFetching) ||
     auditQuery.isFetching ||
     paymentsQuery.isFetching ||
     salesQuery.isFetching ||
@@ -265,8 +386,8 @@ export default function GymActionsPage() {
     gap: 12,
     paddingBottom: 32,
   };
-  const shouldShowSection = (section: Exclude<GymActionSectionFilter, "all">) =>
-    sectionFilter === "all" || sectionFilter === section;
+  const shouldShowSection = (section: GymActionSectionFilter) =>
+    sectionFilter === section;
 
   const transactionColumns: FitTableColumn<TransactionRow>[] = [
     {
@@ -412,7 +533,7 @@ export default function GymActionsPage() {
         }}
       >
         <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 850 }}>
-          Section
+          View
         </FitText>
         <FitPill
           mode="toggle"
@@ -453,34 +574,53 @@ export default function GymActionsPage() {
             style={{
               display: "grid",
               gap: 10,
-              gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 0.28fr)",
+              gridTemplateColumns:
+                "minmax(220px, 1.2fr) minmax(130px, 0.45fr) minmax(130px, 0.45fr) minmax(170px, 0.55fr) minmax(180px, 0.6fr)",
               padding: 14,
               borderBottom: `1px solid ${colors.border}`,
             }}
           >
-            <label
-              style={{
-                alignItems: "center",
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.fieldBorder}`,
-                borderRadius: 12,
-                display: "flex",
-                gap: 8,
-                minHeight: 44,
-                padding: "0 12px",
+            <FilterSearchControl
+              colors={colors}
+              onChange={(value) => {
+                setTransactionSearch(value);
+                setTransactionPage(1);
               }}
-            >
-              <Search size={15} color={colors.textMuted} />
-              <FitTextInput
-                value={transactionSearch}
-                onChange={(event) => {
-                  setTransactionSearch(event.target.value);
-                  setTransactionPage(1);
-                }}
-                placeholder="Search transactions"
-              />
-            </label>
+              placeholder="Search transactions"
+              value={transactionSearch}
+            />
+            <DateFilterInput
+              ariaLabel="Filter transactions from date"
+              colors={colors}
+              label="From"
+              onChange={(value) => {
+                setTransactionDateRange((current) => ({ ...current, from: value }));
+                setTransactionPage(1);
+              }}
+              value={transactionDateRange.from}
+            />
+            <DateFilterInput
+              ariaLabel="Filter transactions to date"
+              colors={colors}
+              label="To"
+              onChange={(value) => {
+                setTransactionDateRange((current) => ({ ...current, to: value }));
+                setTransactionPage(1);
+              }}
+              value={transactionDateRange.to}
+            />
             <FitDropdown
+              ariaLabel="Filter transactions by status"
+              fullWidth
+              value={transactionStatus}
+              onChange={(value) => {
+                setTransactionStatus(value);
+                setTransactionPage(1);
+              }}
+              options={transactionStatusOptions}
+            />
+            <FitDropdown
+              ariaLabel="Filter transactions by type"
               fullWidth
               value={transactionKind}
               onChange={(value) => {
@@ -538,34 +678,53 @@ export default function GymActionsPage() {
             style={{
               display: "grid",
               gap: 10,
-              gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 0.28fr)",
+              gridTemplateColumns:
+                "minmax(220px, 1.2fr) minmax(130px, 0.45fr) minmax(130px, 0.45fr) minmax(170px, 0.55fr) minmax(180px, 0.6fr)",
               padding: 14,
               borderBottom: `1px solid ${colors.border}`,
             }}
           >
-            <label
-              style={{
-                alignItems: "center",
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.fieldBorder}`,
-                borderRadius: 12,
-                display: "flex",
-                gap: 8,
-                minHeight: 44,
-                padding: "0 12px",
+            <FilterSearchControl
+              colors={colors}
+              onChange={(value) => {
+                setAuditSearch(value);
+                setAuditPage(1);
               }}
-            >
-              <Search size={15} color={colors.textMuted} />
-              <FitTextInput
-                value={auditSearch}
-                onChange={(event) => {
-                  setAuditSearch(event.target.value);
-                  setAuditPage(1);
-                }}
-                placeholder="Search audit logs"
-              />
-            </label>
+              placeholder="Search audit logs"
+              value={auditSearch}
+            />
+            <DateFilterInput
+              ariaLabel="Filter audit logs from date"
+              colors={colors}
+              label="From"
+              onChange={(value) => {
+                setAuditDateRange((current) => ({ ...current, from: value }));
+                setAuditPage(1);
+              }}
+              value={auditDateRange.from}
+            />
+            <DateFilterInput
+              ariaLabel="Filter audit logs to date"
+              colors={colors}
+              label="To"
+              onChange={(value) => {
+                setAuditDateRange((current) => ({ ...current, to: value }));
+                setAuditPage(1);
+              }}
+              value={auditDateRange.to}
+            />
             <FitDropdown
+              ariaLabel="Filter audit logs by actor status"
+              fullWidth
+              value={auditStatus}
+              onChange={(value) => {
+                setAuditStatus(value);
+                setAuditPage(1);
+              }}
+              options={auditStatusOptions}
+            />
+            <FitDropdown
+              ariaLabel="Filter audit logs by entity"
               fullWidth
               value={auditKind}
               onChange={(value) => {
@@ -608,10 +767,38 @@ export default function GymActionsPage() {
         activities={recentRows}
         columns={recentColumns}
         colors={colors}
-        isLoading={snapshotQuery.isFetching}
-        onRefresh={() => void snapshotQuery.refetch()}
+        dateRange={recentDateRange}
+        isLoading={recentLoading}
+        onRefresh={() => {
+          if (isAdmin) {
+            void snapshotQuery.refetch();
+            return;
+          }
+          void Promise.all([
+            auditQuery.refetch(),
+            paymentsQuery.refetch(),
+            salesQuery.refetch(),
+            bookingsQuery.refetch(),
+            appointmentsQuery.refetch(),
+          ]);
+        }}
         page={Math.min(recentPage, recentTotalPages)}
+        search={recentSearch}
         setPage={setRecentPage}
+        setSearch={(value) => {
+          setRecentSearch(value);
+          setRecentPage(1);
+        }}
+        setStatus={(value) => {
+          setRecentStatus(value);
+          setRecentPage(1);
+        }}
+        setDateRange={(nextRange) => {
+          setRecentDateRange(nextRange);
+          setRecentPage(1);
+        }}
+        status={recentStatus}
+        statusOptions={recentStatusOptions}
         totalPages={recentTotalPages}
       />
       ) : null}
@@ -666,19 +853,33 @@ function RecentActivitySection({
   activities,
   columns,
   colors,
+  dateRange,
   isLoading,
   onRefresh,
   page,
+  search,
   setPage,
+  setDateRange,
+  setSearch,
+  setStatus,
+  status,
+  statusOptions,
   totalPages,
 }: {
   activities: AnalyticsRecentActivityRecord[];
   columns: FitTableColumn<AnalyticsRecentActivityRecord>[];
   colors: ReturnType<typeof useTheme>["colors"];
+  dateRange: DateRangeFilter;
   isLoading: boolean;
   onRefresh: () => void;
   page: number;
   setPage: (page: number) => void;
+  search: string;
+  setDateRange: (nextRange: DateRangeFilter) => void;
+  setSearch: (value: string) => void;
+  setStatus: (value: string) => void;
+  status: string;
+  statusOptions: Array<{ label: string; value: string }>;
   totalPages: number;
 }) {
   return (
@@ -699,6 +900,45 @@ function RecentActivitySection({
       }
     >
       <div style={{ display: "grid", gap: 0 }}>
+        <div
+          className="gym-actions-filter-row"
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns:
+              "minmax(220px, 1.2fr) minmax(130px, 0.45fr) minmax(130px, 0.45fr) minmax(170px, 0.55fr)",
+            padding: 14,
+            borderBottom: `1px solid ${colors.border}`,
+          }}
+        >
+          <FilterSearchControl
+            colors={colors}
+            onChange={setSearch}
+            placeholder="Search activity"
+            value={search}
+          />
+          <DateFilterInput
+            ariaLabel="Filter recent activity from date"
+            colors={colors}
+            label="From"
+            onChange={(value) => setDateRange({ ...dateRange, from: value })}
+            value={dateRange.from}
+          />
+          <DateFilterInput
+            ariaLabel="Filter recent activity to date"
+            colors={colors}
+            label="To"
+            onChange={(value) => setDateRange({ ...dateRange, to: value })}
+            value={dateRange.to}
+          />
+          <FitDropdown
+            ariaLabel="Filter recent activity by status"
+            fullWidth
+            value={status}
+            onChange={setStatus}
+            options={statusOptions}
+          />
+        </div>
         <FitTable
           columns={columns}
           rows={activities}
@@ -719,6 +959,82 @@ function RecentActivitySection({
         </div>
       </div>
     </ActionTableSection>
+  );
+}
+
+function FilterSearchControl({
+  colors,
+  onChange,
+  placeholder,
+  value,
+}: {
+  colors: ReturnType<typeof useTheme>["colors"];
+  onChange: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.fieldBorder}`,
+        borderRadius: 12,
+        display: "flex",
+        gap: 8,
+        minHeight: 44,
+        padding: "0 12px",
+      }}
+    >
+      <Search size={15} color={colors.textMuted} />
+      <FitTextInput
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+    </label>
+  );
+}
+
+function DateFilterInput({
+  ariaLabel,
+  colors,
+  label,
+  onChange,
+  value,
+}: {
+  ariaLabel: string;
+  colors: ReturnType<typeof useTheme>["colors"];
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.fieldBorder}`,
+        borderRadius: 12,
+        display: "flex",
+        gap: 8,
+        minHeight: 44,
+        padding: "0 12px",
+      }}
+    >
+      <CalendarRange size={15} color={colors.textMuted} />
+      <FitText style={{ color: colors.textMuted, fontSize: 11, fontWeight: 800 }}>
+        {label}
+      </FitText>
+      <FitTextInput
+        aria-label={ariaLabel}
+        type="date"
+        value={value}
+        onInput={(event) => onChange(event.currentTarget.value)}
+        onChange={(event) => onChange(event.target.value)}
+        style={{ minWidth: 0 }}
+      />
+    </label>
   );
 }
 

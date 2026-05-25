@@ -245,6 +245,7 @@ function ExerciseLabPageBody() {
     handleMilestoneScopeChange,
     handleOpenClosedMilestones,
     isCompact,
+    milestoneDecisionPending,
     milestoneNotes,
     milestoneScope,
     milestoneWorkbenchMotionKey,
@@ -316,6 +317,7 @@ function ExerciseLabPageBody() {
             fullMotion={fullMotion}
             isCompact={isCompact}
             milestoneNotes={milestoneNotes}
+            milestoneDecisionPending={milestoneDecisionPending}
             milestoneScope={milestoneScope}
             milestoneWorkbenchMotionKey={milestoneWorkbenchMotionKey}
             onDecision={handleMilestoneDecision}

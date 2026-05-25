@@ -231,12 +231,11 @@ export function RecurringPlanActionModal({
         {action.mode === "cancel" ? (
           <div
             style={{
-              borderRadius: 18,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surfaceRaised,
-              padding: 16,
               display: "grid",
               gap: 10,
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: "transparent",
+              paddingTop: 14,
             }}
           >
             <OperationsMetricGrid columns={2}>

@@ -74,11 +74,12 @@ import {
   isPendingFullCoachPayment,
   mapAppointmentToTimelineBooking,
 } from "@/components/schedule/operationsUtils";
+import { getDefaultDateInput } from "@/components/schedule/GymOperationsOverlayShared";
 import type { Booking, Resource } from "@/components/schedule";
 
 import {
   EMPTY_APPOINTMENT_RESULT,
-  SCHEDULE_DAY_PART_OPTIONS,
+  SCHEDULE_TIMELINE_HOURS,
   buildLocalIso,
   createDefaultRecurringPlanForm,
   getErrorMessage,
@@ -91,7 +92,6 @@ import {
   type PaymentConfirmState,
   type RecurringPlanActionState,
   type RecurringPlanFormState,
-  type ScheduleDayPart,
   type ScheduleRangeMode,
   type ScheduleSurfaceTab,
 } from "./SchedulePageShared";
@@ -101,6 +101,24 @@ import {
   getWeekStart,
   mapCoachesToRoster,
 } from "@/app/(auth)/schedule/helpers";
+
+function isBookableOperationsMember(member: MemberRecord) {
+  const role = (
+    member as MemberRecord & { role?: MemberRecord["role"] | string }
+  ).role;
+  const roleName =
+    typeof role === "string" ? role.toUpperCase() : role?.name?.toUpperCase();
+  const status = (
+    member as MemberRecord & { status?: string | null }
+  ).status?.toLowerCase();
+
+  return (
+    (roleName === "USER" || roleName === "MEMBER") &&
+    (!status || status === "active") &&
+    member.membershipCard?.status === "active" &&
+    !member.deletedAt
+  );
+}
 
 function useGymOperationsPageState() {
   const { colors, settings } = useTheme();
@@ -178,8 +196,6 @@ function useGymOperationsPageState() {
         canViewVenueBookings,
       ),
     );
-  const [scheduleDayPart, setScheduleDayPart] =
-    useState<ScheduleDayPart>("morning");
   const [scheduleRangeMode, setScheduleRangeMode] =
     useState<ScheduleRangeMode>("weekly");
   const { style: slideStyle } = usePowerSlide(slideKey, slideDir);
@@ -204,12 +220,7 @@ function useGymOperationsPageState() {
     () => (scheduleRangeMode === "weekly" ? weekDays : [weekStart]),
     [scheduleRangeMode, weekDays, weekStart],
   );
-  const visibleTimelineHours = useMemo(
-    () =>
-      SCHEDULE_DAY_PART_OPTIONS.find((option) => option.key === scheduleDayPart)
-        ?.hours ?? SCHEDULE_DAY_PART_OPTIONS[0].hours,
-    [scheduleDayPart],
-  );
+  const visibleTimelineHours = SCHEDULE_TIMELINE_HOURS;
 
   const [coachVisibilityScope, setCoachVisibilityScope] =
     useState<CoachVisibilityScope>("all");
@@ -481,22 +492,7 @@ function useGymOperationsPageState() {
   const memberOptions = useMemo(
     () =>
       (staffUsers as MemberRecord[])
-        .filter((member) => {
-          const role = (
-            member as MemberRecord & { role?: MemberRecord["role"] | string }
-          ).role;
-          const roleName =
-            typeof role === "string" ? role.toUpperCase() : role?.name?.toUpperCase();
-          const status = (
-            member as MemberRecord & { status?: string | null }
-          ).status?.toLowerCase();
-          const isActive = !status || status === "active";
-          return (
-            (roleName === "USER" || roleName === "MEMBER") &&
-            isActive &&
-            !member.deletedAt
-          );
-        })
+        .filter(isBookableOperationsMember)
         .map((member) => {
           const label = getPersonDisplayName(
             member.profile,
@@ -523,7 +519,7 @@ function useGymOperationsPageState() {
       webApiClient,
       activeRecurringPlanId ?? "pending",
     ),
-    enabled: Boolean(activeRecurringPlanId),
+    enabled: isAdmin && Boolean(activeRecurringPlanId),
     staleTime: 20_000,
   });
   const recurringSessionRows = recurringPlanSessions?.sessions ?? [];
@@ -552,10 +548,14 @@ function useGymOperationsPageState() {
     payRecurringCycleMutation.isPending ||
     processBookingBalanceMutation.isPending ||
     verifyPaymentMutation.isPending;
+  const recurringPlanMinStartDate = getDefaultDateInput();
+  const recurringPlanStartDateInvalid =
+    !recurringPlanForm.startDate ||
+    recurringPlanForm.startDate < recurringPlanMinStartDate;
   const recurringPlanInputInvalid =
     !recurringPlanForm.memberId ||
     !recurringPlanForm.coachId ||
-    !recurringPlanForm.startDate ||
+    recurringPlanStartDateInvalid ||
     !recurringPlanForm.preferredTime ||
     recurringPlanForm.preferredDays.length === 0;
   const recurringPreviewConflictOverrides = useMemo(
@@ -1196,7 +1196,7 @@ function useGymOperationsPageState() {
   const handlePreviewRecurringPlan = async () => {
     if (recurringPlanInputInvalid) {
       showFeedback(
-        "Choose a member, coach, start date, time, and at least one weekday.",
+        "Choose a member, coach, start date today or later, time, and at least one weekday.",
         "danger",
       );
       return;
@@ -1224,7 +1224,7 @@ function useGymOperationsPageState() {
   const handleConfirmRecurringPlan = async (skipConflicts = false) => {
     if (recurringPlanInputInvalid) {
       showFeedback(
-        "Complete the recurring plan details before confirming.",
+        "Complete the recurring plan details with a start date today or later before confirming.",
         "danger",
       );
       return;
@@ -2226,7 +2226,7 @@ function useGymOperationsPageState() {
     requestCollectAppointmentInitialPayment, requestCollectVenueBalance,
     requestRecurringCyclePayment, respondAppointmentMutation,
     respondAppointmentPending, rightScrollRef,
-    rosterBookings, scheduleDayPart, scheduleLoading,
+    rosterBookings, scheduleLoading,
     scheduleRangeMode, scheduleRosterMaxHeight, scheduleTimelineMaxHeight,
     selectedCoachProfile, selectedCoachRoster, selectedVenueFilterLabel,
     venueBookingDateLabel, clearVenueBookingDateRange,
@@ -2239,7 +2239,7 @@ function useGymOperationsPageState() {
     setCreateVenueBookingOpen, setFeedbackModal, setPaymentConfirm, setProfileEditorCoachId,
     setRecurringActionCoachId, setRecurringActionDate, setRecurringActionReason,
     setRecurringActionTime, setRecurringPlanAction, setRecurringPlanForm,
-    setRecurringPlanOpen, setRecurringPlanPreview, setScheduleDayPart,
+    setRecurringPlanOpen, setRecurringPlanPreview,
     setScheduleRangeMode, setSlideKey, setVenueFilterId,
     setVenueEndCalendarOpen, setVenueReviewTarget, setVenueStartCalendarOpen,
     setVenueStatusFilter, setWeekStart,

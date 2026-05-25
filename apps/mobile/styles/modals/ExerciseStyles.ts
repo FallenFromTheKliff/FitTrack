@@ -23,36 +23,29 @@ export function makeExerciseModalStyles(colors: ThemeColors) {
       overflow: "hidden"
     },
     header: {
-      flexDirection: "row",
       alignItems: "center",
+      borderBottomColor: colors.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
       gap: 10,
       paddingHorizontal: 16,
-      paddingVertical: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border
+      paddingVertical: 14
     },
     headerIcon: {
-      width: 38,
-      height: 38,
+      alignItems: "center",
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
       borderRadius: R.md,
       borderWidth: 1,
-      backgroundColor: colors.brand + "22",
-      borderColor: colors.brand + "44",
-      alignItems: "center",
-      justifyContent: "center"
+      height: 32,
+      justifyContent: "center",
+      width: 32
     },
-    headerTextWrap: {
-      flex: 1
-    },
-    title: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: colors.textPrimary
-    },
-    subtitle: {
-      fontSize: 13,
-      color: colors.textMuted,
-      marginTop: 2
+    headerTitle: {
+      color: colors.textPrimary,
+      flex: 1,
+      fontSize: 17,
+      fontWeight: "700"
     },
     filtersArea: {
       zIndex: 10,
@@ -63,8 +56,8 @@ export function makeExerciseModalStyles(colors: ThemeColors) {
       alignItems: "center",
       gap: 10,
       paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 8
+      paddingTop: 16,
+      paddingBottom: 10
     },
     searchFieldWrap: {
       flex: 1

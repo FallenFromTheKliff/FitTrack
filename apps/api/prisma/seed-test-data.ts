@@ -827,7 +827,7 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       contactPhone: '+639110000003',
       displayName: 'Coach Ridge',
       averageRating: new Prisma.Decimal('4.88'),
-      bio: 'Seeded coach-role profile used to verify that the Coach Portal and Gym Operations records share one account role.',
+      bio: 'Coach profile connected to the Coach Portal and Gym Operations records.',
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('875'),
       isAvailableForBooking: true,
@@ -1689,7 +1689,7 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
           expires_at: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
           cancelled_at: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
           cancellation_reason:
-            'Seeded expired state for member-card and subscription coverage.',
+            'Expired state retained for member-card and subscription coverage.',
         },
       });
       continue;
@@ -1723,7 +1723,7 @@ async function ensureMemberStates(ensuredAccounts: readonly EnsuredAccount[]) {
           id: seedId('deletion-request:member-archived'),
           userId,
           reason:
-            'Seeded archived account for restore and account-edit QA coverage.',
+            'Archived account prepared for restore and account-edit coverage.',
           status: AccountDeletionRequestStatus.approved,
           reviewedBy: adminUserId,
           reviewedAt: accountArchivedAt(account) ?? now,
@@ -2149,7 +2149,7 @@ async function ensureNutritionFixtures(
           macro_target_id: macroTargetId,
           log_date: nutritionDate(1),
           meal_name: 'Daily summary',
-          food_item: 'Seeded full-day meal coverage',
+          food_item: 'Balanced full-day meal coverage',
           calories: new Prisma.Decimal(
             Math.round(calories * 0.92 * dailyModifier).toString(),
           ),
@@ -2242,7 +2242,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('1899'),
       stockQuantity: 4,
       reorderThreshold: 10,
-      imageUrl: 'https://fittrack.dev/assets/whey-isolate.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 5, dayOfMonth: 4, hour: 10 }),
     },
     {
@@ -2255,7 +2255,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('799'),
       stockQuantity: 7,
       reorderThreshold: 8,
-      imageUrl: 'https://fittrack.dev/assets/creatine.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 4, dayOfMonth: 7, hour: 11 }),
     },
     {
@@ -2267,7 +2267,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('120'),
       stockQuantity: 22,
       reorderThreshold: 12,
-      imageUrl: 'https://fittrack.dev/assets/energy-drink.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 3, dayOfMonth: 10, hour: 14 }),
     },
     {
@@ -2280,7 +2280,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('450'),
       stockQuantity: 14,
       reorderThreshold: 6,
-      imageUrl: 'https://fittrack.dev/assets/lifting-straps.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 2, dayOfMonth: 8, hour: 15 }),
     },
     {
@@ -2293,7 +2293,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('349'),
       stockQuantity: 2,
       reorderThreshold: 6,
-      imageUrl: 'https://fittrack.dev/assets/recovery-balm.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 6, hour: 16 }),
     },
     {
@@ -2306,7 +2306,7 @@ async function ensureAnalyticsFixtures(
       price: new Prisma.Decimal('299'),
       stockQuantity: 18,
       reorderThreshold: 8,
-      imageUrl: 'https://fittrack.dev/assets/shaker-bottle.jpg',
+      imageUrl: null,
       createdAt: analyticsAt({ monthsAgo: 1, dayOfMonth: 14, hour: 13 }),
     },
   ] as const;
@@ -2348,7 +2348,7 @@ async function ensureAnalyticsFixtures(
       name: 'Adjustable Bench',
       description:
         'One bench is currently pulled from the floor for upholstery replacement.',
-      imageUrl: 'https://fittrack.dev/assets/adjustable-bench.jpg',
+      imageUrl: null,
       quantityTotal: 6,
       quantityCurrent: 5,
       unit: 'benches',
@@ -2359,7 +2359,7 @@ async function ensureAnalyticsFixtures(
       name: 'Spin Bike',
       description:
         'Cardio bike fleet with a few units waiting on drivetrain servicing.',
-      imageUrl: 'https://fittrack.dev/assets/spin-bike.jpg',
+      imageUrl: null,
       quantityTotal: 10,
       quantityCurrent: 7,
       unit: 'bikes',
@@ -2370,7 +2370,7 @@ async function ensureAnalyticsFixtures(
       name: 'Hex Dumbbell Set',
       description:
         'Strength floor dumbbells with two pairs temporarily unavailable.',
-      imageUrl: 'https://fittrack.dev/assets/hex-dumbbell-set.jpg',
+      imageUrl: null,
       quantityTotal: 20,
       quantityCurrent: 18,
       unit: 'pairs',
@@ -2381,7 +2381,7 @@ async function ensureAnalyticsFixtures(
       name: 'Concept Rower',
       description:
         'Cardio rowers currently fully available and used as a healthy control.',
-      imageUrl: 'https://fittrack.dev/assets/concept-rower.jpg',
+      imageUrl: null,
       quantityTotal: 4,
       quantityCurrent: 4,
       unit: 'machines',
@@ -3487,8 +3487,8 @@ async function ensureWorkoutFixtures(
         'Primary lower-body compound lift for the seeded workout happy path.',
       instructions:
         'Brace the core, keep the chest tall, and drive through the mid-foot on every rep.',
-      videoUrl: 'https://fittrack.dev/exercises/barbell-back-squat',
-      imageUrl: 'https://fittrack.dev/exercises/barbell-back-squat.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'bench',
@@ -3499,8 +3499,8 @@ async function ensureWorkoutFixtures(
         'Press variation used to keep the seeded catalog broad enough for manual selection.',
       instructions:
         'Lower with control, keep forearms stacked, and press until the dumbbells meet above the chest.',
-      videoUrl: 'https://fittrack.dev/exercises/dumbbell-bench-press',
-      imageUrl: 'https://fittrack.dev/exercises/dumbbell-bench-press.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'push',
@@ -3511,8 +3511,8 @@ async function ensureWorkoutFixtures(
         'Bodyweight horizontal press seeded so live pose tracking can select and log push-up sessions explicitly.',
       instructions:
         'Keep a straight body line, lower with the elbows bending back, and press without letting the hips sag.',
-      videoUrl: 'https://fittrack.dev/exercises/push-up',
-      imageUrl: 'https://fittrack.dev/exercises/push-up.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'dip',
@@ -3523,8 +3523,8 @@ async function ensureWorkoutFixtures(
         'Bodyweight vertical press seeded so bilateral arm-motion tuning can be verified with dip-specific thresholds.',
       instructions:
         'Lower until the elbows bend deeply, keep both arms moving together, and press to a tall lockout without shrugging.',
-      videoUrl: 'https://fittrack.dev/exercises/dip',
-      imageUrl: 'https://fittrack.dev/exercises/dip.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'pull',
@@ -3535,8 +3535,8 @@ async function ensureWorkoutFixtures(
         'Bodyweight vertical pull seeded so pull-up pose tracking and back mastery can be tested end to end.',
       instructions:
         'Start from a controlled hang, pull until the elbows flex and the chest rises, then lower without swinging.',
-      videoUrl: 'https://fittrack.dev/exercises/pull-up',
-      imageUrl: 'https://fittrack.dev/exercises/pull-up.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'curl',
@@ -3547,8 +3547,8 @@ async function ensureWorkoutFixtures(
         'Dumbbell curl seeded so pose tracking can test equipment-aware elbow flexion.',
       instructions:
         'Stand tall, hold a dumbbell in each hand, curl without swinging the hips, and lower under control.',
-      videoUrl: 'https://fittrack.dev/exercises/dumbbell-bicep-curl',
-      imageUrl: 'https://fittrack.dev/exercises/dumbbell-bicep-curl.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'row',
@@ -3559,8 +3559,8 @@ async function ensureWorkoutFixtures(
         'Upper-back pull seeded so the workout picker is not a single-exercise stub.',
       instructions:
         'Stay tall, pull the handle to the lower ribs, and squeeze the shoulder blades together.',
-      videoUrl: 'https://fittrack.dev/exercises/seated-cable-row',
-      imageUrl: 'https://fittrack.dev/exercises/seated-cable-row.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
     {
       key: 'rope',
@@ -3571,8 +3571,8 @@ async function ensureWorkoutFixtures(
         'Light conditioning option so the shared catalog includes more than pure strength work.',
       instructions:
         'Stay light on the feet, keep the elbows in, and rotate from the wrists.',
-      videoUrl: 'https://fittrack.dev/exercises/jump-rope',
-      imageUrl: 'https://fittrack.dev/exercises/jump-rope.jpg',
+      videoUrl: null,
+      imageUrl: null,
     },
   ] as const;
 
@@ -4027,7 +4027,7 @@ async function ensureWorkoutFixtures(
         day_of_week: 1,
         focus_label: 'Lower Body Power',
         notes:
-          'Seeded lower-body day so the mobile workout page can load a real first exercise.',
+          'Lower-body day connected to the mobile workout page first exercise.',
       },
       {
         id: upperDayId,
@@ -4315,8 +4315,8 @@ async function ensureFeatureCoverageFixtures(
       update: {
         admin_notes:
           state === CreatorState.approved
-            ? 'Seeded creator-approved member for mobile exercise draft flows.'
-            : 'Seeded creator governance state for Exercise Lab coverage.',
+            ? 'Creator-approved member for mobile exercise draft flows.'
+            : 'Creator governance state for Exercise Lab coverage.',
         last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
         state,
       },
@@ -4324,8 +4324,8 @@ async function ensureFeatureCoverageFixtures(
         id: seedId(`creator-profile:${key}`),
         admin_notes:
           state === CreatorState.approved
-            ? 'Seeded creator-approved member for mobile exercise draft flows.'
-            : 'Seeded creator governance state for Exercise Lab coverage.',
+            ? 'Creator-approved member for mobile exercise draft flows.'
+            : 'Creator governance state for Exercise Lab coverage.',
         last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
         state,
         user_id: userId,
@@ -4838,7 +4838,7 @@ async function ensureFeatureCoverageFixtures(
         details: {
           bodyLineTolerance: 45,
           elbowSymmetryDelta: 60,
-          reason: 'Seeded event for admin integrity queue coverage.',
+          reason: 'Progression event flagged for admin integrity coverage.',
         } as Prisma.InputJsonValue,
         event_type: 'pose_session_flagged',
         integrity_case_id: integrityCaseId,
@@ -4864,7 +4864,7 @@ async function ensureFeatureCoverageFixtures(
         integrity_case_id: integrityCaseId,
         progression_grant_id: penaltyGrantId,
         rationale:
-          'Seeded moderation action for testing progression audit and integrity queues.',
+          'Manual moderation action for progression audit and integrity queues.',
         season_id: activeSeasonId,
         source_event_id: flaggedSourceEventId,
         target_user_id: memberFrozenId,
@@ -5140,15 +5140,15 @@ async function ensureFeatureCoverageFixtures(
     data: [
       {
         floor_id: 'floor-1',
-        image_url: 'https://fittrack.dev/floor-plans/floor-1.png',
+        image_url: null,
       },
       {
         floor_id: 'floor-2',
-        image_url: 'https://fittrack.dev/floor-plans/floor-2.png',
+        image_url: null,
       },
       {
         floor_id: 'floor-3',
-        image_url: 'https://fittrack.dev/floor-plans/floor-3.png',
+        image_url: null,
       },
     ],
   });

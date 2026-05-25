@@ -20,6 +20,10 @@ export const ANALYTICS_SECTION_FILTER_OPTIONS = [
     value: "insights",
   },
   {
+    label: "Performance KPIs",
+    value: "kpis",
+  },
+  {
     label: "System Alerts",
     value: "alerts",
   },
@@ -30,14 +34,6 @@ export const ANALYTICS_SECTION_FILTER_OPTIONS = [
   {
     label: "Revenue",
     value: "revenue",
-  },
-  {
-    label: "Performance KPIs",
-    value: "kpis",
-  },
-  {
-    label: "Attendance",
-    value: "attendance",
   },
 ] as const;
 

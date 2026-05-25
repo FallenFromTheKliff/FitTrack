@@ -1,5 +1,7 @@
 import { EditProfileModal, ConfirmModal, TimeSlotModal } from "@/components/modals";
 import AttendanceQrModal from "@/components/modals/profile/AttendanceQrModal";
+import TimeAvailabilityModal from "@/components/modals/profile/TimeAvailabilityModal";
+import NoticeModal from "@/components/modals/shared/NoticeModal";
 import { TIME_SLOTS } from "@/data/bookings";
 import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
 import { to12HourLabel } from "@fittrack/utils";
@@ -95,6 +97,25 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
           refreshLabel={controller.attendanceQrRefreshLabel}
         />
       ) : null}
+      {controller.isMember && controller.membershipPaymentConfirmation ? (
+        <NoticeModal
+          isVisible={controller.membershipPaymentConfirmation != null}
+          title={controller.membershipPaymentConfirmation.title}
+          message={controller.membershipPaymentConfirmation.message}
+          buttonLabel="Stay on Profile"
+          onClose={() => controller.setMembershipPaymentConfirmation(null)}
+        />
+      ) : null}
+      {controller.isCoach ? (
+        <TimeAvailabilityModal
+          controller={controller}
+          isVisible={controller.isAvailabilityEditorOpen}
+          onClose={() => {
+            controller.setIsAvailabilityEditorOpen(false);
+            controller.setAvailabilityDeleteTarget(null);
+          }}
+        />
+      ) : null}
       <TimeSlotModal
         isVisible={controller.isAvailabilityTimeOpen}
         slots={controller.availabilityTimeTarget === "start" ? TIME_SLOTS : controller.availabilityEndSlots}
@@ -103,6 +124,9 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
             ? to12HourLabel(controller.availabilityDraft.startTime)
             : to12HourLabel(controller.availabilityDraft.endTime)
         }
+        showAvailabilityLegend={false}
+        title="Choose Availability Time"
+        emptyMessage="Select a start time before choosing an end time."
         onSelect={controller.handleAvailabilitySelect}
         onClose={() => controller.setIsAvailabilityTimeOpen(false)}
       />

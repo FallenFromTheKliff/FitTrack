@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
+import { R } from "@fittrack/ui/tokens";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
@@ -14,8 +15,6 @@ import type {
 
 type Props = {
   content: MobileHelpContent;
-  onNeverShowAgain?: () => void;
-  showNeverShowAgain?: boolean;
 };
 
 type HelpPanelStyles = ReturnType<typeof makeStyles>;
@@ -158,6 +157,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       fontSize: 13,
       lineHeight: 19,
     },
+    fabNote: {
+      backgroundColor: colors.brand + "10",
+      borderColor: colors.brand + "33",
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    fabNoteTitle: {
+      color: colors.brand,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+    },
+    fabNoteText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+    },
     section: {
       gap: 8,
     },
@@ -207,7 +227,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     },
     chevronBadge: {
       alignItems: "center",
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       height: 32,
       justifyContent: "center",
@@ -285,34 +305,44 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       fontSize: 12,
       lineHeight: 17,
     },
-    neverButton: {
-      alignItems: "center",
-      borderColor: colors.border,
-      borderRadius: 14,
-      borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-    },
-    neverText: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      fontWeight: "800",
-    },
   });
+}
+
+function hasFabGuidance(content: MobileHelpContent) {
+  const detailText =
+    content.detailCards
+      ?.flatMap((card) => [
+        card.title,
+        card.subtitle,
+        ...card.details,
+        ...(card.terms?.flatMap((term) => [term.label, term.value]) ?? []),
+      ])
+      .join(" ") ?? "";
+  const text = [content.description, ...content.steps, detailText].join(" ");
+  return /\bFAB\b|\+ button/i.test(text);
 }
 
 export default function MobileHelpPanel({
   content,
-  onNeverShowAgain,
-  showNeverShowAgain = false,
 }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [openDetailIndex, setOpenDetailIndex] = useState<number | null>(null);
+  const showFabNote = hasFabGuidance(content);
 
   return (
     <View style={s.body}>
       <FitText style={s.description}>{content.description}</FitText>
+      {showFabNote ? (
+        <View style={s.fabNote}>
+          <FitText style={s.fabNoteTitle}>FAB</FitText>
+          <FitText style={s.fabNoteText}>
+            FAB means Floating Action Button: the round quick-action button near
+            the bottom corner. Open it for this screen's shortcuts, then choose
+            the action that matches your next task.
+          </FitText>
+        </View>
+      ) : null}
 
       <View style={s.section}>
         <FitText style={s.sectionTitle}>How to use this page</FitText>
@@ -351,16 +381,6 @@ export default function MobileHelpPanel({
             ))}
           </View>
         </View>
-      ) : null}
-
-      {showNeverShowAgain ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onNeverShowAgain}
-          style={s.neverButton}
-        >
-          <FitText style={s.neverText}>Never show this automatically again</FitText>
-        </Pressable>
       ) : null}
     </View>
   );

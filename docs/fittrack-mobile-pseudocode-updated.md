@@ -79,7 +79,7 @@ RootLayout:
 AuthProvider:
   uses createAuthController
   uses mobileSessionStore backed by AsyncStorage
-  roleGate.allowedRoles = ["USER"]
+  roleGate.allowedRoles = ["USER", "COACH"]
   hydrates deletion-request status for members
   clears tokens on auth failure
 ```
@@ -88,17 +88,17 @@ AuthProvider:
 
 ## Mobile Role Gate
 
-### Current allowed mobile role
+### Current allowed mobile roles
 
 - `USER`
+- `COACH`
 
 ### Current blocked roles
 
 - `ADMIN`
 - `STAFF`
-- `COACH`
 
-Current note: coach-specific mobile profile components still exist in the codebase, but the active mobile auth gate rejects non-`USER` roles before protected tabs render.
+Current note: coach-specific mobile views render inside the protected tabs through the same mobile shell as members. ADMIN and STAFF are rejected before protected tabs render.
 
 ```text
 IF auth is loading:

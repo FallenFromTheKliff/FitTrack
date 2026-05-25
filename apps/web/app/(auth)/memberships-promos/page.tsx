@@ -9,6 +9,7 @@ import type {
   MembershipPaymentDetailsRecord,
   MembershipPlanRecord,
 } from "@fittrack/api-client";
+import type { MembershipCatalogSettingsRecord } from "@fittrack/types";
 import {
   createGymPromotionMutationOptions,
   createMembershipPlanMutationOptions,
@@ -33,7 +34,7 @@ import {
   FitTextArea,
   FitTextInput,
 } from "@/components/fit";
-import { ConfirmModal } from "@/components/modals";
+import { ConfirmModal, FitModal } from "@/components/modals";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,14 @@ const PLAN_NAME_MAX_LENGTH = 100;
 const PROMO_CODE_MAX_LENGTH = 100;
 const PROMO_TITLE_MAX_LENGTH = 255;
 
+type MembershipServiceOffering = {
+  helper: string;
+  id: string;
+  isActive: boolean;
+  label: string;
+  price: string;
+};
+
 function parsePositiveMoney(value: string, label: string) {
   const trimmed = value.trim();
   if (!trimmed) return { error: `${label} is required.`, value: null };
@@ -108,6 +117,21 @@ function parsePositiveWholeNumber(value: string, label: string) {
     return { error: `${label} must be at least 1.`, value: null };
   }
   return { error: null, value: parsed };
+}
+
+function formatMoney(value: string | number | null | undefined) {
+  return `PHP ${Number(value ?? 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatDuration(days: number) {
+  if (days === 1) return "1 day";
+  if (days % 365 === 0) return `${days / 365} year${days === 365 ? "" : "s"}`;
+  if (days % 30 === 0) return `${days / 30} month${days === 30 ? "" : "s"}`;
+  if (days % 7 === 0) return `${days / 7} week${days === 7 ? "" : "s"}`;
+  return `${days} days`;
 }
 
 function parsePromoDate(value: string, label: string) {
@@ -139,10 +163,6 @@ function formatDate(value: string) {
   });
 }
 
-function formatNullableDate(value: string | null) {
-  return value ? formatDate(value) : "No date set";
-}
-
 function toIsoDateTime(value: string) {
   return new Date(value).toISOString();
 }
@@ -172,6 +192,39 @@ function planToDraft(plan: MembershipPlanRecord): PlanDraft {
   };
 }
 
+function buildMembershipServiceOfferings(
+  plans: MembershipPlanRecord[],
+  catalogSettings?: MembershipCatalogSettingsRecord,
+): MembershipServiceOffering[] {
+  const offerings: MembershipServiceOffering[] = [];
+
+  if (catalogSettings) {
+    offerings.push({
+      helper:
+        "One-time member-card activation fee from the live membership catalog settings.",
+      id: "membership-card-activation",
+      isActive: true,
+      label: "One-time membership activation",
+      price: formatMoney(catalogSettings.membership_card_price),
+    });
+  }
+
+  return [
+    ...offerings,
+    ...plans.map((plan) => ({
+      helper:
+        plan.description?.trim() ||
+        (plan.includes_coaching
+          ? "Live access plan that includes coaching benefits."
+          : "Live gym access reload plan."),
+      id: plan.id,
+      isActive: plan.is_active,
+      label: plan.name,
+      price: `${formatMoney(plan.price)} / ${formatDuration(plan.duration_days)}`,
+    })),
+  ];
+}
+
 export default function MembershipsPromosPage() {
   const { colors } = useTheme();
   const fadeIn = useFadeIn({ duration: 220 });
@@ -184,6 +237,7 @@ export default function MembershipsPromosPage() {
   const [membershipCardPriceDraft, setMembershipCardPriceDraft] = useState("");
   const [promoDraft, setPromoDraft] = useState<PromoDraft>(DEFAULT_PROMO_DRAFT);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [plansModalOpen, setPlansModalOpen] = useState(false);
   const [deactivatePromoTarget, setDeactivatePromoTarget] =
     useState<GymPromotionRecord | null>(null);
 
@@ -203,7 +257,7 @@ export default function MembershipsPromosPage() {
     reviewMembershipPaymentsQueryOptions(webApiClient, {
       limit: 6,
       page: 1,
-      status: "pending",
+      status: "awaiting_verification",
     }),
   );
   const createPlanMutation = useMutation(
@@ -222,10 +276,17 @@ export default function MembershipsPromosPage() {
     deactivateGymPromotionMutationOptions(webApiClient, queryClient),
   );
 
-  const plans = plansQuery.data?.data ?? [];
+  const plans = useMemo(
+    () => plansQuery.data?.data ?? [],
+    [plansQuery.data?.data],
+  );
   const membershipCatalogSettings = membershipCatalogSettingsQuery.data;
   const operations = operationsQuery.data;
   const promotions = promotionsQuery.data?.data ?? [];
+  const serviceOfferings = useMemo(
+    () => buildMembershipServiceOfferings(plans, membershipCatalogSettings),
+    [membershipCatalogSettings, plans],
+  );
   const plansTotal = plansQuery.data?.meta.total ?? plans.length;
   const promotionsTotal = promotionsQuery.data?.meta.total ?? promotions.length;
   const pageError =
@@ -409,91 +470,128 @@ export default function MembershipsPromosPage() {
         colors={colors}
         dashboard={operations}
         loading={operationsQuery.isFetching}
+        offeringsLoading={
+          plansQuery.isFetching || membershipCatalogSettingsQuery.isFetching
+        }
         pendingPayments={membershipReviewPaymentsQuery.data?.data ?? []}
         paymentsLoading={membershipReviewPaymentsQuery.isFetching}
-        onRefresh={() => void operationsQuery.refetch()}
+        onRefresh={() =>
+          void Promise.all([
+            operationsQuery.refetch(),
+            plansQuery.refetch(),
+            membershipCatalogSettingsQuery.refetch(),
+          ])
+        }
         onRefreshPayments={() => void membershipReviewPaymentsQuery.refetch()}
+        onOpenPlans={() => setPlansModalOpen(true)}
         panelStyle={panelStyle}
         mutedStyle={muted}
+        serviceOfferings={serviceOfferings}
       />
 
-      <MembershipSurface
-        colors={colors}
-        heading={`MEMBERSHIP PLANS (${plansTotal})`}
-        action={
-          <FitButton
-            icon={RefreshCcw}
-            label="REFRESH"
-            variant="ghost"
-            onClick={() => void plansQuery.refetch()}
-            loading={plansQuery.isFetching}
-          />
-        }
+      <FitModal
+        isOpen={plansModalOpen}
+        onClose={() => setPlansModalOpen(false)}
+        title={`Membership Plans (${plansTotal})`}
+        subtitle="Update one-time activation pricing and gym access reload plans separately from daily operations."
+        icon={BadgePercent}
+        maxWidth={1080}
       >
-        <div
-          style={{
-            ...panelStyle,
-            backgroundColor: colors.surface,
-            display: "grid",
-            gap: 12,
-          }}
-        >
-          <FitText style={{ fontSize: 14, fontWeight: 900 }}>
-            Membership card price
-          </FitText>
-          <FitText as="p" style={muted}>
-            This is the one-time member-facing card price shown in the mobile Profile purchase flow before any plan is loaded.
-          </FitText>
+        <div style={{ display: "grid", gap: 14 }}>
           <div
             style={{
-              alignItems: "end",
+              alignItems: "center",
               display: "grid",
               gap: 12,
-              gridTemplateColumns: "minmax(180px, 0.35fr) auto",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
             }}
           >
-            <label style={{ display: "grid", gap: 6 }}>
-              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                Mobile membership card price
+            <div>
+              <FitText style={{ fontSize: 14, fontWeight: 900 }}>
+                Activation and reload catalog
               </FitText>
-              <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-                <FitTextInput
-                  aria-label="Membership card price"
-                  inputMode="decimal"
-                  min="0.01"
-                  step="0.01"
-                  type="number"
-                  value={membershipCardPriceDraft}
-                  onChange={(event) => setMembershipCardPriceDraft(event.target.value)}
-                />
-              </div>
-            </label>
+              <FitText as="p" style={muted}>
+                Keep the member-card fee separate from reload plan duration and pricing.
+              </FitText>
+            </div>
             <FitButton
-              icon={Save}
-              label="SAVE CARD PRICE"
-              loading={updateMembershipCatalogSettingsMutation.isPending}
-              onClick={() => {
-                const price = parsePositiveMoney(
-                  membershipCardPriceDraft,
-                  "Membership card price",
-                );
-                if (price.error) {
-                  setValidationMessage(price.error);
-                  return;
-                }
-                setValidationMessage(null);
-                updateMembershipCatalogSettingsMutation.mutate({
-                  membershipCardPrice: price.value ?? 0,
-                });
-              }}
+              icon={RefreshCcw}
+              label="REFRESH"
+              variant="ghost"
+              onClick={() =>
+                void Promise.all([
+                  plansQuery.refetch(),
+                  membershipCatalogSettingsQuery.refetch(),
+                ])
+              }
+              loading={plansQuery.isFetching || membershipCatalogSettingsQuery.isFetching}
             />
           </div>
-        </div>
 
-        <div style={{ display: "grid", gap: 12 }}>
-          {plans.map((plan) => {
-            const draft = planDrafts[plan.id] ?? planToDraft(plan);
-            return (
+          <div
+            style={{
+              ...panelStyle,
+              backgroundColor: colors.surface,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <FitText style={{ fontSize: 14, fontWeight: 900 }}>
+              Membership activation fee
+            </FitText>
+            <FitText as="p" style={muted}>
+              This one-time member-facing card price is shown in the mobile Profile purchase flow before any reload plan is loaded.
+            </FitText>
+            <div
+              style={{
+                alignItems: "end",
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "minmax(180px, 0.35fr) auto",
+              }}
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                  One-time membership activation
+                </FitText>
+                <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
+                  <FitTextInput
+                    aria-label="Membership card price"
+                    inputMode="decimal"
+                    min="0.01"
+                    step="0.01"
+                    type="number"
+                    value={membershipCardPriceDraft}
+                    onChange={(event) => setMembershipCardPriceDraft(event.target.value)}
+                  />
+                </div>
+              </label>
+              <FitButton
+                icon={Save}
+                label="SAVE CARD PRICE"
+                loading={updateMembershipCatalogSettingsMutation.isPending}
+                onClick={() => {
+                  const price = parsePositiveMoney(
+                    membershipCardPriceDraft,
+                    "Membership card price",
+                  );
+                  if (price.error) {
+                    setValidationMessage(price.error);
+                    return;
+                  }
+                  setValidationMessage(null);
+                  updateMembershipCatalogSettingsMutation.mutate({
+                    membershipCardPrice: price.value ?? 0,
+                  });
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            {plans.map((plan) => {
+              const draft = planDrafts[plan.id] ?? planToDraft(plan);
+              return (
               <div
                 key={plan.id}
                 style={{
@@ -514,7 +612,7 @@ export default function MembershipsPromosPage() {
                   </FitText>
                   <FitPill
                     mode="status"
-                    label={plan.includes_coaching ? "Includes coaching" : "Gym access"}
+                    label={plan.includes_coaching ? "Includes coaching" : "Access reload"}
                     color={colors.brand}
                     style={{ justifySelf: "start", maxWidth: "100%" }}
                   />
@@ -570,124 +668,125 @@ export default function MembershipsPromosPage() {
                   />
                 </div>
               </div>
-            );
-          })}
-          {plans.length === 0 ? (
-            <FitText as="p" style={muted}>
-              No active membership plans are available.
+              );
+            })}
+            {plans.length === 0 ? (
+              <FitText as="p" style={muted}>
+                No active access reload plans are available.
+              </FitText>
+            ) : null}
+          </div>
+          <div
+            style={{
+              borderTop: `1px solid ${colors.border}`,
+              display: "grid",
+              gap: 12,
+              marginTop: 6,
+              paddingTop: 16,
+            }}
+          >
+            <FitText style={{ fontSize: 13, fontWeight: 900, color: colors.textMuted }}>
+              CREATE ACCESS RELOAD PLAN
             </FitText>
-          ) : null}
-        </div>
-        <div
-          style={{
-            borderTop: `1px solid ${colors.border}`,
-            display: "grid",
-            gap: 12,
-            marginTop: 6,
-            paddingTop: 16,
-          }}
-        >
-          <FitText style={{ fontSize: 13, fontWeight: 900, color: colors.textMuted }}>
-            CREATE MEMBERSHIP PLAN
-          </FitText>
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: "minmax(180px, 1fr) minmax(120px, 0.35fr) minmax(120px, 0.35fr) auto",
-            alignItems: "end",
-          }}
-        >
-          <label style={{ display: "grid", gap: 6 }}>
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Plan name</FitText>
-            <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-              <FitTextInput
-                maxLength={PLAN_NAME_MAX_LENGTH}
-                value={createPlanDraft.name}
-                onChange={(event) =>
-                  setCreatePlanDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                placeholder="Monthly Membership"
-              />
-            </div>
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Price</FitText>
-            <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-              <FitTextInput
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
-                type="number"
-                value={createPlanDraft.price}
-                onChange={(event) =>
-                  setCreatePlanDraft((current) => ({
-                    ...current,
-                    price: event.target.value,
-                  }))
-                }
-                placeholder="1499"
-              />
-            </div>
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Days</FitText>
-            <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-              <FitTextInput
-                inputMode="numeric"
-                min="1"
-                step="1"
-                type="number"
-                value={createPlanDraft.durationDays}
-                onChange={(event) =>
-                  setCreatePlanDraft((current) => ({
-                    ...current,
-                    durationDays: event.target.value,
-                  }))
-                }
-              />
-            </div>
-          </label>
-          <FitButton
-            icon={Plus}
-            label="CREATE"
-            loading={createPlanMutation.isPending}
-            onClick={createPlan}
-          />
-          <label style={{ display: "grid", gap: 6, gridColumn: "1 / span 3" }}>
-            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Description</FitText>
-            <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-              <FitTextInput
-                value={createPlanDraft.description}
-                onChange={(event) =>
-                  setCreatePlanDraft((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                placeholder="Access to gym equipment and member app benefits"
-              />
-            </div>
-          </label>
-          <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
-            <input
-              checked={createPlanDraft.includesCoaching}
-              onChange={(event) =>
-                setCreatePlanDraft((current) => ({
-                  ...current,
-                  includesCoaching: event.target.checked,
-                }))
-              }
-              type="checkbox"
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "minmax(180px, 1fr) minmax(120px, 0.35fr) minmax(120px, 0.35fr) auto",
+              alignItems: "end",
+            }}
+          >
+            <label style={{ display: "grid", gap: 6 }}>
+              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Plan name</FitText>
+              <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
+                <FitTextInput
+                  maxLength={PLAN_NAME_MAX_LENGTH}
+                  value={createPlanDraft.name}
+                  onChange={(event) =>
+                    setCreatePlanDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Monthly Gym Access Reload"
+                />
+              </div>
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Price</FitText>
+              <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
+                <FitTextInput
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  type="number"
+                  value={createPlanDraft.price}
+                  onChange={(event) =>
+                    setCreatePlanDraft((current) => ({
+                      ...current,
+                      price: event.target.value,
+                    }))
+                  }
+                  placeholder="1499"
+                />
+              </div>
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Access days</FitText>
+              <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
+                <FitTextInput
+                  inputMode="numeric"
+                  min="1"
+                  step="1"
+                  type="number"
+                  value={createPlanDraft.durationDays}
+                  onChange={(event) =>
+                    setCreatePlanDraft((current) => ({
+                      ...current,
+                      durationDays: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </label>
+            <FitButton
+              icon={Plus}
+              label="CREATE"
+              loading={createPlanMutation.isPending}
+              onClick={createPlan}
             />
-            <FitText style={{ fontSize: 12 }}>Includes coaching</FitText>
-          </label>
+            <label style={{ display: "grid", gap: 6, gridColumn: "1 / span 3" }}>
+              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Description</FitText>
+              <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
+                <FitTextInput
+                  value={createPlanDraft.description}
+                  onChange={(event) =>
+                    setCreatePlanDraft((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  placeholder="Reloads gym access and member app benefits for 30 days"
+                />
+              </div>
+            </label>
+            <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
+              <input
+                checked={createPlanDraft.includesCoaching}
+                onChange={(event) =>
+                  setCreatePlanDraft((current) => ({
+                    ...current,
+                    includesCoaching: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              <FitText style={{ fontSize: 12 }}>Includes coaching</FitText>
+            </label>
+          </div>
+          </div>
         </div>
-        </div>
-      </MembershipSurface>
+      </FitModal>
 
       <MembershipSurface
         colors={colors}
@@ -903,21 +1002,27 @@ function MembershipOperationsDashboard({
   dashboard,
   loading,
   mutedStyle,
+  onOpenPlans,
+  offeringsLoading,
   onRefreshPayments,
   onRefresh,
   panelStyle,
   paymentsLoading,
   pendingPayments,
+  serviceOfferings,
 }: {
   colors: ReturnType<typeof useTheme>["colors"];
   dashboard?: MembershipOperationsDashboardRecord;
   loading: boolean;
   mutedStyle: CSSProperties;
+  onOpenPlans: () => void;
+  offeringsLoading: boolean;
   onRefreshPayments: () => void;
   onRefresh: () => void;
   panelStyle: CSSProperties;
   paymentsLoading: boolean;
   pendingPayments: MembershipPaymentDetailsRecord[];
+  serviceOfferings: MembershipServiceOffering[];
 }) {
   const metricCards = [
     {
@@ -926,63 +1031,11 @@ function MembershipOperationsDashboard({
       helper: "Subscriptions currently marked active.",
     },
     {
-      label: "Activated Last 7 Days",
-      value: dashboard?.recentlyActivatedCount ?? 0,
-      helper: "Newly started memberships.",
-    },
-    {
-      label: "Expiring Next 7 Days",
-      value: dashboard?.expiringMembershipCount ?? 0,
-      helper: "Active, past-due, or cancelled access ending soon.",
-    },
-    {
-      label: "Pending Payment Reviews",
+      label: "Payment Reviews Awaiting Verification",
       value: pendingPayments.length,
       helper: "Cash or manual membership submissions waiting for staff review.",
     },
   ];
-
-  const renderRows = (
-    rows: MembershipOperationsDashboardRecord["recentlyActivated"],
-    emptyCopy: string,
-  ) =>
-    rows.length ? (
-      <div style={{ display: "grid", gap: 8 }}>
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            style={{
-              ...panelStyle,
-              backgroundColor: colors.surface,
-              display: "grid",
-              gap: 8,
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-              padding: 12,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <FitText style={{ fontSize: 13.5, fontWeight: 850 }}>
-                {row.memberName}
-              </FitText>
-              <FitText as="p" style={mutedStyle}>
-                {row.planName} / {formatNullableDate(row.startsAt)} to{" "}
-                {formatNullableDate(row.expiresAt)}
-              </FitText>
-            </div>
-            <FitPill
-              mode="status"
-              label={row.status.replaceAll("_", " ")}
-              color={colors.brand}
-              style={{ justifySelf: "end" }}
-            />
-          </div>
-        ))}
-      </div>
-    ) : (
-      <FitText as="p" style={mutedStyle}>
-        {emptyCopy}
-      </FitText>
-    );
 
   return (
     <MembershipSurface
@@ -1004,6 +1057,12 @@ function MembershipOperationsDashboard({
             VIEW MEMBER ACCOUNTS
           </a>
           <FitButton
+            icon={BadgePercent}
+            label="VIEW MEMBERSHIP PLANS"
+            variant="primary"
+            onClick={onOpenPlans}
+          />
+          <FitButton
             icon={RefreshCcw}
             label="REFRESH"
             variant="ghost"
@@ -1018,7 +1077,7 @@ function MembershipOperationsDashboard({
           style={{
             display: "grid",
             gap: 12,
-            gridTemplateColumns: "repeat(4, minmax(160px, 1fr))",
+            gridTemplateColumns: "repeat(2, minmax(180px, 1fr))",
           }}
         >
           {metricCards.map((card) => (
@@ -1040,31 +1099,38 @@ function MembershipOperationsDashboard({
           style={{
             display: "grid",
             gap: 12,
-            gridTemplateColumns: "repeat(2, minmax(240px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
           }}
         >
-          <div style={panelStyle}>
-            <FitText style={{ fontSize: 14, fontWeight: 900 }}>
-              Recently Activated
-            </FitText>
-            <div style={{ marginTop: 10 }}>
-              {renderRows(
-                dashboard?.recentlyActivated ?? [],
-                "No memberships activated in the last 7 days.",
-              )}
+          {serviceOfferings.length ? serviceOfferings.map((offering) => (
+            <div key={offering.id} style={panelStyle}>
+              <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                <FitText style={{ color: colors.textMuted, fontSize: 11, fontWeight: 900 }}>
+                  {offering.price}
+                </FitText>
+                <FitPill
+                  mode="status"
+                  label={offering.isActive ? "Active" : "Inactive"}
+                  color={offering.isActive ? colors.success : colors.textMuted}
+                />
+              </div>
+              <FitText as="p" style={{ fontSize: 15, fontWeight: 900, marginTop: 6 }}>
+                {offering.label}
+              </FitText>
+              <FitText as="p" style={mutedStyle}>
+                {offering.helper}
+              </FitText>
             </div>
-          </div>
-          <div style={panelStyle}>
-            <FitText style={{ fontSize: 14, fontWeight: 900 }}>
-              Expiring Soon
-            </FitText>
-            <div style={{ marginTop: 10 }}>
-              {renderRows(
-                dashboard?.expiringMemberships ?? [],
-                "No memberships expire in the next 7 days.",
-              )}
+          )) : (
+            <div style={panelStyle}>
+              <FitText style={{ fontSize: 15, fontWeight: 900 }}>
+                {offeringsLoading ? "Loading live membership offerings" : "No membership offerings returned"}
+              </FitText>
+              <FitText as="p" style={mutedStyle}>
+                Activation fees and reload plans come from the live membership catalog.
+              </FitText>
             </div>
-          </div>
+          )}
         </div>
 
         <div style={panelStyle}>
@@ -1079,7 +1145,7 @@ function MembershipOperationsDashboard({
           >
             <div>
               <FitText style={{ fontSize: 14, fontWeight: 900 }}>
-                Pending membership payment reviews
+                Payment reviews awaiting verification
               </FitText>
               <FitText as="p" style={mutedStyle}>
                 These are the latest manual or cash submissions awaiting approval before member access updates.
@@ -1130,7 +1196,7 @@ function MembershipOperationsDashboard({
                         : `User ${payment.user_id.slice(0, 8)}`}
                     </FitText>
                     <FitText as="p" style={mutedStyle}>
-                      {payment.payable_type.replaceAll("_", " ")} / ₱
+                      {payment.payable_type.replaceAll("_", " ")} / PHP{" "}
                       {Number(payment.amount ?? 0).toLocaleString("en-PH", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -1147,7 +1213,7 @@ function MembershipOperationsDashboard({
               ))
             ) : (
               <FitText as="p" style={mutedStyle}>
-                No pending membership-card or subscription payment reviews right now.
+                No membership-card or subscription payment reviews awaiting verification right now.
               </FitText>
             )}
           </div>

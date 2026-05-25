@@ -48,7 +48,7 @@ export default function Header({
             iconSize={23}
             className="fit-header-menu-button"
             onClick={onMenuToggle}
-            style={s.iconBtn}
+            style={{ ...s.iconBtn, color: colors.brand }}
             aria-label="Open sidebar"
           />
         ) : null}

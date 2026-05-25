@@ -54,8 +54,8 @@ export default function NotificationInboxPanel({
   const unreadCount = notifications.filter((item) => !item.readAt).length;
 
   return (
-    <Animated.View style={[s.body, surfaceStyle]}>
-      <View>
+    <Animated.View style={[s.notificationBody, surfaceStyle]}>
+      <View style={s.notificationContent}>
         <AnimatedFitText style={[s.sectionLabel, textMutedStyle]}>
           RECENT NOTIFICATIONS
         </AnimatedFitText>
@@ -107,7 +107,7 @@ export default function NotificationInboxPanel({
         </View>
       </View>
 
-      <View style={s.footer}>
+      <View style={s.notificationFooter}>
         <FitButton
           label={markAllReadMutation.isPending ? "Marking..." : "Mark All Read"}
           variant="ghost"

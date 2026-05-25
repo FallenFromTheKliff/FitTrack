@@ -279,7 +279,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flex: 1
         } as CSSProperties,
         messageTitle: {
-            fontSize: 38,
+            fontSize: "clamp(24px, 3vw, 38px)",
             fontWeight: 500,
             lineHeight: 1.08,
             margin: 0,
@@ -288,7 +288,7 @@ export function headerStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             overflowWrap: "break-word"
         } as CSSProperties,
         messageSubtitle: {
-            fontSize: 15,
+            fontSize: "clamp(12px, 1.15vw, 15px)",
             color: subtitleColor,
             marginTop: 8,
             marginBottom: 0,

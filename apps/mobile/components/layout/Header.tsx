@@ -21,6 +21,10 @@ type HeaderProps = {
   unreadCount?: number;
 };
 
+function usesBrandHeader(activeTab: TabKey) {
+  return activeTab === "profile";
+}
+
 export default function Header({
   onMenuPress,
   onHelpPress,
@@ -34,14 +38,14 @@ export default function Header({
   const { colors, activeIconColor } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const s = React.useMemo(() => makeHeaderStyles(colors), [colors]);
-  const isProfile = activeTab === "profile";
+  const isBrandHeader = usesBrandHeader(activeTab);
   const dimOpacity = useSharedValue(isDimmed ? 1 : 0);
-  const isProfileShared = useSharedValue(isProfile ? 1 : 0);
+  const isBrandHeaderShared = useSharedValue(isBrandHeader ? 1 : 0);
   const brandColor = useSharedValue(colors.brand);
 
   React.useEffect(() => {
-    isProfileShared.value = isProfile ? 1 : 0;
-  }, [isProfile, isProfileShared]);
+    isBrandHeaderShared.value = isBrandHeader ? 1 : 0;
+  }, [isBrandHeader, isBrandHeaderShared]);
 
   React.useEffect(() => {
     brandColor.value = colors.brand;
@@ -51,11 +55,11 @@ export default function Header({
     dimOpacity.value = isDimmed ? 1 : 0;
   }, [dimOpacity, isDimmed]);
 
-  const iconColor = isProfile ? (colors.onBrand ?? "#FFFFFF") : (activeIconColor ?? colors.textPrimary);
+  const iconColor = isBrandHeader ? (colors.onBrand ?? "#FFFFFF") : (activeIconColor ?? colors.textPrimary);
   const showOverlayBlur = !!isDimmed;
 
   const headerStyle = useAnimatedStyle(() => ({
-    backgroundColor: isProfileShared.value === 1 ? brandColor.value : ic.value.surface
+    backgroundColor: isBrandHeaderShared.value === 1 ? brandColor.value : ic.value.surface
   }));
   const dimOverlayStyle = useAnimatedStyle(() => ({ opacity: dimOpacity.value }));
 

@@ -63,6 +63,7 @@ export const SURFACE_MODE_OPTIONS: Array<{ label: string; value: SurfaceMode }> 
   { label: "Review", value: "review" },
   { label: "Library", value: "library" },
   { label: "Muscles", value: "muscles" },
+  { label: "Milestones", value: "milestones" },
 ];
 export const CREATOR_STATE_OPTIONS = [
   { label: "None", value: "none" },
@@ -206,7 +207,7 @@ export function scoreExerciseMatch(
 
 export function getEvidenceBars(evidence: ExerciseReviewEvidenceRecord | null) {
   if (Array.isArray(evidence)) return evidence;
-  return [18, 28, 44, 34, 24, 20];
+  return [];
 }
 
 export function getEvidenceSummary(evidence: ExerciseReviewEvidenceRecord | null) {

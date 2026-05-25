@@ -5,7 +5,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { WandSparkles, X } from "lucide-react-native";
+import { WandSparkles } from "lucide-react-native";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
@@ -28,6 +28,7 @@ import {
   normalizeExerciseMuscleTargets,
   validateExerciseEditorContract,
 } from "@fittrack/utils";
+import { R } from "@fittrack/ui/tokens";
 
 export type ExerciseCreationDraft = {
   category: FitnessExerciseCategory;
@@ -266,9 +267,6 @@ export default function ExerciseCreationReviewModal({
                 Review the captured rig before sending it to Exercise Lab.
               </FitText>
             </View>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <X color={colors.textMuted} size={22} />
-            </Pressable>
           </View>
 
           <View
@@ -335,7 +333,7 @@ export default function ExerciseCreationReviewModal({
                               activeKeyframeIndex === index
                                 ? colors.brand
                                 : colors.surfaceRaised,
-                            borderRadius: 999,
+                            borderRadius: R.md,
                             paddingHorizontal: 12,
                             paddingVertical: 8,
                           }}
@@ -449,7 +447,7 @@ export default function ExerciseCreationReviewModal({
                           }
                           style={{
                             backgroundColor: target.role === role ? colors.brand : colors.surface,
-                            borderRadius: 999,
+                            borderRadius: R.md,
                             paddingHorizontal: 10,
                             paddingVertical: 7,
                           }}

@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Modal, Pressable, ScrollView } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { ChevronDown, X } from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -14,6 +14,8 @@ import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
 
 import { AnimatedFitText, FitText } from "@/components/fit/FitText";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type PrefKey =
     | "notifications"
@@ -30,7 +32,7 @@ type Props = {
   icon: LucideIcon;
   onClose: () => void;
   children: ReactNode;
-  hideHeaderClose?: boolean;
+  fixedFooterAccessory?: ReactNode;
   showFixedCloseButton?: boolean;
   showScrollHint?: boolean;
 };
@@ -42,7 +44,7 @@ export default function SettingsModal({
   icon: Icon,
   onClose,
   children,
-  hideHeaderClose = false,
+  fixedFooterAccessory,
   showFixedCloseButton = false,
   showScrollHint = false,
 }: Props) {
@@ -50,6 +52,7 @@ export default function SettingsModal({
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(visible, "scale");
   const s = useMemo(() => makePrefModalStyles(colors), [colors]);
+  const scrollRef = useRef<ScrollView | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({
     contentHeight: 0,
     offsetY: 0,
@@ -65,6 +68,7 @@ export default function SettingsModal({
     scrollMetrics.offsetY + scrollMetrics.viewportHeight >=
       scrollMetrics.contentHeight - 18;
   const showScrollCue = canScroll && !isAtBottom;
+  const hasFixedFooterAccessory = Boolean(fixedFooterAccessory);
 
   const backdropStyle = useAnimatedStyle(() => ({ backgroundColor: ic.value.overlay }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -92,8 +96,18 @@ export default function SettingsModal({
 
   useEffect(() => {
     if (visible) return;
-    setScrollMetrics({ contentHeight: 0, offsetY: 0, viewportHeight: 0 });
+    setScrollMetrics((current) =>
+      current.contentHeight === 0 &&
+      current.offsetY === 0 &&
+      current.viewportHeight === 0
+        ? current
+        : { contentHeight: 0, offsetY: 0, viewportHeight: 0 },
+    );
   }, [visible]);
+
+  const handleScrollCuePress = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
 
   return (
       <Modal
@@ -112,43 +126,42 @@ export default function SettingsModal({
               <AnimatedFitText style={[s.headerTitle, headerTitleStyle]}>
                 {title}
               </AnimatedFitText>
-              {hideHeaderClose ? null : (
-                <Pressable
-                  accessibilityLabel="Close modal"
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={onClose}
-                  style={s.closeButton}
-                >
-                  <X size={18} color={colors.textPrimary} strokeWidth={2.4} />
-                </Pressable>
-              )}
             </Animated.View>
             <ScrollView
+                ref={scrollRef}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
                 bounces={false}
-                contentContainerStyle={
+                contentContainerStyle={[
+                  s.scrollContent,
                   showFixedCloseButton
                     ? s.scrollContentWithFixedClose
                     : showScrollHint
                       ? s.scrollContentWithCue
                       : undefined
-                }
+                ]}
                 onContentSizeChange={(_, contentHeight) => {
                   if (!showScrollHint) return;
-                  setScrollMetrics((current) => ({
-                    ...current,
-                    contentHeight,
-                  }));
+                  setScrollMetrics((current) =>
+                    current.contentHeight === contentHeight
+                      ? current
+                      : {
+                          ...current,
+                          contentHeight,
+                        },
+                  );
                 }}
                 onLayout={(event) => {
                   if (!showScrollHint) return;
                   const viewportHeight = event.nativeEvent?.layout?.height ?? 0;
-                  setScrollMetrics((current) => ({
-                    ...current,
-                    viewportHeight,
-                  }));
+                  setScrollMetrics((current) =>
+                    current.viewportHeight === viewportHeight
+                      ? current
+                      : {
+                          ...current,
+                          viewportHeight,
+                        },
+                  );
                 }}
                 onScroll={(event) => {
                   if (!showScrollHint) return;
@@ -156,22 +169,37 @@ export default function SettingsModal({
                   const contentHeight = nativeEvent?.contentSize?.height ?? 0;
                   const offsetY = nativeEvent?.contentOffset?.y ?? 0;
                   const viewportHeight = nativeEvent?.layoutMeasurement?.height ?? 0;
-                  setScrollMetrics((current) => ({
-                    ...current,
-                    contentHeight,
-                    offsetY,
-                    viewportHeight,
-                  }));
+                  setScrollMetrics((current) =>
+                    current.contentHeight === contentHeight &&
+                    current.offsetY === offsetY &&
+                    current.viewportHeight === viewportHeight
+                      ? current
+                      : {
+                          contentHeight,
+                          offsetY,
+                          viewportHeight,
+                        },
+                  );
                 }}
+                persistentScrollbar={false}
                 scrollEventThrottle={showScrollHint ? 16 : undefined}
             >
               {children}
             </ScrollView>
             {showScrollHint ? (
-              <Animated.View
-                pointerEvents="none"
+              <AnimatedPressable
+                accessibilityLabel="Scroll settings modal to bottom"
+                accessibilityRole="button"
+                disabled={!showScrollCue}
+                hitSlop={8}
+                onPress={handleScrollCuePress}
+                pointerEvents={showScrollCue ? "auto" : "none"}
                 style={[
-                  showFixedCloseButton ? s.scrollCueWithFixedClose : s.scrollCue,
+                  showFixedCloseButton
+                    ? hasFixedFooterAccessory
+                      ? s.scrollCueWithFixedCloseAccessory
+                      : s.scrollCueWithFixedClose
+                    : s.scrollCue,
                   scrollCueStyle,
                 ]}
               >
@@ -180,10 +208,11 @@ export default function SettingsModal({
                   size={18}
                   strokeWidth={2.4}
                 />
-              </Animated.View>
+              </AnimatedPressable>
             ) : null}
             {showFixedCloseButton ? (
               <Animated.View style={[s.fixedCloseFooter, headerBorderStyle]}>
+                {fixedFooterAccessory}
                 <Pressable
                   accessibilityLabel="Close help"
                   accessibilityRole="button"

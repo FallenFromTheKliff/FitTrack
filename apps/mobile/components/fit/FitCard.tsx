@@ -29,6 +29,7 @@ type Props = {
     emoji?: string;
     avatarInitials?: string;
     selected?: boolean;
+    selectedIndicatorColor?: string;
     rating?: number;
 };
 
@@ -38,7 +39,7 @@ export default React.memo(function FitCard({
                                                hasDropdown = false, noChevron = false,
                                                iconBg, trailingLabel, trailingLabelColor,
                                                progress, onPress, children, statValue,
-                                               emoji, avatarInitials, selected, rating
+                                               emoji, avatarInitials, selected, selectedIndicatorColor, rating
                                            }: Props) {
     const { colors } = useTheme();
     const { ic } = useThemeTransitionAnim();
@@ -110,11 +111,19 @@ export default React.memo(function FitCard({
                 style={[
                     s.row,
                     hasBorder && s.rowBorder,
-                    selected ? s.rowSelected : undefined
+                    selected && !selectedIndicatorColor ? s.rowSelected : undefined
                 ]}
                 onPress={handlePress}
                 disabled={!hasDropdown && !onPress}
             >
+                {selected && selectedIndicatorColor ? (
+                    <View
+                        style={[
+                            s.rowSelectedIndicator,
+                            { backgroundColor: selectedIndicatorColor }
+                        ]}
+                    />
+                ) : null}
                 {hasBorder && (
                     <Animated.View style={[s.rowBorderOverlay, borderOverlayStyle]} />
                 )}

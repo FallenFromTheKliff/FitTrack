@@ -78,6 +78,16 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
 export function makeFitSectionStyles(colors: ThemeColors) {
   return StyleSheet.create({
     section: { marginBottom: 28 },
+    headerRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 10,
+      paddingHorizontal: 4
+    },
+    headerAccessory: {
+      marginLeft: 12
+    },
     heading: {
       fontSize: 12,
       fontWeight: "600",
@@ -85,6 +95,11 @@ export function makeFitSectionStyles(colors: ThemeColors) {
       letterSpacing: 1,
       marginBottom: 10,
       paddingHorizontal: 4
+    },
+    headingInline: {
+      flex: 1,
+      marginBottom: 0,
+      paddingHorizontal: 0
     },
     subtitle: {
       fontSize: 12,
@@ -110,7 +125,8 @@ export function makeFitCardStyles(colors: ThemeColors) {
       alignItems: "center",
       paddingVertical: 14,
       paddingHorizontal: 16,
-      gap: 14
+      gap: 14,
+      position: "relative"
     },
     rowBorder: {},
     rowBorderOverlay: {
@@ -137,6 +153,14 @@ export function makeFitCardStyles(colors: ThemeColors) {
       gap: 8
     },
     rowSelected: { borderWidth: 2, borderRadius: R.lg },
+    rowSelectedIndicator: {
+      borderRadius: 999,
+      bottom: 10,
+      left: 0,
+      position: "absolute",
+      top: 10,
+      width: 4
+    },
     ratingPill: { flexDirection: "row", alignItems: "center", gap: 4 },
     ratingText: { fontSize: 13, fontWeight: "700" },
     avatarInitials: { fontSize: 14, fontWeight: "700" },
@@ -269,9 +293,10 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
+      minHeight: 40,
       paddingHorizontal: 10,
-      paddingVertical: 8,
-      borderRadius: R.xl,
+      paddingVertical: 9,
+      borderRadius: R.md,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surfaceRaised

@@ -25,18 +25,20 @@ import type {
   FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
+  FitnessMilestoneEvidenceSubmissionRecord,
   MuscleDefinitionRecord,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
 } from "@fittrack/api-client";
 import {
+  adminMilestoneEvidenceQueryOptions,
   archiveMuscleDefinitionMutationOptions,
   createMuscleDefinitionMutationOptions,
   createFitnessExerciseMutationOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
-  fitnessAchievementReviewsQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
+  reviewFitnessMilestoneEvidenceMutationOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
   updateMuscleDefinitionMutationOptions,
@@ -96,6 +98,48 @@ import type {
   EditorColors,
   ExerciseEditorTab,
 } from "@/components/exercise-lab/ExerciseContractEditors";
+
+function getEvidenceReviewStatus(
+  status: FitnessMilestoneEvidenceSubmissionRecord["status"],
+): AchievementReviewStatus {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
+}
+
+function getEvidenceMemberInitials(record: FitnessMilestoneEvidenceSubmissionRecord) {
+  if (record.memberInitials?.trim()) return record.memberInitials.trim();
+  const source = record.memberName?.trim() || record.memberEmail?.trim() || "Member";
+  return source
+    .split(/\s+|@/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function mapMilestoneEvidenceToReview(
+  record: FitnessMilestoneEvidenceSubmissionRecord,
+): AchievementReviewRecord {
+  const title = record.milestoneTitle?.trim() || "Milestone proof";
+  const memberName = record.memberName?.trim() || "Member";
+  return {
+    badgeLabel: title,
+    id: record.id,
+    memberEmail: record.memberEmail?.trim() || "No email on file",
+    memberId: record.userId,
+    memberInitials: getEvidenceMemberInitials(record),
+    memberName,
+    proofCaption:
+      record.caption?.trim() ||
+      `${record.evidenceType} proof submitted for ${title}.`,
+    proofImageUrl: record.fileUrl,
+    reviewedAt: record.reviewedAt ?? undefined,
+    reviewerNotes: record.reviewerNotes ?? undefined,
+    status: getEvidenceReviewStatus(record.status),
+    submittedAt: record.createdAt,
+  };
+}
 
 function useExerciseLabPageState() {
   const { colors, settings } = useTheme();
@@ -192,14 +236,11 @@ function useExerciseLabPageState() {
 
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
-    if (requestedTab === "milestones") {
-      router.replace("/milestones", { scroll: false });
-      return;
-    }
     if (
       requestedTab === "review" ||
       requestedTab === "library" ||
-      requestedTab === "muscles"
+      requestedTab === "muscles" ||
+      requestedTab === "milestones"
     ) {
       setMode(requestedTab);
     }
@@ -273,19 +314,25 @@ function useExerciseLabPageState() {
       ...(muscleSearch.trim() ? { search: muscleSearch.trim() } : {}),
     }),
   );
-  const milestoneReviewsQuery = useQuery(
-    fitnessAchievementReviewsQueryOptions(webApiClient),
+  const milestoneEvidenceQuery = useQuery(
+    adminMilestoneEvidenceQueryOptions(webApiClient, {
+      limit: 50,
+      page: 1,
+      status: "all",
+    }),
   );
 
   useEffect(() => {
-    const reviews = milestoneReviewsQuery.data ?? [];
+    const reviews = (milestoneEvidenceQuery.data?.data ?? []).map(
+      mapMilestoneEvidenceToReview,
+    );
     setMilestoneReviews(reviews);
     setSelectedMilestoneId((current) =>
       current && reviews.some((review) => review.id === current)
         ? current
         : (reviews[0]?.id ?? ""),
     );
-  }, [milestoneReviewsQuery.data]);
+  }, [milestoneEvidenceQuery.data?.data]);
 
   const createExerciseMutation = useMutation(
     createFitnessExerciseMutationOptions(webApiClient, queryClient),
@@ -304,6 +351,9 @@ function useExerciseLabPageState() {
   );
   const updateExerciseMutation = useMutation(
     updateFitnessExerciseMutationOptions(webApiClient, queryClient),
+  );
+  const reviewMilestoneEvidenceMutation = useMutation(
+    reviewFitnessMilestoneEvidenceMutationOptions(webApiClient, queryClient),
   );
 
   const reviewCandidates =
@@ -691,7 +741,7 @@ function useExerciseLabPageState() {
     }
   };
 
-  const handleMilestoneDecision = (status: AchievementReviewStatus) => {
+  const handleMilestoneDecision = async (status: AchievementReviewStatus) => {
     if (!selectedMilestone) return;
     const trimmedNotes = milestoneNotes.trim();
     if (status === "Rejected" && !trimmedNotes) {
@@ -699,24 +749,30 @@ function useExerciseLabPageState() {
       return;
     }
 
-    setMilestoneReviews((current) =>
-      current.map((review) =>
-        review.id === selectedMilestone.id
-          ? {
-              ...review,
-              reviewedAt: new Date().toISOString(),
-              reviewerNotes: trimmedNotes,
-              status,
-            }
-          : review,
-      ),
-    );
-
-    showMessage(
-      status === "Approved"
-        ? `${selectedMilestone.badgeLabel} was approved.`
-        : `${selectedMilestone.badgeLabel} was declined.`,
-    );
+    try {
+      const reviewed = await reviewMilestoneEvidenceMutation.mutateAsync({
+        evidenceSubmissionId: selectedMilestone.id,
+        payload: {
+          reviewerNotes: trimmedNotes || null,
+          status: status === "Approved" ? "approved" : "rejected",
+        },
+      });
+      const updatedReview = mapMilestoneEvidenceToReview(reviewed);
+      setMilestoneReviews((current) =>
+        current.map((review) =>
+          review.id === selectedMilestone.id ? updatedReview : review,
+        ),
+      );
+      showMessage(
+        status === "Approved"
+          ? `${selectedMilestone.badgeLabel} was approved.`
+          : `${selectedMilestone.badgeLabel} was declined.`,
+      );
+    } catch (error) {
+      showMessage(
+        getErrorMessage(error, "Unable to save this milestone decision."),
+      );
+    }
   };
 
   const handleOpenClosedMilestones = () => {
@@ -1388,6 +1444,7 @@ function useExerciseLabPageState() {
     matchDrawerOpen,
     matchSearch,
     matchSuggestions,
+    milestoneDecisionPending: reviewMilestoneEvidenceMutation.isPending,
     milestoneNotes,
     milestoneScope,
     milestoneWorkbenchMotionKey,

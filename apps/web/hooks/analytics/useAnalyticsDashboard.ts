@@ -45,11 +45,10 @@ const PDF_EXPORT_SECTION_OPTIONS: Array<{
   label: string;
   value: AnalyticsPdfSection;
 }> = [
-  { label: "Daily Insights", value: "daily" },
   { label: "Performance KPIs", value: "kpis" },
+  { label: "Daily Insights", value: "daily" },
   { label: "Revenue", value: "revenue" },
   { label: "Inventory", value: "inventory" },
-  { label: "Attendance", value: "attendance" },
   { label: "System Alerts", value: "alerts" },
   { label: "Recent Activities", value: "activities" },
   { label: "Recommendations", value: "recommendations" },

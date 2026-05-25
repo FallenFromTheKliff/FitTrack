@@ -6,10 +6,7 @@ import { FitSection } from "@/components/fit";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 
-import { useAccountsPage } from "./AccountsPageContext";
-
 export default function AccountsPageFrame({ children }: { children: ReactNode }) {
-  const { isCreateMode } = useAccountsPage();
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
 
@@ -21,13 +18,20 @@ export default function AccountsPageFrame({ children }: { children: ReactNode })
       bare
       noPadding
       className={themeTransition}
-      style={fadeIn}
+      style={{
+        ...fadeIn,
+        height: "100%",
+        marginBottom: 0,
+        minHeight: 0,
+      }}
     >
       <div
-        className={isCreateMode ? "members-shell members-shell-create" : "members-shell"}
+        className="members-shell"
         style={{
           display: "grid",
-          gap: isCreateMode ? 0 : 18,
+          gap: 18,
+          height: "100%",
+          minHeight: 0,
           width: "100%",
         }}
       >

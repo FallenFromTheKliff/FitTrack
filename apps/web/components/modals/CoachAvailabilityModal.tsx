@@ -170,10 +170,9 @@ export default function CoachAvailabilityModal({
         {slots.length === 0 ? (
           <div
             style={{
-              borderRadius: 12,
               border: `1px dashed ${colors.border}`,
-              backgroundColor: colors.surfaceRaised,
-              padding: 20,
+              backgroundColor: "transparent",
+              padding: "14px 0",
             }}
           >
             <FitText style={{ fontSize: 14, color: colors.textMuted }}>
@@ -191,10 +190,9 @@ export default function CoachAvailabilityModal({
                   gridTemplateColumns: "minmax(150px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto",
                   gap: 10,
                   alignItems: "end",
-                  borderRadius: 12,
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surfaceRaised,
-                  padding: 14,
+                  borderTop: `1px solid ${colors.border}`,
+                  backgroundColor: "transparent",
+                  padding: "14px 0 0",
                 }}
               >
                 <div style={{ display: "grid", gap: 6 }}>

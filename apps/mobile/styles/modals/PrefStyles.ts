@@ -22,6 +22,9 @@ export function makePrefModalStyles(colors: ThemeColors) {
       backgroundColor: colors.surface,
       overflow: "hidden"
     },
+    scrollContent: {
+      flexGrow: 1
+    },
     scrollContentWithCue: {
       paddingBottom: 28
     },
@@ -33,7 +36,7 @@ export function makePrefModalStyles(colors: ThemeColors) {
       alignSelf: "center",
       backgroundColor: colors.surfaceRaised,
       borderColor: colors.border,
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       bottom: 10,
       boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
@@ -48,9 +51,24 @@ export function makePrefModalStyles(colors: ThemeColors) {
       alignSelf: "center",
       backgroundColor: colors.surfaceRaised,
       borderColor: colors.border,
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       bottom: 78,
+      boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
+      elevation: 7,
+      height: 34,
+      justifyContent: "center",
+      position: "absolute",
+      width: 34
+    },
+    scrollCueWithFixedCloseAccessory: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
+      borderRadius: R.md,
+      borderWidth: 1,
+      bottom: 128,
       boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
       elevation: 7,
       height: 34,
@@ -61,6 +79,7 @@ export function makePrefModalStyles(colors: ThemeColors) {
     fixedCloseFooter: {
       borderTopColor: colors.border,
       borderTopWidth: 1,
+      gap: 10,
       paddingHorizontal: 16,
       paddingVertical: 12
     },
@@ -108,17 +127,53 @@ export function makePrefModalStyles(colors: ThemeColors) {
       width: 32,
     },
     body: {
+      flexGrow: 1,
       paddingHorizontal: 16,
       paddingTop: 16,
-      paddingBottom: 8,
+      paddingBottom: 0,
       gap: 16
+    },
+    notificationBody: {
+      flexGrow: 1,
+      gap: 0
+    },
+    notificationContent: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 16
+    },
+    notificationFooter: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: "auto",
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.border
     },
     footer: {
       flexDirection: "row",
       gap: 10,
+      marginHorizontal: -16,
+      marginTop: "auto",
       padding: 16,
       borderTopWidth: 1,
       borderTopColor: colors.border
+    },
+    feedbackCategoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    feedbackCategoryButton: {
+      flexGrow: 1,
+      minWidth: 118,
+      paddingHorizontal: 10,
+      paddingVertical: 9
+    },
+    feedbackCategoryButtonText: {
+      fontSize: 12,
+      fontWeight: "700",
+      textAlign: "center"
+    },
+    feedbackFooterButtonText: {
+      fontSize: 13,
+      fontWeight: "700"
     },
     cancelBtn: { flex: 1 },
     applyBtn: { flex: 1 },

@@ -14,10 +14,18 @@ type Props = {
   children: ReactNode;
   bare?: boolean;
   cardStyle?: StyleProp<ViewStyle>;
+  headerAccessory?: ReactNode;
   subtitle?: string;
 };
 
-export default React.memo(function FitSection({ heading, children, bare = false, cardStyle, subtitle }: Props) {
+export default React.memo(function FitSection({
+  heading,
+  children,
+  bare = false,
+  cardStyle,
+  headerAccessory,
+  subtitle
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const s = React.useMemo(() => makeFitSectionStyles(colors), [colors]);
@@ -32,9 +40,20 @@ export default React.memo(function FitSection({ heading, children, bare = false,
   return (
     <View style={s.section}>
       {heading.length > 0 && (
-        <AnimatedFitText style={[s.heading, headingAnimStyle]}>
-          {heading}
-        </AnimatedFitText>
+        headerAccessory ? (
+          <View style={s.headerRow}>
+            <AnimatedFitText style={[s.heading, s.headingInline, headingAnimStyle]}>
+              {heading}
+            </AnimatedFitText>
+            <View style={s.headerAccessory}>
+              {headerAccessory}
+            </View>
+          </View>
+        ) : (
+          <AnimatedFitText style={[s.heading, headingAnimStyle]}>
+            {heading}
+          </AnimatedFitText>
+        )
       )}
       {subtitle ? (
         <AnimatedFitText style={[s.subtitle, subtitleAnimStyle]}>

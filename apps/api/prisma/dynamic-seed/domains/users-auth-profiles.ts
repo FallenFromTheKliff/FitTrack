@@ -209,7 +209,7 @@ async function seedAccount(
     where: { user_id: userId },
     update: {
       activity_level: defaultActivityLevel(account),
-      avatar_url: `https://fittrack.local/avatars/${account.key}.png`,
+      avatar_url: null,
       date_of_birth: defaultDateOfBirth(ctx, account),
       first_name: account.firstName,
       fitness_goal: defaultFitnessGoal(account),
@@ -222,7 +222,7 @@ async function seedAccount(
     create: {
       id: seedId(`profile:${account.key}`),
       activity_level: defaultActivityLevel(account),
-      avatar_url: `https://fittrack.local/avatars/${account.key}.png`,
+      avatar_url: null,
       date_of_birth: defaultDateOfBirth(ctx, account),
       first_name: account.firstName,
       fitness_goal: defaultFitnessGoal(account),
@@ -263,8 +263,8 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
       created_at: daysFrom(ctx.config.anchorDate, -18 + (index % 12), 16),
       message:
         index % 2 === 0
-          ? 'Seeded QA feedback: booking filters and payment states look realistic.'
-          : 'Seeded QA feedback: profile and notification flows are ready for demo.',
+          ? 'Booking filters and payment states look realistic.'
+          : 'Profile and notification flows are ready for demo.',
       user_id: ctx.state.userIds[account.key],
     }));
 
@@ -317,8 +317,8 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
       createdAt: daysFrom(ctx.config.anchorDate, -12 + index, 9),
       reason:
         account.memberPersona === 'archived'
-          ? 'Seeded archived account used to test admin account lifecycle.'
-          : 'Seeded edge-state account used to verify account review filters.',
+          ? 'Archived account reviewed for account lifecycle coverage.'
+          : 'Edge-state account kept open for account review filters.',
       reviewNotes:
         account.memberPersona === 'archived'
           ? 'Approved as part of seeded QA history.'

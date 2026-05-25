@@ -52,7 +52,7 @@ export default function SettingsSections({ footerTextStyle, onSelect, styles }: 
         <FitCard
           icon={PREF_META.help.icon}
           label="Help Center"
-          subtitle="FAQs and support"
+          subtitle="FAQs and automatic help"
           hasBorder
           onPress={() => onSelect("help")}
         />

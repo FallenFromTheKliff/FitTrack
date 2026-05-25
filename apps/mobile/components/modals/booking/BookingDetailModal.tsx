@@ -18,6 +18,7 @@ import { FitButton, FitText } from "@/components/fit";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 export type DetailBooking = {
+  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   amountDueNow?: number;
   assessmentReport?: string | null;
   bookingType?: "recurring" | "single";

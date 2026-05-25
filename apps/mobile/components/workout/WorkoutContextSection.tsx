@@ -47,7 +47,9 @@ export function WorkoutContextSection({
         <FitText style={s.tipText}>{exerciseFocusText}</FitText>
         <FitText style={s.tipText}>{sessionStatusText}</FitText>
       </View>
-      <FitText style={s.sectionLabel}>Exercise References</FitText>
+      <FitText style={[s.sectionLabel, s.exerciseReferencesLabel]}>
+        Exercise References
+      </FitText>
       <FitButton
         variant="field"
         label="Exercise References"

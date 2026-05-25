@@ -12,7 +12,7 @@ export function useTimedMessage(duration = 2000) {
   const showMessage = useCallback((text: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const normalized = text.trim();
-    const shouldAnimate = /(?:\.\s*){1,3}$/.test(normalized);
+    const shouldAnimate = /(?:\.{3}|\.\s+\.\s*\.?)$/.test(normalized);
     const nextBaseMessage = shouldAnimate
       ? normalized.replace(/(?:\.\s*){1,3}$/, "").trimEnd()
       : normalized;
@@ -39,7 +39,10 @@ export function useTimedMessage(duration = 2000) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (!animateDots && message) setMessage(baseMessage || message);
+      if (!animateDots && message) {
+        const nextMessage = baseMessage || message;
+        setMessage((current) => (current === nextMessage ? current : nextMessage));
+      }
       return;
     }
 
@@ -57,7 +60,8 @@ export function useTimedMessage(duration = 2000) {
 
   useEffect(() => {
     if (!animateDots || !message) return;
-    setMessage(`${baseMessage}${DOT_FRAMES[dotCount] ? ` ${DOT_FRAMES[dotCount]}` : ""}`);
+    const nextMessage = `${baseMessage}${DOT_FRAMES[dotCount] ? ` ${DOT_FRAMES[dotCount]}` : ""}`;
+    setMessage((current) => (current === nextMessage ? current : nextMessage));
   }, [animateDots, baseMessage, dotCount, message]);
 
   useEffect(() => {

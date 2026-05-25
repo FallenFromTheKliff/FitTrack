@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -72,6 +73,7 @@ type NoticeModalState = {
   tone: ToastTone;
 } | null;
 type PaymentReviewAction = "approve" | "reject" | null;
+export type CoachClientPanelMode = "overview" | "schedule" | "feedback";
 type PendingMembershipPayment = {
   id: string;
   user_id: string;
@@ -129,6 +131,7 @@ type AccountsPageContextValue = {
   canVerifyNonMemberTarget: boolean;
   canTerminateEditTarget: boolean;
   closeInspector: () => void;
+  coachClientPanelMode: CoachClientPanelMode;
   contentMode: ContentMode;
   deleteTarget: MemberRecord | null;
   directoryEmptyMessage: string;
@@ -204,6 +207,7 @@ type AccountsPageContextValue = {
   setActiveStatus: Dispatch<SetStateAction<MemberStatusTab>>;
   setActiveTier: Dispatch<SetStateAction<string>>;
   setArchiveTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setCoachClientPanelMode: Dispatch<SetStateAction<CoachClientPanelMode>>;
   setContentMode: Dispatch<SetStateAction<ContentMode>>;
   setDeleteTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setEditConfirmOpen: Dispatch<SetStateAction<boolean>>;
@@ -260,6 +264,8 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     useState("all");
   const [activeCoachActivityLevel, setActiveCoachActivityLevel] =
     useState("all");
+  const [coachClientPanelMode, setCoachClientPanelMode] =
+    useState<CoachClientPanelMode>("overview");
   const [viewMode, setViewMode] = useState<DirectoryViewMode>("list");
   const isTerminationRequestsView = activeStatus === "Termination Requests";
   const directoryServerFilters = useMemo<MemberDirectoryFilters>(() => {
@@ -340,12 +346,12 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [isAccountsHamburgerMode, setIsAccountsHamburgerMode] = useState(false);
   const [paymentReviewAction, setPaymentReviewAction] = useState<PaymentReviewAction>(null);
-  const notify = (tone: ToastTone, title: string, description?: string) => {
+  const notify = useCallback((tone: ToastTone, title: string, description?: string) => {
     setNoticeModal({ description, title, tone });
-  };
-  const notifyActionError = (title: string, error: unknown, fallback: string) => {
+  }, []);
+  const notifyActionError = useCallback((title: string, error: unknown, fallback: string) => {
     notify("error", title, getActionErrorMessage(error, fallback));
-  };
+  }, [notify]);
   const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
     enabled: canManageAccounts,
@@ -370,7 +376,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     void fetchMembers().catch((error: unknown) => {
       notifyActionError("Could not refresh clients", error, "Failed to fetch members.");
     });
-  }, [canInspectAccounts, fetchMembers]);
+  }, [canInspectAccounts, fetchMembers, notifyActionError]);
 
   useEffect(() => {
     setDirectoryFilters(canInspectAccounts ? directoryServerFilters : {});
@@ -407,7 +413,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!membersError || !canInspectAccounts) return;
     notify("error", "Could not load the account directory", membersError);
-  }, [canInspectAccounts, membersError]);
+  }, [canInspectAccounts, membersError, notify]);
 
   useEffect(() => {
     if (!deletionRequestsError || !canManageAccounts) return;
@@ -416,16 +422,16 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       deletionRequestsError,
       "Failed to load pending termination requests.",
     );
-  }, [canManageAccounts, deletionRequestsError]);
+  }, [canManageAccounts, deletionRequestsError, notifyActionError]);
 
   useEffect(() => {
     if (!pendingMembershipPaymentsError || !canManageAccounts) return;
     notifyActionError(
       "Payment reviews could not be loaded",
       pendingMembershipPaymentsError,
-      "Failed to load pending membership payment reviews.",
+      "Failed to load membership payment reviews awaiting verification.",
     );
-  }, [canManageAccounts, pendingMembershipPaymentsError]);
+  }, [canManageAccounts, pendingMembershipPaymentsError, notifyActionError]);
 
   const roleScopedMembers = useMemo(() => {
     return members.filter((member) => {
@@ -968,7 +974,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       notify(
         "error",
         "Could not approve the payment review",
-        `Try again while the ${reviewLabel} request is still pending.`,
+        `Try again while the ${reviewLabel} request is still awaiting verification.`,
       );
     } finally {
       setPaymentReviewAction(null);
@@ -1007,7 +1013,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       notify(
         "error",
         "Could not decline the payment review",
-        `Try again while the ${reviewLabel} request is still pending.`,
+        `Try again while the ${reviewLabel} request is still awaiting verification.`,
       );
     } finally {
       setPaymentReviewAction(null);
@@ -1141,6 +1147,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         canVerifyNonMemberTarget,
         canTerminateEditTarget,
         closeInspector,
+        coachClientPanelMode,
         contentMode,
         deleteTarget,
         directoryEmptyMessage,
@@ -1216,6 +1223,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         setActiveStatus,
         setActiveTier,
         setArchiveTarget,
+        setCoachClientPanelMode,
         setContentMode,
         setDeleteTarget,
         setEditConfirmOpen,

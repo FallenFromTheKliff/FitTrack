@@ -248,6 +248,8 @@ export function useInventoryDashboard() {
   const [createEquipmentOpen, setCreateEquipmentOpen] = useState(false);
   const [createEquipmentPreset, setCreateEquipmentPreset] = useState("new");
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+  const [equipmentDetailsDeepLinkId, setEquipmentDetailsDeepLinkId] =
+    useState<string | null>(null);
   const [writeOffEquipmentId, setWriteOffEquipmentId] = useState<string | null>(null);
   const [archiveEquipmentId, setArchiveEquipmentId] = useState<string | null>(null);
   const [createRetailImageUrl, setCreateRetailImageUrl] = useState("");
@@ -555,6 +557,7 @@ export function useInventoryDashboard() {
       setArchiveEquipmentId(null);
       setWriteOffEquipmentId(null);
       setSelectedEquipmentId(equipmentId);
+      setEquipmentDetailsDeepLinkId(equipmentId);
     }
 
     const nextParams = new URLSearchParams();
@@ -1102,6 +1105,7 @@ export function useInventoryDashboard() {
     equipmentCount: equipmentItems.length,
     equipmentCurrentUnits,
     equipmentDetailLoading: equipmentDetailQuery.isFetching,
+    equipmentDetailsDeepLinkId,
     equipmentMissingUnits,
     equipmentStatusFilter,
     equipmentTotalUnits,

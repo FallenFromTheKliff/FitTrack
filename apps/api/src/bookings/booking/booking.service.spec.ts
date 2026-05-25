@@ -186,7 +186,9 @@ describe('BookingService', () => {
       });
     }
 
-    expect(amenityRepository.findActiveAmenityByIdOrThrow).not.toHaveBeenCalled();
+    expect(
+      amenityRepository.findActiveAmenityByIdOrThrow,
+    ).not.toHaveBeenCalled();
   });
 
   it('marks slots unavailable when active bookings reach amenity capacity', async () => {
@@ -697,7 +699,9 @@ describe('BookingService', () => {
         provider: PaymentProvider.cash,
       }),
     );
-    expect(bookingRepository.createConfirmedManualBooking).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createConfirmedManualBooking,
+    ).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       BOOKING_CONFIRMED_EVENT,
       expect.anything(),
@@ -707,6 +711,57 @@ describe('BookingService', () => {
       status: 'pending',
       checkout_url: null,
       payment_id: 'payment-1',
+    });
+  });
+
+  it('creates staff manual full-cash venue bookings as confirmed payments', async () => {
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1',
+      name: 'Main Court',
+      hourly_rate: new Prisma.Decimal('800'),
+      requires_subscription: false,
+    });
+    bookingRepository.createConfirmedManualBooking.mockResolvedValue({
+      id: 'booking-1',
+      status: 'confirmed',
+    });
+
+    const result = await service.createStaffManualBooking(
+      'member-1',
+      {
+        amenity_id: 'amenity-1',
+        member_id: 'member-1',
+        starts_at: '2099-03-24T10:00:00.000Z',
+        ends_at: '2099-03-24T11:00:00.000Z',
+        payment_stage: 'full' as never,
+      },
+      'staff-1',
+    );
+
+    expect(bookingRepository.createConfirmedManualBooking).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'member-1',
+        amenityId: 'amenity-1',
+        paymentAmount: new Prisma.Decimal('800.00'),
+        paymentStage: PaymentStage.full,
+        verifiedBy: 'staff-1',
+      }),
+    );
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      BOOKING_CONFIRMED_EVENT,
+      expect.objectContaining({
+        amenityId: 'amenity-1',
+        bookingId: 'booking-1',
+        userId: 'member-1',
+      }),
+    );
+    expect(result).toEqual({
+      booking_id: 'booking-1',
+      status: 'confirmed',
+      checkout_url: null,
     });
   });
 
@@ -1187,6 +1242,7 @@ describe('BookingService', () => {
       amenity_id: 'amenity-1',
       status: 'confirmed',
       cancelled_at: null,
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
     });
     bookingRepository.cancelBooking.mockResolvedValue({
       id: 'booking-1',
@@ -1215,5 +1271,21 @@ describe('BookingService', () => {
         amenityId: 'amenity-1',
       }),
     );
+  });
+
+  it('rejects staff venue cancellation on the booking date', async () => {
+    bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
+      id: 'booking-1',
+      amenity_id: 'amenity-1',
+      user_id: 'member-1',
+      status: 'confirmed',
+      cancelled_at: null,
+      starts_at: new Date(),
+    });
+
+    await expect(
+      service.cancelBookingAsStaff('booking-1', 'staff-1', 'Same-day change.'),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(bookingRepository.cancelBooking).not.toHaveBeenCalled();
   });
 });

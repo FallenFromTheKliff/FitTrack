@@ -12,7 +12,18 @@ import FitModal from "@/components/modals/FitModal";
 export type FieldConfig = {
   name: string;
   label: string;
-  type: "text" | "email" | "tel" | "time" | "password" | "date" | "number" | "select" | "radio" | "textarea";
+  type:
+    | "text"
+    | "email"
+    | "tel"
+    | "time"
+    | "password"
+    | "date"
+    | "number"
+    | "select"
+    | "multi-select"
+    | "radio"
+    | "textarea";
   required?: boolean;
   readOnly?: boolean;
   options?: { label: string; value: string }[];
@@ -109,6 +120,20 @@ export default function DetailsModal({
 
   const disableSubmit = !readOnly && disableUnchanged && !hasChanges;
 
+  const getMultiSelectValues = (name: string) =>
+    (formData[name] ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+  const toggleMultiSelectValue = (field: FieldConfig, value: string) => {
+    const selectedValues = getMultiSelectValues(field.name);
+    const nextValues = selectedValues.includes(value)
+      ? selectedValues.filter((item) => item !== value)
+      : [...selectedValues, value];
+    handleChange(field.name, nextValues.join(", "));
+  };
+
   return (
     <FitModal
       isOpen={isOpen}
@@ -166,6 +191,43 @@ export default function DetailsModal({
               style={s.fieldSelect}
               disabled={fieldReadOnly}
             />
+          ) : field.type === "multi-select" ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                ...(field.options ?? []),
+                ...getMultiSelectValues(field.name)
+                  .filter(
+                    (value) =>
+                      !(field.options ?? []).some((option) => option.value === value),
+                  )
+                  .map((value) => ({ label: value, value })),
+              ].map((opt) => {
+                const selected = getMultiSelectValues(field.name).includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={fieldReadOnly}
+                    onClick={() => toggleMultiSelectValue(field, opt.value)}
+                    style={{
+                      backgroundColor: selected ? colors.brand : colors.surfaceRaised,
+                      border: `1px solid ${selected ? `${colors.brand}66` : colors.border}`,
+                      borderRadius: 999,
+                      color: selected ? colors.onBrand : colors.textPrimary,
+                      cursor: fieldReadOnly ? "not-allowed" : "pointer",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      minHeight: 34,
+                      padding: "7px 12px",
+                      boxShadow: selected ? `0 0 0 1px ${colors.brand}22 inset` : "none",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           ) : field.type === "radio" ? (
             <div style={s.radioGroup}>
               {field.options?.map((opt) => (

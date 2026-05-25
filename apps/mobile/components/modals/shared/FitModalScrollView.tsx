@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -16,9 +17,12 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
+import { R } from "@fittrack/ui/tokens";
 
 import type { ThemeColors } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type FitModalScrollViewProps = ScrollViewProps & {
   cueBottom?: number;
@@ -50,7 +54,7 @@ function makeStyles(colors: ThemeColors) {
       alignSelf: "center",
       backgroundColor: colors.surfaceRaised,
       borderColor: colors.border,
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       bottom: 10,
       boxShadow: "0 4px 12px rgba(0,0,0,0.16)",
@@ -75,6 +79,7 @@ export default function FitModalScrollView({
   onContentSizeChange,
   onLayout,
   onScroll,
+  persistentScrollbar = false,
   resetKey,
   scrollEventThrottle,
   showScrollCue = true,
@@ -84,6 +89,7 @@ export default function FitModalScrollView({
 }: FitModalScrollViewProps) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
+  const scrollRef = useRef<ScrollView | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({
     contentHeight: 0,
     offsetY: 0,
@@ -110,16 +116,26 @@ export default function FitModalScrollView({
   }, [cueOpacity, shouldShowCue]);
 
   useEffect(() => {
-    setScrollMetrics({ contentHeight: 0, offsetY: 0, viewportHeight: 0 });
+    setScrollMetrics((current) =>
+      current.contentHeight === 0 &&
+      current.offsetY === 0 &&
+      current.viewportHeight === 0
+        ? current
+        : { contentHeight: 0, offsetY: 0, viewportHeight: 0 },
+    );
     cueOpacity.value = 0;
   }, [cueOpacity, resetKey]);
 
   const handleContentSizeChange = (width: number, height: number) => {
     if (showScrollCue) {
-      setScrollMetrics((current) => ({
-        ...current,
-        contentHeight: height,
-      }));
+      setScrollMetrics((current) =>
+        current.contentHeight === height
+          ? current
+          : {
+              ...current,
+              contentHeight: height,
+            },
+      );
     }
     onContentSizeChange?.(width, height);
   };
@@ -127,10 +143,14 @@ export default function FitModalScrollView({
   const handleLayout = (event: LayoutChangeEvent) => {
     if (showScrollCue) {
       const viewportHeight = event.nativeEvent?.layout?.height ?? 0;
-      setScrollMetrics((current) => ({
-        ...current,
-        viewportHeight,
-      }));
+      setScrollMetrics((current) =>
+        current.viewportHeight === viewportHeight
+          ? current
+          : {
+              ...current,
+              viewportHeight,
+            },
+      );
     }
     onLayout?.(event);
   };
@@ -141,18 +161,29 @@ export default function FitModalScrollView({
       const contentHeight = nativeEvent?.contentSize?.height ?? 0;
       const offsetY = nativeEvent?.contentOffset?.y ?? 0;
       const viewportHeight = nativeEvent?.layoutMeasurement?.height ?? 0;
-      setScrollMetrics({
-        contentHeight,
-        offsetY,
-        viewportHeight,
-      });
+      setScrollMetrics((current) =>
+        current.contentHeight === contentHeight &&
+        current.offsetY === offsetY &&
+        current.viewportHeight === viewportHeight
+          ? current
+          : {
+              contentHeight,
+              offsetY,
+              viewportHeight,
+            },
+      );
     }
     onScroll?.(event);
+  };
+
+  const handleScrollCuePress = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
   };
 
   return (
     <View style={fill ? s.hostFill : s.host}>
       <ScrollView
+        ref={scrollRef}
         {...scrollProps}
         contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? "handled"}
@@ -160,6 +191,7 @@ export default function FitModalScrollView({
         onContentSizeChange={handleContentSizeChange}
         onLayout={handleLayout}
         onScroll={handleScroll}
+        persistentScrollbar={persistentScrollbar}
         scrollEventThrottle={scrollEventThrottle ?? 16}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         style={[fill ? s.scrollFill : undefined, style]}
@@ -167,8 +199,13 @@ export default function FitModalScrollView({
         {children}
       </ScrollView>
       {showScrollCue ? (
-        <Animated.View
-          pointerEvents="none"
+        <AnimatedPressable
+          accessibilityLabel="Scroll modal to bottom"
+          accessibilityRole="button"
+          disabled={!shouldShowCue}
+          hitSlop={8}
+          onPress={handleScrollCuePress}
+          pointerEvents={shouldShowCue ? "auto" : "none"}
           style={[
             s.scrollCue,
             { bottom: cueBottom },
@@ -177,7 +214,7 @@ export default function FitModalScrollView({
           ]}
         >
           <ChevronDown color={colors.brand} size={18} strokeWidth={2.4} />
-        </Animated.View>
+        </AnimatedPressable>
       ) : null}
     </View>
   );

@@ -20,14 +20,26 @@ export type TimeSlot = {
 };
 
 type Props = {
+  emptyMessage?: string;
   isVisible: boolean;
   slots: TimeSlot[];
   selectedTime: string;
+  showAvailabilityLegend?: boolean;
+  title?: string;
   onSelect: (slot: TimeSlot) => void;
   onClose: () => void;
 };
 
-export default function TimeSlotModal({ isVisible, slots, selectedTime, onSelect, onClose }: Props) {
+export default function TimeSlotModal({
+  emptyMessage = "No time slots are available.",
+  isVisible,
+  slots,
+  selectedTime,
+  showAvailabilityLegend = true,
+  title = "Available Time Slots",
+  onSelect,
+  onClose,
+}: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -98,34 +110,40 @@ export default function TimeSlotModal({ isVisible, slots, selectedTime, onSelect
             <View style={[s.headerIcon, { backgroundColor: colors.brand + "22", borderColor: colors.brand + "44"}]}>
               <Clock size={18} color={colors.brand} strokeWidth={2} />
             </View>
-            <AnimatedFitText style={[s.headerTitle, titleStyle]}>Available Time Slots</AnimatedFitText>
+            <AnimatedFitText style={[s.headerTitle, titleStyle]}>{title}</AnimatedFitText>
           </Animated.View>
-          <Animated.View style={[s.legend, legendBorderStyle]}>
-            <FitText style={[s.legendLabel, { color: colors.textMuted }]}>LEGEND:</FitText>
-            <View style={s.legendItem}>
-              <View style={[s.legendDot, { backgroundColor: colors.brand }]} />
-              <FitText style={[s.legendText, { color: colors.textMuted }]}>Selected</FitText>
-            </View>
-            <View style={s.legendItem}>
-              <View style={[s.legendDot, { borderWidth: 1, borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg}]} />
-              <FitText style={[s.legendText, { color: colors.textMuted }]}>
-                Available
-              </FitText>
-            </View>
-            <View style={s.legendItem}>
-              <View style={[s.legendDot, { backgroundColor: colors.warning }]} />
-              <FitText style={[s.legendText, { color: colors.textMuted }]}>Waitlist</FitText>
-            </View>
-            <View style={s.legendItem}>
-              <View style={[s.legendDot, { backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border }]} />
-              <FitText style={[s.legendText, { color: colors.textMuted }]}>Full</FitText>
-            </View>
-          </Animated.View>
+          {showAvailabilityLegend ? (
+            <Animated.View style={[s.legend, legendBorderStyle]}>
+              <FitText style={[s.legendLabel, { color: colors.textMuted }]}>LEGEND:</FitText>
+              <View style={s.legendItem}>
+                <View style={[s.legendDot, { backgroundColor: colors.brand }]} />
+                <FitText style={[s.legendText, { color: colors.textMuted }]}>Selected</FitText>
+              </View>
+              <View style={s.legendItem}>
+                <View style={[s.legendDot, { borderWidth: 1, borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg}]} />
+                <FitText style={[s.legendText, { color: colors.textMuted }]}>
+                  Available
+                </FitText>
+              </View>
+              <View style={s.legendItem}>
+                <View style={[s.legendDot, { backgroundColor: colors.warning }]} />
+                <FitText style={[s.legendText, { color: colors.textMuted }]}>Waitlist</FitText>
+              </View>
+              <View style={s.legendItem}>
+                <View style={[s.legendDot, { backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border }]} />
+                <FitText style={[s.legendText, { color: colors.textMuted }]}>Full</FitText>
+              </View>
+            </Animated.View>
+          ) : null}
           <FitModalScrollView
             contentContainerStyle={s.grid}
             resetKey={`${isVisible}-${selectedTime}-${slots.length}`}
           >
-            {slots.map((slot) => {
+            {slots.length === 0 ? (
+              <FitText style={[s.emptyText, { color: colors.textMuted }]}>
+                {emptyMessage}
+              </FitText>
+            ) : slots.map((slot) => {
               const isChosen = slot.time === selectedTime;
               const isFull = slot.status === "full";
               const c = getSlotColors(slot.status, isChosen);

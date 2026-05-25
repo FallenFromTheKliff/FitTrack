@@ -30,7 +30,7 @@ import {
   getActiveNutritionTotals,
   getFoodTrailingLabel,
   getNutritionGuidanceAlerts,
-  getRecommendedFoodCatalogItems,
+  getRecommendedSavedMealLogs,
   getTodayString,
 } from "@/components/member-only/memberOnlyUtils";
 import { useMemberOnlyAccess, useMemberOnlyNutritionData } from "@/hooks/member-only/useMemberOnlyData";
@@ -49,8 +49,9 @@ export default function NutritionPage() {
   const isPremiumLocked = user?.role === "USER" && !data.subscriptionQuery.isPending && !hasActivePlan;
   const macroRows = formatMacroRows(logged, target);
   const alerts = getNutritionGuidanceAlerts(logged, target);
-  const recommendedFoods = getRecommendedFoodCatalogItems(logged, target, 4);
   const logs = data.nutritionLogsQuery.data?.data ?? [];
+  const recentLogs = data.recentNutritionLogsQuery.data?.data ?? [];
+  const recommendedFoods = getRecommendedSavedMealLogs(recentLogs, logged, target, 4);
   const history = data.nutritionHistoryQuery.data?.data ?? [];
 
   if (!hasMemberCardAccess) return <AccessGate featureName="Nutrition" icon={UtensilsCrossed} />;
@@ -103,19 +104,23 @@ export default function NutritionPage() {
         </MemberGrid>
       </MemberSection>
 
-      <MemberSection heading="Food Shelf">
+      <MemberSection heading="Saved Meal Shelf">
         <MemberSurface>
-          {recommendedFoods.map((item, index) => (
-            <MemberCard
-              key={item.name}
-              hasBorder={index < recommendedFoods.length - 1}
-              icon={UtensilsCrossed}
-              label={item.name}
-              subtitle={formatFoodSubtitle(item)}
-              trailingLabel={getFoodTrailingLabel(item)}
-              trailingTone="success"
-            />
-          ))}
+          {recommendedFoods.length === 0 ? (
+            <EmptyState icon={UtensilsCrossed} title="No saved meal patterns yet" hint="Log meals first, then recent foods will be reused here as DB-backed suggestions." />
+          ) : (
+            recommendedFoods.map((item, index) => (
+              <MemberCard
+                key={item.id}
+                hasBorder={index < recommendedFoods.length - 1}
+                icon={UtensilsCrossed}
+                label={item.foodItem}
+                subtitle={formatFoodSubtitle(item)}
+                trailingLabel={getFoodTrailingLabel(item)}
+                trailingTone="success"
+              />
+            ))
+          )}
         </MemberSurface>
       </MemberSection>
 

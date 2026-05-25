@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Modal, Pressable, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, Modal, Pressable, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Clock, Image as ImageIcon, Star, Users } from "lucide-react-native";
@@ -14,9 +14,9 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { makeDetailsModalStyles } from "@/styles/modals/DetailsStyles";
-import { AMENITY_META, AMENITY_STATUS_META, type AmenityStatus, AMENITY_IMAGE_PLACEHOLDERS } from "@/data/amenities";
-import { formatCurrency } from "@fittrack/utils";
-import { mobileApiClient } from "@/lib/api-client";
+import { AMENITY_STATUS_META, type AmenityStatus } from "@/data/amenities";
+import { buildRenderableAssetUrl, formatCurrency } from "@fittrack/utils";
+import { MOBILE_API_BASE_URL, mobileApiClient } from "@/lib/api-client";
 import { getVenueIcon } from "@/utils/venueMap";
 import type { VenuePresentation } from "@/utils/venueBookings";
 
@@ -47,6 +47,16 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
     text: string;
     tone: "danger" | "success";
   } | null>(null);
+  const [failedImageUri, setFailedImageUri] = useState<string | null>(null);
+  const resolvedVenueImageUrl = buildRenderableAssetUrl({
+    apiBaseUrl: MOBILE_API_BASE_URL,
+    assetUrl: venue?.imageUrl ?? null
+  });
+
+  useEffect(() => {
+    setFailedImageUri(null);
+  }, [resolvedVenueImageUrl]);
+
   const feedbackQuery = useQuery({
     ...venueFeedbackQueryOptions(mobileApiClient, liveVenueId),
     enabled: isVisible && !!liveVenueId,
@@ -74,15 +84,18 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
 
   if (!venue) return null;
 
-  const meta = AMENITY_META[venue.id] ?? {
-    description: "Facility details coming soon.",
-    hours: "Check with staff for hours",
+  const meta = {
+    description:
+      venue.description?.trim() ||
+      "No member-facing description has been published for this venue yet.",
+    hours: "Facility-specific hours have not been published for this venue.",
     status: "available" as AmenityStatus
   };
   const statusMeta = AMENITY_STATUS_META[meta.status];
   const Icon = getVenueIcon(venue.iconKey);
   const priceLabel = venue.isReservable ? `${formatCurrency(venue.price)} / ${venue.unit}` : "Core facility";
   const capacityLabel = venue.maxSlots > 0 ? `${venue.maxSlots} slots` : "Not specified";
+  const canShowVenueImage = !!resolvedVenueImageUrl && failedImageUri !== resolvedVenueImageUrl;
   const venueFloorId = venue.floorId ?? null;
   const assignedEquipment = venueFloorId
     ? liveEquipment
@@ -202,14 +215,19 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
             </View>
             <View>
               <FitText style={s.sectionLabel}>Images</FitText>
-              <View style={s.imagesGrid}>
-                {AMENITY_IMAGE_PLACEHOLDERS.map((label) => (
-                  <View key={label} style={s.imageTile}>
-                    <ImageIcon size={28} color={colors.textDisabled} strokeWidth={1.5} />
-                    <FitText style={s.imageTileLabel}>{label}</FitText>
-                  </View>
-                ))}
-              </View>
+              {canShowVenueImage ? (
+                <Image
+                  source={{ uri: resolvedVenueImageUrl ?? "" }}
+                  resizeMode="cover"
+                  onError={() => setFailedImageUri(resolvedVenueImageUrl)}
+                  style={s.imagePreview}
+                />
+              ) : (
+                <View style={s.imageTile}>
+                  <ImageIcon size={28} color={colors.textDisabled} strokeWidth={1.5} />
+                  <FitText style={s.imageTileLabel}>No venue image has been published yet.</FitText>
+                </View>
+              )}
             </View>
             <View>
               <FitText style={s.sectionLabel}>Venue Feedback</FitText>

@@ -24,7 +24,7 @@ import type {
   PoseSequenceFrameRecord,
   PoseSessionQualityState,
 } from "@fittrack/types";
-import { EXERCISE_REFERENCES, type ExerciseReference } from "@/data/exercises";
+import type { ExerciseReference } from "@/data/exercises";
 import type {
   NativeEquipmentSnapshot,
   NativePoseFrame,
@@ -1081,17 +1081,10 @@ function buildPoseQualityFeedback(
   ].slice(0, 3);
 }
 
-function mergeExerciseReferences(
-  liveReferences: ExerciseReference[],
-  fallbackReferences: ExerciseReference[] = EXERCISE_REFERENCES,
-) {
+function mergeExerciseReferences(liveReferences: ExerciseReference[]) {
   const merged = new Map<string, ExerciseReference>();
 
   for (const reference of liveReferences) {
-    merged.set(normalizeExerciseName(reference.name), reference);
-  }
-
-  for (const reference of fallbackReferences) {
     const normalizedName = normalizeExerciseName(reference.name);
     if (!normalizedName || merged.has(normalizedName)) continue;
     merged.set(normalizedName, reference);

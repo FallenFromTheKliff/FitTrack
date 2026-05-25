@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Modal, Pressable, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import {
   CalendarDays,
@@ -28,7 +28,7 @@ import {
   venueAvailabilityQueryOptions,
   venuesQueryOptions,
 } from "@fittrack/query";
-import { TIME_SLOTS, getTodayString } from "@/data/bookings";
+import { getTodayString } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
@@ -77,6 +77,40 @@ function timeToMinutes(value: string) {
 function timeValueToMinutes(value: string) {
   const [hours, minutes] = value.split(":").map((part) => Number(part));
   return hours * 60 + minutes;
+}
+
+function formatIsoTimeLabel(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const hours = parsed.getHours();
+  const minutes = parsed.getMinutes();
+  const period = hours >= 12 ? "PM" : "AM";
+  const normalizedHour = hours % 12 || 12;
+  return `${String(normalizedHour).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function isoTimeToMinutes(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 0;
+  return parsed.getHours() * 60 + parsed.getMinutes();
+}
+
+function formatDurationLabel(startLabel: string, endLabel: string) {
+  const minutes = timeToMinutes(endLabel) - timeToMinutes(startLabel);
+  if (minutes <= 0) return "1 hr";
+  const hours = minutes / 60;
+  return Number.isInteger(hours)
+    ? `${hours} hr${hours === 1 ? "" : "s"}`
+    : `${minutes} min`;
+}
+
+function toVenueStartSlot(slot: VenueAvailabilityRecord): TimeSlot {
+  const startLabel = formatIsoTimeLabel(slot.startTime);
+  return {
+    time: startLabel,
+    duration: formatDurationLabel(startLabel, formatIsoTimeLabel(slot.endTime)),
+    status: slot.status === "available" ? "available" : "full",
+  };
 }
 
 function matchesDay(selectedDate: string, dayValue: number | string) {
@@ -246,7 +280,7 @@ function toGymWallClockIso(date: string, minutes: number) {
 }
 
 function formatCurrency(value: number) {
-  return `₱${value.toLocaleString("en-PH", {
+  return `PHP ${value.toLocaleString("en-PH", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
@@ -383,7 +417,11 @@ export default function ReservationModal({
     [],
   );
 
-  const { data: availability = [] } = useQuery({
+  const {
+    data: availability = [],
+    error: availabilityError,
+    isLoading: availabilityLoading,
+  } = useQuery({
     ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
       mobileApiClient,
       selectedVenue?.id,
@@ -471,14 +509,20 @@ export default function ReservationModal({
   const paymentProvider =
     paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
   const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
-  const currentMinutes = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  }, [date, isTimeOpen, isVisible]);
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const liveVenueSlots = useMemo(
+    () =>
+      [...availability].sort(
+        (a, b) =>
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      ),
+    [availability],
+  );
   const confirmButtonLabel = isFreeReservation
     ? "Confirm Reservation"
     : paymentOption === "paymongo_downpayment" && canUsePaymongo
-      ? "Pay with PayMongo"
+      ? "Confirm PayMongo Payment"
       : paymentOption === "cash_full"
         ? "Submit Full Cash Payment"
         : "Submit Downpayment";
@@ -508,7 +552,7 @@ export default function ReservationModal({
     }
 
     return {
-      body: `Start PayMongo checkout for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
+      body: `Confirm the testing PayMongo payment for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
       eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
       title: "Online downpayment",
     };
@@ -521,28 +565,85 @@ export default function ReservationModal({
     totalAmount,
   ]);
 
-  const endSlots = useMemo((): TimeSlot[] => {
-    if (!startTime) return [];
-    const startIdx = TIME_SLOTS.findIndex((slot) => slot.time === startTime);
-    if (startIdx === -1) return [];
-    const result: TimeSlot[] = [];
-    for (let i = startIdx + 1; i < TIME_SLOTS.length; i += 1) {
-      result.push(TIME_SLOTS[i]);
-      if (TIME_SLOTS[i].status === "full") break;
-    }
-    return result;
-  }, [startTime]);
   const startSlots = useMemo(
     () =>
-      date === getTodayString()
-        ? TIME_SLOTS.filter((slot) => timeToMinutes(slot.time) > currentMinutes)
-        : TIME_SLOTS,
-    [currentMinutes, date],
+      liveVenueSlots
+        .filter((slot) => {
+          if (date !== getTodayString()) return true;
+          return isoTimeToMinutes(slot.startTime) > currentMinutes;
+        })
+        .map(toVenueStartSlot),
+    [currentMinutes, date, liveVenueSlots],
   );
+  const endSlots = useMemo((): TimeSlot[] => {
+    if (!startTime) return [];
+    const startIdx = liveVenueSlots.findIndex(
+      (slot) => formatIsoTimeLabel(slot.startTime) === startTime,
+    );
+    if (startIdx === -1) return [];
+    if (liveVenueSlots[startIdx]?.status !== "available") return [];
+
+    const result: TimeSlot[] = [];
+    let expectedStart = new Date(liveVenueSlots[startIdx].startTime).getTime();
+    for (let i = startIdx; i < liveVenueSlots.length; i += 1) {
+      const slot = liveVenueSlots[i];
+      if (new Date(slot.startTime).getTime() !== expectedStart) break;
+      if (slot.status !== "available") break;
+
+      const endLabel = formatIsoTimeLabel(slot.endTime);
+      if (timeToMinutes(endLabel) > timeToMinutes(startTime)) {
+        result.push({
+          time: endLabel,
+          duration: formatDurationLabel(startTime, endLabel),
+          status: "available",
+        });
+      }
+      expectedStart = new Date(slot.endTime).getTime();
+    }
+    return result;
+  }, [liveVenueSlots, startTime]);
   const isSelectedStartInPast =
     date === getTodayString() &&
     startTime !== "" &&
     timeToMinutes(startTime) <= currentMinutes;
+  const hasOpenStartSlot = startSlots.some((slot) => slot.status === "available");
+  const canOpenStartTime =
+    Boolean(selectedVenue) &&
+    !availabilityLoading &&
+    !availabilityError &&
+    startSlots.length > 0;
+  const canOpenEndTime = Boolean(startTime) && endSlots.length > 0;
+  const timeAvailabilityMessage = useMemo(() => {
+    if (!selectedVenue) {
+      return "Select a venue to load live time availability.";
+    }
+    if (availabilityLoading) {
+      return "Loading live venue availability...";
+    }
+    if (availabilityError) {
+      return availabilityError instanceof Error
+        ? availabilityError.message
+        : "Unable to load venue availability right now.";
+    }
+    if (startSlots.length === 0) {
+      return "No future venue slots are available for the selected date.";
+    }
+    if (!hasOpenStartSlot) {
+      return "All venue slots are currently booked for the selected date.";
+    }
+    if (startTime && endSlots.length === 0) {
+      return "No continuous venue time is available after the selected start.";
+    }
+    return "";
+  }, [
+    availabilityError,
+    availabilityLoading,
+    endSlots.length,
+    hasOpenStartSlot,
+    selectedVenue,
+    startSlots.length,
+    startTime,
+  ]);
 
   useEffect(() => {
     if (!isSelectedStartInPast) return;
@@ -623,6 +724,8 @@ export default function ReservationModal({
     !!endTime &&
     reservationHours > 0 &&
     !isSelectedStartInPast &&
+    !availabilityLoading &&
+    !availabilityError &&
     !hasConflict &&
     coachMatchesWindow;
 
@@ -697,20 +800,16 @@ export default function ReservationModal({
         }),
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ]).then(([response]) => response);
-      if (result?.checkout_url) {
-        handleReset();
-        onSuccess?.();
-        onClose();
-        void Linking.openURL(result.checkout_url);
-        return;
-      }
-
-      const successTitle = isFreeReservation
+      const successTitle = result?.checkout_url
+        ? "Payment confirmed"
+        : isFreeReservation
         ? "Reservation confirmed"
         : paymentOption === "cash_full"
           ? "Cash payment submitted"
           : "Downpayment submitted";
-      const successMessage = isFreeReservation
+      const successMessage = result?.checkout_url
+        ? `Testing payment confirmed for ${selectedVenuePresentation?.name ?? "your venue"} on ${formatBookingDate(date)} at ${startTime} - ${endTime}. Front desk can verify the reservation while you stay in Bookings. Remaining balance: ${formatCurrency(remainingBalance)}.`
+        : isFreeReservation
         ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
         : paymentOption === "cash_full"
           ? `Your reservation is pending staff verification for the full cash payment of ${formatCurrency(totalAmount)}.`
@@ -748,9 +847,9 @@ export default function ReservationModal({
 
     if (paymentOption === "paymongo_downpayment") {
       setReservationConfirmation({
-        title: "Continue to PayMongo?",
-        message: `You are about to start PayMongo checkout for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.`,
-        yesLabel: "Continue to PayMongo",
+        title: "Confirm PayMongo payment?",
+        message: `Confirm the testing PayMongo payment for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.`,
+        yesLabel: "Confirm Payment",
       });
       return;
     }
@@ -797,7 +896,7 @@ export default function ReservationModal({
               <FitText style={s.headerTitle}>Make a Reservation</FitText>
               <FitText style={s.headerSubtitle}>
                 {selectedVenuePresentation
-                  ? `${selectedVenuePresentation.emoji} ${selectedVenuePresentation.name} · ₱${selectedVenuePresentation.price}/${selectedVenuePresentation.unit}`
+                  ? `${selectedVenuePresentation.emoji} ${selectedVenuePresentation.name} / PHP ${selectedVenuePresentation.price}/${selectedVenuePresentation.unit}`
                   : "Book a reservable venue"}
               </FitText>
             </View>
@@ -836,12 +935,15 @@ export default function ReservationModal({
                   s.fieldBtnFlex,
                   {
                     borderColor: startTime ? colors.brand : colors.fieldBorder,
+                    opacity: canOpenStartTime ? 1 : 0.45,
                   },
                 ]}
                 onPress={() => {
+                  if (!canOpenStartTime) return;
                   setTimeTarget("start");
                   setIsTimeOpen(true);
                 }}
+                disabled={!canOpenStartTime}
               >
                 <Clock
                   size={16}
@@ -863,15 +965,15 @@ export default function ReservationModal({
                   s.fieldBtnFlex,
                   {
                     borderColor: endTime ? colors.brand : colors.fieldBorder,
-                    opacity: !startTime ? 0.45 : 1,
+                    opacity: canOpenEndTime ? 1 : 0.45,
                   },
                 ]}
                 onPress={() => {
-                  if (!startTime) return;
+                  if (!canOpenEndTime) return;
                   setTimeTarget("end");
                   setIsTimeOpen(true);
                 }}
-                disabled={!startTime}
+                disabled={!canOpenEndTime}
               >
                 <Clock
                   size={16}
@@ -891,6 +993,17 @@ export default function ReservationModal({
             {startTime === "" || endTime === "" ? (
               <FitText style={s.validationHint}>
                 Start and end time are required
+              </FitText>
+            ) : null}
+            {timeAvailabilityMessage !== "" ? (
+              <FitText
+                style={
+                  selectedVenue && !availabilityLoading && !availabilityError
+                    ? s.unavailableText
+                    : s.validationHint
+                }
+              >
+                {timeAvailabilityMessage}
               </FitText>
             ) : null}
             {isSelectedStartInPast ? (
@@ -920,7 +1033,12 @@ export default function ReservationModal({
                         backgroundColor: colors.brand + "12",
                       },
                     ]}
-                    onPress={() => setSelectedVenue(isActive ? null : venue)}
+                    onPress={() => {
+                      setSelectedVenue(isActive ? null : venue);
+                      setStartTime("");
+                      setEndTime("");
+                      setSelectedCoachId(null);
+                    }}
                   >
                     <FitText style={s.amenityEmoji}>
                       {presentation.name.slice(0, 1)}
@@ -940,7 +1058,7 @@ export default function ReservationModal({
                         isActive && { color: colors.brand },
                       ]}
                     >
-                      ₱{presentation.price}/{presentation.unit}
+                      PHP {presentation.price}/{presentation.unit}
                     </FitText>
                     {isActive ? (
                       <View style={s.amenityCheck}>
@@ -1048,7 +1166,7 @@ export default function ReservationModal({
               VENUE RATE
             </FitText>
             <View style={[s.inputFieldWrap, { opacity: 0.6 }]}>
-              <FitText style={s.inputPrefix}>₱</FitText>
+              <FitText style={s.inputPrefix}>PHP</FitText>
               <FitText style={s.inputField}>
                 {basePrice > 0 ? String(basePrice) : "—"}
               </FitText>
@@ -1079,7 +1197,7 @@ export default function ReservationModal({
                         {
                           key: "paymongo_downpayment" as const,
                           label: "PayMongo Downpayment",
-                          meta: `Pay now ${formatCurrency(splitAmountDueNow)}`,
+                          meta: `Confirm now ${formatCurrency(splitAmountDueNow)}`,
                           body: canUsePaymongo
                             ? `Leave ${formatCurrency(splitRemainingBalance)} for later.`
                             : "Temporarily unavailable on this local stack.",
@@ -1088,14 +1206,14 @@ export default function ReservationModal({
                         {
                           key: "cash_downpayment" as const,
                           label: "Cash Downpayment",
-                          meta: `Pay now ${formatCurrency(splitAmountDueNow)}`,
+                          meta: `Submit now ${formatCurrency(splitAmountDueNow)}`,
                           body: `Settle ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
                           disabled: false,
                         },
                         {
                           key: "cash_full" as const,
                           label: "Cash Full Payment",
-                          meta: `Pay now ${formatCurrency(totalAmount)}`,
+                          meta: `Submit now ${formatCurrency(totalAmount)}`,
                           body: "No remaining balance after staff verifies the payment.",
                           disabled: false,
                         },
@@ -1184,7 +1302,7 @@ export default function ReservationModal({
                         </FitText>
                       </View>
                       <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>Pay now</FitText>
+                        <FitText style={s.paymentSummaryLabel}>Due now</FitText>
                         <FitText style={s.paymentSummaryValue}>
                           {formatCurrency(amountDueNow)}
                         </FitText>
@@ -1234,7 +1352,7 @@ export default function ReservationModal({
                 <View key={idx} style={s.noteRow}>
                   <View style={s.noteContent}>
                     <View style={[s.inputFieldWrap, s.noteFieldWrap]}>
-                      <FitText style={s.noteBullet}>•</FitText>
+                      <FitText style={s.noteBullet}>-</FitText>
                       <FitTextInput
                         value={note}
                         onChangeText={(text) => {
@@ -1342,6 +1460,9 @@ export default function ReservationModal({
         onVisibleMonthChange={handleCalendarMonthChange}
         onSelect={(selectedDate) => {
           setDate(selectedDate);
+          setStartTime("");
+          setEndTime("");
+          setSelectedCoachId(null);
           setIsCalOpen(false);
         }}
         onClose={() => setIsCalOpen(false)}
@@ -1350,6 +1471,11 @@ export default function ReservationModal({
         isVisible={isTimeOpen}
         slots={timeTarget === "start" ? startSlots : endSlots}
         selectedTime={timeTarget === "start" ? startTime : endTime}
+        emptyMessage={
+          timeTarget === "start"
+            ? "No venue time slots are available for the selected date."
+            : "No continuous end time is available after the selected start."
+        }
         onSelect={handleTimePick}
         onClose={() => setIsTimeOpen(false)}
       />

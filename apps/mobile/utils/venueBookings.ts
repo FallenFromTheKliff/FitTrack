@@ -17,6 +17,7 @@ export type VenuePresentation = {
   price: number;
   unit: string;
   description?: string | null;
+  imageUrl?: string | null;
   isReservable: boolean;
   gridColumn: number;
   gridRow: number;
@@ -40,6 +41,7 @@ export function getVenuePresentation(venue: VenueRecord): VenuePresentation {
     price,
     unit,
     description: venue.description,
+    imageUrl: venue.imageUrl,
     isReservable: venue.isReservable ?? true,
     gridColumn: venue.gridColumn ?? 1,
     gridRow: venue.gridRow ?? 1,

@@ -166,8 +166,7 @@ export function MemberCard({
         type="button"
         style={baseStyle}
         onClick={onClick}
-        whileHover={{ y: -1 }}
-        whileTap={{ scale: 0.995 }}
+        whileHover={{ boxShadow: `0 0 0 1px ${colors.brand}22 inset` }}
         transition={{ duration: 0.14, ease: "easeOut" }}
       >
         {content}
@@ -338,8 +337,7 @@ export function ChipButton({
       disabled={disabled}
       onClick={onClick}
       style={s.chip(active, disabled)}
-      whileHover={disabled ? undefined : { y: -1 }}
-      whileTap={disabled ? undefined : { scale: 0.98 }}
+      whileHover={disabled ? undefined : { boxShadow: `0 0 0 1px ${colors.brand}24 inset` }}
       transition={{ duration: 0.14, ease: "easeOut" }}
     >
       {children}

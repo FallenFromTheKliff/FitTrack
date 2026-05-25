@@ -185,7 +185,7 @@ async function seedCards(ctx: DynamicSeedContext) {
         revoked_by: status === MembershipCardStatus.revoked ? adminId : null,
         revoke_reason:
           status === MembershipCardStatus.revoked
-            ? 'Seeded revoked card for account-state QA.'
+            ? 'Revoked card retained for account-state review.'
             : null,
         source:
           index % 4 === 0
@@ -213,7 +213,7 @@ async function seedCards(ctx: DynamicSeedContext) {
         revoked_by: status === MembershipCardStatus.revoked ? adminId : null,
         revoke_reason:
           status === MembershipCardStatus.revoked
-            ? 'Seeded revoked card for account-state QA.'
+            ? 'Revoked card retained for account-state review.'
             : null,
         source:
           index % 4 === 0
@@ -268,7 +268,7 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
       update: {
         cancellation_reason:
           subscriptionStatus === SubscriptionStatus.suspended
-            ? 'Seeded frozen/suspended membership for QA.'
+            ? 'Frozen or suspended membership retained for review.'
             : null,
         cancelled_at:
           subscriptionStatus === SubscriptionStatus.suspended
@@ -294,7 +294,7 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
         id: subscriptionId,
         cancellation_reason:
           subscriptionStatus === SubscriptionStatus.suspended
-            ? 'Seeded frozen/suspended membership for QA.'
+            ? 'Frozen or suspended membership retained for review.'
             : null,
         cancelled_at:
           subscriptionStatus === SubscriptionStatus.suspended
@@ -353,12 +353,9 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
           : null,
       rejection_reason:
         paymentStatusForPersona(persona) === PaymentStatus.failed
-          ? 'Seeded failed payment for suspended member QA.'
+          ? 'Failed payment retained for suspended member review.'
           : null,
-      screenshot_url:
-        paymentStatusForPersona(persona) === PaymentStatus.awaiting_verification
-          ? `https://fittrack.local/seed/payments/${account.key}.png`
-          : null,
+      screenshot_url: null,
       status: paymentStatusForPersona(persona),
       user_id: userId,
       verified_at: completed

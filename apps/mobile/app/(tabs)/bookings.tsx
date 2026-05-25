@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -66,7 +65,6 @@ import {
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
-import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
 import {
@@ -82,12 +80,13 @@ import {
 import { mobileApiClient } from "@/lib/api-client";
 import { toMobileBookings } from "@/utils/venueBookings";
 
-import { FitButton, FitCard, FitFilter, FitSearch, FitText } from "@/components/fit";
+import { FitButton, FitCard, FitFilter, FitPager, FitSearch, FitText } from "@/components/fit";
 import {
   AppointmentModal,
   BookingDetailModal,
   CalendarModal,
   ConfirmModal,
+  NoticeModal,
   type DetailBooking,
 } from "@/components/modals";
 
@@ -121,6 +120,7 @@ const COACH_CLIENT_DURATION_OPTIONS = [
   { label: "60 minutes", value: 60 },
   { label: "90 minutes", value: 90 },
 ] as const;
+const BOOKINGS_PAGE_SIZE = 10;
 
 type BookingSection = "bookings" | "appointments" | "clients" | "earnings";
 type CoachSection = Extract<BookingSection, "clients" | "appointments" | "earnings">;
@@ -145,6 +145,10 @@ type PendingAppointmentPayment = {
   booking: DetailBooking;
   provider: AppointmentPaymentProvider;
   stage: AppointmentPaymentStage;
+};
+type PaymentConfirmationState = {
+  message: string;
+  title: string;
 };
 type PendingCancellation = {
   booking: DetailBooking;
@@ -243,6 +247,31 @@ function isPendingStatus(status: string) {
   );
 }
 
+function canStartMemberAppointmentPayment(booking: DetailBooking) {
+  if (booking.status === "pending_full_payment") {
+    return booking.activePaymentStage === "full";
+  }
+
+  return (
+    booking.status === "pending_payment" ||
+    booking.status === "pending_downpayment"
+  );
+}
+
+function getMemberAppointmentPaymentStage(
+  booking: DetailBooking,
+): AppointmentPaymentStage {
+  return booking.activePaymentStage === "full" ? "full" : "downpayment";
+}
+
+function canStartMemberAppointmentFullPayment(booking: DetailBooking) {
+  return (
+    booking.status === "pending_payment" &&
+    booking.activePaymentStage !== "downpayment" &&
+    Number(booking.totalAmount ?? booking.amountDueNow ?? 0) > 0
+  );
+}
+
 function formatPeso(value: number) {
   return `PHP ${value.toLocaleString("en-PH")}`;
 }
@@ -330,7 +359,6 @@ export default function BookingsScreen() {
     setReservationOpen,
     bookingRefreshTick,
   } = useFABState();
-  const { ic } = useThemeTransitionAnim();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const s = useMemo(() => makeBookingsScreenStyles(colors), [colors]);
@@ -349,6 +377,7 @@ export default function BookingsScreen() {
     useState<BookingSection>("bookings");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [bookingPage, setBookingPage] = useState(1);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isStartCalOpen, setIsStartCalOpen] = useState(false);
   const [isEndCalOpen, setIsEndCalOpen] = useState(false);
@@ -362,6 +391,8 @@ export default function BookingsScreen() {
     useState<CoachClientDetailTab>("overview");
   const [pendingAppointmentPayment, setPendingAppointmentPayment] =
     useState<PendingAppointmentPayment | null>(null);
+  const [paymentConfirmation, setPaymentConfirmation] =
+    useState<PaymentConfirmationState | null>(null);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
   const [pendingCoachAction, setPendingCoachAction] =
@@ -484,6 +515,7 @@ export default function BookingsScreen() {
                 ? "pending_full_payment"
                 : normalizeBookingStatus(appointment.status);
         return {
+          activePaymentStage: appointment.activePaymentStage ?? null,
           amountDueNow: appointment.amountDueNow ?? undefined,
           assessmentReport: appointment.assessmentReport,
           bookingType: appointment.recurringPlanId ? "recurring" : "single",
@@ -807,10 +839,6 @@ export default function BookingsScreen() {
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
-  const dividerStyle = useAnimatedStyle(() => ({
-    backgroundColor: ic.value.border,
-  }));
-
   const cancelBookingMutation = useMutation(
     cancelBookingMutationOptions(mobileApiClient, queryClient),
   );
@@ -864,8 +892,8 @@ export default function BookingsScreen() {
     "CANCELLING",
     cancelAppointmentMutation.isPending,
   );
-  const openingPaymongoLabel = useLoadingText(
-    "OPENING PAYMONGO",
+  const confirmingPaymentLabel = useLoadingText(
+    "CONFIRMING PAYMENT",
     payAppointmentMutation.isPending,
   );
   const coachActionLoadingLabel = useLoadingText(
@@ -875,23 +903,28 @@ export default function BookingsScreen() {
 
   const handleSubmitAppointmentPayment = useCallback(
     async ({ booking, provider, stage }: PendingAppointmentPayment) => {
-      const result = await payAppointmentMutation.mutateAsync({
+      await payAppointmentMutation.mutateAsync({
         appointmentId: booking.id,
         paymentStage: stage,
         provider,
         userId: user?.id,
       });
 
-      setPendingAppointmentPayment(null);
-      if (provider === "cash") {
-        setDetailBooking(null);
-        return;
-      }
+      const amount =
+        stage === "full"
+          ? Number(booking.totalAmount ?? booking.amountDueNow ?? 0)
+          : Number(booking.amountDueNow ?? booking.totalAmount ?? 0);
+      const stageLabel = stage === "full" ? "full payment" : "downpayment";
 
-      if (result.checkoutUrl) {
-        setDetailBooking(null);
-        void Linking.openURL(result.checkoutUrl);
-      }
+      setPendingAppointmentPayment(null);
+      setDetailBooking(null);
+      setPaymentConfirmation({
+        title: provider === "paymongo" ? "Payment confirmed" : "Cash payment submitted",
+        message:
+          provider === "paymongo"
+            ? `Testing ${stageLabel} of ${formatPeso(amount)} was confirmed for ${booking.resourceName}. You remain in Bookings while front desk verification updates the appointment status.`
+            : `Cash ${stageLabel} of ${formatPeso(amount)} was submitted for ${booking.resourceName}. Staff will verify the payment before the appointment status changes.`,
+      });
     },
     [payAppointmentMutation, user?.id],
   );
@@ -1372,7 +1405,23 @@ export default function BookingsScreen() {
     todayString,
   ]);
 
-  const grouped = groupItemsByDate(filtered, "asc");
+  const bookingTotalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / BOOKINGS_PAGE_SIZE),
+  );
+  const safeBookingPage = Math.min(bookingPage, bookingTotalPages);
+  const pagedBookings = useMemo(() => {
+    const start = (safeBookingPage - 1) * BOOKINGS_PAGE_SIZE;
+    return filtered.slice(start, start + BOOKINGS_PAGE_SIZE);
+  }, [filtered, safeBookingPage]);
+  const grouped = groupItemsByDate(pagedBookings, "asc");
+  const bookingCountByDate = useMemo(() => {
+    const counts = new Map<string, number>();
+    filtered.forEach((booking) => {
+      counts.set(booking.date, (counts.get(booking.date) ?? 0) + 1);
+    });
+    return counts;
+  }, [filtered]);
   const isEmpty =
     !isLoading &&
     (activeSection === "clients" && isCoachRole
@@ -1380,6 +1429,14 @@ export default function BookingsScreen() {
       : filtered.length === 0);
   const startLabel = startDate ? formatGroupLabel(startDate) : "All Dates";
   const endLabel = endDate ? formatGroupLabel(endDate) : "Due Date";
+
+  useEffect(() => {
+    setBookingPage(1);
+  }, [activeSection, debouncedSearchQuery, endDate, startDate, statusFilter]);
+
+  useEffect(() => {
+    setBookingPage((current) => Math.min(current, bookingTotalPages));
+  }, [bookingTotalPages]);
   const detailVenue = useMemo(
     () =>
       venues.find((venue) => String(venue.id) === detailBooking?.resourceId) ??
@@ -1535,21 +1592,55 @@ export default function BookingsScreen() {
 
       return actions;
     }
-    if (
-      detailBooking.status === "pending_payment" ||
-      detailBooking.status === "pending_downpayment" ||
-      detailBooking.status === "pending_full_payment"
-    ) {
-      const initialStage =
-        detailBooking.status === "pending_full_payment" &&
-        Number(detailBooking.remainingBalance ?? 0) <= 0
-          ? "full"
-          : "downpayment";
+    if (canStartMemberAppointmentPayment(detailBooking)) {
+      const initialStage = getMemberAppointmentPaymentStage(detailBooking);
+      const fullPaymentActions =
+        initialStage !== "full" &&
+        canStartMemberAppointmentFullPayment(detailBooking)
+          ? [
+              {
+                key: "paymongo-appointment-full",
+                label: payAppointmentMutation.isPending
+                  ? confirmingPaymentLabel
+                  : "PayMongo Full Payment",
+                variant: "ghost" as const,
+                icon: CheckCircle2,
+                onPress: async (booking: DetailBooking) => {
+                  setPendingAppointmentPayment({
+                    booking,
+                    provider: "paymongo",
+                    stage: "full",
+                  });
+                },
+                disabled: payAppointmentMutation.isPending || isCancelling,
+                loading: payAppointmentMutation.isPending,
+                loadingLabel: confirmingPaymentLabel,
+              },
+              {
+                key: "cash-appointment-full",
+                label: payAppointmentMutation.isPending
+                  ? "SENDING"
+                  : "Cash Full Payment",
+                variant: "ghost" as const,
+                icon: CheckCircle2,
+                onPress: async (booking: DetailBooking) => {
+                  setPendingAppointmentPayment({
+                    booking,
+                    provider: "cash",
+                    stage: "full",
+                  });
+                },
+                disabled: payAppointmentMutation.isPending || isCancelling,
+                loading: payAppointmentMutation.isPending,
+                loadingLabel: "SENDING",
+              },
+            ]
+          : [];
       return [
         {
           key: "paymongo-appointment-downpayment",
           label: payAppointmentMutation.isPending
-            ? openingPaymongoLabel
+            ? confirmingPaymentLabel
             : initialStage === "full"
               ? "PayMongo Full Payment"
               : "PayMongo Downpayment",
@@ -1564,7 +1655,7 @@ export default function BookingsScreen() {
           },
           disabled: payAppointmentMutation.isPending || isCancelling,
           loading: payAppointmentMutation.isPending,
-          loadingLabel: openingPaymongoLabel,
+          loadingLabel: confirmingPaymentLabel,
         },
         {
           key: "cash-appointment-downpayment",
@@ -1584,24 +1675,7 @@ export default function BookingsScreen() {
           loading: payAppointmentMutation.isPending,
           loadingLabel: "SENDING",
         },
-        {
-          key: "cash-appointment-full",
-          label: payAppointmentMutation.isPending
-            ? "SENDING"
-            : "Cash Full Payment",
-          variant: "ghost" as const,
-          icon: CheckCircle2,
-          onPress: async (booking: DetailBooking) => {
-            setPendingAppointmentPayment({
-              booking,
-              provider: "cash",
-              stage: "full",
-            });
-          },
-          disabled: payAppointmentMutation.isPending || isCancelling,
-          loading: payAppointmentMutation.isPending,
-          loadingLabel: "SENDING",
-        },
+        ...fullPaymentActions,
         {
           key: "cancel-appointment",
           label: isCancelling
@@ -1665,7 +1739,7 @@ export default function BookingsScreen() {
     handleOpenCoachReview,
     isCancelling,
     isCoachRole,
-    openingPaymongoLabel,
+    confirmingPaymentLabel,
     payAppointmentMutation,
     submitCoachReviewMutation.isPending,
     user?.id,
@@ -1824,7 +1898,6 @@ export default function BookingsScreen() {
             </View>
           ) : activeSection === "clients" && isCoachRole ? (
             <View style={s.group}>
-              <Animated.View style={[s.groupDivider, dividerStyle]} />
               <FitText style={s.groupLabel}>CLIENTS</FitText>
               <View style={s.groupCards}>
                 {filteredCoachClients.map((client, index) => {
@@ -1866,7 +1939,6 @@ export default function BookingsScreen() {
             <>
               {activeSection === "earnings" && isCoachRole ? (
                 <View style={s.group}>
-                  <Animated.View style={[s.groupDivider, dividerStyle]} />
                   <FitText style={s.groupLabel}>EARNINGS SUMMARY</FitText>
                   <View style={s.groupCards}>
                     <FitCard
@@ -1903,9 +1975,11 @@ export default function BookingsScreen() {
               ) : null}
               {grouped.map(([dateKey, dateBookings]) => (
                 <View key={dateKey} style={s.group}>
-                  <Animated.View style={[s.groupDivider, dividerStyle]} />
                   <FitText style={s.groupLabel}>
-                    {formatGroupLabel(dateKey)}
+                    {formatGroupLabel(dateKey)} - {bookingCountByDate.get(dateKey) ?? dateBookings.length}{" "}
+                    {(bookingCountByDate.get(dateKey) ?? dateBookings.length) === 1
+                      ? "booking"
+                      : "bookings"}
                   </FitText>
                   <View style={s.groupCards}>
                     {dateBookings.map((booking) => {
@@ -1959,6 +2033,13 @@ export default function BookingsScreen() {
                   </View>
                 </View>
               ))}
+              {bookingTotalPages > 1 ? (
+                <FitPager
+                  currentPage={safeBookingPage}
+                  onPageChange={setBookingPage}
+                  totalPages={bookingTotalPages}
+                />
+              ) : null}
             </>
           )}
         </Animated.View>
@@ -2815,12 +2896,12 @@ export default function BookingsScreen() {
         isVisible={pendingAppointmentPayment != null}
         title={
           pendingAppointmentPayment?.provider === "paymongo"
-            ? "Continue to PayMongo?"
+            ? "Confirm PayMongo payment?"
             : "Submit cash payment?"
         }
         message={
           pendingAppointmentPayment
-            ? `${pendingAppointmentPayment.provider === "paymongo" ? "Start PayMongo checkout" : "Submit a cash payment request"} for the appointment ${
+            ? `${pendingAppointmentPayment.provider === "paymongo" ? "Confirm the testing PayMongo payment" : "Submit a cash payment request"} for the appointment ${
                 pendingAppointmentPayment.stage === "full"
                   ? "full payment"
                   : "downpayment"
@@ -2833,26 +2914,26 @@ export default function BookingsScreen() {
                 maximumFractionDigits: 2,
               })}?${
                 pendingAppointmentPayment.stage === "full"
-                  ? " No remaining balance will be due after staff verifies it."
+                  ? " No remaining balance will be due after the full payment is confirmed."
                   : " The remaining balance will stay due after this payment is verified."
               }`
             : ""
         }
         yesLabel={
           pendingAppointmentPayment?.provider === "paymongo"
-            ? "Open PayMongo"
+            ? "Confirm Payment"
             : "Submit"
         }
         noLabel="Cancel"
         isLoading={payAppointmentMutation.isPending}
         loadingLabel={
           pendingAppointmentPayment?.provider === "paymongo"
-            ? "OPENING PAYMONGO"
+            ? "CONFIRMING PAYMENT"
             : "SUBMITTING"
         }
         loadingTitle={
           pendingAppointmentPayment?.provider === "paymongo"
-            ? "Opening checkout"
+            ? "Confirming payment"
             : "Submitting payment"
         }
         onNo={() => {
@@ -2863,6 +2944,13 @@ export default function BookingsScreen() {
           if (!pendingAppointmentPayment) return;
           void handleSubmitAppointmentPayment(pendingAppointmentPayment);
         }}
+      />
+      <NoticeModal
+        isVisible={paymentConfirmation != null}
+        title={paymentConfirmation?.title ?? "Payment updated"}
+        message={paymentConfirmation?.message ?? ""}
+        buttonLabel="Stay in Bookings"
+        onClose={() => setPaymentConfirmation(null)}
       />
       <ConfirmModal
         isVisible={pendingCancellation != null}

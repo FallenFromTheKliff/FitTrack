@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
@@ -7,16 +7,12 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {
-  Bot,
-  ChevronLeft,
-  ChevronRight,
   ClipboardCheck,
   Dumbbell,
   Lock,
   RefreshCw,
-  Search,
+  SlidersHorizontal,
   Sparkles,
-  Target,
   Trophy,
   type LucideIcon,
 } from "lucide-react-native";
@@ -31,9 +27,11 @@ import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import {
   FitButton,
   FitCard,
+  FitFilter,
+  FitPager,
+  FitSearch,
   FitSection,
   FitText,
-  FitTextInput,
 } from "@/components/fit";
 
 import type { useMuscleMasteryScreen } from "@/hooks/mastery/useMuscleMasteryScreen";
@@ -63,6 +61,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     actionGrid: {
       gap: 10,
     },
+    achievementList: {
+      gap: 8,
+    },
+    achievementMeta: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+      opacity: 0.74,
+    },
+    achievementRow: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      gap: 4,
+      padding: 10,
+    },
+    achievementTitle: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 17,
+    },
     burstDot: {
       borderRadius: 999,
       height: 10,
@@ -79,35 +98,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       top: 92,
       zIndex: 12,
     },
-    chip: {
-      borderRadius: 999,
-      borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    chipRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
     emptyMessage: {
       color: colors.textSecondary,
       fontSize: 14,
       lineHeight: 20,
     },
     heroCard: {
-      borderRadius: R.xl,
-      gap: 16,
-      padding: 18,
-    },
-    heroEyebrow: {
-      color: colors.onBrand ?? "#FFFFFF",
-      fontSize: 12,
-      fontWeight: "700",
-      letterSpacing: 1.1,
+      gap: 10,
+      paddingVertical: 2,
     },
     heroMetaPill: {
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       paddingHorizontal: 10,
       paddingVertical: 6,
@@ -118,37 +119,54 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       gap: 8,
     },
     heroMetaText: {
-      color: colors.onBrand ?? "#FFFFFF",
+      color: colors.textSecondary,
       fontSize: 12,
       fontWeight: "600",
+    },
+    heroPrimaryRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
     },
     heroProgressFill: {
       borderRadius: 999,
       height: 7,
     },
     heroProgressMeta: {
-      color: colors.onBrand ?? "#FFFFFF",
+      color: colors.textMuted,
       fontSize: 12,
       fontWeight: "700",
       opacity: 0.9,
     },
     heroProgressTrack: {
-      backgroundColor: (colors.onBrand ?? "#FFFFFF") + "22",
+      backgroundColor: colors.brand + "18",
       borderRadius: 999,
       height: 7,
       overflow: "hidden",
     },
-    heroSubtitle: {
-      color: colors.onBrand ?? "#FFFFFF",
-      fontSize: 14,
-      lineHeight: 20,
-      opacity: 0.92,
-    },
     heroTitle: {
-      color: colors.onBrand ?? "#FFFFFF",
+      color: colors.textPrimary,
       fontSize: 24,
       fontWeight: "700",
       lineHeight: 30,
+    },
+    heroValue: {
+      color: colors.brand,
+      fontSize: 22,
+      fontWeight: "800",
+      lineHeight: 26,
+    },
+    heroValueLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      opacity: 0.72,
+    },
+    heroValueRow: {
+      flexDirection: "row",
+      gap: 16,
     },
     leaderboardAvatar: {
       alignItems: "center",
@@ -192,6 +210,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       flexDirection: "row",
       justifyContent: "flex-end",
       marginTop: 10,
+    },
+    claimButton: {
+      minWidth: 128,
     },
     milestoneCard: {
       borderRadius: R.lg,
@@ -237,17 +258,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       fontSize: 14,
       fontWeight: "700",
     },
-    pager: {
+    sectionPager: {
       alignItems: "center",
-      flexDirection: "row",
-      gap: 10,
-      justifyContent: "space-between",
-      marginTop: 12,
-    },
-    pagerLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: "700",
+      marginTop: 0,
     },
     progressMeta: {
       color: colors.textMuted,
@@ -258,20 +271,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       gap: 12,
       position: "relative",
     },
-    searchRow: {
-      alignItems: "center",
-      borderRadius: R.md,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+    muscleControls: {
+      gap: 8,
+      position: "relative",
+      zIndex: 20,
+      elevation: 12,
     },
-    searchInput: {
-      color: colors.textPrimary,
+    muscleFilterDropdown: {
+      left: 0,
+      right: 0,
+      top: 54,
+      zIndex: 220,
+      elevation: 12,
+    },
+    muscleFilterButton: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      justifyContent: "center",
+      minWidth: 42,
+      paddingLeft: 10,
+      paddingVertical: 6,
+    },
+    muscleSearchField: {
       flex: 1,
-      fontSize: 14,
-      padding: 0,
+    },
+    muscleSearchRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
     },
     sectionMessage: {
       color: colors.textSecondary,
@@ -292,7 +319,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     },
     tabButton: {
       alignItems: "center",
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       flexGrow: 1,
       paddingHorizontal: 10,
@@ -302,6 +329,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
+      marginBottom: 14,
     },
     tabText: {
       fontSize: 12,
@@ -429,40 +457,47 @@ function MilestoneClaimBurst({
   );
 }
 
-function PaginationControls({
-  currentPage,
-  onPageChange,
-  totalPages,
+export function MuscleMasteryHeaderPanel({
+  controller,
 }: {
-  currentPage: number;
-  onPageChange: (page: number) => void;
-  totalPages: number;
+  controller: MuscleMasteryScreenController;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const safeTotalPages = Math.max(1, totalPages);
+  const heroProgressPercent = Math.min(
+    Math.max(controller.totalXpProgress, 0),
+    1,
+  );
+  const currentStreak = controller.progressionProfile?.currentStreak ?? 0;
+  const streakLabel = `${currentStreak} day streak`;
+  const totalXpLabel = `${controller.totalXp.toLocaleString("en-US")} EXP`;
 
   return (
-    <View style={styles.pager}>
-      <FitButton
-        label="Prev"
-        icon={ChevronLeft}
-        onPress={() => onPageChange(Math.max(1, currentPage - 1))}
-        variant="ghost"
-        disabled={currentPage <= 1}
-        flex={1}
-      />
-      <FitText style={styles.pagerLabel}>
-        {currentPage} / {safeTotalPages}
-      </FitText>
-      <FitButton
-        label="Next"
-        icon={ChevronRight}
-        onPress={() => onPageChange(Math.min(safeTotalPages, currentPage + 1))}
-        variant="ghost"
-        disabled={currentPage >= safeTotalPages}
-        flex={1}
-      />
+    <View style={styles.heroCard}>
+      <View style={styles.heroPrimaryRow}>
+        <FitText style={styles.heroTitle}>{streakLabel}</FitText>
+        <View>
+          <FitText style={styles.heroValueLabel}>TOTAL EXP</FitText>
+          <FitText style={styles.heroValue}>{totalXpLabel}</FitText>
+        </View>
+      </View>
+      <View style={{ gap: 8 }}>
+        <View style={styles.heroProgressTrack}>
+          <View
+            style={[
+              styles.heroProgressFill,
+              {
+                backgroundColor: colors.brand,
+                width: `${heroProgressPercent * 100}%`,
+              },
+            ]}
+          />
+        </View>
+        <FitText style={styles.heroProgressMeta}>
+          {controller.totalXp.toLocaleString("en-US")} /{" "}
+          {controller.totalXpGoal.toLocaleString("en-US")} EXP
+        </FitText>
+      </View>
     </View>
   );
 }
@@ -474,11 +509,8 @@ export default function MuscleMasteryScreenContent({
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [isMuscleFilterOpen, setIsMuscleFilterOpen] = useState(false);
   const maxXp = controller.mastery[0]?.xpPoints ?? 0;
-  const heroProgressPercent = Math.min(
-    Math.max(controller.totalXpProgress, 0),
-    1,
-  );
 
   const renderSummary = () => (
     <>
@@ -503,7 +535,7 @@ export default function MuscleMasteryScreenContent({
         </FitSection>
       ) : null}
 
-      <FitSection heading="Snapshot">
+      <FitSection heading="Summary" cardStyle={{ padding: 14 }}>
         <View style={styles.statGrid}>
           {controller.summaryCards.map((item) => (
             <View key={item.id} style={styles.statTile}>
@@ -526,283 +558,284 @@ export default function MuscleMasteryScreenContent({
         ) : null}
       </FitSection>
 
-      <FitSection heading="Quick Links">
-        <View style={styles.actionGrid}>
-          <FitButton
-            label="Open Workout"
-            icon={Dumbbell}
-            onPress={controller.onOpenWorkout}
-            variant="primary"
-          />
-          <FitButton
-            label="Open Nutrition"
-            icon={Target}
-            onPress={controller.onOpenNutrition}
-            variant="ghost"
-          />
-          <FitButton
-            label="Ask BrodigyAI"
-            icon={Bot}
-            onPress={controller.onOpenChatbot}
-            variant="ghost"
-          />
-        </View>
+      <FitSection heading="Season" cardStyle={{ padding: 14 }}>
+        <FitCard
+          label={controller.seasonCaption}
+          subtitle="Season standing and points are tracked from confirmed progression."
+          trailingLabel={controller.seasonRankLabel}
+          trailingLabelColor={colors.brand}
+          icon={Trophy}
+          noChevron
+        />
       </FitSection>
     </>
   );
 
   const renderMilestones = () => (
-    <FitSection heading="Milestones">
-      {controller.sortedMilestones.length > 0 ? (
-        <View style={styles.list}>
-          {controller.sortedMilestones.map((milestone) => {
-            const Icon = getMilestoneIcon(milestone);
-            const tone = getMilestoneTone(milestone, colors);
-            const canClaim = milestone.status === "unlocked";
-            const needsReview = milestone.status === "pending_review";
-            const wasRejected = milestone.status === "rejected";
-            const reviewHint = needsReview
-              ? "Waiting for staff or admin approval."
-              : wasRejected
-                ? "Proof was rejected. Submit a new photo or video proof."
-                : null;
+    <>
+      <FitSection heading="Milestones" cardStyle={{ padding: 14 }}>
+        {controller.sortedMilestones.length > 0 ? (
+          <View style={styles.list}>
+            {controller.milestonePageItems.map((milestone) => {
+              const Icon = getMilestoneIcon(milestone);
+              const tone = getMilestoneTone(milestone, colors);
+              const canClaim = milestone.status === "unlocked";
+              const needsReview = milestone.status === "pending_review";
+              const wasRejected = milestone.status === "rejected";
+              const reviewHint = needsReview
+                ? "Waiting for staff or admin approval."
+                : wasRejected
+                  ? "Proof was rejected. Submit a new photo or video proof."
+                  : null;
 
-            return (
-              <View
-                key={milestone.milestoneDefinitionId}
-                style={[
-                  styles.milestoneCard,
-                  {
-                    backgroundColor: canClaim
-                      ? colors.brand + "10"
-                      : colors.surfaceRaised,
-                    borderColor: canClaim ? colors.brand + "55" : colors.border,
-                  },
-                ]}
-              >
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Icon size={22} color={tone} strokeWidth={2} />
-                  <View style={{ flex: 1 }}>
-                    <FitText style={styles.milestoneTitle}>
-                      {milestone.title}
-                    </FitText>
-                    <FitText style={styles.milestoneDescription}>
-                      {milestone.description ??
-                        `${formatTitle(milestone.triggerType)} milestone progress.`}
-                    </FitText>
-                  </View>
-                </View>
-                <View style={styles.milestoneMeta}>
-                  <FitText style={styles.progressMeta}>
-                    {formatTitle(milestone.category)}
-                  </FitText>
-                  <FitText style={styles.progressMeta}>
-                    {milestone.progressValue.toLocaleString("en-US")} /{" "}
-                    {milestone.targetValue.toLocaleString("en-US")}
-                  </FitText>
-                  <FitText style={[styles.progressMeta, { color: tone }]}>
-                      {getMilestoneStatusLabel(milestone)}
-                  </FitText>
-                </View>
-                {reviewHint ? (
-                  <View
-                    style={[
-                      styles.milestoneReviewHint,
-                      {
-                        backgroundColor: tone + "12",
-                        borderColor: tone + "55",
-                      },
-                    ]}
-                  >
-                    <FitText style={[styles.milestoneReviewHintText, { color: tone }]}>
-                      {reviewHint}
-                    </FitText>
-                  </View>
-                ) : null}
+              return (
                 <View
-                  style={{
-                    backgroundColor: colors.border,
-                    borderRadius: 999,
-                    height: 5,
-                    overflow: "hidden",
-                  }}
+                  key={milestone.milestoneDefinitionId}
+                  style={[
+                    styles.milestoneCard,
+                    {
+                      backgroundColor: canClaim
+                        ? colors.brand + "10"
+                        : colors.surfaceRaised,
+                      borderColor: canClaim ? colors.brand + "55" : colors.border,
+                    },
+                  ]}
                 >
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <Icon size={22} color={tone} strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <FitText style={styles.milestoneTitle}>
+                        {milestone.title}
+                      </FitText>
+                      <FitText style={styles.milestoneDescription}>
+                        {milestone.description ??
+                          `${formatTitle(milestone.triggerType)} milestone progress.`}
+                      </FitText>
+                    </View>
+                  </View>
+                  <View style={styles.milestoneMeta}>
+                    <FitText style={styles.progressMeta}>
+                      {formatTitle(milestone.category)}
+                    </FitText>
+                    <FitText style={styles.progressMeta}>
+                      {milestone.progressValue.toLocaleString("en-US")} /{" "}
+                      {milestone.targetValue.toLocaleString("en-US")}
+                    </FitText>
+                    <FitText style={[styles.progressMeta, { color: tone }]}>
+                      {getMilestoneStatusLabel(milestone)}
+                    </FitText>
+                  </View>
+                  {reviewHint ? (
+                    <View
+                      style={[
+                        styles.milestoneReviewHint,
+                        {
+                          backgroundColor: tone + "12",
+                          borderColor: tone + "55",
+                        },
+                      ]}
+                    >
+                      <FitText style={[styles.milestoneReviewHintText, { color: tone }]}>
+                        {reviewHint}
+                      </FitText>
+                    </View>
+                  ) : null}
                   <View
                     style={{
-                      backgroundColor: tone,
+                      backgroundColor: colors.border,
+                      borderRadius: 999,
                       height: 5,
-                      width: `${Math.min(Math.max(milestone.progressPercent, 0), 100)}%`,
+                      overflow: "hidden",
                     }}
-                  />
-                </View>
-                {canClaim ? (
-                  <View style={styles.milestoneActions}>
-                    <FitButton
-                      label="Claim"
-                      icon={Sparkles}
-                      onPress={() => void controller.onClaimMilestone(milestone)}
-                      variant="primary"
-                      disabled={controller.isClaimingMilestone}
-                      loading={controller.isClaimingMilestone}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: tone,
+                        height: 5,
+                        width: `${Math.min(Math.max(milestone.progressPercent, 0), 100)}%`,
+                      }}
                     />
                   </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-      ) : (
-        <FitText style={styles.sectionMessage}>
-          Visible milestones will appear after the progression backbone publishes
-          active goals for this member account.
-        </FitText>
-      )}
-    </FitSection>
+                  {canClaim ? (
+                    <View style={styles.milestoneActions}>
+                      <FitButton
+                        label="Claim"
+                        icon={Sparkles}
+                        onPress={() => void controller.onClaimMilestone(milestone)}
+                        variant="primary"
+                        disabled={controller.isClaimingMilestone}
+                        loading={controller.isClaimingMilestone}
+                        style={styles.claimButton}
+                        textStyle={{ textAlign: "center" }}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <FitText style={styles.sectionMessage}>
+            Visible milestones will appear after the progression backbone publishes
+            active goals for this member account.
+          </FitText>
+        )}
+      </FitSection>
+      {controller.milestoneTotalPages > 1 ? (
+        <FitPager
+          currentPage={controller.milestonePage}
+          onPageChange={controller.setMilestonePage}
+          style={styles.sectionPager}
+          totalPages={controller.milestoneTotalPages}
+        />
+      ) : null}
+    </>
   );
 
   const renderMuscles = () => (
-    <FitSection heading="Muscle EXP">
-      <View
-        style={[
-          styles.searchRow,
-          { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-        ]}
-      >
-        <Search size={18} color={colors.textMuted} strokeWidth={2} />
-        <FitTextInput
-          value={controller.muscleSearch}
-          placeholder="Search muscle group"
-          placeholderTextColor={colors.textMuted}
-          onChangeText={controller.setMuscleSearch}
-          style={styles.searchInput}
+    <>
+      <View style={styles.muscleControls}>
+        <View style={styles.muscleSearchRow}>
+          <View style={styles.muscleSearchField}>
+            <FitSearch
+              value={controller.muscleSearch}
+              placeholder="Search muscle group"
+              onChangeText={controller.setMuscleSearch}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isMuscleFilterOpen }}
+            hitSlop={8}
+            onPress={() => setIsMuscleFilterOpen((open) => !open)}
+            style={styles.muscleFilterButton}
+          >
+            <SlidersHorizontal
+              size={20}
+              color={isMuscleFilterOpen ? colors.brand : colors.textMuted}
+              strokeWidth={2}
+            />
+          </Pressable>
+        </View>
+        <FitFilter
+          isOpen={isMuscleFilterOpen}
+          topChipLabel="Rank"
+          topChipOptions={RANK_FILTERS}
+          dropdownStyle={styles.muscleFilterDropdown}
+          activeTopChip={controller.muscleRankFilter}
+          onTopChipChange={(value) => {
+            controller.setMuscleRankFilter(value as FitnessMasteryRank | "all");
+            setIsMuscleFilterOpen(false);
+          }}
         />
       </View>
-      <View style={[styles.chipRow, { marginTop: 12 }]}>
-        {RANK_FILTERS.map((option) => {
-          const active = controller.muscleRankFilter === option.value;
-          return (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: active
-                    ? colors.brand + "12"
-                    : colors.surfaceRaised,
-                  borderColor: active ? colors.brand : colors.border,
-                },
-              ]}
-              onPress={() => controller.setMuscleRankFilter(option.value)}
-            >
-              <FitText
-                style={{
-                  color: active ? colors.brand : colors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: active ? "700" : "600",
-                }}
-              >
-                {option.label}
-              </FitText>
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={[styles.list, { marginTop: 12 }]}>
-        {controller.musclePageItems.length > 0 ? (
-          controller.musclePageItems.map((entry) => (
-            <FitCard
-              key={entry.id}
-              label={entry.muscleGroup}
-              subtitle={`${entry.xpPoints.toLocaleString("en-US")} EXP | ${entry.totalVolumeKg.toLocaleString("en-US")} kg total volume`}
-              trailingLabel={entry.rankDisplay}
-              trailingLabelColor={colors.brand}
-              progress={maxXp > 0 ? entry.xpPoints / maxXp : 0}
-              icon={Sparkles}
-              noChevron
-            />
-          ))
-        ) : (
-          <FitText style={styles.sectionMessage}>
-            No muscle EXP entries match the current filters.
-          </FitText>
-        )}
-      </View>
-      <PaginationControls
-        currentPage={controller.musclePage}
-        onPageChange={controller.setMusclePage}
-        totalPages={controller.muscleTotalPages}
-      />
-    </FitSection>
+      <FitSection heading="Muscle EXP" cardStyle={{ padding: 14 }}>
+        <View style={styles.list}>
+          {controller.musclePageItems.length > 0 ? (
+            controller.musclePageItems.map((entry) => (
+              <FitCard
+                key={entry.id}
+                label={entry.muscleGroup}
+                subtitle={`${entry.xpPoints.toLocaleString("en-US")} EXP | ${entry.totalVolumeKg.toLocaleString("en-US")} kg total volume`}
+                trailingLabel={entry.rankDisplay}
+                trailingLabelColor={colors.brand}
+                progress={maxXp > 0 ? entry.xpPoints / maxXp : 0}
+                icon={Sparkles}
+                noChevron
+              />
+            ))
+          ) : (
+            <FitText style={styles.sectionMessage}>
+              No muscle EXP entries match the current filters.
+            </FitText>
+          )}
+        </View>
+      </FitSection>
+      {controller.muscleTotalPages > 1 ? (
+        <FitPager
+          currentPage={controller.musclePage}
+          onPageChange={controller.setMusclePage}
+          style={styles.sectionPager}
+          totalPages={controller.muscleTotalPages}
+        />
+      ) : null}
+    </>
   );
 
   const renderLeaderboard = () => (
-    <FitSection heading="Leaderboard">
-      {controller.rankingVisibility === "private" ? (
-        <FitText style={styles.sectionMessage}>
-          Your visible ranking is private. Progression still counts in history,
-          but member-facing leaderboards hide your standing.
-        </FitText>
-      ) : controller.leaderboard.length > 0 ? (
-        <View>
-          {controller.leaderboard.map((entry, index) => (
-            <View key={`${entry.userId}-${entry.rankPosition}`}>
-              <View style={styles.leaderboardRow}>
-                <View
-                  style={[
-                    styles.leaderboardAvatar,
-                    { backgroundColor: colors.brand + "18" },
-                  ]}
-                >
-                  <FitText
+    <>
+      <FitSection heading="Leaderboard" cardStyle={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+        {controller.rankingVisibility === "private" ? (
+          <FitText style={styles.sectionMessage}>
+            Your visible ranking is private. Progression still counts in history,
+            but member-facing leaderboards hide your standing.
+          </FitText>
+        ) : controller.leaderboard.length > 0 ? (
+          <View>
+            {controller.leaderboard.map((entry, index) => (
+              <View key={`${entry.userId}-${entry.rankPosition}`}>
+                <View style={styles.leaderboardRow}>
+                  <View
                     style={[
-                      styles.leaderboardAvatarText,
-                      { color: colors.brand },
+                      styles.leaderboardAvatar,
+                      { backgroundColor: colors.brand + "18" },
                     ]}
                   >
-                    {getInitials(entry.displayName)}
-                  </FitText>
+                    <FitText
+                      style={[
+                        styles.leaderboardAvatarText,
+                        { color: colors.brand },
+                      ]}
+                    >
+                      {getInitials(entry.displayName)}
+                    </FitText>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <FitText style={styles.leaderboardName}>
+                      {entry.displayName}
+                    </FitText>
+                    <FitText style={styles.leaderboardSubtitle}>
+                      Rank #{entry.rankPosition}
+                    </FitText>
+                  </View>
+                  <View style={styles.leaderboardMeta}>
+                    <FitText style={styles.leaderboardXp}>
+                      {entry.totalXp.toLocaleString("en-US")} EXP
+                    </FitText>
+                    <FitText style={styles.leaderboardSubtitle}>
+                      {controller.leaderboardEntry?.userId === entry.userId
+                        ? "You"
+                        : "Gym member"}
+                    </FitText>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <FitText style={styles.leaderboardName}>
-                    {entry.displayName}
-                  </FitText>
-                  <FitText style={styles.leaderboardSubtitle}>
-                    Rank #{entry.rankPosition}
-                  </FitText>
-                </View>
-                <View style={styles.leaderboardMeta}>
-                  <FitText style={styles.leaderboardXp}>
-                    {entry.totalXp.toLocaleString("en-US")} EXP
-                  </FitText>
-                  <FitText style={styles.leaderboardSubtitle}>
-                    {controller.leaderboardEntry?.userId === entry.userId
-                      ? "You"
-                      : "Gym member"}
-                  </FitText>
-                </View>
+                {index < controller.leaderboard.length - 1 ? (
+                  <View
+                    style={[
+                      styles.separator,
+                      { backgroundColor: colors.border },
+                    ]}
+                  />
+                ) : null}
               </View>
-              {index < controller.leaderboard.length - 1 ? (
-                <View
-                  style={[
-                    styles.separator,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-              ) : null}
-            </View>
-          ))}
-        </View>
-      ) : (
-        <FitText style={styles.sectionMessage}>
-          No visible leaderboard entries are available for this season yet.
-        </FitText>
-      )}
-      <PaginationControls
-        currentPage={controller.leaderboardMeta.page}
-        onPageChange={controller.setLeaderboardPage}
-        totalPages={controller.leaderboardMeta.total_pages}
-      />
-    </FitSection>
+            ))}
+          </View>
+        ) : (
+          <FitText style={styles.sectionMessage}>
+            No visible leaderboard entries are available for this season yet.
+          </FitText>
+        )}
+      </FitSection>
+      {controller.rankingVisibility !== "private" &&
+      controller.leaderboardMeta.total_pages > 1 ? (
+        <FitPager
+          currentPage={controller.leaderboardMeta.page}
+          onPageChange={controller.setLeaderboardPage}
+          style={styles.sectionPager}
+          totalPages={controller.leaderboardMeta.total_pages}
+        />
+      ) : null}
+    </>
   );
 
   return (
@@ -812,63 +845,6 @@ export default function MuscleMasteryScreenContent({
           activeKey={controller.celebrationKey}
           color={colors.brand}
         />
-      </View>
-
-      <View style={[styles.heroCard, { backgroundColor: colors.brand }]}>
-        <FitText style={styles.heroEyebrow}>MUSCLE MASTERY</FitText>
-        <View style={styles.heroMetaRow}>
-          <View
-            style={[
-              styles.heroMetaPill,
-              { borderColor: (colors.onBrand ?? "#FFFFFF") + "44" },
-            ]}
-          >
-            <FitText style={styles.heroMetaText}>
-              {controller.seasonRankLabel}
-            </FitText>
-          </View>
-          <View
-            style={[
-              styles.heroMetaPill,
-              { borderColor: (colors.onBrand ?? "#FFFFFF") + "44" },
-            ]}
-          >
-            <FitText style={styles.heroMetaText}>
-              {controller.topMuscle
-                ? `${controller.topMuscle.muscleGroup} leads`
-                : "No muscles tracked yet"}
-            </FitText>
-          </View>
-        </View>
-        <FitText style={styles.heroTitle}>
-          {controller.progressionProfile
-            ? `${controller.progressionProfile.currentStreak} day streak in motion`
-            : controller.topMuscle
-              ? `${controller.topMuscle.rankDisplay} momentum is building`
-              : "Build your first mastery streak"}
-        </FitText>
-        <FitText style={styles.heroSubtitle}>
-          {controller.progressionProfile
-            ? `${controller.seasonCaption}. ${controller.totalXp.toLocaleString("en-US")} confirmed EXP now drives mastery, milestones, and season standing.`
-            : "Workout progress, season standing, milestone claims, and muscle EXP now live in one cleaner surface."}
-        </FitText>
-        <View style={{ gap: 8 }}>
-          <View style={styles.heroProgressTrack}>
-            <View
-              style={[
-                styles.heroProgressFill,
-                {
-                  backgroundColor: colors.onBrand ?? "#FFFFFF",
-                  width: `${heroProgressPercent * 100}%`,
-                },
-              ]}
-            />
-          </View>
-          <FitText style={styles.heroProgressMeta}>
-            {controller.totalXp.toLocaleString("en-US")} /{" "}
-            {controller.totalXpGoal.toLocaleString("en-US")} EXP
-          </FitText>
-        </View>
       </View>
 
       {controller.statusMessage ? (
@@ -938,37 +914,35 @@ export default function MuscleMasteryScreenContent({
         </FitSection>
       ) : (
         <>
-          <FitSection heading="Mastery Views">
-            <View style={styles.tabRow}>
-              {TABS.map((tab) => {
-                const active = controller.activeTab === tab.value;
-                return (
-                  <Pressable
-                    key={tab.value}
+          <View style={styles.tabRow}>
+            {TABS.map((tab) => {
+              const active = controller.activeTab === tab.value;
+              return (
+                <Pressable
+                  key={tab.value}
+                  style={[
+                    styles.tabButton,
+                    {
+                      backgroundColor: active
+                        ? colors.brand + "12"
+                        : colors.surfaceRaised,
+                      borderColor: active ? colors.brand : colors.border,
+                    },
+                  ]}
+                  onPress={() => controller.setActiveTab(tab.value)}
+                >
+                  <FitText
                     style={[
-                      styles.tabButton,
-                      {
-                        backgroundColor: active
-                          ? colors.brand + "12"
-                          : colors.surfaceRaised,
-                        borderColor: active ? colors.brand : colors.border,
-                      },
+                      styles.tabText,
+                      { color: active ? colors.brand : colors.textSecondary },
                     ]}
-                    onPress={() => controller.setActiveTab(tab.value)}
                   >
-                    <FitText
-                      style={[
-                        styles.tabText,
-                        { color: active ? colors.brand : colors.textSecondary },
-                      ]}
-                    >
-                      {tab.label}
-                    </FitText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </FitSection>
+                    {tab.label}
+                  </FitText>
+                </Pressable>
+              );
+            })}
+          </View>
 
           {controller.activeTab === "summary" ? renderSummary() : null}
           {controller.activeTab === "milestones" ? renderMilestones() : null}

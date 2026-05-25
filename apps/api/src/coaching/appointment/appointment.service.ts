@@ -92,11 +92,10 @@ type AppointmentAmounts = {
   coachEarnings: Prisma.Decimal;
 };
 
-type InitialAppointmentPaymentStage =
-  Extract<
-    PaymentStage,
-    typeof PaymentStage.downpayment | typeof PaymentStage.full
-  >;
+type InitialAppointmentPaymentStage = Extract<
+  PaymentStage,
+  typeof PaymentStage.downpayment | typeof PaymentStage.full
+>;
 
 type NormalizedAvailabilitySlot = {
   dayOfWeek: number;
@@ -191,7 +190,9 @@ export class AppointmentService {
       scheduledAt.getTime() + dto.duration_minutes * 60 * 1000,
     );
 
-    if (this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)) {
+    if (
+      this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
@@ -237,8 +238,7 @@ export class AppointmentService {
   }
 
   private formatMemberAppointmentNotes(dto: CreateAppointmentDTO) {
-    const bookingMode =
-      dto.booking_mode ?? CoachAppointmentBookingMode.single;
+    const bookingMode = dto.booking_mode ?? CoachAppointmentBookingMode.single;
     const sessionCount =
       bookingMode === CoachAppointmentBookingMode.single
         ? 1
@@ -288,7 +288,9 @@ export class AppointmentService {
       scheduledAt.getTime() + dto.duration_minutes * 60 * 1000,
     );
 
-    if (this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)) {
+    if (
+      this.toGymDateKey(appointmentEndsAt) !== this.toGymDateKey(scheduledAt)
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
@@ -313,9 +315,7 @@ export class AppointmentService {
       dto.duration_minutes,
       false,
     );
-    const paymentStage = resolveStaffAppointmentPaymentStage(
-      dto.payment_stage,
-    );
+    const paymentStage = resolveStaffAppointmentPaymentStage(dto.payment_stage);
     const paymentAmount =
       paymentStage === PaymentStage.full
         ? amounts.totalAmount
@@ -486,6 +486,7 @@ export class AppointmentService {
 
     this.assertCancellationOwnership(appointment, requesterId, role);
     this.assertCancellableStatus(appointment.status);
+    this.assertCancellationWindow(appointment.scheduled_at);
 
     const cancelledAt = new Date();
     const updated = await this.repo.updateAppointment(appointment.id, {
@@ -898,9 +899,7 @@ export class AppointmentService {
       return;
     }
 
-    if (
-      appointment.status !== AppointmentStatus.pending_payment
-    ) {
+    if (appointment.status !== AppointmentStatus.pending_payment) {
       return;
     }
 
@@ -1133,16 +1132,15 @@ export class AppointmentService {
           avatar_url: appointment.user.profile?.avatar_url ?? null,
         },
       },
-      review:
-        appointment.review
-          ? {
-              id: appointment.review.id,
-              rating: appointment.review.rating,
-              comment: appointment.review.comment ?? null,
-              created_at: appointment.review.created_at.toISOString(),
-              updated_at: appointment.review.updated_at.toISOString(),
-            }
-          : null,
+      review: appointment.review
+        ? {
+            id: appointment.review.id,
+            rating: appointment.review.rating,
+            comment: appointment.review.comment ?? null,
+            created_at: appointment.review.created_at.toISOString(),
+            updated_at: appointment.review.updated_at.toISOString(),
+          }
+        : null,
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };
@@ -1207,16 +1205,15 @@ export class AppointmentService {
           avatar_url: null,
         },
       },
-      review:
-        appointment.review
-          ? {
-              id: appointment.review.id,
-              rating: appointment.review.rating,
-              comment: appointment.review.comment ?? null,
-              created_at: appointment.review.created_at.toISOString(),
-              updated_at: appointment.review.updated_at.toISOString(),
-            }
-          : null,
+      review: appointment.review
+        ? {
+            id: appointment.review.id,
+            rating: appointment.review.rating,
+            comment: appointment.review.comment ?? null,
+            created_at: appointment.review.created_at.toISOString(),
+            updated_at: appointment.review.updated_at.toISOString(),
+          }
+        : null,
       created_at: appointment.created_at.toISOString(),
       updated_at: appointment.updated_at.toISOString(),
     };
@@ -1304,10 +1301,7 @@ export class AppointmentService {
       return;
     }
 
-    if (
-      role === UserRole.coach &&
-      appointment.coach.user_id === requesterId
-    ) {
+    if (role === UserRole.coach && appointment.coach.user_id === requesterId) {
       return;
     }
 
@@ -1342,6 +1336,23 @@ export class AppointmentService {
     }
   }
 
+  private assertCancellationWindow(scheduledAt: Date): void {
+    if (this.toGymDateKey(new Date()) < this.toGymDateKey(scheduledAt)) {
+      return;
+    }
+
+    throw new HttpException(
+      {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Appointment Cannot Be Cancelled',
+        status: 422,
+        detail:
+          'Coach appointments can only be cancelled until the day before the appointment date.',
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+
   private assertDownpaymentAllowed(
     appointment: AppointmentLifecycleRecord,
   ): void {
@@ -1370,9 +1381,7 @@ export class AppointmentService {
       });
     }
 
-    if (
-      appointment.status !== AppointmentStatus.pending_payment
-    ) {
+    if (appointment.status !== AppointmentStatus.pending_payment) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
@@ -1597,9 +1606,7 @@ export class AppointmentService {
       });
     }
 
-    if (
-      appointment.status !== AppointmentStatus.pending_payment
-    ) {
+    if (appointment.status !== AppointmentStatus.pending_payment) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
@@ -1622,8 +1629,7 @@ export class AppointmentService {
     paymentStage: InitialAppointmentPaymentStage,
   ): Promise<AppointmentCheckoutResponseDTO> {
     if (
-      (payment.user_id !== userId &&
-        !this.isStaffPaymentProcessor(userRole)) ||
+      (payment.user_id !== userId && !this.isStaffPaymentProcessor(userRole)) ||
       payment.payable_type !== PayableType.coaching
     ) {
       throw new ConflictException({
@@ -1773,7 +1779,7 @@ export class AppointmentService {
         ? 'balance'
         : payment.payment_stage === PaymentStage.full
           ? 'full payment'
-        : 'downpayment';
+          : 'downpayment';
     const checkout = await this.paymongoCheckoutService.createCheckoutSession({
       amount: this.toMinorAmount(payment.amount),
       description: `Coaching appointment ${paymentLabel}`,
@@ -1839,9 +1845,7 @@ export class AppointmentService {
   }
 
   private toGymWallClockDate(value: Date): Date {
-    return new Date(
-      value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
-    );
+    return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
   }
 
   private toGymDateKey(value: Date): string {
@@ -1903,7 +1907,10 @@ function calculateAppointmentAmounts(
 
 function resolveStaffAppointmentPaymentStage(
   paymentStage?: CreateStaffInitialPaymentStage,
-): Extract<PaymentStage, typeof PaymentStage.downpayment | typeof PaymentStage.full> {
+): Extract<
+  PaymentStage,
+  typeof PaymentStage.downpayment | typeof PaymentStage.full
+> {
   return paymentStage === CreateStaffInitialPaymentStage.downpayment
     ? PaymentStage.downpayment
     : PaymentStage.full;

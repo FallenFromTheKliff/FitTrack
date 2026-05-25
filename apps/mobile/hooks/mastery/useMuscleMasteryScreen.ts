@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,6 +61,7 @@ const RANK_PRIORITY: Record<FitnessMasteryRank, number> = {
 };
 
 const EMPTY_MILESTONES: FitnessMilestoneProgressRecord[] = [];
+const MILESTONE_PAGE_SIZE = 4;
 const MUSCLE_PAGE_SIZE = 8;
 const LEADERBOARD_PAGE_SIZE = 8;
 
@@ -266,6 +267,7 @@ export function useMuscleMasteryScreen({
   const [muscleSearch, setMuscleSearch] = useState("");
   const [muscleRankFilter, setMuscleRankFilter] =
     useState<MuscleRankFilter>("all");
+  const [milestonePage, setMilestonePage] = useState(1);
   const [musclePage, setMusclePage] = useState(1);
   const [leaderboardPage, setLeaderboardPage] = useState(1);
   const [celebrationKey, setCelebrationKey] = useState(0);
@@ -357,6 +359,14 @@ export function useMuscleMasteryScreen({
         .filter((milestone) => !milestone.isHidden)
         .sort(sortMilestones),
     [milestones],
+  );
+  const milestoneTotalPages = Math.max(
+    1,
+    Math.ceil(sortedMilestones.length / MILESTONE_PAGE_SIZE),
+  );
+  const milestonePageItems = sortedMilestones.slice(
+    (milestonePage - 1) * MILESTONE_PAGE_SIZE,
+    milestonePage * MILESTONE_PAGE_SIZE,
   );
   const activeMilestones = useMemo(
     () =>
@@ -468,6 +478,12 @@ export function useMuscleMasteryScreen({
   }, [muscleRankFilter, muscleSearch]);
 
   useEffect(() => {
+    if (milestonePage > milestoneTotalPages) {
+      setMilestonePage(milestoneTotalPages);
+    }
+  }, [milestonePage, milestoneTotalPages]);
+
+  useEffect(() => {
     if (musclePage > muscleTotalPages) {
       setMusclePage(muscleTotalPages);
     }
@@ -494,6 +510,48 @@ export function useMuscleMasteryScreen({
       showMessage(`${milestone.title} unlocked. Claim it in Milestones.`);
     }
   }, [showMessage, sortedMilestones]);
+
+  const handleOpenChatbot = useCallback(
+    () =>
+      router.push({
+        pathname: "/(tabs)/chatbot",
+        params: { from: "mastery", sessionId: "new" },
+      }),
+    [router],
+  );
+
+  const handleOpenNutrition = useCallback(() => {
+    router.push("/(tabs)/nutrition");
+  }, [router]);
+
+  const handleOpenProfile = useCallback(() => {
+    router.push("/(tabs)/profile");
+  }, [router]);
+
+  const handleOpenWorkout = useCallback(() => {
+    router.push("/(tabs)/workout");
+  }, [router]);
+
+  const handleClaimMilestone = useCallback(
+    async (milestone: FitnessMilestoneProgressRecord) => {
+      if (!user?.id || milestone.status !== "unlocked") return;
+      try {
+        await claimMilestoneMutation.mutateAsync({
+          milestoneDefinitionId: milestone.milestoneDefinitionId,
+          userId: user.id,
+        });
+        setCelebrationKey((current) => current + 1);
+        showMessage(`${milestone.title} claimed.`);
+      } catch (error) {
+        showMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to claim milestone right now.",
+        );
+      }
+    },
+    [claimMilestoneMutation, showMessage, user?.id],
+  );
 
   return {
     achievementCards,
@@ -525,6 +583,9 @@ export function useMuscleMasteryScreen({
       membershipCardStatus,
       hasMemberCardAccess,
     ),
+    milestonePage,
+    milestonePageItems,
+    milestoneTotalPages,
     milestones,
     mastery,
     musclePage,
@@ -532,31 +593,11 @@ export function useMuscleMasteryScreen({
     muscleRankFilter,
     muscleSearch,
     muscleTotalPages,
-    onOpenChatbot: () =>
-      router.push({
-        pathname: "/(tabs)/chatbot",
-        params: { from: "mastery", sessionId: "new" },
-      }),
-    onOpenNutrition: () => router.push("/(tabs)/nutrition"),
-    onOpenProfile: () => router.push("/(tabs)/profile"),
-    onOpenWorkout: () => router.push("/(tabs)/workout"),
-    onClaimMilestone: async (milestone: FitnessMilestoneProgressRecord) => {
-      if (!user?.id || milestone.status !== "unlocked") return;
-      try {
-        await claimMilestoneMutation.mutateAsync({
-          milestoneDefinitionId: milestone.milestoneDefinitionId,
-          userId: user.id,
-        });
-        setCelebrationKey((current) => current + 1);
-        showMessage(`${milestone.title} claimed.`);
-      } catch (error) {
-        showMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to claim milestone right now.",
-        );
-      }
-    },
+    onOpenChatbot: handleOpenChatbot,
+    onOpenNutrition: handleOpenNutrition,
+    onOpenProfile: handleOpenProfile,
+    onOpenWorkout: handleOpenWorkout,
+    onClaimMilestone: handleClaimMilestone,
     onRefresh: async () => {
       await Promise.all(loadingQueries.map((query) => query.refetch()));
     },
@@ -582,6 +623,7 @@ export function useMuscleMasteryScreen({
     summaryCards,
     setActiveTab,
     setLeaderboardPage,
+    setMilestonePage,
     setMusclePage,
     setMuscleRankFilter,
     setMuscleSearch,

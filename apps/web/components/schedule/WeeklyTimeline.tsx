@@ -263,7 +263,8 @@ export default function WeeklyTimeline({
           backgroundColor: colors.surface,
           border: flush ? "none" : `1px solid ${colors.border}`,
           borderRadius: flush ? 0 : 8,
-          overflow: "hidden",
+          overflowX: "hidden",
+          overflowY: height ? "auto" : "hidden",
           height: height ?? undefined,
         }}
       >

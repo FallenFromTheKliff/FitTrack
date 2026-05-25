@@ -5,6 +5,7 @@ import { Archive, ImagePlus, Plus, ReceiptText, RefreshCw, Trash2 } from "lucide
 
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -664,10 +665,14 @@ function RetailSaleModal({
 }
 
 export default function InventoryPage() {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
   const inventory = useInventoryDashboard();
+  const canManageInventoryCatalog = user?.role === "ADMIN";
+  const canPerformInventoryOperations =
+    user?.role === "ADMIN" || user?.role === "STAFF";
   const [detailEditorOpen, setDetailEditorOpen] = useState<
     "retail" | "equipment" | null
   >(null);
@@ -763,6 +768,15 @@ export default function InventoryPage() {
     }
   }, [detailEditorOpen, inventory.selectedEquipment, inventory.selectedRetail]);
 
+  useEffect(() => {
+    if (
+      inventory.equipmentDetailsDeepLinkId &&
+      inventory.selectedEquipment?.id === inventory.equipmentDetailsDeepLinkId
+    ) {
+      setDetailEditorOpen("equipment");
+    }
+  }, [inventory.equipmentDetailsDeepLinkId, inventory.selectedEquipment?.id]);
+
   return (
     <FitSection
       as="section"
@@ -782,14 +796,19 @@ export default function InventoryPage() {
       ) : null}
 
       <InventoryMainPanel
+        canManageInventoryCatalog={canManageInventoryCatalog}
+        canPerformInventoryOperations={canPerformInventoryOperations}
         colors={colors}
         inventory={inventory}
         isCompactDetail={isCompactDetail}
-        onOpenDetailEditor={setDetailEditorOpen}
+        onOpenDetailEditor={(kind) => {
+          if (!canManageInventoryCatalog) return;
+          setDetailEditorOpen(kind);
+        }}
       />
 
       <DetailsModal
-        isOpen={inventory.createRetailOpen}
+        isOpen={canManageInventoryCatalog && inventory.createRetailOpen}
         title="Add Retail Product"
         subtitle="Create a retail item with category and stock thresholds."
         fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
@@ -848,15 +867,19 @@ export default function InventoryPage() {
         submitLabel={inventory.updateRetailPending ? "SAVING..." : "SAVE CHANGES"}
         isLoading={inventory.updateRetailPending}
         validate={validateRetailProductForm}
-        dangerLabel="ARCHIVE ITEM"
-        dangerIcon={Archive}
-        dangerDisabled={!inventory.selectedRetail}
+        readOnly={!canManageInventoryCatalog}
+        readOnlyBanner="Catalog details are admin-controlled. Operational actions remain available below."
+        dangerLabel={canManageInventoryCatalog ? "ARCHIVE ITEM" : undefined}
+        dangerIcon={canManageInventoryCatalog ? Archive : undefined}
+        dangerDisabled={!canManageInventoryCatalog || !inventory.selectedRetail}
         onDanger={() => {
+          if (!canManageInventoryCatalog) return;
           if (!inventory.selectedRetail) return;
           inventory.closeRetailDetails();
           inventory.openRetailArchive(inventory.selectedRetail.id);
         }}
         onSubmit={(data) => {
+          if (!canManageInventoryCatalog) return;
           void inventory.handleUpdateRetail(data);
           if (!isCompactDetail) setDetailEditorOpen(null);
         }}
@@ -878,14 +901,16 @@ export default function InventoryPage() {
               backgroundColor: colors.surface
             }}
           >
-            <InventoryImageUploadCard
-              title="Product Image"
-              imageUrl={inventory.detailRetailImageUrl}
-              buttonLabel="UPLOAD NEW IMAGE"
-              onUpload={(file) => {
-                void inventory.handleUploadInventoryImage(file, "detail-retail");
-              }}
-            />
+            {canManageInventoryCatalog ? (
+              <InventoryImageUploadCard
+                title="Product Image"
+                imageUrl={inventory.detailRetailImageUrl}
+                buttonLabel="UPLOAD NEW IMAGE"
+                onUpload={(file) => {
+                  void inventory.handleUploadInventoryImage(file, "detail-retail");
+                }}
+              />
+            ) : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <FitPill
                 mode="status"
@@ -956,30 +981,34 @@ export default function InventoryPage() {
                 </FitText>
               </div>
             </div>
-            <FitButton
-              variant="primary"
-              label="RECORD SALE"
-              fullWidth
-              disabled={inventory.selectedRetail.stockQuantity <= 0}
-              onClick={() => {
-                if (!inventory.selectedRetail) return;
-                inventory.closeRetailDetails();
-                inventory.openRetailSale(inventory.selectedRetail.id);
-              }}
-              style={{ marginTop: 12 }}
-            />
-            <FitButton
-              variant="ghost"
-              label="RESTOCK ITEM"
-              icon={RefreshCw}
-              fullWidth
-              onClick={() => {
-                if (!inventory.selectedRetail) return;
-                inventory.closeRetailDetails();
-                inventory.openRetailRestock(inventory.selectedRetail.id);
-              }}
-              style={{ marginTop: 10 }}
-            />
+            {canPerformInventoryOperations ? (
+              <>
+                <FitButton
+                  variant="primary"
+                  label="RECORD SALE"
+                  fullWidth
+                  disabled={inventory.selectedRetail.stockQuantity <= 0}
+                  onClick={() => {
+                    if (!inventory.selectedRetail) return;
+                    inventory.closeRetailDetails();
+                    inventory.openRetailSale(inventory.selectedRetail.id);
+                  }}
+                  style={{ marginTop: 12 }}
+                />
+                <FitButton
+                  variant="ghost"
+                  label="RESTOCK ITEM"
+                  icon={RefreshCw}
+                  fullWidth
+                  onClick={() => {
+                    if (!inventory.selectedRetail) return;
+                    inventory.closeRetailDetails();
+                    inventory.openRetailRestock(inventory.selectedRetail.id);
+                  }}
+                  style={{ marginTop: 10 }}
+                />
+              </>
+            ) : null}
           </div>
         ) : inventory.productDetailLoading ? (
           <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 12 }}>
@@ -989,7 +1018,7 @@ export default function InventoryPage() {
       </DetailsModal>
 
       <DetailsModal
-        isOpen={inventory.retailRestockOpen}
+        isOpen={canPerformInventoryOperations && inventory.retailRestockOpen}
         title="Restock Retail Item"
         subtitle={
           inventory.restockRetailTarget?.name ??
@@ -1011,7 +1040,7 @@ export default function InventoryPage() {
       />
 
       <RetailSaleModal
-        isOpen={inventory.retailSaleOpen}
+        isOpen={canPerformInventoryOperations && inventory.retailSaleOpen}
         initialProductId={inventory.saleRetailTarget?.id ?? null}
         products={inventory.retailSaleProducts}
         isLoading={inventory.retailSalePending}
@@ -1020,7 +1049,7 @@ export default function InventoryPage() {
       />
 
       <ConfirmModal
-        isOpen={inventory.archiveRetailOpen}
+        isOpen={canManageInventoryCatalog && inventory.archiveRetailOpen}
         title="Archive Retail Item"
         message={`Archive ${inventory.archiveRetailTarget?.name ?? "this retail item"} from the live catalog? Sales history stays intact, but the item will no longer appear as active inventory.`}
         confirmLabel="ARCHIVE ITEM"
@@ -1035,7 +1064,7 @@ export default function InventoryPage() {
       />
 
       <DetailsModal
-        isOpen={inventory.createEquipmentOpen}
+        isOpen={canManageInventoryCatalog && inventory.createEquipmentOpen}
         title="Add Equipment Item"
         subtitle="Track operational equipment separately from retail stock."
         fields={createEquipmentFields}
@@ -1086,15 +1115,19 @@ export default function InventoryPage() {
         submitLabel={inventory.updateEquipmentPending ? "SAVING..." : "SAVE CHANGES"}
         isLoading={inventory.updateEquipmentPending}
         validate={validateEquipmentDetailForm}
-        dangerLabel="ARCHIVE EQUIPMENT"
-        dangerIcon={Archive}
-        dangerDisabled={!inventory.selectedEquipment}
+        readOnly={!canManageInventoryCatalog}
+        readOnlyBanner="Equipment details are admin-controlled. Operational writeoff remains available below."
+        dangerLabel={canManageInventoryCatalog ? "ARCHIVE EQUIPMENT" : undefined}
+        dangerIcon={canManageInventoryCatalog ? Archive : undefined}
+        dangerDisabled={!canManageInventoryCatalog || !inventory.selectedEquipment}
         onDanger={() => {
+          if (!canManageInventoryCatalog) return;
           if (!inventory.selectedEquipment) return;
           inventory.closeEquipmentDetails();
           inventory.openEquipmentArchive(inventory.selectedEquipment.id);
         }}
         onSubmit={(data) => {
+          if (!canManageInventoryCatalog) return;
           void inventory.handleUpdateEquipment(data);
           if (!isCompactDetail) setDetailEditorOpen(null);
         }}
@@ -1116,14 +1149,16 @@ export default function InventoryPage() {
                 backgroundColor: colors.surface
               }}
             >
-              <InventoryImageUploadCard
-                title="Equipment Picture"
-                imageUrl={inventory.detailEquipmentImageUrl}
-                buttonLabel="UPLOAD NEW IMAGE"
-                onUpload={(file) => {
-                  void inventory.handleUploadInventoryImage(file, "detail-equipment");
-                }}
-              />
+              {canManageInventoryCatalog ? (
+                <InventoryImageUploadCard
+                  title="Equipment Picture"
+                  imageUrl={inventory.detailEquipmentImageUrl}
+                  buttonLabel="UPLOAD NEW IMAGE"
+                  onUpload={(file) => {
+                    void inventory.handleUploadInventoryImage(file, "detail-equipment");
+                  }}
+                />
+              ) : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <FitPill
                   mode="status"
@@ -1181,17 +1216,19 @@ export default function InventoryPage() {
                   </FitText>
                 </div>
               </div>
-              <FitButton
-                variant="ghost"
-                label="RECORD WRITEOFF"
-                fullWidth
-                onClick={() => {
-                  if (!inventory.selectedEquipment) return;
-                  inventory.closeEquipmentDetails();
-                  inventory.openEquipmentWriteOff(inventory.selectedEquipment.id);
-                }}
-                style={{ marginTop: 12 }}
-              />
+              {canPerformInventoryOperations ? (
+                <FitButton
+                  variant="ghost"
+                  label="RECORD WRITEOFF"
+                  fullWidth
+                  onClick={() => {
+                    if (!inventory.selectedEquipment) return;
+                    inventory.closeEquipmentDetails();
+                    inventory.openEquipmentWriteOff(inventory.selectedEquipment.id);
+                  }}
+                  style={{ marginTop: 12 }}
+                />
+              ) : null}
             </div>
 
             <div
@@ -1247,7 +1284,7 @@ export default function InventoryPage() {
       </DetailsModal>
 
       <DetailsModal
-        isOpen={inventory.writeOffEquipmentOpen}
+        isOpen={canPerformInventoryOperations && inventory.writeOffEquipmentOpen}
         title="Record Equipment Writeoff"
         subtitle={inventory.writeOffEquipmentTarget?.name ?? "Equipment item"}
         fields={INVENTORY_EQUIPMENT_WRITEOFF_FIELDS}
@@ -1268,7 +1305,7 @@ export default function InventoryPage() {
       />
 
       <DetailsModal
-        isOpen={inventory.archiveEquipmentOpen}
+        isOpen={canManageInventoryCatalog && inventory.archiveEquipmentOpen}
         title="Archive Equipment"
         subtitle={inventory.archiveEquipmentTarget?.name ?? "Equipment item"}
         fields={INVENTORY_EQUIPMENT_ARCHIVE_FIELDS}
@@ -1291,7 +1328,7 @@ export default function InventoryPage() {
       />
 
       <ConfirmModal
-        isOpen={pendingArchiveEquipmentForm !== null}
+        isOpen={canManageInventoryCatalog && pendingArchiveEquipmentForm !== null}
         title="Confirm Equipment Archive"
         message={`Archive ${pendingArchiveEquipmentForm?.quantityToArchive ?? "0"} unit(s) from ${inventory.archiveEquipmentTarget?.name ?? "this equipment item"}? This will remove them from active inventory and record the provided reason.`}
         confirmLabel="ARCHIVE EQUIPMENT"

@@ -52,7 +52,6 @@ export default function AccountsModalLayer() {
     handleRevokeMembershipCard,
     handleVerifyNonMember,
     isAccountsHamburgerMode,
-    isAdmin,
     isApproveDeletionPending,
     isMembershipCardPending,
     isMembershipPaymentReviewPending,
@@ -160,10 +159,9 @@ export default function AccountsModalLayer() {
                 marginTop: 12,
                 display: "grid",
                 gap: 10,
-                padding: 14,
-                borderRadius: 10,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: `${colors.surface}ee`,
+                paddingTop: 12,
+                borderTop: `1px solid ${colors.border}`,
+                backgroundColor: "transparent",
               }}
             >
               {[
@@ -253,7 +251,7 @@ export default function AccountsModalLayer() {
           onCancel={() => setPaymentReviewAction(null)}
         />
       ) : null}
-      {isAdmin ? (
+      {canManageAccounts ? (
         <AttendanceScanModal
           isOpen={scanOpen}
           isSubmitting={isScanAttendancePending}

@@ -94,7 +94,7 @@ export function makeDetailsModalStyles(colors: ThemeColors) {
       gap: 10
     },
     imageTile: {
-      width: "47.5%",
+      width: "100%",
       aspectRatio: 16 / 9,
       borderRadius: R.md,
       borderWidth: 1,
@@ -103,6 +103,14 @@ export function makeDetailsModalStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
       gap: 6
+    },
+    imagePreview: {
+      width: "100%",
+      aspectRatio: 16 / 9,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised
     },
     imageTileLabel: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
     footer: {

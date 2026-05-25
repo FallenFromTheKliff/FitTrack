@@ -7,6 +7,8 @@ import {
   bookingsQueryOptions,
   cancelAppointmentMutationOptions,
   cancelBookingMutationOptions,
+  createAppointmentMutationOptions,
+  createBookingMutationOptions,
   claimFitnessMilestoneMutationOptions,
   completeWorkoutSessionMutationOptions,
   fitnessLeaderboardQueryOptions,
@@ -23,6 +25,7 @@ import {
   nutritionDailySummaryQueryOptions,
   nutritionHistoryQueryOptions,
   nutritionLogsQueryOptions,
+  payAppointmentDownpaymentMutationOptions,
   startWorkoutSessionMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
@@ -56,7 +59,6 @@ export function useMemberOnlyAccess(featureName = "This feature") {
 
 export function useMemberOnlyHomeData({
   hasMemberCardAccess,
-  todayString,
   userId,
 }: {
   hasMemberCardAccess: boolean;
@@ -112,6 +114,9 @@ export function useMemberOnlyBookingsData(userId?: string) {
     }),
     cancelAppointmentMutation: useMutation(cancelAppointmentMutationOptions(webApiClient, queryClient)),
     cancelBookingMutation: useMutation(cancelBookingMutationOptions(webApiClient, queryClient)),
+    createAppointmentMutation: useMutation(createAppointmentMutationOptions(webApiClient, queryClient)),
+    createBookingMutation: useMutation(createBookingMutationOptions(webApiClient, queryClient)),
+    payAppointmentMutation: useMutation(payAppointmentDownpaymentMutationOptions(webApiClient, queryClient)),
     submitCoachReviewMutation: useMutation(submitCoachReviewMutationOptions(webApiClient, queryClient)),
     venuesQuery: useQuery({ ...venuesQueryOptions(webApiClient, userId), enabled: !!userId }),
   };
@@ -147,6 +152,13 @@ export function useMemberOnlyNutritionData({
         endDate: todayString,
         page: 1,
         limit: 20,
+      }),
+      enabled: !!userId && hasMemberCardAccess,
+    }),
+    recentNutritionLogsQuery: useQuery({
+      ...nutritionLogsQueryOptions<NutritionLogRecord>(webApiClient, userId, {
+        page: 1,
+        limit: 24,
       }),
       enabled: !!userId && hasMemberCardAccess,
     }),

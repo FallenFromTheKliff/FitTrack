@@ -47,6 +47,24 @@ export function makeProfileStyles(colors: ThemeColors) {
     profileMeta: { fontSize: 13, color: colors.onBrand, opacity: 0.65, marginTop: 2 },
     statsRow: { flexDirection: "row", alignItems: "stretch" },
     statDivider: { width: 1, backgroundColor: colors.border },
+    fitnessSummaryHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontStyle: "italic",
+      lineHeight: 18,
+      marginBottom: 4,
+      marginTop: 14,
+      paddingHorizontal: 12,
+      textAlign: "center"
+    },
+    availabilityAddButton: {
+      alignItems: "center",
+      backgroundColor: colors.brand,
+      borderRadius: R.md,
+      height: 32,
+      justifyContent: "center",
+      width: 32
+    },
     terminateBtn: { marginTop: 4 }
   });
 }
@@ -292,7 +310,7 @@ export function makeGymMapStyles(colors: ThemeColors) {
       color: colors.textMuted,
       paddingHorizontal: 10,
       paddingVertical: 6,
-      borderRadius: 999,
+      borderRadius: R.md,
       backgroundColor: colors.brand + "14",
       overflow: "hidden"
     },
@@ -414,6 +432,7 @@ export function makeGymMapStyles(colors: ThemeColors) {
     mapGridLine: {
       position: "absolute" as const,
       backgroundColor: colors.border,
+      pointerEvents: "none" as const,
       opacity: 0.45
     },
     mapZone: {
@@ -427,6 +446,7 @@ export function makeGymMapStyles(colors: ThemeColors) {
       ...StyleSheet.absoluteFill,
       borderRadius: R.lg,
       backgroundColor: colors.surfaceRaised,
+      pointerEvents: "none" as const,
       opacity: 0.5
     },
     mapEmptyState: {
@@ -461,6 +481,7 @@ export function makeGymMapStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
       gap: 6,
+      pointerEvents: "none" as const,
       zIndex: 1
     },
     mapZoneLabel: {
@@ -501,8 +522,8 @@ export function makeGymMapStyles(colors: ThemeColors) {
 export function makeWorkoutStyles(colors: ThemeColors) {
   return StyleSheet.create({
     previewInner: {
-      height: 450,
-      minHeight: 360,
+      height: 576,
+      minHeight: 456,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
@@ -582,7 +603,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
       position: "absolute" as const,
       left: 16,
       right: 16,
-      top: 56,
+      top: 16,
       alignItems: "center"
     },
     timerPill: {
@@ -599,14 +620,14 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     repsPill: {
       flexDirection: "row",
       alignItems: "baseline",
-      gap: 6,
+      gap: 4,
       backgroundColor: "rgba(0,0,0,0.45)",
       borderRadius: R.lg,
-      paddingHorizontal: 16,
-      paddingVertical: 7
+      paddingHorizontal: 12,
+      paddingVertical: 5
     },
-    repsText: { fontSize: 40, fontWeight: "700", color: "#FFFFFF" },
-    repsPillLabel: { fontSize: 16, fontWeight: "600", color: "rgba(255,255,255,0.75)" },
+    repsText: { fontSize: 18, fontWeight: "800", color: "#FFFFFF" },
+    repsPillLabel: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.75)" },
     kcalPill: {
       flexDirection: "row",
       alignItems: "center",
@@ -628,6 +649,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     },
     currentLoadText: { fontSize: 13, fontWeight: "700", color: "#FFFFFF" },
     sectionLabel: { fontSize: 15, fontWeight: "600", color: colors.textPrimary, marginBottom: 10 },
+    exerciseReferencesLabel: { marginTop: 14 },
     presetField: { marginBottom: 16 },
     presetHint: { fontSize: 12, color: colors.textMuted, marginTop: -8, marginBottom: 16 },
     statsRow: {
@@ -680,12 +702,88 @@ export function makeWorkoutStyles(colors: ThemeColors) {
 
 export function makeNutritionStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    headerSummary: {
+      flex: 1,
+      gap: 4,
+      position: "relative" as const,
+    },
+    headerTopRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    headerTitleStack: {
+      flex: 1,
+      gap: 3,
+    },
+    headerFlameIcon: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 36,
+      width: 36,
+    },
+    headerGoalName: {
+      color: colors.brand,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1,
+    },
+    headerCaloriesLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    headerCaloriesValue: {
+      color: colors.brand,
+      fontSize: 40,
+      fontWeight: "800",
+      lineHeight: 44,
+    },
+    headerCaloriesTarget: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      opacity: 0.84,
+    },
+    headerCaloriesBar: {
+      backgroundColor: colors.brand + "18",
+      borderRadius: 3,
+      height: 6,
+      marginTop: 7,
+      overflow: "hidden",
+    },
+    headerCaloriesBarFill: {
+      backgroundColor: colors.brand,
+      borderRadius: 3,
+      height: 6,
+    },
+    headerCaloriesRemaining: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 3,
+      opacity: 0.8,
+    },
+    headerCaloriesHint: {
+      color: colors.textMuted,
+      flex: 1,
+      fontSize: 12,
+      fontStyle: "italic",
+      lineHeight: 17,
+      opacity: 0.82,
+    },
+    headerHintRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+      marginTop: 4,
+    },
     caloriesCard: {
       backgroundColor: colors.surface,
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: 20,
+      padding: 18,
       marginBottom: 16,
       position: "relative" as const,
       overflow: "hidden"
@@ -695,7 +793,7 @@ export function makeNutritionStyles(colors: ThemeColors) {
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.brand,
-      padding: 20,
+      padding: 18,
       marginBottom: 16,
       position: "relative" as const,
       overflow: "hidden"
@@ -723,16 +821,16 @@ export function makeNutritionStyles(colors: ThemeColors) {
       marginBottom: 4
     },
     caloriesValue: {
-      fontSize: 48,
+      fontSize: 42,
       fontWeight: "700",
       color: colors.textPrimary,
-      lineHeight: 54
+      lineHeight: 48
     },
     caloriesValueActive: {
-      fontSize: 48,
+      fontSize: 42,
       fontWeight: "700",
       color: colors.onBrand,
-      lineHeight: 54
+      lineHeight: 48
     },
     caloriesTarget: {
       fontSize: 14,
@@ -802,9 +900,37 @@ export function makeNutritionStyles(colors: ThemeColors) {
       color: colors.onBrand,
       opacity: 0.75
     },
+    caloriesActionHint: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      lineHeight: 17,
+      marginTop: 8
+    },
+    caloriesActionHintActive: {
+      fontSize: 12,
+      color: colors.onBrand,
+      lineHeight: 17,
+      marginTop: 8,
+      opacity: 0.82
+    },
     macroBlock: {
       padding: 16,
       gap: 4
+    },
+    logFabHintRow: {
+      alignItems: "center",
+      flexDirection: "row" as const,
+      gap: 6,
+      justifyContent: "center",
+      marginTop: 10
+    },
+    logFabHint: {
+      color: colors.textMuted,
+      flexShrink: 1,
+      fontSize: 12,
+      fontStyle: "italic",
+      lineHeight: 17,
+      textAlign: "center" as const
     },
     macroRow: {
       flexDirection: "row" as const,
@@ -895,7 +1021,6 @@ export function makeNutritionStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
       padding: 16,
-      marginBottom: 16,
       gap: 6
     },
     matchBadge: {
@@ -920,8 +1045,7 @@ export function makeNutritionStyles(colors: ThemeColors) {
       borderRadius: R.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      overflow: "hidden",
-      marginBottom: 10
+      overflow: "hidden"
     },
     disclaimer: {
       fontSize: 11,

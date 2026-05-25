@@ -34,7 +34,7 @@ export default function ProfileSections({ colors, controller, styles }: ProfileS
       {controller.isCoach ? (
         <CoachProfileSections colors={colors} controller={controller} styles={styles} />
       ) : (
-        <MemberProfileSections controller={controller} styles={styles} />
+        <MemberProfileSections colors={colors} controller={controller} styles={styles} />
       )}
       {controller.isMember ? (
         <FitButton

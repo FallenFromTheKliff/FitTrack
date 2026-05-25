@@ -553,6 +553,9 @@ class AnalyticsPdfComposer {
   }
 
   private drawDailyInsightsSection(args: BuildAnalyticsPdfArgs) {
+    const peakAttendanceLabel = this.getPeakAttendanceLabel(args.attendance);
+    const topRevenueSource = args.revenue.top_revenue_sources[0];
+
     this.drawSectionHeading(
       'Daily Insights',
       'Active member access and session movement across the selected attendance window.',
@@ -599,6 +602,18 @@ class AnalyticsPdfComposer {
         label: 'Recent Activities',
         value: String(args.snapshot.daily_insights.recent_activities),
       },
+      {
+        label: 'Live Alerts',
+        value: String(args.snapshot.system_alerts.length),
+      },
+      {
+        label: 'Window Check-ins',
+        value: String(args.attendance.total_check_ins),
+      },
+      {
+        label: 'Revenue Window',
+        value: formatMoney(args.revenue.totals.total_revenue),
+      },
     ]);
 
     this.drawSimpleMetricTable([
@@ -608,15 +623,28 @@ class AnalyticsPdfComposer {
         'Recent Activities',
         String(args.snapshot.daily_insights.recent_activities),
       ],
+      ['Live Alerts', String(args.snapshot.system_alerts.length)],
+      ['Attendance Window', args.attendanceLabel],
+      ['Window Check-ins', String(args.attendance.total_check_ins)],
+      ['Peak Check-in Window', peakAttendanceLabel],
+      ['Revenue Window Total', formatMoney(args.revenue.totals.total_revenue)],
+      [
+        'Top Revenue Source',
+        topRevenueSource
+          ? `${topRevenueSource.source_label} (${topRevenueSource.share_percentage.toFixed(1)}%)`
+          : 'No revenue source data available',
+      ],
     ]);
 
     this.drawInsightCard(args.insights.dailyInsights, SURFACE_WARN, TEXT_WARN);
   }
 
   private drawPerformanceSection(args: BuildAnalyticsPdfArgs) {
+    const peakAttendanceLabel = this.getPeakAttendanceLabel(args.attendance);
+
     this.drawSectionHeading(
       'Performance KPIs',
-      'Current operational totals for revenue, bookings, appointments, member growth, and coaching output.',
+      'Current operational totals for revenue, attendance, bookings, appointments, member growth, and coaching output.',
     );
 
     const kpis = [
@@ -646,6 +674,11 @@ class AnalyticsPdfComposer {
         label: 'Check-ins',
         value: args.snapshot.performance_kpis.check_ins,
         valueLabel: String(args.snapshot.performance_kpis.check_ins),
+      },
+      {
+        label: 'Window Check-ins',
+        value: args.attendance.total_check_ins,
+        valueLabel: String(args.attendance.total_check_ins),
       },
       {
         label: 'Coaching',
@@ -681,6 +714,9 @@ class AnalyticsPdfComposer {
       ],
       ['New Members', String(args.snapshot.performance_kpis.new_members)],
       ['Check-ins', String(args.snapshot.performance_kpis.check_ins)],
+      ['Selected Attendance Window', args.attendanceLabel],
+      ['Selected Window Check-ins', String(args.attendance.total_check_ins)],
+      ['Peak Check-in Window', peakAttendanceLabel],
       [
         'Coaching Sessions',
         String(args.snapshot.performance_kpis.coaching_sessions),

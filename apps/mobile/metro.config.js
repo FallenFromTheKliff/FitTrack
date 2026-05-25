@@ -29,9 +29,21 @@ function safeResolveModule(request, resolverPaths) {
   }
 }
 
+function listExistingChildDirectories(parentPath) {
+  try {
+    return fs
+      .readdirSync(parentPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(parentPath, entry.name));
+  } catch {
+    return [];
+  }
+}
+
 const logicalAppRoot = __dirname;
 const appRoot = safeRealpath(logicalAppRoot);
 const workspaceRoot = safeRealpath(path.resolve(logicalAppRoot, "..", ".."));
+const workspacePackageRoots = listExistingChildDirectories(path.join(workspaceRoot, "packages"));
 
 const config = getDefaultConfig(appRoot);
 const extraBlockList = [
@@ -46,6 +58,7 @@ const extraBlockList = [
   /[\\/]\.uv-runtime([\\/]|$)/,
   /[\\/]\.venv([\\/]|$)/,
   /[\\/]\.next([\\/]|$)/,
+  /[\\/]\.next-dev([\\/]|$)/,
   /[\\/]\.next-runtime([\\/]|$)/,
   /[\\/]pytest-cache-files[^\\/]*([\\/]|$)/,
   /[\\/]node_modules[\\/]\.pnpm[\\/]next@[^\\/]+[\\/]node_modules[\\/]next_tmp_[^\\/]+([\\/]|$)/,
@@ -83,7 +96,10 @@ function resolveMobileSingleton(moduleName) {
   return null;
 }
 
-config.watchFolders = uniqueExistingPaths([workspaceRoot]);
+config.watchFolders = uniqueExistingPaths([
+  path.join(workspaceRoot, "node_modules"),
+  ...workspacePackageRoots,
+]);
 
 config.resolver.nodeModulesPaths = resolverPaths;
 config.resolver.unstable_enableSymlinks = true;

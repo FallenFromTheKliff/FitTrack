@@ -27,14 +27,15 @@ import { CalendarModal, ConfirmModal } from "@/components/modals";
 import { OverlayAmountGrid } from "./GymOperationsOverlayCards";
 import { OverlayFrame } from "./GymOperationsOverlayFrame";
 import {
+  COACH_SPECIALTY_OPTIONS,
   EMAIL_PATTERN,
   PHONE_PATTERN,
-  VENUE_SLOT_OPTIONS,
   actionPillStyle,
   formatCompactDate,
   formatDurationLabel,
   formatPeso,
   formatSlotLabel,
+  getCurrentGymMinutes,
   getDefaultDateInput,
   getInitialPaymentAmount,
   hasVenueWindowConflict,
@@ -178,13 +179,25 @@ function getDateInputOffset(offsetDays: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function venueAvailabilityTimeValue(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+}
+
+function sortVenueAvailabilitySlots(slots: VenueAvailabilityRecord[]) {
+  return [...slots].sort(
+    (left, right) =>
+      new Date(left.startTime).getTime() - new Date(right.startTime).getTime(),
+  );
+}
+
 function findNextCoachSlot(availability: CoachAvailabilityResponse | undefined) {
   const slots = expandCoachAvailabilitySlots(
     availability?.availability ?? [],
     availability?.scheduleType ?? "part_time",
   );
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = getCurrentGymMinutes();
 
   for (let offset = 0; offset <= 30; offset += 1) {
     const candidateDate = getDateInputOffset(offset);
@@ -214,8 +227,7 @@ function getUpcomingCoachAvailableDates(
     availability?.availability ?? [],
     availability?.scheduleType ?? "part_time",
   );
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = getCurrentGymMinutes();
   const dates: string[] = [];
 
   for (let offset = 0; offset <= windowDays; offset += 1) {
@@ -279,7 +291,11 @@ export function GymOperationsCreateVenueBookingModal({
   const shouldAnimate = settings.animationLevel !== "none";
   const inputStyle = modalFieldStyle(colors);
   const textAreaStyle = modalTextAreaStyle(colors);
-  const { data: venueAvailability = [] } = useQuery({
+  const {
+    data: venueAvailability = [],
+    error: venueAvailabilityError,
+    isLoading: venueAvailabilityLoading,
+  } = useQuery({
     ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
       webApiClient,
       venueId || undefined,
@@ -304,33 +320,64 @@ export function GymOperationsCreateVenueBookingModal({
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions, venueOptions]);
 
-  const currentMinutes = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  }, [date, datePickerOpen, isOpen]);
+  const currentMinutes = getCurrentGymMinutes();
+  const liveVenueSlots = useMemo(
+    () => sortVenueAvailabilitySlots(venueAvailability),
+    [venueAvailability],
+  );
   const venueStartOptions = useMemo(
     () =>
-      VENUE_SLOT_OPTIONS.filter(
-        (value) =>
-          date !== getDefaultDateInput() || toMinutes(value) > currentMinutes,
-      ).map((value) => ({
-        label: formatSlotLabel(value),
-        value,
-      })),
-    [currentMinutes, date],
+      liveVenueSlots
+        .filter((slot) => {
+          const value = venueAvailabilityTimeValue(slot.startTime);
+          return value && (date !== getDefaultDateInput() || toMinutes(value) > currentMinutes);
+        })
+        .map((slot) => {
+          const value = venueAvailabilityTimeValue(slot.startTime);
+          const isAvailable = slot.status === "available";
+          return {
+            disabled: !isAvailable,
+            label: `${formatSlotLabel(value)}${isAvailable ? "" : " (booked)"}`,
+            value,
+          };
+        }),
+    [currentMinutes, date, liveVenueSlots],
   );
   useEffect(() => {
-    if (!venueStartOptions.some((option) => option.value === startTime)) {
-      setStartTime(venueStartOptions[0]?.value ?? "");
+    const selectedOption = venueStartOptions.find((option) => option.value === startTime);
+    if (!selectedOption || selectedOption.disabled) {
+      setStartTime(venueStartOptions.find((option) => !option.disabled)?.value ?? "");
     }
   }, [startTime, venueStartOptions]);
   const venueEndOptions = useMemo(
-    () =>
-      VENUE_SLOT_OPTIONS.filter((value) => value > startTime).map((value) => ({
-        label: formatSlotLabel(value),
-        value,
-      })),
-    [startTime],
+    () => {
+      if (!startTime) return [];
+      const startIndex = liveVenueSlots.findIndex(
+        (slot) => venueAvailabilityTimeValue(slot.startTime) === startTime,
+      );
+      if (startIndex === -1 || liveVenueSlots[startIndex]?.status !== "available") {
+        return [];
+      }
+
+      const options: Array<{ label: string; value: string }> = [];
+      let expectedStart = new Date(liveVenueSlots[startIndex].startTime).getTime();
+      for (let index = startIndex; index < liveVenueSlots.length; index += 1) {
+        const slot = liveVenueSlots[index];
+        if (new Date(slot.startTime).getTime() !== expectedStart) break;
+        if (slot.status !== "available") break;
+
+        const value = venueAvailabilityTimeValue(slot.endTime);
+        if (value && value > startTime) {
+          options.push({
+            label: formatSlotLabel(value),
+            value,
+          });
+        }
+        expectedStart = new Date(slot.endTime).getTime();
+      }
+      return options;
+    },
+    [liveVenueSlots, startTime],
   );
   useEffect(() => {
     if (!venueEndOptions.some((option) => option.value === endTime)) {
@@ -343,6 +390,32 @@ export function GymOperationsCreateVenueBookingModal({
     startTime,
     endTime,
   );
+  const venueAvailabilityMessage = useMemo(() => {
+    if (!venueId) return "Select a venue to load live availability.";
+    if (venueAvailabilityLoading) return "Loading live venue availability...";
+    if (venueAvailabilityError) {
+      return venueAvailabilityError instanceof Error
+        ? venueAvailabilityError.message
+        : "Unable to load venue availability.";
+    }
+    if (venueStartOptions.length === 0) {
+      return "No future venue slots are available for the selected date.";
+    }
+    if (!venueStartOptions.some((option) => !option.disabled)) {
+      return "All venue slots are booked for the selected date.";
+    }
+    if (startTime && venueEndOptions.length === 0) {
+      return "No continuous venue time is available after the selected start.";
+    }
+    return "";
+  }, [
+    startTime,
+    venueAvailabilityError,
+    venueAvailabilityLoading,
+    venueEndOptions.length,
+    venueId,
+    venueStartOptions,
+  ]);
   const selectedVenueOption = venueOptions.find(
     (option) => option.value === venueId,
   );
@@ -378,6 +451,8 @@ export function GymOperationsCreateVenueBookingModal({
     Boolean(endTime) &&
     endTime > startTime &&
     isVenueWindowInFuture &&
+    !venueAvailabilityLoading &&
+    !venueAvailabilityError &&
     !hasConflict;
 
   const submitVenueBooking = () => {
@@ -492,7 +567,11 @@ export function GymOperationsCreateVenueBookingModal({
               </FitText>
               <FitSelect
                 value={venueId}
-                onChange={(event) => setVenueId(event.target.value)}
+                onChange={(event) => {
+                  setVenueId(event.target.value);
+                  setStartTime("");
+                  setEndTime("");
+                }}
                 options={venueOptions}
                 compact
                 fullWidth
@@ -544,8 +623,12 @@ export function GymOperationsCreateVenueBookingModal({
               </FitText>
               <FitSelect
                 value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
+                onChange={(event) => {
+                  setStartTime(event.target.value);
+                  setEndTime("");
+                }}
                 options={venueStartOptions}
+                disabled={venueAvailabilityLoading || venueStartOptions.length === 0}
                 compact
                 fullWidth
               />
@@ -565,6 +648,7 @@ export function GymOperationsCreateVenueBookingModal({
                 value={endTime}
                 onChange={(event) => setEndTime(event.target.value)}
                 options={venueEndOptions}
+                disabled={!startTime || venueEndOptions.length === 0}
                 compact
                 fullWidth
               />
@@ -666,25 +750,30 @@ export function GymOperationsCreateVenueBookingModal({
               style={{ fontSize: 12, color: colors.textMuted }}
             >
               {paymentStage === "downpayment"
-                ? `${formatPeso(amountDueNow)} is approved now; ${formatPeso(remainingBalance)} remains pending full payment.`
-                : `${formatPeso(amountDueNow)} is approved now as the full payment.`}
+                ? `${formatPeso(amountDueNow)} is recorded now; ${formatPeso(remainingBalance)} remains pending full payment.`
+                : `${formatPeso(amountDueNow)} confirms this booking as fully paid.`}
             </FitText>
           </div>
 
-          {hasConflict || errorText ? (
+          {hasConflict || errorText || venueAvailabilityMessage ? (
             <div
               style={{
                 borderRadius: 14,
-                border: `1px solid ${colors.danger}44`,
-                backgroundColor: `${colors.danger}12`,
+                border: `1px solid ${(hasConflict || errorText ? colors.danger : colors.warning)}44`,
+                backgroundColor: `${hasConflict || errorText ? colors.danger : colors.warning}12`,
                 padding: 12,
               }}
             >
               <FitText
                 excludeGlobalScale
-                style={{ fontSize: 12, color: colors.danger, lineHeight: 1.45 }}
+                style={{
+                  fontSize: 12,
+                  color: hasConflict || errorText ? colors.danger : colors.warning,
+                  lineHeight: 1.45,
+                }}
               >
                 {errorText ||
+                  venueAvailabilityMessage ||
                   "The selected venue is already occupied in this time window."}
               </FitText>
             </div>
@@ -713,7 +802,11 @@ export function GymOperationsCreateVenueBookingModal({
           selectedDate={date}
           onClose={() => setDatePickerOpen(false)}
           onSelect={(nextDate) => {
-            if (nextDate) setDate(nextDate);
+            if (nextDate) {
+              setDate(nextDate);
+              setStartTime("");
+              setEndTime("");
+            }
           }}
         />
       </div>
@@ -809,8 +902,7 @@ export function GymOperationsCreateCoachBookingModal({
   }, [coachOptions, isOpen, memberOptions]);
 
   const currentMinutes = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
+    return getCurrentGymMinutes();
   }, []);
 
   const slotOptions = useMemo(() => {
@@ -1125,11 +1217,10 @@ export function GymOperationsCreateCoachBookingModal({
 
           <div
             style={{
-              borderRadius: 14,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surfaceRaised,
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: "transparent",
               minHeight: 54,
-              padding: 12,
+              paddingTop: 10,
               display: "grid",
               gap: 6,
             }}
@@ -1210,8 +1301,8 @@ export function GymOperationsCreateCoachBookingModal({
               style={{ fontSize: 12, color: colors.textMuted }}
             >
               {paymentStage === "downpayment"
-                ? `${formatPeso(amountDueNow)} is approved now; ${formatPeso(remainingBalance)} remains pending full payment.`
-                : `${formatPeso(amountDueNow)} is approved now as the full payment.`}
+                ? `${formatPeso(amountDueNow)} is recorded now; ${formatPeso(remainingBalance)} remains pending full payment.`
+                : `${formatPeso(amountDueNow)} confirms this booking as fully paid.`}
             </FitText>
           </div>
 
@@ -1339,6 +1430,10 @@ export function GymOperationsCreateCoachModal({
     () => splitListInput(specialties),
     [specialties],
   );
+  const selectedSpecialties = useMemo(
+    () => new Set(specialtiesList),
+    [specialtiesList],
+  );
   const certificationsList = useMemo(
     () => splitListInput(certifications),
     [certifications],
@@ -1404,6 +1499,16 @@ export function GymOperationsCreateCoachModal({
       scheduleType,
       specialties: specialtiesList,
     });
+  };
+
+  const toggleSpecialty = (value: string) => {
+    const nextValues = selectedSpecialties.has(value)
+      ? specialtiesList.filter((item) => item !== value)
+      : [...specialtiesList, value];
+    setSpecialties(nextValues.join(", "));
+    if (errors.specialties) {
+      setErrors((current) => ({ ...current, specialties: "" }));
+    }
   };
 
   const handleCreate = () => {
@@ -1577,13 +1682,51 @@ export function GymOperationsCreateCoachModal({
               >
                 Specialties
               </FitText>
-              <FitTextArea
-                value={specialties}
-                onChange={(event) => setSpecialties(event.target.value)}
-                rows={3}
-                placeholder="Strength, Mobility"
-                style={textAreaStyle}
-              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {COACH_SPECIALTY_OPTIONS.map((option) => {
+                  const selected = selectedSpecialties.has(option.value);
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={isSubmitting}
+                      onClick={() => toggleSpecialty(option.value)}
+                      style={{
+                        backgroundColor: selected
+                          ? colors.brand
+                          : colors.surfaceRaised,
+                        border: `1px solid ${
+                          selected ? `${colors.brand}66` : colors.border
+                        }`,
+                        borderRadius: 999,
+                        boxShadow: selected
+                          ? `0 0 0 1px ${colors.brand}22 inset`
+                          : "none",
+                        color: selected
+                          ? colors.onBrand
+                          : colors.textPrimary,
+                        cursor: isSubmitting ? "not-allowed" : "pointer",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        minHeight: 34,
+                        padding: "7px 12px",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <FitText
+                excludeGlobalScale
+                style={{ color: colors.textMuted, fontSize: 11 }}
+              >
+                {specialtiesList.length
+                  ? specialtiesList.join(" / ")
+                  : "Select at least one coach specialty."}
+              </FitText>
               {errors.specialties ? (
                 <FitText
                   excludeGlobalScale

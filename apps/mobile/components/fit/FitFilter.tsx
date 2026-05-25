@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CalendarCheck, RotateCcw } from "lucide-react-native";
 
@@ -31,6 +31,7 @@ type Props = {
   onEndDatePress?: () => void;
   onStartDateReset?: () => void;
   onEndDateReset?: () => void;
+  dropdownStyle?: StyleProp<ViewStyle>;
 };
 
 export default function FitFilter({
@@ -39,7 +40,7 @@ export default function FitFilter({
   activeChip, onChipChange, showDateRange = false,
   startDate, endDate, startDateLabel = "All Dates",
   endDateLabel = "End Date", onStartDatePress, onEndDatePress,
-  onStartDateReset, onEndDateReset
+  onStartDateReset, onEndDateReset, dropdownStyle
 }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeFitFilterStyles(colors), [colors]);
@@ -64,7 +65,7 @@ export default function FitFilter({
   if (!everOpenedRef.current) return null;
 
   return (
-      <Animated.View style={[s.filterDropdown, filterPanelStyle]}>
+      <Animated.View style={[s.filterDropdown, dropdownStyle, filterPanelStyle]}>
         <View style={s.filterPanel}>
           {!!topChipOptions?.length && (
               <View style={s.filterSection}>

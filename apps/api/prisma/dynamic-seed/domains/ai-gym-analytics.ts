@@ -167,7 +167,7 @@ async function seedAiChat(ctx: DynamicSeedContext) {
         action_triggered:
           context === ChatContext.training_plan ? 'plan_adjustment' : null,
         content:
-          'Seeded answer: keep the next session lighter, prioritize recovery, and use your current logs as the source of truth.',
+        'Keep the next session lighter, prioritize recovery, and use your current logs as the source of truth.',
         created_at: daysFrom(ctx.config.anchorDate, -1, 18, (index % 50) + 2),
         role: ChatRole.assistant,
         session_id: sessionId,
@@ -248,8 +248,8 @@ async function seedNotifications(ctx: DynamicSeedContext) {
           id: seedId(`notification:${userKey}:${rowIndex}`),
           body:
             type === NotificationType.low_stock
-              ? 'Seeded inventory alert: review low stock products before closing.'
-              : 'Seeded notification for QA filters and badge counts.',
+          ? 'Inventory alert: review low stock products before closing.'
+          : 'Notification used for filters and badge counts.',
           channel:
             rowIndex === 2
               ? NotificationChannel.in_app
@@ -359,7 +359,7 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
         is_closed: false,
         opens_at: fixedTime('08:00:00'),
         pricing_note: 'Off-peak booking discount after maintenance window.',
-        reason: 'Seeded quarterly equipment maintenance',
+        reason: 'Quarterly equipment maintenance',
         starts_on: dateOnly(ctx.config.anchorDate, 14),
       },
       {
@@ -370,7 +370,7 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
         is_closed: true,
         opens_at: null,
         pricing_note: null,
-        reason: 'Seeded local holiday closure',
+        reason: 'Local holiday closure',
         starts_on: dateOnly(ctx.config.anchorDate, 32),
       },
     ],
@@ -382,7 +382,7 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
       {
         id: seedId('promotion:premium-coaching-demo'),
         description:
-          'Seeded promo for premium coaching members during demo QA.',
+          'Premium coaching member promo for the current campaign.',
         ends_at: daysFrom(ctx.config.anchorDate, 21, 23, 59),
         is_active: true,
         pricing_note: 'Free assessment on first recurring plan.',
@@ -392,7 +392,7 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
       },
       {
         id: seedId('promotion:amenity-bundle'),
-        description: 'Seeded promo for boxing ring and studio reservations.',
+        description: 'Boxing ring and studio reservation promo for the current campaign.',
         ends_at: daysFrom(ctx.config.anchorDate, 10, 23, 59),
         is_active: true,
         pricing_note: '10% off two-hour amenity blocks.',
@@ -454,7 +454,7 @@ async function seedGymChat(ctx: DynamicSeedContext) {
       {
         id: seedId(`gym-chat-message:${memberKey}:assistant`),
         content:
-          'Seeded grounded answer: check operating hours and amenity availability from FitTrack gym content.',
+          'Check operating hours and amenity availability from FitTrack gym content.',
         created_at: daysFrom(ctx.config.anchorDate, -1, 13, 1),
         grounded_sources: [
           { type: 'operating_hours', id: seedId('operating-hour:1') },
@@ -549,7 +549,7 @@ async function seedAuditAndAnalytics(ctx: DynamicSeedContext) {
           opportunities: ['Premium coaching utilization is strong.'],
           risks: ['Pending payments need staff follow-up.'],
           summary:
-            'Seeded monthly overview with revenue, attendance, and coaching signals.',
+            'Monthly overview with revenue, attendance, and coaching signals.',
         },
         latency_ms: 1450,
         model_used: 'seeded-business-insight',
@@ -567,7 +567,7 @@ async function seedAuditAndAnalytics(ctx: DynamicSeedContext) {
         insight_payload: {
           opportunities: ['Bundle protein bars with coaching check-ins.'],
           risks: ['Low stock products should be reordered this week.'],
-          summary: 'Seeded inventory insight for admin analytics QA.',
+          summary: 'Inventory insight for admin analytics review.',
         },
         latency_ms: 1180,
         model_used: 'seeded-business-insight',

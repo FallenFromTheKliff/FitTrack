@@ -32,17 +32,21 @@ function getCoachScreenName(activeTab: TabKey, coachView?: string) {
 
 function getCoachSubtitle(activeTab: TabKey, coachView?: string) {
   if (activeTab === "home") {
-    return "Review your client work, coaching sessions, earnings, and training tools.";
+    return "Coach work at a glance.";
   }
   if (activeTab === "bookings") {
-    if (coachView === "clients") return "Review member profiles and client readiness.";
-    if (coachView === "earnings") return "Review completed coaching work and expected earnings.";
-    return "Track coaching appointments and session status.";
+    if (coachView === "clients") return "Review client progress.";
+    if (coachView === "earnings") return "Track session revenue.";
+    return "Manage coaching sessions.";
   }
   if (activeTab === "chathistory" || activeTab === "chatbot") {
-    return "Ask BrodigyAI for focused guidance without leaving the mobile portal.";
+    return "Ask BrodigyAI.";
   }
   return TAB_SUBTITLES[activeTab];
+}
+
+function usesBrandHeader(activeTab: TabKey) {
+  return activeTab === "profile";
 }
 
 export default React.memo(function HeaderMessage({ activeTab }: Props) {
@@ -52,6 +56,7 @@ export default React.memo(function HeaderMessage({ activeTab }: Props) {
   const searchParams = useGlobalSearchParams<{ coachView?: string | string[] }>();
   const s = React.useMemo(() => makeHeaderMessageStyles(colors), [colors]);
   const isProfile = activeTab === "profile";
+  const isBrandHeader = usesBrandHeader(activeTab);
   const isCoach = user?.role === "COACH";
   const coachView = getSearchParamValue(searchParams.coachView);
   const screenName = isCoach ? getCoachScreenName(activeTab, coachView) : SCREEN_NAMES[activeTab] ?? "";
@@ -70,21 +75,24 @@ export default React.memo(function HeaderMessage({ activeTab }: Props) {
     intervalMs: 38
   });
 
-  const isProfileShared = useSharedValue(isProfile ? 1 : 0);
+  const isBrandHeaderShared = useSharedValue(isBrandHeader ? 1 : 0);
   const onBrandColor = useSharedValue(colors.onBrand ?? "#FFFFFF");
 
   React.useEffect(() => {
-    isProfileShared.value = isProfile ? 1 : 0;
-  }, [isProfile, isProfileShared]);
+    isBrandHeaderShared.value = isBrandHeader ? 1 : 0;
+  }, [isBrandHeader, isBrandHeaderShared]);
 
   React.useEffect(() => {
     onBrandColor.value = colors.onBrand ?? "#FFFFFF";
   }, [colors.onBrand, onBrandColor]);
 
   const screenNameStyle = useAnimatedStyle(() => ({
-    color: isProfileShared.value === 1 ? onBrandColor.value : ic.value.textPrimary
+    color: isBrandHeaderShared.value === 1 ? onBrandColor.value : ic.value.textPrimary
   }));
-  const subtitleStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
+  const subtitleStyle = useAnimatedStyle(() => ({
+    color: isBrandHeaderShared.value === 1 ? onBrandColor.value : ic.value.textMuted,
+    opacity: isBrandHeaderShared.value === 1 ? 0.84 : 1,
+  }));
 
   return (
       <Animated.View style={s.container}>

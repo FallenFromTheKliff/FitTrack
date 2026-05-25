@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import {
   AuthProvider,
   BookingStatus,
+  MembershipCardSource,
+  MembershipCardStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -36,6 +38,35 @@ function toFrontendRole(role: UserRole) {
 
 function toFrontendMembershipType(role: UserRole) {
   return role === UserRole.member ? 'member' : null;
+}
+
+function toFrontendMembershipCard(
+  role: UserRole,
+  card: {
+    activated_at: Date | null;
+    purchased_at: Date;
+    revoke_reason: string | null;
+    revoked_at: Date | null;
+    source: MembershipCardSource;
+    status: MembershipCardStatus;
+    updated_at: Date;
+    verified_at: Date | null;
+  } | null,
+) {
+  if (role !== UserRole.member) {
+    return null;
+  }
+
+  return {
+    activatedAt: card?.activated_at?.toISOString() ?? null,
+    purchasedAt: card?.purchased_at.toISOString() ?? null,
+    revokeReason: card?.revoke_reason ?? null,
+    revokedAt: card?.revoked_at?.toISOString() ?? null,
+    source: card?.source ?? null,
+    status: card?.status ?? 'none',
+    updatedAt: card?.updated_at.toISOString() ?? null,
+    verifiedAt: card?.verified_at?.toISOString() ?? null,
+  };
 }
 
 function findIdentity(
@@ -217,6 +248,7 @@ export class StaffService {
           orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
         },
         profile: true,
+        membership_card: true,
       },
       orderBy: { created_at: 'desc' },
     });
@@ -232,8 +264,13 @@ export class StaffService {
         email: primaryEmail?.identifier ?? '',
         phone_no: user.profile?.phone ?? null,
         role: toFrontendRole(user.role),
+        status: user.status,
         emailVerified: Boolean(user.email_verified_at),
         phoneVerified: false,
+        membershipCard: toFrontendMembershipCard(
+          user.role,
+          user.membership_card,
+        ),
         deletedAt: user.deletedAt?.toISOString() ?? null,
         createdAt: user.created_at.toISOString(),
         updatedAt: user.updated_at.toISOString(),

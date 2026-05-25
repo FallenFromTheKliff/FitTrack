@@ -258,9 +258,8 @@ export class RecurringCoachingPlanService {
     }
 
     if (cycle.payment_id) {
-      const existingPayment = await this.paymentRepository.findPaymentByIdOrThrow(
-        cycle.payment_id,
-      );
+      const existingPayment =
+        await this.paymentRepository.findPaymentByIdOrThrow(cycle.payment_id);
       const checkoutUrl = this.extractCheckoutUrl(
         existingPayment.gateway_metadata,
       );
@@ -797,6 +796,19 @@ export class RecurringCoachingPlanService {
     const endDate = dto.end_date
       ? this.toDateOnlyValue(this.parseDateOnly(dto.end_date))
       : this.addMonths(startDate, dto.duration_months ?? 1);
+    const today = this.getCurrentGymDateOnly();
+
+    if (startDate.getTime() < today.getTime()) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Recurring Plan Window',
+          status: 422,
+          detail: 'start_date must be today or later.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
 
     if (endDate.getTime() < startDate.getTime()) {
       throw new HttpException(
@@ -978,7 +990,7 @@ export class RecurringCoachingPlanService {
       | 'total_sessions'
       | 'completed_sessions'
       | 'billing_cycles'
-    >
+    >,
   ): RecurringCoachingPlanResponseDTO {
     return {
       id: plan.id,
@@ -1092,10 +1104,8 @@ export class RecurringCoachingPlanService {
         .reduce(
           (total, session) =>
             total.plus(
-              this.calculateSessionAmounts(
-                input.coach,
-                session.durationMinutes,
-              ).totalAmount,
+              this.calculateSessionAmounts(input.coach, session.durationMinutes)
+                .totalAmount,
             ),
           ZERO_DECIMAL,
         )
@@ -1109,7 +1119,10 @@ export class RecurringCoachingPlanService {
           this.addDays(cycleEndExclusive, -1),
         ),
         due_date: dueDate,
-        grace_period_ends_at: this.addDays(dueDate, RECURRING_BILLING_GRACE_DAYS),
+        grace_period_ends_at: this.addDays(
+          dueDate,
+          RECURRING_BILLING_GRACE_DAYS,
+        ),
         status: RecurringCoachingBillingCycleStatus.due,
       });
     }
@@ -1223,6 +1236,12 @@ export class RecurringCoachingPlanService {
 
   private toDateString(value: Date): string {
     return value.toISOString().slice(0, 10);
+  }
+
+  private getCurrentGymDateOnly() {
+    return this.toDateOnlyValue(
+      this.parseDateOnly(this.toGymDateKey(new Date())),
+    );
   }
 
   private toTimeValue(value: string): Date {

@@ -2,7 +2,6 @@ import { View } from "react-native";
 import {
   Award,
   CreditCard,
-  Dumbbell,
   Eye,
   EyeOff,
   HeartPulse,
@@ -20,6 +19,9 @@ import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
 import type { FitnessRankingVisibility } from "@fittrack/types";
 
 type MemberProfileSectionsProps = {
+  colors: {
+    brand: string;
+  };
   controller: ProfileScreenController;
   styles: ReturnType<typeof makeProfileStyles>;
 };
@@ -30,7 +32,7 @@ function getRankingPrivacyIcon(value: FitnessRankingVisibility) {
   return Eye;
 }
 
-export default function MemberProfileSections({ controller, styles }: MemberProfileSectionsProps) {
+export default function MemberProfileSections({ colors, controller, styles }: MemberProfileSectionsProps) {
   const canShowGamification = controller.hasMemberCardAccess;
   const membershipCardActionSubtitle = controller.memberAccessLabel === "Pending verification"
     ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
@@ -103,22 +105,9 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
                   noChevron
                 />
               </View>
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                <FitButton
-                  label="Open Muscle Mastery"
-                  icon={Trophy}
-                  variant="primary"
-                  onPress={controller.onOpenMastery}
-                  flex={1}
-                />
-                <FitButton
-                  label="Open Workout"
-                  icon={Dumbbell}
-                  variant="ghost"
-                  onPress={controller.onOpenWorkout}
-                  flex={1}
-                />
-              </View>
+              <FitText style={styles.fitnessSummaryHint}>
+                Open Muscle Mastery or Workout anytime to improve these stats.
+              </FitText>
             </>
           )}
         </FitSection>
@@ -145,6 +134,7 @@ export default function MemberProfileSections({ controller, styles }: MemberProf
               trailingLabelColor={option.isSelected ? controller.memberAccessColor : undefined}
               hasBorder
               selected={option.isSelected}
+              selectedIndicatorColor={option.isSelected ? colors.brand : undefined}
               onPress={
                 option.isSelected || controller.isRankingPrivacySaving
                   ? undefined

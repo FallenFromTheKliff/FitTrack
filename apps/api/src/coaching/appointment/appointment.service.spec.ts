@@ -556,6 +556,7 @@ describe('AppointmentService', () => {
       coach_id: 'coach-1',
       status: 'confirmed',
       is_free_session: false,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
       cancelled_at: null,
       cancellation_reason: null,
       coach: { id: 'coach-1', user_id: 'coach-user-1' },
@@ -624,6 +625,7 @@ describe('AppointmentService', () => {
       coach_id: 'coach-1',
       status: 'confirmed',
       is_free_session: false,
+      scheduled_at: new Date('2099-04-01T08:00:00.000Z'),
       cancelled_at: null,
       cancellation_reason: null,
       coach: { id: 'coach-1', user_id: 'coach-user-1' },
@@ -632,6 +634,27 @@ describe('AppointmentService', () => {
     await expect(
       service.cancelAppointment('member-2', UserRole.member, 'appt-1', {
         reason: 'Not my appointment.',
+      }),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(repo.updateAppointment).not.toHaveBeenCalled();
+  });
+
+  it('rejects coach appointment cancellation on the appointment date', async () => {
+    repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
+      id: 'appt-1',
+      user_id: 'member-1',
+      coach_id: 'coach-1',
+      status: 'confirmed',
+      is_free_session: false,
+      scheduled_at: new Date(),
+      cancelled_at: null,
+      cancellation_reason: null,
+      coach: { id: 'coach-1', user_id: 'coach-user-1' },
+    });
+
+    await expect(
+      service.cancelAppointment('staff-1', UserRole.staff, 'appt-1', {
+        reason: 'Same-day cancellation.',
       }),
     ).rejects.toBeInstanceOf(HttpException);
     expect(repo.updateAppointment).not.toHaveBeenCalled();

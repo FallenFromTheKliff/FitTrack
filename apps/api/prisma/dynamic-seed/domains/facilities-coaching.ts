@@ -122,11 +122,11 @@ async function seedAmenities(ctx: DynamicSeedContext) {
     await ctx.prisma.facilityFloorPlanMedia.upsert({
       where: { floor_id: floorId },
       update: {
-        image_url: `https://fittrack.local/floor-plans/${floorId}.png`,
+        image_url: null,
       },
       create: {
         floor_id: floorId,
-        image_url: `https://fittrack.local/floor-plans/${floorId}.png`,
+        image_url: null,
       },
     });
   }
@@ -244,8 +244,8 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
       member_id: memberId,
       notes:
         relationshipStatus === RelationshipStatus.paused
-          ? 'Seeded paused relationship for coach filters.'
-          : 'Seeded active coaching relationship with measurable goals.',
+          ? 'Paused relationship retained for coach filters.'
+          : 'Active coaching relationship with measurable goals.',
       started_at: daysFrom(ctx.config.anchorDate, -45 + (index % 16), 9),
       status: relationshipStatus,
     });
@@ -345,7 +345,7 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         id: appointmentId,
         assessment_report:
           status === AppointmentStatus.completed
-            ? 'Seeded assessment: improved hinge pattern and session adherence.'
+            ? 'Assessment: improved hinge pattern and session adherence.'
             : null,
         balance_amount: new Prisma.Decimal(0),
         balance_paid_at:
@@ -373,7 +373,7 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         member_notes:
           apptIndex === 1
             ? 'Wants extra shoulder mobility work.'
-            : 'Seeded member note for coach detail QA.',
+            : 'Member note for coach detail review.',
         no_show_at:
           status === AppointmentStatus.no_show
             ? daysFrom(scheduledAt, 0, scheduledAt.getHours() + 1)
@@ -521,8 +521,8 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
       ends_at: daysFrom(startsAt, 0, startsAt.getHours() + 2),
       notes:
         status === BookingStatus.no_show
-          ? 'Seeded no-show booking for admin filters.'
-          : 'Seeded amenity booking for schedule QA.',
+          ? 'No-show booking retained for admin filters.'
+          : 'Amenity booking retained for schedule review.',
       starts_at: startsAt,
       status,
       total_amount: totalAmount,

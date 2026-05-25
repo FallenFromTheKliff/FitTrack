@@ -164,7 +164,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         hand_shape_profile: {
           grip: exercise.key === 'run' ? 'none' : 'neutral',
         },
-        image_url: `https://fittrack.local/exercises/${exercise.key}.png`,
+        image_url: null,
         instructions:
           'Warm up, keep control through the full range, and stop if pain changes the movement.',
         is_active: true,
@@ -179,7 +179,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         muscle_group: exercise.muscleGroup,
         muscle_targets: [exercise.muscleGroup],
         name: exercise.name,
-        video_url: `https://fittrack.local/exercises/${exercise.key}.mp4`,
+        video_url: null,
       },
       create: {
         id: exerciseId,
@@ -188,7 +188,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         hand_shape_profile: {
           grip: exercise.key === 'run' ? 'none' : 'neutral',
         },
-        image_url: `https://fittrack.local/exercises/${exercise.key}.png`,
+        image_url: null,
         instructions:
           'Warm up, keep control through the full range, and stop if pain changes the movement.',
         is_active: true,
@@ -203,7 +203,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         muscle_group: exercise.muscleGroup,
         muscle_targets: [exercise.muscleGroup],
         name: exercise.name,
-        video_url: `https://fittrack.local/exercises/${exercise.key}.mp4`,
+        video_url: null,
       },
     });
   }
@@ -330,7 +330,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             : dayIndex === 1
               ? 'Upper Strength'
               : 'Conditioning',
-        notes: 'Seeded training day for demo plan detail.',
+        notes: 'Training day prepared for plan detail review.',
         plan_id: planId,
         week_number: 1,
       });
@@ -347,7 +347,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               ? 600 + orderIndex * 60
               : null,
           exercise_id: ctx.state.exerciseIds[exerciseKey],
-          notes: 'Seeded plan exercise with realistic set prescription.',
+          notes: 'Plan exercise with realistic set prescription.',
           order_index: orderIndex,
           reps: exerciseKey === 'run' ? null : 8 + orderIndex * 2,
           rest_seconds: exerciseKey === 'run' ? 90 : 75,
@@ -444,7 +444,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               id: seedId(`exercise-review:${memberKey}`),
               category: ExerciseCategory.strength,
               description:
-                'Seeded unknown movement submitted from pose finalization for admin review.',
+                'Unknown movement submitted from pose finalization for admin review.',
               evidence_bars: [
                 { label: 'visibility', value: 0.82 },
                 { label: 'phase', value: 0.77 },
@@ -458,7 +458,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               muscle_targets: ['chest', 'triceps'],
               origin_label: 'client custom',
               pose_session_id: poseSessionId,
-              proposed_name: 'Seeded Incline Push Pattern',
+              proposed_name: 'Incline Push Pattern',
               published_exercise_id:
                 memberIndex % 3 === 0 ? ctx.state.exerciseIds['push-up'] : null,
               queue_tag: 'needs match',
@@ -724,7 +724,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
       update: {
         admin_notes:
           account.memberPersona === 'premium'
-            ? 'Seeded premium member candidate for creator review.'
+            ? 'Premium member candidate for creator review.'
             : null,
         last_state_changed_at:
           account.memberPersona === 'premium'
@@ -739,7 +739,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         id: seedId(`creator-profile:${account.key}`),
         admin_notes:
           account.memberPersona === 'premium'
-            ? 'Seeded premium member candidate for creator review.'
+            ? 'Premium member candidate for creator review.'
             : null,
         last_state_changed_at:
           account.memberPersona === 'premium'
@@ -821,7 +821,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         grant_type: ProgressionGrantType.xp,
         metadata: { source: 'dynamic-seed' },
         muscle_group: index % 2 === 0 ? 'chest' : 'quads',
-        reason: 'Seeded completed workout reward.',
+        reason: 'Completed workout reward.',
         season_id: activeSeasonId,
         source_event_id: source.id,
         user_id: source.user_id,
@@ -834,7 +834,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         grant_type: ProgressionGrantType.season_points,
         metadata: { source: 'dynamic-seed' },
         muscle_group: null,
-        reason: 'Seeded season standing reward.',
+        reason: 'Season standing reward.',
         season_id: activeSeasonId,
         source_event_id: source.id,
         user_id: source.user_id,
@@ -876,14 +876,14 @@ async function seedGamification(ctx: DynamicSeedContext) {
   await ctx.prisma.milestoneEvidenceSubmission.createMany({
     data: activeMemberKeys.slice(0, 10).map((memberKey, index) => ({
       id: seedId(`milestone-evidence:${memberKey}`),
-      caption: 'Seeded coaching proof for milestone review.',
+      caption: 'Coaching proof for milestone review.',
       created_at: daysFrom(ctx.config.anchorDate, -3 + (index % 2), 13),
       evidence_type:
         index % 2 === 0
           ? MilestoneEvidenceType.image
           : MilestoneEvidenceType.video,
       file_key: `seed/milestones/${memberKey}.${index % 2 === 0 ? 'jpg' : 'mp4'}`,
-      file_url: `https://fittrack.local/seed/milestones/${memberKey}.${index % 2 === 0 ? 'jpg' : 'mp4'}`,
+      file_url: `seed/milestones/${memberKey}.${index % 2 === 0 ? 'jpg' : 'mp4'}`,
       milestone_definition_id: seedId(
         'milestone-definition:dynamic-coach-accountability',
       ),
@@ -922,7 +922,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
           : index === 1
             ? IntegrityCaseStatus.under_review
             : IntegrityCaseStatus.resolved_valid,
-      summary: 'Seeded progression anomaly for moderation QA.',
+      summary: 'Progression anomaly for moderation review.',
       user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -957,7 +957,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
       before_state: { status: 'open' },
       created_at: daysFrom(ctx.config.anchorDate, -3 + index, 15),
       integrity_case_id: seedId(`integrity-case:${memberKey}`),
-      rationale: 'Seeded moderation action for governance audit.',
+      rationale: 'Moderation action for governance audit.',
       season_id: activeSeasonId,
       source_event_id: activeMemberKeys.includes(memberKey)
         ? seedId(`progression-source:${memberKey}:workout`)

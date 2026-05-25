@@ -109,6 +109,9 @@ export function ExerciseLabModalLayer() {
     updateReviewSubmissionMutation,
     workbenchMotionKey,
   } = useExerciseLabPage();
+  const selectedCandidateEvidenceBars = selectedCandidate
+    ? getEvidenceBars(selectedCandidate.evidenceBars)
+    : [];
 
   return (
     <>      <FitModal
@@ -236,8 +239,8 @@ export function ExerciseLabModalLayer() {
                       height: 48,
                     }}
                   >
-                    {getEvidenceBars(selectedCandidate.evidenceBars).map(
-                      (value, index) => (
+                    {selectedCandidateEvidenceBars.length ? (
+                      selectedCandidateEvidenceBars.map((value, index) => (
                         <div
                           key={`${value}-${index}`}
                           style={{
@@ -248,7 +251,11 @@ export function ExerciseLabModalLayer() {
                               index === 2 ? colors.brand : `${colors.brand}35`,
                           }}
                         />
-                      ),
+                      ))
+                    ) : (
+                      <FitText style={{ fontSize: 12, color: colors.textMuted }}>
+                        No numeric evidence bars submitted.
+                      </FitText>
                     )}
                   </div>
                   <FitText

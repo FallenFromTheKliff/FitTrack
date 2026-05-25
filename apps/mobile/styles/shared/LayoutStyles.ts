@@ -3,7 +3,7 @@ import { StyleSheet } from "react-native";
 import type { ThemeColors } from "@fittrack/types";
 import { R, MAX_WIDTH } from "@fittrack/ui/tokens";
 
-export const SIDEBAR_WIDTH = 320;
+export const SIDEBAR_WIDTH = 284;
 
 export function makeHeaderStyles(colors: ThemeColors) {
   return StyleSheet.create({
@@ -88,14 +88,14 @@ export function makeSidebarStyles(
       borderRightWidth: 1,
       borderRightColor: colors.border,
       paddingTop: 40,
-      paddingHorizontal: 20,
-      paddingBottom: 24
+      paddingHorizontal: 14,
+      paddingBottom: 0
     },
     logoRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      marginBottom: 20,
+      marginBottom: 14,
       paddingBottom: 20,
       borderBottomWidth: 1,
       borderBottomColor: colors.border
@@ -116,13 +116,13 @@ export function makeSidebarStyles(
       alignItems: "center",
       borderRadius: R.lg,
       borderWidth: 1,
-      padding: 12,
-      gap: 12,
+      padding: 10,
+      gap: 10,
       marginBottom: 0
     },
     profileAvatar: {
-      width: 46,
-      height: 46,
+      width: 40,
+      height: 40,
       borderRadius: R.lg,
       overflow: "hidden",
       borderWidth: 1,
@@ -131,57 +131,78 @@ export function makeSidebarStyles(
       alignItems: "center",
       justifyContent: "center"
     },
-    profileAvatarText: { fontSize: 16, fontWeight: "700", color: ic },
-    profileInfo: { flex: 1, gap: 3 },
-    profileName: { fontSize: 16, fontWeight: "600", color: ic },
-    profileTierRow: { fontSize: 12, color: colors.textMuted },
+    profileAvatarText: { fontSize: 14, fontWeight: "700", color: ic },
+    profileInfo: { flex: 1, gap: 2 },
+    profileName: { fontSize: 14, fontWeight: "600", color: ic },
+    profileTierRow: { fontSize: 11, color: colors.textMuted },
     profileManageHint: {
       flexDirection: "row",
       alignItems: "center",
       gap: 4,
-      marginTop: 5,
+      marginTop: 4,
       backgroundColor: colors.surface,
       borderRadius: R.sm,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingVertical: 3,
-      paddingHorizontal: 7,
+      paddingVertical: 2,
+      paddingHorizontal: 6,
       alignSelf: "flex-start"
     },
-    profileManageHintText: { fontSize: 11, color: ic },
+    profileManageHintText: { fontSize: 10, color: ic },
     navSeparator: {
       height: 1,
       backgroundColor: colors.border,
-      marginVertical: 16
+      marginBottom: 12,
+      marginTop: 14
+    },
+    navList: {
+      flex: 1,
+      gap: 8
+    },
+    navSection: {
+      flexShrink: 0,
+      gap: 3
+    },
+    navSectionItems: {
+      gap: 3
+    },
+    navSectionLabel: {
+      color: colors.textMuted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.4,
+      paddingHorizontal: 10,
+      paddingBottom: 2,
+      textTransform: "uppercase" as const
     },
     navItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      borderRadius: R.lg,
-      marginBottom: 6,
-      gap: 14
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      borderRadius: R.md,
+      gap: 10
     },
     navItemActive: { backgroundColor: colors.surfaceRaised },
-    navText: { fontSize: 17, color: colors.textMuted },
-    navTextActive: { color: colors.textPrimary, fontWeight: "500" },
+    navText: { fontSize: 14, color: colors.textMuted },
+    navTextActive: { color: colors.onBrand ?? "#FFFFFF", fontSize: 14, fontWeight: "600" },
     bottomSection: {
       marginTop: "auto",
       borderTopWidth: 1,
       borderTopColor: colors.border,
-      paddingTop: 16
+      paddingTop: 12
     },
     logoutItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 15,
-      paddingHorizontal: 14,
-      borderRadius: R.lg,
-      gap: 12,
+      paddingVertical: 13,
+      paddingHorizontal: 12,
+      borderRadius: R.md,
+      gap: 10,
       borderWidth: 1,
-      borderColor: colors.danger
+      borderColor: colors.danger,
+      transform: [{ translateY: -5 }]
     },
-    logoutText: { fontSize: 17, color: colors.danger, fontWeight: "500" }
+    logoutText: { fontSize: 14, color: colors.danger, fontWeight: "600" }
   });
 }

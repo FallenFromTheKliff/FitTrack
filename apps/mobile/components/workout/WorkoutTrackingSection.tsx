@@ -13,6 +13,7 @@ import {
 import { CameraView, type CameraType } from "expo-camera";
 
 import type { IThemeContext } from "@fittrack/types";
+import { R } from "@fittrack/ui/tokens";
 import type {
   PoseEquipmentDetectionBoxRecord,
   PoseKeypointRecord,
@@ -221,7 +222,7 @@ export function WorkoutTrackingSection({
                     borderColor: equipmentDetected
                       ? "rgba(255,255,255,0.78)"
                       : "rgba(255, 216, 77, 0.65)",
-                    borderRadius: 999,
+                    borderRadius: R.md,
                     borderWidth: 1,
                     bottom: 54,
                     paddingHorizontal: 12,
@@ -320,7 +321,7 @@ export function WorkoutTrackingSection({
               alignItems: "center",
               backgroundColor: "rgba(0,0,0,0.62)",
               borderColor: "rgba(255,255,255,0.24)",
-              borderRadius: 999,
+              borderRadius: R.md,
               borderWidth: 1,
               flexDirection: "row",
               gap: 6,

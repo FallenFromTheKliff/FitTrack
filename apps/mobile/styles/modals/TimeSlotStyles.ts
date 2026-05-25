@@ -64,6 +64,7 @@ export function makeTimeSlotModalStyles() {
     slotDuration: { fontSize: 13, textAlign: "center" },
     slotSpots: { fontSize: 13, fontWeight: "700", textAlign: "center" },
     slotCheck: { position: "absolute", top: 5, right: 5 },
+    emptyText: { width: "100%", paddingVertical: 24, fontSize: 14, textAlign: "center" },
     footer: { padding: 16, borderTopWidth: 1 }
   });
 }

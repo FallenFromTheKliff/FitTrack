@@ -363,9 +363,8 @@ export function miniButtonStyle(
     fontSize: 12,
     fontWeight: 800,
     padding: "8px 12px",
-    transform: active ? "translateY(-1px)" : "translateY(0)",
     transition:
-      "background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease",
+      "background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease",
   };
 }
 

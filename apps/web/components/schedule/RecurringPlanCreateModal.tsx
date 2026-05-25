@@ -6,7 +6,10 @@ import type { RecurringCoachingPlanPreviewResult } from "@fittrack/api-client";
 
 import { FitButton, FitPill, FitSelect, FitText } from "@/components/fit";
 import { FitModal } from "@/components/modals";
-import type { SelectOption } from "@/components/schedule/GymOperationsOverlayShared";
+import {
+  getDefaultDateInput,
+  type SelectOption,
+} from "@/components/schedule/GymOperationsOverlayShared";
 import { useTheme } from "@/contexts/ThemeContext";
 
 import {
@@ -51,6 +54,7 @@ export function RecurringPlanCreateModal({
   setForm,
 }: Props) {
   const { colors } = useTheme();
+  const minStartDate = getDefaultDateInput();
   const controlLabelStyle = useMemo(
     () => ({
       color: colors.textMuted,
@@ -239,6 +243,7 @@ export function RecurringPlanCreateModal({
                 </FitText>
                 <input
                   type="date"
+                  min={minStartDate}
                   value={form.startDate}
                   onChange={(event) => patchForm({ startDate: event.target.value })}
                   style={fieldStyle}
@@ -300,12 +305,11 @@ export function RecurringPlanCreateModal({
 
         <div
           style={{
-            borderRadius: 18,
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.surfaceRaised,
-            padding: 16,
             display: "grid",
             gap: 10,
+            borderTop: `1px solid ${colors.border}`,
+            backgroundColor: "transparent",
+            paddingTop: 14,
           }}
         >
           <div
@@ -350,10 +354,9 @@ export function RecurringPlanCreateModal({
                     gridTemplateColumns: "minmax(0, 1fr) auto",
                     gap: 12,
                     alignItems: "center",
-                    borderRadius: 14,
-                    border: `1px solid ${session.conflict ? `${colors.danger}55` : colors.border}`,
-                    backgroundColor: session.conflict ? `${colors.danger}12` : colors.surface,
-                    padding: "10px 12px",
+                    borderTop: `1px solid ${session.conflict ? `${colors.danger}55` : colors.border}`,
+                    backgroundColor: "transparent",
+                    padding: "10px 0 0",
                   }}
                 >
                   <div style={{ display: "grid", gap: 3 }}>

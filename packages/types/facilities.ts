@@ -256,52 +256,6 @@ function slugify(value: string) {
   return slug || "venue";
 }
 
-function createTemplateFloorVenue(
-  floorId: FacilityFloorId,
-  iconKey: VenueIconKey,
-  name: string,
-  capacity: number,
-  hourlyRate: number | null
-): FloorVenueRecord {
-  const defaults = FACILITY_LAYOUT_DEFAULTS[iconKey];
-  return {
-    id: `${floorId}-${defaults.slug}`,
-    slug: defaults.slug,
-    name,
-    capacity,
-    hourlyRate,
-    minimumHours: defaults.minimumHours,
-    iconKey,
-    floorId,
-    gridColumn: defaults.gridColumn,
-    gridRow: defaults.gridRow,
-    gridWidth: defaults.gridWidth,
-    gridHeight: defaults.gridHeight,
-    isReservable: defaults.isReservable,
-    isSystem: false,
-    displayOrder: defaults.displayOrder,
-    isActive: true,
-    mapId: `${floorId}-${defaults.slug}`,
-    sourceVenueId: undefined
-  };
-}
-
-function buildTemplateFloorVenues(): Record<FacilityFloorId, FloorVenueRecord[]> {
-  return {
-    "floor-1": [
-      createTemplateFloorVenue("floor-1", "reception", "Reception", 2, null),
-      createTemplateFloorVenue("floor-1", "gym-area", "Gym Area", 30, null),
-      createTemplateFloorVenue("floor-1", "basketball", "Basketball Court", 10, 153)
-    ],
-    "floor-2": [
-      createTemplateFloorVenue("floor-2", "boxing", "Boxing Ring", 4, 29)
-    ],
-    "floor-3": [
-      createTemplateFloorVenue("floor-3", "yoga", "Multi-Purpose Studio", 16, 75)
-    ]
-  };
-}
-
 function toFloorVenueRecord(venue: VenueRecord): FloorVenueRecord {
   const iconKey = resolveVenueIconKey(venue);
   const defaults = FACILITY_LAYOUT_DEFAULTS[iconKey];
@@ -325,10 +279,6 @@ function toFloorVenueRecord(venue: VenueRecord): FloorVenueRecord {
 }
 
 export function buildFacilityFloorVenues(venues: VenueRecord[]): Record<FacilityFloorId, FloorVenueRecord[]> {
-  if (venues.length === 0) {
-    return buildTemplateFloorVenues();
-  }
-
   const grouped: Record<FacilityFloorId, FloorVenueRecord[]> = {
     "floor-1": [],
     "floor-2": [],

@@ -217,7 +217,13 @@ export default function MembersDirectoryPanel({
             </div>
             <div
               className="members-directory-panel__rows"
-              style={{ display: "grid", gap: 0, alignContent: "start", minHeight: 0 }}
+              style={{
+                alignContent: "start",
+                display: "grid",
+                gap: 0,
+                minHeight: 0,
+                overflowY: "auto",
+              }}
             >
               {rows.map((member, index) => {
                 const isActive = member.id === activeRowId;
@@ -422,13 +428,12 @@ export default function MembersDirectoryPanel({
         }
 
         .members-directory-panel__row {
-          transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+          transition: background-color 120ms ease, box-shadow 120ms ease;
         }
 
         .members-directory-panel__row:hover {
           background-color: ${colors.brand}0d !important;
           box-shadow: 3px 0 0 ${colors.brand}66 inset;
-          transform: translateX(1px);
         }
 
         .members-directory-panel__cell,
@@ -464,13 +469,12 @@ export default function MembersDirectoryPanel({
         .members-directory-panel__mobile-card {
           cursor: pointer;
           outline: none;
-          transition: filter 140ms ease, transform 140ms ease;
+          transition: filter 140ms ease;
         }
 
         .members-directory-panel__grid-card:hover,
         .members-directory-panel__mobile-card:hover {
           filter: brightness(1.02);
-          transform: translateY(-1px);
         }
 
         .members-directory-panel__grid-card:hover > .members-grid-card,

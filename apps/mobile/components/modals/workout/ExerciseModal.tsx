@@ -10,14 +10,14 @@ import {
   type LayoutChangeEvent
 } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { Dumbbell, SlidersHorizontal } from "lucide-react-native";
+import { Dumbbell, ListChecks, SlidersHorizontal } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useDebounce } from "@fittrack/hooks";
 import { makeExerciseModalStyles } from "@/styles/modals/ExerciseStyles";
-import { EXERCISE_REFERENCES, type ExerciseReference } from "@/data/exercises";
+import type { ExerciseReference } from "@/data/exercises";
 
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitSearch from "@/components/fit/FitSearch";
@@ -30,6 +30,7 @@ const LEVEL_OPTIONS: { label: string; value: "all" | ExerciseReference["level"] 
   { label: "Intermediate", value: "Intermediate" },
   { label: "Advanced", value: "Advanced" }
 ];
+const EMPTY_EXERCISE_REFERENCES: ExerciseReference[] = [];
 
 type LoadInputUnit = "kg" | "lb";
 
@@ -192,7 +193,7 @@ export default function ExerciseModal({
 }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
-  const { opacity, translateY } = useOverlayAnim(isVisible, "slideUp");
+  const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeExerciseModalStyles(colors), [colors]);
   const [query, setQuery] = useState("");
   const [activeLevel, setActiveLevel] = useState<"all" | ExerciseReference["level"]>("all");
@@ -202,7 +203,8 @@ export default function ExerciseModal({
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
     backgroundColor: ic.value.surface,
     borderColor: ic.value.border
   }));
@@ -213,7 +215,7 @@ export default function ExerciseModal({
     return colors.danger;
   };
 
-  const sourceReferences = references ?? EXERCISE_REFERENCES;
+  const sourceReferences = references ?? EMPTY_EXERCISE_REFERENCES;
   const canEditLoadInput =
     loadInputVisible &&
     !!onApplyLoadInput &&
@@ -262,12 +264,9 @@ export default function ExerciseModal({
           <Animated.View style={[s.card, cardStyle]}>
             <View style={s.header}>
               <View style={s.headerIcon}>
-                <Dumbbell size={18} color={colors.brand} strokeWidth={2} />
+                <ListChecks size={18} color={colors.brand} strokeWidth={2} />
               </View>
-              <View style={s.headerTextWrap}>
-                <FitText style={s.title}>Exercise References</FitText>
-                <FitText style={s.subtitle}>Browse exercises by level and muscle group.</FitText>
-              </View>
+              <FitText style={s.headerTitle}>Exercise References</FitText>
             </View>
             <View style={s.filtersArea}>
               <View style={s.filtersWrap}>

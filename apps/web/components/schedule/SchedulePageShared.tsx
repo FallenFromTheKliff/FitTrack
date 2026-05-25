@@ -1,8 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarDays, ClipboardList, Moon, Sun, Sunrise, UsersRound } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { CalendarDays, ClipboardList, UsersRound } from "lucide-react";
 import type {
   RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanInput,
@@ -14,12 +13,12 @@ import { FitText } from "@/components/fit";
 import type { FieldConfig } from "@/components/modals";
 import type { VenueBookingRecord } from "@/contexts/ScheduleContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { COACH_SPECIALTY_OPTIONS } from "./GymOperationsOverlayShared";
 
 import { addDays } from "@/app/(auth)/schedule/helpers";
 
 export type GymOperationsTab = "schedule" | "coaches" | "appointments";
 export type ScheduleSurfaceTab = "coach-schedule" | "venue-bookings";
-export type ScheduleDayPart = "morning" | "afternoon" | "night";
 export type ScheduleRangeMode = "weekly" | "daily";
 export type CoachVisibilityScope = "all" | "hidden" | "visible";
 export type RecurringPlanActionMode = "single" | "future" | "cancel";
@@ -113,16 +112,10 @@ export const SCHEDULE_SURFACE_TABS: Array<{
   { key: "venue-bookings", label: "Venue Bookings" },
 ];
 
-export const SCHEDULE_DAY_PART_OPTIONS: Array<{
-  key: ScheduleDayPart;
-  label: string;
-  icon?: LucideIcon;
-  hours: number[];
-}> = [
-  { key: "morning", label: "Morning", icon: Sunrise, hours: [7, 8, 9, 10, 11] },
-  { key: "afternoon", label: "Afternoon", icon: Sun, hours: [12, 13, 14, 15, 16, 17] },
-  { key: "night", label: "Night", icon: Moon, hours: [18, 19, 20, 21, 22, 23] },
-];
+export const SCHEDULE_TIMELINE_HOURS = Array.from(
+  { length: 17 },
+  (_, index) => index + 7,
+);
 
 export const VENUE_STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
@@ -262,10 +255,10 @@ export const COACH_PROFILE_FIELDS: FieldConfig[] = [
   {
     name: "specialties",
     label: "Specialties",
-    type: "textarea",
+    type: "multi-select",
     required: true,
-    placeholder: "Strength, Boxing, Conditioning",
-    hint: "Separate specialties with commas or line breaks.",
+    options: [...COACH_SPECIALTY_OPTIONS],
+    hint: "Select the specialties shown on coach cards and booking surfaces.",
   },
   {
     name: "certifications",

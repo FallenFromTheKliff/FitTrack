@@ -122,7 +122,12 @@ function getCoachMutationError(error: unknown, fallback: string) {
 function CoachClientManagementPanel() {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { editTarget, isCoach } = useAccountsPage();
+  const {
+    coachClientPanelMode,
+    editTarget,
+    isCoach,
+    setCoachClientPanelMode,
+  } = useAccountsPage();
   const queryClient = useQueryClient();
   const [scheduledAt, setScheduledAt] = useState(createNextScheduleValue);
   const [durationMinutes, setDurationMinutes] = useState("60");
@@ -130,7 +135,6 @@ function CoachClientManagementPanel() {
   const [scheduleMessage, setScheduleMessage] = useState<CoachInspectorMessage>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [historyAppointmentId, setHistoryAppointmentId] = useState("");
-  const [coachPanelMode, setCoachPanelMode] = useState<"overview" | "schedule" | "feedback">("overview");
   const [coachFeedback, setCoachFeedback] = useState("");
   const [assessmentReport, setAssessmentReport] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState<CoachInspectorMessage>(null);
@@ -247,8 +251,8 @@ function CoachClientManagementPanel() {
   }, [selectedAppointment?.id, selectedAppointment?.coachFeedback, selectedAppointment?.assessmentReport]);
 
   useEffect(() => {
-    setCoachPanelMode("overview");
-  }, [editTarget?.id]);
+    setCoachClientPanelMode("overview");
+  }, [editTarget?.id, setCoachClientPanelMode]);
 
   if (!isCoachClient || !editTarget) return null;
 
@@ -373,48 +377,7 @@ function CoachClientManagementPanel() {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div
-        role="tablist"
-        aria-label="Coach client panel"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 6,
-        }}
-      >
-        {[
-          ["overview", "Overview"],
-          ["schedule", "Schedule"],
-          ["feedback", "Feedback"],
-        ].map(([mode, label]) => {
-          const isActive = coachPanelMode === mode;
-
-          return (
-            <button
-              key={mode}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setCoachPanelMode(mode as "overview" | "schedule" | "feedback")}
-              style={{
-                minHeight: 34,
-                borderRadius: 7,
-                border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
-                backgroundColor: isActive ? `${colors.brand}14` : colors.surfaceRaised,
-                color: isActive ? colors.brand : colors.textSecondary,
-                cursor: "pointer",
-                padding: "6px 8px",
-              }}
-            >
-              <FitText as="span" excludeGlobalScale style={{ fontSize: 10.5, fontWeight: 800, lineHeight: 1 }}>
-                {label}
-              </FitText>
-            </button>
-          );
-        })}
-      </div>
-
-      {coachPanelMode === "overview" ? (
+      {coachClientPanelMode === "overview" ? (
         <div style={sectionCardStyle}>
           <FitText
             style={{
@@ -528,7 +491,7 @@ function CoachClientManagementPanel() {
         </div>
       ) : null}
 
-      {coachPanelMode === "schedule" ? (
+      {coachClientPanelMode === "schedule" ? (
         <div style={sectionCardStyle}>
           <FitText
             style={{
@@ -613,7 +576,7 @@ function CoachClientManagementPanel() {
         </div>
       ) : null}
 
-      {coachPanelMode === "feedback" ? (
+      {coachClientPanelMode === "feedback" ? (
         <div style={sectionCardStyle}>
           <FitText
             style={{
@@ -705,7 +668,7 @@ function CoachClientManagementPanel() {
 
 function AccountInspectorCommandRow() {
   const { colors, onBrandTextColor } = useTheme();
-  const { canManageAccounts, isAdmin, setContentMode, setScanFeedback, setScanOpen } = useAccountsPage();
+  const { canManageAccounts, setContentMode, setScanFeedback, setScanOpen } = useAccountsPage();
 
   if (!canManageAccounts) return null;
 
@@ -714,39 +677,37 @@ function AccountInspectorCommandRow() {
       className="members-inspector-command-row"
       style={{
         display: "grid",
-        gridTemplateColumns: isAdmin ? "minmax(0, 0.86fr) minmax(0, 1fr)" : "1fr",
+        gridTemplateColumns: "minmax(0, 0.86fr) minmax(0, 1fr)",
         gap: 8,
         minWidth: 0,
       }}
     >
-      {isAdmin ? (
-        <FitButton
-          variant="ghost"
-          label="SCAN QR"
-          icon={ScanLine}
-          iconSize={14}
-          title="Scan QR Attendance"
-          aria-label="Scan QR Attendance"
-          style={{
-            minHeight: 40,
-            borderRadius: 8,
-            paddingInline: 8,
-            border: `1px solid ${colors.brand}42`,
-            backgroundColor: colors.surfaceRaised,
-            color: colors.brand,
-          }}
-          onClick={() => {
-            setScanOpen(true);
-            setScanFeedback(null);
-          }}
-          textStyle={{
-            color: colors.brand,
-            fontSize: 10.75,
-            fontWeight: 800,
-            whiteSpace: "nowrap",
-          }}
-        />
-      ) : null}
+      <FitButton
+        variant="ghost"
+        label="SCAN QR"
+        icon={ScanLine}
+        iconSize={14}
+        title="Scan QR Attendance"
+        aria-label="Scan QR Attendance"
+        style={{
+          minHeight: 40,
+          borderRadius: 8,
+          paddingInline: 8,
+          border: `1px solid ${colors.brand}42`,
+          backgroundColor: colors.surfaceRaised,
+          color: colors.brand,
+        }}
+        onClick={() => {
+          setScanOpen(true);
+          setScanFeedback(null);
+        }}
+        textStyle={{
+          color: colors.brand,
+          fontSize: 10.75,
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+        }}
+      />
       <FitButton
         variant="primary"
         label="CREATE ACCOUNT"

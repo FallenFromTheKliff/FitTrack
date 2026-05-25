@@ -61,8 +61,8 @@ function resolveGenericContent(variant: PaymentReturnVariant): PaymentReturnCont
       noticeBody:
         "Avoid starting the same purchase again until you have checked the original FitTrack screen or confirmed the payment status with staff.",
       noticeTitle: "Do not treat the redirect itself as final settlement.",
-      primaryActionHref: "/login",
-      primaryActionLabel: "Open Web Portal Login",
+      primaryActionHref: "/dashboard",
+      primaryActionLabel: "Return to Web Portal",
       title: "Checkout Returned",
       tone: "success"
     };
@@ -95,8 +95,8 @@ function resolveGenericContent(variant: PaymentReturnVariant): PaymentReturnCont
     noticeBody:
       "Do not mark a payment as settled just because the browser reached this page. Retry from the original FitTrack flow if you still want to continue.",
     noticeTitle: "This is not a payment receipt.",
-    primaryActionHref: "/login",
-    primaryActionLabel: "Open Web Portal Login",
+    primaryActionHref: "/dashboard",
+    primaryActionLabel: "Return to Web Portal",
     title: "Checkout Was Cancelled",
     tone: "warning"
   }
@@ -131,8 +131,8 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
       noticeBody:
         "Do not start another membership-card purchase right away. First reopen Profile and confirm whether the current attempt is still processing or already completed.",
       noticeTitle: "One checkout can still be in flight after the redirect.",
-      primaryActionHref: "/login",
-      primaryActionLabel: "Open Web Portal Login",
+      primaryActionHref: "/profile",
+      primaryActionLabel: "Return to Profile",
       title: "Membership Card Checkout Returned",
       tone: "success"
     };
@@ -165,8 +165,8 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
       noticeBody:
         "If a previous attempt still appears pending in Profile, wait for it to settle or ask staff to confirm the payment state before trying again.",
       noticeTitle: "Avoid stacking duplicate card purchases.",
-      primaryActionHref: "/login",
-      primaryActionLabel: "Open Web Portal Login",
+      primaryActionHref: "/profile",
+      primaryActionLabel: "Return to Profile",
       title: "Membership Card Checkout Cancelled",
       tone: "warning"
     };

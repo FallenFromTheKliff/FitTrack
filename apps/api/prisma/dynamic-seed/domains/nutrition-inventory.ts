@@ -224,8 +224,8 @@ async function seedInventory(ctx: DynamicSeedContext) {
       update: {
         category,
         cost: new Prisma.Decimal(cost),
-        description: `Seeded ${category} item for inventory, search, low-stock, and sales QA.`,
-        image_url: `https://fittrack.local/products/${key}.png`,
+        description: `${category} item for inventory, search, low-stock, and sales review.`,
+        image_url: null,
         is_active: true,
         last_low_stock_alert_at:
           stockQuantity <= 18 ? daysFrom(ctx.config.anchorDate, -1, 8) : null,
@@ -238,8 +238,8 @@ async function seedInventory(ctx: DynamicSeedContext) {
         id: productId,
         category,
         cost: new Prisma.Decimal(cost),
-        description: `Seeded ${category} item for inventory, search, low-stock, and sales QA.`,
-        image_url: `https://fittrack.local/products/${key}.png`,
+        description: `${category} item for inventory, search, low-stock, and sales review.`,
+        image_url: null,
         is_active: true,
         last_low_stock_alert_at:
           stockQuantity <= 18 ? daysFrom(ctx.config.anchorDate, -1, 8) : null,
@@ -257,7 +257,7 @@ async function seedInventory(ctx: DynamicSeedContext) {
       where: { id: seedId(`equipment-item:${key}`) },
       update: {
         description,
-        image_url: `https://fittrack.local/equipment-items/${key}.png`,
+        image_url: null,
         is_active: true,
         name,
         quantity_current: quantityCurrent,
@@ -267,7 +267,7 @@ async function seedInventory(ctx: DynamicSeedContext) {
       create: {
         id: seedId(`equipment-item:${key}`),
         description,
-        image_url: `https://fittrack.local/equipment-items/${key}.png`,
+        image_url: null,
         is_active: true,
         name,
         quantity_current: quantityCurrent,
@@ -291,8 +291,8 @@ async function seedInventory(ctx: DynamicSeedContext) {
         quantity_set_to: quantityCurrent,
         reason:
           index % 2 === 0
-            ? 'Seeded worn-out shared equipment write-off.'
-            : 'Seeded damaged item found during closing inventory.',
+            ? 'Worn-out shared equipment write-off.'
+            : 'Damaged item found during closing inventory.',
       };
     }),
     skipDuplicates: true,
@@ -346,8 +346,8 @@ async function seedSales(ctx: DynamicSeedContext) {
       customer_user_id: ctx.state.userIds[memberKey],
       notes:
         index % 5 === 0
-          ? 'Seeded premium member supplement bundle.'
-          : 'Seeded retail sale for revenue analytics.',
+          ? 'Premium member supplement bundle.'
+          : 'Retail sale for revenue analytics.',
       payment_id: paymentId,
       payment_method:
         index % 4 === 0 ? SalePaymentMethod.paymongo : SalePaymentMethod.cash,

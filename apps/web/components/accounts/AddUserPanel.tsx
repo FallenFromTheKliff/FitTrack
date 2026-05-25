@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ChevronUp,
@@ -267,13 +267,27 @@ export default function AddUserPanel({
   const watchedValues = (useWatch({ control }) ?? {}) as Partial<AdminCreateUserFormValues>;
   const activeRole = (useWatch({ control, name: "role" }) ?? "member") as CreateRole;
   const availableRoleOptions = useMemo(
-    () => (isStaffCreator ? ROLE_OPTIONS.filter((option) => option.value !== "admin") : ROLE_OPTIONS),
+    () =>
+      isStaffCreator
+        ? ROLE_OPTIONS.filter(
+            (option) => option.value === "staff" || option.value === "member",
+          )
+        : ROLE_OPTIONS,
     [isStaffCreator],
   );
   const activeRoleMeta = ROLE_META[activeRole];
   const roleError = errors.role?.message as string | undefined;
   const submitting = isLoading || isSubmitting;
   const isReviewStep = reviewData !== null;
+
+  useEffect(() => {
+    if (availableRoleOptions.some((option) => option.value === activeRole)) return;
+    setValue("role", "member", {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  }, [activeRole, availableRoleOptions, setValue]);
   const firstNameValue = watchedValues.firstName ?? "";
   const lastNameValue = watchedValues.lastName ?? "";
   const emailValue = watchedValues.email ?? "";
@@ -902,7 +916,7 @@ export default function AddUserPanel({
                   </div>
                   <FitText style={{ fontSize: 11.5, lineHeight: 1.45, color: roleError ? colors.danger : colors.textMuted, textAlign: "left" }}>
                     {roleError ?? (isStaffCreator
-                      ? `${activeRoleMeta.note} Staff can create staff and member accounts only.`
+                      ? `${activeRoleMeta.note} Staff can create operational staff and member accounts only.`
                       : activeRoleMeta.note)}
                   </FitText>
                 </div>

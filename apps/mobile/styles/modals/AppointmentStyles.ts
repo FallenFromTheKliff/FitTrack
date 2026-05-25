@@ -85,7 +85,7 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
       gap: 6,
     },
     filterChip: {
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surfaceRaised,
@@ -160,7 +160,7 @@ export function makeAppointmentModalStyles(colors: ThemeColors) {
     coachMetaChip: {
       paddingHorizontal: 10,
       paddingVertical: 5,
-      borderRadius: 999,
+      borderRadius: R.md,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,

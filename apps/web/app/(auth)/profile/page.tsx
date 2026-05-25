@@ -65,6 +65,7 @@ import {
   coachSelfProfileQueryOptions,
   updateCoachProfileMutationOptions,
 } from "@fittrack/query";
+import { COACH_SPECIALTY_OPTIONS } from "@/components/schedule/GymOperationsOverlayShared";
 
 const COACH_WEEKDAY_OPTIONS = [
   { label: "Sun", value: 0 },
@@ -133,6 +134,10 @@ function formatCoachAvailabilitySlot(slot: NonNullable<CoachProfileRecord["avail
 
 function getCoachSpecialties(profile?: CoachProfileRecord | null) {
   return (profile?.specialties ?? []).map((specialty) => specialty.trim()).filter(Boolean);
+}
+
+function isKnownCoachSpecialty(value: string) {
+  return COACH_SPECIALTY_OPTIONS.some((option) => option.value === value);
 }
 
 export default function ProfileSettingsPage() {
@@ -317,7 +322,6 @@ function MemberProfileBody() {
                   hasBorder
                   icon={Award}
                   label="Current Badge"
-                  onClick={() => router.push("/mastery")}
                   subtitle={topMuscle ? `${topMuscle.muscleGroup} leads with ${formatCompactNumber(topMuscle.xpPoints)} EXP.` : "Complete a workout to start earning live mastery badges."}
                   trailingLabel={highestRankEntry ? `${highestRankEntry.rankDisplay} badge` : "First badge pending"}
                 />
@@ -325,7 +329,6 @@ function MemberProfileBody() {
                   hasBorder
                   icon={Trophy}
                   label="Gym Standing"
-                  onClick={() => router.push("/mastery")}
                   subtitle={leaderboardEntry ? `${formatCompactNumber(totalXp)} EXP across ${mastery.length} tracked muscle group${mastery.length === 1 ? "" : "s"}.` : "No leaderboard placement yet. Your next tracked sessions will start the climb."}
                   trailingLabel={leaderboardEntry ? `Gym Rank #${leaderboardEntry.rankPosition}` : "Leaderboard warming up"}
                 />
@@ -336,9 +339,6 @@ function MemberProfileBody() {
                   trailingLabel={healthSnapshot}
                 />
               </MemberSurface>
-            <div className="member-only-profile-actions">
-              <FitButton label="Open Muscle Mastery" icon={Trophy} onClick={() => router.push("/mastery")} fullWidth />
-            </div>
             </MemberStack>
           )}
         </MemberSection>
@@ -676,6 +676,21 @@ function CoachProfileManagementPanel() {
   const updateProfileMutation = useMutation(updateCoachProfileMutationOptions(webApiClient, queryClient));
   const isSaving = updateProfileMutation.isPending;
   const coachProfileReadOnly = !isCoachProfileEditing || isPending || isSaving;
+  const selectedSpecializations = useMemo(
+    () => splitCoachListInput(form.specializations),
+    [form.specializations],
+  );
+  const selectedSpecializationSet = useMemo(
+    () => new Set(selectedSpecializations),
+    [selectedSpecializations],
+  );
+  const customSpecializations = useMemo(
+    () =>
+      selectedSpecializations.filter(
+        (specialization) => !isKnownCoachSpecialty(specialization),
+      ),
+    [selectedSpecializations],
+  );
 
   useEffect(() => {
     setForm(createCoachProfileFormState(coachProfile));
@@ -687,6 +702,21 @@ function CoachProfileManagementPanel() {
     value: CoachProfileFormState[K],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+  const setSpecializations = (values: string[]) => {
+    setField("specializations", joinCoachListInput(values));
+  };
+  const toggleSpecialization = (value: string) => {
+    if (coachProfileReadOnly) return;
+
+    if (selectedSpecializationSet.has(value)) {
+      setSpecializations(
+        selectedSpecializations.filter((specialization) => specialization !== value),
+      );
+      return;
+    }
+
+    setSpecializations([...selectedSpecializations, value]);
   };
   const handleSaveCoachProfile = async () => {
     if (!coachProfile || !user?.id) return;
@@ -767,16 +797,74 @@ function CoachProfileManagementPanel() {
             style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
           />
         </label>
-        <label style={{ display: "grid", gap: 6 }}>
+        <div style={{ display: "grid", gap: 6 }}>
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Specializations</FitText>
-          <FitTextInput
-            value={form.specializations}
-            placeholder="Strength and Conditioning"
-            disabled={coachProfileReadOnly}
-            onChange={(event) => setField("specializations", event.target.value)}
-            style={{ border: `1px solid ${colors.border}`, borderRadius: 12, padding: "12px 14px" }}
-          />
-        </label>
+          <div
+            aria-label="Coach profile specializations"
+            role="group"
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              padding: 10,
+            }}
+          >
+            {COACH_SPECIALTY_OPTIONS.map((option) => {
+              const selected = selectedSpecializationSet.has(option.value);
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={coachProfileReadOnly}
+                  onClick={() => toggleSpecialization(option.value)}
+                  style={{
+                    backgroundColor: selected ? `${colors.brand}18` : colors.surfaceRaised,
+                    border: `1px solid ${selected ? `${colors.brand}66` : colors.border}`,
+                    borderRadius: 8,
+                    color: selected ? colors.brand : colors.textSecondary,
+                    cursor: coachProfileReadOnly ? "default" : "pointer",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    lineHeight: 1.15,
+                    padding: "8px 10px",
+                    textAlign: "center",
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          {customSpecializations.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {customSpecializations.map((specialization) => (
+                <button
+                  key={specialization}
+                  type="button"
+                  disabled={coachProfileReadOnly}
+                  onClick={() => toggleSpecialization(specialization)}
+                  style={{
+                    backgroundColor: `${colors.warning}12`,
+                    border: `1px solid ${colors.warning}40`,
+                    borderRadius: 8,
+                    color: colors.warning,
+                    cursor: coachProfileReadOnly ? "default" : "pointer",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    lineHeight: 1.15,
+                    padding: "7px 9px",
+                    textAlign: "center",
+                  }}
+                >
+                  {specialization}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
           <label style={{ display: "grid", gap: 6 }}>
             <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Rate</FitText>

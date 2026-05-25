@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { formatBookingDate } from "@fittrack/utils";
+import { toDateTimeRange } from "@fittrack/app-core";
 import type { StaffAppointmentRecord } from "@fittrack/api-client";
 import { coachScheduleQueryOptions } from "@fittrack/query";
 
@@ -35,29 +36,108 @@ import {
   countRecentActiveDays,
   countRecentCompletedSessions,
   formatStatusLabel,
-  getTodayString,
   toMemberBookings,
 } from "@/components/member-only/memberOnlyUtils";
 import { getStatusTone } from "@/components/member-only/MemberOnlyPageShared";
-import { useMemberOnlyAccess, useMemberOnlyHomeData } from "@/hooks/member-only/useMemberOnlyData";
+import {
+  getPersonDisplayName,
+  getReadableStatus,
+} from "@/components/schedule/operationsUtils";
+import {
+  useMemberOnlyAccess,
+  useMemberOnlyHomeData,
+} from "@/hooks/member-only/useMemberOnlyData";
 import { webApiClient } from "@/lib/api-client";
+
+const GYM_TIME_ZONE = "Asia/Manila";
+
+function getGymDateKey(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: GYM_TIME_ZONE,
+    year: "numeric",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+function getCoachAppointmentMemberName(appointment: StaffAppointmentRecord) {
+  return getPersonDisplayName(
+    appointment.user?.profile,
+    appointment.user?.email,
+    "Member",
+  );
+}
+
+function isAppointmentForDay(
+  appointment: StaffAppointmentRecord,
+  dayKey: string,
+) {
+  return (
+    getGymDateKey(appointment.scheduledAt) === dayKey &&
+    appointment.status !== "cancelled"
+  );
+}
+
+function compareAppointmentStartTime(
+  left: StaffAppointmentRecord,
+  right: StaffAppointmentRecord,
+) {
+  return (
+    new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()
+  );
+}
+
+function hasPaidCoachEarningsEvidence(appointment: StaffAppointmentRecord) {
+  if (appointment.coachPayoutPaidAt || appointment.balancePaidAt) return true;
+  if (appointment.activePaymentStatus !== "completed") return false;
+
+  if (appointment.activePaymentStage === "downpayment") {
+    const remainingBalance = Number(appointment.remainingBalance ?? 0);
+    return Number.isFinite(remainingBalance) && remainingBalance <= 0;
+  }
+
+  return true;
+}
+
+function isPaidCompletedCoachAppointment(appointment: StaffAppointmentRecord) {
+  return (
+    appointment.status === "completed" &&
+    hasPaidCoachEarningsEvidence(appointment)
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isLoading, user } = useAuth();
   const access = useMemberOnlyAccess("Home insights");
   const { hasMemberCardAccess } = access;
-  const todayString = getTodayString();
+  const todayString = getGymDateKey(new Date());
   const memberUserId = user?.role === "USER" ? user.id : undefined;
-  const data = useMemberOnlyHomeData({ hasMemberCardAccess: user?.role === "USER" && hasMemberCardAccess, todayString, userId: memberUserId });
+  const data = useMemberOnlyHomeData({
+    hasMemberCardAccess: user?.role === "USER" && hasMemberCardAccess,
+    todayString,
+    userId: memberUserId,
+  });
   const coachAppointmentsQuery = useQuery({
     ...coachScheduleQueryOptions<StaffAppointmentRecord>(webApiClient, user?.id),
     enabled: user?.role === "COACH" && Boolean(user?.id),
     staleTime: 30_000,
   });
 
-  const venues = useMemo(() => data.venuesQuery.data ?? [], [data.venuesQuery.data]);
-  const bookings = useMemo(() => toMemberBookings(data.bookingsQuery.data ?? [], venues), [data.bookingsQuery.data, venues]);
+  const venues = useMemo(
+    () => data.venuesQuery.data ?? [],
+    [data.venuesQuery.data],
+  );
+  const bookings = useMemo(
+    () => toMemberBookings(data.bookingsQuery.data ?? [], venues),
+    [data.bookingsQuery.data, venues],
+  );
   const todayBookings = bookings.filter((booking) => booking.date === todayString && booking.status !== "cancelled");
   const leaderboard = data.leaderboardQuery.data?.data ?? [];
   const sessions = data.sessionsQuery.data?.data ?? [];
@@ -81,12 +161,22 @@ export default function DashboardPage() {
 
   if (user?.role === "COACH") {
     const coachAppointments = coachAppointmentsQuery.data ?? [];
+    const coachTodayAppointments = coachAppointments
+      .filter((appointment) => isAppointmentForDay(appointment, todayString))
+      .sort(compareAppointmentStartTime);
+    const visibleCoachTodayAppointments = coachTodayAppointments.slice(0, 4);
+    const hiddenCoachTodayCount = Math.max(
+      coachTodayAppointments.length - visibleCoachTodayAppointments.length,
+      0,
+    );
     const coachClientCount = new Set(
       coachAppointments.map((appointment) => appointment.userId).filter(Boolean),
     ).size;
     const totalSessions = coachAppointments.length;
-    const totalEarnings = coachAppointments
-      .filter((appointment) => appointment.status === "completed")
+    const paidCompletedAppointments = coachAppointments.filter(
+      isPaidCompletedCoachAppointment,
+    );
+    const totalEarnings = paidCompletedAppointments
       .reduce((sum, appointment) => sum + Number(appointment.coachEarnings ?? 0), 0);
 
     return (
@@ -108,45 +198,67 @@ export default function DashboardPage() {
             />
             <StatTile
               icon={LineChart}
-              label="Earnings"
+              label="Paid Earnings"
               value={coachAppointmentsQuery.isLoading ? "--" : `PHP ${totalEarnings.toLocaleString("en-PH")}`}
               tone="warning"
               variant="inline"
             />
           </MemberGrid>
 
-          <MemberSection heading="Coach actions">
+          <MemberSection heading="Today's Bookings">
             <MemberSurface>
-              {[
-                {
-                  icon: Users,
-                  label: "Clients",
-                  path: "/accounts",
-                  subtitle: "Review member profiles and client readiness.",
-                },
-                {
-                  icon: CalendarCheck,
-                  label: "Sessions",
-                  path: "/schedule",
-                  subtitle: "Track coaching appointments and session status.",
-                },
-                {
-                  icon: LineChart,
-                  label: "Earnings",
-                  path: "/analytics",
-                  subtitle: "Review completed coaching work and expected earnings.",
-                },
-              ].map((item, index, items) => (
-                <MemberCard
-                  key={item.path}
-                  density="compact"
-                  hasBorder={index < items.length - 1}
-                  icon={item.icon}
-                  label={item.label}
-                  subtitle={item.subtitle}
-                  onClick={() => router.push(item.path)}
+              {coachAppointmentsQuery.isLoading ? (
+                <EmptyState
+                  icon={CalendarDays}
+                  title="Loading today's sessions"
+                  hint="Coach appointments will appear here once the schedule finishes syncing."
                 />
-              ))}
+              ) : coachTodayAppointments.length === 0 ? (
+                <EmptyState
+                  icon={CalendarCheck}
+                  title="No coach sessions today"
+                  hint="Confirmed and pending coaching appointments will appear here when members book with you."
+                />
+              ) : (
+                <>
+                  {visibleCoachTodayAppointments.map((appointment, index) => {
+                    const { endLabel, startLabel } = toDateTimeRange(
+                      appointment.scheduledAt,
+                      appointment.duration,
+                    );
+                    const appointmentDate = getGymDateKey(
+                      appointment.scheduledAt,
+                    );
+                    const status = appointment.status ?? "pending";
+
+                    return (
+                      <MemberCard
+                        key={appointment.id}
+                        density="compact"
+                        hasBorder={
+                          index < visibleCoachTodayAppointments.length - 1 ||
+                          hiddenCoachTodayCount > 0
+                        }
+                        icon={CalendarCheck}
+                        label={getCoachAppointmentMemberName(appointment)}
+                        subtitle={`${formatBookingDate(appointmentDate)} | ${startLabel} - ${endLabel}`}
+                        trailingLabel={getReadableStatus(status)}
+                        trailingTone={getStatusTone(status)}
+                        onClick={() => router.push("/schedule")}
+                      />
+                    );
+                  })}
+                  {hiddenCoachTodayCount > 0 ? (
+                    <MemberCard
+                      density="compact"
+                      icon={CalendarDays}
+                      label={`${hiddenCoachTodayCount} more session${hiddenCoachTodayCount === 1 ? "" : "s"} today`}
+                      subtitle="Open Schedule to review the rest of your queue."
+                      onClick={() => router.push("/schedule")}
+                    />
+                  ) : null}
+                </>
+              )}
             </MemberSurface>
           </MemberSection>
         </div>
