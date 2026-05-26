@@ -10,9 +10,17 @@ type Props = {
   activeColor: string;
   inactiveColor: string;
   useAnimations: boolean;
+  accessibilityLabel?: string;
 };
 
-export function FitSquareToggle({ value, onValueChange, activeColor, inactiveColor, useAnimations }: Props) {
+export function FitSquareToggle({
+  value,
+  onValueChange,
+  activeColor,
+  inactiveColor,
+  useAnimations,
+  accessibilityLabel
+}: Props) {
   const { colors } = useTheme();
   const progress = useSharedValue(value ? 1 : 0);
 
@@ -31,7 +39,13 @@ export function FitSquareToggle({ value, onValueChange, activeColor, inactiveCol
   }));
 
   return (
-    <Pressable onPress={() => onValueChange(!value)} style={sqStyles.track}>
+    <Pressable
+      onPress={() => onValueChange(!value)}
+      style={sqStyles.track}
+      accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel ?? "Toggle setting"}
+      accessibilityState={{ checked: value }}
+    >
       <Animated.View style={[sqStyles.trackFill, trackStyle]} />
       <Animated.View style={[sqStyles.thumb, { backgroundColor: colors.surface }, thumbStyle]} />
     </Pressable>

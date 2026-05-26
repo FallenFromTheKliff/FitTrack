@@ -111,6 +111,9 @@ export function AppearancePanel({ onClose }: { onClose: () => void }) {
                 key={key}
                 style={[s.themeCard, isActive && { borderColor: accent, borderWidth: 2 }]}
                 onPress={() => handleSelectTheme(key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${THEME_LABELS[key]} theme`}
+                accessibilityState={{ selected: isActive }}
               >
                 <FitText style={[s.themeCardLabel, isActive && { color: accent, fontWeight: "600" }]}>
                   {THEME_LABELS[key]}
@@ -131,6 +134,9 @@ export function AppearancePanel({ onClose }: { onClose: () => void }) {
                 key={key}
                 style={[s.fontCard, isActive && s.fontCardActive]}
                 onPress={() => handleSelectFont(key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${FONT_LABELS[key]} font`}
+                accessibilityState={{ selected: isActive }}
               >
                 <FitText
                   style={[
@@ -157,6 +163,7 @@ export function AppearancePanel({ onClose }: { onClose: () => void }) {
           activeColor={colors.brand}
           inactiveColor={colors.border}
           useAnimations={settings.animationLevel === "full"}
+          accessibilityLabel="Animations"
         />
       </View>
       {appearanceDirty && (
@@ -203,6 +210,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Push notifications"
           />
         </View>
         <View style={s.infoCardDivider} />
@@ -217,6 +225,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Email alerts"
           />
         </View>
         <View style={s.infoCardDivider} />
@@ -231,6 +240,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Class reminders"
           />
         </View>
       </View>

@@ -140,6 +140,9 @@ export function CoachAppointmentsTable({
         );
         const coachName = getCoachDisplayName(appointment.coach, "Coach");
         const { dateLabel, timeLabel } = formatAppointmentWindow(appointment);
+        const appointmentActionLabel = getAppointmentActionLabel(
+          getCoachAppointmentPaymentStatus(appointment),
+        );
 
         return (
           <div
@@ -270,6 +273,7 @@ export function CoachAppointmentsTable({
                 <FitButton
                   variant="ghost"
                   label="CLOSED"
+                  aria-label={`Open closed appointment for ${memberName} with ${coachName} on ${dateLabel} at ${timeLabel}`}
                   onClick={() => onOpenReview(appointment)}
                   style={{
                     minHeight: 30,
@@ -281,7 +285,8 @@ export function CoachAppointmentsTable({
               ) : (
                 <FitButton
                   variant={appointment.status === "pending_coach" ? "primary" : "ghost"}
-                  label={getAppointmentActionLabel(getCoachAppointmentPaymentStatus(appointment)).toUpperCase()}
+                  label={appointmentActionLabel.toUpperCase()}
+                  aria-label={`${appointmentActionLabel} appointment for ${memberName} with ${coachName} on ${dateLabel} at ${timeLabel}`}
                   onClick={() => onOpenReview(appointment)}
                   style={{
                     minHeight: 30,
@@ -377,8 +382,24 @@ export function VenueBookingsTable({
           booking.user?.email,
           "Member",
         );
+        const venueName = booking.venue?.name ?? `Venue ${booking.venueId}`;
         const start = new Date(booking.startTime);
         const end = new Date(booking.endTime);
+        const venueActionLabel = getVenueBookingActionLabel(
+          getVenueBookingPaymentStatus(booking),
+        );
+        const venueDateLabel = start.toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+        const venueTimeLabel = `${start.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        })} - ${end.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        })}`;
         return (
           <div
             key={booking.id}
@@ -424,7 +445,7 @@ export function VenueBookingsTable({
                   display: "block",
                 }}
               >
-                {booking.venue?.name ?? `Venue ${booking.venueId}`}
+                {venueName}
               </FitText>
               <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted, display: "block" }}>
                 {booking.purpose?.trim() || "General venue use"}
@@ -440,22 +461,10 @@ export function VenueBookingsTable({
                   display: "block",
                 }}
               >
-                {start.toLocaleDateString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
+                {venueDateLabel}
               </FitText>
               <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted, display: "block" }}>
-                {start.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}{" "}
-                -{" "}
-                {end.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+                {venueTimeLabel}
               </FitText>
               <FitPill
                 mode="status"
@@ -476,11 +485,12 @@ export function VenueBookingsTable({
               ) : (
                 <FitButton
                   variant={
-                    getVenueBookingActionLabel(getVenueBookingPaymentStatus(booking)) === "Review"
+                    venueActionLabel === "Review"
                       ? "primary"
                       : "ghost"
                   }
-                  label={getVenueBookingActionLabel(getVenueBookingPaymentStatus(booking)).toUpperCase()}
+                  label={venueActionLabel.toUpperCase()}
+                  aria-label={`${venueActionLabel} venue booking for ${memberName} at ${venueName} on ${venueDateLabel}, ${venueTimeLabel}`}
                   onClick={() => onOpenReview(booking)}
                   style={{
                     minHeight: 30,
@@ -538,6 +548,12 @@ function CoachRailButton({
       onClick={onPress}
       {...(draggable ? listeners : {})}
       {...(draggable ? attributes : {})}
+      aria-label={`${staff.name}, ${bookingCount} booking${
+        bookingCount === 1 ? "" : "s"
+      }${isVisible ? "" : ", hidden from member booking"}${
+        isSelected ? ", selected" : ""
+      }`}
+      aria-pressed={isSelected}
       style={{
         width: tileSize,
         height: tileSize,

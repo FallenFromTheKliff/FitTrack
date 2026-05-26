@@ -32,6 +32,8 @@ export default function FitFABMenu({ items, isOpen }: Props) {
       {items.map((item, idx) => (
         <Animated.View key={item.label} style={optAnims[idx]?.style}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${item.label}${item.sub ? `. ${item.sub}` : ""}`}
             style={s.row}
             onPress={() => {
               setTimeout(() => item.onPress(), 0);

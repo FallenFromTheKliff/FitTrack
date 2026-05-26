@@ -223,10 +223,12 @@ export default function ChatPanel({
       >
         <div style={s.inputWrap}>
           <FitTextArea
+            id="brodigy-chat-message"
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            aria-label={placeholder}
             rows={2}
             style={s.inputField}
             disabled={disabled || isReadOnly}

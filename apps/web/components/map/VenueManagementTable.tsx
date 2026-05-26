@@ -218,6 +218,7 @@ export function VenueManagementTable<TVenue extends VenueRecord = VenueRecord>({
               }}
             >
               <FitButton
+                aria-label={`Edit ${venue.name}`}
                 label="EDIT"
                 onClick={(event) => {
                   event.stopPropagation();

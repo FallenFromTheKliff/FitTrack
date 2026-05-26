@@ -235,6 +235,9 @@ function OptionSheetModal<T extends string>({
                     }
                   ]}
                   onPress={() => onSelect(option.value)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${title}: ${option.label}`}
+                  accessibilityState={{ selected: isActive }}
                 >
                   <View style={sheetStyles.optionCopy}>
                     <FitText
@@ -536,6 +539,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                   <View style={s.inputFieldWrap}>
                     <Search size={16} color={colors.textMuted} strokeWidth={2} />
                     <FitTextInput
+                      nativeID="nutrition-log-previous-meal-search"
+                      accessibilityLabel="Search previous meals"
                       style={s.inputField}
                       placeholder="Search food, meal, unit, or macros"
                       value={previousMealSearch}
@@ -610,6 +615,9 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
               <Pressable
                 style={[s.fieldBtn, logDate ? { borderColor: colors.brand } : { borderColor: colors.fieldBorder }]}
                 onPress={() => setIsCalOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Log date: ${logDate ? formatLongDate(logDate) : "not selected"}`}
+                accessibilityState={{ expanded: isCalOpen }}
               >
                 <CalendarDays size={16} color={logDate ? colors.brand : colors.textMuted} strokeWidth={2} />
                 <FitText style={[s.fieldBtnText, logDate ? { color: colors.brand } : null]}>
@@ -635,6 +643,9 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                       : { borderColor: colors.fieldBorder }
                 ]}
                 onPress={() => setActivePicker("meal")}
+                accessibilityRole="button"
+                accessibilityLabel={`Meal type: ${selectedMealOption?.label ?? "not selected"}`}
+                accessibilityState={{ expanded: activePicker === "meal" }}
               >
                 <UtensilsCrossed size={16} color={mealName ? colors.brand : colors.textMuted} strokeWidth={2} />
                 <FitText style={[s.fieldBtnText, mealName ? { color: colors.textPrimary } : null]}>
@@ -654,6 +665,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
               <View style={[s.inputFieldWrap, fieldErrors.foodItem?.[0] ? { borderColor: colors.danger } : null]}>
                 <UtensilsCrossed size={16} color={colors.textMuted} strokeWidth={2} />
                 <FitTextInput
+                  nativeID="nutrition-log-food-item"
+                  accessibilityLabel="Food item"
                   style={s.inputField}
                   placeholder="What did you eat? e.g. Chicken breast"
                   value={foodItem}
@@ -684,6 +697,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                   </FitText>
                   <View style={[s.inputFieldWrap, fieldErrors[field.key]?.[0] ? { borderColor: colors.danger } : null]}>
                     <FitTextInput
+                      nativeID={`nutrition-log-${field.key}`}
+                      accessibilityLabel={field.label}
                       style={s.inputField}
                       placeholder={field.placeholder}
                       value={field.value}
@@ -707,6 +722,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
               <FitText style={s.sectionLabel}>PORTION</FitText>
               <View style={[s.inputFieldWrap, fieldErrors.quantity?.[0] ? { borderColor: colors.danger } : null]}>
                 <FitTextInput
+                  nativeID="nutrition-log-quantity"
+                  accessibilityLabel="Portion quantity"
                   style={s.inputField}
                   placeholder="How much did you have? e.g. 1.5"
                   value={quantity}
@@ -731,6 +748,9 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                   fieldErrors.unit?.[0] ? { borderColor: colors.danger } : { borderColor: colors.brand }
                 ]}
                 onPress={() => setActivePicker("unit")}
+                accessibilityRole="button"
+                accessibilityLabel={`Portion unit: ${selectedUnitOption?.label ?? "not selected"}`}
+                accessibilityState={{ expanded: activePicker === "unit" }}
               >
                 <Scale size={16} color={colors.brand} strokeWidth={2} />
                 <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>

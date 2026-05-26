@@ -223,6 +223,7 @@ export function EquipmentManagementTable({
                 }}
               >
                 <FitButton
+                  aria-label={`Place ${item.name}`}
                   disabled={isOutOfStock}
                   label="PLACE"
                   onClick={(event) => {

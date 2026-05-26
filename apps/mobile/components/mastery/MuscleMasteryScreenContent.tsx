@@ -705,6 +705,7 @@ export default function MuscleMasteryScreenContent({
           </View>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={`Filter muscle EXP by rank: ${controller.muscleRankFilter === "all" ? "All" : controller.muscleRankFilter}`}
             accessibilityState={{ expanded: isMuscleFilterOpen }}
             hitSlop={8}
             onPress={() => setIsMuscleFilterOpen((open) => !open)}
@@ -930,6 +931,9 @@ export default function MuscleMasteryScreenContent({
                     },
                   ]}
                   onPress={() => controller.setActiveTab(tab.value)}
+                  accessibilityRole="tab"
+                  accessibilityLabel={`Show ${tab.label}`}
+                  accessibilityState={{ selected: active }}
                 >
                   <FitText
                     style={[

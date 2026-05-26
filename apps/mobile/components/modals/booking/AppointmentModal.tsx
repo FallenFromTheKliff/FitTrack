@@ -371,7 +371,7 @@ export default function AppointmentModal({
     createAppointmentMutationOptions(mobileApiClient, queryClient),
   );
 
-  const bookingLabel = useLoadingText(
+  const sendingRequestLabel = useLoadingText(
     "SENDING REQUEST",
     createAppointmentMutation.isPending,
   );
@@ -656,6 +656,9 @@ export default function AppointmentModal({
                                 setSpecializationFilter(filter);
                                 setSelectedSlotLabel("");
                               }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Filter coaches by specialty: ${filter}`}
+                              accessibilityState={{ selected: isActive }}
                             >
                               <FitText
                                 style={[
@@ -686,6 +689,9 @@ export default function AppointmentModal({
                                 setMinimumRating(filter.value);
                                 setSelectedSlotLabel("");
                               }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Filter coaches by rating: ${filter.label}`}
+                              accessibilityState={{ selected: isActive }}
                             >
                               <FitText
                                 style={[
@@ -729,6 +735,9 @@ export default function AppointmentModal({
                                 setErrorText("");
                                 setSelectedSlotLabel("");
                               }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Select coach ${getCoachName(coach)}. ${getCoachPrimarySpecialty(coach)}. ${getCoachPriceLabel(coach)}. ${getCoachRatingLabel(coach)}.`}
+                              accessibilityState={{ selected: isActive }}
                             >
                               <View
                                 style={[
@@ -892,6 +901,9 @@ export default function AppointmentModal({
                               setPlanMode(option.key);
                               setErrorText("");
                             }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Select session plan: ${option.title}, ${option.sessionCount} session${option.sessionCount === 1 ? "" : "s"}`}
+                            accessibilityState={{ selected: isActive }}
                           >
                             <View style={{ flex: 1, gap: 3 }}>
                               <FitText style={s.planOptionTitle}>
@@ -929,6 +941,8 @@ export default function AppointmentModal({
                         },
                       ]}
                       onPress={() => setIsCalOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select appointment date. Current date ${formatBookingDate(selectedDate)}`}
                     >
                       <CalendarDays
                         size={16}
@@ -952,6 +966,8 @@ export default function AppointmentModal({
                         },
                       ]}
                       onPress={() => setIsTimeOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select appointment time slot. Current selection ${selectedSlotLabel || "none"}`}
                     >
                       <Clock
                         size={16}
@@ -1037,7 +1053,13 @@ export default function AppointmentModal({
                 flex={1}
               />
               <FitButton
-                label={step === "coach" ? "Continue" : bookingLabel}
+                label={
+                  step === "coach"
+                    ? "Continue"
+                    : createAppointmentMutation.isPending
+                      ? sendingRequestLabel
+                      : "Send Request"
+                }
                 variant="primary"
                 onPress={step === "coach" ? goToTimeStep : handleConfirm}
                 disabled={
@@ -1098,7 +1120,7 @@ export default function AppointmentModal({
         yesLabel={appointmentConfirmation?.yesLabel ?? "Confirm"}
         noLabel="Cancel"
         isLoading={createAppointmentMutation.isPending}
-        loadingLabel={bookingLabel}
+        loadingLabel={sendingRequestLabel}
         loadingTitle="Submitting appointment"
         onNo={() => {
           if (createAppointmentMutation.isPending) {

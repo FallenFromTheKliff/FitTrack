@@ -59,6 +59,7 @@ export default function FitPager({
       <FitButton
         icon={ChevronLeft}
         iconOnly
+        label="Previous page"
         iconSize={18}
         onPress={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
         variant={canGoPrev ? "primary" : "ghost"}
@@ -71,6 +72,7 @@ export default function FitPager({
       <FitButton
         icon={ChevronRight}
         iconOnly
+        label="Next page"
         iconSize={18}
         onPress={() => onPageChange(Math.min(safeTotalPages, safeCurrentPage + 1))}
         variant={canGoNext ? "primary" : "ghost"}

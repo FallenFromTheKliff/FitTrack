@@ -741,14 +741,20 @@ export default function BookingsScreen() {
         icon: CalendarCheck,
         iconColor: colors.brand,
         iconBg: colors.surfaceRaised,
-        onPress: () => setReservationOpen(true),
+        onPress: () => {
+          setFabOpen(false);
+          setReservationOpen(true);
+        },
       },
       {
         label: "Book a Trainer",
         icon: Users,
         iconColor: colors.brand,
         iconBg: colors.surfaceRaised,
-        onPress: () => setIsAppointmentOpen(true),
+        onPress: () => {
+          setFabOpen(false);
+          setIsAppointmentOpen(true);
+        },
       },
     ];
   }, [
@@ -756,6 +762,7 @@ export default function BookingsScreen() {
     colors.surfaceRaised,
     isFrozen,
     isUserRole,
+    setFabOpen,
     setReservationOpen,
   ]);
 
@@ -1783,26 +1790,41 @@ export default function BookingsScreen() {
           : isCoachRole
             ? "Sessions unavailable"
             : "Appointments unavailable";
+  const hasActiveListFilters = Boolean(
+    debouncedSearchQuery.trim() || statusFilter !== "all" || startDate || endDate
+  );
   const emptyTitle =
-    activeSection === "bookings"
-      ? "No reservations"
-      : activeSection === "clients"
-        ? "No clients found"
-        : activeSection === "earnings"
-          ? "No earnings found"
-          : isCoachRole
-            ? "No sessions found"
-            : "No appointments found";
+    hasActiveListFilters
+      ? activeSection === "bookings"
+        ? "No matching reservations"
+        : activeSection === "clients"
+          ? "No matching clients"
+          : activeSection === "earnings"
+            ? "No matching earnings"
+            : isCoachRole
+              ? "No matching sessions"
+              : "No matching appointments"
+      : activeSection === "bookings"
+        ? "No reservations"
+        : activeSection === "clients"
+          ? "No clients found"
+          : activeSection === "earnings"
+            ? "No earnings found"
+            : isCoachRole
+              ? "No sessions found"
+              : "No appointments found";
   const emptyHint =
-    activeSection === "bookings"
-      ? "Your reservations will appear here"
-      : activeSection === "clients"
-        ? "Client profiles appear after assigned coach sessions."
-        : activeSection === "earnings"
-          ? "Completed coach sessions will appear here."
-          : isCoachRole
-            ? "Coach sessions will appear here"
-            : "Your trainer appointments will appear here";
+    hasActiveListFilters
+      ? "Clear the search or filters to bring the rest of the list back into view."
+      : activeSection === "bookings"
+        ? "Your reservations will appear here"
+        : activeSection === "clients"
+          ? "Client profiles appear after assigned coach sessions."
+          : activeSection === "earnings"
+            ? "Completed coach sessions will appear here."
+            : isCoachRole
+              ? "Coach sessions will appear here"
+              : "Your trainer appointments will appear here";
 
   return (
     <View style={[base.screen, !isFocused && { display: "none" }]}>
@@ -1824,6 +1846,9 @@ export default function BookingsScreen() {
               }}
               style={s.filterBtn}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={isFilterOpen ? "Close booking filters" : "Open booking filters"}
+              accessibilityState={{ expanded: isFilterOpen }}
             >
               <SlidersHorizontal
                 size={20}

@@ -84,6 +84,7 @@ export const FitTextInput = forwardRef<HTMLInputElement, FitTextInputProps>(func
     <input
       {...props}
       ref={ref}
+      name={props.name ?? (typeof props.id === "string" ? props.id : undefined)}
       className={cn("flex-1 bg-transparent outline-none text-sm border-none", fontClass, className)}
       style={{
         ...s.input(props.disabled),
@@ -105,6 +106,7 @@ export const FitTextArea = forwardRef<HTMLTextAreaElement, FitTextAreaProps>(fun
     <textarea
       {...props}
       ref={ref}
+      name={props.name ?? (typeof props.id === "string" ? props.id : undefined)}
       className={cn("flex-1 bg-transparent outline-none text-sm resize-none border-none", fontClass, className)}
       style={{ ...s.area(props.disabled), ...style }}
     />

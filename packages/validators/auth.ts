@@ -262,9 +262,26 @@ export const registerSchema = z
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(8),
-    newPassword: z.string().min(8),
-    confirmPassword: z.string()
+    currentPassword: z.string().trim().min(1, "Current password is required"),
+    newPassword: z
+      .string({ required_error: "New password is required" })
+      .trim()
+      .min(1, "New password is required")
+      .min(8, "New password must be at least 8 characters long")
+      .max(64, "New password must not exceed 64 characters")
+      .refine((value) => /[A-Z]/.test(value), {
+        message: "New password must contain at least one uppercase letter",
+      })
+      .refine((value) => /[a-z]/.test(value), {
+        message: "New password must contain at least one lowercase letter",
+      })
+      .refine((value) => /\d/.test(value), {
+        message: "New password must contain at least one number",
+      })
+      .refine((value) => authStrongPasswordPattern.test(value), {
+        message: "New password must contain at least one special character",
+      }),
+    confirmPassword: z.string().trim().min(1, "Please confirm your new password")
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords do not match",

@@ -381,9 +381,9 @@ function MemberProfileBody() {
           <MemberCard
             hasBorder
             icon={UserCog}
-            label="Edit Profile"
+            label="Profile Settings"
             onClick={() => router.push("/settings")}
-            subtitle="Update member-facing preferences and account controls."
+            subtitle="Open settings for password, preferences, and account support."
           />
           <MemberCard
             hasBorder
@@ -676,6 +676,11 @@ function CoachProfileManagementPanel() {
   const updateProfileMutation = useMutation(updateCoachProfileMutationOptions(webApiClient, queryClient));
   const isSaving = updateProfileMutation.isPending;
   const coachProfileReadOnly = !isCoachProfileEditing || isPending || isSaving;
+  const savedCoachProfileForm = useMemo(
+    () => createCoachProfileFormState(coachProfile),
+    [coachProfile],
+  );
+  const hasCoachProfileChanges = JSON.stringify(form) !== JSON.stringify(savedCoachProfileForm);
   const selectedSpecializations = useMemo(
     () => splitCoachListInput(form.specializations),
     [form.specializations],
@@ -693,9 +698,9 @@ function CoachProfileManagementPanel() {
   );
 
   useEffect(() => {
-    setForm(createCoachProfileFormState(coachProfile));
+    setForm(savedCoachProfileForm);
     setIsCoachProfileEditing(false);
-  }, [coachProfile]);
+  }, [savedCoachProfileForm]);
 
   const setField = <K extends keyof CoachProfileFormState>(
     key: K,
@@ -749,6 +754,11 @@ function CoachProfileManagementPanel() {
       });
     }
   };
+  const handleCancelCoachProfile = () => {
+    setForm(savedCoachProfileForm);
+    setIsCoachProfileEditing(false);
+    setMessage(null);
+  };
 
   return (
     <div
@@ -781,6 +791,8 @@ function CoachProfileManagementPanel() {
         <label style={{ display: "grid", gap: 6 }}>
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Display Name</FitText>
           <FitTextInput
+            id="coach-profile-display-name"
+            aria-label="Display Name"
             value={form.displayName}
             disabled={coachProfileReadOnly}
             onChange={(event) => setField("displayName", event.target.value)}
@@ -790,6 +802,8 @@ function CoachProfileManagementPanel() {
         <label style={{ display: "grid", gap: 6 }}>
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Skills</FitText>
           <FitTextInput
+            id="coach-profile-skills"
+            aria-label="Skills"
             value={form.skills}
             placeholder="CPR, Olympic lifting, mobility coaching"
             disabled={coachProfileReadOnly}
@@ -819,6 +833,7 @@ function CoachProfileManagementPanel() {
                   key={option.value}
                   type="button"
                   disabled={coachProfileReadOnly}
+                  aria-pressed={selected}
                   onClick={() => toggleSpecialization(option.value)}
                   style={{
                     backgroundColor: selected ? `${colors.brand}18` : colors.surfaceRaised,
@@ -845,6 +860,7 @@ function CoachProfileManagementPanel() {
                   key={specialization}
                   type="button"
                   disabled={coachProfileReadOnly}
+                  aria-pressed
                   onClick={() => toggleSpecialization(specialization)}
                   style={{
                     backgroundColor: `${colors.warning}12`,
@@ -869,6 +885,8 @@ function CoachProfileManagementPanel() {
           <label style={{ display: "grid", gap: 6 }}>
             <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Rate</FitText>
             <FitTextInput
+              id="coach-profile-rate"
+              aria-label="Rate"
               type="number"
               min="0"
               value={form.hourlyRate}
@@ -900,6 +918,9 @@ function CoachProfileManagementPanel() {
         <label style={{ display: "grid", gap: 6 }}>
           <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>Bio</FitText>
           <textarea
+            id="coach-profile-bio"
+            name="coach-profile-bio"
+            aria-label="Bio"
             value={form.bio}
             disabled={coachProfileReadOnly}
             onChange={(event) => setField("bio", event.target.value)}
@@ -915,14 +936,23 @@ function CoachProfileManagementPanel() {
           />
         </label>
         {isCoachProfileEditing ? (
-          <FitButton
-            variant="primary"
-            label={isSaving ? "SAVING..." : "SAVE COACH PROFILE"}
-            loading={isSaving}
-            disabled={isPending || isSaving || !coachProfile}
-            onClick={handleSaveCoachProfile}
-            fullWidth
-          />
+          <div style={{ display: "flex", gap: 10 }}>
+            <FitButton
+              variant="ghost"
+              label="Cancel"
+              disabled={isSaving}
+              onClick={handleCancelCoachProfile}
+              fullWidth
+            />
+            <FitButton
+              variant="primary"
+              label={isSaving ? "SAVING..." : "SAVE COACH PROFILE"}
+              loading={isSaving}
+              disabled={isPending || isSaving || !coachProfile || !hasCoachProfileChanges}
+              onClick={handleSaveCoachProfile}
+              fullWidth
+            />
+          </div>
         ) : (
           <FitButton
             variant="primary"
@@ -971,6 +1001,7 @@ function OperationsProfileSettingsPage() {
   const isCoach = user?.role === "COACH";
 
   const renderLabeledInput = ({
+    id,
     label,
     icon: Icon,
     value,
@@ -978,6 +1009,7 @@ function OperationsProfileSettingsPage() {
     type = "text",
     onChange
   }: {
+    id: string;
     label: string;
     icon: typeof User;
     value: string;
@@ -990,6 +1022,8 @@ function OperationsProfileSettingsPage() {
       <div style={{ position: "relative" }}>
         <Icon size={14} color={colors.textMuted} style={s.fieldIcon} />
         <FitTextInput
+          id={id}
+          aria-label={label}
           type={type}
           value={value}
           placeholder={placeholder}
@@ -1065,6 +1099,7 @@ function OperationsProfileSettingsPage() {
                 <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
                   <div style={s.twoColumnFieldGrid}>
                     {renderLabeledInput({
+                      id: "profile-first-name",
                       label: "First Name",
                       icon: User,
                       value: personalData.firstName,
@@ -1072,6 +1107,7 @@ function OperationsProfileSettingsPage() {
                       onChange: (value) => setPersonalData((prev) => ({ ...prev, firstName: value }))
                     })}
                     {renderLabeledInput({
+                      id: "profile-last-name",
                       label: "Last Name",
                       icon: User,
                       value: personalData.lastName,
@@ -1085,6 +1121,7 @@ function OperationsProfileSettingsPage() {
                       {field.key === "dateOfBirth" ? (
                         <FitButton
                           variant="field"
+                          aria-label={`${field.label}: ${personalData.dateOfBirth ? formatDate(personalData.dateOfBirth, "MMM d, yyyy") : "Select date"}`}
                           disabled={!editing}
                           onClick={() => {
                             if (!editing) return;
@@ -1107,6 +1144,8 @@ function OperationsProfileSettingsPage() {
                         <div style={{ position: "relative" }}>
                           <field.icon size={14} color={colors.textMuted} style={s.fieldIcon} />
                           <FitTextInput
+                            id={`profile-${field.key}`}
+                            aria-label={field.label}
                             type={field.type || "text"}
                             value={personalData[field.key]}
                             placeholder={field.placeholder}

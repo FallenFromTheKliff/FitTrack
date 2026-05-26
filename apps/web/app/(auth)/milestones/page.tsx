@@ -399,6 +399,21 @@ function slugifyMilestoneKey(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function isPlaceholderEvidenceUrl(value: string | null | undefined) {
+  if (!value) return true;
+  try {
+    const { hostname } = new URL(value);
+    return (
+      hostname === "fittrack.local" ||
+      hostname.endsWith(".fittrack.local") ||
+      hostname === "fittrack.dev" ||
+      hostname.endsWith(".fittrack.dev")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isAdvancedCondition(value: Record<string, unknown> | null | undefined) {
   if (!value) return false;
   return Boolean(value.all || value.any || typeof value.metric !== "string");
@@ -698,6 +713,7 @@ export default function MilestonesPage() {
   useEffect(() => {
     if (selectedEvidence && selectedEvidence.id !== selectedEvidenceId) {
       setSelectedEvidenceId(selectedEvidence.id);
+      setReviewNotes("");
     }
   }, [selectedEvidence, selectedEvidenceId]);
 
@@ -943,6 +959,10 @@ export default function MilestonesPage() {
     ],
     [colors],
   );
+  const selectEvidenceRecord = (record: FitnessMilestoneEvidenceSubmissionRecord) => {
+    setSelectedEvidenceId(record.id);
+    setReviewNotes("");
+  };
 
   const isSavingDefinition = createMutation.isPending || updateMutation.isPending;
   const canSaveDefinition =
@@ -1171,7 +1191,7 @@ export default function MilestonesPage() {
               loadingMessage="Loading milestone evidence..."
               emptyMessage="No milestone proof items match the current filters."
               compact
-              onRowClick={(row) => setSelectedEvidenceId(row.id)}
+              onRowClick={selectEvidenceRecord}
               actions={[
                 {
                   label: "Open",
@@ -1179,7 +1199,7 @@ export default function MilestonesPage() {
                   icon: Eye,
                   iconOnly: true,
                   ariaLabel: (row) => `Open proof for ${row.milestoneTitle ?? "milestone"}`,
-                  onClick: (row) => setSelectedEvidenceId(row.id),
+                  onClick: selectEvidenceRecord,
                 },
               ]}
             />
@@ -2407,6 +2427,23 @@ function EvidenceInspector({
   }
 
   const canReview = record.status === "pending";
+  const hasUsableEvidenceUrl = !isPlaceholderEvidenceUrl(record.fileUrl);
+  const mediaContent = record.evidenceType === "image" && hasUsableEvidenceUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={record.fileUrl} alt={`${record.milestoneTitle ?? "Milestone"} proof`} />
+  ) : (
+    <div className="evidence-video-placeholder">
+      <FileVideo size={36} color={colors.brand} />
+      <FitText style={{ display: "block", marginTop: 10, fontWeight: 900 }}>
+        {hasUsableEvidenceUrl ? "Open MP4 evidence" : "Evidence file unavailable"}
+      </FitText>
+      <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
+        {hasUsableEvidenceUrl
+          ? "MP4 uploads are capped at 15 MiB."
+          : "Seeded placeholder media is not available in this environment."}
+      </FitText>
+    </div>
+  );
 
   return (
     <FitSection heading="Proof Inspector">
@@ -2430,22 +2467,15 @@ function EvidenceInspector({
           </div>
         </div>
 
-        <a href={record.fileUrl} target="_blank" rel="noreferrer" className="evidence-media-card">
-          {record.evidenceType === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={record.fileUrl} alt={`${record.milestoneTitle ?? "Milestone"} proof`} />
-          ) : (
-            <div className="evidence-video-placeholder">
-              <FileVideo size={36} color={colors.brand} />
-              <FitText style={{ display: "block", marginTop: 10, fontWeight: 900 }}>
-                Open MP4 evidence
-              </FitText>
-              <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-                MP4 uploads are capped at 15 MiB.
-              </FitText>
-            </div>
-          )}
-        </a>
+        {hasUsableEvidenceUrl ? (
+          <a href={record.fileUrl} target="_blank" rel="noreferrer" className="evidence-media-card">
+            {mediaContent}
+          </a>
+        ) : (
+          <div className="evidence-media-card" aria-label="Evidence file unavailable">
+            {mediaContent}
+          </div>
+        )}
 
         <div className="evidence-meta-grid">
           <InspectorFact label="Evidence type" value={formatLabel(record.evidenceType)} />
@@ -2466,6 +2496,8 @@ function EvidenceInspector({
         ) : null}
 
         <FitTextArea
+          id="milestone-evidence-review-notes"
+          name="milestoneEvidenceReviewNotes"
           value={reviewNotes}
           onChange={(event) => onReviewNotesChange(event.target.value)}
           placeholder="Add a short note for this decision"

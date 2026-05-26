@@ -248,6 +248,9 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
                       key={rating}
                       onPress={() => setFeedbackRating(rating)}
                       hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Venue rating: ${rating} star${rating === 1 ? "" : "s"}`}
+                      accessibilityState={{ selected: rating === feedbackRating }}
                       style={{
                         alignItems: "center",
                         backgroundColor: colors.surfaceRaised,
@@ -269,6 +272,8 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
                   ))}
                 </View>
                 <TextInput
+                  nativeID="venue-feedback-comment"
+                  accessibilityLabel="Optional note about this venue"
                   value={feedbackComment}
                   onChangeText={(value) => {
                     setFeedbackComment(value);

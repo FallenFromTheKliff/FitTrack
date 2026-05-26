@@ -144,6 +144,7 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Automatic help modals"
           />
         </View>
         <FitText style={s.infoCardHint}>

@@ -19,13 +19,21 @@ export default function AiPage() {
   const { user } = useAuth();
 
   if (user?.role) {
-    return <BrodigyAiPageBody />;
+    return <BrodigyAiPageBody role={user.role} />;
   }
 
   return null;
 }
 
-function BrodigyAiPageBody() {
+function getChatPlaceholder(role: string) {
+  if (role === "USER") {
+    return "Ask BrodigyAI about your training plan, recovery, bookings, or membership...";
+  }
+
+  return "Ask BrodigyAI about revenue, attendance, staffing, inventory, or gym operations...";
+}
+
+function BrodigyAiPageBody({ role }: { role: string }) {
   const { colors } = useTheme();
   const s = useMemo(() => chatbotStyles(colors), [colors]);
   const fadeIn = useFadeIn();
@@ -196,7 +204,7 @@ function BrodigyAiPageBody() {
             placeholder={
               isSelectedSessionDeleted
                 ? "Restore this chat to continue the conversation."
-                : "Ask BrodigyAI about revenue, attendance, staffing, inventory, or gym operations..."
+                : getChatPlaceholder(role)
             }
             showBackButton={isMobileBrodigy}
           />

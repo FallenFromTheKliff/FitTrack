@@ -171,18 +171,44 @@ function formatAttendanceQrCountdown(remainingMs: number) {
   if (remainingMs <= 0) return "Refreshing...";
 
   const totalSeconds = Math.ceil(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return hours > 0
+      ? `${days}d ${hours}h remaining`
+      : `${days}d remaining`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m remaining`;
+  }
+
+  const displayMinutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")} remaining`;
+  return `${displayMinutes}:${seconds.toString().padStart(2, "0")} remaining`;
 }
 
 function formatShortCountdown(remainingMs: number) {
   if (remainingMs <= 0) return "0:00";
 
   const totalSeconds = Math.ceil(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  const displayMinutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  return `${displayMinutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function getFutureRemainingMs(isoString?: string | null) {
@@ -685,8 +711,9 @@ export function useProfileScreen() {
       setTerminateVisible(false);
     } catch {
       return;
+    } finally {
+      if (isMounted.current) setIsTerminating(false);
     }
-    if (isMounted.current) setIsTerminating(false);
   };
 
   const handleCancelTermination = async () => {
@@ -700,8 +727,9 @@ export function useProfileScreen() {
       setCancelVisible(false);
     } catch {
       return;
+    } finally {
+      if (isMounted.current) setIsCancelling(false);
     }
-    if (isMounted.current) setIsCancelling(false);
   };
 
   const handleStartAvailabilityEditor = (slot?: CoachAvailabilityRecord) => {

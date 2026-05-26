@@ -43,6 +43,33 @@ type Props = {
   selectedMilestone: AchievementReviewRecord | null;
 };
 
+function isUnavailableProofPreviewUrl(value: string | null | undefined) {
+  if (!value) return true;
+
+  const rawValue = value.trim();
+  if (!rawValue) return true;
+
+  try {
+    const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:/i.test(rawValue);
+    const parsed = isAbsoluteUrl ? new URL(rawValue) : null;
+    const hostname = parsed?.hostname.toLowerCase() ?? "";
+
+    if (
+      hostname === "fittrack.local" ||
+      hostname.endsWith(".fittrack.local") ||
+      hostname === "fittrack.dev" ||
+      hostname.endsWith(".fittrack.dev")
+    ) {
+      return true;
+    }
+
+    const pathname = parsed?.pathname ?? rawValue.split(/[?#]/, 1)[0];
+    return /\.(m4v|mov|mp4|webm)$/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function ExerciseLabMilestoneSurface({
   canAnimate,
   closedMilestoneCount,
@@ -66,6 +93,9 @@ export function ExerciseLabMilestoneSurface({
   const selectedMilestoneMetric = selectedMilestone
     ? getMilestoneMetric(selectedMilestone)
     : null;
+  const hasUsableProofPreview =
+    selectedMilestone &&
+    !isUnavailableProofPreviewUrl(selectedMilestone.proofImageUrl);
 
   return (
     <div
@@ -346,17 +376,45 @@ export function ExerciseLabMilestoneSurface({
                       padding: 16,
                     }}
                   >
-                    <img
-                      src={selectedMilestone.proofImageUrl}
-                      alt={`${selectedMilestone.badgeLabel} proof preview`}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 16,
-                        height: 170,
-                        objectFit: "cover",
-                        width: "100%",
-                      }}
-                    />
+                    {hasUsableProofPreview ? (
+                      <img
+                        src={selectedMilestone.proofImageUrl}
+                        alt={`${selectedMilestone.badgeLabel} proof preview`}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 16,
+                          height: 170,
+                          objectFit: "cover",
+                          width: "100%",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-label="Proof file unavailable"
+                        style={{
+                          alignItems: "center",
+                          border: `1px dashed ${colors.borderStrong}`,
+                          borderRadius: 16,
+                          display: "grid",
+                          gap: 8,
+                          minHeight: 170,
+                          padding: 16,
+                          placeItems: "center",
+                          textAlign: "center",
+                        }}
+                      >
+                        <FileText size={22} color={colors.textSecondary} />
+                        <FitText
+                          style={{
+                            color: colors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Proof file unavailable
+                        </FitText>
+                      </div>
+                    )}
                     <FitText
                       style={{ color: colors.textSecondary, fontSize: 11.5 }}
                     >

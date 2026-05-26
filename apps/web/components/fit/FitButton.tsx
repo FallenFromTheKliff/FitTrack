@@ -67,10 +67,13 @@ export default function FitButton({
   const needsTrailing = showTrailing || variant === "field";
   const isCard = variant === "card";
   const LeadingIcon = loading ? undefined : Icon;
+  const iconOnlyLabel =
+    iconOnly && displayLabel && !props["aria-label"] ? displayLabel : undefined;
 
   return (
       <button
           {...props}
+          aria-label={props["aria-label"] ?? iconOnlyLabel}
           ref={buttonRef}
           type={props.type ?? "button"}
           disabled={isDisabled}

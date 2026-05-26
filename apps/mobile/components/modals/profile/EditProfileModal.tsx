@@ -233,6 +233,14 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const wKg = parseFloat(weightInput);
   const hCm = parseFloat(heightInput);
   const bmiResult = wKg > 0 && hCm > 0 ? calcBMI(wKg, hCm) : null;
+  const weightError =
+    weightInput.trim().length > 0 && (!Number.isFinite(wKg) || wKg <= 0)
+      ? "Weight must be greater than zero."
+      : "";
+  const heightError =
+    heightInput.trim().length > 0 && (!Number.isFinite(hCm) || hCm <= 0)
+      ? "Height must be greater than zero."
+      : "";
   const avatarInitials =
     [
       (personalForm.watch("firstName") ?? "").trim().charAt(0),
@@ -352,6 +360,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
 
   const handleSave = personalForm.handleSubmit(async (personal) => {
     if (isSubmitting) return;
+    if (weightError || heightError) return;
     await commitSave(personal);
   });
 
@@ -386,11 +395,23 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
         <Animated.View style={[s.card, { height: modalCardHeight }, cardStyle]}>
           <View style={s.header}>
             <View style={s.tabPill}>
-              <Pressable style={[s.tabBtn, activeTab === "personal" && s.tabBtnActive]} onPress={() => setActiveTab("personal")}>
+              <Pressable
+                style={[s.tabBtn, activeTab === "personal" && s.tabBtnActive]}
+                onPress={() => setActiveTab("personal")}
+                accessibilityRole="tab"
+                accessibilityLabel="Personal profile tab"
+                accessibilityState={{ selected: activeTab === "personal" }}
+              >
                 <User size={14} color={activeTab === "personal" ? colors.textPrimary : colors.textSecondary} strokeWidth={2} />
                 <FitText style={[s.tabLabel, activeTab === "personal" && s.tabLabelActive]}>Personal</FitText>
               </Pressable>
-              <Pressable style={[s.tabBtn, activeTab === "fitness" && s.tabBtnActive]} onPress={() => setActiveTab("fitness")}>
+              <Pressable
+                style={[s.tabBtn, activeTab === "fitness" && s.tabBtnActive]}
+                onPress={() => setActiveTab("fitness")}
+                accessibilityRole="tab"
+                accessibilityLabel={`${isCoach ? "Coach" : "Fitness"} profile tab`}
+                accessibilityState={{ selected: activeTab === "fitness" }}
+              >
                 <Dumbbell size={14} color={activeTab === "fitness" ? colors.textPrimary : colors.textSecondary} strokeWidth={2} />
                 <FitText style={[s.tabLabel, activeTab === "fitness" && s.tabLabelActive]}>{isCoach ? "Coach" : "Fitness"}</FitText>
               </Pressable>
@@ -407,7 +428,11 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
             {activeTab === "personal" ? (
               <>
                 <View style={s.avatarRow}>
-                  <Pressable onPress={handlePickImage}>
+                  <Pressable
+                    onPress={handlePickImage}
+                    accessibilityRole="button"
+                    accessibilityLabel="Change profile photo"
+                  >
                     <View style={s.avatarWrap}>
                       {displayedAvatarUri ? (
                         <FitAvatarImage
@@ -501,6 +526,9 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                         <Pressable
                           key={option.value}
                           disabled={isSubmitting}
+                          accessibilityRole="radio"
+                          accessibilityLabel={option.label}
+                          accessibilityState={{ disabled: isSubmitting, selected: isActive }}
                           onPress={() =>
                             personalForm.setValue("gender", option.value, {
                               shouldDirty: true
@@ -532,11 +560,19 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
               <>
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Role</FitText>
-                  <FitTextInput value={roleValue || "--"} editable={false} style={[s.fitInput, { color: colors.brand }]} />
+                  <FitTextInput
+                    nativeID="coach-role"
+                    accessibilityLabel="Role"
+                    value={roleValue || "--"}
+                    editable={false}
+                    style={[s.fitInput, { color: colors.brand }]}
+                  />
                 </View>
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Hourly Rate</FitText>
                   <FitTextInput
+                    nativeID="coach-hourly-rate"
+                    accessibilityLabel="Hourly Rate"
                     value={coachHourlyRate}
                     placeholder="e.g. 850"
                     keyboardType="phone-pad"
@@ -548,6 +584,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Specialties</FitText>
                   <FitTextInput
+                    nativeID="coach-specialties"
+                    accessibilityLabel="Specialties"
                     value={coachSpecialties}
                     placeholder="Strength, Boxing"
                     editable={!isSubmitting}
@@ -558,6 +596,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Certifications</FitText>
                   <FitTextInput
+                    nativeID="coach-certifications"
+                    accessibilityLabel="Certifications"
                     value={coachCertifications}
                     placeholder="NASM, CPR"
                     editable={!isSubmitting}
@@ -568,6 +608,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.bmiCard}>
                   <FitText style={s.fitLabel}>Bio</FitText>
                   <FitTextInput
+                    nativeID="coach-bio"
+                    accessibilityLabel="Bio"
                     value={coachBio}
                     placeholder="Tell members about your coaching style"
                     editable={!isSubmitting}
@@ -582,6 +624,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Role</FitText>
                   <FitTextInput
+                    nativeID="member-role"
+                    accessibilityLabel="Role"
                     value={roleValue || "--"}
                     editable={false}
                     style={[s.fitInput, { color: colors.brand }]}
@@ -590,6 +634,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Tier</FitText>
                   <FitTextInput
+                    nativeID="member-tier"
+                    accessibilityLabel="Tier"
                     value={tierValue || "--"}
                     editable={false}
                     style={[s.fitInput, { color: colors.brand }]}
@@ -598,6 +644,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Member Since</FitText>
                   <FitTextInput
+                    nativeID="member-since"
+                    accessibilityLabel="Member Since"
                     value={memberSinceValue}
                     editable={false}
                     style={[s.fitInput, { color: colors.textSecondary }]}
@@ -606,6 +654,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Weight (kg)</FitText>
                   <FitTextInput
+                    nativeID="member-weight"
+                    accessibilityLabel="Weight (kg)"
                     value={weightInput}
                     placeholder="e.g. 70"
                     keyboardType="phone-pad"
@@ -614,10 +664,17 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     onChangeText={(text) => setWeightInput(text.replace(/[^0-9]/g, ""))}
                     style={s.fitInput}
                   />
+                  {weightError ? (
+                    <FitText style={{ color: colors.danger, fontSize: 12 }}>
+                      {weightError}
+                    </FitText>
+                  ) : null}
                 </View>
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Height (cm)</FitText>
                   <FitTextInput
+                    nativeID="member-height"
+                    accessibilityLabel="Height (cm)"
                     value={heightInput}
                     placeholder="e.g. 170"
                     keyboardType="phone-pad"
@@ -626,6 +683,11 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     onChangeText={(text) => setHeightInput(text.replace(/[^0-9]/g, ""))}
                     style={s.fitInput}
                   />
+                  {heightError ? (
+                    <FitText style={{ color: colors.danger, fontSize: 12 }}>
+                      {heightError}
+                    </FitText>
+                  ) : null}
                 </View>
                 <View style={s.bmiCard}>
                   <FitText style={s.fitLabel}>BMI</FitText>

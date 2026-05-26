@@ -133,13 +133,22 @@ export default function ChatbotScreenContent({
       <View style={[styles.inputBar, { paddingBottom: Math.max(14, insets.bottom + 10) }]}>
         <View style={styles.inputWrap}>
           <FitTextInput
+            nativeID="brodigyai-message-input"
+            accessibilityLabel="Type a message"
             placeholder={isFrozen ? "Account frozen" : isMemberLocked ? "Membership card required" : isSessionDeleted ? "Restore this chat to continue" : "Type a message"}
             value={input}
             onChangeText={onInputChange}
             editable={!isFrozen && !isMemberLocked && !isSessionDeleted && !isPending}
           />
         </View>
-        <Pressable onPress={onSend} disabled={!canSend} style={[styles.sendBtn, !canSend && { opacity: 0.6 }]}>
+        <Pressable
+          onPress={onSend}
+          disabled={!canSend}
+          style={[styles.sendBtn, !canSend && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
+          accessibilityState={{ disabled: !canSend }}
+        >
           <ArrowUp size={20} color={colors.surface} strokeWidth={2.5} />
         </Pressable>
       </View>

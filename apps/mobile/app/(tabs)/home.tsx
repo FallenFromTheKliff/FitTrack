@@ -867,6 +867,8 @@ export default function HomeScreen() {
                 {quickActions.map((action) => (
                   <Pressable
                     key={action.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${action.label}. ${action.subtitle}`}
                     onPress={action.onPress}
                     style={s.quickCard}
                   >

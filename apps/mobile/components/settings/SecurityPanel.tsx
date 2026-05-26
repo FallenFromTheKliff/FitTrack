@@ -224,6 +224,7 @@ export function PrivacyPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Activity visible to trainers"
           />
         </View>
         <View style={s.infoCardDivider} />
@@ -241,6 +242,7 @@ export function PrivacyPanel({ onClose }: { onClose: () => void }) {
             activeColor={colors.brand}
             inactiveColor={colors.border}
             useAnimations={settings.animationLevel === "full"}
+            accessibilityLabel="Usage analytics"
           />
         </View>
       </View>
@@ -248,16 +250,10 @@ export function PrivacyPanel({ onClose }: { onClose: () => void }) {
       <View style={s.infoCard}>
         <FitText style={s.infoCardTitle}>Data Export</FitText>
         <FitText style={s.infoCardHint}>
-          Request a copy of all your FitTrack data including workouts, bookings,
-          and profile history. Your data will only be used for your account,
-          gym operations, and legally required service records.
+          Your FitTrack records include workouts, bookings, and profile history.
+          Your data will only be used for your account, gym operations, and
+          legally required service records.
         </FitText>
-        <FitButton
-          label="Request Export"
-          variant="ghost"
-          onPress={() => {}}
-          style={{ marginTop: 10 }}
-        />
       </View>
       <View style={s.footer}>
         <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />

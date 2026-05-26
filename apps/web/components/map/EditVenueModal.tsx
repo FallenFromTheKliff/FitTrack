@@ -314,12 +314,14 @@ export function EditVenueModal({
     options?: Array<{ label: string; value: string }>;
   }) => (
     <div style={{ display: "grid", gap: 6 }}>
-      <FitText as="label" style={s.fieldLabel}>
+      <FitText as="label" htmlFor={`venue-${name}`} style={s.fieldLabel}>
         {label}
         {required ? <FitText as="span" style={s.requiredAsterisk}>*</FitText> : null}
       </FitText>
       {type === "textarea" ? (
         <FitTextArea
+          id={`venue-${name}`}
+          name={name}
           rows={4}
           value={formData[name] ?? ""}
           onChange={(e) => handleChange(name, e.target.value)}
@@ -328,6 +330,9 @@ export function EditVenueModal({
         />
       ) : type === "select" ? (
         <FitSelect
+          id={`venue-${name}`}
+          name={name}
+          aria-label={label}
           fullWidth
           value={formData[name] ?? ""}
           onChange={(e) => handleChange(name, e.target.value)}
@@ -336,6 +341,8 @@ export function EditVenueModal({
         />
       ) : (
         <FitTextInput
+          id={`venue-${name}`}
+          name={name}
           value={formData[name] ?? ""}
           onChange={(e) => handleChange(name, e.target.value)}
           placeholder={placeholder}

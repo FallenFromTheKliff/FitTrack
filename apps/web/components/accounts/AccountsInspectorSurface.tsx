@@ -288,12 +288,16 @@ function CoachClientManagementPanel() {
     }
 
     setScheduleMessage(null);
-    await createManagedAppointmentMutation.mutateAsync({
-      durationMinutes: Number(durationMinutes),
-      memberId: editTarget.id,
-      memberNotes: memberNotes.trim() || undefined,
-      scheduledAt: parsedScheduleAt.toISOString(),
-    });
+    try {
+      await createManagedAppointmentMutation.mutateAsync({
+        durationMinutes: Number(durationMinutes),
+        memberId: editTarget.id,
+        memberNotes: memberNotes.trim() || undefined,
+        scheduledAt: parsedScheduleAt.toISOString(),
+      });
+    } catch {
+      // onError owns the user-facing message; keep handled validation failures out of the console.
+    }
   };
 
   const handleSubmitAppointmentFeedback = async () => {
@@ -315,13 +319,17 @@ function CoachClientManagementPanel() {
     }
 
     setFeedbackMessage(null);
-    await submitAppointmentFeedbackMutation.mutateAsync({
-      appointmentId: selectedAppointmentId,
-      payload: {
-        assessmentReport: assessmentReport.trim() || undefined,
-        coachFeedback: trimmedFeedback,
-      },
-    });
+    try {
+      await submitAppointmentFeedbackMutation.mutateAsync({
+        appointmentId: selectedAppointmentId,
+        payload: {
+          assessmentReport: assessmentReport.trim() || undefined,
+          coachFeedback: trimmedFeedback,
+        },
+      });
+    } catch {
+      // onError owns the user-facing message; keep handled validation failures out of the console.
+    }
   };
 
   const sharedInputStyle: CSSProperties = {
@@ -437,10 +445,12 @@ function CoachClientManagementPanel() {
           <label style={{ display: "grid", gap: 6 }}>
             <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Session record</FitText>
             <FitSelect
+              id="coach-client-session-record"
+              name="coachClientSessionRecord"
               fullWidth
               value={historyAppointmentId}
               onChange={(event) => setHistoryAppointmentId(event.currentTarget.value)}
-              placeholder="No sessions yet"
+              placeholder={clientAppointments.length > 0 ? "Select session" : "No sessions yet"}
               options={clientAppointments.map((appointment) => ({
                 label: formatCoachScheduleDate(appointment.scheduledAt),
                 value: appointment.id,
@@ -510,6 +520,8 @@ function CoachClientManagementPanel() {
           <label style={compactCoachFieldStyle}>
             <FitText style={compactCoachFieldLabelStyle}>Date &amp; time</FitText>
             <input
+              id="coach-client-scheduled-at"
+              name="coachClientScheduledAt"
               type="datetime-local"
               value={scheduledAt}
               onChange={(event) => {
@@ -522,6 +534,8 @@ function CoachClientManagementPanel() {
           <label style={{ display: "grid", gap: 6 }}>
             <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Duration</FitText>
             <FitSelect
+              id="coach-client-duration-minutes"
+              name="coachClientDurationMinutes"
               fullWidth
               value={durationMinutes}
               onChange={(event) => {
@@ -538,6 +552,8 @@ function CoachClientManagementPanel() {
           <label style={compactCoachFieldStyle}>
             <FitText style={compactCoachFieldLabelStyle}>Session notes</FitText>
             <textarea
+              id="coach-client-session-notes"
+              name="coachClientSessionNotes"
               rows={2}
               value={memberNotes}
               onChange={(event) => {
@@ -597,10 +613,12 @@ function CoachClientManagementPanel() {
               Completed session
             </FitText>
             <FitSelect
+              id="coach-client-completed-session"
+              name="coachClientCompletedSession"
               fullWidth
               value={selectedAppointmentId}
               onChange={(event) => setSelectedAppointmentId(event.currentTarget.value)}
-              placeholder="No completed sessions yet"
+              placeholder={completedAppointments.length > 0 ? "Select completed session" : "No completed sessions yet"}
               options={completedAppointments.map((appointment) => ({
                 label: formatCoachScheduleDate(appointment.scheduledAt),
                 value: appointment.id,
@@ -612,6 +630,8 @@ function CoachClientManagementPanel() {
           <label style={compactCoachFieldStyle}>
             <FitText style={compactCoachFieldLabelStyle}>Coach feedback</FitText>
             <textarea
+              id="coach-client-feedback"
+              name="coachClientFeedback"
               rows={2}
               value={coachFeedback}
               onChange={(event) => {
@@ -625,6 +645,8 @@ function CoachClientManagementPanel() {
           <label style={compactCoachFieldStyle}>
             <FitText style={compactCoachFieldLabelStyle}>Assessment report</FitText>
             <textarea
+              id="coach-client-assessment-report"
+              name="coachClientAssessmentReport"
               rows={2}
               value={assessmentReport}
               onChange={(event) => {
@@ -738,6 +760,7 @@ export function AccountInspectorFooter() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsPanelId = useId();
   const {
+    coachClientPanelMode,
     canEditTargetDetails,
     canManageMemberCard,
     canManualCheckInTarget,
@@ -815,6 +838,17 @@ export function AccountInspectorFooter() {
   const actionsPanelMaxHeight = isCoachActionsVariant ? "min(620px, max(340px, calc(100vh - 300px)))" : 320;
   const verifyAccountActionLabel =
     editTarget?.role?.name === "USER" ? "Verify Non-Member" : "Verify Team Member";
+
+  useEffect(() => {
+    if (!isCoach || !editTarget) {
+      setActionsOpen(false);
+      return;
+    }
+
+    if (coachClientPanelMode !== "overview") {
+      setActionsOpen(true);
+    }
+  }, [coachClientPanelMode, editTarget, isCoach]);
 
   return (
     <div style={{ display: "grid", gap: 8 }}>

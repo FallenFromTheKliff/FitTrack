@@ -528,6 +528,9 @@ function RetailSaleModal({
           const quantity = parseSaleQuantity(item.quantity);
           const subtotal = product && quantity ? product.price * quantity : 0;
           const error = lineErrors[index];
+          const productSelectLabel = product
+            ? `Sale product: ${product.name}`
+            : "Sale product: Choose product";
 
           return (
             <div
@@ -554,6 +557,7 @@ function RetailSaleModal({
                     Product
                   </FitText>
                   <FitSelect
+                    aria-label={productSelectLabel}
                     fullWidth
                     value={item.productId}
                     placeholder="Choose product"
@@ -568,6 +572,9 @@ function RetailSaleModal({
                     Qty
                   </FitText>
                   <FitTextInput
+                    aria-label={`Quantity for ${product?.name ?? "sale item"}`}
+                    name={`sale-quantity-${index + 1}`}
+                    autoComplete="off"
                     type="number"
                     min={1}
                     max={product?.stockQuantity}

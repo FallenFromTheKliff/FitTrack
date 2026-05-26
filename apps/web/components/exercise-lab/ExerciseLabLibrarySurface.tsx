@@ -37,6 +37,7 @@ export function ExerciseLabLibrarySurface() {
     surfaceTitleNavStyle,
     surfaceTopRowStyle,
   } = useExerciseLabPage();
+  const libraryTotalPages = Math.max(1, libraryMeta?.total_pages ?? 1);
 
   return (          <section
             style={{
@@ -181,13 +182,13 @@ export function ExerciseLabLibrarySurface() {
                 <FitText
                   style={{ fontSize: 12.5, color: colors.textSecondary }}
                 >
-                  Showing page {libraryMeta.page} of {libraryMeta.total_pages} /{" "}
+                  Showing page {Math.min(libraryMeta.page, libraryTotalPages)} of {libraryTotalPages} /{" "}
                   {libraryMeta.total} total exercises
                 </FitText>
                 <FitPagination
                   ariaLabel="Exercise library pagination"
-                  currentPage={libraryMeta.page}
-                  totalPages={Math.max(1, libraryMeta.total_pages)}
+                  currentPage={Math.min(libraryMeta.page, libraryTotalPages)}
+                  totalPages={libraryTotalPages}
                   onPageChange={setLibraryPage}
                   showSinglePage
                 />

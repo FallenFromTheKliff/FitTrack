@@ -87,10 +87,16 @@ export default function AppFeedbackSettingsSection() {
           ))}
         </div>
         <div style={{ display: "grid", gap: 8 }}>
-          <FitText style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700 }}>
+          <FitText
+            as="label"
+            htmlFor="settings-feedback-message"
+            style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700 }}
+          >
             Your Feedback
           </FitText>
           <FitTextArea
+            id="settings-feedback-message"
+            aria-label="Your Feedback"
             value={message}
             onChange={(event) => {
               setMessage(event.target.value);

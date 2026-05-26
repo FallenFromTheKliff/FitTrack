@@ -35,6 +35,14 @@ export default function FitSearch({
   const s = useMemo(() => makeFitSearchStyles(colors), [colors]);
   const [inputValue, setInputValue] = useState(value);
   const debouncedInput = useDebounce(inputValue, 300);
+  const fallbackName = useMemo(() => {
+    const source = ariaLabel ?? placeholder;
+    return source
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "search";
+  }, [ariaLabel, placeholder]);
 
   useEffect(() => {
     setInputValue(value);
@@ -64,7 +72,7 @@ export default function FitSearch({
       <Search size={compact ? 18 : 20} color={colors.textMuted} strokeWidth={2} />
       <FitTextInput
         id={id}
-        name={name}
+        name={name ?? fallbackName}
         aria-label={ariaLabel}
         placeholder={placeholder}
         value={inputValue}
@@ -77,6 +85,7 @@ export default function FitSearch({
           iconOnly
           icon={XCircle}
           iconSize={compact ? 16 : 18}
+          aria-label="Clear search"
           onClick={() => setInputValue("")}
         />
       )}

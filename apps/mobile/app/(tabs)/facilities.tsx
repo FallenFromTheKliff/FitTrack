@@ -234,6 +234,7 @@ export default function FacilitiesScreen() {
             <View style={s.floorToggleHeader}>
               <FitText style={s.floorToggleLabel}>LEVEL</FitText>
               <FitButton
+                accessibilityLabel="Refresh facilities map"
                 onPress={() => void doRefresh()}
                 variant="ghost"
                 icon={RefreshCw}

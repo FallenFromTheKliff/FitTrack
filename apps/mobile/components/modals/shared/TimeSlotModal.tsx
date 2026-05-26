@@ -147,6 +147,13 @@ export default function TimeSlotModal({
               const isChosen = slot.time === selectedTime;
               const isFull = slot.status === "full";
               const c = getSlotColors(slot.status, isChosen);
+              const statusLabel = isFull
+                ? "full"
+                : isChosen
+                  ? "selected"
+                  : slot.status === "waitlisted"
+                    ? "waitlist"
+                    : "available";
               return (
                 <Pressable
                   key={slot.time}
@@ -156,6 +163,9 @@ export default function TimeSlotModal({
                   ]}
                   onPress={() => !isFull && onSelect(slot)}
                   disabled={isFull}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${slot.time}, ${slot.duration}, ${statusLabel}`}
+                  accessibilityState={{ disabled: isFull, selected: isChosen }}
                 >
                   <FitText style={[s.slotTime, { color: c.text }]}>
                     {slot.time}

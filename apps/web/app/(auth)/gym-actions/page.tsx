@@ -356,7 +356,13 @@ export default function GymActionsPage() {
       (recentStatus === "all" || activity.status === recentStatus) &&
       matchesDateRange(activity.occurredAt, recentDateRange) &&
       matchesSearch(
-        [activity.actorName, activity.description, activity.status, activity.title],
+        [
+          activity.actorName,
+          activity.description,
+          activity.status,
+          labelize(activity.status),
+          activity.title,
+        ],
         recentSearch,
       ),
   );
@@ -501,7 +507,7 @@ export default function GymActionsPage() {
       key: "status",
       heading: "Status",
       render: (activity, c) => (
-        <FitPill mode="status" label={activity.status} color={c.brand} />
+        <FitPill mode="status" label={labelize(activity.status)} color={c.brand} />
       ),
     },
     {
@@ -582,6 +588,7 @@ export default function GymActionsPage() {
           >
             <FilterSearchControl
               colors={colors}
+              id="gym-actions-transactions-search"
               onChange={(value) => {
                 setTransactionSearch(value);
                 setTransactionPage(1);
@@ -592,6 +599,7 @@ export default function GymActionsPage() {
             <DateFilterInput
               ariaLabel="Filter transactions from date"
               colors={colors}
+              id="gym-actions-transactions-from"
               label="From"
               onChange={(value) => {
                 setTransactionDateRange((current) => ({ ...current, from: value }));
@@ -602,6 +610,7 @@ export default function GymActionsPage() {
             <DateFilterInput
               ariaLabel="Filter transactions to date"
               colors={colors}
+              id="gym-actions-transactions-to"
               label="To"
               onChange={(value) => {
                 setTransactionDateRange((current) => ({ ...current, to: value }));
@@ -686,6 +695,7 @@ export default function GymActionsPage() {
           >
             <FilterSearchControl
               colors={colors}
+              id="gym-actions-audit-search"
               onChange={(value) => {
                 setAuditSearch(value);
                 setAuditPage(1);
@@ -696,6 +706,7 @@ export default function GymActionsPage() {
             <DateFilterInput
               ariaLabel="Filter audit logs from date"
               colors={colors}
+              id="gym-actions-audit-from"
               label="From"
               onChange={(value) => {
                 setAuditDateRange((current) => ({ ...current, from: value }));
@@ -706,6 +717,7 @@ export default function GymActionsPage() {
             <DateFilterInput
               ariaLabel="Filter audit logs to date"
               colors={colors}
+              id="gym-actions-audit-to"
               label="To"
               onChange={(value) => {
                 setAuditDateRange((current) => ({ ...current, to: value }));
@@ -913,6 +925,7 @@ function RecentActivitySection({
         >
           <FilterSearchControl
             colors={colors}
+            id="gym-actions-recent-search"
             onChange={setSearch}
             placeholder="Search activity"
             value={search}
@@ -920,6 +933,7 @@ function RecentActivitySection({
           <DateFilterInput
             ariaLabel="Filter recent activity from date"
             colors={colors}
+            id="gym-actions-recent-from"
             label="From"
             onChange={(value) => setDateRange({ ...dateRange, from: value })}
             value={dateRange.from}
@@ -927,6 +941,7 @@ function RecentActivitySection({
           <DateFilterInput
             ariaLabel="Filter recent activity to date"
             colors={colors}
+            id="gym-actions-recent-to"
             label="To"
             onChange={(value) => setDateRange({ ...dateRange, to: value })}
             value={dateRange.to}
@@ -964,11 +979,13 @@ function RecentActivitySection({
 
 function FilterSearchControl({
   colors,
+  id,
   onChange,
   placeholder,
   value,
 }: {
   colors: ReturnType<typeof useTheme>["colors"];
+  id: string;
   onChange: (value: string) => void;
   placeholder: string;
   value: string;
@@ -988,6 +1005,8 @@ function FilterSearchControl({
     >
       <Search size={15} color={colors.textMuted} />
       <FitTextInput
+        aria-label={placeholder}
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -999,12 +1018,14 @@ function FilterSearchControl({
 function DateFilterInput({
   ariaLabel,
   colors,
+  id,
   label,
   onChange,
   value,
 }: {
   ariaLabel: string;
   colors: ReturnType<typeof useTheme>["colors"];
+  id: string;
   label: string;
   onChange: (value: string) => void;
   value: string;
@@ -1028,6 +1049,7 @@ function DateFilterInput({
       </FitText>
       <FitTextInput
         aria-label={ariaLabel}
+        id={id}
         type="date"
         value={value}
         onInput={(event) => onChange(event.currentTarget.value)}

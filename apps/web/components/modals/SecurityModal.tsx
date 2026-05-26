@@ -48,6 +48,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
 
   const renderPasswordField = ({
     label,
+    id,
     value,
     onChange,
     show,
@@ -58,6 +59,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
     extra
   }: {
     label: string;
+    id: string;
     value: string;
     onChange: (value: string) => void;
     show: boolean;
@@ -68,10 +70,12 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
     extra?: ReactNode;
   }) => (
     <div style={s.securityFieldWrap}>
-      <FitText style={s.fieldLabel}>{label}</FitText>
+      <FitText as="label" htmlFor={id} style={s.fieldLabel}>{label}</FitText>
       <div style={s.securityInputRow(error ? colors.danger : colors.fieldBorder)}>
         <Lock size={15} color={colors.textMuted} />
         <FitTextInput
+          id={id}
+          aria-label={label}
           type={show ? "text" : "password"}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -190,6 +194,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
       >
         {renderPasswordField({
           label: "Confirm Old Password",
+          id: "current-password",
           value: currentPassword,
           onChange: (value) => {
             setCurrentPassword(value);
@@ -203,6 +208,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
         })}
         {renderPasswordField({
           label: "New Password",
+          id: "new-password",
           value: newPassword,
           onChange: (value) => {
             setNewPassword(value);
@@ -217,6 +223,7 @@ export default function SecurityModal({ isOpen, onClose, onSuccess }: Props) {
         })}
         {renderPasswordField({
           label: "Confirm New Password",
+          id: "confirm-new-password",
           value: confirmNewPassword,
           onChange: (value) => {
             setConfirmNewPassword(value);

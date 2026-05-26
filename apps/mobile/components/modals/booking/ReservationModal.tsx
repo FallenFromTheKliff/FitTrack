@@ -17,12 +17,14 @@ import {
 } from "@fittrack/app-config";
 import type {
   CoachAvailabilityResponse,
+  VenueBookingRecord,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
 import type { CoachProfileRecord } from "@fittrack/types";
 
 import {
   activeCoachesQueryOptions,
+  bookingsQueryOptions,
   coachAvailabilityQueryOptions,
   createBookingMutationOptions,
   venueAvailabilityQueryOptions,
@@ -30,6 +32,7 @@ import {
 } from "@fittrack/query";
 import { getTodayString } from "@/data/bookings";
 import { formatBookingDate } from "@fittrack/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
@@ -62,6 +65,12 @@ type ReservationConfirmationState = {
   title: string;
   yesLabel: string;
 };
+
+const MEMBER_OVERLAP_STATUSES = new Set([
+  "balance_pending",
+  "confirmed",
+  "pending",
+]);
 
 function timeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -96,12 +105,19 @@ function isoTimeToMinutes(value: string) {
 }
 
 function formatDurationLabel(startLabel: string, endLabel: string) {
-  const minutes = timeToMinutes(endLabel) - timeToMinutes(startLabel);
+  let minutes = timeToMinutes(endLabel) - timeToMinutes(startLabel);
+  if (minutes <= 0) minutes += 24 * 60;
   if (minutes <= 0) return "1 hr";
-  const hours = minutes / 60;
-  return Number.isInteger(hours)
-    ? `${hours} hr${hours === 1 ? "" : "s"}`
-    : `${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours} hr${hours === 1 ? "" : "s"} ${remainingMinutes} min`;
+  }
+  if (hours > 0) {
+    return `${hours} hr${hours === 1 ? "" : "s"}`;
+  }
+  return `${minutes} min`;
 }
 
 function toVenueStartSlot(slot: VenueAvailabilityRecord): TimeSlot {
@@ -279,6 +295,31 @@ function toGymWallClockIso(date: string, minutes: number) {
   ).toISOString();
 }
 
+function getReservationWindowMs(date: string, startTime: string, endTime: string) {
+  const startMinutes = timeToMinutes(startTime);
+  let endMinutes = timeToMinutes(endTime);
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+  return {
+    end: Date.parse(toGymWallClockIso(date, endMinutes)),
+    start: Date.parse(toGymWallClockIso(date, startMinutes)),
+  };
+}
+
+function bookingOverlapsWindow(
+  booking: VenueBookingRecord,
+  window: { end: number; start: number },
+) {
+  if (!MEMBER_OVERLAP_STATUSES.has(String(booking.status).toLowerCase())) {
+    return false;
+  }
+  const bookingStart = Date.parse(booking.startTime);
+  const bookingEnd = Date.parse(booking.endTime);
+  if (!Number.isFinite(bookingStart) || !Number.isFinite(bookingEnd)) {
+    return false;
+  }
+  return window.start < bookingEnd && window.end > bookingStart;
+}
+
 function formatCurrency(value: number) {
   return `PHP ${value.toLocaleString("en-PH", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
@@ -291,6 +332,7 @@ export default function ReservationModal({
   onClose,
   onSuccess,
 }: Props) {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
@@ -354,6 +396,7 @@ export default function ReservationModal({
     () => (selectedVenue ? getVenuePresentation(selectedVenue) : null),
     [selectedVenue],
   );
+  const selectedVenueId = selectedVenue?.id;
   const selectedCoach = useMemo(
     () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
     [coaches, selectedCoachId],
@@ -373,14 +416,18 @@ export default function ReservationModal({
     () => getMonthDateKeys(calendarCursor.year, calendarCursor.month),
     [calendarCursor.month, calendarCursor.year],
   );
+  const venueCalendarQueryDates = useMemo(
+    () =>
+      isVisible && isCalOpen && selectedVenueId != null ? calendarDateKeys : [],
+    [calendarDateKeys, isCalOpen, isVisible, selectedVenueId],
+  );
   const venueCalendarQueries = useQueries({
-    queries: calendarDateKeys.map((dateKey) => ({
+    queries: venueCalendarQueryDates.map((dateKey) => ({
       ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
         mobileApiClient,
-        selectedVenue?.id,
+        selectedVenueId,
         dateKey,
       ),
-      enabled: isVisible && isCalOpen && Boolean(selectedVenue),
       staleTime: 30_000,
     })),
   });
@@ -389,7 +436,7 @@ export default function ReservationModal({
     const blockedDates: string[] = [];
 
     venueCalendarQueries.forEach((query, index) => {
-      const dateKey = calendarDateKeys[index];
+      const dateKey = venueCalendarQueryDates[index];
       const slots = query.data as VenueAvailabilityRecord[] | undefined;
       if (!dateKey || !slots) return;
 
@@ -402,7 +449,7 @@ export default function ReservationModal({
     });
 
     return { blockedVenueDates: blockedDates, highlightedVenueDates: highlightedDates };
-  }, [calendarDateKeys, venueCalendarQueries]);
+  }, [venueCalendarQueries, venueCalendarQueryDates]);
   const calendarHighlightedDates =
     selectedVenue != null ? highlightedVenueDates : fallbackCoachAvailabilityDates;
   const calendarBlockedDates = selectedVenue != null ? blockedVenueDates : [];
@@ -424,10 +471,16 @@ export default function ReservationModal({
   } = useQuery({
     ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
       mobileApiClient,
-      selectedVenue?.id,
+      selectedVenueId,
       date,
     ),
-    enabled: isVisible && !!selectedVenue && !!date,
+    enabled: isVisible && selectedVenueId != null && !!date,
+  });
+  const { data: existingBookings = [], isLoading: existingBookingsLoading } =
+    useQuery({
+    ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
+    enabled: isVisible && !!user?.id,
+    staleTime: 30_000,
   });
   const {
     data: coachAvailability,
@@ -668,6 +721,20 @@ export default function ReservationModal({
     });
   }, [availability, date, endTime, selectedVenue, startTime]);
 
+  const hasMemberTimeOverlap = useMemo(() => {
+    if (!date || !startTime || !endTime) return false;
+    const selectedWindow = getReservationWindowMs(date, startTime, endTime);
+    if (
+      !Number.isFinite(selectedWindow.start) ||
+      !Number.isFinite(selectedWindow.end)
+    ) {
+      return false;
+    }
+    return existingBookings.some((booking) =>
+      bookingOverlapsWindow(booking, selectedWindow),
+    );
+  }, [date, endTime, existingBookings, startTime]);
+
   const coachMatchesWindow = useMemo(() => {
     if (!selectedCoach) return true;
     if (!date || !startTime || !endTime) return true;
@@ -726,7 +793,9 @@ export default function ReservationModal({
     !isSelectedStartInPast &&
     !availabilityLoading &&
     !availabilityError &&
+    !existingBookingsLoading &&
     !hasConflict &&
+    !hasMemberTimeOverlap &&
     coachMatchesWindow;
 
   const handleReset = () => {
@@ -908,6 +977,8 @@ export default function ReservationModal({
           >
             <FitText style={s.sectionLabel}>DATE</FitText>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Reservation date: ${date ? formatBookingDate(date) : "Select a date"}`}
               style={[
                 s.fieldBtn,
                 { borderColor: date ? colors.brand : colors.fieldBorder },
@@ -930,6 +1001,9 @@ export default function ReservationModal({
             </FitText>
             <View style={s.twoFieldRow}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Start time: ${startTime || "Select start time"}`}
+                accessibilityState={{ disabled: !canOpenStartTime }}
                 style={[
                   s.fieldBtn,
                   s.fieldBtnFlex,
@@ -960,6 +1034,9 @@ export default function ReservationModal({
                 </FitText>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`End time: ${endTime || "Select end time"}`}
+                accessibilityState={{ disabled: !canOpenEndTime }}
                 style={[
                   s.fieldBtn,
                   s.fieldBtnFlex,
@@ -1016,6 +1093,11 @@ export default function ReservationModal({
                 The selected time overlaps an active booking.
               </FitText>
             ) : null}
+            {hasMemberTimeOverlap ? (
+              <FitText style={s.unavailableText}>
+                You already have a booking in this time window.
+              </FitText>
+            ) : null}
             {apiError !== "" ? (
               <FitText style={s.unavailableText}>{apiError}</FitText>
             ) : null}
@@ -1026,6 +1108,9 @@ export default function ReservationModal({
                 return (
                   <Pressable
                     key={venue.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${presentation.name}, PHP ${presentation.price}/${presentation.unit}${isActive ? ", selected" : ""}`}
+                    accessibilityState={{ selected: isActive }}
                     style={[
                       s.amenityCard,
                       isActive && {
@@ -1106,6 +1191,9 @@ export default function ReservationModal({
                   return (
                     <Pressable
                       key={coach.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${getCoachName(coach)}, ${coach.specialties?.[0] ?? "General Coaching"}, ${getCoachPriceLabel(coach)}, ${getCoachRatingLabel(coach)}${isActive ? ", selected" : ""}`}
+                      accessibilityState={{ selected: isActive }}
                       style={[
                         s.trainerRow,
                         isActive && {
@@ -1222,6 +1310,9 @@ export default function ReservationModal({
                         return (
                           <Pressable
                             key={option.key}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${option.label}. ${option.meta}. ${option.body}${isActive ? " Selected." : ""}`}
+                            accessibilityState={{ disabled: option.disabled, selected: isActive }}
                             style={[
                               s.paymentOptionCard,
                               isActive && {
@@ -1335,6 +1426,7 @@ export default function ReservationModal({
                 variant="link"
                 icon={Plus}
                 iconOnly
+                label="Add reservation note"
                 iconSize={18}
                 onPress={() => setNotes((prev) => [...prev, ""])}
                 disabled={notes.length >= 10}
@@ -1354,6 +1446,8 @@ export default function ReservationModal({
                     <View style={[s.inputFieldWrap, s.noteFieldWrap]}>
                       <FitText style={s.noteBullet}>-</FitText>
                       <FitTextInput
+                        nativeID={`reservation-note-${idx + 1}`}
+                        accessibilityLabel={`Reservation note ${idx + 1}`}
                         value={note}
                         onChangeText={(text) => {
                           if (text.length > 50) return;
@@ -1376,6 +1470,8 @@ export default function ReservationModal({
                     </FitText>
                   </View>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove reservation note ${idx + 1}`}
                     onPress={() =>
                       setNotes((prev) =>
                         prev.filter((_, noteIndex) => noteIndex !== idx),

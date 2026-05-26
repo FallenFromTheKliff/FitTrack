@@ -202,6 +202,9 @@ export function GymOperationsVenueBookingModal({
         <FitButton
           variant="primary"
           label={isSubmitting ? "SAVING..." : "SAVE"}
+          aria-label={
+            isSubmitting ? "Saving venue decision" : "Save venue decision"
+          }
           onClick={handleSave}
           disabled={
             isSubmitting ||
@@ -372,6 +375,7 @@ export function GymOperationsVenueBookingModal({
             <FitButton
               variant="ghost"
               label="VENUE DETAILS"
+              aria-label="Open venue details"
               onClick={() => onVenueDetails?.()}
               disabled={isSubmitting || !onVenueDetails}
               style={{ ...actionPillStyle(colors), justifySelf: "start" }}
@@ -398,10 +402,12 @@ export function GymOperationsVenueBookingModal({
               }}
             >
               {canCollectBalance
-                ? "Collect the remaining balance, or send this booking back for reschedule/rejection without marking it paid."
+                ? "Collect the remaining balance, or cancel before the booking day without marking it paid."
+                : isConfirmedSettled
+                  ? "Mark this confirmed venue booking complete or no-show. Cancel remains available only before the booking day."
                 : approvalAlsoVerifiesPayment
-                  ? "Accept the submitted payment, or send it back for reschedule/rejection without leaving Gym Operations."
-                  : "Approve, reschedule, or reject without leaving Gym Operations."}
+                  ? "Accept the submitted payment, cancel the request, or reject it without leaving Gym Operations."
+                  : "Approve, cancel, or reject without leaving Gym Operations."}
             </FitText>
             {cancellationClosed ? (
               <FitText
@@ -421,6 +427,11 @@ export function GymOperationsVenueBookingModal({
                 <FitButton
                   variant="ghost"
                   label={booking?.status === "completed" ? "COMPLETED" : "CANCELLED"}
+                  aria-label={
+                    booking?.status === "completed"
+                      ? "Venue booking completed"
+                      : "Venue booking cancelled"
+                  }
                   onClick={onClose}
                   disabled
                   style={actionPillStyle(colors)}
@@ -446,6 +457,7 @@ export function GymOperationsVenueBookingModal({
                   }
                   disabled={isSubmitting}
                   fullWidth
+                  aria-label="Venue decision"
                   style={{ minWidth: 240 }}
                 />
               ) : null}
@@ -473,6 +485,7 @@ export function GymOperationsVenueBookingModal({
               onChange={(event) => setNote(event.target.value)}
               rows={3}
               placeholder="Optional handoff note for facilities staff or front desk..."
+              aria-label="Venue decision handoff note"
               style={{ fontSize: 12, lineHeight: 1.4 }}
             />
           </div>

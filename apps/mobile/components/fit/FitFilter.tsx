@@ -65,7 +65,12 @@ export default function FitFilter({
   if (!everOpenedRef.current) return null;
 
   return (
-      <Animated.View style={[s.filterDropdown, dropdownStyle, filterPanelStyle]}>
+      <Animated.View
+        style={[s.filterDropdown, dropdownStyle, filterPanelStyle]}
+        accessibilityElementsHidden={!isOpen}
+        importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
+      >
+        {isOpen ? (
         <View style={s.filterPanel}>
           {!!topChipOptions?.length && (
               <View style={s.filterSection}>
@@ -78,6 +83,9 @@ export default function FitFilter({
                             key={opt.value}
                             style={[s.filterChip, isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "18" }]}
                             onPress={() => onTopChipChange?.(opt.value)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${topChipLabel}: ${opt.label}`}
+                            accessibilityState={{ selected: isActive }}
                         >
                           <FitText style={[s.filterChipText, isActive && { color: colors.brand, fontWeight: "600" }]}>
                             {opt.label}
@@ -99,6 +107,9 @@ export default function FitFilter({
                             key={opt.value}
                             style={[s.filterChip, isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "18" }]}
                             onPress={() => onChipChange?.(opt.value)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Status: ${opt.label}`}
+                            accessibilityState={{ selected: isActive }}
                         >
                           <FitText style={[s.filterChipText, isActive && { color: colors.brand, fontWeight: "600" }]}>
                             {opt.label}
@@ -116,6 +127,8 @@ export default function FitFilter({
                   <Pressable
                       style={[s.datePicker, startDate && { borderColor: colors.brand }]}
                       onPress={onStartDatePress}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Start date: ${startDateLabel}`}
                   >
                     <CalendarDays size={14} color={startDate ? colors.brand : colors.textMuted} strokeWidth={2} />
                     <FitText style={[s.datePickerText, startDate && { color: colors.brand }]}>{startDateLabel}</FitText>
@@ -123,19 +136,31 @@ export default function FitFilter({
                   <Pressable
                       style={[s.datePicker, endDate && { borderColor: colors.brand }]}
                       onPress={onEndDatePress}
+                      accessibilityRole="button"
+                      accessibilityLabel={`End date: ${endDateLabel}`}
                   >
                     <CalendarCheck size={14} color={endDate ? colors.brand : colors.textMuted} strokeWidth={2} />
                     <FitText style={[s.datePickerText, endDate && { color: colors.brand }]}>{endDateLabel}</FitText>
                   </Pressable>
                 </View>
                 {startDate ? (
-                    <Pressable style={s.dateResetBtn} onPress={() => onStartDateReset?.()}>
+                    <Pressable
+                      style={s.dateResetBtn}
+                      onPress={() => onStartDateReset?.()}
+                      accessibilityRole="button"
+                      accessibilityLabel="Reset start date filter"
+                    >
                       <RotateCcw size={13} color={colors.textMuted} strokeWidth={2} />
                       <FitText style={s.dateResetText}>Reset</FitText>
                     </Pressable>
                 ) : null}
                 {endDate ? (
-                    <Pressable style={s.dateResetBtn} onPress={() => onEndDateReset?.()}>
+                    <Pressable
+                      style={s.dateResetBtn}
+                      onPress={() => onEndDateReset?.()}
+                      accessibilityRole="button"
+                      accessibilityLabel="Reset end date filter"
+                    >
                       <RotateCcw size={13} color={colors.textMuted} strokeWidth={2} />
                       <FitText style={s.dateResetText}>Reset</FitText>
                     </Pressable>
@@ -143,6 +168,7 @@ export default function FitFilter({
               </View>
           )}
         </View>
+        ) : null}
       </Animated.View>
   );
 }

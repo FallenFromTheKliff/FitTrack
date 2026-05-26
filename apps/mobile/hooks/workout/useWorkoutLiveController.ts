@@ -3381,7 +3381,16 @@ export function useWorkoutLiveController() {
     onInitCamera: handleInitCamera,
     onNativeEquipmentSnapshot: handleNativeEquipmentSnapshot,
     onNativePoseFrame: handleNativePoseFrame,
-    onOpenExerciseModal: () => setIsExerciseModalOpen(true),
+    onOpenExerciseModal: () => {
+      if (typeof document !== "undefined") {
+        (document.activeElement as HTMLElement | null)?.blur?.();
+      }
+      if (typeof requestAnimationFrame !== "undefined") {
+        requestAnimationFrame(() => setIsExerciseModalOpen(true));
+        return;
+      }
+      setIsExerciseModalOpen(true);
+    },
     onOpenExerciseCreationReview: handleOpenExerciseCreationReview,
     onPause: handlePause,
     onResumeRecord: handleResumeRecord,

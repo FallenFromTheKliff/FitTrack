@@ -37,6 +37,7 @@ type FitButtonProps = {
   animatedBg?: SharedValue<string>;
   animatedBorder?: SharedValue<string>;
   animatedText?: SharedValue<string>;
+  accessibilityLabel?: string;
 };
 
 export default function FitButton({
@@ -55,7 +56,8 @@ export default function FitButton({
     textStyle,
     animatedBg,
     animatedBorder,
-    animatedText
+    animatedText,
+    accessibilityLabel
   }: FitButtonProps) {
   const { colors, activeIconColor } = useTheme();
   const { ic } = useThemeTransitionAnim();
@@ -64,6 +66,7 @@ export default function FitButton({
   const onBrand = colors.onBrand ?? "#FFFFFF";
   const flexStyle: ViewStyle = flex !== undefined ? { flex } : {};
   const displayLabel = loading && loadingLabel ? loadingLabel : (label ?? "");
+  const pressableAccessibilityLabel = accessibilityLabel ?? label;
 
   const containerVariants: Record<FitButtonVariant, ViewStyle> = {
     primary: {
@@ -207,6 +210,9 @@ export default function FitButton({
             ]}
         >
           <Pressable
+              accessibilityLabel={pressableAccessibilityLabel}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isDisabled }}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -233,6 +239,9 @@ export default function FitButton({
     return (
         <Animated.View style={[btn, ghostAnimStyle, style as ViewStyle]}>
           <Pressable
+              accessibilityLabel={pressableAccessibilityLabel}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isDisabled }}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -266,7 +275,14 @@ export default function FitButton({
     );
   }
   return (
-      <Pressable style={[btn, style]} onPress={onPress} disabled={isDisabled}>
+      <Pressable
+        accessibilityLabel={pressableAccessibilityLabel}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isDisabled }}
+        style={[btn, style]}
+        onPress={onPress}
+        disabled={isDisabled}
+      >
         {Icon && <Icon size={iconSize} color={iconColor[variant]} strokeWidth={2} />}
         {!iconOnly && (
             <FitText style={[textVariants[variant], textStyle]}>{displayLabel}</FitText>

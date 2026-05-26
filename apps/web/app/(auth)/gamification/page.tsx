@@ -807,6 +807,8 @@ function AdminGamificationPage() {
                   />
                 </div>
                 <FitTextArea
+                  aria-label="Lifecycle rationale"
+                  id="gamification-season-lifecycle-rationale"
                   value={seasonRationale}
                   onChange={(event) => setSeasonRationale(event.target.value)}
                   rows={1}
@@ -1030,6 +1032,8 @@ function AdminGamificationPage() {
                     />
                   </div>
                   <FitTextArea
+                    aria-label="Reviewer rationale for this integrity decision"
+                    id={`gamification-integrity-rationale-${integrityCase.caseId}`}
                     rows={2}
                     value={integrityNotes[integrityCase.caseId] ?? ""}
                     onChange={(event) =>
@@ -1126,6 +1130,8 @@ function AdminGamificationPage() {
                     />
                   </div>
                   <FitTextArea
+                    aria-label="Admin note for this ranking governance decision"
+                    id={`gamification-ranking-governance-note-${profile.userId}`}
                     rows={2}
                     value={rankingNotes[profile.userId] ?? ""}
                     onChange={(event) =>
@@ -2131,6 +2137,8 @@ function ManualExpGrantPanel({
         >
           <label style={inputShell}>
             <FitTextInput
+              aria-label="Manual EXP amount"
+              id="gamification-manual-exp-amount"
               inputMode="numeric"
               pattern="[0-9]*"
               value={draft.amount}
@@ -2144,6 +2152,8 @@ function ManualExpGrantPanel({
           </label>
           <label style={inputShell}>
             <FitTextInput
+              aria-label="Manual EXP muscle group"
+              id="gamification-manual-exp-muscle-group"
               value={draft.muscleGroup}
               placeholder="Muscle group (optional)"
               onChange={(event) =>
@@ -2154,6 +2164,8 @@ function ManualExpGrantPanel({
         </div>
         <label style={inputShell}>
           <FitTextInput
+            aria-label="Manual EXP appointment ID"
+            id="gamification-manual-exp-appointment-id"
             value={draft.appointmentId}
             placeholder="Appointment ID (optional)"
             onChange={(event) =>
@@ -2170,6 +2182,8 @@ function ManualExpGrantPanel({
           }}
         >
           <FitTextArea
+            aria-label="Reviewer rationale"
+            id="gamification-manual-exp-rationale"
             rows={3}
             value={draft.rationale}
             placeholder="Reviewer rationale"

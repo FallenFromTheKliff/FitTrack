@@ -61,6 +61,26 @@ const EMPTY_EQUIPMENT: Record<string, { color: string; id: string; name: string 
 const DEFAULT_MEMBER_MAP_ZOOM = 0.86;
 const ZOOM_STEP = 0.1;
 
+function hidePlaceholderAssetUrl(assetUrl?: string | null) {
+  const trimmedUrl = assetUrl?.trim();
+  if (!trimmedUrl) return null;
+
+  try {
+    const { hostname } = new URL(trimmedUrl);
+    if (
+      hostname === "fittrack.dev" ||
+      hostname === "fittrack.local" ||
+      hostname.endsWith(".fittrack.local")
+    ) {
+      return null;
+    }
+  } catch {
+    return trimmedUrl;
+  }
+
+  return trimmedUrl;
+}
+
 function getDetailToneColor(tone: DetailRow["tone"], colors: ThemeColors) {
   if (tone === "success") return colors.success;
   if (tone === "warning") return colors.warning;
@@ -121,14 +141,14 @@ export function MemberFacilitiesMap({
   const activeFloorLabel = activeFloorConfig.label;
   const reservableCount = venues.filter((venue) => venue.isReservable).length;
   const supportCount = Math.max(venues.length - reservableCount, 0);
-  const renderedFloorImageUrl = buildRenderableAssetUrl({
+  const renderedFloorImageUrl = hidePlaceholderAssetUrl(buildRenderableAssetUrl({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: floorImageUrl,
-  });
-  const selectedVenueImageUrl = buildRenderableAssetUrl({
+  }));
+  const selectedVenueImageUrl = hidePlaceholderAssetUrl(buildRenderableAssetUrl({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: selectedVenue?.imageUrl ?? null,
-  });
+  }));
 
   const floorRows = useMemo<DetailRow[]>(
     () => [
@@ -148,12 +168,12 @@ export function MemberFacilitiesMap({
       {
         icon: Map,
         label: "Floor plan",
-        meta: floorImageUrl ? "Staff-published floor image is visible on the map" : "Using the generated 2D layout",
-        tone: floorImageUrl ? "success" : "brand",
-        value: floorImageUrl ? "Image available" : "Canvas layout",
+        meta: renderedFloorImageUrl ? "Staff-published floor image is visible on the map" : "Using the generated 2D layout",
+        tone: renderedFloorImageUrl ? "success" : "brand",
+        value: renderedFloorImageUrl ? "Image available" : "Canvas layout",
       },
     ],
-    [floorImageUrl, isLoading, reservableCount, supportCount, venues.length],
+    [isLoading, renderedFloorImageUrl, reservableCount, supportCount, venues.length],
   );
 
   const selectedVenueRows = useMemo<DetailRow[]>(() => {

@@ -223,6 +223,8 @@ export default function AssessmentsScreen() {
 
   const isLoading = appointmentsQuery.isLoading || appointmentsQuery.isFetching;
   const errorMessage = (appointmentsQuery.error as Error | null)?.message;
+  const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === activeFilter)?.label ?? "All";
+  const hasActiveFilters = coachSearch.trim().length > 0 || activeFilter !== "all";
 
   return (
     <Animated.View style={[base.screen, { backgroundColor: colors.base }]}>
@@ -238,6 +240,7 @@ export default function AssessmentsScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={`Filter assessments by record type: ${activeFilterLabel}`}
               accessibilityState={{ expanded: isFilterOpen }}
               hitSlop={8}
               onPress={() => {
@@ -287,9 +290,11 @@ export default function AssessmentsScreen() {
           ) : assessmentCards.length === 0 ? (
             <View style={s.emptyState}>
               <NotebookText size={30} color={colors.textMuted} strokeWidth={2} />
-              <FitText style={s.emptyTitle}>No assessments yet</FitText>
+              <FitText style={s.emptyTitle}>{hasActiveFilters ? "No matching assessments" : "No assessments yet"}</FitText>
               <FitText style={s.emptyHint}>
-                Completed coaching sessions with notes, reports, or ratings will appear here.
+                {hasActiveFilters
+                  ? "Clear the search or record-type filter to bring the rest of your coaching records back into view."
+                  : "Completed coaching sessions with notes, reports, or ratings will appear here."}
               </FitText>
             </View>
           ) : (

@@ -557,8 +557,10 @@ export default function MembershipsPromosPage() {
                 <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                   <FitTextInput
                     aria-label="Membership card price"
+                    id="membership-card-price"
                     inputMode="decimal"
                     min="0.01"
+                    name="membershipCardPrice"
                     step="0.01"
                     type="number"
                     value={membershipCardPriceDraft}
@@ -622,8 +624,10 @@ export default function MembershipsPromosPage() {
                   <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                     <FitTextInput
                       aria-label={`${plan.name} price`}
+                      id={`membership-plan-${plan.id}-price`}
                       inputMode="decimal"
                       min="0.01"
+                      name={`membershipPlan_${plan.id}_price`}
                       step="0.01"
                       type="number"
                       value={draft.price}
@@ -638,8 +642,10 @@ export default function MembershipsPromosPage() {
                   <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                     <FitTextInput
                       aria-label={`${plan.name} duration`}
+                      id={`membership-plan-${plan.id}-duration`}
                       inputMode="numeric"
                       min="1"
+                      name={`membershipPlan_${plan.id}_duration`}
                       step="1"
                       type="number"
                       value={draft.durationDays}
@@ -653,6 +659,8 @@ export default function MembershipsPromosPage() {
                   <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
                     <input
                       checked={draft.isActive}
+                      id={`membership-plan-${plan.id}-active`}
+                      name={`membershipPlan_${plan.id}_active`}
                       onChange={(event) =>
                         updatePlanDraft(plan, { isActive: event.target.checked })
                       }
@@ -700,7 +708,9 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Plan name</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-create-plan-name"
                   maxLength={PLAN_NAME_MAX_LENGTH}
+                  name="membershipCreatePlanName"
                   value={createPlanDraft.name}
                   onChange={(event) =>
                     setCreatePlanDraft((current) => ({
@@ -716,8 +726,10 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Price</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-create-plan-price"
                   inputMode="decimal"
                   min="0.01"
+                  name="membershipCreatePlanPrice"
                   step="0.01"
                   type="number"
                   value={createPlanDraft.price}
@@ -735,8 +747,10 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Access days</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-create-plan-duration"
                   inputMode="numeric"
                   min="1"
+                  name="membershipCreatePlanDuration"
                   step="1"
                   type="number"
                   value={createPlanDraft.durationDays}
@@ -759,6 +773,8 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Description</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-create-plan-description"
+                  name="membershipCreatePlanDescription"
                   value={createPlanDraft.description}
                   onChange={(event) =>
                     setCreatePlanDraft((current) => ({
@@ -773,6 +789,8 @@ export default function MembershipsPromosPage() {
             <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
               <input
                 checked={createPlanDraft.includesCoaching}
+                id="membership-create-plan-includes-coaching"
+                name="membershipCreatePlanIncludesCoaching"
                 onChange={(event) =>
                   setCreatePlanDraft((current) => ({
                     ...current,
@@ -862,7 +880,9 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Promo title</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-promo-title"
                   maxLength={PROMO_TITLE_MAX_LENGTH}
+                  name="membershipPromoTitle"
                   value={promoDraft.title}
                   onChange={(event) =>
                     setPromoDraft((current) => ({
@@ -878,6 +898,8 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Starts</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-promo-starts-at"
+                  name="membershipPromoStartsAt"
                   type="datetime-local"
                   value={promoDraft.startsAt}
                   onChange={(event) =>
@@ -893,6 +915,8 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Ends</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-promo-ends-at"
+                  name="membershipPromoEndsAt"
                   type="datetime-local"
                   value={promoDraft.endsAt}
                   onChange={(event) =>
@@ -909,6 +933,8 @@ export default function MembershipsPromosPage() {
             <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Description</FitText>
             <div style={{ ...inputShell(fieldBorder, colors.surfaceRaised), minHeight: 92 }}>
               <FitTextArea
+                id="membership-promo-description"
+                name="membershipPromoDescription"
                 rows={3}
                 value={promoDraft.description}
                 onChange={(event) =>
@@ -926,7 +952,9 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Code</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-promo-code"
                   maxLength={PROMO_CODE_MAX_LENGTH}
+                  name="membershipPromoCode"
                   value={promoDraft.promoCode}
                   onChange={(event) =>
                     setPromoDraft((current) => ({
@@ -942,6 +970,8 @@ export default function MembershipsPromosPage() {
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Pricing note</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
                 <FitTextInput
+                  id="membership-promo-pricing-note"
+                  name="membershipPromoPricingNote"
                   value={promoDraft.pricingNote}
                   onChange={(event) =>
                     setPromoDraft((current) => ({

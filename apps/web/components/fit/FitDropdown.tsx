@@ -59,6 +59,11 @@ export default function FitDropdown({
   const triggerHeight = compact ? 32 : 42;
   const isSelected = Boolean(selected && !selected.isPlaceholder);
   const canAnimate = settings.animationLevel !== "none";
+  const baseAriaLabel = (ariaLabel ?? placeholder).trim();
+  const triggerAriaLabel =
+    baseAriaLabel && displayLabel && !baseAriaLabel.toLowerCase().includes(displayLabel.toLowerCase())
+      ? `${baseAriaLabel}: ${displayLabel}`
+      : baseAriaLabel || displayLabel;
 
   return (
     <DropdownMenu.Root
@@ -71,7 +76,7 @@ export default function FitDropdown({
         <button
           id={id}
           type="button"
-          aria-label={ariaLabel ?? placeholder}
+          aria-label={triggerAriaLabel}
           aria-expanded={open}
           className={cn("fit-dropdown-trigger", fontClass, className)}
           data-filled={isSelected ? "true" : "false"}

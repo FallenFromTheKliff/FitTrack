@@ -26,6 +26,7 @@ Use this skill for the final verification pass on a touched FitTrack surface, fe
 - 2026-04-20: added anti-reference drift checks so a prior weak scaffold or live surface cannot still dominate the final composition after a premium redesign pass.
 - 2026-04-20: added visual-DNA and concept-divergence closure checks so premium UI must prove both workflow strength and screenshot-level identity.
 - 2026-05-17: added runtime-guardrails and browser-runtime-loop alignment so blank browser states, Playwright MCP recovery, and click-through evidence are handled consistently.
+- 2026-05-26: added interaction-inventory, weird-input, security-boundary, and full-integration closure rules so QA cannot pass pages with visible but unintegrated controls.
 
 ## First pass
 
@@ -53,6 +54,107 @@ Run verification in this order unless the touched change is clearly exempt from 
 7. Browser DevTools checks for browser runtime issues, targeted accessibility, or Lighthouse
 8. Playwright MCP verification, preferably through `browser-runtime-loop` for browser-visible flows that need click-through evidence
 9. final bug, edge-case, use-case, UI-quality, accessibility, and performance report
+
+## User-simulation integration loop
+
+For page, screen, or route-family QA, use a real-user simulation loop before signing off. A page is not closed merely because it renders or because the primary happy path works.
+
+1. **Discover**
+   - Use Chrome DevTools snapshots and targeted DOM scans to inventory interactive elements:
+     - buttons
+     - links
+     - inputs, textareas, selects, date/time controls, and file controls
+     - tabs, segmented controls, pills, filters, menus, dropdowns, and popovers
+     - pagination
+     - row actions
+     - toggles and checkboxes
+     - dialogs, drawers, inspectors, confirmations, and help panels
+     - elements with `role=button`, `role=link`, `role=dialog`, `aria-haspopup`, `aria-expanded`, or click handlers
+   - Classify each discovered item as safe click, navigation, modal/menu opener, form input, safe mutation, destructive or irreversible mutation, disabled or gated, role-sensitive, or not exercised with a recorded reason.
+
+2. **Exercise**
+   - Use Playwright MCP and/or Chrome DevTools MCP to click, fill, navigate, and observe like a normal user.
+   - Exercise every safe visible control at least once in the relevant role.
+   - For destructive or archive/deactivate/delete flows, open the confirmation and cancel before final mutation unless the user explicitly approved the mutation or the flow is known safe.
+   - Open and close every reachable modal, drawer, menu, help panel, and confirmation.
+   - Use the real login route and visible navigation for allowed-role checks, then use direct URL navigation for forbidden-role checks.
+
+3. **Verify integration**
+   - For each exercised action, verify the observable contract:
+     - the UI changes state or gives clear feedback
+     - expected network request happens when an API-backed action is implied
+     - request returns the expected success or validation status
+     - loading and disabled states prevent duplicate submission where relevant
+     - bad input is blocked with human-readable copy
+     - successful safe mutations update the UI and survive refresh
+     - related UI reflects the same data truth when checking that relationship is safe
+   - A button, link, or control that produces no state change, no navigation, no request, no modal, and no explanation is a suspected dead control until proven otherwise.
+
+4. **Record**
+   - Save snapshots under `.artifacts/qa`.
+   - Record role coverage, exercised controls, fixed bugs, skipped destructive mutations, and residual risks in the QA ledger.
+   - Before closing the page, list any discovered interactive controls that were not exercised. Either exercise them, prove they are disabled/gated by design, or record them as residual risk/blockers.
+
+## Weird-input battery
+
+For forms, filters, search fields, notes, names, amounts, dates, and other user-entered values, test the relevant subset of:
+
+- empty input
+- spaces only
+- very long text
+- emoji or non-ASCII text when the domain permits user text
+- `<script>alert(1)</script>`
+- SQL-ish strings such as `' OR 1=1 --`
+- invalid email, phone, URL, or identifier formats
+- zero, negative, decimal, and huge numeric values
+- invalid dates and times
+- start date after end date
+- past dates where future dates are required
+- duplicate names or codes when uniqueness is implied
+- rapid double-click submit when it is safe to attempt
+
+Do not invent validation rules that the product does not imply, but fail the page when bad input causes crashes, raw errors, misleading success, broken layout, unbounded values, or a mutation that contradicts visible business rules.
+
+## Security and role-boundary battery
+
+For role-scoped pages, verify both UI visibility and direct-route behavior:
+
+- Login through the correct role route.
+- Confirm nav visibility matches the role.
+- Directly visit allowed and forbidden routes.
+- Confirm forbidden routes redirect or deny cleanly.
+- Confirm forbidden actions and data do not appear in nav, tables, details, modals, or row actions.
+- Confirm sensitive/admin-only controls are not merely hidden visually while still focusable or clickable.
+- Confirm raw backend, Prisma, SQL, Axios, NestJS, stack trace, token, or internal implementation details are not shown to users.
+- Confirm destructive actions require confirmation and expose a cancel path.
+
+When the visible UI claims a permission boundary, treat any mismatch between UI, route behavior, and network result as a confirmed integration bug until investigated.
+
+## Full-integration closure gates
+
+A browser-visible page or feature cannot close as QA-passed until the relevant gates are satisfied:
+
+- Every discovered visible interactive control is exercised, classified, or recorded as residual risk.
+- Every primary workflow is checked through the UI, not only through direct API calls.
+- Every safe form has at least one valid path and one invalid path tested.
+- Every modal/drawer/confirmation can open and close without trapping the user.
+- Every table/list has search, filters, pagination, empty state, and row actions checked when present.
+- Every API-backed action has network and UI feedback checked.
+- Console and network are checked after patches and at page closure.
+- Role access is verified for allowed and forbidden roles.
+- Evidence snapshots and ledger notes exist for the page family.
+- Repo-native verification such as `pnpm.cmd typecheck` runs after code patches unless the change is documentation-only.
+
+Hard-fail closure when:
+
+- a visible feature is unintegrated or fake
+- a clickable control is dead
+- a form accepts clearly invalid values and mutates state
+- a safe cancel path is missing or broken
+- a forbidden role can reach protected data or protected actions
+- the page shows raw internal errors
+- console or network errors are caused by the touched surface
+- the run did not audit untouched interactive controls
 
 ## Risk-based matrix
 
@@ -143,7 +245,7 @@ Run verification in this order unless the touched change is clearly exempt from 
 - `postgresReadOnly` is allowed when a raw SQL truth check is faster or clearer than Prisma-level inspection.
 - Browser DevTools is allowed for browser-visible runtime issues, targeted accessibility checks, and Lighthouse.
 - Swagger is a verification MCP, not an implementation MCP.
-- Playwright is a browser-surface verification MCP and should only run after direct API checks pass for runtime-sensitive flows. If Playwright appears blank or stuck, use `runtime-guardrails` and direct route navigation before declaring the MCP unavailable.
+- Playwright is a browser-surface verification MCP and should be used for repeatable real-user simulation when a browser-visible page, route family, form, modal, or role boundary is being closed. For runtime-sensitive flows, use direct API or health checks first when needed to avoid mistaking backend downtime for UI failure. If Playwright appears blank or stuck, use `runtime-guardrails` and direct route navigation before declaring the MCP unavailable.
 - Sentry is optional and future-facing here; use it only when a real FitTrack project exists and the issue is genuinely prod-observed.
 
 ## Regression-adjacent selection rules

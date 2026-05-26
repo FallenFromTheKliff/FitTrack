@@ -22,6 +22,7 @@ import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
 import BufferScreen from "@/components/loading/BufferScreen";
 import ForgotPasswordModal from "@/components/modals/auth/ForgotPasswordModal";
+import OTPModal from "@/components/modals/auth/OTPModal";
 
 const WEB_AUTH_STATUS_KEY = "fittrack_mobile_auth_status";
 
@@ -40,6 +41,8 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showBuffer, setShowBuffer] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [showOTP, setShowOTP] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
   const [statusTone, setStatusTone] = useState<"danger" | "brand">("brand");
   const [statusText, setStatusText] = useState("");
   const contentOpacity = useSharedValue(1);
@@ -125,7 +128,11 @@ export default function LoginScreen() {
     }
     if (result.needsOTP) {
       setStatusTone("brand");
-      showStatus("Verification code sent. Check your email to continue.");
+      setPendingEmail(data.email.trim());
+      setShowOTP(true);
+      showStatus("Verification code sent. Enter it to continue.", {
+        autoClearMs: null,
+      });
       return;
     }
     setStatusTone("brand");
@@ -206,6 +213,8 @@ export default function LoginScreen() {
                   editable={!isLoading}
                 />
                 <FitText
+                  accessibilityLabel="Forgot Password?"
+                  accessibilityRole="button"
                   style={s.forgotPassword}
                   onPress={() => setForgotOpen(true)}
                 >
@@ -254,6 +263,23 @@ export default function LoginScreen() {
       <ForgotPasswordModal
         isVisible={forgotOpen}
         onClose={() => setForgotOpen(false)}
+      />
+      <OTPModal
+        visible={showOTP}
+        destination={pendingEmail}
+        onSuccess={async () => {
+          setShowOTP(false);
+          setPendingEmail("");
+          setStatusTone("brand");
+          showStatus("Welcome back!");
+          await fadeOutAndShowBuffer();
+        }}
+        onDismiss={() => {
+          setShowOTP(false);
+          setPendingEmail("");
+          setStatusTone("danger");
+          showStatus("Verification cancelled. Please sign in again.");
+        }}
       />
     </Animated.View>
   );

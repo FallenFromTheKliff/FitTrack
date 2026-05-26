@@ -83,6 +83,9 @@ function filterScheduleOptions(
 function ScheduleOptionPicker({
   disabled,
   emptyLabel,
+  inputId,
+  inputName,
+  inputLabel,
   inputStyle,
   onChange,
   onSearchChange,
@@ -93,6 +96,9 @@ function ScheduleOptionPicker({
 }: {
   disabled?: boolean;
   emptyLabel: string;
+  inputId?: string;
+  inputName?: string;
+  inputLabel?: string;
   inputStyle: CSSProperties;
   onChange: (option: SelectOption) => void;
   onSearchChange: (value: string) => void;
@@ -106,6 +112,9 @@ function ScheduleOptionPicker({
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <FitTextInput
+        id={inputId}
+        name={inputName}
+        aria-label={inputLabel ?? placeholder}
         value={searchValue}
         onChange={(event) => onSearchChange(event.target.value)}
         placeholder={placeholder}
@@ -546,6 +555,9 @@ export function GymOperationsCreateVenueBookingModal({
                 Member
               </FitText>
               <FitSelect
+                id="manual-venue-booking-member"
+                name="manualVenueBookingMember"
+                aria-label="Manual venue booking member"
                 value={memberId}
                 onChange={(event) => setMemberId(event.target.value)}
                 options={memberOptions}
@@ -566,6 +578,9 @@ export function GymOperationsCreateVenueBookingModal({
                 Venue
               </FitText>
               <FitSelect
+                id="manual-venue-booking-venue"
+                name="manualVenueBookingVenue"
+                aria-label="Manual venue booking venue"
                 value={venueId}
                 onChange={(event) => {
                   setVenueId(event.target.value);
@@ -600,6 +615,9 @@ export function GymOperationsCreateVenueBookingModal({
               <FitButton
                 variant="ghost"
                 label={date ? formatCompactDate(date) : "Select date"}
+                aria-label={`Manual venue booking date: ${
+                  date ? formatCompactDate(date) : "Select date"
+                }`}
                 onClick={() => setDatePickerOpen(true)}
                 style={{
                   ...inputStyle,
@@ -622,6 +640,9 @@ export function GymOperationsCreateVenueBookingModal({
                 Start time
               </FitText>
               <FitSelect
+                id="manual-venue-booking-start-time"
+                name="manualVenueBookingStartTime"
+                aria-label="Manual venue booking start time"
                 value={startTime}
                 onChange={(event) => {
                   setStartTime(event.target.value);
@@ -645,6 +666,9 @@ export function GymOperationsCreateVenueBookingModal({
                 End time
               </FitText>
               <FitSelect
+                id="manual-venue-booking-end-time"
+                name="manualVenueBookingEndTime"
+                aria-label="Manual venue booking end time"
                 value={endTime}
                 onChange={(event) => setEndTime(event.target.value)}
                 options={venueEndOptions}
@@ -663,6 +687,9 @@ export function GymOperationsCreateVenueBookingModal({
               Optional coach add-on
             </FitText>
             <FitSelect
+              id="manual-venue-booking-coach-addon"
+              name="manualVenueBookingCoachAddon"
+              aria-label="Manual venue booking optional coach add-on"
               value={coachId}
               onChange={(event) => setCoachId(event.target.value)}
               options={[
@@ -734,6 +761,9 @@ export function GymOperationsCreateVenueBookingModal({
               Payment option
             </FitText>
             <FitSelect
+              id="manual-venue-booking-payment-option"
+              name="manualVenueBookingPaymentOption"
+              aria-label="Manual venue booking payment option"
               value={paymentStage}
               onChange={(event) =>
                 setPaymentStage(event.target.value as StaffInitialPaymentStage)
@@ -787,6 +817,9 @@ export function GymOperationsCreateVenueBookingModal({
               Operator note
             </FitText>
             <FitTextArea
+              id="manual-venue-booking-note"
+              name="manualVenueBookingNote"
+              aria-label="Manual venue booking operator note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={3}
@@ -1068,6 +1101,9 @@ export function GymOperationsCreateCoachBookingModal({
               <ScheduleOptionPicker
                 disabled={isSubmitting}
                 emptyLabel="No members found"
+                inputId="manual-coach-booking-member-search"
+                inputName="manualCoachBookingMemberSearch"
+                inputLabel="Manual coach booking member search"
                 inputStyle={inputStyle}
                 onChange={(option) => {
                   setMemberId(option.value);
@@ -1094,6 +1130,9 @@ export function GymOperationsCreateCoachBookingModal({
               <ScheduleOptionPicker
                 disabled={isSubmitting}
                 emptyLabel="No coaches found"
+                inputId="manual-coach-booking-coach-search"
+                inputName="manualCoachBookingCoachSearch"
+                inputLabel="Manual coach booking coach search"
                 inputStyle={inputStyle}
                 onChange={(option) => {
                   setCoachId(option.value);
@@ -1130,6 +1169,9 @@ export function GymOperationsCreateCoachBookingModal({
               <FitButton
                 variant="ghost"
                 label={date ? formatCompactDate(date) : "Select date"}
+                aria-label={`Manual coach booking date: ${
+                  date ? formatCompactDate(date) : "Select date"
+                }`}
                 onClick={() => setDatePickerOpen(true)}
                 style={{
                   ...inputStyle,
@@ -1200,6 +1242,9 @@ export function GymOperationsCreateCoachBookingModal({
                 Available timeslot
               </FitText>
               <FitSelect
+                id="manual-coach-booking-timeslot"
+                name="manualCoachBookingTimeslot"
+                aria-label="Manual coach booking available timeslot"
                 value={slotValue}
                 onChange={(event) => setSlotValue(event.target.value)}
                 options={slotOptions.map((slot) => ({
@@ -1285,6 +1330,9 @@ export function GymOperationsCreateCoachBookingModal({
               Payment option
             </FitText>
             <FitSelect
+              id="manual-coach-booking-payment-option"
+              name="manualCoachBookingPaymentOption"
+              aria-label="Manual coach booking payment option"
               value={paymentStage}
               onChange={(event) =>
                 setPaymentStage(event.target.value as StaffInitialPaymentStage)
@@ -1332,6 +1380,9 @@ export function GymOperationsCreateCoachBookingModal({
               Session note
             </FitText>
             <FitTextArea
+              id="manual-coach-booking-note"
+              name="manualCoachBookingNote"
+              aria-label="Manual coach booking session note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={3}

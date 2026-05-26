@@ -19,6 +19,8 @@ export default function FitSearch({ placeholder = "Search...", value, onChangeTe
   const s = useMemo(() => makeFitSearchStyles(colors), [colors]);
   const [inputValue, setInputValue] = useState(value);
   const debouncedInput = useDebounce(inputValue, 300);
+  const searchLabel = placeholder.replace(/\.+$/, "").trim() || "Search";
+  const searchId = `${searchLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
 
   useEffect(() => {
     setInputValue(value);
@@ -32,6 +34,8 @@ export default function FitSearch({ placeholder = "Search...", value, onChangeTe
     <View style={s.searchBar}>
       <Search size={18} color={colors.textMuted} strokeWidth={2} />
       <FitTextInput
+        nativeID={searchId}
+        accessibilityLabel={searchLabel}
         placeholder={placeholder}
         value={inputValue}
         onChangeText={setInputValue}
@@ -39,7 +43,14 @@ export default function FitSearch({ placeholder = "Search...", value, onChangeTe
         style={s.searchInput}
       />
       {inputValue.length > 0 && (
-        <Pressable onPress={() => setInputValue("")} style={s.searchClear} hitSlop={8} disabled={isFabOpen}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Clear ${searchLabel.toLowerCase()}`}
+          onPress={() => setInputValue("")}
+          style={s.searchClear}
+          hitSlop={8}
+          disabled={isFabOpen}
+        >
           <XCircle size={18} color={colors.textMuted} strokeWidth={2} />
         </Pressable>
       )}

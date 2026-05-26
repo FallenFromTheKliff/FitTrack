@@ -121,6 +121,9 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 style={s.pressableField}
                 onPress={editable ? onPress : undefined}
                 disabled={!editable}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ disabled: !editable }}
               >
                 <FitText
                   style={[
@@ -185,6 +188,8 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 />
               )}
               <FitTextInput
+                nativeID={String(name)}
+                accessibilityLabel={label}
                 value={renderedValue}
                 placeholder={placeholder}
                 placeholderTextColor={
@@ -223,6 +228,7 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                   icon={visible ? EyeOff : Eye}
                   iconSize={24}
                   iconOnly
+                  accessibilityLabel={visible ? "Hide password" : "Show password"}
                   onPress={() => setVisible((v) => !v)}
                   style={s.eyeBtn}
                 />

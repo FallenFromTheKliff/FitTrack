@@ -218,6 +218,22 @@ function timeToMinutes(value: string) {
   return Number(hourValue) * 60 + Number(minuteValue);
 }
 
+function parseBookingTimeToMinutes(value?: string) {
+  if (!value) return Number.NaN;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return timeToMinutes(trimmed);
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = match[3]?.toUpperCase();
+
+  if (period === "PM" && hour < 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+
+  return hour * 60 + minute;
+}
+
 function toGymWallClockIso(date: string, minutes: number) {
   const [year, month, day] = date.split("-").map(Number);
   const hour = Math.floor(minutes / 60);
@@ -237,6 +253,17 @@ function isFutureLocalStart(date: string, startTime: string) {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = startTime.split(":").map(Number);
   return new Date(year, month - 1, day, hour, minute).getTime() > Date.now();
+}
+
+function isActiveReservationStatus(status: MemberBookingItem["status"]) {
+  return !["cancelled", "completed", "no_show"].includes(status);
+}
+
+function getBookingRangeMinutes(booking: MemberBookingItem) {
+  const [rangeStart, rangeEnd] = booking.time.split(/\s+-\s+/);
+  const start = parseBookingTimeToMinutes(booking.startTime ?? rangeStart);
+  const end = parseBookingTimeToMinutes(booking.endTime ?? rangeEnd);
+  return { end, start };
 }
 
 function matchesDay(selectedDate: string, dayValue: number | string) {
@@ -605,6 +632,12 @@ function CoachDiscoveryPanel({
   const pageEnd = totalFilteredCount === 0
     ? 0
     : Math.min(totalFilteredCount, currentPage * COACH_DIRECTORY_PAGE_SIZE);
+  const selectedSkillLabel =
+    skillOptions.find((option) => option.value === skillFilter)?.label ??
+    skillFilter;
+  const selectedRatingLabel =
+    COACH_RATING_FILTERS.find((option) => option.value === ratingFilter)?.label ??
+    ratingFilter;
 
   const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>, coachId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -707,7 +740,7 @@ function CoachDiscoveryPanel({
               <FitSelect
                 compact
                 fullWidth
-                aria-label="Filter coaches by skill"
+                aria-label={`Filter coaches by skill: ${selectedSkillLabel}`}
                 name="coachSkillFilter"
                 value={skillFilter}
                 options={skillOptions.map((option) => ({ label: option.label, value: option.value }))}
@@ -738,7 +771,7 @@ function CoachDiscoveryPanel({
               <FitSelect
                 compact
                 fullWidth
-                aria-label="Filter coaches by rating"
+                aria-label={`Filter coaches by rating: ${selectedRatingLabel}`}
                 name="coachRatingFilter"
                 value={ratingFilter}
                 options={COACH_RATING_FILTERS.map((option) => ({ label: option.label, value: option.value }))}
@@ -1289,6 +1322,8 @@ function BookingsFilterSelect<TValue extends string>({
   width?: number;
 }) {
   const { colors } = useTheme();
+  const selectedLabel =
+    options.find((option) => option.value === value)?.label ?? value;
 
   return (
     <div
@@ -1306,7 +1341,7 @@ function BookingsFilterSelect<TValue extends string>({
       <FitSelect
         compact
         fullWidth
-        aria-label={ariaLabel}
+        aria-label={`${ariaLabel}: ${selectedLabel}`}
         name={name}
         value={value}
         options={options.map((option) => ({ label: option.label, value: option.value }))}
@@ -1734,7 +1769,7 @@ function BookingInspectorContent({
           <BookingDetailLine label="Participant" value={booking.participantName ?? booking.participantLabel ?? "Member"} />
           <BookingDetailLine label="Payment" value={booking.paymentPlan ? booking.paymentPlan.replace(/_/g, " ") : "Standard"} />
           {booking.remainingBalance != null ? (
-            <BookingDetailLine label="Balance" value={`PHP ${Number(booking.remainingBalance).toLocaleString()}`} />
+            <BookingDetailLine label="Balance" value={formatMoney(Number(booking.remainingBalance))} />
           ) : null}
         </div>
       ) : null}
@@ -2201,6 +2236,7 @@ function RequestFieldButton({
         icon={icon}
         showTrailing
         fullWidth
+        aria-label={`${label}: ${value}`}
         onClick={onClick}
         style={{ minHeight: 44, borderRadius: 8 }}
         textStyle={{ fontSize: 13, fontWeight: 750 }}
@@ -2543,6 +2579,9 @@ function RequestCoachModal({
           <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
             <MemberText variant="brand">Notes</MemberText>
             <FitTextArea
+              id="coach-booking-request-notes"
+              name="coachBookingRequestNotes"
+              aria-label="Coach booking request notes"
               value={bookingNotes}
               onChange={(event) => setBookingNotes(event.target.value)}
               placeholder="Goals, injuries, preferred cadence, or questions for this coach."
@@ -2633,6 +2672,7 @@ type ReservationSubmitResult = {
 };
 
 function MemberReservationModal({
+  existingReservations,
   isOpen,
   isSubmitting,
   onBookTrainer,
@@ -2641,6 +2681,7 @@ function MemberReservationModal({
   userId,
   venues,
 }: {
+  existingReservations: MemberBookingItem[];
   isOpen: boolean;
   isSubmitting: boolean;
   onBookTrainer: () => void;
@@ -2681,10 +2722,33 @@ function MemberReservationModal({
   const isFreeReservation = hasPricedDuration && totalAmount <= 0;
   const paymentProvider = paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
   const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const hasActiveOverlap = useMemo(() => {
+    if (!selectedVenue || !reservationDate || !startTime || !endTime) return false;
+
+    const candidateStart = timeToMinutes(startTime);
+    const candidateEnd = timeToMinutes(endTime);
+    if (!Number.isFinite(candidateStart) || !Number.isFinite(candidateEnd) || candidateEnd <= candidateStart) return false;
+
+    return existingReservations.some((booking) => {
+      if (!isActiveReservationStatus(booking.status)) return false;
+      if (booking.date !== reservationDate) return false;
+      const sameVenue =
+        String(booking.resourceId) === String(selectedVenue.id) ||
+        booking.resourceName === selectedVenue.name;
+      if (!sameVenue) return false;
+
+      const existingRange = getBookingRangeMinutes(booking);
+      if (!Number.isFinite(existingRange.start) || !Number.isFinite(existingRange.end)) return false;
+
+      return candidateStart < existingRange.end && candidateEnd > existingRange.start;
+    });
+  }, [endTime, existingReservations, reservationDate, selectedVenue, startTime]);
+  const overlapErrorText = hasActiveOverlap ? "You already have a booking in this time window." : "";
   const canSubmit =
     Boolean(selectedVenue && reservationDate && startTime && endTime) &&
     durationHours >= minimumHours &&
     isFutureLocalStart(reservationDate, startTime) &&
+    !hasActiveOverlap &&
     !isSubmitting;
 
   useEffect(() => {
@@ -2859,7 +2923,7 @@ function MemberReservationModal({
                 <div style={{ display: "grid", gap: 8 }}>
                   <MemberText variant="brand">Venue</MemberText>
                   <FitSelect
-                    aria-label="Reservation venue"
+                    aria-label={`Reservation venue: ${selectedVenue?.name ?? "Select venue"}`}
                     fullWidth
                     value={selectedVenue ? String(selectedVenue.id) : selectedVenueId}
                     onChange={(event) => setSelectedVenueId(event.currentTarget.value)}
@@ -2940,6 +3004,9 @@ function MemberReservationModal({
                 <div style={{ display: "grid", gap: 8 }}>
                   <MemberText variant="brand">Notes</MemberText>
                   <FitTextArea
+                    id="venue-reservation-notes"
+                    name="venueReservationNotes"
+                    aria-label="Venue reservation notes"
                     value={reservationNotes}
                     onChange={(event) => setReservationNotes(event.target.value)}
                     placeholder="Purpose, preferred setup, or staff notes."
@@ -2975,6 +3042,7 @@ function MemberReservationModal({
             )}
 
             {errorText ? <FitText style={{ color: colors.danger, fontSize: 12.5, fontWeight: 750 }}>{errorText}</FitText> : null}
+            {overlapErrorText ? <FitText style={{ color: colors.danger, fontSize: 12.5, fontWeight: 750 }}>{overlapErrorText}</FitText> : null}
             {successText ? <FitText style={{ color: colors.success, fontSize: 12.5, fontWeight: 750 }}>{successText}</FitText> : null}
           </div>
         )}
@@ -2993,6 +3061,12 @@ function MemberReservationModal({
       <TimePickerModal
         isOpen={timePickerOpen}
         selectedTime={timeTarget === "start" ? startTime : endTime}
+        subtitle={
+          timeTarget === "start"
+            ? "Choose when this venue reservation should begin."
+            : "Choose when this venue reservation should end."
+        }
+        title={timeTarget === "start" ? "Start Time" : "End Time"}
         onClose={() => setTimePickerOpen(false)}
         onSelect={(value) => {
           if (timeTarget === "start") {
@@ -4033,6 +4107,7 @@ export default function BookingsPage() {
         ) : null}
       </FitModal>
       <MemberReservationModal
+        existingReservations={reservations}
         isOpen={reservationModalOpen}
         isSubmitting={data.createBookingMutation.isPending}
         onBookTrainer={handleBookTrainer}

@@ -573,11 +573,11 @@ export function InventoryMainPanel({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          flexWrap: "nowrap",
+          flexWrap: "wrap",
           gap: 10,
           minWidth: 0,
-          overflowX: "auto",
-          overflowY: "hidden",
+          overflowX: "visible",
+          overflowY: "visible",
         }}
       >
         <div
@@ -587,12 +587,12 @@ export function InventoryMainPanel({
             alignItems: "center",
             gap: 8,
             minWidth: 0,
-            flex: "1 1 340px",
+            flex: "1 1 300px",
           }}
         >
           <div
             className="inventory-directory-search"
-            style={{ flex: "1 1 340px", minWidth: 260, maxWidth: 480 }}
+            style={{ flex: "1 1 300px", minWidth: 0, maxWidth: 520 }}
           >
             <FitSearch
               value={inventory.q}
@@ -610,12 +610,12 @@ export function InventoryMainPanel({
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: "flex-start",
             gap: 8,
-            flex: "0 0 auto",
+            flex: "1 1 440px",
             minWidth: 0,
-            marginLeft: "auto",
-            flexWrap: "nowrap",
+            marginLeft: 0,
+            flexWrap: "wrap",
           }}
         >
           <InventoryModeToggle
@@ -1681,6 +1681,13 @@ function InventoryFilterSelect({
   options: Array<{ label: string; value: string }>;
   value: string;
 }) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? value;
+  const combinedAriaLabel = ariaLabel
+    .toLowerCase()
+    .includes(selectedLabel.toLowerCase())
+    ? ariaLabel
+    : `${ariaLabel}: ${selectedLabel}`;
+
   return (
     <div
       className="inventory-filter-select"
@@ -1694,7 +1701,7 @@ function InventoryFilterSelect({
     >
       <Filter size={14} color={colors.textMuted} strokeWidth={2} />
       <FitSelect
-        aria-label={ariaLabel}
+        aria-label={combinedAriaLabel}
         fullWidth
         compact
         value={value}
@@ -1932,7 +1939,7 @@ function DetailMetricGrid({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
         gap: 8,
       }}
     >
@@ -1955,7 +1962,7 @@ function DetailMetricGrid({
               fontSize: 12.5,
               fontWeight: 800,
               marginTop: 3,
-              overflowWrap: "anywhere",
+              overflowWrap: "break-word",
             }}
           >
             {value}

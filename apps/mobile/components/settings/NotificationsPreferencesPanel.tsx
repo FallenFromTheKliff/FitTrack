@@ -69,6 +69,7 @@ export default function NotificationsPreferencesPanel({
                   activeColor={colors.brand}
                   inactiveColor={colors.border}
                   useAnimations={settings.animationLevel === "full"}
+                  accessibilityLabel={group.label}
                 />
               </View>
               {index < NOTIFICATION_PREFERENCE_GROUPS.length - 1 ? (

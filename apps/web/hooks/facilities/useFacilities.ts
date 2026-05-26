@@ -66,6 +66,26 @@ export type QuickFloorRegionTemplate = {
 
 type DisplayEquipmentSeed = Pick<GymLayoutEquipmentRecord, "iconKey" | "name" | "type">;
 
+function hidePlaceholderAssetUrl(assetUrl?: string | null) {
+  const trimmedUrl = assetUrl?.trim();
+  if (!trimmedUrl) return null;
+
+  try {
+    const { hostname } = new URL(trimmedUrl);
+    if (
+      hostname === "fittrack.dev" ||
+      hostname === "fittrack.local" ||
+      hostname.endsWith(".fittrack.local")
+    ) {
+      return null;
+    }
+  } catch {
+    return trimmedUrl;
+  }
+
+  return trimmedUrl;
+}
+
 function normalizeEquipmentKey(value: string | null | undefined) {
   return (value ?? "")
     .trim()
@@ -829,7 +849,10 @@ export function useFloorLayout() {
   const floorPlanImageByFloor = useMemo(
     () =>
       Object.fromEntries(
-        floorPlanMedia.map((item) => [item.floorId, item.imageUrl])
+        floorPlanMedia.map((item) => [
+          item.floorId,
+          hidePlaceholderAssetUrl(item.imageUrl)
+        ])
       ) as Record<FacilityFloorId, string | null>,
     [floorPlanMedia]
   );

@@ -179,6 +179,8 @@ export function GymOperationsCoachAppointmentModal({
     ? appointment.coach.displayName?.trim() ||
       getPersonDisplayName(appointment.coach.profile, null, "Coach")
     : "Coach";
+  const coachSubtitleName =
+    isCoachView && coachName === "Coach" ? "you" : coachName;
   const scheduleWindow = appointment
     ? formatAppointmentWindow(appointment)
     : { dateLabel: "-", timeLabel: "-" };
@@ -421,7 +423,7 @@ export function GymOperationsCoachAppointmentModal({
                 excludeGlobalScale
                 style={{ fontSize: 13, color: colors.textMuted }}
               >
-                with {coachName}
+                with {coachSubtitleName}
               </FitText>
             </div>
             <div style={{ display: "grid", gap: 4 }}>
@@ -634,6 +636,13 @@ export function GymOperationsCoachAppointmentModal({
               }}
             >
               <FitTextArea
+                id="coach-appointment-decision-note"
+                name="coachAppointmentDecisionNote"
+                aria-label={
+                  isCoachView
+                    ? "Coach appointment decision note"
+                    : "Operations appointment decision note"
+                }
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={3}
@@ -685,6 +694,9 @@ export function GymOperationsCoachAppointmentModal({
                   Client feedback
                 </FitText>
                 <FitTextArea
+                  id="coach-appointment-client-feedback"
+                  name="coachAppointmentClientFeedback"
+                  aria-label="Coach appointment client feedback"
                   value={coachFeedback}
                   onChange={(event) => setCoachFeedback(event.target.value)}
                   rows={3}
@@ -704,6 +716,9 @@ export function GymOperationsCoachAppointmentModal({
                   Assessment report
                 </FitText>
                 <FitTextArea
+                  id="coach-appointment-assessment-report"
+                  name="coachAppointmentAssessmentReport"
+                  aria-label="Coach appointment assessment report"
                   value={assessmentReport}
                   onChange={(event) => setAssessmentReport(event.target.value)}
                   rows={3}
@@ -724,6 +739,9 @@ export function GymOperationsCoachAppointmentModal({
                 Private session notes
               </FitText>
               <FitTextArea
+                id="coach-appointment-private-session-notes"
+                name="coachAppointmentPrivateSessionNotes"
+                aria-label="Coach appointment private session notes"
                 value={sessionNotes}
                 onChange={(event) => setSessionNotes(event.target.value)}
                 rows={3}
@@ -771,6 +789,9 @@ export function GymOperationsCoachAppointmentModal({
                   Coach feedback
                 </FitText>
                 <FitTextArea
+                  id="coach-appointment-reply-feedback"
+                  name="coachAppointmentReplyFeedback"
+                  aria-label="Coach appointment reply feedback"
                   value={coachFeedback}
                   onChange={(event) => setCoachFeedback(event.target.value)}
                   rows={3}
@@ -790,6 +811,9 @@ export function GymOperationsCoachAppointmentModal({
                   Assessment report
                 </FitText>
                 <FitTextArea
+                  id="coach-appointment-reply-assessment-report"
+                  name="coachAppointmentReplyAssessmentReport"
+                  aria-label="Coach appointment reply assessment report"
                   value={assessmentReport}
                   onChange={(event) => setAssessmentReport(event.target.value)}
                   rows={3}

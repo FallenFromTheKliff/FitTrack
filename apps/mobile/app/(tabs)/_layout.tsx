@@ -35,6 +35,15 @@ const TAB_ROUTES: TabKey[] = [
   "chathistory", "chatbot", "profile", "settings"
 ];
 
+const COACH_ALLOWED_TABS = new Set<TabKey>([
+  "home",
+  "bookings",
+  "chathistory",
+  "chatbot",
+  "profile",
+  "settings",
+]);
+
 const TAB_SCREEN_OPTIONS = {
   headerShown: false,
   tabBarStyle: { display: "none" as const },
@@ -111,6 +120,19 @@ function TabsLayoutInner() {
     enabled: Boolean(user?.id),
   });
 
+  const openHelp = (nextAutoHelpTab: TabKey | null) => {
+    if (typeof document !== "undefined") {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    }
+    setAutoHelpTab(nextAutoHelpTab);
+    setNeverAutoHelpChecked(false);
+    if (typeof requestAnimationFrame !== "undefined") {
+      requestAnimationFrame(() => setHelpVisible(true));
+      return;
+    }
+    setHelpVisible(true);
+  };
+
   useEffect(() => {
     const isActive = isSidebarOpen || isFabOpen;
     if (settings.animationLevel === "full") {
@@ -132,14 +154,32 @@ function TabsLayoutInner() {
   }, [isAuthenticated, isLoading, router, user?.role]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || user?.role !== "COACH") return;
+    if (COACH_ALLOWED_TABS.has(activeTab)) return;
+
+    setFabOpen(false);
+    setSidebarOpen(false);
+    setReservationOpen(false);
+    setHelpVisible(false);
+    router.replace("/(tabs)/home");
+  }, [
+    activeTab,
+    isAuthenticated,
+    isLoading,
+    router,
+    setFabOpen,
+    setReservationOpen,
+    setSidebarOpen,
+    user?.role,
+  ]);
+
+  useEffect(() => {
     if (!user?.id || !isAutoHelpEligible) return;
     let isMounted = true;
     isAutoHelpDismissed(user.id, activeTab)
       .then((dismissed) => {
         if (!isMounted || dismissed) return;
-        setNeverAutoHelpChecked(false);
-        setAutoHelpTab(activeTab);
-        setHelpVisible(true);
+        openHelp(activeTab);
       })
       .catch(() => undefined);
 
@@ -210,9 +250,7 @@ function TabsLayoutInner() {
       <Header
         onMenuPress={handleMenuPress}
         onHelpPress={() => {
-          setAutoHelpTab(null);
-          setNeverAutoHelpChecked(false);
-          setHelpVisible(true);
+          openHelp(null);
         }}
         onNotificationsPress={() => setNotificationsVisible(true)}
         activeTab={activeTab}

@@ -64,7 +64,11 @@ function normalizeAssetPathValue(value: string) {
 function isPlaceholderAssetUrl(value: string) {
   try {
     const parsed = new URL(value);
-    return parsed.hostname === "fittrack.dev" || parsed.hostname.endsWith(".fittrack.local");
+    return (
+      parsed.hostname === "fittrack.dev" ||
+      parsed.hostname === "fittrack.local" ||
+      parsed.hostname.endsWith(".fittrack.local")
+    );
   } catch {
     return false;
   }

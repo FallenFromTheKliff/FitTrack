@@ -85,7 +85,13 @@ export default function FitFAB({ screenIcon: ScreenIcon, onPress, isOpen, scroll
         />
       )}
       <Animated.View style={[s.container, hideStyle, style]}>
-        <Pressable style={[s.fab, { backgroundColor: colors.brand }]} onPress={handlePress}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isOpen ? "Close quick actions menu" : "Open quick actions menu"}
+          accessibilityState={{ expanded: isOpen }}
+          style={[s.fab, { backgroundColor: colors.brand }]}
+          onPress={handlePress}
+        >
           <View style={s.iconWrap}>
             <Animated.View style={[s.iconLayer, plusStyle]}>
               <Plus size={30} color={colors.onBrand ?? "#FFFFFF"} strokeWidth={2} />

@@ -201,6 +201,7 @@ const MEMBER_NAV_SECTIONS: NavSection[] = [
   {
     label: "System",
     items: [
+      { href: "/ai", label: "BrodigyAI", icon: Bot, pageKey: "ai" },
       {
         href: "/settings",
         label: "Settings",

@@ -281,6 +281,11 @@ export default function ExerciseModal({
                     onPress={() => setIsFilterOpen((o) => !o)}
                     style={s.filterBtn}
                     hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter exercise references by level: ${
+                      LEVEL_OPTIONS.find((opt) => opt.value === activeLevel)?.label ?? "All levels"
+                    }`}
+                    accessibilityState={{ expanded: isFilterOpen }}
                 >
                   <SlidersHorizontal
                       size={20}
@@ -302,6 +307,9 @@ export default function ExerciseModal({
                                   s.filterChip,
                                   isActive && { borderColor: colors.brand, backgroundColor: colors.brand + "18" }
                                 ]}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Show ${opt.label.toLowerCase()} exercise references`}
+                                accessibilityState={{ selected: isActive }}
                                 onPress={() => {
                                   setActiveLevel(opt.value);
                                   setIsFilterOpen(false);
@@ -344,6 +352,14 @@ export default function ExerciseModal({
                       ]}
                       disabled={!onSelectReference}
                       onPress={() => onSelectReference?.(item.name)}
+                      accessibilityRole={onSelectReference ? "button" : undefined}
+                      accessibilityLabel={`${item.name}, ${item.muscleGroup}, ${item.level}. ${
+                        isSelected ? "Selected for tracking" : "Tap to use for tracking"
+                      }`}
+                      accessibilityState={{
+                        disabled: !onSelectReference,
+                        selected: isSelected,
+                      }}
                     >
                       <View style={s.cardHeadRow}>
                         <View style={s.cardTitleWrap}>
@@ -397,6 +413,9 @@ export default function ExerciseModal({
                       <Pressable
                         key={unit}
                         onPress={() => onChangeLoadInputUnit?.(unit)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Use ${unit} for workout load`}
+                        accessibilityState={{ selected: isActive }}
                         style={[
                           s.loadUnitChip,
                           isActive && {

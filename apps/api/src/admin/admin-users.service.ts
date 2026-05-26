@@ -40,6 +40,16 @@ const MANUALLY_VERIFIABLE_ACCOUNT_ROLES = new Set<UserRole>([
   UserRole.staff,
 ]);
 
+function normalizeOptionalBooleanFilter(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
+}
+
 function canManuallyVerifyAccount(actingRole: UserRole, targetRole: UserRole) {
   if (!MANUALLY_VERIFIABLE_ACCOUNT_ROLES.has(targetRole)) {
     return false;
@@ -297,8 +307,9 @@ export class AdminUsersService {
       where.status = filters.status;
     }
 
-    if (filters.archived !== undefined) {
-      where.deletedAt = filters.archived ? { not: null } : null;
+    const archivedFilter = normalizeOptionalBooleanFilter(filters.archived);
+    if (archivedFilter !== undefined) {
+      where.deletedAt = archivedFilter ? { not: null } : null;
     }
 
     if (actingRole === UserRole.coach && actingUserId) {

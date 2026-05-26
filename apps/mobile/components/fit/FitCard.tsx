@@ -90,6 +90,10 @@ export default React.memo(function FitCard({
     }
 
     const showChevron = !noChevron && (hasDropdown || onPress !== undefined);
+    const isInteractive = hasDropdown || onPress !== undefined;
+    const accessibilityLabel = [label, subtitle, trailingLabel]
+        .filter(Boolean)
+        .join(", ");
 
     const iconContent = emoji ? (
         <Text>{emoji}</Text>
@@ -114,7 +118,9 @@ export default React.memo(function FitCard({
                     selected && !selectedIndicatorColor ? s.rowSelected : undefined
                 ]}
                 onPress={handlePress}
-                disabled={!hasDropdown && !onPress}
+                disabled={!isInteractive}
+                accessibilityRole={isInteractive ? "button" : undefined}
+                accessibilityLabel={isInteractive ? accessibilityLabel : undefined}
             >
                 {selected && selectedIndicatorColor ? (
                     <View

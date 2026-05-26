@@ -130,9 +130,23 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
         <Animated.View style={[s.card, cardStyle]}>
           <Animated.View style={[s.header, headerBorderStyle]}>
             <View style={s.navRow}>
-              <FitButton variant="link" icon={ChevronLeft} iconOnly iconSize={24} onPress={handlePrev} />
+              <FitButton
+                variant="link"
+                icon={ChevronLeft}
+                iconOnly
+                iconSize={24}
+                accessibilityLabel="Previous calendar page"
+                onPress={handlePrev}
+              />
               <FitText style={s.monthLabel}>{navLabel}</FitText>
-              <FitButton variant="link" icon={ChevronRight} iconOnly iconSize={24} onPress={handleNext} />
+              <FitButton
+                variant="link"
+                icon={ChevronRight}
+                iconOnly
+                iconSize={24}
+                accessibilityLabel="Next calendar page"
+                onPress={handleNext}
+              />
             </View>
           </Animated.View>
           <View style={s.viewRow}>

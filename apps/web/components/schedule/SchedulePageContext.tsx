@@ -1005,12 +1005,12 @@ function useGymOperationsPageState() {
   );
   const venueBookingDateLabel =
     bookingDateRange.startDate && bookingDateRange.endDate
-      ? `${bookingDateRange.startDate} to ${bookingDateRange.endDate}`
+      ? `between ${bookingDateRange.startDate} and ${bookingDateRange.endDate}`
       : bookingDateRange.startDate
-        ? bookingDateRange.startDate
+        ? `from ${bookingDateRange.startDate}`
         : bookingDateRange.endDate
-          ? `Until ${bookingDateRange.endDate}`
-          : "All dates";
+          ? `through ${bookingDateRange.endDate}`
+          : "for all dates";
 
   const handleVenueStartDateSelect = (ymd: string) => {
     if (!ymd) {

@@ -95,6 +95,10 @@ function toInputNumber(value?: number | null) {
   return value != null ? String(value) : "";
 }
 
+function toDateOnlyInput(value?: string | null) {
+  return value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "";
+}
+
 function isGenderValue(value?: string | null): value is GenderValue {
   return GENDER_OPTIONS.some((option) => option.value === value);
 }
@@ -139,7 +143,7 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
     const nextActivityLevel = pickProfileValue(user?.activityLevel, profile?.activityLevel, "moderate");
     const nextFitnessGoal = pickProfileValue(user?.fitnessGoal, profile?.fitnessGoal, "maintenance");
 
-    setDateOfBirth(pickProfileValue(user?.dateOfBirth, profile?.dateOfBirth, ""));
+    setDateOfBirth(toDateOnlyInput(pickProfileValue(user?.dateOfBirth, profile?.dateOfBirth, "")));
     setWeightKg(toInputNumber(user?.weightKg ?? profile?.currentWeightKg));
     setHeightCm(toInputNumber(user?.heightCm ?? profile?.heightCm));
     setGender(isGenderValue(nextGender) ? nextGender : "male");
@@ -258,6 +262,10 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               <Pressable
                 style={[s.fieldBtn, dateOfBirth ? { borderColor: colors.brand } : { borderColor: colors.fieldBorder }]}
                 onPress={() => setIsCalOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Date of birth: ${dateOfBirth ? formatLongDate(dateOfBirth) : "not selected"}`}
+                accessibilityHint="Opens the birth date picker"
+                accessibilityState={{ expanded: isCalOpen }}
               >
                 <CalendarDays size={16} color={dateOfBirth ? colors.brand : colors.textMuted} strokeWidth={2} />
                 <FitText style={[s.fieldBtnText, dateOfBirth ? { color: colors.brand } : {}]}>
@@ -276,6 +284,8 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               <View style={[s.inputFieldWrap, fieldErrors.weightKg?.[0] ? { borderColor: colors.danger } : null]}>
                 <Dumbbell size={16} color={colors.textMuted} strokeWidth={2} />
                 <FitTextInput
+                  nativeID="nutrition-target-weight-kg"
+                  accessibilityLabel="Weight in kg"
                   style={s.inputField}
                   placeholder="Weight in kg"
                   value={weightKg}
@@ -294,6 +304,8 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
               <View style={[s.inputFieldWrap, fieldErrors.heightCm?.[0] ? { borderColor: colors.danger } : null]}>
                 <Dumbbell size={16} color={colors.textMuted} strokeWidth={2} />
                 <FitTextInput
+                  nativeID="nutrition-target-height-cm"
+                  accessibilityLabel="Height in cm"
                   style={s.inputField}
                   placeholder="Height in cm"
                   value={heightCm}
@@ -326,6 +338,9 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
                         }
                       ]}
                       onPress={() => setGender(option.value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose gender: ${option.label}`}
+                      accessibilityState={{ selected: isActive }}
                     >
                       <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
                         {option.label}
@@ -353,6 +368,9 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
                         }
                       ]}
                       onPress={() => setActivityLevel(option.value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose activity level: ${option.label}`}
+                      accessibilityState={{ selected: isActive }}
                     >
                       <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
                         {option.label}
@@ -380,6 +398,9 @@ export default function GoalsModal({ isVisible, onClose, onSuccess }: Props) {
                         }
                       ]}
                       onPress={() => setFitnessGoal(option.value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose fitness goal: ${option.label}`}
+                      accessibilityState={{ selected: isActive }}
                     >
                       <FitText style={[s.goalTypePillText, { color: isActive ? colors.brand : colors.textMuted }]}>
                         {option.label}

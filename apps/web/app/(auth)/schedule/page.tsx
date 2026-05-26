@@ -302,6 +302,15 @@ function GymOperationsPageBody() {
       maximumFractionDigits: 0,
       minimumFractionDigits: 0,
     })}`;
+  const selectedAppointmentStatusLabel =
+    STATUS_OPTIONS.find((option) => option.value === appointmentStatusFilter)
+      ?.label ?? "All statuses";
+  const selectedVenueStatusLabel =
+    VENUE_STATUS_OPTIONS.find((option) => option.value === venueStatusFilter)
+      ?.label ?? "All statuses";
+  const selectedCoachAppointmentFilterLabel =
+    coachOptions.find((option) => option.value === (coachFilterId ?? ""))
+      ?.label ?? "All coaches";
 
   return (
     <DndContext
@@ -678,6 +687,7 @@ function GymOperationsPageBody() {
                               setAppointmentStatusFilter(event.target.value || "all")
                             }
                             options={STATUS_OPTIONS}
+                            aria-label={`Schedule status filter: ${selectedAppointmentStatusLabel}`}
                           />
                         </OperationsControlField>
                       ) : null}
@@ -808,6 +818,7 @@ function GymOperationsPageBody() {
                           options={venueFilterOptions}
                           compact
                           fullWidth
+                          aria-label={`Venue filter: ${selectedVenueFilterLabel}`}
                         />
                       </OperationsControlField>
                       <OperationsControlField label="Status Filter" minWidth={180}>
@@ -819,6 +830,7 @@ function GymOperationsPageBody() {
                           options={VENUE_STATUS_OPTIONS}
                           compact
                           fullWidth
+                          aria-label={`Venue booking status filter: ${selectedVenueStatusLabel}`}
                         />
                       </OperationsControlField>
                       <OperationsControlField label="Start Date" minWidth={160}>
@@ -827,6 +839,9 @@ function GymOperationsPageBody() {
                           icon={CalendarDays}
                           iconSize={15}
                           label={bookingDateRange.startDate ?? "Any date"}
+                          aria-label={`Venue booking start date: ${
+                            bookingDateRange.startDate ?? "Any date"
+                          }`}
                           onClick={() => setVenueStartCalendarOpen(true)}
                           style={{
                             justifyContent: "flex-start",
@@ -841,6 +856,9 @@ function GymOperationsPageBody() {
                           icon={CalendarDays}
                           iconSize={15}
                           label={bookingDateRange.endDate ?? "Any date"}
+                          aria-label={`Venue booking end date: ${
+                            bookingDateRange.endDate ?? "Any date"
+                          }`}
                           onClick={() => setVenueEndCalendarOpen(true)}
                           style={{
                             justifyContent: "flex-start",
@@ -868,7 +886,7 @@ function GymOperationsPageBody() {
                         marginTop: 8,
                       }}
                     >
-                      Showing venue bookings for {venueBookingDateLabel}.
+                      Showing venue bookings {venueBookingDateLabel}.
                     </FitText>
                   </div>
                   <OperationsMetricGrid>
@@ -1023,6 +1041,7 @@ function GymOperationsPageBody() {
                       placeholder="All coaches"
                       compact
                       fullWidth
+                      aria-label={`Coach appointment filter: ${selectedCoachAppointmentFilterLabel}`}
                     />
                   </OperationsControlField>
                   <OperationsControlField label="Status Filter" minWidth={180}>
@@ -1034,6 +1053,7 @@ function GymOperationsPageBody() {
                       options={STATUS_OPTIONS}
                       compact
                       fullWidth
+                      aria-label={`Coach appointment status filter: ${selectedAppointmentStatusLabel}`}
                     />
                   </OperationsControlField>
                 </div>

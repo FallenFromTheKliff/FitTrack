@@ -1168,6 +1168,7 @@ function useExerciseLabPageState() {
     () => [
       {
         label: "Review",
+        ariaLabel: (candidate) => `Review ${candidate.title}`,
         variant: "ghost",
         icon: PanelRightOpen,
         onClick: openReviewModal,
@@ -1244,12 +1245,14 @@ function useExerciseLabPageState() {
     {
       icon: Pencil,
       label: "Edit",
+      ariaLabel: (exercise) => `Edit ${exercise.name}`,
       onClick: handleOpenEdit,
       variant: "ghost",
     },
     {
       icon: Archive,
       label: "Archive",
+      ariaLabel: (exercise) => `Archive ${exercise.name}`,
       disabled: (exercise) => !exercise.isActive,
       onClick: (exercise) =>
         setConfirmationState({
@@ -1262,6 +1265,7 @@ function useExerciseLabPageState() {
     {
       icon: RefreshCcw,
       label: "Restore",
+      ariaLabel: (exercise) => `Restore ${exercise.name}`,
       disabled: (exercise) => exercise.isActive,
       onClick: (exercise) =>
         setConfirmationState({
@@ -1325,12 +1329,14 @@ function useExerciseLabPageState() {
     {
       icon: Pencil,
       label: "Edit",
+      ariaLabel: (definition) => `Edit ${definition.name}`,
       onClick: resetMuscleDraft,
       variant: "ghost",
     },
     {
       icon: Archive,
       label: "Archive",
+      ariaLabel: (definition) => `Archive ${definition.name}`,
       disabled: (definition) => !definition.isActive,
       onClick: (definition) => void handleArchiveMuscleDefinition(definition),
       variant: "ghost",
@@ -1338,6 +1344,7 @@ function useExerciseLabPageState() {
     {
       icon: RefreshCcw,
       label: "Restore",
+      ariaLabel: (definition) => `Restore ${definition.name}`,
       disabled: (definition) => definition.isActive,
       onClick: (definition) =>
         void updateMuscleDefinitionMutation

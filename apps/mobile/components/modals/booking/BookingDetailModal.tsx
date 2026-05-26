@@ -212,8 +212,12 @@ export default function BookingDetailModal({
   const totalPrice = booking.totalAmount ?? pricing.finalPrice;
   const showPaymentPlan =
     booking.paymentPlan === "downpayment" || booking.paymentPlan === "full";
-  const amountDueNow = booking.amountDueNow ?? totalPrice;
   const remainingBalance = booking.remainingBalance ?? 0;
+  const isBalanceCollection =
+    booking.status === "pending_full_payment" && remainingBalance > 0;
+  const amountDueNow = isBalanceCollection
+    ? remainingBalance
+    : booking.amountDueNow ?? totalPrice;
   const bookingTypeLabel =
     booking.bookingType === "recurring"
       ? "Recurring booking"
@@ -223,7 +227,9 @@ export default function BookingDetailModal({
       ? "Part of a recurring coach plan."
       : "One-time booking only.";
   const paymentPlanLabel =
-    booking.paymentPlan === "full"
+    isBalanceCollection
+      ? "Balance payment"
+      : booking.paymentPlan === "full"
       ? "Full payment"
       : booking.paymentPlan === "downpayment"
         ? "Split payment"

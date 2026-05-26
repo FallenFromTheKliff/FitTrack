@@ -37,6 +37,26 @@ const FacilitiesKonvaMap = dynamic(() => import("./FacilitiesKonvaMap"), {
   ssr: false,
 });
 
+function hidePlaceholderAssetUrl(assetUrl?: string | null) {
+  const trimmedUrl = assetUrl?.trim();
+  if (!trimmedUrl) return null;
+
+  try {
+    const { hostname } = new URL(trimmedUrl);
+    if (
+      hostname === "fittrack.dev" ||
+      hostname === "fittrack.local" ||
+      hostname.endsWith(".fittrack.local")
+    ) {
+      return null;
+    }
+  } catch {
+    return trimmedUrl;
+  }
+
+  return trimmedUrl;
+}
+
 type AssignedEquipmentDisplay = {
   color: string;
   icon: LucideIcon;
@@ -752,8 +772,7 @@ export function FloorPlanPanel({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: floorImageUrl ?? null,
   });
-  const renderableFloorImageUrl =
-    resolvedFloorImageUrl?.startsWith("https://fittrack.dev/") ? null : resolvedFloorImageUrl;
+  const renderableFloorImageUrl = hidePlaceholderAssetUrl(resolvedFloorImageUrl);
 
   const quickRegionPlacement = useMemo(() => {
     if (!quickRegionTemplate || !hoverCell) {

@@ -276,9 +276,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       filters.search = search;
     }
 
-    if (activeStatus === "Active" || activeStatus === "Termination Requests") {
-      filters.archived = false;
-    } else if (activeStatus === "Archived") {
+    if (activeStatus === "Archived") {
       filters.archived = true;
     }
 

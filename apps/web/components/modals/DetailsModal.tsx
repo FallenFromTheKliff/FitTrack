@@ -257,6 +257,7 @@ export default function DetailsModal({
             <FitTextArea
               id={fieldId}
               name={field.name}
+              autoComplete="off"
               placeholder={field.placeholder}
               value={formData[field.name] ?? ""}
               onChange={(e) => handleChange(field.name, e.target.value)}
@@ -269,6 +270,7 @@ export default function DetailsModal({
             <FitTextInput
               id={fieldId}
               name={field.name}
+              autoComplete="off"
               type={field.type}
               placeholder={field.placeholder}
               value={formData[field.name] ?? ""}
