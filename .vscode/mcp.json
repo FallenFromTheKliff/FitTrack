@@ -19,26 +19,9 @@
         "Authorization": "Bearer ${input:github_mcp_pat_v2}"
       }
     },
-    "Notion": {
-      "type": "http",
-      "url": "https://mcp.notion.com/mcp"
-    },
     "Prisma Remote": {
       "type": "http",
       "url": "https://mcp.prisma.io/mcp"
-    },
-    "oraios/serena": {
-      "type": "stdio",
-      "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--open-web-dashboard",
-        "false",
-        "--context",
-        "codex",
-        "--project",
-        "${workspaceFolder}"
-      ]
     },
     "FitTrack Playwright": {
       "type": "stdio",
@@ -84,10 +67,6 @@
     "Context7 Docs": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
-    },
-    "Exa Docs": {
-      "type": "http",
-      "url": "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa"
     }
   }
 }

@@ -1,0 +1,55 @@
+# FitTrack Graphify scope
+#
+# The first graph is intentionally application-code-only. Graphify remains a
+# generated evidence source; it must not ingest secrets, caches, agent state,
+# test artifacts, screenshots, vendored code, or its own output.
+
+.env
+.env.*
+.git/
+.agents/
+.artifacts/
+.codex/
+.cxx/
+.history/
+.idea/
+.npm-cache/
+.pnpm-store/
+.railway-deploy/
+.railway-upload/
+.serena/
+.turbo/
+.uv-cache/
+.uv-cache-local/
+.uv-runtime/
+.vscode/
+
+artifacts/
+context/
+coverage/
+dist/
+docs/
+infodump/
+logs/
+node_modules/
+patches/
+playwright-report/
+pytest-cache-files-*/
+repo-skills/
+scripts/
+tasks/
+temp_skill_build/
+test-results/
+tmp/
+Ultralytics/
+
+graphify-out/
+
+*.log
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.pdf
+*.tsbuildinfo
+

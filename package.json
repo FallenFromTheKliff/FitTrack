@@ -29,7 +29,7 @@
     "db:migrate": "pnpm --filter @fittrack/api exec npx prisma migrate dev",
     "db:migrate:generate": "pnpm db:migrate && pnpm db:generate",
     "db:seed": "pnpm --filter @fittrack/api exec npx prisma db seed",
-    "db:seed:realistic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=reset --users=100",
+    "db:seed:realistic": "pnpm run db:seed:dynamic",
     "db:seed:dynamic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=reset --users=100",
     "db:seed:dynamic:additive": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --users=100",
     "db:seed:dynamic:railway": "railway run pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=railway --mode=additive --users=100",
