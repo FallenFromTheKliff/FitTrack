@@ -1,0 +1,1882 @@
+{
+  "schema_version": "page-design-evidence.v1",
+  "evidence_id": "evidence-page-baseline-run-20260727-gym-operations-component-composition-v1",
+  "contract_id": "page-design-fittrack-gym-operations-v1",
+  "run_id": "run-20260727-gym-operations-component-composition-v1",
+  "project_id": "fittrack",
+  "task_id": "task-20260727-gym-operations-ui-harness-calibration-v0",
+  "phase": "baseline",
+  "source_revision": "git-scope:1c9256cd0985193c4f3764b2d8b7e32a1e9e04a0",
+  "captured_at": "2026-07-26T18:55:23.789Z",
+  "observations": [
+    {
+      "state_id": "gym-month-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule",
+      "screenshot_ref": "shot-baseline-gym-month-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 570.578125
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-month-calendar",
+          "selector": "[data-ui='gym-operations-month-calendar']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 570.578125
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-month-compact",
+      "viewport_id": "desktop-compact",
+      "url": "http://127.0.0.1:8080/schedule",
+      "screenshot_ref": "shot-baseline-gym-month-compact",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 230,
+            "width": 1114,
+            "height": 570.578125
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-month-calendar",
+          "selector": "[data-ui='gym-operations-month-calendar']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 230,
+            "width": 1114,
+            "height": 570.578125
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-day-modal-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule",
+      "screenshot_ref": "shot-baseline-gym-day-modal-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-9",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "2 schedules for this day",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 570.578125
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-month-calendar",
+          "selector": "[data-ui='gym-operations-month-calendar']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 570.578125
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-day-modal",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 580,
+            "y": 358.109375,
+            "width": 760,
+            "height": 363.765625
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "16px",
+            "background": "rgb(30, 30, 30)",
+            "border": "0px solid rgb(229, 231, 235)",
+            "shadow": "rgba(0, 0, 0, 0.2) 0px 20px 25px -5px"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-day-modal-compact",
+      "viewport_id": "desktop-compact",
+      "url": "http://127.0.0.1:8080/schedule",
+      "screenshot_ref": "shot-baseline-gym-day-modal-compact",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-9",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "2 schedules for this day",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 230,
+            "width": 1114,
+            "height": 570.578125
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-month-calendar",
+          "selector": "[data-ui='gym-operations-month-calendar']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 230,
+            "width": 1114,
+            "height": 570.578125
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-day-modal",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 340,
+            "y": 268.109375,
+            "width": 760,
+            "height": 363.765625
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "16px",
+            "background": "rgb(30, 30, 30)",
+            "border": "0px solid rgb(229, 231, 235)",
+            "shadow": "rgba(0, 0, 0, 0.2) 0px 20px 25px -5px"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-coach-schedule-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule?schedule_view=coaches",
+      "screenshot_ref": "shot-baseline-gym-coach-schedule-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 891
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-venue-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule?schedule_view=venues",
+      "screenshot_ref": "shot-baseline-gym-venue-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 600.703125
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        }
+      ]
+    },
+    {
+      "state_id": "gym-coaches-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule?tab=coaches",
+      "screenshot_ref": "shot-baseline-gym-coaches-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 890
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-coaches-panel",
+          "selector": "[data-ui='gym-operations-coaches-panel']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 890
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        }
+      ]
+    },
+    {
+      "state_id": "gym-coaches-compact",
+      "viewport_id": "desktop-compact",
+      "url": "http://127.0.0.1:8080/schedule",
+      "screenshot_ref": "shot-baseline-gym-coaches-compact",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1114,
+            "height": 710
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-coaches-panel",
+          "selector": "[data-ui='gym-operations-coaches-panel']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1114,
+            "height": 710
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        }
+      ]
+    },
+    {
+      "state_id": "gym-appointments-full",
+      "viewport_id": "desktop-full",
+      "url": "http://127.0.0.1:8080/schedule?tab=appointments",
+      "screenshot_ref": "shot-baseline-gym-appointments-full",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules.",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 9107.34375
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-appointments-panel",
+          "selector": "[data-ui='gym-operations-appointments-panel']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1594,
+            "height": 9107.34375
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        }
+      ]
+    },
+    {
+      "state_id": "gym-appointments-compact",
+      "viewport_id": "desktop-compact",
+      "url": "http://127.0.0.1:8080/schedule?tab=appointments",
+      "screenshot_ref": "shot-baseline-gym-appointments-compact",
+      "copy_blocks": [
+        {
+          "copy_id": "gym-title-1",
+          "selector": "h1",
+          "text": "Gym Operations",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-title",
+          "exposure": "persistent",
+          "critical": true,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "gym-subtitle-1",
+          "selector": "h1 + *",
+          "text": "Run bookings and schedules",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": "gym-subtitle",
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-1",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Admin Portal",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-2",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Manage Profile Details",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-3",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Main",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-4",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "Fitness Ops",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        },
+        {
+          "copy_id": "observed-copy-5",
+          "selector": "h1,h2,h3,p,small,[role='status'],[role='alert'],[data-help-text],[data-description]",
+          "text": "System",
+          "visible": true,
+          "first_viewport": true,
+          "line_count": 1,
+          "matched_content_id": null,
+          "exposure": "persistent",
+          "critical": false,
+          "access_modes": [
+            "visible"
+          ],
+          "trigger_accessible": true
+        }
+      ],
+      "surface_records": [
+        {
+          "surface_role_id": "gym-page",
+          "selector": "[data-ui='gym-operations-content']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1114,
+            "height": 9167.640625
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        },
+        {
+          "surface_role_id": "gym-primary-tabs",
+          "selector": "[data-ui='gym-operations-primary-tabs']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 422.046875,
+            "height": 44
+          },
+          "decorated": true,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": {
+            "radius": "8px",
+            "background": "rgb(30, 30, 30)",
+            "border": "1px solid rgb(58, 58, 58)",
+            "shadow": "none"
+          }
+        },
+        {
+          "surface_role_id": "gym-appointments-panel",
+          "selector": "[data-ui='gym-operations-appointments-panel']",
+          "found": true,
+          "visible": true,
+          "rect": {
+            "x": 298,
+            "y": 178,
+            "width": 1114,
+            "height": 9167.640625
+          },
+          "decorated": false,
+          "decorated_ancestor_depth": 1,
+          "pill_geometry": false,
+          "style_signature": null
+        }
+      ]
+    }
+  ],
+  "evidence_manifest": {
+    "schema_version": "evidence-manifest.v1",
+    "manifest_id": "manifest-page-baseline-run-20260727-gym-operations-component-composition-v1",
+    "deliverable_id": "page-design-baseline-evidence",
+    "run_id": "run-20260727-gym-operations-component-composition-v1",
+    "created_at": "2026-07-26T18:55:23.789Z",
+    "evidence": [
+      {
+        "evidence_id": "shot-baseline-gym-month-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-month-full.png",
+        "content_hash": "sha256:b2d20661208a832e8d1e54cc9b3836d120039aff9cf73a75d7cddcedef455e0c",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:21.542Z",
+        "independence": "self",
+        "size_bytes": 96268
+      },
+      {
+        "evidence_id": "shot-baseline-gym-month-compact",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-month-compact.png",
+        "content_hash": "sha256:08f9d77de9a082af17face9e69ccdf753149a9300bf78cac5963b872febd967c",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:27.319Z",
+        "independence": "self",
+        "size_bytes": 84897
+      },
+      {
+        "evidence_id": "shot-baseline-gym-day-modal-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-day-modal-full.png",
+        "content_hash": "sha256:28752fdac2587cfb16a534217a7c470ca062503272eb96677b8780dc7edc0c6f",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:33.027Z",
+        "independence": "self",
+        "size_bytes": 83269
+      },
+      {
+        "evidence_id": "shot-baseline-gym-day-modal-compact",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-day-modal-compact.png",
+        "content_hash": "sha256:32edfb37ccaaffb6a29f6e8f409602cc1969c46dbfb080d8b4fe7047dd5cf154",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:38.826Z",
+        "independence": "self",
+        "size_bytes": 78345
+      },
+      {
+        "evidence_id": "shot-baseline-gym-coach-schedule-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-coach-schedule-full.png",
+        "content_hash": "sha256:4e3d16a7ab3792b0044dbeadc5c62251afa0c091ce740417717369e76812d99c",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:45.235Z",
+        "independence": "self",
+        "size_bytes": 97306
+      },
+      {
+        "evidence_id": "shot-baseline-gym-venue-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-venue-full.png",
+        "content_hash": "sha256:252ec969e609f68df29ed3b3378d5ff722741e290d1f0b1904d898ac8614c0c2",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:51.356Z",
+        "independence": "self",
+        "size_bytes": 133219
+      },
+      {
+        "evidence_id": "shot-baseline-gym-coaches-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-coaches-full.png",
+        "content_hash": "sha256:d1d7693b87cf3a77c9d2f584c764ed899c2494e431a5f15ab79cc376268ebfc8",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:54:57.491Z",
+        "independence": "self",
+        "size_bytes": 120693
+      },
+      {
+        "evidence_id": "shot-baseline-gym-coaches-compact",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-coaches-compact.png",
+        "content_hash": "sha256:43bc001f43c4e0efecd9ba61c89eb6283a95065e060c3b845f68d1024a98e045",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:55:03.980Z",
+        "independence": "self",
+        "size_bytes": 114065
+      },
+      {
+        "evidence_id": "shot-baseline-gym-appointments-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-appointments-full.png",
+        "content_hash": "sha256:c27887423220b35ac4d0ccadc9608659e579769f5fbe8a3981d93a4c945571b9",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:55:10.109Z",
+        "independence": "self",
+        "size_bytes": 149420
+      },
+      {
+        "evidence_id": "shot-baseline-gym-appointments-compact",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/baseline/gym-appointments-compact.png",
+        "content_hash": "sha256:c99500ab26b4819a754d12639386f0c0ecf53fb211747c556d5ea07cdbd4b2d2",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:55:17.506Z",
+        "independence": "self",
+        "size_bytes": 123346
+      },
+      {
+        "evidence_id": "copy-observation-baseline",
+        "kind": "copy-observation",
+        "uri": "page-design-baseline-evidence.json#copy-observation",
+        "content_hash": "sha256:9d46cf2492a20693157ac2329fd29d51ed84f1465b75bdf111a75d45a7ddb7d6",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:55:23.789Z",
+        "independence": "self",
+        "size_bytes": 21806
+      },
+      {
+        "evidence_id": "surface-morphology-baseline",
+        "kind": "surface-morphology-record",
+        "uri": "page-design-baseline-evidence.json#surface-morphology",
+        "content_hash": "sha256:cfd99c2ee38cd437ae7a008ba94a971c5abedb6d1726187e40956ac4221be055",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-26T18:55:23.789Z",
+        "independence": "self",
+        "size_bytes": 9572
+      }
+    ]
+  }
+}

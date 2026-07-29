@@ -1,0 +1,4304 @@
+{
+  "schema_version": "ui-run-contract.v1",
+  "contract_id": "contract-fittrack-admin-analytics-v1",
+  "run_id": "run-20260726-ui-ux-enforcement-v1",
+  "project_id": "fittrack",
+  "task_id": "work-20260722-ui-ux-vertical-slice",
+  "project_pack_revision": 1,
+  "source_revision": "git-scope:362559fedc08cb30a73b8d419fa709efff5972924c41c09a192d82bbd734a7c0",
+  "route": "/analytics",
+  "lane": "premium",
+  "context_manifest": {
+    "manifest_id": "context-run-20260726-ui-ux-enforcement-v1",
+    "content_hash": "sha256:950c857fcfc290a35271d4e3f3d75d8ee7876488d1c0e22d53711324e99aeb3f",
+    "required_refs": [
+      "Research/Design/UI-UX-Enforcement/mechanical-enforcement-contract.md",
+      "Research/Design/UI-UX-Enforcement/design-dna-model.md",
+      "Research/Design/UI-UX-Enforcement/framer-agent-orchestration-model.md",
+      "References/Projects/FitTrack/design-dna.md",
+      "References/Projects/FitTrack/Surfaces/admin-analytics-ui-contract.md"
+    ]
+  },
+  "roles": [
+    "admin"
+  ],
+  "viewports": [
+    {
+      "viewport_id": "desktop-full",
+      "width": 1920,
+      "height": 1080,
+      "class": "full"
+    },
+    {
+      "viewport_id": "desktop-compact",
+      "width": 1440,
+      "height": 900,
+      "class": "compact"
+    }
+  ],
+  "data_fixtures": [
+    {
+      "fixture_id": "analytics-seeded",
+      "description": "Seeded admin analytics with operational KPIs, alerts, revenue, attendance, and modal-capable controls."
+    }
+  ],
+  "states": [
+    {
+      "state_id": "analytics-all-sections-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "all-sections",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-all-sections-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-all-sections-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-all-sections-full",
+          "action": "click",
+          "target_id": "tab-all",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "insights-section",
+          "selector": "#analytics-insights",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "kpis-section",
+          "selector": "#analytics-kpis",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "alerts-section",
+          "selector": "#analytics-alerts",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "range-section",
+          "selector": "#analytics-daily",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "revenue-section",
+          "selector": "#analytics-revenue",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-ai-insights-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "ai-insights",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-ai-insights-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-ai-insights-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-ai-insights-full",
+          "action": "click",
+          "target_id": "tab-insights",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-ai-insights-full",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-insights",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-performance-kpis-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "performance-kpis",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-performance-kpis-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-performance-kpis-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-performance-kpis-full",
+          "action": "click",
+          "target_id": "tab-kpis",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-performance-kpis-full",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-kpis",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-system-alerts-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "system-alerts",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-system-alerts-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-system-alerts-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-system-alerts-full",
+          "action": "click",
+          "target_id": "tab-alerts",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-system-alerts-full",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-alerts",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-range-insights-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "range-insights",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-range-insights-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-range-insights-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-range-insights-full",
+          "action": "click",
+          "target_id": "tab-range",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-range-insights-full",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-daily",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-revenue-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "revenue",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-revenue-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-revenue-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-revenue-full",
+          "action": "click",
+          "target_id": "tab-revenue",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-revenue-full",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-revenue",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-range-dirty-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "range-dirty",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-range-dirty-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-range-dirty-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "fill-range-dirty-full",
+          "action": "fill",
+          "target_id": "start-date",
+          "value": "2026-01-01",
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "open-range-group-full",
+          "action": "click",
+          "target_id": "group-select",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "choose-yearly-group-full",
+          "action": "click",
+          "target_id": "group-yearly",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-yearly",
+          "selector": "[role='menuitem']:nth-of-type(3)",
+          "kind": "control",
+          "required": false,
+          "must_be_fully_visible": false,
+          "minimum_width": 1,
+          "minimum_height": 1
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-pdf-modal-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "pdf-modal",
+      "overlay_id": "pdf-modal",
+      "setup_steps": [
+        {
+          "step_id": "goto-pdf-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-pdf-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "scroll-pdf-full",
+          "action": "scroll-into-view",
+          "target_id": "pdf-trigger",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "open-pdf-full",
+          "action": "click",
+          "target_id": "pdf-trigger",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-pdf-dialog-full",
+          "action": "wait-for",
+          "target_id": "modal-shell",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "pdf-trigger",
+          "selector": "[data-ui=\"analytics-pdf-trigger\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 300,
+          "minimum_height": 100
+        },
+        {
+          "target_id": "modal-close",
+          "selector": "[role='dialog'] button[aria-label='Close modal']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-primary",
+          "selector": ".analytics-pdf-modal-footer button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-footer",
+          "selector": ".analytics-pdf-modal-footer",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 40
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ],
+        [
+          "modal-close",
+          "modal-primary"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "pdf-trigger",
+        "overlay_target_id": "modal-shell",
+        "scroll_owner_target_id": "modal-scroll-owner",
+        "close_target_id": "modal-close",
+        "primary_action_target_id": "modal-primary",
+        "background_target_id": "analytics-shell",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-drilldown-modal-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "drilldown-modal",
+      "overlay_id": "drilldown-modal",
+      "setup_steps": [
+        {
+          "step_id": "goto-drilldown-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-drilldown-full",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-drilldown-full",
+          "action": "click",
+          "target_id": "drilldown-trigger",
+          "value": null,
+          "timeout_ms": 5000
+        },
+        {
+          "step_id": "wait-drilldown-dialog-full",
+          "action": "wait-for",
+          "target_id": "modal-shell",
+          "value": null,
+          "timeout_ms": 5000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "drilldown-trigger",
+          "selector": "[data-ui='analytics-drilldown-trigger']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 300,
+          "minimum_height": 100
+        },
+        {
+          "target_id": "modal-close",
+          "selector": "[role='dialog'] button[aria-label='Close modal']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 32,
+          "minimum_height": 32
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "drilldown-trigger",
+        "overlay_target_id": "modal-shell",
+        "scroll_owner_target_id": "modal-scroll-owner",
+        "close_target_id": "modal-close",
+        "primary_action_target_id": "modal-close",
+        "background_target_id": "analytics-shell",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-all-sections-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "all-sections",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-all-sections-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-all-sections-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-all-sections-compact",
+          "action": "click",
+          "target_id": "tab-all",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "insights-section",
+          "selector": "#analytics-insights",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "kpis-section",
+          "selector": "#analytics-kpis",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "alerts-section",
+          "selector": "#analytics-alerts",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "range-section",
+          "selector": "#analytics-daily",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        },
+        {
+          "target_id": "revenue-section",
+          "selector": "#analytics-revenue",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-ai-insights-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "ai-insights",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-ai-insights-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-ai-insights-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-ai-insights-compact",
+          "action": "click",
+          "target_id": "tab-insights",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-ai-insights-compact",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-insights",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-performance-kpis-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "performance-kpis",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-performance-kpis-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-performance-kpis-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-performance-kpis-compact",
+          "action": "click",
+          "target_id": "tab-kpis",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-performance-kpis-compact",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-kpis",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-system-alerts-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "system-alerts",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-system-alerts-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-system-alerts-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-system-alerts-compact",
+          "action": "click",
+          "target_id": "tab-alerts",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-system-alerts-compact",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-alerts",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-range-insights-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "range-insights",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-range-insights-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-range-insights-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-range-insights-compact",
+          "action": "click",
+          "target_id": "tab-range",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-range-insights-compact",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-daily",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-revenue-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "revenue",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-revenue-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-shell-revenue-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-revenue-compact",
+          "action": "click",
+          "target_id": "tab-revenue",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-revenue-compact",
+          "action": "wait-for",
+          "target_id": "active-section",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "active-section",
+          "selector": "#analytics-revenue",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 400,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-range-dirty-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "range-dirty",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-range-dirty-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-range-dirty-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "fill-range-dirty-compact",
+          "action": "fill",
+          "target_id": "start-date",
+          "value": "2026-01-01",
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "open-range-group-compact",
+          "action": "click",
+          "target_id": "group-select",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "choose-yearly-group-compact",
+          "action": "click",
+          "target_id": "group-yearly",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-yearly",
+          "selector": "[role='menuitem']:nth-of-type(3)",
+          "kind": "control",
+          "required": false,
+          "must_be_fully_visible": false,
+          "minimum_width": 1,
+          "minimum_height": 1
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-pdf-modal-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "pdf-modal",
+      "overlay_id": "pdf-modal",
+      "setup_steps": [
+        {
+          "step_id": "goto-pdf-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-pdf-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "scroll-pdf-compact",
+          "action": "scroll-into-view",
+          "target_id": "pdf-trigger",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "open-pdf-compact",
+          "action": "click",
+          "target_id": "pdf-trigger",
+          "value": null,
+          "timeout_ms": 10000
+        },
+        {
+          "step_id": "wait-pdf-dialog-compact",
+          "action": "wait-for",
+          "target_id": "modal-shell",
+          "value": null,
+          "timeout_ms": 10000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "pdf-trigger",
+          "selector": "[data-ui=\"analytics-pdf-trigger\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 300,
+          "minimum_height": 100
+        },
+        {
+          "target_id": "modal-close",
+          "selector": "[role='dialog'] button[aria-label='Close modal']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-primary",
+          "selector": ".analytics-pdf-modal-footer button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-footer",
+          "selector": ".analytics-pdf-modal-footer",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 40
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ],
+        [
+          "modal-close",
+          "modal-primary"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "pdf-trigger",
+        "overlay_target_id": "modal-shell",
+        "scroll_owner_target_id": "modal-scroll-owner",
+        "close_target_id": "modal-close",
+        "primary_action_target_id": "modal-primary",
+        "background_target_id": "analytics-shell",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    },
+    {
+      "state_id": "analytics-drilldown-modal-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "analytics-seeded",
+      "ui_state": "drilldown-modal",
+      "overlay_id": "drilldown-modal",
+      "setup_steps": [
+        {
+          "step_id": "goto-drilldown-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/analytics",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-drilldown-compact",
+          "action": "wait-for",
+          "target_id": "analytics-shell",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-drilldown-compact",
+          "action": "click",
+          "target_id": "drilldown-trigger",
+          "value": null,
+          "timeout_ms": 5000
+        },
+        {
+          "step_id": "wait-drilldown-dialog-compact",
+          "action": "wait-for",
+          "target_id": "modal-shell",
+          "value": null,
+          "timeout_ms": 5000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-title",
+          "selector": "h1",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 36
+        },
+        {
+          "target_id": "analytics-shell",
+          "selector": ".analytics-shell",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 600,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "section-filter",
+          "selector": ".analytics-section-filter",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "tab-all",
+          "selector": ".analytics-section-filter button:nth-of-type(1)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-insights",
+          "selector": ".analytics-section-filter button:nth-of-type(2)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 68,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-kpis",
+          "selector": ".analytics-section-filter button:nth-of-type(3)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-alerts",
+          "selector": ".analytics-section-filter button:nth-of-type(4)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-range",
+          "selector": ".analytics-section-filter button:nth-of-type(5)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 78,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "tab-revenue",
+          "selector": ".analytics-section-filter button:nth-of-type(6)",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 60,
+          "minimum_height": 30
+        },
+        {
+          "target_id": "date-panel",
+          "selector": ".analytics-date-range-panel",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 600,
+          "minimum_height": 72
+        },
+        {
+          "target_id": "start-date",
+          "selector": "input[aria-label='Analytics start date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "end-date",
+          "selector": "input[aria-label='Analytics end date']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "group-select",
+          "selector": ".analytics-date-range-panel .fit-dropdown-trigger",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 110,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "reset-range",
+          "selector": "[data-ui=\"analytics-range-reset\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 56,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "apply-range",
+          "selector": "[data-ui=\"analytics-range-apply\"]",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 88,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "drilldown-trigger",
+          "selector": "[data-ui='analytics-drilldown-trigger']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog'][aria-modal='true']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 300,
+          "minimum_height": 100
+        },
+        {
+          "target_id": "modal-close",
+          "selector": "[role='dialog'] button[aria-label='Close modal']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 32,
+          "minimum_height": 32
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "tab-all",
+          "tab-insights",
+          "tab-kpis",
+          "tab-alerts",
+          "tab-range",
+          "tab-revenue"
+        ],
+        [
+          "start-date",
+          "end-date",
+          "group-select",
+          "reset-range",
+          "apply-range"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "drilldown-trigger",
+        "overlay_target_id": "modal-shell",
+        "scroll_owner_target_id": "modal-scroll-owner",
+        "close_target_id": "modal-close",
+        "primary_action_target_id": "modal-close",
+        "background_target_id": "analytics-shell",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot"
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "exclusion_id": "exclude-ai-provider-side-effect",
+      "dimension": "ui-state",
+      "value": "ai-generation-commit",
+      "reason": "External AI generation is outside safe visual calibration; only the visible action and existing output states are judged."
+    },
+    {
+      "exclusion_id": "exclude-pdf-download-side-effect",
+      "dimension": "ui-state",
+      "value": "pdf-download-commit",
+      "reason": "The calibration opens and dismisses export configuration without committing a filesystem download."
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion_id": "criterion-complete-state-evidence",
+      "statement": "Every declared Analytics state and viewport has fresh screenshot and structured runtime evidence.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "screenshot",
+        "geometry",
+        "diagnostics"
+      ]
+    },
+    {
+      "criterion_id": "criterion-no-layout-breakage",
+      "statement": "No declared target overlaps, clips, escapes its container, or creates horizontal document overflow.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "geometry",
+        "screenshot"
+      ]
+    },
+    {
+      "criterion_id": "criterion-filter-behavior",
+      "statement": "Date bounds and weekly, monthly, or yearly grouping remain independent with correct draft and applied control states.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "interaction",
+        "screenshot"
+      ]
+    },
+    {
+      "criterion_id": "criterion-overlay-behavior",
+      "statement": "PDF and drilldown dialogs are bounded, keyboard-contained, background-inert, dismissible, and return focus.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "overlay",
+        "interaction",
+        "geometry"
+      ]
+    },
+    {
+      "criterion_id": "criterion-runtime-clean",
+      "statement": "The contracted flow introduces no console error, unhandled rejection, failed critical request, or major layout shift.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "console",
+        "network",
+        "performance"
+      ]
+    },
+    {
+      "criterion_id": "criterion-analytics-hierarchy",
+      "statement": "The page communicates applied range, primary business signals, exploration sections, and secondary AI actions in a clear order.",
+      "criterion_type": "subjective",
+      "critical": true,
+      "evidence_kinds": [
+        "screenshot",
+        "critic-opinion"
+      ]
+    },
+    {
+      "criterion_id": "criterion-fittrack-dna",
+      "statement": "The surface uses FitTrack color, typography, density, spacing, shape, and interaction rules with purposeful restraint.",
+      "criterion_type": "subjective",
+      "critical": false,
+      "evidence_kinds": [
+        "screenshot",
+        "critic-opinion"
+      ]
+    }
+  ],
+  "required_checks": [
+    "accessibility",
+    "console",
+    "geometry",
+    "interaction",
+    "network",
+    "overflow",
+    "performance",
+    "screenshot"
+  ],
+  "judge_policy": {
+    "minimum_judges": 2,
+    "pass_score": 82,
+    "disagreement_limit": 18,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "label": "Visual hierarchy",
+        "weight": 0.18,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "information-density",
+        "label": "Information density",
+        "weight": 0.14,
+        "minimum_score": 72,
+        "critical": false
+      },
+      {
+        "dimension_id": "control-clarity",
+        "label": "Control clarity",
+        "weight": 0.18,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "state-legibility",
+        "label": "State legibility",
+        "weight": 0.14,
+        "minimum_score": 74,
+        "critical": false
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "label": "Layout coherence",
+        "weight": 0.18,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "label": "Accessibility usability",
+        "weight": 0.1,
+        "minimum_score": 72,
+        "critical": false
+      },
+      {
+        "dimension_id": "fittrack-dna-alignment",
+        "label": "FitTrack DNA alignment",
+        "weight": 0.08,
+        "minimum_score": 72,
+        "critical": false
+      }
+    ]
+  },
+  "repair_budget": {
+    "max_attempts": 1
+  },
+  "created_at": "2026-07-26T08:05:00+08:00"
+}

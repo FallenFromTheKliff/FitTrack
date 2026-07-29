@@ -1,0 +1,13 @@
+{
+  "avoidable_action_count": 0,
+  "continuation_decision_count": 2,
+  "control_decision_count": 4,
+  "finding_count": 0,
+  "issues": [],
+  "journey_count": 3,
+  "option_mismatch_count": 0,
+  "preservation_check_count": 0,
+  "reentry_field_count": 0,
+  "stable_geometry_group_count": 2,
+  "state": "PASS"
+}

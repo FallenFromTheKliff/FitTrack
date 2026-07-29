@@ -1,0 +1,60 @@
+{
+  "schema_version": "post-repair-runtime-validation.v1",
+  "state": "PASS",
+  "viewport_checks": {
+    "full": {
+      "width": 1920,
+      "height": 1080,
+      "page_horizontal_overflow": false,
+      "single_h1": true,
+      "season_score_is_primary": true,
+      "lifecycle_disclosure_is_explicit": true
+    },
+    "compact": {
+      "width": 768,
+      "height": 900,
+      "page_horizontal_overflow": false,
+      "metric_strip_reflows": true,
+      "leaderboard_has_internal_scroll_owner": true,
+      "leaderboard_scroll_hint_visible": true
+    }
+  },
+  "manual_exp_checks": {
+    "modal_opens": true,
+    "persistent_labels_visible": true,
+    "additive_adjustment_guidance_visible": true,
+    "submit_disabled_without_member": true,
+    "eligible_member_search_match": true,
+    "eligible_member_search_empty_state": true,
+    "eligible_member_search_recovery": true,
+    "canonical_muscle_option_count": 25,
+    "invalid_amount_blocks_mutation": true,
+    "compact_modal_scroll_owner": true,
+    "compact_modal_footer_visible": true
+  },
+  "governance_geometry_checks": {
+    "integrity_panel_height": 340,
+    "rankings_panel_height": 340,
+    "audit_panel_height": 340,
+    "workspace_height": 381.796875,
+    "audit_scroll_height": 681,
+    "audit_overflow_y": "auto",
+    "peer_geometry_stable": true
+  },
+  "confirmation_boundary_checks": {
+    "season_lifecycle_confirmation": true,
+    "season_lifecycle_cancel_preserves_active": true,
+    "integrity_resolution_confirmation": true,
+    "mutations_committed": false
+  },
+  "diagnostics": {
+    "console_errors": 0,
+    "console_warnings": 0,
+    "unexpected_network_failures": 0
+  },
+  "static_checks": {
+    "web_typecheck": "PASS",
+    "web_lint_errors": 0,
+    "unrelated_existing_lint_warnings": 2
+  }
+}

@@ -1,0 +1,1219 @@
+{
+  "schema_version": "ui-run-contract.v1",
+  "contract_id": "contract-ui-gamification-enforced-v1",
+  "run_id": "run-20260728-gamification-enforced-v1",
+  "project_id": "fittrack",
+  "task_id": "task-fittrack-gamification-ui-enforcement-calibration-v1",
+  "project_pack_revision": 1,
+  "source_revision": "git-scope:dd95bcff1a09181d591817523312a32f48264e67f81955c3d039a02cb26ca892",
+  "route": "/gamification",
+  "lane": "premium",
+  "context_manifest": {
+    "manifest_id": "manifest-run-20260728-gamification-enforced-v1",
+    "content_hash": "sha256:d61b5310bd6e6f94527070a955cead52bf368bbfc78f89bef1c8ff7b7ecce22d",
+    "required_refs": [
+      "References/Projects/FitTrack/design-dna.md",
+      "References/Projects/FitTrack/Profiles/admin-web.md",
+      "Research/Design/UI-UX-Enforcement/mechanical-enforcement-contract.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/modal-and-drawer.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/pagination-and-continuation.md",
+      "Research/Design/UI-UX-Enforcement/app-reference-atlas.md",
+      "Research/Design/UI-UX-Enforcement/framer-agent-orchestration-model.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/tabs-and-view-switchers.md"
+    ]
+  },
+  "roles": [
+    "admin"
+  ],
+  "viewports": [
+    {
+      "viewport_id": "desktop-full",
+      "width": 1920,
+      "height": 1080,
+      "class": "full"
+    },
+    {
+      "viewport_id": "desktop-compact",
+      "width": 768,
+      "height": 900,
+      "class": "compact"
+    }
+  ],
+  "data_fixtures": [
+    {
+      "fixture_id": "gamification-seeded",
+      "description": "Seeded active season with standings, integrity cases, governed rankings, and audit corrections."
+    }
+  ],
+  "states": [
+    {
+      "state_id": "gamification-populated-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "populated-overview",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-full",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-gamification-command-full",
+          "action": "wait-for",
+          "target_id": "command-center",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page",
+          "selector": "[data-ui='gamification-admin-page']",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 620,
+          "minimum_height": 500
+        },
+        {
+          "target_id": "command-center",
+          "selector": "[data-ui='gamification-command-center']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 620,
+          "minimum_height": 150
+        },
+        {
+          "target_id": "active-season",
+          "selector": "[data-ui='gamification-active-season']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 560,
+          "minimum_height": 90
+        },
+        {
+          "target_id": "overview",
+          "selector": "[data-ui='gamification-overview']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 620,
+          "minimum_height": 400
+        },
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 560,
+          "minimum_height": 220
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 420,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "integrity-panel",
+          "selector": "[data-ui='gamification-integrity-review-panel']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 420,
+          "minimum_height": 180
+        },
+        {
+          "target_id": "leaderboard",
+          "selector": "[data-season-performance-table='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 560,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "search-member",
+          "selector": "input[placeholder='Search member']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 20
+        },
+        {
+          "target_id": "season-filter",
+          "selector": "button[aria-label='Select: All seasons']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 20
+        },
+        {
+          "target_id": "leaderboard-location",
+          "selector": "[aria-label='Season standing pagination']",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 160,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "leaderboard-previous",
+          "selector": "[aria-label='Season standing pagination'] button[aria-label='Go to previous page']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "leaderboard-next",
+          "selector": "[aria-label='Season standing pagination'] button[aria-label='Go to next page']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 32,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "refresh-overview",
+          "selector": "[data-ui='gamification-command-center'] button",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 80,
+          "minimum_height": 32
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "command-center",
+          "overview"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-populated-compact",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "responsive-overview",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-compact",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-gamification-command-compact",
+          "action": "wait-for",
+          "target_id": "command-center",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page",
+          "selector": "[data-ui='gamification-admin-page']",
+          "kind": "landmark",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 560,
+          "minimum_height": 500
+        },
+        {
+          "target_id": "command-center",
+          "selector": "[data-ui='gamification-command-center']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 560,
+          "minimum_height": 150
+        },
+        {
+          "target_id": "active-season",
+          "selector": "[data-ui='gamification-active-season']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 90
+        },
+        {
+          "target_id": "leaderboard",
+          "selector": "[data-season-performance-table='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 520,
+          "minimum_height": 240
+        },
+        {
+          "target_id": "refresh-overview",
+          "selector": "[data-ui='gamification-command-center'] button",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 80,
+          "minimum_height": 32
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "command-center",
+          "leaderboard"
+        ]
+      ],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-empty-filter-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "empty-filter-result",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-empty",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "fill-impossible-member",
+          "action": "fill",
+          "target_id": "search-member",
+          "value": "no-such-member-zzzz",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-empty-table",
+          "action": "wait-for",
+          "target_id": "empty-result-row",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "search-member",
+          "selector": "input[placeholder='Search member']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 20
+        },
+        {
+          "target_id": "empty-result-row",
+          "selector": "[data-season-performance-table='true'] tbody tr",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 500,
+          "minimum_height": 36
+        }
+      ],
+      "non_overlap_groups": [],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-lifecycle-modal-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "lifecycle-confirmation-open",
+      "overlay_id": "season-lifecycle-confirmation",
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-modal",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-lifecycle-controls",
+          "action": "click",
+          "target_id": "lifecycle-disclosure",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-lifecycle-modal",
+          "action": "click",
+          "target_id": "lifecycle-action",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-lifecycle-modal",
+          "action": "wait-for",
+          "target_id": "modal-shell",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 620,
+          "minimum_height": 500
+        },
+        {
+          "target_id": "lifecycle-disclosure",
+          "selector": "[data-ui='gamification-season-controls'] summary",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 160,
+          "minimum_height": 24
+        },
+        {
+          "target_id": "lifecycle-action",
+          "selector": "[data-ui='gamification-season-controls'] button",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 80,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 400,
+          "minimum_height": 200
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 400,
+          "minimum_height": 200
+        },
+        {
+          "target_id": "modal-cancel",
+          "selector": "[role='dialog'] button:first-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 100,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "modal-primary",
+          "selector": "[role='dialog'] button:last-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 40
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "modal-cancel",
+          "modal-primary"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "lifecycle-action",
+        "overlay_target_id": "modal-shell",
+        "scroll_owner_target_id": "modal-scroll-owner",
+        "close_target_id": "modal-cancel",
+        "primary_action_target_id": "modal-primary",
+        "background_target_id": "page-background",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-manual-exp-modal-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "manual-exp-member-selected",
+      "overlay_id": "manual-exp-grant",
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-manual-exp",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-manual-exp",
+          "action": "click",
+          "target_id": "manual-exp-trigger",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-manual-exp-modal",
+          "action": "wait-for",
+          "target_id": "manual-exp-modal",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "search-manual-exp-member",
+          "action": "fill",
+          "target_id": "manual-exp-search",
+          "value": "seed.member.active",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-manual-exp-member",
+          "action": "wait-for",
+          "target_id": "manual-exp-first-result",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "select-manual-exp-member",
+          "action": "click",
+          "target_id": "manual-exp-first-result",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 620,
+          "minimum_height": 500
+        },
+        {
+          "target_id": "manual-exp-trigger",
+          "selector": "[data-ui='gamification-manual-exp-trigger'] button",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 90,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "manual-exp-modal",
+          "selector": "[role='dialog']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 420
+        },
+        {
+          "target_id": "manual-exp-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 380,
+          "minimum_height": 300
+        },
+        {
+          "target_id": "manual-exp-workflow",
+          "selector": "[data-ui='gamification-manual-exp-workflow']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 360,
+          "minimum_height": 320
+        },
+        {
+          "target_id": "manual-exp-search",
+          "selector": "input[aria-label='Search eligible member for manual EXP']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 220,
+          "minimum_height": 20
+        },
+        {
+          "target_id": "manual-exp-member-results",
+          "selector": "[data-ui='gamification-manual-exp-member-results']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 320,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "manual-exp-muscle",
+          "selector": "[data-ui='gamification-manual-exp-muscle']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 180,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "manual-exp-first-result",
+          "selector": "[data-ui='gamification-manual-exp-member-results'] [role='option']:first-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 280,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "manual-exp-submit",
+          "selector": "[data-ui='gamification-manual-exp-submit'] button",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 140,
+          "minimum_height": 34
+        },
+        {
+          "target_id": "manual-exp-close",
+          "selector": "[role='dialog'] button[aria-label='Close manual EXP grant']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 32,
+          "minimum_height": 32
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "manual-exp-search",
+          "manual-exp-member-results"
+        ],
+        [
+          "manual-exp-member-results",
+          "manual-exp-submit"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "manual-exp-trigger",
+        "overlay_target_id": "manual-exp-modal",
+        "scroll_owner_target_id": "manual-exp-scroll-owner",
+        "close_target_id": "manual-exp-close",
+        "primary_action_target_id": "manual-exp-submit",
+        "background_target_id": "page-background",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-integrity-review-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "integrity-review-open",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-integrity-review",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-integrity-review",
+          "action": "wait-for",
+          "target_id": "integrity-panel",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "scroll-integrity-review",
+          "action": "scroll-into-view",
+          "target_id": "integrity-panel",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 760,
+          "minimum_height": 220
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "integrity-panel",
+          "selector": "[data-ui='gamification-integrity-review-panel']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 180
+        }
+      ],
+      "non_overlap_groups": [],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-ranking-governance-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "ranking-governance-confirmation-open",
+      "overlay_id": "ranking-governance-confirmation",
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-ranking-governance",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-ranking-governance",
+          "action": "click",
+          "target_id": "ranking-governance-tab",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-ranking-governance",
+          "action": "wait-for",
+          "target_id": "ranking-panel",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "scroll-ranking-governance",
+          "action": "scroll-into-view",
+          "target_id": "ranking-panel",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "fill-ranking-note",
+          "action": "fill",
+          "target_id": "ranking-note",
+          "value": "Calibration review for staged ranking governance.",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-ranking-confirmation",
+          "action": "click",
+          "target_id": "ranking-apply",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-ranking-confirmation",
+          "action": "wait-for",
+          "target_id": "ranking-confirm-modal",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 760,
+          "minimum_height": 500
+        },
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 760,
+          "minimum_height": 220
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 520,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "ranking-governance-tab",
+          "selector": "[data-ui='gamification-governance-tab-rankings']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 120,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "ranking-panel",
+          "selector": "[data-ui='gamification-ranking-governance-panel']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 520,
+          "minimum_height": 180
+        },
+        {
+          "target_id": "ranking-note",
+          "selector": "textarea[aria-label='Admin note for this ranking governance decision']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 320,
+          "minimum_height": 52
+        },
+        {
+          "target_id": "ranking-apply",
+          "selector": "[data-ui='gamification-ranking-governance-panel'] button[type='button']:last-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 72,
+          "minimum_height": 32
+        },
+        {
+          "target_id": "ranking-confirm-modal",
+          "selector": "[role='dialog']",
+          "kind": "overlay",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 400,
+          "minimum_height": 200
+        },
+        {
+          "target_id": "ranking-confirm-scroll-owner",
+          "selector": "[role='dialog']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 400,
+          "minimum_height": 200
+        },
+        {
+          "target_id": "ranking-confirm-cancel",
+          "selector": "[role='dialog'] button:first-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 100,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "ranking-confirm-primary",
+          "selector": "[role='dialog'] button:last-of-type",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 40
+        }
+      ],
+      "non_overlap_groups": [
+        [
+          "ranking-confirm-cancel",
+          "ranking-confirm-primary"
+        ]
+      ],
+      "overlay_protocol": {
+        "trigger_target_id": "ranking-apply",
+        "overlay_target_id": "ranking-confirm-modal",
+        "scroll_owner_target_id": "ranking-confirm-scroll-owner",
+        "close_target_id": "ranking-confirm-cancel",
+        "primary_action_target_id": "ranking-confirm-primary",
+        "background_target_id": "page-background",
+        "require_escape_close": true,
+        "require_focus_return": true,
+        "require_tab_containment": true,
+        "require_background_inert": true
+      },
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    },
+    {
+      "state_id": "gamification-audit-log-full",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "audit-log-open",
+      "overlay_id": null,
+      "setup_steps": [
+        {
+          "step_id": "goto-gamification-audit-log",
+          "action": "goto",
+          "target_id": null,
+          "value": "/gamification",
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "open-audit-log",
+          "action": "click",
+          "target_id": "audit-log-tab",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "wait-audit-log",
+          "action": "wait-for",
+          "target_id": "audit-panel",
+          "value": null,
+          "timeout_ms": 15000
+        },
+        {
+          "step_id": "scroll-audit-log",
+          "action": "scroll-into-view",
+          "target_id": "audit-panel",
+          "value": null,
+          "timeout_ms": 15000
+        }
+      ],
+      "target_selectors": [
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 560,
+          "minimum_height": 180
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": false,
+          "minimum_width": 420,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "audit-log-tab",
+          "selector": "[data-ui='gamification-governance-tab-audit']",
+          "kind": "control",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 120,
+          "minimum_height": 40
+        },
+        {
+          "target_id": "audit-panel",
+          "selector": "[data-ui='gamification-audit-panel']",
+          "kind": "content",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 420,
+          "minimum_height": 140
+        },
+        {
+          "target_id": "audit-records",
+          "selector": "[data-ui='gamification-audit-records']",
+          "kind": "scroll-owner",
+          "required": true,
+          "must_be_fully_visible": true,
+          "minimum_width": 520,
+          "minimum_height": 120
+        }
+      ],
+      "non_overlap_groups": [],
+      "overlay_protocol": null,
+      "required_checks": [
+        "accessibility",
+        "console",
+        "geometry",
+        "interaction",
+        "network",
+        "overflow",
+        "performance",
+        "screenshot",
+        "visual-consistency"
+      ]
+    }
+  ],
+  "overlay_inventory": [
+    {
+      "overlay_id": "season-lifecycle-confirmation",
+      "overlay_type": "dialog",
+      "trigger_target_id": "lifecycle-action",
+      "coverage_state_ids": [
+        "gamification-lifecycle-modal-full"
+      ],
+      "exclusion_reason": null
+    },
+    {
+      "overlay_id": "manual-exp-grant",
+      "overlay_type": "dialog",
+      "trigger_target_id": "manual-exp-trigger",
+      "coverage_state_ids": [
+        "gamification-manual-exp-modal-full"
+      ],
+      "exclusion_reason": null
+    },
+    {
+      "overlay_id": "ranking-governance-confirmation",
+      "overlay_type": "dialog",
+      "trigger_target_id": "ranking-apply",
+      "coverage_state_ids": [
+        "gamification-ranking-governance-full"
+      ],
+      "exclusion_reason": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion_id": "criterion-complete-state-evidence",
+      "statement": "Populated, compact, empty-filter, and lifecycle-confirmation states have fresh structured evidence.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "screenshot",
+        "geometry",
+        "diagnostics"
+      ]
+    },
+    {
+      "criterion_id": "criterion-responsive-geometry",
+      "statement": "The command center never collapses into one-word columns and the route has no page-level horizontal overflow.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "geometry",
+        "overflow",
+        "screenshot"
+      ]
+    },
+    {
+      "criterion_id": "criterion-functional-preservation",
+      "statement": "Filters, bounded table overflow, lifecycle disclosure, modal cancellation, and pagination remain functional.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "interaction",
+        "accessibility",
+        "network"
+      ]
+    },
+    {
+      "criterion_id": "criterion-operational-hierarchy",
+      "statement": "Season state, metrics, leaderboard, and governance controls have an intentional scan order without a false tab or permanent lifecycle form.",
+      "criterion_type": "subjective",
+      "critical": true,
+      "evidence_kinds": [
+        "screenshot",
+        "critic-opinion"
+      ]
+    },
+    {
+      "criterion_id": "criterion-component-intent-and-scale",
+      "statement": "Rare manual corrections are on demand, and member discovery remains usable at a 5,000-member scale ceiling without preloading a giant dropdown.",
+      "criterion_type": "objective",
+      "critical": true,
+      "evidence_kinds": [
+        "interaction",
+        "network",
+        "screenshot"
+      ]
+    },
+    {
+      "criterion_id": "criterion-fittrack-dna",
+      "statement": "The repaired page preserves FitTrack typography, color, density, and restrained operational surfaces.",
+      "criterion_type": "subjective",
+      "critical": false,
+      "evidence_kinds": [
+        "screenshot",
+        "critic-opinion"
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "exclusion_id": "exclusion-coach-role",
+      "dimension": "role",
+      "value": "coach",
+      "reason": "This calibration targets the administrator governance surface; the coach implementation is a separate page branch."
+    }
+  ],
+  "judge_policy": {
+    "minimum_judges": 2,
+    "pass_score": 82,
+    "component_minimum_score": 78,
+    "disagreement_limit": 18,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "label": "Visual hierarchy",
+        "weight": 0.2,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "control-clarity",
+        "label": "Control clarity",
+        "weight": 0.2,
+        "minimum_score": 80,
+        "critical": true
+      },
+      {
+        "dimension_id": "interaction-efficiency",
+        "label": "Interaction efficiency",
+        "weight": 0.18,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "label": "Layout coherence",
+        "weight": 0.18,
+        "minimum_score": 78,
+        "critical": true
+      },
+      {
+        "dimension_id": "state-legibility",
+        "label": "State legibility",
+        "weight": 0.12,
+        "minimum_score": 74,
+        "critical": false
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "label": "Accessibility usability",
+        "weight": 0.12,
+        "minimum_score": 72,
+        "critical": false
+      }
+    ]
+  },
+  "repair_budget": {
+    "max_attempts": 3
+  },
+  "required_checks": [
+    "accessibility",
+    "console",
+    "geometry",
+    "interaction",
+    "network",
+    "overflow",
+    "performance",
+    "screenshot",
+    "visual-consistency"
+  ],
+  "created_at": "2026-07-28T08:53:52Z"
+}

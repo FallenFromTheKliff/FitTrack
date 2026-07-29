@@ -1,0 +1,118 @@
+{
+  "schema_version": "broskie-browser-observations.v1",
+  "run_id": "run-20260728-gamification-enforced-v1",
+  "source_revision": "git-scope:dcb633f5fa07fc6487df41810272044effd3ad0580c0b5229178066636078587",
+  "captured_at": "2026-07-28T11:20:23Z",
+  "observations": {
+    "full_screen_first": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "page_horizontal_overflow": false,
+      "populated_result_text": "Showing 1 to 6 of 70 results"
+    },
+    "compact": {
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "page_horizontal_overflow": false
+    },
+    "empty_boundary": {
+      "message": "No season standings match the current filters.",
+      "previous_page_disabled": true,
+      "next_page_disabled": true
+    },
+    "recovery": {
+      "route_reload_required": false,
+      "result_text": "Showing 1 to 6 of 70 results"
+    },
+    "invalid_manual_exp": {
+      "amount": 0,
+      "validation_dialog": "Manual EXP Needs A Valid Amount",
+      "manual_exp_dialog_remained_open": true,
+      "mutation_request_emitted": false
+    },
+    "manual_member_search": {
+      "query_backed": true,
+      "initial_directory_preloaded": false,
+      "visible_result_limit": 20,
+      "refinement_message_visible": true,
+      "member_automatically_selected_before_search": false,
+      "match_query": "seed.member.active",
+      "match_result": "seed.member.active@fittrack.com",
+      "no_match_message": "No eligible members match this search.",
+      "recovery_without_reload": true
+    },
+    "manual_exp_muscle_discovery": {
+      "source": "canonical active muscle definitions",
+      "control": "native autocomplete datalist",
+      "option_count": 25,
+      "sample_options": [
+        "Chest",
+        "Quads",
+        "Upper Chest",
+        "Hamstrings",
+        "Glutes",
+        "Lats",
+        "Core",
+        "Shoulders"
+      ]
+    },
+    "manual_exp_compact_geometry": {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "dialog_height": 654.171875,
+      "dialog_bottom": 687.078125,
+      "scroll_owner_client_height": 482,
+      "scroll_owner_scroll_height": 552,
+      "footer_submit_bottom": 671.078125,
+      "footer_visible": true
+    },
+    "lifecycle_cancel": {
+      "confirmation_dialog_visible": true,
+      "cancel_action_visible": true,
+      "destructive_action_label": "Move to Closed",
+      "dialog_closed_after_cancel": true,
+      "active_season_status_after_cancel": "Active"
+    },
+    "governance_tabs": {
+      "Integrity": [
+        "gamification-governance-panel-integrity"
+      ],
+      "Rankings": [
+        "gamification-governance-panel-rankings"
+      ],
+      "Audit log": [
+        "gamification-governance-panel-audit"
+      ],
+      "exactly_one_panel_visible_per_selection": true,
+      "integrity_panel_height": 340,
+      "rankings_panel_height": 340,
+      "audit_panel_height": 340,
+      "workspace_height": 381.796875,
+      "audit_scroll_height": 681,
+      "audit_overflow_y": "auto",
+      "peer_geometry_stable": true
+    },
+    "graphify_refresh": {
+      "nodes": 13350,
+      "edges": 33876,
+      "communities": 448,
+      "repository_method_reverse_impacts": [
+        "GamificationService.listAdminManualExpEligibleMembers()",
+        "GamificationAdminController.listManualExpEligibleMembers()"
+      ],
+      "label_only_query_ambiguous": true,
+      "unique_node_id_query_passed": true
+    },
+    "diagnostics": {
+      "console_error_count": 0,
+      "network_failure_count": 0,
+      "stale_interaction_count": 0
+    }
+  }
+}

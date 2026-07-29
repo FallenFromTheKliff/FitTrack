@@ -1,0 +1,3680 @@
+{
+  "schema_version": "ui-surface-evidence.v1",
+  "evidence_id": "evidence-ui-closure-run-20260728-gamification-enforced-v1",
+  "contract_id": "contract-ui-gamification-enforced-v1",
+  "run_id": "run-20260728-gamification-enforced-v1",
+  "project_id": "fittrack",
+  "task_id": "task-fittrack-gamification-ui-enforcement-calibration-v1",
+  "source_revision": "git-scope:7e60a6c76251a4b18a95c6ce7a2220c4a11887b9c3c4baa261d91e3952f70fe0",
+  "captured_at": "2026-07-28T16:42:46.559Z",
+  "observations": [
+    {
+      "state_id": "gamification-populated-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "populated-overview",
+      "overlay_id": null,
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-populated-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "page",
+          "selector": "[data-ui='gamification-admin-page']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchiveOpen integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare membe",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "button",
+            "input",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 1575,
+            "height": 1306.421875
+          },
+          "client_width": 1575,
+          "client_height": 1306,
+          "scroll_width": 1575,
+          "scroll_height": 1306,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "command-center",
+          "selector": "[data-ui='gamification-command-center']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchive",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 1575,
+            "height": 137.1875
+          },
+          "client_width": 1573,
+          "client_height": 135,
+          "scroll_width": 1573,
+          "scroll_height": 135,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "relative",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "active-season",
+          "selector": "[data-ui='gamification-active-season']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Season controlsAdmin lifecycle review completed.CloseArchive",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 319,
+            "y": 205.1875,
+            "width": 1533,
+            "height": 33
+          },
+          "client_width": 1533,
+          "client_height": 33,
+          "scroll_width": 1533,
+          "scroll_height": 33,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "overview",
+          "selector": "[data-ui='gamification-overview']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Open integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare member momentum, earned EXP, milestones, and ranking eligibility.70 competitorsAll seasonsAdvanced filters0All visibilityAll governanceInclude arc",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "input",
+            "button",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 273.1875,
+            "width": 1575,
+            "height": 1129.234375
+          },
+          "client_width": 1575,
+          "client_height": 1129,
+          "scroll_width": 1575,
+          "scroll_height": 1129,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Governance Queue3 actionableIntegrity2Rankings1Audit log5Review suspicious progressionConfirm whether an AI-flagged result should remain valid before it affects trusted rankings.Rina TorresProgression anomaly for moderation review.MediumRev",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab",
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 1004.625,
+            "width": 1575,
+            "height": 381.796875
+          },
+          "client_width": 1573,
+          "client_height": 380,
+          "scroll_width": 1573,
+          "scroll_height": 380,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tablist",
+          "name": "Gamification governance views",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab"
+          ],
+          "peer_visual_mode": "quiet-equal",
+          "peer_visuals": [
+            {
+              "peer_id": "gamification-governance-tab-integrity",
+              "name": "Integrity2",
+              "aria_selected": true,
+              "rect": {
+                "x": 309,
+                "y": 1055.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "color(srgb 1 1 1 / 0.07)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgb(232, 119, 34)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-rankings",
+              "name": "Rankings1",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 1101.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-audit",
+              "name": "Audit log5",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 1147.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            }
+          ],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 299,
+            "y": 1045.421875,
+            "width": 210,
+            "height": 340
+          },
+          "client_width": 209,
+          "client_height": 340,
+          "scroll_width": 209,
+          "scroll_height": 340,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "integrity-panel",
+          "selector": "[data-ui='gamification-integrity-review-panel']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tabpanel",
+          "name": "Integrity2",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 509,
+            "y": 1045.421875,
+            "width": 1363,
+            "height": 340
+          },
+          "client_width": 1348,
+          "client_height": 340,
+          "scroll_width": 1348,
+          "scroll_height": 340,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "leaderboard",
+          "selector": "[data-season-performance-table='true']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "RankParticipantSeasonSeason scoreTop MuscleMilestonesGovernanceLast Earned#1Ava R.Ava RiveraDynamic Demo SeasonActive900 pts960 total XPcore660 XP1/2claimed/unlockedPublicNormalJul 26, 2026, 7:00 PM#2Luca D.Luca Dela CruzDynamic Demo Season",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 299,
+            "y": 502.703125,
+            "width": 1573,
+            "height": 423.921875
+          },
+          "client_width": 1573,
+          "client_height": 424,
+          "scroll_width": 1573,
+          "scroll_height": 424,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "search-member",
+          "selector": "input[placeholder='Search member']",
+          "tag_name": "input",
+          "input_type": "text",
+          "role": null,
+          "name": "Search member",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": "",
+          "default_value": "",
+          "placeholder": "Search member",
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "input"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 356,
+            "y": 457.703125,
+            "width": 723.828125,
+            "height": 24
+          },
+          "client_width": 724,
+          "client_height": 24,
+          "scroll_width": 724,
+          "scroll_height": 24,
+          "overflow_x": "clip",
+          "overflow_y": "clip",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "season-filter",
+          "selector": "button[aria-label='Select: All seasons']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Select: All seasons",
+          "option_count": 3,
+          "selected_count": 0,
+          "value": "All seasons",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": "menu",
+          "aria_expanded": false,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1098.828125,
+            "y": 447.703125,
+            "width": 557.171875,
+            "height": 44
+          },
+          "client_width": 555,
+          "client_height": 42,
+          "scroll_width": 555,
+          "scroll_height": 42,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "relative",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "leaderboard-location",
+          "selector": "[aria-label='Season standing pagination']",
+          "tag_name": "nav",
+          "input_type": null,
+          "role": null,
+          "name": "Season standing pagination",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 1610,
+            "y": 939.625,
+            "width": 244,
+            "height": 36
+          },
+          "client_width": 244,
+          "client_height": 36,
+          "scroll_width": 244,
+          "scroll_height": 36,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "leaderboard-previous",
+          "selector": "[aria-label='Season standing pagination'] button[aria-label='Go to previous page']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Go to previous page",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": false,
+          "interactive": true,
+          "rect": {
+            "x": 1610,
+            "y": 939.625,
+            "width": 37,
+            "height": 36
+          },
+          "client_width": 35,
+          "client_height": 34,
+          "scroll_width": 35,
+          "scroll_height": 34,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "leaderboard-next",
+          "selector": "[aria-label='Season standing pagination'] button[aria-label='Go to next page']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Go to next page",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1817,
+            "y": 939.625,
+            "width": 37,
+            "height": 36
+          },
+          "client_width": 35,
+          "client_height": 34,
+          "scroll_width": 35,
+          "scroll_height": 34,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "refresh-overview",
+          "selector": "[data-ui='gamification-command-center'] button",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Grant EXP",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1620.234375,
+            "y": 139,
+            "width": 125.09375,
+            "height": 44.5
+          },
+          "client_width": 125,
+          "client_height": 45,
+          "scroll_width": 125,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        }
+      ],
+      "overlays": [],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "command-center: height below contract; active-season: height below contract; governance-tabs: width below contract",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "fail",
+          "observed": "governance-tabs: selected peer uses a broad filled background",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0
+      }
+    },
+    {
+      "state_id": "gamification-populated-compact",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-compact",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "responsive-overview",
+      "overlay_id": null,
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "screenshot_ref": "shot-closure-gamification-populated-compact",
+      "document": {
+        "client_width": 768,
+        "client_height": 900,
+        "scroll_width": 768,
+        "scroll_height": 900
+      },
+      "elements": [
+        {
+          "target_id": "page",
+          "selector": "[data-ui='gamification-admin-page']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchiveOpen integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare membe",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "button",
+            "input",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 18,
+            "y": 120,
+            "width": 707,
+            "height": 1652.5625
+          },
+          "client_width": 707,
+          "client_height": 1653,
+          "scroll_width": 707,
+          "scroll_height": 1653,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "command-center",
+          "selector": "[data-ui='gamification-command-center']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchive",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 18,
+            "y": 120,
+            "width": 707,
+            "height": 133.1875
+          },
+          "client_width": 705,
+          "client_height": 131,
+          "scroll_width": 705,
+          "scroll_height": 131,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "relative",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "active-season",
+          "selector": "[data-ui='gamification-active-season']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Season controlsAdmin lifecycle review completed.CloseArchive",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 35,
+            "y": 203.1875,
+            "width": 673,
+            "height": 33
+          },
+          "client_width": 673,
+          "client_height": 33,
+          "scroll_width": 673,
+          "scroll_height": 33,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "leaderboard",
+          "selector": "[data-season-performance-table='true']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "RankParticipantSeasonSeason scoreTop MuscleMilestonesGovernanceLast Earned#1Ava R.Ava RiveraDynamic Demo SeasonActive900 pts960 total XPcore660 XP1/2claimed/unlockedPublicNormalJul 26, 2026, 7:00 PM#2Luca D.Luca Dela CruzDynamic Demo Season",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 19,
+            "y": 628.5,
+            "width": 705,
+            "height": 564.265625
+          },
+          "client_width": 705,
+          "client_height": 564,
+          "scroll_width": 705,
+          "scroll_height": 564,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "refresh-overview",
+          "selector": "[data-ui='gamification-command-center'] button",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Grant EXP",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 476.234375,
+            "y": 137,
+            "width": 125.09375,
+            "height": 44.5
+          },
+          "client_width": 125,
+          "client_height": 45,
+          "scroll_width": 125,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        }
+      ],
+      "overlays": [],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "command-center: height below contract; active-season: height below contract",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "pass",
+          "observed": "Peer controls retain stable geometry and restrained selection emphasis.",
+          "evidence_refs": [
+            "shot-closure-gamification-populated-compact"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0
+      }
+    },
+    {
+      "state_id": "gamification-empty-filter-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "empty-filter-result",
+      "overlay_id": null,
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-empty-filter-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "search-member",
+          "selector": "input[placeholder='Search member']",
+          "tag_name": "input",
+          "input_type": "text",
+          "role": null,
+          "name": "Search member",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": "no-such-member-zzzz",
+          "default_value": "no-such-member-zzzz",
+          "placeholder": "Search member",
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "input"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 356,
+            "y": 457.703125,
+            "width": 699.828125,
+            "height": 24
+          },
+          "client_width": 700,
+          "client_height": 24,
+          "scroll_width": 700,
+          "scroll_height": 24,
+          "overflow_x": "clip",
+          "overflow_y": "clip",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "empty-result-row",
+          "selector": "[data-season-performance-table='true'] tbody tr",
+          "tag_name": "tr",
+          "input_type": null,
+          "role": null,
+          "name": "No season standings match the current filters.",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 317,
+            "y": 541,
+            "width": 1537,
+            "height": 44.1875
+          },
+          "client_width": 1537,
+          "client_height": 44,
+          "scroll_width": 1537,
+          "scroll_height": 44,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        }
+      ],
+      "overlays": [],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "pass",
+          "observed": "Required targets meet the contracted geometry and non-overlap rules.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "pass",
+          "observed": "Peer controls retain stable geometry and restrained selection emphasis.",
+          "evidence_refs": [
+            "shot-closure-gamification-empty-filter-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0.0622
+      }
+    },
+    {
+      "state_id": "gamification-lifecycle-modal-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "lifecycle-confirmation-open",
+      "overlay_id": "season-lifecycle-confirmation",
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-lifecycle-modal-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchiveOpen integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare membe",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "button",
+            "input",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 1575,
+            "height": 1374.421875
+          },
+          "client_width": 1575,
+          "client_height": 1374,
+          "scroll_width": 1575,
+          "scroll_height": 1374,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "lifecycle-disclosure",
+          "selector": "[data-ui='gamification-season-controls'] summary",
+          "tag_name": "summary",
+          "input_type": null,
+          "role": null,
+          "name": "Season controls",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 319,
+            "y": 206.1875,
+            "width": 1533,
+            "height": 32
+          },
+          "client_width": 1533,
+          "client_height": 32,
+          "scroll_width": 1533,
+          "scroll_height": 32,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "lifecycle-action",
+          "selector": "[data-ui='gamification-season-controls'] button",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Close",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1669.46875,
+            "y": 266.1875,
+            "width": 86,
+            "height": 40
+          },
+          "client_width": 86,
+          "client_height": 40,
+          "scroll_width": 86,
+          "scroll_height": 40,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "modal-shell",
+          "selector": "[role='dialog']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "dialog",
+          "name": "Confirm Season Lifecycle Change?",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "dialog",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 710,
+            "y": 431.8125,
+            "width": 500,
+            "height": 216.375
+          },
+          "client_width": 498,
+          "client_height": 214,
+          "scroll_width": 498,
+          "scroll_height": 214,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "season-lifecycle-confirmation"
+        },
+        {
+          "target_id": "modal-scroll-owner",
+          "selector": "[role='dialog']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "dialog",
+          "name": "Confirm Season Lifecycle Change?",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "dialog",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 710,
+            "y": 431.8125,
+            "width": 500,
+            "height": 216.375
+          },
+          "client_width": 498,
+          "client_height": 214,
+          "scroll_width": 498,
+          "scroll_height": 214,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "season-lifecycle-confirmation"
+        },
+        {
+          "target_id": "modal-cancel",
+          "selector": "[role='dialog'] button:first-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Cancel",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 735,
+            "y": 576.6875,
+            "width": 220,
+            "height": 46.5
+          },
+          "client_width": 218,
+          "client_height": 45,
+          "scroll_width": 218,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "season-lifecycle-confirmation"
+        },
+        {
+          "target_id": "modal-primary",
+          "selector": "[role='dialog'] button:last-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Move to Closed",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 965,
+            "y": 576.6875,
+            "width": 220,
+            "height": 46.5
+          },
+          "client_width": 218,
+          "client_height": 45,
+          "scroll_width": 218,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "season-lifecycle-confirmation"
+        }
+      ],
+      "overlays": [
+        {
+          "overlay_id": "season-lifecycle-confirmation",
+          "selector": "[role='dialog']",
+          "open": true,
+          "accessible_name": "Confirm Season Lifecycle Change?",
+          "rect": {
+            "x": 710,
+            "y": 431.8125,
+            "width": 500,
+            "height": 216.375
+          },
+          "background_inert": true,
+          "initial_focus_inside": true,
+          "tab_contained": true,
+          "escape_closed": true,
+          "focus_returned": true,
+          "close_control_visible": true,
+          "scroll_owner_count": 1,
+          "primary_action_visible": true
+        }
+      ],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "pass",
+          "observed": "Required targets meet the contracted geometry and non-overlap rules.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "pass",
+          "observed": "Peer controls retain stable geometry and restrained selection emphasis.",
+          "evidence_refs": [
+            "shot-closure-gamification-lifecycle-modal-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0
+      }
+    },
+    {
+      "state_id": "gamification-manual-exp-modal-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "manual-exp-member-selected",
+      "overlay_id": "manual-exp-grant",
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-manual-exp-modal-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchiveOpen integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare membe",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "button",
+            "input",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 120,
+            "width": 1575,
+            "height": 1306.421875
+          },
+          "client_width": 1575,
+          "client_height": 1306,
+          "scroll_width": 1575,
+          "scroll_height": 1306,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "manual-exp-trigger",
+          "selector": "[data-ui='gamification-manual-exp-trigger'] button",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Grant EXP",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1620.234375,
+            "y": 139,
+            "width": 125.09375,
+            "height": 44.5
+          },
+          "client_width": 125,
+          "client_height": 45,
+          "scroll_width": 125,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "manual-exp-modal",
+          "selector": "[role='dialog']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "dialog",
+          "name": "Grant Manual EXP",
+          "option_count": 26,
+          "selected_count": 1,
+          "value": "Ava Riveraseed.member.active@fittrack.com",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "dialog",
+            "button",
+            "input",
+            "listbox",
+            "option",
+            "combobox"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 650,
+            "y": 159.4375,
+            "width": 620,
+            "height": 761.109375
+          },
+          "client_width": 620,
+          "client_height": 761,
+          "scroll_width": 620,
+          "scroll_height": 761,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "relative",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-scroll-owner",
+          "selector": "[role='dialog'] [data-fit-modal-content='true']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Search first; FitTrack does not preload the full member directory. Only active members with verified membership-card access are eligible.Ava Riveraseed.member.active@fittrack.comSelected: Ava RiveraEXP amountMuscle group (optional)ChestQuad",
+          "option_count": 26,
+          "selected_count": 1,
+          "value": "Ava Riveraseed.member.active@fittrack.com",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "input",
+            "button",
+            "listbox",
+            "option",
+            "combobox"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 650,
+            "y": 254.109375,
+            "width": 620,
+            "height": 588.9375
+          },
+          "client_width": 620,
+          "client_height": 589,
+          "scroll_width": 620,
+          "scroll_height": 589,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-workflow",
+          "selector": "[data-ui='gamification-manual-exp-workflow']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Search first; FitTrack does not preload the full member directory. Only active members with verified membership-card access are eligible.Ava Riveraseed.member.active@fittrack.comSelected: Ava Rivera",
+          "option_count": 1,
+          "selected_count": 1,
+          "value": "Ava Riveraseed.member.active@fittrack.com",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "input",
+            "button",
+            "listbox",
+            "option"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 674,
+            "y": 274.109375,
+            "width": 572,
+            "height": 208.515625
+          },
+          "client_width": 572,
+          "client_height": 209,
+          "scroll_width": 572,
+          "scroll_height": 209,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-search",
+          "selector": "input[aria-label='Search eligible member for manual EXP']",
+          "tag_name": "input",
+          "input_type": "text",
+          "role": null,
+          "name": "Search eligible member for manual EXP",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": "seed.member.active",
+          "default_value": "seed.member.active",
+          "placeholder": "Search member name or email",
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "input"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 721,
+            "y": 338.328125,
+            "width": 484,
+            "height": 24
+          },
+          "client_width": 484,
+          "client_height": 24,
+          "scroll_width": 484,
+          "scroll_height": 24,
+          "overflow_x": "clip",
+          "overflow_y": "clip",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-member-results",
+          "selector": "[data-ui='gamification-manual-exp-member-results']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "listbox",
+          "name": "Eligible member search results",
+          "option_count": 1,
+          "selected_count": 1,
+          "value": "Ava Riveraseed.member.active@fittrack.com",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "listbox",
+            "option"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 674,
+            "y": 383.328125,
+            "width": 572,
+            "height": 63.5
+          },
+          "client_width": 570,
+          "client_height": 62,
+          "scroll_width": 570,
+          "scroll_height": 62,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-muscle",
+          "selector": "[data-ui='gamification-manual-exp-muscle']",
+          "tag_name": "span",
+          "input_type": null,
+          "role": null,
+          "name": "ChestQuadsUpper ChestHamstringsGlutesLatsCoreShouldersCardioMobilityUpper BackTrapsFront DeltsSide DeltsRear DeltsBicepsTricepsForearmsAbsObliquesLower BackCalvesAdductorsAbductorsHip Flexors",
+          "option_count": 25,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "combobox",
+            "option"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 792,
+            "y": 522.234375,
+            "width": 454,
+            "height": 38
+          },
+          "client_width": 452,
+          "client_height": 36,
+          "scroll_width": 452,
+          "scroll_height": 36,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-first-result",
+          "selector": "[data-ui='gamification-manual-exp-member-results'] [role='option']:first-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": "option",
+          "name": "Ava Riveraseed.member.active@fittrack.com",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": true,
+          "searchable": false,
+          "descendant_roles": [
+            "option"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 675,
+            "y": 384.328125,
+            "width": 570,
+            "height": 61.5
+          },
+          "client_width": 570,
+          "client_height": 61,
+          "scroll_width": 570,
+          "scroll_height": 61,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-submit",
+          "selector": "[data-ui='gamification-manual-exp-submit'] button",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Grant EXP",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1112.90625,
+            "y": 860.046875,
+            "width": 133.09375,
+            "height": 44.5
+          },
+          "client_width": 133,
+          "client_height": 45,
+          "scroll_width": 133,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        },
+        {
+          "target_id": "manual-exp-close",
+          "selector": "[role='dialog'] button[aria-label='Close manual EXP grant']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Close manual EXP grant",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1210,
+            "y": 179.4375,
+            "width": 36,
+            "height": 36
+          },
+          "client_width": 34,
+          "client_height": 34,
+          "scroll_width": 34,
+          "scroll_height": 34,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "manual-exp-grant"
+        }
+      ],
+      "overlays": [
+        {
+          "overlay_id": "manual-exp-grant",
+          "selector": "[role='dialog']",
+          "open": true,
+          "accessible_name": "Grant Manual EXP",
+          "rect": {
+            "x": 650,
+            "y": 159.4375,
+            "width": 620,
+            "height": 761.109375
+          },
+          "background_inert": true,
+          "initial_focus_inside": true,
+          "tab_contained": true,
+          "escape_closed": true,
+          "focus_returned": true,
+          "close_control_visible": true,
+          "scroll_owner_count": 1,
+          "primary_action_visible": true
+        }
+      ],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "manual-exp-workflow: height below contract; manual-exp-submit: width below contract",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "pass",
+          "observed": "Peer controls retain stable geometry and restrained selection emphasis.",
+          "evidence_refs": [
+            "shot-closure-gamification-manual-exp-modal-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0.0007
+      }
+    },
+    {
+      "state_id": "gamification-integrity-review-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "integrity-review-open",
+      "overlay_id": null,
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-integrity-review-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Governance Queue3 actionableIntegrity2Rankings1Audit log5Review suspicious progressionConfirm whether an AI-flagged result should remain valid before it affects trusted rankings.Rina TorresProgression anomaly for moderation review.MediumRev",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab",
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 681.625,
+            "width": 1575,
+            "height": 381.796875
+          },
+          "client_width": 1573,
+          "client_height": 380,
+          "scroll_width": 1573,
+          "scroll_height": 380,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tablist",
+          "name": "Gamification governance views",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Integrity2",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab"
+          ],
+          "peer_visual_mode": "quiet-equal",
+          "peer_visuals": [
+            {
+              "peer_id": "gamification-governance-tab-integrity",
+              "name": "Integrity2",
+              "aria_selected": true,
+              "rect": {
+                "x": 309,
+                "y": 732.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "color(srgb 1 1 1 / 0.07)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgb(232, 119, 34)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-rankings",
+              "name": "Rankings1",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 778.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-audit",
+              "name": "Audit log5",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 824.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            }
+          ],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 299,
+            "y": 722.421875,
+            "width": 210,
+            "height": 340
+          },
+          "client_width": 209,
+          "client_height": 340,
+          "scroll_width": 209,
+          "scroll_height": 340,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "integrity-panel",
+          "selector": "[data-ui='gamification-integrity-review-panel']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tabpanel",
+          "name": "Integrity2",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 509,
+            "y": 722.421875,
+            "width": 1363,
+            "height": 340
+          },
+          "client_width": 1348,
+          "client_height": 340,
+          "scroll_width": 1348,
+          "scroll_height": 340,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        }
+      ],
+      "overlays": [],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "governance-tabs: width below contract",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "fail",
+          "observed": "governance-tabs: selected peer uses a broad filled background",
+          "evidence_refs": [
+            "shot-closure-gamification-integrity-review-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0.0622
+      }
+    },
+    {
+      "state_id": "gamification-ranking-governance-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "ranking-governance-confirmation-open",
+      "overlay_id": "ranking-governance-confirmation",
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-ranking-governance-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "page-background",
+          "selector": "[data-ui='gamification-admin-page']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Dynamic Demo SeasonActive70 standings / 5 hidden / 0 disqualifiedGrant EXPRefreshSeason controlsAdmin lifecycle review completed.CloseArchiveOpen integrity2Governed rankings1Season standings70Corrections logged5Season standingsCompare membe",
+          "option_count": 4,
+          "selected_count": 1,
+          "value": "Rankings1",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": true,
+          "descendant_roles": [
+            "button",
+            "input",
+            "checkbox",
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": -244,
+            "width": 1575,
+            "height": 1306.421875
+          },
+          "client_width": 1575,
+          "client_height": 1306,
+          "scroll_width": 1575,
+          "scroll_height": 1306,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Governance Queue3 actionableIntegrity2Rankings1Audit log5Control public ranking eligibilityRestore, hide, or disqualify an exceptional profile without changing earned workout history.Kian SuspendedHidden By Admin / PublicHide from rankingsA",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Rankings1",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab",
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 640.625,
+            "width": 1575,
+            "height": 381.796875
+          },
+          "client_width": 1573,
+          "client_height": 380,
+          "scroll_width": 1573,
+          "scroll_height": 380,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tablist",
+          "name": "Gamification governance views",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Rankings1",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab"
+          ],
+          "peer_visual_mode": "quiet-equal",
+          "peer_visuals": [
+            {
+              "peer_id": "gamification-governance-tab-integrity",
+              "name": "Integrity2",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 691.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-rankings",
+              "name": "Rankings1",
+              "aria_selected": true,
+              "rect": {
+                "x": 309,
+                "y": 737.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "color(srgb 1 1 1 / 0.07)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgb(232, 119, 34)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-audit",
+              "name": "Audit log5",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 783.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            }
+          ],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 299,
+            "y": 681.421875,
+            "width": 210,
+            "height": 340
+          },
+          "client_width": 209,
+          "client_height": 340,
+          "scroll_width": 209,
+          "scroll_height": 340,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "ranking-governance-tab",
+          "selector": "[data-ui='gamification-governance-tab-rankings']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": "tab",
+          "name": "Rankings1",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": true,
+          "searchable": false,
+          "descendant_roles": [
+            "tab"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 309,
+            "y": 737.421875,
+            "width": 189,
+            "height": 46
+          },
+          "client_width": 187,
+          "client_height": 46,
+          "scroll_width": 187,
+          "scroll_height": 46,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "ranking-panel",
+          "selector": "[data-ui='gamification-ranking-governance-panel']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tabpanel",
+          "name": "Rankings1",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tabpanel",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 509,
+            "y": 681.421875,
+            "width": 1363,
+            "height": 340
+          },
+          "client_width": 1348,
+          "client_height": 340,
+          "scroll_width": 1348,
+          "scroll_height": 340,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "ranking-note",
+          "selector": "textarea[aria-label='Admin note for this ranking governance decision']",
+          "tag_name": "textarea",
+          "input_type": null,
+          "role": null,
+          "name": "Admin note for this ranking governance decision",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": "Calibration review for staged ranking governance.",
+          "default_value": "Calibration review for staged ranking governance.",
+          "placeholder": "Admin note for this ranking governance decision",
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 547,
+            "y": 897.203125,
+            "width": 1273,
+            "height": 52
+          },
+          "client_width": 1273,
+          "client_height": 52,
+          "scroll_width": 1273,
+          "scroll_height": 52,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "ranking-apply",
+          "selector": "[data-ui='gamification-ranking-governance-panel'] button[type='button']:last-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Apply",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 1737.90625,
+            "y": 847.203125,
+            "width": 82.09375,
+            "height": 42
+          },
+          "client_width": 82,
+          "client_height": 42,
+          "scroll_width": 82,
+          "scroll_height": 42,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "ranking-confirm-modal",
+          "selector": "[role='dialog']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "dialog",
+          "name": "Apply Ranking Governance Decision?",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "dialog",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 710,
+            "y": 415.96875,
+            "width": 500,
+            "height": 248.0625
+          },
+          "client_width": 498,
+          "client_height": 246,
+          "scroll_width": 498,
+          "scroll_height": 246,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "ranking-governance-confirmation"
+        },
+        {
+          "target_id": "ranking-confirm-scroll-owner",
+          "selector": "[role='dialog']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "dialog",
+          "name": "Apply Ranking Governance Decision?",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "dialog",
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 710,
+            "y": 415.96875,
+            "width": 500,
+            "height": 248.0625
+          },
+          "client_width": 498,
+          "client_height": 246,
+          "scroll_width": 498,
+          "scroll_height": 246,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "ranking-governance-confirmation"
+        },
+        {
+          "target_id": "ranking-confirm-cancel",
+          "selector": "[role='dialog'] button:first-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Cancel",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 735,
+            "y": 592.53125,
+            "width": 214.140625,
+            "height": 46.5
+          },
+          "client_width": 212,
+          "client_height": 45,
+          "scroll_width": 212,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "ranking-governance-confirmation"
+        },
+        {
+          "target_id": "ranking-confirm-primary",
+          "selector": "[role='dialog'] button:last-of-type",
+          "tag_name": "button",
+          "input_type": null,
+          "role": null,
+          "name": "Apply ranking decision",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "button"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 959.140625,
+            "y": 592.53125,
+            "width": 225.859375,
+            "height": 46.5
+          },
+          "client_width": 224,
+          "client_height": 45,
+          "scroll_width": 224,
+          "scroll_height": 45,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": "ranking-governance-confirmation"
+        }
+      ],
+      "overlays": [
+        {
+          "overlay_id": "ranking-governance-confirmation",
+          "selector": "[role='dialog']",
+          "open": true,
+          "accessible_name": "Apply Ranking Governance Decision?",
+          "rect": {
+            "x": 710,
+            "y": 415.96875,
+            "width": 500,
+            "height": 248.0625
+          },
+          "background_inert": true,
+          "initial_focus_inside": true,
+          "tab_contained": true,
+          "escape_closed": true,
+          "focus_returned": true,
+          "close_control_visible": true,
+          "scroll_owner_count": 1,
+          "primary_action_visible": true
+        }
+      ],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "governance-tabs: width below contract",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "fail",
+          "observed": "governance-tabs: selected peer uses a broad filled background",
+          "evidence_refs": [
+            "shot-closure-gamification-ranking-governance-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0.0622
+      }
+    },
+    {
+      "state_id": "gamification-audit-log-full",
+      "route": "/gamification",
+      "role_id": "admin",
+      "viewport_id": "desktop-full",
+      "fixture_id": "gamification-seeded",
+      "ui_state": "audit-log-open",
+      "overlay_id": null,
+      "url": "http://localhost:8080/gamification",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot_ref": "shot-closure-gamification-audit-log-full",
+      "document": {
+        "client_width": 1920,
+        "client_height": 1080,
+        "scroll_width": 1920,
+        "scroll_height": 1080
+      },
+      "elements": [
+        {
+          "target_id": "governance-workspace",
+          "selector": ".gamification-governance-workspace",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Governance Queue3 actionableIntegrity2Rankings1Audit log5Trace moderation and correctionsReview recent immutable admin actions so corrections remain explainable.Resolve Integrity Case ValidJules Garcia / Jul 29, 2026, 3:00 PMModeration acti",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Audit log5",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab",
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 298,
+            "y": 640.625,
+            "width": 1575,
+            "height": 381.796875
+          },
+          "client_width": 1573,
+          "client_height": 380,
+          "scroll_width": 1573,
+          "scroll_height": 380,
+          "overflow_x": "hidden",
+          "overflow_y": "hidden",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "governance-tabs",
+          "selector": "[data-ui='gamification-governance-tabs']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tablist",
+          "name": "Gamification governance views",
+          "option_count": 3,
+          "selected_count": 1,
+          "value": "Audit log5",
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tablist",
+            "tab"
+          ],
+          "peer_visual_mode": "quiet-equal",
+          "peer_visuals": [
+            {
+              "peer_id": "gamification-governance-tab-integrity",
+              "name": "Integrity2",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 691.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-rankings",
+              "name": "Rankings1",
+              "aria_selected": false,
+              "rect": {
+                "x": 309,
+                "y": 737.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "rgba(0, 0, 0, 0)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgba(0, 0, 0, 0)",
+              "font_weight": "400"
+            },
+            {
+              "peer_id": "gamification-governance-tab-audit",
+              "name": "Audit log5",
+              "aria_selected": true,
+              "rect": {
+                "x": 309,
+                "y": 783.421875,
+                "width": 189,
+                "height": 46
+              },
+              "background_color": "color(srgb 1 1 1 / 0.07)",
+              "border_bottom_width": "0px",
+              "border_bottom_color": "rgb(232, 119, 34)",
+              "font_weight": "400"
+            }
+          ],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 299,
+            "y": 681.421875,
+            "width": 210,
+            "height": 340
+          },
+          "client_width": 209,
+          "client_height": 340,
+          "scroll_width": 209,
+          "scroll_height": 340,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "audit-log-tab",
+          "selector": "[data-ui='gamification-governance-tab-audit']",
+          "tag_name": "button",
+          "input_type": null,
+          "role": "tab",
+          "name": "Audit log5",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": true,
+          "searchable": false,
+          "descendant_roles": [
+            "tab"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": true,
+          "rect": {
+            "x": 309,
+            "y": 783.421875,
+            "width": 189,
+            "height": 46
+          },
+          "client_width": 187,
+          "client_height": 46,
+          "scroll_width": 187,
+          "scroll_height": 46,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "audit-panel",
+          "selector": "[data-ui='gamification-audit-panel']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": "tabpanel",
+          "name": "Audit log5",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [
+            "tabpanel"
+          ],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 509,
+            "y": 681.421875,
+            "width": 1363,
+            "height": 340
+          },
+          "client_width": 1348,
+          "client_height": 340,
+          "scroll_width": 1348,
+          "scroll_height": 681,
+          "overflow_x": "auto",
+          "overflow_y": "auto",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        },
+        {
+          "target_id": "audit-records",
+          "selector": "[data-ui='gamification-audit-records']",
+          "tag_name": "div",
+          "input_type": null,
+          "role": null,
+          "name": "Resolve Integrity Case ValidJules Garcia / Jul 29, 2026, 3:00 PMModeration action for governance audit.IntegrityResolve Integrity Case ValidLuca Dela Cruz / Jul 27, 2026, 3:00 PMModeration action for governance audit.IntegrityResolve Integr",
+          "option_count": 0,
+          "selected_count": 0,
+          "value": null,
+          "default_value": null,
+          "placeholder": null,
+          "autocomplete": null,
+          "has_popup": null,
+          "aria_expanded": null,
+          "aria_selected": null,
+          "searchable": false,
+          "descendant_roles": [],
+          "peer_visual_mode": null,
+          "peer_visuals": [],
+          "found": true,
+          "visible": true,
+          "enabled": true,
+          "interactive": false,
+          "rect": {
+            "x": 529,
+            "y": 767.015625,
+            "width": 1308,
+            "height": 576.921875
+          },
+          "client_width": 1308,
+          "client_height": 577,
+          "scroll_width": 1308,
+          "scroll_height": 577,
+          "overflow_x": "visible",
+          "overflow_y": "visible",
+          "position": "static",
+          "z_index": "auto",
+          "overlay_id": null
+        }
+      ],
+      "overlays": [],
+      "checks": [
+        {
+          "check_id": "accessibility",
+          "state": "pass",
+          "observed": "Contracted interactive targets expose accessible names.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "console",
+          "state": "pass",
+          "observed": "No browser console errors or uncaught page errors were observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "geometry",
+          "state": "fail",
+          "observed": "governance-tabs: width below contract; audit-records: clipped by viewport",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "interaction",
+          "state": "pass",
+          "observed": "Contracted controls and overlay behavior completed.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "network",
+          "state": "pass",
+          "observed": "No failed critical local document or API request was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "overflow",
+          "state": "pass",
+          "observed": "No unowned horizontal document overflow was observed.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "performance",
+          "state": "pass",
+          "observed": "Layout-shift evidence is present and remains within the locked threshold.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "screenshot",
+          "state": "pass",
+          "observed": "Viewport screenshot was captured and content-hashed.",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        },
+        {
+          "check_id": "visual-consistency",
+          "state": "fail",
+          "observed": "governance-tabs: selected peer uses a broad filled background",
+          "evidence_refs": [
+            "shot-closure-gamification-audit-log-full"
+          ]
+        }
+      ],
+      "diagnostics": {
+        "console_errors": [],
+        "network_failures": [],
+        "accessibility_violations": [],
+        "layout_shift_score": 0
+      }
+    }
+  ],
+  "evidence_manifest": {
+    "schema_version": "evidence-manifest.v1",
+    "manifest_id": "manifest-ui-closure-run-20260728-gamification-enforced-v1",
+    "deliverable_id": "qa.ui-state-evidence",
+    "run_id": "run-20260728-gamification-enforced-v1",
+    "created_at": "2026-07-28T16:42:46.559Z",
+    "evidence": [
+      {
+        "evidence_id": "shot-closure-gamification-populated-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-populated-full.png",
+        "content_hash": "sha256:6efd4d94fa5dd2c4cf18aea613fe8c78d0099ba8d2359c9fb570cc0956636341",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:41:30.734Z",
+        "independence": "self",
+        "size_bytes": 155007
+      },
+      {
+        "evidence_id": "shot-closure-gamification-populated-compact",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-populated-compact.png",
+        "content_hash": "sha256:d3142b268e29401263518529c7ef6a4ba89f58d1d42ff74dde1b7bb9e50e5695",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:41:39.831Z",
+        "independence": "self",
+        "size_bytes": 66965
+      },
+      {
+        "evidence_id": "shot-closure-gamification-empty-filter-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-empty-filter-full.png",
+        "content_hash": "sha256:28aacba92c15e4cecdae0eb244cd72d4bc7cb622ffa3b836be18e6ff6a176bf0",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:41:46.940Z",
+        "independence": "self",
+        "size_bytes": 124681
+      },
+      {
+        "evidence_id": "shot-closure-gamification-lifecycle-modal-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-lifecycle-modal-full.png",
+        "content_hash": "sha256:d65255dcdc23695470128108f659d6be473bc6915b56869880d499305ebc1532",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:41:56.276Z",
+        "independence": "self",
+        "size_bytes": 126451
+      },
+      {
+        "evidence_id": "shot-closure-gamification-manual-exp-modal-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-manual-exp-modal-full.png",
+        "content_hash": "sha256:aa241cf22dcf5af49f8c3bdf9c3b51cd58c8637ef6708b72b345577968e53460",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:42:06.616Z",
+        "independence": "self",
+        "size_bytes": 134941
+      },
+      {
+        "evidence_id": "shot-closure-gamification-integrity-review-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-integrity-review-full.png",
+        "content_hash": "sha256:1a766efd8dc3e552a70876dd3522a9264cef8d95bee9bdcde1a748060544730c",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:42:18.730Z",
+        "independence": "self",
+        "size_bytes": 150729
+      },
+      {
+        "evidence_id": "shot-closure-gamification-ranking-governance-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-ranking-governance-full.png",
+        "content_hash": "sha256:edd43cec8f268d6a1f1c6234193688fbac0acc26443f108aacfe1d785cafb1cc",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:42:27.721Z",
+        "independence": "self",
+        "size_bytes": 117137
+      },
+      {
+        "evidence_id": "shot-closure-gamification-audit-log-full",
+        "kind": "browser-screenshot",
+        "uri": "screenshots/closure/gamification-audit-log-full.png",
+        "content_hash": "sha256:cea13f4b7b28e69b3c83fbbc328802e0e0c1a2064ccbabec577741aa865f0ec5",
+        "producer_id": "broskie-playwright-page-design-adapter",
+        "captured_at": "2026-07-28T16:42:37.815Z",
+        "independence": "self",
+        "size_bytes": 150875
+      },
+      {
+        "evidence_id": "chrome-devtools-diagnostics",
+        "kind": "performance-trace",
+        "uri": "chrome-devtools-diagnostics.json",
+        "content_hash": "sha256:a510f18b6d53ed9b032890331115dc2b2dfbd72a1c94969bc662a91c52a9075a",
+        "producer_id": "broskie-chrome-devtools-adapter",
+        "captured_at": "2026-07-28T16:42:46.559Z",
+        "independence": "self",
+        "size_bytes": 552
+      }
+    ]
+  }
+}

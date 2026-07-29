@@ -1,0 +1,281 @@
+[
+  {
+    "schema_version": "ui-judge-opinion.v1",
+    "judge_id": "critic-visual-repair-alpha",
+    "producer_id": "playwright-repair-adapter",
+    "contract_id": "contract-fittrack-admin-analytics-repair-v1",
+    "verdict": "PASS",
+    "confidence": 0.97,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "score": 85,
+        "rationale": "The applied reporting window, section switcher, primary signals, exploration surfaces, and secondary AI actions follow a clear scan order. Range, revenue, and drilldown supporting information now has enough visual weight to remain subordinate without becoming difficult to read.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "information-density",
+        "score": 75,
+        "rationale": "KPI, range, revenue, alert, and modal states use both viewports efficiently without crowding. The approved AI reading canvas retains generous negative space, but its status, readout, recommendations, and actions remain cohesive and fully usable.",
+        "evidence_refs": [
+          "shot-analytics-performance-kpis-compact",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-revenue-compact",
+          "shot-analytics-system-alerts-full",
+          "shot-analytics-ai-insights-full"
+        ]
+      },
+      {
+        "dimension_id": "control-clarity",
+        "score": 86,
+        "rationale": "Active tabs, date and grouping fields, clean versus dirty range actions, exploration controls, PDF selections, modal close controls, and the export action are consistently grouped and visually distinguishable.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-range-dirty-full",
+          "shot-analytics-range-dirty-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "state-legibility",
+        "score": 87,
+        "rationale": "Selected section tabs, enabled dirty-range actions, explicit AI fallback status, selected PDF options, and the attendance slice summary make each declared state recognizable. Both overlays have clear ownership and purpose.",
+        "evidence_refs": [
+          "shot-analytics-range-dirty-full",
+          "shot-analytics-range-dirty-compact",
+          "shot-analytics-ai-insights-compact",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "score": 89,
+        "rationale": "The route preserves grid alignment, section rhythm, and bounded content across 1920x1080 and 1440x900. The PDF and drilldown dialogs remain centered, balanced, closable, and constrained to one evidenced scroll owner without visible overlap or horizontal escape.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-range-insights-full",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "score": 90,
+        "rationale": "The final drilldown subtitle, metadata, time labels, and axes are visibly readable at both widths. The contrast regression passes all 76 semantic text and chart samples, including the subtitle at 6.38:1, while structured evidence records accessible names, focus containment, background inertness, focus return, and no automated accessibility violations.",
+        "evidence_refs": [
+          "shot-analytics-range-insights-full",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-revenue-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "fittrack-dna-alignment",
+        "score": 88,
+        "rationale": "The dark athletic shell, orange interaction language, branded display typography, compact card anatomy, icon treatments, and restrained modal styling remain consistent across the complete analytics route family.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-performance-kpis-compact",
+          "shot-analytics-system-alerts-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "finding-ai-focused-canvas-density-follow-up",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "The explicitly approved AI Insights surface leaves a large band of negative space between its concise readout and recommended actions. This remains a subjective density follow-up only and does not obscure state, content, or controls.",
+        "user_impact": "The surface may feel visually underfilled on wide displays, although its focused reading flow remains clear and fully usable.",
+        "severity": "low",
+        "repair_direction": "Optional only: if a denser reading experience is later approved, bring recommendations closer to the readout or constrain the canvas without changing the focused interaction model.",
+        "verification": "Review both AI Insights viewports and confirm any optional adjustment preserves the complete readout, status, recommendations, and primary actions.",
+        "evidence_refs": [
+          "shot-analytics-ai-insights-full",
+          "shot-analytics-ai-insights-compact"
+        ]
+      }
+    ],
+    "evidence_refs": [
+      "shot-analytics-all-sections-full",
+      "shot-analytics-ai-insights-full",
+      "shot-analytics-performance-kpis-full",
+      "shot-analytics-system-alerts-full",
+      "shot-analytics-range-insights-full",
+      "shot-analytics-revenue-full",
+      "shot-analytics-range-dirty-full",
+      "shot-analytics-pdf-modal-full",
+      "shot-analytics-drilldown-modal-full",
+      "shot-analytics-all-sections-compact",
+      "shot-analytics-ai-insights-compact",
+      "shot-analytics-performance-kpis-compact",
+      "shot-analytics-system-alerts-compact",
+      "shot-analytics-range-insights-compact",
+      "shot-analytics-revenue-compact",
+      "shot-analytics-range-dirty-compact",
+      "shot-analytics-pdf-modal-compact",
+      "shot-analytics-drilldown-modal-compact"
+    ]
+  },
+  {
+    "schema_version": "ui-judge-opinion.v1",
+    "judge_id": "critic-usability-repair-beta",
+    "producer_id": "playwright-repair-adapter",
+    "contract_id": "contract-fittrack-admin-analytics-repair-v1",
+    "verdict": "PASS",
+    "confidence": 0.98,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "score": 87,
+        "rationale": "Headings, KPI values, chart labels, supporting text, and modal content maintain a clear reading order at both viewports. The revised drilldown subtitle is now visibly distinct from its background without competing with the modal title.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-range-insights-full",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "information-density",
+        "score": 81,
+        "rationale": "The dashboard balances dense operational reporting with sufficient grouping and spacing. Compact captures remain readable without clipping or unusable compression. The approved dedicated AI surface is intentionally quieter than the other sections and does not prevent task completion.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-ai-insights-full",
+          "shot-analytics-ai-insights-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-revenue-compact"
+        ]
+      },
+      {
+        "dimension_id": "control-clarity",
+        "score": 89,
+        "rationale": "Section tabs, date-range controls, refresh/export actions, PDF selections, and modal close controls have recognizable affordances and understandable labels. Range-dirty captures clearly distinguish pending input from the applied reporting range.",
+        "evidence_refs": [
+          "shot-analytics-range-dirty-full",
+          "shot-analytics-range-dirty-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "state-legibility",
+        "score": 90,
+        "rationale": "Selected sections, dirty date-range state, AI fallback content, PDF choices, and drilldown context are visually and semantically distinguishable. The drilldown title, revised subtitle, selected slice, totals, and peak-hour metadata communicate what data is being inspected.",
+        "evidence_refs": [
+          "shot-analytics-ai-insights-full",
+          "shot-analytics-ai-insights-compact",
+          "shot-analytics-range-dirty-full",
+          "shot-analytics-range-dirty-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "score": 90,
+        "rationale": "All 18 recaptured states preserve coherent alignment, section structure, chart bounds, and responsive behavior. Both modal sizes remain contained within the viewport, expose one intended scroll owner, and keep their primary actions and close controls available.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-range-insights-full",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-revenue-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "score": 92,
+        "rationale": "The final source-bound evidence reports 76 of 76 semantic text and chart contrast samples passing. The revised drilldown subtitle measures 6.38:1 and is visibly legible in both captures. Structured modal evidence also confirms accessible naming, background isolation, initial focus placement, contained tab navigation, Escape dismissal, and focus restoration at both viewports.",
+        "evidence_refs": [
+          "shot-analytics-range-insights-full",
+          "shot-analytics-range-insights-compact",
+          "shot-analytics-revenue-full",
+          "shot-analytics-revenue-compact",
+          "shot-analytics-pdf-modal-full",
+          "shot-analytics-pdf-modal-compact",
+          "shot-analytics-drilldown-modal-full",
+          "shot-analytics-drilldown-modal-compact"
+        ]
+      },
+      {
+        "dimension_id": "fittrack-dna-alignment",
+        "score": 88,
+        "rationale": "The dark operational dashboard, restrained orange emphasis, compact analytics cards, chart styling, and modal treatment consistently express the established FitTrack administrative visual language across full and compact captures.",
+        "evidence_refs": [
+          "shot-analytics-all-sections-full",
+          "shot-analytics-all-sections-compact",
+          "shot-analytics-performance-kpis-full",
+          "shot-analytics-performance-kpis-compact",
+          "shot-analytics-system-alerts-full",
+          "shot-analytics-system-alerts-compact"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "finding-ai-focused-canvas-whitespace",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "The explicitly approved dedicated AI reading surface retains a comparatively large quiet region between its narrative and recommendation content.",
+        "user_impact": "This may create modest additional eye travel for some users, but no control, status, recommendation, or task path is obscured.",
+        "severity": "low",
+        "repair_direction": "No mandatory repair. Consider modest vertical tightening only if future usability feedback shows the focused reading layout feels unnecessarily sparse.",
+        "verification": "If adjusted later, recapture the dedicated AI state at both viewports and confirm that narrative readability and action separation remain intact.",
+        "evidence_refs": [
+          "shot-analytics-ai-insights-full",
+          "shot-analytics-ai-insights-compact"
+        ]
+      }
+    ],
+    "evidence_refs": [
+      "shot-analytics-all-sections-full",
+      "shot-analytics-ai-insights-full",
+      "shot-analytics-performance-kpis-full",
+      "shot-analytics-system-alerts-full",
+      "shot-analytics-range-insights-full",
+      "shot-analytics-revenue-full",
+      "shot-analytics-range-dirty-full",
+      "shot-analytics-pdf-modal-full",
+      "shot-analytics-drilldown-modal-full",
+      "shot-analytics-all-sections-compact",
+      "shot-analytics-ai-insights-compact",
+      "shot-analytics-performance-kpis-compact",
+      "shot-analytics-system-alerts-compact",
+      "shot-analytics-range-insights-compact",
+      "shot-analytics-revenue-compact",
+      "shot-analytics-range-dirty-compact",
+      "shot-analytics-pdf-modal-compact",
+      "shot-analytics-drilldown-modal-compact"
+    ]
+  }
+]

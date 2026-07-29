@@ -1,0 +1,136 @@
+{
+  "state": "PASS",
+  "issues": [],
+  "manifest_id": "manifest-run-20260728-gamification-enforced-v1",
+  "content_hash": "sha256:d61b5310bd6e6f94527070a955cead52bf368bbfc78f89bef1c8ff7b7ecce22d",
+  "knowledge_count": 8,
+  "trusted_statuses": [
+    "accepted",
+    "active",
+    "approved",
+    "canonical",
+    "canonical-design",
+    "human-approved",
+    "published",
+    "verified"
+  ],
+  "manifest": {
+    "schema_version": "vault-context-manifest.v1",
+    "manifest_id": "manifest-run-20260728-gamification-enforced-v1",
+    "run_id": "run-20260728-gamification-enforced-v1",
+    "task_id": "task-fittrack-gamification-ui-enforcement-calibration-v1",
+    "project_id": "fittrack",
+    "generated_at": "2026-07-28T08:53:52Z",
+    "source_revision": "git-scope:dd95bcff1a09181d591817523312a32f48264e67f81955c3d039a02cb26ca892",
+    "budget": {
+      "max_characters": 24000,
+      "used_characters": 8224,
+      "max_notes": 8,
+      "used_notes": 8
+    },
+    "task": {
+      "path": "Tasks/Active/FitTrack/gamification-ui-enforcement-calibration-v1/task.md",
+      "content_hash": "sha256:13a0b36155fa145616da3ba5a5fe5d6ea5e9c56450a5b724a4d55bd1c95b2cea",
+      "status": "active",
+      "revision": 1,
+      "acceptance_criteria": [
+        "The active-season command center does not collapse at desktop or compact widths.",
+        "The leaderboard populated, empty-filter, and pagination boundary states remain functional.",
+        "The season lifecycle disclosure and confirmation modal preserve a non-destructive cancel path.",
+        "The page has no page-level horizontal overflow at declared viewports.",
+        "Static validation and independent UI judgment pass."
+      ]
+    },
+    "knowledge": [
+      {
+        "path": "References/Projects/FitTrack/design-dna.md",
+        "content_hash": "sha256:5767347611f29133099cbc4cf5d7374a59fc262920c97e0c867f2f4882808c40",
+        "status": "canonical-design",
+        "knowledge_type": "design-dna",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nid: knowledge-fittrack-design-dna\nkind: knowledge\ntype: design-dna\nstatus: canonical-design\nrevision: 1\n---\n# FitTrack design DNA\n\nThe sidebar owns its width and the page body owns normal page scroll. Nested scroll is allowed only for bounded tables, lists, and overlays. There must be no page-level horizontal overflow. Content must shrink within flex and grid parents. Purpose and state precede controls. Empty content collapses instead of preserving decorative dead space. Responsive behavior follows the available container and the user's job, not only the global viewport. Operational pages use restrained radii, deliberate hierarchy, point-of-need disclosure, and compact action groups. Do not treat one happy screenshot as coverage. Every relevant role, viewport, fixture, state, and overlay requires fresh evidence. Modals require visible geometry, a clear scroll owner, close behavior, focus return, tab containment, inert background, and a non-destructive cancellation path."
+      },
+      {
+        "path": "References/Projects/FitTrack/Profiles/admin-web.md",
+        "content_hash": "sha256:06c83e5051d99779338d8d9ca541447389e95eee85dc5351caad3915c05073f9",
+        "status": "active",
+        "knowledge_type": "project-profile",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nid: knowledge-fittrack-admin-web-profile\nkind: knowledge\ntype: project-profile\nstatus: active\nrevision: 1\n---\n# FitTrack admin web profile\n\nAdmin pages follow route to provider or hook to page frame to focused operational surfaces to modal to responsive state. Directories combine context with a bounded table or list and use an inspector, drawer, or modal for details. Toolbars group search, filters, view controls, and actions. Tables own their horizontal overflow. Destructive or consequential mutations require explicit confirmation."
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/mechanical-enforcement-contract.md",
+        "content_hash": "sha256:86c1022c04081bc21d8a0d06a3267f5dfeb481e5b8d620ee047838127a6fcd7a",
+        "status": "canonical",
+        "knowledge_type": "enforcement-contract",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nid: knowledge-ui-enforcement-contract\nkind: knowledge\ntype: enforcement-contract\nstatus: canonical\nrevision: 1\n---\n# Mechanical UI enforcement\n\nBefore source mutation, compile a context-bound UI run contract, page-design contract, component-composition contract, and browser QA request. A valid run must include visual and responsive evidence, a boundary state, a negative state, a resilience state, and every declared overlay. Completion requires static validation, browser evidence, objective geometry and overflow checks, and independent judgment. Repair attempts are bounded."
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/Component-Contracts/modal-and-drawer.md",
+        "content_hash": "sha256:041732814db2149aac6b87e3818d9e2927d550fe8fdf0f3d86cc7e634cf139a5",
+        "status": "canonical",
+        "knowledge_type": "component-contract",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nid: knowledge-component-modal-drawer\nkind: knowledge\ntype: component-contract\nstatus: canonical\nrevision: 1\n---\n# Modal and drawer contract\n\nUse a modal for a consequential decision that interrupts the current task. Keep the message specific, preserve a visible cancel action, ensure keyboard closure and focus return, and keep long content inside an explicit bounded scroll owner."
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/Component-Contracts/pagination-and-continuation.md",
+        "content_hash": "sha256:93edb5126b6f4c78f59ec038d9ef1bbc3b6dbe56d50dafc98b7ad5dbc1ee6509",
+        "status": "canonical",
+        "knowledge_type": "component-contract",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nid: knowledge-component-pagination\nkind: knowledge\ntype: component-contract\nstatus: canonical\nrevision: 1\n---\n# Pagination and continuation\n\nUse pagination for stable administrative records when location and bounded retrieval matter. Show result position, disable impossible transitions, preserve filters, and test the first, empty, and boundary states."
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/app-reference-atlas.md",
+        "content_hash": "sha256:937233ef8429ca04b16be4d3707401dc335bb2ec6a67d7827b3ca2be64c2e558",
+        "status": "canonical",
+        "knowledge_type": "app-reference-atlas",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nschema_version: 1\ntype: app-reference-atlas\nstatus: canonical\nscope: generic\nsource_policy: official-behavior-plus-labeled-inspiration\n---\n# Application Reference Atlas \u2014 task-scoped extract\n\nReuse proven behaviors, not brand costumes. Framer contributes plan-before-mutation,\nlocal-pattern reuse, deterministic geometry/lint, rendered pixels, independent\njudgment, and reversible repair. Lovable contributes explicit plan/review/build\nseparation and maintained design-system context. Notion contributes one data source\nwith task-specific views and progressive disclosure. Linear contributes coherent,\nrecoverable actions and minimal creation. Figma contributes contextual controls and\nconstrained component variants. Attio contributes scope \u2192 view \u2192 filter \u2192 select \u2192\ninspect/act for directories. Vercel and Railway contribute staged consequential\nchanges, visible state, and inspectable evidence.\n\nFor FitTrack, compose Attio + Notion for operational directories and views; Linear\nfor action consistency; Figma + Lovable for constrained component variants and\nexplicit design context; Railway + Vercel for staged changes and evidence; Framer\nfor plan \u2192 bounded change \u2192 geometry/lint \u2192 pixels \u2192 independent judgment \u2192\nrepair/rollback. Repository tokens, approved FitTrack DNA, role jobs, and runtime\nevidence remain authoritative.\n"
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/framer-agent-orchestration-model.md",
+        "content_hash": "sha256:db942f2dc0039be7eec5967dc533884cbb14269f29128691ff9f9a5318082766",
+        "status": "canonical",
+        "knowledge_type": "architecture-research",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nschema_version: 1\ntype: architecture-research\nstatus: canonical\n---\n# Framer-Like Agent Orchestration Model \u2014 task-scoped extract\n\nClassify intent; load only relevant manuals and project context; inspect established\nlayouts, styles, colors, and components; form a design plan; apply bounded patches;\nmeasure geometry; run hard rules for layout, type, contrast, and accessibility;\nrender actual pixels; use independent model judgment; analyze failed sessions; rerun\nevaluation; and keep work reversible.\n\nBroskie maps this to: thin workflow routing; vault-loaded standards; project pack\nand repository component inventory; a locked design-decision deliverable; scoped\nrepository edits; Playwright geometry and screenshots; Python validators; an\nindependent critic that receives evidence instead of the implementer's PASS claim;\nand bounded repair. Context selection is derived from project, role, route, task\nclass, affected components/states, risk, required tools, and knowledge gaps. A valid\nvertical slice declares its state/viewport matrix, design references, baseline,\nbounded plan, deterministic checks, candidate pixels, independent criticism, repair,\nand reusable correction record.\n"
+      },
+      {
+        "path": "Research/Design/UI-UX-Enforcement/Component-Contracts/tabs-and-view-switchers.md",
+        "content_hash": "sha256:a1cef5608076045c4c841d64b38e8dc84749380ac7722a28942448bdf6fe5d01",
+        "status": "canonical",
+        "knowledge_type": "ui-pattern-contract",
+        "required_by": [
+          "task-fittrack-gamification-ui-enforcement-calibration-v1",
+          "ui-run-contract"
+        ],
+        "content": "---\nschema_version: ui-pattern-contract.v1\ntype: ui-pattern-contract\nstatus: canonical\nscope: generic\npattern: tabs-and-view-switchers\n---\n# Tabs and View Switchers Contract \u2014 task-scoped extract\n\nTabs switch among peer panels in one context. Quiet operational interfaces keep\npeer geometry stable across selected and unselected states. Equal workspace tabs\nretain equal width and height. Selection may use a restrained underline plus\nbrand-colored text or icon emphasis, but not a broad tinted fill that makes one\npeer appear larger or heavier than the others.\n\nMechanical evidence captures each peer's rectangle, aria-selected state, computed\nbackground, bottom-border indicator, and font weight. Reject unequal peer geometry,\nzero-or-multiple selected peers, broad filled selection, hidden-panel interaction,\nstale panel content, clipped labels, and unreachable narrow-width peers.\n"
+      }
+    ],
+    "omitted_refs": []
+  }
+}

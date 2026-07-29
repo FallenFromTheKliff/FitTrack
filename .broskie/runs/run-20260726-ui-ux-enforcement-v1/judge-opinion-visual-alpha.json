@@ -1,0 +1,163 @@
+{
+  "schema_version": "ui-judge-opinion.v1",
+  "judge_id": "critic-visual-alpha",
+  "producer_id": "playwright-adapter",
+  "contract_id": "contract-fittrack-admin-analytics-v1",
+  "verdict": "REPAIR_REQUIRED",
+  "confidence": 0.92,
+  "dimensions": [
+    {
+      "dimension_id": "visual-hierarchy",
+      "score": 70,
+      "rationale": "The page title, active tab, and modal heading are clear, but the oversized empty AI panel gives a secondary feature more prominence than the primary KPI signals required by the contract.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-all-sections-compact"
+      ]
+    },
+    {
+      "dimension_id": "information-density",
+      "score": 65,
+      "rationale": "The main page is excessively sparse because the empty insight surface reserves substantial height, while the export modal shifts to a dense grid with repeated status treatments on every option.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "control-clarity",
+      "score": 76,
+      "rationale": "Actions and active tabs are identifiable, but compact date controls are visually disconnected by extreme widths, and modal selections redundantly use a checkbox, orange border, and INCLUDED label.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "state-legibility",
+      "score": 80,
+      "rationale": "Active tabs, disabled range actions, empty AI output, and selected export sections are visually distinguishable, although faint secondary text weakens the legibility of supporting state information.",
+      "evidence_refs": [
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "layout-coherence",
+      "score": 75,
+      "rationale": "The shell and modal remain bounded without visible clipping, but the compact date-panel wrapping is imbalanced and the tall empty insight panel disrupts the page's vertical rhythm across both viewports.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "accessibility-usability",
+      "score": 64,
+      "rationale": "Essential helper text, inactive navigation labels, section labels, and modal descriptions appear too faint against dark surfaces, increasing reading effort despite clear primary headings and actions.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "fittrack-dna-alignment",
+      "score": 78,
+      "rationale": "The charcoal palette, orange accent, rounded surfaces, and icon treatment are consistent, but overused orange outlines and overly muted typography reduce the purposeful restraint required by the contract.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "finding-empty-ai-panel-dominates",
+      "criterion_id": "criterion-analytics-hierarchy",
+      "observation": "In both All Sections captures, the empty AI insight panel consumes most of the first viewport. At full width only the KPI heading and card tops appear, while at compact width the primary KPI section is entirely below the captured viewport.",
+      "user_impact": "Administrators encounter an empty secondary feature before the primary business signals, weakening task priority and making the dashboard feel unfinished.",
+      "severity": "high",
+      "repair_direction": "Use a compact empty state in All Sections and size the AI panel to its content, or place KPI summaries before AI. Reserve the tall reading surface for populated output or the dedicated AI Insights state.",
+      "verification": "Recapture both All Sections viewports and confirm that the first KPI row is visible without scrolling while the empty-state message and AI actions remain readable.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-essential-text-too-muted",
+      "criterion_id": "criterion-fittrack-dna",
+      "observation": "Helper copy, field labels, inactive tabs, section labels, sidebar labels, timestamps, and modal descriptions use very muted gray against near-black or charcoal surfaces.",
+      "user_impact": "Important context becomes difficult to scan, especially in the compact modal where descriptions recede substantially behind headings and orange status treatments.",
+      "severity": "high",
+      "repair_direction": "Promote essential secondary copy to a higher-contrast text token and reserve the faintest tone for optional metadata. Validate the revised tokens against the actual dark surfaces.",
+      "verification": "Measure text contrast and recapture the five states, confirming that labels and descriptions remain clearly readable without competing with primary headings.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-compact-range-grid-imbalanced",
+      "criterion_id": "criterion-analytics-hierarchy",
+      "observation": "At compact width, the start and end date fields stretch across long half-width rows with calendar icons at the distant edges, while the Monthly selector is narrow and the range actions sit at the opposite side of a separate row.",
+      "user_impact": "The relationship between date values, icons, grouping, and actions is harder to scan, and the applied-range panel occupies more vertical space than its information warrants.",
+      "severity": "medium",
+      "repair_direction": "Use a bounded responsive grid with consistently sized date fields, an adjacent grouping selector, and a cohesive action cluster while keeping explanatory copy full-width above the controls.",
+      "verification": "Recapture the compact state and confirm that each label, value, icon, and related action reads as a cohesive control group with balanced column widths.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-section-tabs-detached",
+      "criterion_id": "criterion-analytics-hierarchy",
+      "observation": "The section tabs form a small right-aligned island separated from both the page title and date-range panel by substantial empty space. The active outline is clear, but inactive labels are faint.",
+      "user_impact": "Users must visually search for the primary exploration control, and the strip does not establish a strong transition from page identity to filtering and content.",
+      "severity": "medium",
+      "repair_direction": "Anchor the tab strip to the main content grid directly above the date panel, increase inactive-label contrast, and use consistent horizontal padding while retaining the clear active state.",
+      "verification": "Recapture full and compact states and confirm that the tab strip reads immediately after the page heading and remains visually connected to the filtered content.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-all-sections-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-modal-selection-overencoded",
+      "criterion_id": "criterion-fittrack-dna",
+      "observation": "Every export option simultaneously uses an orange border, checked box, and repeated INCLUDED label, making all eight tiles equally prominent and visually crowding their descriptions.",
+      "user_impact": "The modal is slower to scan because repeated status chrome competes with section names and prevents meaningful emphasis within the selection grid.",
+      "severity": "medium",
+      "repair_direction": "Keep one dominant selected cue, such as the checkbox with a subtle selected fill or border, and demote or remove the repeated INCLUDED label while improving description contrast.",
+      "verification": "Recapture both modal viewports and confirm that selected status remains unmistakable while section names and descriptions become the primary scan path.",
+      "evidence_refs": [
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    }
+  ],
+  "evidence_refs": [
+    "shot-analytics-all-sections-full",
+    "shot-analytics-ai-insights-full",
+    "shot-analytics-pdf-modal-full",
+    "shot-analytics-all-sections-compact",
+    "shot-analytics-pdf-modal-compact"
+  ]
+}

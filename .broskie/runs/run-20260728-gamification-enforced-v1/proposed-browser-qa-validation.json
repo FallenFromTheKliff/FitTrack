@@ -1,0 +1,35 @@
+{
+  "state": "PASS",
+  "issues": [],
+  "request_id": "browser-qa-gamification-enforced-v1",
+  "run_id": "run-20260728-gamification-enforced-v1",
+  "required_scenario_ids": [
+    "scenario.gamification-boundary-empty",
+    "scenario.gamification-governance-tabs",
+    "scenario.gamification-happy",
+    "scenario.gamification-member-scale",
+    "scenario.gamification-modal",
+    "scenario.gamification-recovery",
+    "scenario.gamification-responsive",
+    "scenario.gamification-validation",
+    "scenario.gamification-visual"
+  ],
+  "completed_scenario_ids": [
+    "scenario.gamification-boundary-empty",
+    "scenario.gamification-governance-tabs",
+    "scenario.gamification-happy",
+    "scenario.gamification-member-scale",
+    "scenario.gamification-modal",
+    "scenario.gamification-recovery",
+    "scenario.gamification-responsive",
+    "scenario.gamification-validation",
+    "scenario.gamification-visual"
+  ],
+  "scenario_count": 9,
+  "exploration_count": 1,
+  "invalid_count": 0,
+  "blocked_count": 0,
+  "repair_count": 0,
+  "ui_enforcement_state": "not-requested",
+  "coverage_complete": true
+}

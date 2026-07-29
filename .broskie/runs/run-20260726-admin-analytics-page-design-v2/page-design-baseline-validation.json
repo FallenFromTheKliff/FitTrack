@@ -1,0 +1,148 @@
+{
+  "cardification_ratio": 0.6667,
+  "coverage_complete": true,
+  "critical_hover_only_count": 0,
+  "decorated_depth_excess_count": 0,
+  "dominant_surface_signature_ratio": 0.5,
+  "duplicate_state_message_count": 0,
+  "finding_count": 19,
+  "inaccessible_disclosure_count": 0,
+  "issues": [
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[0].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[1].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[2].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[3].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[4].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[5].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[6].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[7].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[8].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[9].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[10].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[11].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[12].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[13].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[14].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[15].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[16].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.copy-text-mismatch",
+      "level": "warning",
+      "message": "observed copy differs from the locked content intent",
+      "path": "evidence.observations[17].copy_blocks[5].text"
+    },
+    {
+      "code": "page-design.removed-content-still-visible",
+      "level": "warning",
+      "message": "content approved for removal remains visible: ['analytics-kpi-helper', 'analytics-tagline', 'analytics-workspace-helper', 'analytics-workspace-label']",
+      "path": "evidence.observations.copy_blocks"
+    },
+    {
+      "code": "page-design.persistent-helper-density-high",
+      "level": "warning",
+      "message": "first viewport exceeds the locked persistent-helper copy budget",
+      "path": "evidence.observations.copy_blocks"
+    },
+    {
+      "code": "page-design.dominant-surface-signature-high",
+      "level": "warning",
+      "message": "one rounded/bordered/elevated signature dominates unrelated surface roles",
+      "path": "evidence.observations.surface_records"
+    }
+  ],
+  "observed_state_count": 18,
+  "persistent_helper_blocks_first_viewport": 2,
+  "persistent_helper_lines_first_viewport": 2,
+  "phase": "baseline",
+  "pill_misuse_count": 0,
+  "quality_budget_mode": "strict",
+  "required_state_count": 18,
+  "state": "PASS",
+  "unclassified_critical_copy_count": 0,
+  "warning_count": 2
+}

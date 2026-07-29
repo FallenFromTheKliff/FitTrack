@@ -1,0 +1,19 @@
+{
+  "schema_version": "layout-candidates.v1",
+  "source_revision": "git-scope:dd95bcff1a09181d591817523312a32f48264e67f81955c3d039a02cb26ca892",
+  "change_scope": "minor",
+  "candidates": [
+    {
+      "candidate_id": "compact-governance-workspace",
+      "description": "Keep the proven route structure, flatten the command center, consolidate metrics, and preserve contextual workflows in tabs and modals.",
+      "benefits": [
+        "Lower first-viewport density",
+        "No navigation relearning",
+        "Smaller regression surface"
+      ],
+      "risks": [
+        "Leaderboard still requires internal horizontal scrolling at compact desktop widths"
+      ]
+    }
+  ]
+}

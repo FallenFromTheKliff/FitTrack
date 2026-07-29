@@ -1,0 +1,21 @@
+{
+  "cardification_ratio": 0.6667,
+  "coverage_complete": true,
+  "critical_hover_only_count": 0,
+  "decorated_depth_excess_count": 0,
+  "dominant_surface_signature_ratio": 0.4286,
+  "duplicate_state_message_count": 0,
+  "finding_count": 0,
+  "inaccessible_disclosure_count": 0,
+  "issues": [],
+  "observed_state_count": 8,
+  "persistent_helper_blocks_first_viewport": 0,
+  "persistent_helper_lines_first_viewport": 0,
+  "phase": "closure",
+  "pill_misuse_count": 0,
+  "quality_budget_mode": "strict",
+  "required_state_count": 8,
+  "state": "PASS",
+  "unclassified_critical_copy_count": 0,
+  "warning_count": 0
+}

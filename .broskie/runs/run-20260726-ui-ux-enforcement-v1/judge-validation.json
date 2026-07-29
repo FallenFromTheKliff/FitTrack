@@ -1,0 +1,36 @@
+{
+  "aggregate_score": 68.93,
+  "critical_failures": [
+    "visual-hierarchy",
+    "control-clarity",
+    "layout-coherence"
+  ],
+  "dimension_scores": {
+    "accessibility-usability": 59.0,
+    "control-clarity": 68.0,
+    "fittrack-dna-alignment": 77.0,
+    "information-density": 64.0,
+    "layout-coherence": 74.5,
+    "state-legibility": 69.0,
+    "visual-hierarchy": 70.0
+  },
+  "dimension_spreads": {
+    "accessibility-usability": 10.0,
+    "control-clarity": 16.0,
+    "fittrack-dna-alignment": 2.0,
+    "information-density": 2.0,
+    "layout-coherence": 1.0,
+    "state-legibility": 22.0,
+    "visual-hierarchy": 0.0
+  },
+  "issues": [
+    {
+      "code": "ui-judge.disagreement",
+      "level": "warning",
+      "message": "judge disagreement or an explicit subjective fork requires human review",
+      "path": "opinions"
+    }
+  ],
+  "judge_count": 2,
+  "state": "HUMAN_DECISION_REQUIRED"
+}

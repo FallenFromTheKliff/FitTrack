@@ -1,0 +1,25 @@
+{
+  "aggregate_score": 86.79,
+  "critical_failures": [],
+  "dimension_scores": {
+    "accessibility-usability": 91.0,
+    "control-clarity": 87.5,
+    "fittrack-dna-alignment": 88.0,
+    "information-density": 78.0,
+    "layout-coherence": 89.5,
+    "state-legibility": 88.5,
+    "visual-hierarchy": 86.0
+  },
+  "dimension_spreads": {
+    "accessibility-usability": 2.0,
+    "control-clarity": 3.0,
+    "fittrack-dna-alignment": 0.0,
+    "information-density": 6.0,
+    "layout-coherence": 1.0,
+    "state-legibility": 3.0,
+    "visual-hierarchy": 2.0
+  },
+  "issues": [],
+  "judge_count": 2,
+  "state": "PASS"
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "surface-intent.v1",
+  "source_revision": "git-scope:dd95bcff1a09181d591817523312a32f48264e67f81955c3d039a02cb26ca892",
+  "route": "/gamification",
+  "primary_user": "FitTrack administrator",
+  "primary_job": "Review season standings, moderate integrity, govern ranking visibility, and issue audited EXP corrections.",
+  "primary_action": "Resolve the highest-priority governance item without losing leaderboard context.",
+  "success_signal": "The administrator can scan status, find a member, enter a governance workflow, and safely cancel or complete an action.",
+  "component_ids": [
+    "gamification-command-center",
+    "gamification-active-season",
+    "gamification-metric-strip",
+    "gamification-season-performance",
+    "gamification-governance-tabs",
+    "gamification-manual-exp-workflow",
+    "gamification-season-lifecycle-confirmation"
+  ]
+}

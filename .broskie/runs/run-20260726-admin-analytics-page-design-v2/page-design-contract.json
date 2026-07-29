@@ -1,0 +1,569 @@
+{
+  "schema_version": "page-design-contract.v1",
+  "contract_id": "contract-fittrack-admin-analytics-page-design-v2",
+  "linked_ui_contract_id": "contract-fittrack-admin-analytics-page-design-v2",
+  "run_id": "run-20260726-admin-analytics-page-design-v2",
+  "project_id": "fittrack",
+  "task_id": "work-20260722-ui-ux-vertical-slice",
+  "source_revision": "git-scope:a40eb8e41e424ed8fb52622d92da8efd19057af11d8f73a849bde8cd60b1acb4",
+  "context_manifest": {
+    "manifest_id": "manifest-run-20260726-admin-analytics-page-design-v2-current",
+    "content_hash": "sha256:964faf26fd275a86364b8f0db2e63fca1610b581630754ab7dd1d89d7aeecd8c",
+    "required_refs": [
+      "References/Projects/FitTrack/design-dna.md",
+      "References/Projects/FitTrack/Profiles/admin-web.md",
+      "References/Projects/FitTrack/Surfaces/admin-analytics-ui-contract.md",
+      "Research/Design/UI-UX-Enforcement/cognitive-load-and-progressive-disclosure.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/action-hierarchy.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/search-filter-toolbar.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/modal-and-drawer.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/tabs-and-view-switchers.md",
+      "Research/Design/UI-UX-Enforcement/Component-Contracts/state-feedback.md"
+    ]
+  },
+  "change_class": "page_repair",
+  "risk": {
+    "user_visible": true,
+    "shared_component": false,
+    "sensitive_data": false,
+    "destructive": false,
+    "responsive": true,
+    "subjective_alternatives": false,
+    "rationale": "A bounded repair of the existing Admin Analytics information hierarchy and surface morphology."
+  },
+  "surface": {
+    "surface_id": "admin-analytics",
+    "route": "/analytics",
+    "platform": "web",
+    "roles": [
+      "admin"
+    ]
+  },
+  "user_job": {
+    "actor": "gym administrator",
+    "situation": "reviewing a selected reporting window and switching among analytical views",
+    "outcome": "identify the primary business signal and take the next report action without explanatory clutter",
+    "success_evidence": [
+      "The active section, applied date window, grouping, and primary action are legible in the first viewport.",
+      "Supporting explanation is removed or exposed only where it resolves a real ambiguity.",
+      "Tabs, range controls, report actions, and both modals remain functional at full and compact desktop sizes."
+    ]
+  },
+  "page_responsibility": {
+    "owns": [
+      "Date-bounded business analysis.",
+      "Section switching across insights, KPIs, alerts, range signals, and revenue.",
+      "Attendance drilldown and report export actions."
+    ],
+    "does_not_own": [
+      "Long-form analytics onboarding.",
+      "Persistent prose explaining controls that are already self-describing.",
+      "Live operational alert history outside the current alert lane."
+    ],
+    "entry_states": [
+      "Authenticated administrator opens Data Analytics with seeded operational data."
+    ],
+    "exit_states": [
+      "Administrator applies a reporting window, opens a drilldown, or exports a report."
+    ],
+    "recovery_paths": [
+      "Reset an uncommitted date-range draft.",
+      "Close either modal with its close control or Escape and return focus to the trigger."
+    ]
+  },
+  "journey_refs": [
+    "journey-admin-review-analytics",
+    "journey-admin-export-analytics",
+    "journey-admin-drill-into-attendance"
+  ],
+  "page_type": "exploration_dashboard",
+  "density_mode": "high",
+  "content_intent": [
+    {
+      "content_id": "analytics-title",
+      "selector": "h1",
+      "text": "Data Analytics",
+      "purpose": "identity",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "critical",
+      "disposition": "keep",
+      "trigger_selector": null,
+      "approval_ref": null
+    },
+    {
+      "content_id": "analytics-tagline",
+      "selector": "h1 + p",
+      "text": "Read business signals.",
+      "purpose": "context",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "supporting",
+      "disposition": "remove",
+      "trigger_selector": null,
+      "approval_ref": "approval-user-20260726-remove-redundant-analytics-copy"
+    },
+    {
+      "content_id": "analytics-workspace-label",
+      "selector": ".analytics-section-filter > div:first-child > p:first-child",
+      "text": "Analytics workspace",
+      "purpose": "identity",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "supporting",
+      "disposition": "remove",
+      "trigger_selector": null,
+      "approval_ref": "approval-user-20260726-remove-redundant-analytics-copy"
+    },
+    {
+      "content_id": "analytics-workspace-helper",
+      "selector": ".analytics-section-filter > div:first-child > p:last-child",
+      "text": "Switch focus without losing the selected reporting window.",
+      "purpose": "instruction",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "supporting",
+      "disposition": "remove",
+      "trigger_selector": null,
+      "approval_ref": "approval-user-20260726-remove-redundant-analytics-copy"
+    },
+    {
+      "content_id": "analytics-range-heading",
+      "selector": ".analytics-date-range-panel > div:first-child > .analytics-inline-icon-row > p",
+      "text": "Analytics date range",
+      "purpose": "identity",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "critical",
+      "disposition": "keep",
+      "trigger_selector": null,
+      "approval_ref": null
+    },
+    {
+      "content_id": "analytics-range-summary",
+      "selector": ".analytics-date-range-panel > div:first-child > p",
+      "text": "Applied: Last 6 months.",
+      "purpose": "state",
+      "exposure": "persistent",
+      "scope": [],
+      "importance": "critical",
+      "disposition": "condense",
+      "trigger_selector": null,
+      "approval_ref": null
+    },
+    {
+      "content_id": "analytics-kpi-helper",
+      "selector": "#analytics-kpis div:has(+ .analytics-card-grid--three) > p",
+      "text": "Revenue, membership, attendance, and coaching results for last 6 months.",
+      "purpose": "context",
+      "exposure": "contextual",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-performance-kpis-full",
+        "analytics-all-sections-compact",
+        "analytics-performance-kpis-compact"
+      ],
+      "importance": "supporting",
+      "disposition": "remove",
+      "trigger_selector": null,
+      "approval_ref": "approval-user-20260726-remove-redundant-analytics-copy"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "switch-to-performance-kpis",
+      "selector": ".analytics-section-filter button:nth-of-type(3)",
+      "hierarchy": "secondary",
+      "result": "Show the Performance KPIs analytical state without changing the applied reporting window.",
+      "state_ids": [
+        "analytics-all-sections-full",
+        "analytics-all-sections-compact"
+      ],
+      "destructive": false
+    },
+    {
+      "action_id": "apply-analytics-range",
+      "selector": "[data-ui=\"analytics-range-apply\"]",
+      "hierarchy": "primary",
+      "result": "Apply the draft dates and grouping to historical analytics.",
+      "state_ids": [
+        "analytics-range-dirty-full",
+        "analytics-range-dirty-compact"
+      ],
+      "destructive": false
+    },
+    {
+      "action_id": "open-pdf-export",
+      "selector": "[data-ui=\"analytics-pdf-trigger\"]",
+      "hierarchy": "primary",
+      "result": "Open the analytics PDF export modal.",
+      "state_ids": [
+        "analytics-pdf-modal-full",
+        "analytics-pdf-modal-compact"
+      ],
+      "destructive": false
+    },
+    {
+      "action_id": "open-attendance-drilldown",
+      "selector": "[data-ui='analytics-drilldown-trigger']",
+      "hierarchy": "secondary",
+      "result": "Open the attendance drilldown modal for the selected point.",
+      "state_ids": [
+        "analytics-drilldown-modal-full",
+        "analytics-drilldown-modal-compact"
+      ],
+      "destructive": false
+    }
+  ],
+  "state_matrix": [
+    {
+      "state_id": "analytics-all-sections-full",
+      "purpose": "Review every analytics lane at 1920 by 1080.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-ai-insights-full",
+      "purpose": "Review the focused AI insights lane at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-performance-kpis-full",
+      "purpose": "Review the focused KPI lane and attendance action at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-system-alerts-full",
+      "purpose": "Review current live alert lanes at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-range-insights-full",
+      "purpose": "Review date-bounded range insights at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-revenue-full",
+      "purpose": "Review revenue analysis and source switching at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-range-dirty-full",
+      "purpose": "Review the unapplied range state and enabled reset/apply actions at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-pdf-modal-full",
+      "purpose": "Verify the PDF export overlay at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-drilldown-modal-full",
+      "purpose": "Verify the attendance drilldown overlay at full desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-all-sections-compact",
+      "purpose": "Review every analytics lane at 1440 by 900.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-ai-insights-compact",
+      "purpose": "Review the focused AI insights lane at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-performance-kpis-compact",
+      "purpose": "Review the focused KPI lane and attendance action at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-system-alerts-compact",
+      "purpose": "Review current live alert lanes at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-range-insights-compact",
+      "purpose": "Review date-bounded range insights at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-revenue-compact",
+      "purpose": "Review revenue analysis and source switching at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-range-dirty-compact",
+      "purpose": "Review the unapplied range state and enabled reset/apply actions at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-pdf-modal-compact",
+      "purpose": "Verify the PDF export overlay at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    },
+    {
+      "state_id": "analytics-drilldown-modal-compact",
+      "purpose": "Verify the attendance drilldown overlay at compact desktop.",
+      "required": true,
+      "exclusion_reason": null
+    }
+  ],
+  "pattern_contracts": [
+    "Research/Design/UI-UX-Enforcement/cognitive-load-and-progressive-disclosure.md",
+    "Research/Design/UI-UX-Enforcement/Component-Contracts/action-hierarchy.md",
+    "Research/Design/UI-UX-Enforcement/Component-Contracts/search-filter-toolbar.md",
+    "Research/Design/UI-UX-Enforcement/Component-Contracts/modal-and-drawer.md",
+    "Research/Design/UI-UX-Enforcement/Component-Contracts/tabs-and-view-switchers.md",
+    "Research/Design/UI-UX-Enforcement/Component-Contracts/state-feedback.md"
+  ],
+  "layout_candidates": [
+    {
+      "candidate_id": "direction-signal-first",
+      "summary": "Keep the existing analytical structure while removing repeated explanation, compacting state copy, and assigning morphology by semantic role.",
+      "tradeoffs": [
+        "First-time users receive less persistent prose.",
+        "The applied range remains explicit while explanatory detail moves out of the permanent first viewport.",
+        "Repeated records retain shared family styling while unrelated surface families stop looking mechanically identical."
+      ],
+      "evidence_refs": [
+        "shot-baseline-analytics-all-sections-full"
+      ]
+    }
+  ],
+  "selected_direction": {
+    "candidate_id": "direction-signal-first",
+    "approval_ref": "approval-user-20260726-build-and-test-updated-harness",
+    "rationale": "The user approved the planned copy restraint and morphology enforcement, and the direction preserves the existing page behavior and layout."
+  },
+  "surface_roles": [
+    {
+      "surface_role_id": "analytics-page",
+      "selector": ".analytics-shell",
+      "component_family": "operational-dashboard",
+      "role": "section",
+      "density": "high",
+      "radius_token": null,
+      "border_token": null,
+      "elevation_token": null,
+      "parent_role_id": null,
+      "allowed_decorated_depth": 2
+    },
+    {
+      "surface_role_id": "analytics-section-switcher",
+      "selector": ".analytics-section-filter",
+      "component_family": "view-switcher",
+      "role": "toolbar",
+      "density": "high",
+      "radius_token": null,
+      "border_token": null,
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "allowed_decorated_depth": 2
+    },
+    {
+      "surface_role_id": "analytics-range-toolbar",
+      "selector": ".analytics-date-range-panel",
+      "component_family": "filter-toolbar",
+      "role": "toolbar",
+      "density": "high",
+      "radius_token": "fit.radius.sm",
+      "border_token": "fit.border.subtle",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "allowed_decorated_depth": 3
+    },
+    {
+      "surface_role_id": "analytics-insight-panel",
+      "selector": "#analytics-insights > *:first-child",
+      "component_family": "analysis-panel",
+      "role": "panel",
+      "density": "high",
+      "radius_token": "fit.radius.sm",
+      "border_token": "fit.border.subtle",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-ai-insights-full",
+        "analytics-pdf-modal-full",
+        "analytics-all-sections-compact",
+        "analytics-ai-insights-compact",
+        "analytics-pdf-modal-compact"
+      ],
+      "allowed_decorated_depth": 4
+    },
+    {
+      "surface_role_id": "analytics-kpi-card",
+      "selector": "#analytics-kpis .analytics-card-grid--three > div:first-child",
+      "component_family": "metric-card",
+      "role": "record",
+      "density": "high",
+      "radius_token": "fit.radius.sm",
+      "border_token": "fit.border.subtle",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-performance-kpis-full",
+        "analytics-drilldown-modal-full",
+        "analytics-all-sections-compact",
+        "analytics-performance-kpis-compact",
+        "analytics-drilldown-modal-compact"
+      ],
+      "allowed_decorated_depth": 4
+    },
+    {
+      "surface_role_id": "analytics-alert-record",
+      "selector": "#analytics-alerts .analytics-alert-grid > div:first-child",
+      "component_family": "operational-alert",
+      "role": "record",
+      "density": "high",
+      "radius_token": "fit.radius.xs",
+      "border_token": "fit.border.status",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-system-alerts-full",
+        "analytics-all-sections-compact",
+        "analytics-system-alerts-compact"
+      ],
+      "allowed_decorated_depth": 4
+    },
+    {
+      "surface_role_id": "analytics-range-record",
+      "selector": "#analytics-daily .analytics-card-grid--three > div:first-child",
+      "component_family": "summary-record",
+      "role": "record",
+      "density": "high",
+      "radius_token": "fit.radius.xs",
+      "border_token": "fit.border.subtle",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-range-insights-full",
+        "analytics-all-sections-compact",
+        "analytics-range-insights-compact"
+      ],
+      "allowed_decorated_depth": 4
+    },
+    {
+      "surface_role_id": "analytics-revenue-board",
+      "selector": ".analytics-revenue-board",
+      "component_family": "analysis-board",
+      "role": "panel",
+      "density": "high",
+      "radius_token": "fit.radius.sm",
+      "border_token": "fit.border.subtle",
+      "elevation_token": null,
+      "parent_role_id": "analytics-page",
+      "scope": [
+        "analytics-all-sections-full",
+        "analytics-revenue-full",
+        "analytics-all-sections-compact",
+        "analytics-revenue-compact"
+      ],
+      "allowed_decorated_depth": 3
+    },
+    {
+      "surface_role_id": "analytics-modal",
+      "selector": "[role='dialog'][aria-modal='true']",
+      "component_family": "modal",
+      "role": "overlay",
+      "density": "high",
+      "radius_token": "fit.radius.modal",
+      "border_token": "fit.border.subtle",
+      "elevation_token": "fit.elevation.overlay",
+      "parent_role_id": null,
+      "scope": [
+        "analytics-pdf-modal-full",
+        "analytics-drilldown-modal-full",
+        "analytics-pdf-modal-compact",
+        "analytics-drilldown-modal-compact"
+      ],
+      "allowed_decorated_depth": 2
+    }
+  ],
+  "repository_impact": {
+    "change_scope": "local",
+    "serena": {
+      "state": "PASS",
+      "source_revision": "git-scope:a40eb8e41e424ed8fb52622d92da8efd19057af11d8f73a849bde8cd60b1acb4",
+      "observed_entities": [
+        "AdminAnalyticsPage@apps/web/app/(auth)/analytics/page.tsx:1092",
+        "useAnalyticsDashboard@apps/web/hooks/analytics/useAnalyticsDashboard.ts:88",
+        "AnalyticsSectionFilterContext@apps/web/contexts/AnalyticsSectionFilterContext.tsx",
+        "PAGE_SUBTITLES@packages/app-config/web-labels.ts:60"
+      ],
+      "evidence_refs": [
+        "impact-serena-admin-analytics-v2"
+      ],
+      "note": "Serena isolated the page composition, date-window hook, section-state context, and shared modal boundary before implementation."
+    },
+    "graphify": {
+      "state": "PASS",
+      "source_revision": "git-scope:a40eb8e41e424ed8fb52622d92da8efd19057af11d8f73a849bde8cd60b1acb4",
+      "observed_entities": [
+        "apps_web_app_auth_analytics_page_adminanalyticspage",
+        "apps_web_hooks_analytics_useanalyticsdashboard",
+        "packages_app_config_web_labels_page_subtitles",
+        "AdminAnalyticsPage degree=12",
+        "useAnalyticsDashboard.ts degree=27",
+        "PAGE_SUBTITLES degree=1"
+      ],
+      "evidence_refs": [
+        "impact-graphify-admin-analytics-v2"
+      ],
+      "note": "Graphify confirmed a local route-level repair with dependencies on the analytics hook, theme, section context, and shared Fit primitives; no schema or backend mutation is required."
+    },
+    "expected_affected_surfaces": [
+      "admin-analytics",
+      "admin-analytics-tabs",
+      "admin-analytics-range-toolbar",
+      "admin-analytics-pdf-modal",
+      "admin-analytics-attendance-drilldown"
+    ],
+    "regression_surfaces": [
+      "admin-analytics-full-desktop",
+      "admin-analytics-compact-desktop",
+      "all-active-themes"
+    ],
+    "exemption_reason": null
+  },
+  "evidence_requirements": [
+    "browser-screenshot",
+    "copy-observation",
+    "surface-morphology-record"
+  ],
+  "quality_budgets": {
+    "mode": "strict",
+    "max_persistent_helper_blocks_first_viewport": 1,
+    "max_persistent_helper_lines_first_viewport": 2,
+    "max_duplicate_state_messages": 0,
+    "max_dominant_surface_signature_ratio": 0.49,
+    "max_cardification_ratio": 0.7
+  },
+  "repair_budget": {
+    "max_attempts": 3
+  },
+  "design_history_required": true,
+  "created_at": "2026-07-27T00:42:00+08:00"
+}

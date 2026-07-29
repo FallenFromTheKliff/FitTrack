@@ -1,0 +1,239 @@
+{
+  "schema_version": "ui-judge-opinion.v1",
+  "judge_id": "critic-usability-beta",
+  "producer_id": "playwright-adapter",
+  "contract_id": "contract-fittrack-admin-analytics-v1",
+  "verdict": "REPAIR_REQUIRED",
+  "confidence": 0.96,
+  "dimensions": [
+    {
+      "dimension_id": "visual-hierarchy",
+      "score": 70,
+      "rationale": "The page title, range panel, and selected section are easy to locate, but All Sections gives the largest first-viewport area to an empty AI panel while primary KPIs fall to the bottom edge on full desktop and below the fold on compact desktop.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-performance-kpis-full"
+      ]
+    },
+    {
+      "dimension_id": "information-density",
+      "score": 63,
+      "rationale": "Dedicated KPI, alert, and range views use concise grids well, but the all-sections and AI views spend most of the viewport on a nearly empty generated-insight container, creating unnecessary scrolling and weak overview value.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-performance-kpis-compact",
+        "shot-analytics-range-insights-compact"
+      ]
+    },
+    {
+      "dimension_id": "control-clarity",
+      "score": 60,
+      "rationale": "Selected tabs, disabled actions, the dirty Apply Range state, and PDF section choices are understandable. Date controls resemble loose text rather than bounded fields, and the contracted drilldown control is absent at both viewports.",
+      "evidence_refs": [
+        "shot-analytics-range-dirty-full",
+        "shot-analytics-range-dirty-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "state-legibility",
+      "score": 58,
+      "rationale": "Tab selection and the Yearly draft state are visible, with Apply Range enabled only while dirty. However, the empty AI panel still says it is a generated insight and shows an update timestamp, while both declared drilldown-modal captures contain no modal.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-range-dirty-full",
+        "shot-analytics-range-dirty-compact",
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "layout-coherence",
+      "score": 74,
+      "rationale": "The evidence reports no horizontal overflow, the compact breakpoint reflows without overlap, and the PDF dialog remains bounded with one scroll owner. Coherence is reduced by undersized date controls, excessive empty vertical area, and the unavailable drilldown layout.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-compact",
+        "shot-analytics-revenue-compact",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "accessibility-usability",
+      "score": 54,
+      "rationale": "Contracted controls expose accessible names, and the PDF dialog demonstrates initial focus, tab containment, Escape close, and focus return. Both PDF states leave the background non-inert, every date input is only 26 pixels high, secondary text has visible contrast risk, and the drilldown dialog is unreachable.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact",
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "dimension_id": "fittrack-dna-alignment",
+      "score": 76,
+      "rationale": "The dark surfaces, orange action color, heavy FitTrack display type, cards, and active outlines are consistent across full and compact states. Very dim supporting text, repetitive outlined containers, and the oversized empty AI workspace weaken the intended restraint and task-first consistency.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-performance-kpis-full",
+        "shot-analytics-revenue-full",
+        "shot-analytics-pdf-modal-full"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "finding-drilldown-state-unreachable",
+      "criterion_id": "criterion-overlay-behavior",
+      "observation": "In both declared drilldown-modal states, the evidence found zero matches for the contracted drilldown trigger and no dialog shell, scroll owner, or close control; both screenshots remain on Revenue with no overlay.",
+      "user_impact": "Users cannot discover or reach revenue drilldown details, and none of the required keyboard, dismissal, or focus-return behavior is available.",
+      "severity": "high",
+      "repair_direction": "Add the contracted drilldown trigger to the intended revenue visualization or summary, wire it to one accessible dialog, and provide the required scroll owner and visible close control at both viewports.",
+      "verification": "Re-capture full and compact drilldown states and require one trigger, an open named dialog, one scroll owner, initial focus inside, contained Tab navigation, inert background, Escape dismissal, and focus return.",
+      "evidence_refs": [
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-drilldown-evidence-not-state-faithful",
+      "criterion_id": "criterion-complete-state-evidence",
+      "observation": "The manifest contains files named for both drilldown-modal states, but neither screenshot nor structured observation depicts the contracted state, so coverage exists by file count rather than by state fidelity.",
+      "user_impact": "Reviewers cannot assess drilldown usability, compact layout, focus behavior, or dismissal, and automated aggregation could overstate state coverage.",
+      "severity": "high",
+      "repair_direction": "Produce fresh captures only after the drilldown dialog is visibly open and its required targets are present; otherwise record the states as failed without treating their screenshots as completed state evidence.",
+      "verification": "Confirm that each drilldown screenshot visibly matches its state ID and that structured geometry and overlay records reference the same open dialog in full and compact viewports.",
+      "evidence_refs": [
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-pdf-background-not-inert",
+      "criterion_id": "criterion-overlay-behavior",
+      "observation": "The PDF dialog opens and passes focus containment, Escape dismissal, and focus return, but background_inert is false in both full and compact evidence.",
+      "user_impact": "Keyboard and assistive-technology users may still navigate or activate obscured page controls while the modal is open, weakening modal isolation.",
+      "severity": "high",
+      "repair_direction": "Apply inertness to the application background while the portaled PDF dialog is open, keep the dialog outside the inert subtree, and restore background state on every close path.",
+      "verification": "Open the PDF dialog at both viewports, confirm background_inert is true, verify background controls cannot receive focus or clicks, then verify Escape and close-button dismissal restore focus and interactivity.",
+      "evidence_refs": [
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-date-input-hit-area",
+      "criterion_id": "criterion-no-layout-breakage",
+      "observation": "Geometry fails in all 18 observations because both date inputs render 26 pixels high against the contracted 32-pixel minimum; screenshots also make them read as loose text with small calendar icons far from the values.",
+      "user_impact": "The fields are harder to identify and target, especially for motor-impaired users, and their affordance is weaker than the neighboring 42-to-45-pixel controls.",
+      "severity": "medium",
+      "repair_direction": "Use the shared FitTrack field container for each date with at least the contracted height, a visible boundary and focus state, and an integrated full-height calendar affordance while preserving the compact two-column layout.",
+      "verification": "Measure both date controls at full and compact viewports, require height at least 32 pixels with no clipping, then exercise value entry, calendar activation, keyboard focus, and the dirty Apply Range transition.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-range-dirty-full",
+        "shot-analytics-range-dirty-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-all-sections-priority-order",
+      "criterion_id": "criterion-analytics-hierarchy",
+      "observation": "All Sections places a very tall, mostly empty AI insight workspace immediately after the range controls; on full desktop the KPI section only begins at the bottom edge, and on compact desktop primary business signals are entirely below the first viewport.",
+      "user_impact": "Administrators must scroll through low-value empty space before seeing the operational metrics expected from an analytics overview.",
+      "severity": "high",
+      "repair_direction": "Make All Sections a concise overview by presenting key KPIs and range signals first and collapsing the empty AI state to a short summary card with its action; retain the expanded AI workspace in the dedicated AI Insights section.",
+      "verification": "Capture All Sections at both viewports and confirm the applied range plus representative primary KPIs are visible in the first viewport, with AI generation clearly secondary and no large empty block.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-performance-kpis-full"
+      ]
+    },
+    {
+      "finding_id": "finding-empty-insight-state-contradiction",
+      "criterion_id": "criterion-analytics-hierarchy",
+      "observation": "The empty AI state is headed 'AI GENERATED INSIGHT: ALL SECTIONS' and shows an Updated timestamp while its body states that no insight has been generated.",
+      "user_impact": "Users cannot tell whether generation succeeded with missing content, whether the result is stale, or whether they still need to generate the first insight.",
+      "severity": "medium",
+      "repair_direction": "Render dedicated empty-state copy without generated-result metadata or an update timestamp, and show the generated heading and timestamp only when a real insight payload exists.",
+      "verification": "Capture both an empty state and an existing-result state and confirm each has internally consistent heading, metadata, body copy, and primary action.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-ai-insights-full"
+      ]
+    },
+    {
+      "finding_id": "finding-secondary-text-contrast-risk",
+      "criterion_id": "criterion-fittrack-dna",
+      "observation": "Muted labels, explanatory copy, chart axes, inactive tabs, and disabled-control text appear very close to the dark backgrounds across full and compact screenshots; this is a visible accessibility risk, not a measured contrast result.",
+      "user_impact": "Users with low vision or lower-quality displays may miss field labels, chart scale information, state explanations, and control availability.",
+      "severity": "medium",
+      "repair_direction": "Raise the shared muted and disabled text tokens to measured accessible contrast while retaining hierarchy through size and weight rather than extreme dimming.",
+      "verification": "Run a contrast audit for normal text, large text, controls, and chart labels in default, active, disabled, and modal states, then visually confirm the revised tokens across both viewports.",
+      "evidence_refs": [
+        "shot-analytics-performance-kpis-compact",
+        "shot-analytics-revenue-full",
+        "shot-analytics-range-dirty-compact",
+        "shot-analytics-pdf-modal-compact"
+      ]
+    },
+    {
+      "finding_id": "finding-runtime-checks-unavailable",
+      "criterion_id": "criterion-runtime-clean",
+      "observation": "Network and performance checks are blocked in every declared state because this session exposed neither a CDP request feed nor a Performance feed; console, overflow, and screenshot checks do not establish request health or layout-shift performance.",
+      "user_impact": "The run cannot rule out failed analytics requests, slow or unstable rendering, or regressions that only appear during real data loading.",
+      "severity": "medium",
+      "repair_direction": "Repeat the same state matrix in a CDP-capable browser session and collect request outcomes plus targeted rendering and layout-stability measurements without changing the contract.",
+      "verification": "Require network and performance checks to return pass or explicit objective failures for every state, with no failed critical requests, no unhandled loading path, and measured layout shift within the contract threshold.",
+      "evidence_refs": [
+        "shot-analytics-all-sections-full",
+        "shot-analytics-ai-insights-full",
+        "shot-analytics-performance-kpis-full",
+        "shot-analytics-system-alerts-full",
+        "shot-analytics-range-insights-full",
+        "shot-analytics-revenue-full",
+        "shot-analytics-range-dirty-full",
+        "shot-analytics-pdf-modal-full",
+        "shot-analytics-drilldown-modal-full",
+        "shot-analytics-all-sections-compact",
+        "shot-analytics-ai-insights-compact",
+        "shot-analytics-performance-kpis-compact",
+        "shot-analytics-system-alerts-compact",
+        "shot-analytics-range-insights-compact",
+        "shot-analytics-revenue-compact",
+        "shot-analytics-range-dirty-compact",
+        "shot-analytics-pdf-modal-compact",
+        "shot-analytics-drilldown-modal-compact"
+      ]
+    }
+  ],
+  "evidence_refs": [
+    "shot-analytics-all-sections-full",
+    "shot-analytics-ai-insights-full",
+    "shot-analytics-performance-kpis-full",
+    "shot-analytics-system-alerts-full",
+    "shot-analytics-range-insights-full",
+    "shot-analytics-revenue-full",
+    "shot-analytics-range-dirty-full",
+    "shot-analytics-pdf-modal-full",
+    "shot-analytics-drilldown-modal-full",
+    "shot-analytics-all-sections-compact",
+    "shot-analytics-ai-insights-compact",
+    "shot-analytics-performance-kpis-compact",
+    "shot-analytics-system-alerts-compact",
+    "shot-analytics-range-insights-compact",
+    "shot-analytics-revenue-compact",
+    "shot-analytics-range-dirty-compact",
+    "shot-analytics-pdf-modal-compact",
+    "shot-analytics-drilldown-modal-compact"
+  ]
+}

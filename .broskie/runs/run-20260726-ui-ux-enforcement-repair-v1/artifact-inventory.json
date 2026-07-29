@@ -1,0 +1,161 @@
+{
+  "schema_version": "artifact-inventory.v1",
+  "run_id": "run-20260726-ui-ux-enforcement-repair-v1",
+  "created_at": "2026-07-26T13:52:34.689Z",
+  "refreshed_at": "2026-07-26T13:52:34.689Z",
+  "retention": {
+    "status": "closed",
+    "retain_until": "2026-08-09T13:52:34.689Z",
+    "pinned": false,
+    "cleanup_rule": "Only direct run folders with a valid run-retention.v1 marker and closed/cancelled/superseded status are eligible."
+  },
+  "total_size_bytes": 3359847,
+  "artifact_count": 29,
+  "artifacts": [
+    {
+      "path": "context-validation.json",
+      "size_bytes": 48777,
+      "content_hash": "sha256:e9efa2457aeb84e5e5d67cf75942da91eef0427d39ba9c7472635c67d2886054"
+    },
+    {
+      "path": "contract-validation.json",
+      "size_bytes": 246,
+      "content_hash": "sha256:2f77087f4860dc737dda49f624e9ef57adec2c51c5edbf08f75f520c4a152280"
+    },
+    {
+      "path": "contrast-regression.json",
+      "size_bytes": 25898,
+      "content_hash": "sha256:210162bbc48cf587548415e9b058d75a14541b48fc614836d98e3c30fb6e40ed"
+    },
+    {
+      "path": "evidence-validation.json",
+      "size_bytes": 94,
+      "content_hash": "sha256:40da540d8c44cbb616e3cc2104cebac944506e1d11a5fd3afc98a3455631bec3"
+    },
+    {
+      "path": "judge-opinion-usability-repair-beta.json",
+      "size_bytes": 7094,
+      "content_hash": "sha256:11d6b0c1b712b61d40c385f8ef4f43968308b1589869762a59027961e0f6393b"
+    },
+    {
+      "path": "judge-opinion-visual-repair-alpha.json",
+      "size_bytes": 6690,
+      "content_hash": "sha256:a651b335e46ce523ae962a0ba690187ad3cc8c88c222ead7ffa758a840545fbc"
+    },
+    {
+      "path": "judge-opinions.json",
+      "size_bytes": 14347,
+      "content_hash": "sha256:188810ef5f89eec54bca633e101ed80764d436741006395a9265ae68903c819c"
+    },
+    {
+      "path": "judge-validation.json",
+      "size_bytes": 638,
+      "content_hash": "sha256:f72a42c261e72f7c2ac3a25ac653ccd79c0d1a84d05296a2ac98117a1c6714c4"
+    },
+    {
+      "path": "screenshots/analytics-ai-insights-compact.png",
+      "size_bytes": 167664,
+      "content_hash": "sha256:fc1e6d851443432bf1cb683eaba657d9d9221543f9fbef3d8816256e8ab9eb2f"
+    },
+    {
+      "path": "screenshots/analytics-ai-insights-full.png",
+      "size_bytes": 187093,
+      "content_hash": "sha256:2f81ebcc5fcd14e83eb8914041912083ac74dbe4b948909dbcf6ce218dd563ce"
+    },
+    {
+      "path": "screenshots/analytics-all-sections-compact.png",
+      "size_bytes": 179994,
+      "content_hash": "sha256:6dbf925f9ae1ad75a75650e2f6dbb24279836d7333079da9f09143fdcd9bdb1a"
+    },
+    {
+      "path": "screenshots/analytics-all-sections-full.png",
+      "size_bytes": 213385,
+      "content_hash": "sha256:4ac91d141c0ed8a888be1bf527ed5b7b5205adfe149128b1b73f165049a8beba"
+    },
+    {
+      "path": "screenshots/analytics-drilldown-modal-compact.png",
+      "size_bytes": 96437,
+      "content_hash": "sha256:044504f148e622976f161fdc5e06bf59041970910ec9ecd2b9a228a16489f73c"
+    },
+    {
+      "path": "screenshots/analytics-drilldown-modal-full.png",
+      "size_bytes": 132790,
+      "content_hash": "sha256:2e12f0345369d5deef05c501b35b611867a96079f7e2a16b3dd7de1d16d42140"
+    },
+    {
+      "path": "screenshots/analytics-pdf-modal-compact.png",
+      "size_bytes": 139143,
+      "content_hash": "sha256:91653cca277e9b7ea121703e9585cf75f5e80f6782ba753a6f4fedab7909e904"
+    },
+    {
+      "path": "screenshots/analytics-pdf-modal-full.png",
+      "size_bytes": 172360,
+      "content_hash": "sha256:0e0693ff28a675770493ae2431afd46972264dc6689320742b89cf5ff4da3873"
+    },
+    {
+      "path": "screenshots/analytics-performance-kpis-compact.png",
+      "size_bytes": 139142,
+      "content_hash": "sha256:73bd075d5eee0e31c4cb98fbf67bec9200fe2fcc109e1bbab9791890cd1ab49a"
+    },
+    {
+      "path": "screenshots/analytics-performance-kpis-full.png",
+      "size_bytes": 157444,
+      "content_hash": "sha256:eecb7ea006e3f9c55625ce79e6324e2ee770700cc72325e0187fdf0848529b2b"
+    },
+    {
+      "path": "screenshots/analytics-range-dirty-compact.png",
+      "size_bytes": 180111,
+      "content_hash": "sha256:28bf5827de9ac4aea36a9f2140e5092136815ab291d97f0fdeb618280b96b04a"
+    },
+    {
+      "path": "screenshots/analytics-range-dirty-full.png",
+      "size_bytes": 213395,
+      "content_hash": "sha256:0970a5fd429b992a976294e85ba23a08af3f0e26951f32a49d94880e40790a05"
+    },
+    {
+      "path": "screenshots/analytics-range-insights-compact.png",
+      "size_bytes": 134221,
+      "content_hash": "sha256:b39cc3bfa73e0a2dcb1a131d3dac20819639cb2e16ae97f70db22d61567c9d0b"
+    },
+    {
+      "path": "screenshots/analytics-range-insights-full.png",
+      "size_bytes": 149397,
+      "content_hash": "sha256:19f6a8f212543bfbaf5a55da6b3d101bfcfe13600a2d305f3fd442221ed0aee7"
+    },
+    {
+      "path": "screenshots/analytics-revenue-compact.png",
+      "size_bytes": 146193,
+      "content_hash": "sha256:a8cac21080331d4626f1ce089a9f2b6fa6af397878dfa5950ce48745c60a79e9"
+    },
+    {
+      "path": "screenshots/analytics-revenue-full.png",
+      "size_bytes": 164029,
+      "content_hash": "sha256:a575c9e96edc4314a80dcd8070464143ac15cc3e5d738a08d99659e738d33575"
+    },
+    {
+      "path": "screenshots/analytics-system-alerts-compact.png",
+      "size_bytes": 120519,
+      "content_hash": "sha256:e00bf9af4bbecaacbb6484de47917a0caa83d89aa37e1e32d495f22e257c20ed"
+    },
+    {
+      "path": "screenshots/analytics-system-alerts-full.png",
+      "size_bytes": 131891,
+      "content_hash": "sha256:93ba600ee631ce27156509cd79577da69cc3300fbb13a8f35de0a506bbbee28b"
+    },
+    {
+      "path": "shared-modal-regression.json",
+      "size_bytes": 799,
+      "content_hash": "sha256:ce4710cf4e316ad4579f5320a44688b5544e8fa5c7cc853ff38e3c7da732dcee"
+    },
+    {
+      "path": "ui-run-contract.json",
+      "size_bytes": 126440,
+      "content_hash": "sha256:5d4d907cf88055e43457c82b5d780166dc0df63308b2e8e2df221d650e1ebcf2"
+    },
+    {
+      "path": "ui-surface-evidence.json",
+      "size_bytes": 303616,
+      "content_hash": "sha256:b94cab51bcf9e70a03a213a170ea34d3e43a737df2ddcf2626bfbb74617d2d16"
+    }
+  ]
+}

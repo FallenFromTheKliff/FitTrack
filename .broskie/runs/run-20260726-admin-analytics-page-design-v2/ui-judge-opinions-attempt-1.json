@@ -1,0 +1,261 @@
+[
+  {
+    "schema_version": "ui-judge-opinion.v1",
+    "judge_id": "critic-visual-hierarchy",
+    "producer_id": "playwright-adapter",
+    "contract_id": "contract-fittrack-admin-analytics-page-design-v2",
+    "verdict": "REPAIR_REQUIRED",
+    "confidence": 0.94,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "score": 79,
+        "rationale": "The main sequence is clear, but oversized low-information KPI cards and repeated high-emphasis treatments keep the page below a consistently premium standard.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      },
+      {
+        "dimension_id": "information-density",
+        "score": 68,
+        "rationale": "Six deep KPI cards communicate one value each, while the drilldown uses oversized repetitive hourly cards that are inefficient for comparison.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "control-clarity",
+        "score": 78,
+        "rationale": "Core controls are recognizable, but heavily muted range actions and uniformly emphasized export selections weaken state hierarchy.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-pdf-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "state-legibility",
+        "score": 80,
+        "rationale": "Active and selected states are visible, but inactive controls are faint and the drilldown does not strongly link its chart and selected-slice summary.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "score": 75,
+        "rationale": "The overview and PDF modal are coherent, but the drilldown has mismatched density and visibly continues beyond the modal without a polished continuation cue.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-pdf-modal-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "score": 70,
+        "rationale": "Core headings are readable, while secondary labels, chart ticks, and control states remain small or muted across dark surfaces.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact",
+          "shot-closure-analytics-pdf-modal-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "fittrack-dna-alignment",
+        "score": 80,
+        "rationale": "The page is recognizably FitTrack, but repeated outlined rectangles and saturated orange selections reduce professional restraint.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-pdf-modal-full"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "finding-analytics-kpi-morphology",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "Each KPI card separates its label and value with a large empty region while providing no supporting context.",
+        "user_impact": "Administrators scan six visually large surfaces but receive little information, pushing substantive insight content downward.",
+        "severity": "high",
+        "repair_direction": "Reduce card height and tighten label-value proximity without inventing unsupported trend data.",
+        "verification": "The six-card block occupies materially less vertical space in full and compact states while preserving value prominence.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      },
+      {
+        "finding_id": "finding-analytics-drilldown-density",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "The drilldown pairs a sparse chart with a long column of oversized hourly cards and clips continuing content.",
+        "user_impact": "Peak-hour comparison requires unnecessary scrolling and the modal appears unfinished.",
+        "severity": "high",
+        "repair_direction": "Use compact comparable rows and an unmistakable bounded scroll treatment.",
+        "verification": "More hourly data is visible at once and any continuing content has an obvious scroll boundary.",
+        "evidence_refs": [
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "finding_id": "finding-analytics-muted-control-ambiguity",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "Range actions and several inactive labels use similarly subdued treatments.",
+        "user_impact": "Enabled, disabled, active, and secondary states are harder to distinguish at a glance.",
+        "severity": "medium",
+        "repair_direction": "Reserve strong muting for disabled states and preserve clear interactive hierarchy.",
+        "verification": "Control states are immediately distinguishable in full and compact captures.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      },
+      {
+        "finding_id": "finding-analytics-selection-noise",
+        "criterion_id": "criterion-fittrack-dna",
+        "observation": "Every selected PDF section uses a saturated orange border, creating eight equally emphatic tiles.",
+        "user_impact": "The modal loses restraint and competes with its primary export action.",
+        "severity": "medium",
+        "repair_direction": "Use a quieter selected surface while keeping the checkbox as the primary marker.",
+        "verification": "Selections remain clear while Export PDF is the dominant orange action.",
+        "evidence_refs": [
+          "shot-closure-analytics-pdf-modal-full"
+        ]
+      }
+    ],
+    "evidence_refs": [
+      "shot-closure-analytics-all-sections-full",
+      "shot-closure-analytics-all-sections-compact",
+      "shot-closure-analytics-pdf-modal-full",
+      "shot-closure-analytics-drilldown-modal-full"
+    ]
+  },
+  {
+    "schema_version": "ui-judge-opinion.v1",
+    "judge_id": "critic-usability-consistency",
+    "producer_id": "playwright-adapter",
+    "contract_id": "contract-fittrack-admin-analytics-page-design-v2",
+    "verdict": "REPAIR_REQUIRED",
+    "confidence": 0.91,
+    "dimensions": [
+      {
+        "dimension_id": "visual-hierarchy",
+        "score": 79,
+        "rationale": "The page sequence is clear, but oversized KPI cards, subdued section labels, and a detached attendance action weaken scanning efficiency.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      },
+      {
+        "dimension_id": "information-density",
+        "score": 74,
+        "rationale": "Headline metrics are easy to scan but consume substantial space for one value, and repeated drilldown records expose little comparative information.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "control-clarity",
+        "score": 76,
+        "rationale": "Date, tab, PDF, and close controls are recognizable, but the attendance action is weakly associated and the drilldown lacks a continuation affordance.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "state-legibility",
+        "score": 75,
+        "rationale": "Applied range and selection states are visible, while raw fallback amounts and limited drilldown labeling reduce professional comprehension.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "layout-coherence",
+        "score": 78,
+        "rationale": "Full and compact layouts preserve their grid and the PDF modal is coherent, but the drilldown ends with a cropped record and no clear internal-scroll treatment.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-pdf-modal-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "accessibility-usability",
+        "score": 69,
+        "rationale": "Large headings and values are readable, while numerous secondary labels and state distinctions are small, low-contrast, or color-dependent.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact",
+          "shot-closure-analytics-pdf-modal-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "dimension_id": "fittrack-dna-alignment",
+        "score": 76,
+        "rationale": "The visual language is FitTrack-consistent, but the analytics treatment remains generic and short on gym-operational interpretation.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "finding_id": "finding-drilldown-continuation-affordance",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "The peak-hour column visibly continues beyond the modal boundary with no scrollbar, fade, footer, or continuation cue.",
+        "user_impact": "Administrators may not realize more hourly data exists or how to reach it.",
+        "severity": "high",
+        "repair_direction": "Give the detail area an unmistakable bounded scroll treatment or fit the essential summary content.",
+        "verification": "Any additional hourly entries have an immediately recognizable continuation affordance.",
+        "evidence_refs": [
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "finding_id": "finding-secondary-contrast",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "Section labels, tab captions, descriptions, chart labels, and several controls use small subdued gray text on dark surfaces.",
+        "user_impact": "Scanning and control recognition become unnecessarily difficult in compact and modal states.",
+        "severity": "high",
+        "repair_direction": "Raise secondary-text contrast and minimum readable size without overwhelming the hierarchy.",
+        "verification": "Secondary content remains readily readable in all supplied states without close inspection.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact",
+          "shot-closure-analytics-pdf-modal-full",
+          "shot-closure-analytics-drilldown-modal-full"
+        ]
+      },
+      {
+        "finding_id": "finding-fallback-number-formatting",
+        "criterion_id": "criterion-analytics-hierarchy",
+        "observation": "Fallback insight values are shown as raw decimals rather than using the localized formats in the KPI cards.",
+        "user_impact": "The state appears machine-generated and reduces trust and comprehension.",
+        "severity": "medium",
+        "repair_direction": "Apply the same localized currency and number formatting used by corresponding metrics.",
+        "verification": "Fallback values match the recognizable format of the dashboard metrics.",
+        "evidence_refs": [
+          "shot-closure-analytics-all-sections-full",
+          "shot-closure-analytics-all-sections-compact"
+        ]
+      }
+    ],
+    "evidence_refs": [
+      "shot-closure-analytics-all-sections-full",
+      "shot-closure-analytics-all-sections-compact",
+      "shot-closure-analytics-pdf-modal-full",
+      "shot-closure-analytics-drilldown-modal-full"
+    ]
+  }
+]

@@ -1,0 +1,49 @@
+{
+  "schema_version": "page-design-history.v1",
+  "history_id": "history-fittrack-admin-analytics-page-design-v2",
+  "contract_id": "contract-fittrack-admin-analytics-page-design-v2",
+  "run_id": "run-20260726-admin-analytics-page-design-v2",
+  "project_id": "fittrack",
+  "task_id": "work-20260722-ui-ux-vertical-slice",
+  "source_revision": "git-scope:b3599e9b2b1bc16ec65d6cb87701757c019d9c3c4fb6e2d157ca863791c6a253",
+  "closed_at": "2026-07-27T01:47:23.4550277+08:00",
+  "user_problem": "Persistent helper copy, repeated card morphology, exposed fallback diagnostics, and weak analytical grouping obscured the Admin Analytics scan path.",
+  "baseline_evidence_refs": [
+    "shot-baseline-analytics-all-sections-full",
+    "shot-baseline-analytics-all-sections-compact"
+  ],
+  "layout_candidates": [
+    "direction-signal-first"
+  ],
+  "selected_direction_id": "direction-signal-first",
+  "rejected_directions": [],
+  "implementation_delta": "Aligned analytics navigation to the primary page axis, replaced six equal KPI cards with headline/revenue/activity groupings, reduced persistent copy, presented deterministic fallback data as a polished dashboard summary, clarified export selection count and attendance tie states, and retained responsive modal behavior.",
+  "state_evidence_refs": [
+    "shot-closure-analytics-all-sections-full",
+    "shot-closure-analytics-all-sections-compact",
+    "shot-closure-analytics-pdf-modal-full",
+    "shot-closure-analytics-drilldown-modal-full"
+  ],
+  "finding_repairs": [
+    "Removed redundant persistent helper prose and restored a single dominant page scan path.",
+    "Reduced cardification by grouping total revenue, revenue contributors, and member activity without inventing unsupported trend data.",
+    "Demoted technical provider status and replaced raw fallback decimals with formatted verified dashboard metrics.",
+    "Added an explicit PDF selection count and a plain-language tied peak-hour summary.",
+    "Preserved the contracted KPI semantic marker so the evidence collector could mechanically observe the redesigned surface."
+  ],
+  "human_decision_refs": [
+    "approval-user-20260726-build-and-test-updated-harness"
+  ],
+  "unresolved_risks": [
+    "Independent critics left non-blocking medium refinements for secondary-text readability, export taxonomy, and daily-versus-hourly attendance terminology.",
+    "Actual PDF file generation and paid or external AI generation remained excluded from this visual calibration contract.",
+    "Repository-wide web lint remains polluted by generated .next-dev output; targeted Analytics lint and web typecheck passed."
+  ],
+  "reusable_knowledge_delta": [
+    "Objective geometry and state validators cannot replace independent visual judgment; both layers are required for closure.",
+    "Source-revision validation must allow closure evidence to bind to the repaired revision while preserving the baseline contract revision.",
+    "Structural UI refactors must preserve or deliberately migrate semantic evidence markers.",
+    "When comparison data is unavailable, improve KPI hierarchy through honest grouping and footprint reduction rather than fabricated trends.",
+    "Each failed repair attempt should be preserved before the next capture so regressions and judge decisions remain auditable."
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "aggregate_score": 75.56,
+  "critical_failures": [],
+  "dimension_scores": {
+    "accessibility-usability": 69.5,
+    "control-clarity": 78.0,
+    "fittrack-dna-alignment": 72.5,
+    "information-density": 70.0,
+    "layout-coherence": 79.0,
+    "state-legibility": 76.5,
+    "visual-hierarchy": 78.0
+  },
+  "dimension_spreads": {
+    "accessibility-usability": 1.0,
+    "control-clarity": 2.0,
+    "fittrack-dna-alignment": 1.0,
+    "information-density": 0.0,
+    "layout-coherence": 6.0,
+    "state-legibility": 3.0,
+    "visual-hierarchy": 4.0
+  },
+  "issues": [
+    {
+      "code": "ui-judge.quality-gate-failed",
+      "level": "error",
+      "message": "independent judgment did not satisfy all score floors",
+      "path": "opinions"
+    }
+  ],
+  "judge_count": 2,
+  "state": "REPAIR_REQUIRED"
+}
