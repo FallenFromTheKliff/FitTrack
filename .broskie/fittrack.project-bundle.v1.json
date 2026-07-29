@@ -406,23 +406,44 @@
       "capability_id": "gamification.progression",
       "project_id": "fittrack",
       "module_id": "gamification",
-      "title": "Track mastery, milestones, and rewards",
+      "title": "Govern mastery, muscle rankings, seasons, milestones, and rewards",
       "status": "active",
       "criticality": "medium",
       "actor_ids": ["member", "staff", "admin"],
       "surface_ids": ["member-web", "mobile-app", "management-web", "fittrack-api"],
-      "goal": "Members can understand earned progress while authorized operators maintain progression rules.",
-      "observable_outcomes": ["Earned progress survives reload.", "Milestones and rewards do not duplicate unexpectedly."],
+      "goal": "Members can understand earned progress and historical performance while authorized operators govern rankings and season lifecycle.",
+      "observable_outcomes": [
+        "Earned progress survives reload.",
+        "Overall and individual-muscle rankings use the selected scoring scope.",
+        "Closed-season winners remain available after a new season begins.",
+        "Season start and close transitions are idempotent.",
+        "Milestones and rewards do not duplicate unexpectedly."
+      ],
       "permission_expectations": ["Only authorized management actors can alter administrative gamification state."],
       "data_expectations": ["Mastery, milestone, and reward totals derive from persisted events."],
-      "required_qa_categories": ["persistence"],
-      "scenario_ids": ["gamification.progression.persistence"],
+      "required_qa_categories": ["happy", "persistence"],
+      "scenario_ids": [
+        "gamification.progression.persistence",
+        "scenario.gamification-happy",
+        "gamification.muscle-ranking.boundary",
+        "gamification.season-history.persistence"
+      ],
       "tags": ["core", "gamification"],
       "technical_refs": {
         "routes": ["/gamification", "/mastery", "/milestones", "mobile:/mastery"],
-        "apis": ["/fitness", "/admin/gamification"],
-        "tests": ["apps/api/src/fitness/gamification/gamification-lifecycle.service.spec.ts"],
-        "symbols": ["apps/web/app/(auth)/gamification/page.tsx", "apps/web/app/(auth)/milestones/page.tsx", "apps/api/src/fitness/gamification/gamification.controller.ts"]
+        "apis": ["/fitness", "/admin/gamification", "/admin/gamification/seasons", "/admin/gamification/season-standings", "/gamification/season-history"],
+        "tests": [
+          "apps/api/src/fitness/gamification/gamification-lifecycle.service.spec.ts",
+          "apps/api/src/fitness/gamification/gamification-season-lifecycle.service.spec.ts",
+          "apps/api/src/fitness/gamification/gamification.service.spec.ts"
+        ],
+        "symbols": [
+          "apps/web/app/(auth)/gamification/page.tsx",
+          "apps/web/app/(auth)/milestones/page.tsx",
+          "apps/mobile/components/mastery/MuscleMasteryScreenContent.tsx",
+          "apps/api/src/fitness/gamification/gamification.controller.ts",
+          "apps/api/src/fitness/gamification/gamification-season-lifecycle.service.ts"
+        ]
       },
       "provenance": {"state": "human_approved", "evidence_refs": ["vault://Memory/Projects/FitTrack/Capability-Map/Surface-Inventory", "human://approval/2026-07-24-fittrack-capability-map-v1"]}
     },
@@ -841,6 +862,162 @@
       "steps": [{"step_id": "keyboard-navigate-public-pages", "action": "navigate", "target": "public home and status pages", "expected": "content, focus order, names, and primary actions are perceivable", "input_class": "keyboard", "transition_required": false}],
       "oracles": [{"oracle_id": "public-accessibility-baseline", "type": "accessibility", "expected": "no critical automated accessibility violation blocks the primary journey", "evaluator": {"operator": "truthy", "expected_value": true}, "evidence_types": ["accessibility"]}],
       "evidence_requirements": ["accessibility"]
+    },
+    {
+      "schema_version": "qa-scenario.v1",
+      "scenario_id": "scenario.gamification-happy",
+      "project_id": "fittrack",
+      "capability_id": "gamification.progression",
+      "title": "Operate the populated admin gamification workspace",
+      "category": "happy",
+      "priority": "high",
+      "actor_id": "admin",
+      "surface_id": "management-web",
+      "minimum_scope": "targeted",
+      "automation_status": "automated",
+      "preconditions": [
+        "An administrator is authenticated.",
+        "A populated gamification season exists."
+      ],
+      "steps": [
+        {
+          "step_id": "step.open-populated-gamification",
+          "action": "navigate",
+          "target": "/gamification",
+          "expected": "the season, standings, and governance workspace become visible",
+          "input_class": "valid",
+          "transition_required": false
+        }
+      ],
+      "oracles": [
+        {
+          "oracle_id": "oracle.populated-state-visible",
+          "type": "visible",
+          "expected": "the populated admin gamification state is visible",
+          "evaluator": {
+            "operator": "truthy",
+            "expected_value": true
+          },
+          "evidence_types": [
+            "screenshot",
+            "accessibility-snapshot"
+          ]
+        }
+      ],
+      "evidence_requirements": [
+        "screenshot",
+        "accessibility-snapshot",
+        "diagnostics"
+      ]
+    },
+    {
+      "schema_version": "qa-scenario.v1",
+      "scenario_id": "gamification.muscle-ranking.boundary",
+      "project_id": "fittrack",
+      "capability_id": "gamification.progression",
+      "title": "Rank the selected muscle without leaking overall-season order",
+      "category": "boundary",
+      "priority": "high",
+      "actor_id": "admin",
+      "surface_id": "management-web",
+      "minimum_scope": "module",
+      "automation_status": "manual",
+      "preconditions": [
+        "An administrator is authenticated.",
+        "Multiple members have persisted EXP for a canonical muscle."
+      ],
+      "steps": [
+        {
+          "step_id": "select-canonical-muscle",
+          "action": "filter",
+          "target": "individual-muscle leaderboard",
+          "expected": "rows are ordered by the selected muscle EXP with deterministic tie handling",
+          "input_class": "valid",
+          "transition_required": false
+        },
+        {
+          "step_id": "filter-to-empty-muscle-result",
+          "action": "search",
+          "target": "individual-muscle leaderboard",
+          "expected": "a stable filtered-empty state replaces the rows without collapsing the workspace",
+          "input_class": "empty-result",
+          "transition_required": false
+        }
+      ],
+      "oracles": [
+        {
+          "oracle_id": "muscle-ranking-scope-is-correct",
+          "type": "visible",
+          "expected": "displayed rank order and values correspond to the selected canonical muscle",
+          "evaluator": {
+            "operator": "truthy",
+            "expected_value": true
+          },
+          "evidence_types": [
+            "screenshot",
+            "api-response"
+          ]
+        }
+      ],
+      "evidence_requirements": [
+        "screenshot",
+        "api-response",
+        "diagnostics"
+      ]
+    },
+    {
+      "schema_version": "qa-scenario.v1",
+      "scenario_id": "gamification.season-history.persistence",
+      "project_id": "fittrack",
+      "capability_id": "gamification.progression",
+      "title": "Preserve finalized winners across season transitions",
+      "category": "persistence",
+      "priority": "high",
+      "actor_id": "member",
+      "surface_id": "mobile-app",
+      "minimum_scope": "module",
+      "automation_status": "manual",
+      "preconditions": [
+        "At least one season is finalized.",
+        "A member is authenticated."
+      ],
+      "steps": [
+        {
+          "step_id": "open-closed-season-history",
+          "action": "navigate",
+          "target": "mobile:/mastery",
+          "expected": "closed seasons expose a Top 3 preview and a Top 10 detail state",
+          "input_class": "valid",
+          "transition_required": false
+        },
+        {
+          "step_id": "reopen-history-after-season-transition",
+          "action": "reload",
+          "target": "closed-season history",
+          "expected": "the same finalized winners remain available without altering lifetime EXP",
+          "input_class": "valid",
+          "transition_required": false
+        }
+      ],
+      "oracles": [
+        {
+          "oracle_id": "closed-season-winners-persist",
+          "type": "persistence",
+          "expected": "historical winner rows remain stable and derive from finalized season data",
+          "evaluator": {
+            "operator": "truthy",
+            "expected_value": true
+          },
+          "evidence_types": [
+            "api-response",
+            "screenshot"
+          ]
+        }
+      ],
+      "evidence_requirements": [
+        "api-response",
+        "screenshot"
+      ]
     }
   ]
 }

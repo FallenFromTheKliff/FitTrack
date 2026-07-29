@@ -90,10 +90,21 @@ const MODEL_DELEGATES = [
 export type DynamicSeedManifest = {
   config: {
     anchorDate: string;
+    bookingDensity: string;
+    coachActiveRate: number;
+    coachFormerRate: number;
+    coachPausedRate: number;
+    historyEndDate: string;
+    historyMonths: number;
+    historyStartDate: string;
     mode: string;
+    pendingPaymentRate: number;
     seed: number;
+    sessionDensity: string;
+    splitPresetsPerMember: number;
     target: string;
     users: number;
+    workoutDensity: string;
   };
   counts: Record<string, number>;
   credentials: SeedCredential[];
@@ -130,10 +141,21 @@ export async function writeDynamicSeedManifest(args: {
   const manifest: DynamicSeedManifest = {
     config: {
       anchorDate: args.config.anchorDate.toISOString(),
+      bookingDensity: args.config.bookingDensity,
+      coachActiveRate: args.config.coachActiveRate,
+      coachFormerRate: args.config.coachFormerRate,
+      coachPausedRate: args.config.coachPausedRate,
+      historyEndDate: args.config.historyEndDate.toISOString(),
+      historyMonths: args.config.historyMonths,
+      historyStartDate: args.config.historyStartDate.toISOString(),
       mode: args.config.mode,
+      pendingPaymentRate: args.config.pendingPaymentRate,
       seed: args.config.seed,
+      sessionDensity: args.config.sessionDensity,
+      splitPresetsPerMember: args.config.splitPresetsPerMember,
       target: args.config.target,
       users: args.config.users,
+      workoutDensity: args.config.workoutDensity,
     },
     counts: args.counts,
     credentials: args.credentials,

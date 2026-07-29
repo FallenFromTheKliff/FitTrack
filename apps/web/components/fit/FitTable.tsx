@@ -38,6 +38,7 @@ type Props<T> = {
   getRowClassName?: (row: T) => string | undefined;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
+  emptyStateHeight?: CSSProperties["height"];
   isLoading?: boolean;
   loadingMessage?: string;
   overflowX?: boolean;
@@ -56,6 +57,7 @@ export default function FitTable<T>({
   getRowClassName,
   onRowClick,
   emptyMessage = "No results found.",
+  emptyStateHeight,
   isLoading = false,
   loadingMessage = "Loading...",
   overflowX = true,
@@ -134,13 +136,29 @@ export default function FitTable<T>({
           <tbody>
           {isLoading ? (
               <tr>
-                <td colSpan={colSpan} style={{ ...cellStyle, textAlign: "center", color: colors.textSecondary }}>
+                <td
+                  colSpan={colSpan}
+                  style={{
+                    ...cellStyle,
+                    color: colors.textSecondary,
+                    height: emptyStateHeight,
+                    textAlign: "center",
+                  }}
+                >
                   <FitText style={{ fontSize: 14, color: colors.textSecondary }}>{loadingMessage}</FitText>
                 </td>
               </tr>
           ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} style={{ ...cellStyle, textAlign: "center", color: colors.textSecondary }}>
+                <td
+                  colSpan={colSpan}
+                  style={{
+                    ...cellStyle,
+                    color: colors.textSecondary,
+                    height: emptyStateHeight,
+                    textAlign: "center",
+                  }}
+                >
                   <FitText style={{ fontSize: 14, color: colors.textSecondary }}>{emptyMessage}</FitText>
                 </td>
               </tr>

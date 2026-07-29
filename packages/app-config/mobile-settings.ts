@@ -29,14 +29,14 @@ export const HELP_FAQS = [
 export const LEGAL_INFO_CARDS = [
   {
     title: "Terms of Service",
-    body: "By using FitTrack, you agree to the SertFit Gym Terms of Service. Membership fees are non-refundable. Bookings must be cancelled at least 2 hours in advance to avoid penalties."
+    body: "Review account responsibilities, gym access, workouts and AI guidance, payments, cancellations, intellectual property, and account termination."
   },
   {
-    title: "Privacy Policy",
-    body: "We collect only the data necessary to provide your gym experience. Your data will only be used for account security, membership access, booking records, coaching support, payments, service notifications, and legally required gym operations. Your information is never sold to third parties. You may request deletion of your account at any time."
+    title: "Data Privacy Notice",
+    body: "Review what SertFit Gym processes, why it is needed, who receives it, how long it is retained, and your rights under the Philippine Data Privacy Act."
   },
   {
     title: "Version",
-    body: "FitTrack v1.0.0 \u00B7 \u00A9 2026 SertFit Gym. All rights reserved."
+    body: "Legal policy version 2026-07-28 \u00B7 FitTrack v1.0.0 \u00B7 \u00A9 2026 SertFit Gym."
   }
 ] as const;

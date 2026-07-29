@@ -14,8 +14,6 @@ import {
   type MasteryRank,
   MilestoneDefinitionStatus,
   MilestoneEvidenceRequirement,
-  MilestoneEvidenceSubmissionStatus,
-  MilestoneEvidenceType,
   MilestoneProgressStatus,
   MilestoneVerificationPolicy,
   ModerationActionType,
@@ -58,10 +56,13 @@ import {
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
+  AdminMuscleLeaderboardFilterDTO,
+  AdminSeasonCreateDTO,
   AdminSeasonStandingFilterDTO,
   AdminSeasonStandingRowDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStatusDTO,
+  AdminSeasonUpdateDTO,
   IntegritySummaryResponseDTO,
   CreateIntegrityCaseDTO,
   LeaderboardEntryResponseDTO,
@@ -69,6 +70,8 @@ import {
   MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
+  MuscleLeaderboardFilterDTO,
+  MuscleLeaderboardRowDTO,
   MuscleMasteryResponseDTO,
   ProgressionProfileResponseDTO,
   ProgressionSourceListFilterDTO,
@@ -77,6 +80,8 @@ import {
   ReviewMilestoneEvidenceDTO,
   ResolveIntegrityCaseDTO,
   SeasonStandingResponseDTO,
+  SeasonHistorySummaryDTO,
+  SeasonTopPerformerFilterDTO,
   SubmitMilestoneEvidenceDTO,
   UpdateRankingProfileDTO,
 } from './dto/gamification.dto';
@@ -102,6 +107,7 @@ import {
   type GrantModerationResult,
   type IntegrityCaseMutationResult,
   type IntegritySummaryRecord,
+  type MuscleLeaderboardRecord,
   type MilestoneEvidenceSubmissionRecord,
   type MilestoneProgressRecord,
   type ProgressionSourceEventRecord,
@@ -110,9 +116,9 @@ import {
   type RankingProfileRecord,
   type RankingOverrideResult,
   type SeasonStatusUpdateResult,
+  type SeasonHistoryRecord,
   type WorkoutProgressionDeltaRecord,
 } from './gamification.repository';
-import { DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES } from '../../config/runtime-settings';
 
 export interface MuscleMasteryDelta {
   xp: number;
@@ -144,10 +150,6 @@ const ADMIN_RANKING_GOVERNANCE_STATUSES = new Set<RankingGovernanceStatus>([
 ]);
 
 const MILESTONE_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MILESTONE_EVIDENCE_IMAGE_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-]);
 
 function toJsonObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -452,8 +454,9 @@ export class GamificationService {
   async getAdminMilestoneDefinition(
     milestoneDefinitionId: string,
   ): Promise<AdminMilestoneDefinitionResponseDTO> {
-    const record =
-      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+    const record = await this.repo.getAdminMilestoneDefinition(
+      milestoneDefinitionId,
+    );
 
     if (!record) {
       throw new NotFoundException('Milestone definition was not found.');
@@ -480,8 +483,9 @@ export class GamificationService {
     milestoneDefinitionId: string,
     dto: AdminMilestoneDefinitionDTO,
   ): Promise<AdminMilestoneDefinitionResponseDTO> {
-    const existing =
-      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+    const existing = await this.repo.getAdminMilestoneDefinition(
+      milestoneDefinitionId,
+    );
 
     if (!existing) {
       throw new NotFoundException('Milestone definition was not found.');
@@ -501,8 +505,9 @@ export class GamificationService {
     actorUserId: string,
     milestoneDefinitionId: string,
   ): Promise<AdminMilestoneDefinitionResponseDTO> {
-    const existing =
-      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+    const existing = await this.repo.getAdminMilestoneDefinition(
+      milestoneDefinitionId,
+    );
 
     if (!existing) {
       throw new NotFoundException('Milestone definition was not found.');
@@ -520,8 +525,9 @@ export class GamificationService {
     actorUserId: string,
     milestoneDefinitionId: string,
   ): Promise<AdminMilestoneDefinitionResponseDTO> {
-    const existing =
-      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
+    const existing = await this.repo.getAdminMilestoneDefinition(
+      milestoneDefinitionId,
+    );
 
     if (!existing) {
       throw new NotFoundException('Milestone definition was not found.');
@@ -553,53 +559,30 @@ export class GamificationService {
     };
   }
 
-  async submitMilestoneEvidence(
+  submitMilestoneEvidence(
     userId: string,
     milestoneDefinitionId: string,
     dto: SubmitMilestoneEvidenceDTO,
-  ): Promise<MilestoneEvidenceSubmissionResponseDTO> {
-    const definition =
-      await this.repo.getAdminMilestoneDefinition(milestoneDefinitionId);
-
-    if (
-      !definition ||
-      !definition.is_active ||
-      definition.status !== MilestoneDefinitionStatus.active ||
-      definition.retired_at !== null
-    ) {
-      throw new NotFoundException('Milestone definition was not found.');
-    }
-
-    this.validateMilestoneEvidenceSubmission(dto, definition);
-
-    const record = await this.repo.submitMilestoneEvidence({
-      caption: dto.caption,
-      evidenceType: dto.evidence_type,
-      fileKey: dto.file_key,
-      fileUrl: dto.file_url,
-      milestoneDefinitionId,
-      mimeType: dto.mime_type,
-      originalFilename: dto.original_filename,
-      sizeBytes: dto.size_bytes,
-      userId,
-    });
-
-    return this.toMilestoneEvidenceSubmissionResponse(record);
+  ): never {
+    void userId;
+    void milestoneDefinitionId;
+    void dto;
+    throw new BadRequestException(
+      'Milestone proof submissions are no longer required or accepted.',
+    );
   }
 
-  async reviewMilestoneEvidence(
+  reviewMilestoneEvidence(
     reviewerUserId: string,
     evidenceSubmissionId: string,
     dto: ReviewMilestoneEvidenceDTO,
-  ): Promise<MilestoneEvidenceSubmissionResponseDTO> {
-    const record = await this.repo.reviewMilestoneEvidence({
-      evidenceSubmissionId,
-      reviewerNotes: dto.reviewer_notes,
-      reviewerUserId,
-      status: dto.status,
-    });
-
-    return this.toMilestoneEvidenceSubmissionResponse(record);
+  ): never {
+    void reviewerUserId;
+    void evidenceSubmissionId;
+    void dto;
+    throw new BadRequestException(
+      'Milestone proof review is retired. Achievement progress is evaluated automatically.',
+    );
   }
 
   async claimMilestone(
@@ -630,7 +613,7 @@ export class GamificationService {
 
     if (progress.status !== MilestoneProgressStatus.unlocked) {
       throw new BadRequestException(
-        'Milestone must be unlocked and approved before it can be claimed.',
+        'Milestone must be unlocked before it can be claimed.',
       );
     }
 
@@ -653,9 +636,122 @@ export class GamificationService {
     return this.toAdminOverviewResponse(overview);
   }
 
+  listAdminManualExpEligibleMembers(search?: string) {
+    return this.repo.listManualExpEligibleMembers(search);
+  }
+
   async listAdminSeasons(): Promise<AdminGamificationSeasonListItemDTO[]> {
     const seasons = await this.repo.listAdminSeasons({ includeArchived: true });
     return seasons.map((season) => this.toAdminSeasonListItemResponse(season));
+  }
+
+  async adminCreateSeason(
+    actorUserId: string,
+    dto: AdminSeasonCreateDTO,
+  ): Promise<AdminGamificationSeasonListItemDTO> {
+    const startsAt = new Date(dto.starts_at);
+    const endsAt = new Date(dto.ends_at);
+    this.validateSeasonWindow(startsAt, endsAt);
+    const season = await this.repo.createSeason({
+      autoStartNext: dto.auto_start_next ?? false,
+      description: dto.description ?? null,
+      endsAt,
+      rulesVersion: dto.rules_version ?? 'v1',
+      startsAt,
+      title: dto.title,
+    });
+    this.emitAudit({
+      userId: actorUserId,
+      action: 'GAMIFICATION_SEASON_CREATED',
+      entity: 'SeasonDefinition',
+      entityId: season.id,
+      after: { status: season.status, title: season.title },
+    });
+    return this.toAdminSeasonListItemResponse(season);
+  }
+
+  async adminUpdateSeason(
+    actorUserId: string,
+    seasonId: string,
+    dto: AdminSeasonUpdateDTO,
+  ): Promise<AdminGamificationSeasonListItemDTO> {
+    const current = await this.repo.getSeasonById(seasonId);
+    if (!current) {
+      throw new NotFoundException(`Season ${seasonId} was not found.`);
+    }
+    if (current.status !== SeasonStatus.draft) {
+      throw new BadRequestException('Only draft seasons can be edited.');
+    }
+    const startsAt = dto.starts_at ? new Date(dto.starts_at) : current.starts_at;
+    const endsAt = dto.ends_at ? new Date(dto.ends_at) : current.ends_at;
+    this.validateSeasonWindow(startsAt, endsAt);
+    const season = await this.repo.updateDraftSeason({
+      autoStartNext: dto.auto_start_next,
+      description: dto.description,
+      endsAt: dto.ends_at ? endsAt : undefined,
+      rulesVersion: dto.rules_version,
+      seasonId,
+      startsAt: dto.starts_at ? startsAt : undefined,
+      title: dto.title,
+    });
+    this.emitAudit({
+      userId: actorUserId,
+      action: 'GAMIFICATION_SEASON_UPDATED',
+      entity: 'SeasonDefinition',
+      entityId: season.id,
+      before: { title: current.title },
+      after: { title: season.title },
+    });
+    return this.toAdminSeasonListItemResponse(season);
+  }
+
+  async listMuscleLeaderboard(
+    dto: MuscleLeaderboardFilterDTO | AdminMuscleLeaderboardFilterDTO,
+    currentUserId?: string,
+  ): Promise<PaginatedResult<MuscleLeaderboardRowDTO>> {
+    if (dto.scope === 'season' && !dto.season_id) {
+      const active = await this.repo.listAdminSeasons();
+      if (!active.some((season) => season.status === SeasonStatus.active)) {
+        return {
+          data: [],
+          meta: {
+            page: dto.page ?? 1,
+            limit: dto.limit ?? 20,
+            total: 0,
+            total_pages: 0,
+          },
+        };
+      }
+    }
+    const adminDto = dto as AdminMuscleLeaderboardFilterDTO;
+    const result = await this.repo.listMuscleLeaderboard({
+      includeHidden: adminDto.include_hidden ?? false,
+      limit: dto.limit,
+      muscleKey: dto.muscle_key,
+      page: dto.page,
+      scope: dto.scope,
+      search: adminDto.search,
+      seasonId: dto.season_id,
+    });
+    return {
+      ...result,
+      data: result.data.map((row) =>
+        this.toMuscleLeaderboardResponse(row, currentUserId),
+      ),
+    };
+  }
+
+  async listSeasonHistory(
+    dto: SeasonTopPerformerFilterDTO,
+  ): Promise<SeasonHistorySummaryDTO[]> {
+    const history = await this.repo.listSeasonHistory({
+      limit: dto.limit ?? 3,
+    });
+    return history.map((season) => this.toSeasonHistoryResponse(season));
+  }
+
+  runSeasonLifecycleSweep() {
+    return this.repo.runSeasonLifecycleSweep();
   }
 
   async listAdminSeasonStandings(
@@ -1159,8 +1255,8 @@ export class GamificationService {
       category: record.category,
       trigger_type: record.trigger_type,
       status: record.status,
-      verification_policy: record.verification_policy,
-      evidence_requirement: record.evidence_requirement,
+      verification_policy: MilestoneVerificationPolicy.auto,
+      evidence_requirement: MilestoneEvidenceRequirement.none,
       condition_payload: this.toJsonObject(record.condition_payload),
       reward_payload: this.toJsonObject(record.reward_payload),
       is_active: record.is_active,
@@ -1168,7 +1264,7 @@ export class GamificationService {
       sort_order: record.sort_order,
       progress_count: record._count.user_progress,
       unlocked_count: record.unlocked_count,
-      pending_review_count: record.pending_review_count,
+      pending_review_count: 0,
       starts_at: record.starts_at?.toISOString() ?? null,
       ends_at: record.ends_at?.toISOString() ?? null,
       archived_at: record.archived_at?.toISOString() ?? null,
@@ -1229,13 +1325,8 @@ export class GamificationService {
       );
     }
 
-    const evidenceRequirement =
-      dto.evidence_requirement ?? MilestoneEvidenceRequirement.none;
-    const verificationPolicy =
-      dto.verification_policy ??
-      (evidenceRequirement === MilestoneEvidenceRequirement.none
-        ? MilestoneVerificationPolicy.auto
-        : MilestoneVerificationPolicy.manual_required);
+    const evidenceRequirement = MilestoneEvidenceRequirement.none;
+    const verificationPolicy = MilestoneVerificationPolicy.auto;
 
     this.validateMilestoneDefinitionContract(
       dto.condition_payload,
@@ -1317,72 +1408,6 @@ export class GamificationService {
     }
   }
 
-  private validateMilestoneEvidenceSubmission(
-    dto: SubmitMilestoneEvidenceDTO,
-    definition: AdminMilestoneDefinitionRecord,
-  ): void {
-    if (
-      definition.evidence_requirement === MilestoneEvidenceRequirement.none
-    ) {
-      throw new BadRequestException(
-        'This milestone does not accept manual evidence.',
-      );
-    }
-
-    if (
-      definition.evidence_requirement === MilestoneEvidenceRequirement.image &&
-      dto.evidence_type !== MilestoneEvidenceType.image
-    ) {
-      throw new BadRequestException('This milestone requires image evidence.');
-    }
-
-    if (
-      definition.evidence_requirement === MilestoneEvidenceRequirement.video &&
-      dto.evidence_type !== MilestoneEvidenceType.video
-    ) {
-      throw new BadRequestException('This milestone requires video evidence.');
-    }
-
-    if (
-      dto.evidence_type === MilestoneEvidenceType.image &&
-      !MILESTONE_EVIDENCE_IMAGE_MIME_TYPES.has(dto.mime_type)
-    ) {
-      throw new BadRequestException(
-        'Image milestone evidence must be JPEG or PNG.',
-      );
-    }
-
-    if (
-      dto.evidence_type === MilestoneEvidenceType.video &&
-      dto.mime_type !== 'video/mp4'
-    ) {
-      throw new BadRequestException('Video milestone evidence must be MP4.');
-    }
-
-    if (
-      dto.evidence_type === MilestoneEvidenceType.video &&
-      dto.size_bytes >
-        DEFAULT_MILESTONE_EVIDENCE_VIDEO_MAX_FILE_SIZE_BYTES
-    ) {
-      throw new BadRequestException(
-        'Video milestone evidence must be 15 MiB or smaller.',
-      );
-    }
-
-    this.assertPublicFileUrl(dto.file_url);
-  }
-
-  private assertPublicFileUrl(value: string): void {
-    try {
-      const url = new URL(value);
-      if (!['http:', 'https:'].includes(url.protocol)) {
-        throw new Error('unsupported protocol');
-      }
-    } catch {
-      throw new BadRequestException('file_url must be a valid HTTP URL.');
-    }
-  }
-
   private toIntegritySummaryResponse(
     userId: string,
     summary: IntegritySummaryRecord,
@@ -1421,8 +1446,12 @@ export class GamificationService {
             id: record.activeSeason.id,
             title: record.activeSeason.title,
             status: record.activeSeason.status,
+            rules_version: record.activeSeason.rules_version,
+            auto_start_next: record.activeSeason.auto_start_next,
             starts_at: record.activeSeason.starts_at.toISOString(),
             ends_at: record.activeSeason.ends_at.toISOString(),
+            activated_at:
+              record.activeSeason.activated_at?.toISOString() ?? null,
             closed_at: record.activeSeason.closed_at?.toISOString() ?? null,
             archived_at: record.activeSeason.archived_at?.toISOString() ?? null,
             standing_count: record.activeSeason.standings.length,
@@ -1517,8 +1546,11 @@ export class GamificationService {
       id: season.id,
       title: season.title,
       status: season.status,
+      rules_version: season.rules_version,
+      auto_start_next: season.auto_start_next,
       starts_at: season.starts_at.toISOString(),
       ends_at: season.ends_at.toISOString(),
+      activated_at: season.activated_at?.toISOString() ?? null,
       closed_at: season.closed_at?.toISOString() ?? null,
       archived_at: season.archived_at?.toISOString() ?? null,
       standing_count: season.standings.length,
@@ -1576,9 +1608,55 @@ export class GamificationService {
       season_id: result.seasonId,
       title: result.title,
       status: result.status,
+      auto_start_next: result.autoStartNext,
+      activated_at: result.activatedAt?.toISOString() ?? null,
       closed_at: result.closedAt?.toISOString() ?? null,
       archived_at: result.archivedAt?.toISOString() ?? null,
     };
+  }
+
+  private toMuscleLeaderboardResponse(
+    row: MuscleLeaderboardRecord,
+    currentUserId?: string,
+  ): MuscleLeaderboardRowDTO {
+    return {
+      rank_position: row.rankPosition,
+      user_id: row.userId,
+      display_name: row.displayName,
+      muscle_key: row.muscleKey,
+      scope: row.seasonId ? 'season' : 'lifetime',
+      xp_points: row.xpPoints,
+      season_id: row.seasonId,
+      season_title: row.seasonTitle,
+      last_earned_at: row.lastEarnedAt?.toISOString() ?? null,
+      ...(currentUserId
+        ? { is_current_user: row.userId === currentUserId }
+        : {}),
+    };
+  }
+
+  private toSeasonHistoryResponse(
+    season: SeasonHistoryRecord,
+  ): SeasonHistorySummaryDTO {
+    return {
+      season_id: season.seasonId,
+      title: season.title,
+      starts_at: season.startsAt.toISOString(),
+      ends_at: season.endsAt.toISOString(),
+      closed_at: season.closedAt?.toISOString() ?? null,
+      top_performers: season.topPerformers.map((performer) => ({
+        rank_position: performer.rankPosition,
+        user_id: performer.userId,
+        display_name: performer.displayName,
+        season_points: performer.seasonPoints,
+      })),
+    };
+  }
+
+  private validateSeasonWindow(startsAt: Date, endsAt: Date): void {
+    if (endsAt <= startsAt) {
+      throw new BadRequestException('Season end must be after its start.');
+    }
   }
 
   private toAdminCreatorStateResponse(

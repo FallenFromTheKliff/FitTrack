@@ -193,8 +193,8 @@ export default function SettingsModal({
                 disabled={!showScrollCue}
                 hitSlop={8}
                 onPress={handleScrollCuePress}
-                pointerEvents={showScrollCue ? "auto" : "none"}
                 style={[
+                  { pointerEvents: showScrollCue ? "auto" : "none" },
                   showFixedCloseButton
                     ? hasFixedFooterAccessory
                       ? s.scrollCueWithFixedCloseAccessory

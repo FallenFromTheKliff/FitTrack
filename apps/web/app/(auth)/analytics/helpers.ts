@@ -11,13 +11,18 @@ import type { ThemeColors } from "@fittrack/ui/tokens";
 
 export type AnalyticsAttendanceFilter = Extract<
   AnalyticsPeriod,
-  "hourly" | "daily" | "monthly" | "yearly"
+  "hourly" | "daily" | "weekly" | "monthly" | "yearly"
+>;
+
+export type AnalyticsAggregationPeriod = Extract<
+  AnalyticsPeriod,
+  "weekly" | "monthly" | "yearly"
 >;
 
 export type AnalyticsDateWindow = {
   endDate: string;
   label: string;
-  period: AnalyticsAttendanceFilter | "weekly";
+  period: AnalyticsAttendanceFilter;
   startDate: string;
 };
 
@@ -47,6 +52,14 @@ export type AnalyticsExportInsights = {
 };
 
 export const ANALYTICS_DEFAULT_ATTENDANCE_FILTER: AnalyticsAttendanceFilter = "daily";
+export const ANALYTICS_AGGREGATION_PERIOD_OPTIONS: Array<{
+  label: string;
+  value: AnalyticsAggregationPeriod;
+}> = [
+  { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
+  { label: "Yearly", value: "yearly" }
+];
 export const ANALYTICS_REVENUE_WINDOW_OPTIONS: Array<{
   label: string;
   value: AnalyticsRevenueWindowFilter;
@@ -63,6 +76,7 @@ export const ANALYTICS_ATTENDANCE_FILTER_OPTIONS: Array<{
 }> = [
   { label: "Hourly", value: "hourly" },
   { label: "Daily", value: "daily" },
+  { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" },
   { label: "Yearly", value: "yearly" }
 ];
@@ -215,6 +229,34 @@ export function toRevenueWindow(
   };
 }
 
+export function getDefaultAnalyticsDateWindow(): AnalyticsDateWindow {
+  return {
+    ...toRevenueWindow("6m"),
+    period: "monthly"
+  };
+}
+
+export function createAnalyticsDateWindow(
+  startDate: string,
+  endDate: string,
+  period: AnalyticsAggregationPeriod
+): AnalyticsDateWindow {
+  const formatDate = (value: string) =>
+    new Date(`${value}T00:00:00.000Z`).toLocaleDateString("en-PH", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC"
+    });
+
+  return {
+    endDate,
+    label: `${formatDate(startDate)} - ${formatDate(endDate)}`,
+    period,
+    startDate
+  };
+}
+
 export function toAttendanceWindow(filter: AnalyticsAttendanceFilter): AnalyticsDateWindow {
   const now = new Date();
 
@@ -236,6 +278,18 @@ export function toAttendanceWindow(filter: AnalyticsAttendanceFilter): Analytics
       endDate: toDateOnly(endOfUtcDay(now)),
       period: "daily",
       label: "Last 14 days"
+    };
+  }
+
+  if (filter === "weekly") {
+    const start = new Date(startOfUtcDay(now));
+    start.setUTCDate(start.getUTCDate() - 83);
+
+    return {
+      startDate: toDateOnly(start),
+      endDate: toDateOnly(endOfUtcDay(now)),
+      period: "weekly",
+      label: "Last 12 weeks"
     };
   }
 
@@ -281,6 +335,25 @@ export function deriveAttendanceDrilldownWindow(
     };
   }
 
+  if (filter === "weekly") {
+    const end = new Date(startOfUtcDay(bucketDate));
+    end.setUTCDate(end.getUTCDate() + 6);
+
+    return {
+      startDate: toDateOnly(startOfUtcDay(bucketDate)),
+      endDate: toDateOnly(endOfUtcDay(end)),
+      period: "daily",
+      label: `Daily breakdown for the week of ${bucketDate.toLocaleDateString(
+        "en-PH",
+        {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }
+      )}`
+    };
+  }
+
   if (filter === "monthly") {
     return {
       startDate: toDateOnly(startOfUtcMonth(bucketDate)),
@@ -311,6 +384,13 @@ function formatRevenueBucket(bucketStart: string, period: AnalyticsPeriod) {
     });
   }
 
+  if (period === "weekly") {
+    return `Week of ${date.toLocaleDateString("en-PH", {
+      day: "numeric",
+      month: "short"
+    })}`;
+  }
+
   if (period === "yearly") {
     return date.toLocaleDateString("en-PH", {
       year: "numeric"
@@ -337,6 +417,13 @@ function formatAttendanceBucket(bucketStart: string, filter: AnalyticsAttendance
       day: "numeric",
       month: "short"
     });
+  }
+
+  if (filter === "weekly") {
+    return `Week of ${date.toLocaleDateString("en-PH", {
+      day: "numeric",
+      month: "short"
+    })}`;
   }
 
   if (filter === "monthly") {

@@ -12,6 +12,7 @@ function getGuardMetadata(
     | 'getPlanById'
     | 'createPlan'
     | 'deletePlan'
+    | 'activatePlan'
     | 'assignPlan',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
@@ -33,6 +34,7 @@ describe('TrainingPlanController', () => {
     getPlanById: jest.fn(),
     createPlan: jest.fn(),
     deletePlan: jest.fn(),
+    activatePlan: jest.fn(),
     assignPlan: jest.fn(),
   };
 
@@ -43,19 +45,18 @@ describe('TrainingPlanController', () => {
     jest.clearAllMocks();
   });
 
-  it.each(['listPlans', 'getPlanById', 'createPlan', 'deletePlan'] as const)(
+  it.each(
+    ['listPlans', 'getPlanById', 'createPlan', 'deletePlan', 'activatePlan'] as const,
+  )(
     'protects %s with JWT auth',
     (methodName) => {
       expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
     },
   );
 
-  it('locks deprecated plan assignment to staff and admin users', () => {
+  it('locks plan assignment to coach users', () => {
     expect(getGuardMetadata('assignPlan')).toEqual([JwtAuthGuard, RolesGuard]);
-    expect(getRolesMetadata('assignPlan')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('assignPlan')).toEqual([UserRole.coach]);
   });
 
   it('lists plans through the service', async () => {
@@ -110,9 +111,30 @@ describe('TrainingPlanController', () => {
     );
   });
 
-  it('marks coach-user plan assignment as gone', () => {
-    expect(() => controller.assignPlan('plan-1')).toThrow(
-      'Coach-user training plan assignment is no longer supported',
+  it('activates plans through the service', async () => {
+    trainingPlanService.activatePlan.mockResolvedValue({ id: 'plan-1' });
+
+    await controller.activatePlan('plan-1', { sub: 'member-1' } as never);
+
+    expect(trainingPlanService.activatePlan).toHaveBeenCalledWith(
+      'member-1',
+      'plan-1',
+    );
+  });
+
+  it('assigns coach-owned plans through the service', async () => {
+    trainingPlanService.assignPlan.mockResolvedValue({ id: 'assigned-plan-1' });
+
+    await controller.assignPlan(
+      'plan-1',
+      { sub: 'coach-user-1' } as never,
+      { member_id: 'member-1' },
+    );
+
+    expect(trainingPlanService.assignPlan).toHaveBeenCalledWith(
+      'coach-user-1',
+      'plan-1',
+      'member-1',
     );
   });
 });

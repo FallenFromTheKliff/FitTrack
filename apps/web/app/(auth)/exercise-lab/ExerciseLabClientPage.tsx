@@ -6,7 +6,6 @@ import type { CSSProperties } from "react";
 
 import { FitButton, FitSection, FitText } from "@/components/fit";
 import { ExerciseLabLibrarySurface } from "@/components/exercise-lab/ExerciseLabLibrarySurface";
-import { ExerciseLabMilestoneSurface } from "@/components/exercise-lab/ExerciseLabMilestoneSurface";
 import { ExerciseLabModalLayer } from "@/components/exercise-lab/ExerciseLabModalLayer";
 import { ExerciseLabMuscleSurface } from "@/components/exercise-lab/ExerciseLabMuscleSurface";
 import {
@@ -29,7 +28,7 @@ export default function ExerciseLabClientPage() {
       terms={[
         { label: "Exercise library", value: "Approved movement records used by workout and coaching features." },
         { label: "Review queue", value: "Submitted or detected movements that need staff review before publishing." },
-        { label: "Milestones", value: "Achievement records connected to member progression and ranking." },
+        { label: "Muscle map", value: "Canonical muscle definitions used to classify movement records." },
       ]}
     />
   );
@@ -234,27 +233,11 @@ function CoachExerciseLabPage() {
 
 function ExerciseLabPageBody() {
   const {
-    canAnimate,
-    closedMilestoneCount,
     colors,
     fadeIn,
     feedbackMessage,
-    filteredMilestones,
-    fullMotion,
-    handleMilestoneDecision,
-    handleMilestoneScopeChange,
-    handleOpenClosedMilestones,
     isCompact,
-    milestoneDecisionPending,
-    milestoneNotes,
-    milestoneScope,
-    milestoneWorkbenchMotionKey,
     mode,
-    pendingMilestoneCount,
-    reviewViewportHeight,
-    selectedMilestone,
-    setMilestoneNotes,
-    setSelectedMilestoneId,
     themeTransition,
   } = useExerciseLabPage();
 
@@ -308,27 +291,6 @@ function ExerciseLabPageBody() {
 
         {mode === "review" ? (
           <ExerciseLabReviewSurface />
-        ) : mode === "milestones" ? (
-          <ExerciseLabMilestoneSurface
-            canAnimate={canAnimate}
-            closedMilestoneCount={closedMilestoneCount}
-            colors={colors}
-            filteredMilestones={filteredMilestones}
-            fullMotion={fullMotion}
-            isCompact={isCompact}
-            milestoneNotes={milestoneNotes}
-            milestoneDecisionPending={milestoneDecisionPending}
-            milestoneScope={milestoneScope}
-            milestoneWorkbenchMotionKey={milestoneWorkbenchMotionKey}
-            onDecision={handleMilestoneDecision}
-            onNotesChange={setMilestoneNotes}
-            onOpenClosedMilestones={handleOpenClosedMilestones}
-            onScopeChange={handleMilestoneScopeChange}
-            onSelectMilestone={setSelectedMilestoneId}
-            pendingMilestoneCount={pendingMilestoneCount}
-            reviewViewportHeight={reviewViewportHeight}
-            selectedMilestone={selectedMilestone}
-          />
         ) : mode === "muscles" ? (
           <ExerciseLabMuscleSurface />
         ) : (

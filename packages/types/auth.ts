@@ -60,6 +60,8 @@ export interface IAuthContext {
     email: string;
     phone?: string;
     password: string;
+    acceptedTerms: true;
+    legalVersion: string;
   }) => Promise<{ success: boolean; userId?: string; error?: string }>;
   logout: () => void | Promise<void>;
   deleteUser?: () => void | Promise<void>;

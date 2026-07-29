@@ -7,6 +7,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FitnessGoal, PlanSource, Prisma, SessionStatus } from '@prisma/client';
 
+import { ActivityLevelService } from '../../user/activity-level.service';
 import {
   WORKOUT_SESSION_COMPLETED_EVENT,
   type WorkoutSessionCompletedEvent,
@@ -22,6 +23,7 @@ describe('WorkoutSessionService', () => {
     findSessionByIdOrThrow: jest.fn(),
     findPlanOwnershipContextByIdOrThrow: jest.fn(),
     findActiveExerciseById: jest.fn(),
+    findPlanExercise: jest.fn(),
     findPoseSessionByIdOrThrow: jest.fn(),
     getNextWorkoutSourceRevision: jest.fn(),
     createSession: jest.fn(),
@@ -32,6 +34,10 @@ describe('WorkoutSessionService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+  };
+
+  const activityLevelService = {
+    recalculateForUser: jest.fn(),
   };
 
   const makeSession = (overrides: Record<string, unknown> = {}) => ({
@@ -140,6 +146,7 @@ describe('WorkoutSessionService', () => {
         WorkoutSessionService,
         { provide: WorkoutSessionRepository, useValue: repo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: ActivityLevelService, useValue: activityLevelService },
       ],
     }).compile();
 
@@ -204,6 +211,7 @@ describe('WorkoutSessionService', () => {
   it('logs a set with linked pose session rep counts', async () => {
     repo.findSessionByIdOrThrow.mockResolvedValue(makeSession());
     repo.findActiveExerciseById.mockResolvedValue({ id: 'exercise-1' });
+    repo.findPlanExercise.mockResolvedValue({ id: 'plan-exercise-1' });
     repo.findPoseSessionByIdOrThrow.mockResolvedValue({
       id: 'pose-1',
       user_id: 'user-1',
@@ -224,6 +232,7 @@ describe('WorkoutSessionService', () => {
       expect.objectContaining({
         repsAiCounted: 12,
         poseSessionId: 'pose-1',
+        planExerciseId: 'plan-exercise-1',
       }),
     );
     expect(result.pose_session?.id).toBe('pose-1');
@@ -334,7 +343,7 @@ describe('WorkoutSessionService', () => {
     jest.useRealTimers();
   });
 
-  it('flags the completion event when linked pose evidence still needs review', async () => {
+  it('accepts completion while surfacing linked pose integrity advisories', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-03-26T08:30:00.000Z'));
     const flaggedPoseSession = {
       id: 'pose-1',
@@ -370,17 +379,17 @@ describe('WorkoutSessionService', () => {
       string,
       WorkoutSessionCompletedEvent,
     ];
-    expect(emittedEvent.validationState).toBe('flagged');
+    expect(emittedEvent.validationState).toBe('validated');
     expect(emittedEvent.integrityState).toBe('suspicious');
-    expect(emittedEvent.eligibilityState).toBe('review_required');
-    expect(emittedEvent.terminalState).toBe('flagged');
+    expect(emittedEvent.eligibilityState).toBe('eligible');
+    expect(emittedEvent.terminalState).toBe('accepted');
     expect(emittedEvent.validationMetadata).toEqual({
       hasPoseEvidence: true,
       hasManualWeightInput: true,
       containsFlaggedSets: true,
       correctionOrigin: 'linked_pose_session',
       sourceQualityNotes: [
-        'flagged_pose_sessions_present',
+        'integrity_advisory_present',
         'linked_pose_sessions_present',
         'pose_session_requires_review:pose-1',
       ],

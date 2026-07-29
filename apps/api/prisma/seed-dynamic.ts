@@ -44,7 +44,14 @@ async function runDomain(
 
 async function main() {
   console.log(
-    `[dynamic-seed] target=${config.target} mode=${config.mode} users=${config.users} seed=${config.seed}`,
+    [
+      `[dynamic-seed] target=${config.target}`,
+      `mode=${config.mode}`,
+      `users=${config.users}`,
+      `seed=${config.seed}`,
+      `history=${config.historyStartDate.toISOString()}..${config.historyEndDate.toISOString()}`,
+      `densities=session:${config.sessionDensity}/workout:${config.workoutDensity}/booking:${config.bookingDensity}`,
+    ].join(' '),
   );
 
   await resetDatabaseForDynamicSeed(prisma, config);

@@ -149,6 +149,14 @@ export class RelationshipService {
     }
   }
 
+  hasActiveCoach(memberId: string): Promise<boolean> {
+    return this.repo.hasActiveRelationshipForMember(memberId);
+  }
+
+  getActiveCoachUserId(memberId: string): Promise<string | null> {
+    return this.repo.findActiveCoachUserIdForMember(memberId);
+  }
+
   async updateRelationship(
     coachUserId: string,
     relationshipId: string,

@@ -11,7 +11,7 @@
   "scripts": {
     "build": "pnpm run prisma:prepare-client && nest build",
     "db:push:deploy": "npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",
-    "db:seed:realistic": "pnpm run db:seed:dynamic",
+    "db:seed:realistic": "node ../../tasks/seed-realistic.mjs 100",
     "db:seed:dynamic": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=reset --users=100",
     "db:seed:dynamic:additive": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --users=100",
     "db:seed:dynamic:railway": "railway run node -r ts-node/register prisma/seed-dynamic.ts --target=railway --mode=additive --users=100",

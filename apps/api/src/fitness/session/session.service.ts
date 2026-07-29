@@ -26,6 +26,10 @@ import {
   type WorkoutSessionCompletedEvent,
 } from './events/workout-session-completed.event';
 import { WorkoutSessionRepository } from './session.repository';
+import {
+  evaluateWorkoutIntegrityAdvisories,
+  WORKOUT_INTEGRITY_RULESET_VERSION,
+} from './workout-integrity.rules';
 
 type SessionDetailRecord = Awaited<
   ReturnType<WorkoutSessionRepository['findSessionByIdOrThrow']>
@@ -69,6 +73,43 @@ export class WorkoutSessionService {
       data: result.data.map((session) => this.toSummaryResponse(session)),
       meta: result.meta,
     };
+  }
+
+  async getRecentExerciseHistorySummary(userId: string): Promise<string | null> {
+    const logs = await this.repo.listRecentExerciseLogsForAi(userId);
+    if (logs.length === 0) return null;
+
+    const byExercise = new Map<
+      string,
+      { latest: Date; maxWeight: number; sets: number; totalReps: number }
+    >();
+    for (const log of logs) {
+      const current = byExercise.get(log.exercise.name) ?? {
+        latest: log.created_at,
+        maxWeight: 0,
+        sets: 0,
+        totalReps: 0,
+      };
+      current.latest =
+        log.created_at > current.latest ? log.created_at : current.latest;
+      current.maxWeight = Math.max(
+        current.maxWeight,
+        log.weight_kg?.toNumber() ?? 0,
+      );
+      current.sets += 1;
+      current.totalReps += log.reps_completed ?? 0;
+      byExercise.set(log.exercise.name, current);
+    }
+
+    return [...byExercise.entries()]
+      .slice(0, 8)
+      .map(
+        ([name, summary]) =>
+          `${name}: ${summary.sets} sets, ${summary.totalReps} reps${
+            summary.maxWeight > 0 ? `, up to ${summary.maxWeight} kg` : ''
+          }`,
+      )
+      .join('; ');
   }
 
   async getSessionById(
@@ -125,6 +166,10 @@ export class WorkoutSessionService {
       );
     }
 
+    const planExercise = session.plan_id
+      ? await this.repo.findPlanExercise(session.plan_id, dto.exercise_id)
+      : null;
+
     let repsAiCounted: number | null = null;
     if (dto.pose_session_id) {
       const poseSession = await this.repo.findPoseSessionByIdOrThrow(
@@ -165,6 +210,7 @@ export class WorkoutSessionService {
         dto.weight_kg === undefined ? null : new Prisma.Decimal(dto.weight_kg),
       durationSeconds: dto.duration_seconds ?? null,
       poseSessionId: dto.pose_session_id ?? null,
+      planExerciseId: planExercise?.id ?? null,
       loggedAt: new Date(),
     });
 
@@ -486,7 +532,16 @@ export class WorkoutSessionService {
           equipmentConflicts.length > 0
         );
       });
-    const containsFlaggedSets = poseSessionsNeedingReview.length > 0;
+    const integrityAdvisory = evaluateWorkoutIntegrityAdvisories(
+      session.exercise_logs.map((log) => ({
+        durationSeconds: log.duration_seconds ?? null,
+        exerciseId: log.exercise_id ?? null,
+        reps: log.reps_completed ?? log.reps_ai_counted ?? 0,
+      })),
+    );
+    const containsFlaggedSets =
+      poseSessionsNeedingReview.length > 0 ||
+      integrityAdvisory.reasonCodes.length > 0;
     const sourceQualityNotes: string[] = [];
 
     if (hasPoseEvidence) {
@@ -525,7 +580,16 @@ export class WorkoutSessionService {
     });
 
     if (containsFlaggedSets) {
-      sourceQualityNotes.unshift('flagged_pose_sessions_present');
+      sourceQualityNotes.unshift('integrity_advisory_present');
+    }
+
+    if (integrityAdvisory.reasonCodes.length > 0) {
+      sourceQualityNotes.push(
+        `integrity_ruleset:${WORKOUT_INTEGRITY_RULESET_VERSION}`,
+        ...integrityAdvisory.reasonCodes.map(
+          (reasonCode) => `integrity_advisory:${reasonCode}`,
+        ),
+      );
     }
 
     if (!containsFlaggedSets) {
@@ -545,15 +609,18 @@ export class WorkoutSessionService {
     }
 
     return {
-      eligibilityState: 'review_required',
+      eligibilityState: 'eligible',
       integrityState: 'suspicious',
-      terminalState: 'flagged',
-      validationState: 'flagged',
+      terminalState: 'accepted',
+      validationState: 'validated',
       validationMetadata: {
         hasPoseEvidence,
         hasManualWeightInput,
         containsFlaggedSets: true,
-        correctionOrigin: 'linked_pose_session',
+        correctionOrigin:
+          poseSessionsNeedingReview.length > 0
+            ? 'linked_pose_session'
+            : 'deterministic_integrity_advisory',
         sourceQualityNotes,
       },
     };

@@ -202,6 +202,30 @@ export class ExerciseController {
     return this.exerciseService.createExercise(dto);
   }
 
+  @Post('exercises/custom')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.member, UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateExerciseDTO })
+  @ApiOperation({
+    summary:
+      'Create a custom exercise that can be used immediately in workout presets.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Custom exercise created.',
+    schema: apiEnvelopeSchema(getSchemaPath(ExerciseResponseDTO)),
+  })
+  @ApiResponse({ status: 409, description: 'Exercise name already exists.' })
+  createCustomExercise(@Body() dto: CreateExerciseDTO) {
+    return this.exerciseService.createExercise({
+      ...dto,
+      description:
+        dto.description?.trim() ||
+        'Custom exercise created from the workout preset builder.',
+    });
+  }
+
   @Patch('exercises/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.admin, UserRole.staff)

@@ -33,6 +33,8 @@ import {
   MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
   MilestoneProgressResponseDTO,
+  MuscleLeaderboardFilterDTO,
+  MuscleLeaderboardRowDTO,
   MuscleMasteryResponseDTO,
   ProgressionProfileResponseDTO,
   ProgressionSourceListFilterDTO,
@@ -40,6 +42,8 @@ import {
   RankingProfileResponseDTO,
   ReviewMilestoneEvidenceDTO,
   SeasonStandingResponseDTO,
+  SeasonHistorySummaryDTO,
+  SeasonTopPerformerFilterDTO,
   SubmitMilestoneEvidenceDTO,
   UpdateRankingProfileDTO,
 } from './dto/gamification.dto';
@@ -82,6 +86,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 @ApiExtraModels(
   AchievementReviewResponseDTO,
   MuscleMasteryResponseDTO,
+  MuscleLeaderboardRowDTO,
   LeaderboardEntryResponseDTO,
   ProgressionProfileResponseDTO,
   ProgressionSourceSummaryResponseDTO,
@@ -90,6 +95,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   MilestoneProgressResponseDTO,
   MilestoneEvidenceSubmissionResponseDTO,
   IntegritySummaryResponseDTO,
+  SeasonHistorySummaryDTO,
 )
 @Controller('fitness')
 export class GamificationController {
@@ -377,6 +383,37 @@ export class GamificationController {
   })
   listMastery(@CurrentUser() user: JwtPayload, @Query() dto: MasteryFilterDTO) {
     return this.gamificationService.getMuscleMastery(user.sub, dto);
+  }
+
+  @Get('muscle-leaderboard')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List lifetime or season-scoped EXP ranking for one muscle.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: paginatedEnvelopeSchema(getSchemaPath(MuscleLeaderboardRowDTO)),
+  })
+  listMuscleLeaderboard(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: MuscleLeaderboardFilterDTO,
+  ) {
+    return this.gamificationService.listMuscleLeaderboard(dto, user.sub);
+  }
+
+  @Get('season-history')
+  @UseGuards(JwtAuthGuard, ActiveMemberCardGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List closed season history with top-three or top-ten performers.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: arrayEnvelopeSchema(getSchemaPath(SeasonHistorySummaryDTO)),
+  })
+  listSeasonHistory(@Query() dto: SeasonTopPerformerFilterDTO) {
+    return this.gamificationService.listSeasonHistory(dto);
   }
 
   @Get('leaderboard')

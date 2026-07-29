@@ -1204,7 +1204,16 @@ function MembershipOperationsDashboard({
               />
             </div>
           </div>
-          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              marginTop: 10,
+              maxHeight: "min(360px, 42vh)",
+              overflowY: "auto",
+              paddingRight: 4,
+            }}
+          >
             {pendingPayments.length ? (
               pendingPayments.map((payment) => (
                 <div

@@ -1,5 +1,6 @@
 export * from "./calendar";
 export * from "./chat";
+export * from "./legal";
 export * from "./mobile-labels";
 export * from "./mobile-settings";
 export * from "./payments";

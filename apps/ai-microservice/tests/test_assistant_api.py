@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.assistant import (
+    OpenRouterAssistantProvider,
+    OpenRouterAssistantSettings,
+)
 
 
 def _openrouter_response(content: dict[str, object], *, model: str, tokens: int) -> object:
@@ -733,3 +738,61 @@ def test_generate_plan_route_rejects_empty_allowed_exercise_catalog() -> None:
     assert payload["title"] == "Invalid Request"
     assert payload["status"] == 422
     assert "body.allowed_exercises" in payload["detail"]
+
+
+def test_openrouter_timeout_is_configurable_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenRouterAssistantProvider()
+
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "42")
+    assert provider._read_request_timeout_seconds() == 42
+
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "500")
+    assert provider._read_request_timeout_seconds() == 55
+
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "not-a-number")
+    assert provider._read_request_timeout_seconds() == 25
+
+
+def test_openrouter_request_variants_continue_after_a_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenRouterAssistantProvider()
+    settings = OpenRouterAssistantSettings(
+        api_key="test-key",
+        base_url="https://openrouter.ai/api/v1",
+        assistant_model="primary-model",
+        assistant_plan_model="primary-model",
+        fallback_model="fallback-model",
+        http_referer=None,
+        app_title=None,
+        request_timeout_seconds=25,
+    )
+    calls: list[str] = []
+
+    def fake_post(*_args, **kwargs):
+        model = kwargs["json"]["model"]
+        calls.append(model)
+        if model == "primary-model":
+            raise httpx.ReadTimeout("primary model timed out")
+        return _openrouter_response(
+            {
+                "content": "Fallback completed the request.",
+                "action": "NONE",
+                "params": None,
+            },
+            model=model,
+            tokens=12,
+        )
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    response = provider._run_request_variants(
+        settings,
+        [{"model": "primary-model"}, {"model": "fallback-model"}],
+        request_label="assistant",
+    )
+
+    assert response.status_code == 200
+    assert calls == ["primary-model", "fallback-model"]

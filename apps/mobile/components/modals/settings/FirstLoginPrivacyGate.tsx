@@ -1,12 +1,17 @@
 import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { ShieldCheck } from "lucide-react-native";
+import {
+  FITTRACK_PRIVACY_SECTIONS,
+  FITTRACK_TERMS_SECTIONS,
+} from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
+import { LegalDocumentSections } from "@/components/legal/LegalDocumentSections";
 import SettingsModal from "./SettingsModal";
 
 type FirstLoginPrivacyGateProps = {
@@ -44,24 +49,14 @@ export default function FirstLoginPrivacyGate({
       onClose={() => {}}
     >
       <View style={[s.body, { gap: 14 }]}>
-        <View style={s.infoCard}>
-          <FitText style={s.infoCardTitle}>SertFit Gym Data Privacy</FitText>
-          <FitText style={s.infoCardHint}>
-            FitTrack stores your account details, contact information,
-            verification status, bookings, attendance, payments, workout
-            activity, and app usage needed to operate your gym account. Your
-            data will only be used for account security, membership access,
-            booking records, coaching support, payments, service
-            notifications, and legally required gym operations.
-          </FitText>
-        </View>
-        <View style={s.infoCard}>
-          <FitText style={s.infoCardTitle}>Your control</FitText>
-          <FitText style={s.infoCardHint}>
-            Continue only after you understand and accept this policy. You can
-            review privacy settings later from Settings.
-          </FitText>
-        </View>
+        <LegalDocumentSections
+          eyebrow="Terms of Service"
+          sections={FITTRACK_TERMS_SECTIONS}
+        />
+        <LegalDocumentSections
+          eyebrow="Philippine Data Privacy Notice"
+          sections={FITTRACK_PRIVACY_SECTIONS}
+        />
         {errorText ? (
           <FitText style={[s.infoCardHint, { color: colors.danger }]}>
             {errorText}

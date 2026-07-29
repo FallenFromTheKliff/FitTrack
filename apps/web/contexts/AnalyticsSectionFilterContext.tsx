@@ -28,7 +28,7 @@ export const ANALYTICS_SECTION_FILTER_OPTIONS = [
     value: "alerts",
   },
   {
-    label: "Daily Insights",
+    label: "Range Insights",
     value: "daily",
   },
   {

@@ -24,6 +24,9 @@ import {
   RankingGovernanceStatus,
   RankingVisibility,
   SeasonStatus,
+  MembershipCardStatus,
+  UserRole,
+  UserStatus,
   type MuscleMasteryProgress,
   Prisma,
 } from '@prisma/client';
@@ -78,6 +81,20 @@ export interface WorkoutProgressionApplicationResult {
   seasonPointsGranted: number;
   sourceStatus: ProgressionSourceStatus;
   totalXpGranted: number;
+}
+
+export interface AdminManualExpMemberRecord {
+  deletedAt: string | null;
+  email: string;
+  id: string;
+  membershipCard: {
+    status: MembershipCardStatus;
+  };
+  profile: {
+    firstName: string;
+    lastName: string;
+  } | null;
+  status: UserStatus;
 }
 
 export interface PoseSourceRecordingResult {
@@ -220,7 +237,9 @@ interface NamedUserRecord {
 }
 
 export interface AdminOverviewSeasonRecord {
+  activated_at: Date | null;
   archived_at: Date | null;
+  auto_start_next: boolean;
   closed_at: Date | null;
   ends_at: Date;
   id: string;
@@ -231,6 +250,7 @@ export interface AdminOverviewSeasonRecord {
   }[];
   starts_at: Date;
   status: SeasonStatus;
+  rules_version: string;
   title: string;
 }
 
@@ -328,11 +348,45 @@ export type AdminSeasonStandingRecord = Prisma.SeasonalStandingGetPayload<{
 }>;
 
 export interface SeasonStatusUpdateResult {
+  activatedAt: Date | null;
   archivedAt: Date | null;
+  autoStartNext: boolean;
   closedAt: Date | null;
   seasonId: string;
   status: SeasonStatus;
   title: string;
+}
+
+export interface MuscleLeaderboardRecord {
+  displayName: string;
+  isDisqualified: boolean;
+  isHidden: boolean;
+  lastEarnedAt: Date | null;
+  muscleKey: string;
+  rankPosition: number;
+  seasonId: string | null;
+  seasonTitle: string | null;
+  userId: string;
+  xpPoints: number;
+}
+
+export interface SeasonHistoryRecord {
+  closedAt: Date | null;
+  endsAt: Date;
+  seasonId: string;
+  startsAt: Date;
+  title: string;
+  topPerformers: {
+    displayName: string;
+    rankPosition: number;
+    seasonPoints: number;
+    userId: string;
+  }[];
+}
+
+export interface SeasonLifecycleSweepResult {
+  closedSeasonIds: string[];
+  startedSeasonId: string | null;
 }
 
 export interface CreatorStateUpdateResult {
@@ -840,12 +894,8 @@ async function syncMilestoneProgress(
     const nextStatus =
       existingProgress?.status === MilestoneProgressStatus.claimed
         ? MilestoneProgressStatus.claimed
-        : existingProgress?.status === MilestoneProgressStatus.rejected
-          ? MilestoneProgressStatus.rejected
         : hasUnlocked
-          ? milestone.verification_policy === MilestoneVerificationPolicy.auto
-            ? MilestoneProgressStatus.unlocked
-            : MilestoneProgressStatus.pending_review
+          ? MilestoneProgressStatus.unlocked
           : MilestoneProgressStatus.in_progress;
     const nextUnlockedAt =
       existingProgress?.unlocked_at ??
@@ -1130,6 +1180,80 @@ export class GamificationRepository extends BaseRepository {
     });
   }
 
+  createSeason(input: {
+    autoStartNext: boolean;
+    description: string | null;
+    endsAt: Date;
+    rulesVersion: string;
+    startsAt: Date;
+    title: string;
+  }) {
+    return this.prisma.seasonDefinition.create({
+      data: {
+        auto_start_next: input.autoStartNext,
+        description: input.description,
+        ends_at: input.endsAt,
+        rules_version: input.rulesVersion,
+        starts_at: input.startsAt,
+        status: SeasonStatus.draft,
+        title: input.title,
+      },
+      include: {
+        standings: {
+          select: {
+            is_disqualified: true,
+            is_hidden: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateDraftSeason(input: {
+    autoStartNext?: boolean;
+    description?: string | null;
+    endsAt?: Date;
+    rulesVersion?: string;
+    seasonId: string;
+    startsAt?: Date;
+    title?: string;
+  }): Promise<AdminSeasonListRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const season = await tx.seasonDefinition.findUniqueOrThrow({
+        where: { id: input.seasonId },
+      });
+      if (season.status !== SeasonStatus.draft) {
+        throw new Error('Only draft seasons can be edited.');
+      }
+
+      return tx.seasonDefinition.update({
+        where: { id: input.seasonId },
+        data: {
+          ...(input.autoStartNext !== undefined
+            ? { auto_start_next: input.autoStartNext }
+            : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.endsAt ? { ends_at: input.endsAt } : {}),
+          ...(input.rulesVersion
+            ? { rules_version: input.rulesVersion }
+            : {}),
+          ...(input.startsAt ? { starts_at: input.startsAt } : {}),
+          ...(input.title ? { title: input.title } : {}),
+        },
+        include: {
+          standings: {
+            select: {
+              is_disqualified: true,
+              is_hidden: true,
+            },
+          },
+        },
+      });
+    });
+  }
+
   async listAdminSeasonStandings(input: {
     governanceStatus?: RankingGovernanceStatus;
     includeArchived?: boolean;
@@ -1262,21 +1386,381 @@ export class GamificationRepository extends BaseRepository {
     };
   }
 
+  async listMuscleLeaderboard(input: {
+    includeHidden?: boolean;
+    limit?: number;
+    muscleKey: string;
+    page?: number;
+    scope: 'lifetime' | 'season';
+    search?: string;
+    seasonId?: string;
+  }): Promise<PaginatedResult<MuscleLeaderboardRecord>> {
+    const page = input.page ?? 1;
+    const limit = input.limit ?? 20;
+    const muscleKey = input.muscleKey.trim().toLowerCase();
+    const search = input.search?.trim();
+
+    if (input.scope === 'season') {
+      const season =
+        (input.seasonId
+          ? await this.prisma.seasonDefinition.findUnique({
+              where: { id: input.seasonId },
+            })
+          : await this.prisma.seasonDefinition.findFirst({
+              where: { status: SeasonStatus.active },
+              orderBy: { starts_at: 'desc' },
+            })) ?? null;
+
+      if (!season) {
+        return {
+          data: [],
+          meta: { page, limit, total: 0, total_pages: 0 },
+        };
+      }
+
+      if (season.status === SeasonStatus.active) {
+        await this.syncSeasonMuscleStandings(season.id);
+      }
+
+      const where: Prisma.SeasonalMuscleStandingWhereInput = {
+        muscle_group: { equals: muscleKey, mode: 'insensitive' },
+        season_id: season.id,
+        ...(input.includeHidden
+          ? {}
+          : { is_disqualified: false, is_hidden: false }),
+        ...(search
+          ? {
+              user: {
+                OR: [
+                  {
+                    profile: {
+                      is: {
+                        first_name: {
+                          contains: search,
+                          mode: 'insensitive',
+                        },
+                      },
+                    },
+                  },
+                  {
+                    profile: {
+                      is: {
+                        last_name: {
+                          contains: search,
+                          mode: 'insensitive',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            }
+          : {}),
+      };
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.seasonalMuscleStanding.findMany({
+          where,
+          include: { user: { include: { profile: true } } },
+          orderBy: [{ muscle_points: 'desc' }, { rank_position: 'asc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.seasonalMuscleStanding.count({ where }),
+      ]);
+
+      return {
+        data: rows.map((row, index) => ({
+          displayName: row.user.profile
+            ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
+            : 'FitTrack Member',
+          isDisqualified: row.is_disqualified,
+          isHidden: row.is_hidden,
+          lastEarnedAt: row.last_earned_at,
+          muscleKey: row.muscle_group,
+          rankPosition:
+            row.rank_position ?? (page - 1) * limit + index + 1,
+          seasonId: season.id,
+          seasonTitle: season.title,
+          userId: row.user_id,
+          xpPoints: row.muscle_points,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    const userFilters: Prisma.UserWhereInput[] = [
+      ...(search
+        ? [
+            {
+              OR: [
+                {
+                  profile: {
+                    is: {
+                      first_name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                },
+                {
+                  profile: {
+                    is: {
+                      last_name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                },
+              ],
+            } satisfies Prisma.UserWhereInput,
+          ]
+        : []),
+      ...(input.includeHidden
+        ? []
+        : [
+            {
+              OR: [
+                { ranking_profile: { is: null } },
+                {
+                  ranking_profile: {
+                    is: {
+                      governance_status: {
+                        notIn: [
+                          RankingGovernanceStatus.hidden_by_admin,
+                          RankingGovernanceStatus.disqualified,
+                        ],
+                      },
+                    },
+                  },
+                },
+              ],
+            } satisfies Prisma.UserWhereInput,
+          ]),
+    ];
+    const where: Prisma.MuscleMasteryProgressWhereInput = {
+      muscle_group: { equals: muscleKey, mode: 'insensitive' },
+      ...(userFilters.length > 0 ? { user: { AND: userFilters } } : {}),
+    };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.muscleMasteryProgress.findMany({
+        where,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              ranking_profile: true,
+            },
+          },
+        },
+        orderBy: [{ xp_points: 'desc' }, { updated_at: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.muscleMasteryProgress.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((row, index) => ({
+        displayName: row.user.profile
+          ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
+          : 'FitTrack Member',
+        isDisqualified:
+          row.user.ranking_profile?.governance_status ===
+          RankingGovernanceStatus.disqualified,
+        isHidden:
+          row.user.ranking_profile?.governance_status ===
+          RankingGovernanceStatus.hidden_by_admin,
+        lastEarnedAt: row.last_ranked_at,
+        muscleKey: row.muscle_group,
+        rankPosition: (page - 1) * limit + index + 1,
+        seasonId: null,
+        seasonTitle: null,
+        userId: row.user_id,
+        xpPoints: row.xp_points,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async listSeasonHistory(input: {
+    limit: 3 | 10;
+  }): Promise<SeasonHistoryRecord[]> {
+    const seasons = await this.prisma.seasonDefinition.findMany({
+      where: { status: { in: [SeasonStatus.closed, SeasonStatus.archived] } },
+      include: {
+        standings: {
+          where: { is_disqualified: false, is_hidden: false },
+          include: { user: { include: { profile: true } } },
+          orderBy: [{ rank_position: 'asc' }, { season_points: 'desc' }],
+          take: input.limit,
+        },
+      },
+      orderBy: [{ ends_at: 'desc' }, { closed_at: 'desc' }],
+    });
+
+    return seasons.map((season) => ({
+      closedAt: season.closed_at,
+      endsAt: season.ends_at,
+      seasonId: season.id,
+      startsAt: season.starts_at,
+      title: season.title,
+      topPerformers: season.standings.map((standing, index) => ({
+        displayName: standing.user.profile
+          ? `${standing.user.profile.first_name} ${standing.user.profile.last_name}`.trim()
+          : 'FitTrack Member',
+        rankPosition: standing.rank_position ?? index + 1,
+        seasonPoints: standing.season_points,
+        userId: standing.user_id,
+      })),
+    }));
+  }
+
+  async syncSeasonMuscleStandings(seasonId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const aggregates = await tx.progressionGrantLedger.groupBy({
+        by: ['user_id', 'muscle_group'],
+        where: {
+          grant_status: ProgressionGrantStatus.applied,
+          muscle_group: { not: null },
+          season_id: seasonId,
+        },
+        _max: { created_at: true },
+        _sum: { amount: true },
+      });
+
+      await tx.seasonalMuscleStanding.deleteMany({
+        where: { season_id: seasonId },
+      });
+      if (!aggregates.length) {
+        return;
+      }
+
+      const orderedByMuscle = new Map<
+        string,
+        typeof aggregates
+      >();
+      for (const aggregate of aggregates) {
+        if (!aggregate.muscle_group) continue;
+        const key = aggregate.muscle_group.trim().toLowerCase();
+        const group = orderedByMuscle.get(key) ?? [];
+        group.push(aggregate);
+        orderedByMuscle.set(key, group);
+      }
+
+      const rows: Prisma.SeasonalMuscleStandingCreateManyInput[] = [];
+      for (const [muscleKey, group] of orderedByMuscle) {
+        group.sort((a, b) => {
+          const pointDifference =
+            (b._sum.amount ?? 0) - (a._sum.amount ?? 0);
+          if (pointDifference !== 0) return pointDifference;
+
+          const earnedDifference =
+            (b._max.created_at?.getTime() ?? 0) -
+            (a._max.created_at?.getTime() ?? 0);
+          if (earnedDifference !== 0) return earnedDifference;
+
+          return a.user_id.localeCompare(b.user_id);
+        });
+        group.forEach((aggregate, index) => {
+          rows.push({
+            is_disqualified: false,
+            is_hidden: false,
+            last_earned_at: aggregate._max.created_at,
+            muscle_group: muscleKey,
+            rank_position: index + 1,
+            season_id: seasonId,
+            user_id: aggregate.user_id,
+            muscle_points: aggregate._sum.amount ?? 0,
+          });
+        });
+      }
+      if (rows.length) {
+        await tx.seasonalMuscleStanding.createMany({ data: rows });
+      }
+    });
+  }
+
   async updateSeasonStatus(input: {
     actorUserId: string;
     rationale: string;
     seasonId: string;
     status: SeasonStatus;
   }): Promise<SeasonStatusUpdateResult> {
+    if (input.status === SeasonStatus.closed) {
+      await this.syncSeasonMuscleStandings(input.seasonId);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      await tx.seasonDefinition.findUniqueOrThrow({
+      const season = await tx.seasonDefinition.findUniqueOrThrow({
         where: { id: input.seasonId },
       });
+
+      if (input.status === SeasonStatus.active) {
+        const existingActive = await tx.seasonDefinition.findFirst({
+          where: {
+            id: { not: input.seasonId },
+            status: SeasonStatus.active,
+          },
+          select: { id: true },
+        });
+        if (existingActive) {
+          throw new Error('Another season is already active.');
+        }
+        if (season.ends_at <= season.starts_at) {
+          throw new Error('Season end must be after its start.');
+        }
+        await tx.userProgressionProfile.updateMany({
+          data: {
+            active_season_id: input.seasonId,
+            current_season_points: 0,
+          },
+        });
+      }
+
+      if (input.status === SeasonStatus.closed) {
+        const standings = await tx.seasonalStanding.findMany({
+          where: { season_id: input.seasonId },
+          orderBy: [{ season_points: 'desc' }, { updated_at: 'asc' }],
+          select: { id: true, is_disqualified: true, is_hidden: true },
+        });
+        let visibleRank = 0;
+        for (const standing of standings) {
+          const rankPosition =
+            standing.is_disqualified || standing.is_hidden
+              ? null
+              : ++visibleRank;
+          await tx.seasonalStanding.update({
+            where: { id: standing.id },
+            data: { rank_position: rankPosition },
+          });
+        }
+        await tx.userProgressionProfile.updateMany({
+          where: { active_season_id: input.seasonId },
+          data: {
+            active_season_id: null,
+            current_season_points: 0,
+          },
+        });
+      }
+
       const updatedSeason = await tx.seasonDefinition.update({
         where: { id: input.seasonId },
         data: {
           status: input.status,
+          ...(input.status === SeasonStatus.active
+            ? {
+                activated_at: now,
+                archived_at: null,
+                closed_at: null,
+              }
+            : {}),
           ...(input.status === SeasonStatus.closed ? { closed_at: now } : {}),
           ...(input.status === SeasonStatus.archived
             ? { archived_at: now }
@@ -1285,13 +1769,77 @@ export class GamificationRepository extends BaseRepository {
       });
 
       return {
+        activatedAt: updatedSeason.activated_at,
         archivedAt: updatedSeason.archived_at,
+        autoStartNext: updatedSeason.auto_start_next,
         closedAt: updatedSeason.closed_at,
         seasonId: updatedSeason.id,
         status: updatedSeason.status,
         title: updatedSeason.title,
       };
     });
+  }
+
+  async runSeasonLifecycleSweep(
+    now = new Date(),
+  ): Promise<SeasonLifecycleSweepResult> {
+    const expiredActive = await this.prisma.seasonDefinition.findMany({
+      where: {
+        ends_at: { lte: now },
+        status: SeasonStatus.active,
+      },
+      orderBy: { ends_at: 'asc' },
+    });
+    const closedSeasonIds: string[] = [];
+    let shouldAutoStart = false;
+
+    for (const season of expiredActive) {
+      await this.updateSeasonStatus({
+        actorUserId: 'system',
+        rationale: 'Automatic season close after configured end time.',
+        seasonId: season.id,
+        status: SeasonStatus.closed,
+      });
+      closedSeasonIds.push(season.id);
+      shouldAutoStart ||= season.auto_start_next;
+    }
+
+    const activeSeason = await this.prisma.seasonDefinition.findFirst({
+      where: { status: SeasonStatus.active },
+      select: { id: true },
+    });
+    if (activeSeason) {
+      return { closedSeasonIds, startedSeasonId: null };
+    }
+
+    const eligibleDrafts = await this.prisma.seasonDefinition.findMany({
+      where: {
+        auto_start_next: true,
+        ends_at: { gt: now },
+        starts_at: { lte: now },
+        status: SeasonStatus.draft,
+      },
+      orderBy: [{ starts_at: 'asc' }, { created_at: 'asc' }],
+      take: 2,
+    });
+    if (
+      eligibleDrafts.length !== 1 ||
+      (!shouldAutoStart && closedSeasonIds.length > 0)
+    ) {
+      return { closedSeasonIds, startedSeasonId: null };
+    }
+
+    const seasonToStart = eligibleDrafts[0];
+    await this.updateSeasonStatus({
+      actorUserId: 'system',
+      rationale: 'Automatic season start at configured start time.',
+      seasonId: seasonToStart.id,
+      status: SeasonStatus.active,
+    });
+    return {
+      closedSeasonIds,
+      startedSeasonId: seasonToStart.id,
+    };
   }
 
   async updateCreatorState(input: {
@@ -1912,10 +2460,8 @@ export class GamificationRepository extends BaseRepository {
         sort_order: input.sortOrder ?? 0,
         starts_at: input.startsAt ?? null,
         ends_at: input.endsAt ?? null,
-        retired_at:
-          status === MilestoneDefinitionStatus.archived ? now : null,
-        archived_at:
-          status === MilestoneDefinitionStatus.archived ? now : null,
+        retired_at: status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_at: status === MilestoneDefinitionStatus.archived ? now : null,
         archived_by_user_id:
           status === MilestoneDefinitionStatus.archived
             ? input.actorUserId
@@ -1982,10 +2528,8 @@ export class GamificationRepository extends BaseRepository {
         sort_order: input.sortOrder ?? 0,
         starts_at: input.startsAt ?? null,
         ends_at: input.endsAt ?? null,
-        retired_at:
-          status === MilestoneDefinitionStatus.archived ? now : null,
-        archived_at:
-          status === MilestoneDefinitionStatus.archived ? now : null,
+        retired_at: status === MilestoneDefinitionStatus.archived ? now : null,
+        archived_at: status === MilestoneDefinitionStatus.archived ? now : null,
         archived_by_user_id:
           status === MilestoneDefinitionStatus.archived
             ? input.actorUserId
@@ -2253,10 +2797,7 @@ export class GamificationRepository extends BaseRepository {
     evidenceSubmissionId: string;
     reviewerNotes?: string | null;
     reviewerUserId: string;
-    status: Extract<
-      MilestoneEvidenceSubmissionStatus,
-      'approved' | 'rejected'
-    >;
+    status: Extract<MilestoneEvidenceSubmissionStatus, 'approved' | 'rejected'>;
   }): Promise<MilestoneEvidenceSubmissionRecord> {
     return this.prisma.$transaction(async (tx) => {
       const evidence = await tx.milestoneEvidenceSubmission.findUniqueOrThrow({
@@ -2648,6 +3189,119 @@ export class GamificationRepository extends BaseRepository {
         totalXp: nextTotalXp,
         currentSeasonPoints: nextCurrentSeasonPoints,
       };
+    });
+  }
+
+  async listManualExpEligibleMembers(
+    search?: string,
+  ): Promise<AdminManualExpMemberRecord[]> {
+    const searchTerms = (search ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 4);
+    const searchClauses: Prisma.UserWhereInput[] = searchTerms.map((term) => ({
+      OR: [
+        {
+          profile: {
+            is: {
+              first_name: {
+                contains: term,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          profile: {
+            is: {
+              last_name: {
+                contains: term,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          auth_identities: {
+            some: {
+              identifier: {
+                contains: term,
+                mode: 'insensitive',
+              },
+              provider: AuthProvider.email,
+            },
+          },
+        },
+      ],
+    }));
+
+    const members = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        membership_card: {
+          is: {
+            status: MembershipCardStatus.active,
+          },
+        },
+        role: UserRole.member,
+        status: UserStatus.active,
+        ...(searchClauses.length > 0 ? { AND: searchClauses } : {}),
+      },
+      orderBy: [{ profile: { last_name: 'asc' } }, { created_at: 'desc' }],
+      take: 20,
+      select: {
+        auth_identities: {
+          orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
+          select: {
+            identifier: true,
+          },
+          take: 1,
+          where: {
+            provider: AuthProvider.email,
+          },
+        },
+        deletedAt: true,
+        id: true,
+        membership_card: {
+          select: {
+            status: true,
+          },
+        },
+        profile: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
+        status: true,
+      },
+    });
+
+    return members.flatMap((member) => {
+      const email = member.auth_identities[0]?.identifier;
+      const membershipCard = member.membership_card;
+      if (!email || !membershipCard) {
+        return [];
+      }
+
+      return [
+        {
+          deletedAt: member.deletedAt?.toISOString() ?? null,
+          email,
+          id: member.id,
+          membershipCard: {
+            status: membershipCard.status,
+          },
+          profile: member.profile
+            ? {
+                firstName: member.profile.first_name,
+                lastName: member.profile.last_name,
+              }
+            : null,
+          status: member.status,
+        },
+      ];
     });
   }
 
@@ -3615,7 +4269,7 @@ export class GamificationRepository extends BaseRepository {
         (total, delta) => total + delta.xpDelta,
         0,
       );
-      const requiresReview =
+      const hasIntegrityAdvisory =
         input.validationState === 'flagged' ||
         input.integrityState === 'suspicious';
       const seasonPointsGranted = activeSeason ? totalXpGranted : 0;
@@ -3869,7 +4523,7 @@ export class GamificationRepository extends BaseRepository {
       }
 
       let integrityEventId: string | null = null;
-      if (requiresReview) {
+      if (hasIntegrityAdvisory) {
         const integrityProfile = await tx.integrityProfile.findUnique({
           where: { user_id: input.userId },
         });
@@ -3877,12 +4531,12 @@ export class GamificationRepository extends BaseRepository {
           where: { user_id: input.userId },
           create: {
             user_id: input.userId,
-            risk_level: IntegrityRiskLevel.medium,
+            risk_level: IntegrityRiskLevel.low,
             last_flagged_at: input.completedAt,
           },
           update: {
             risk_level: maxIntegrityRiskLevel(
-              IntegrityRiskLevel.medium,
+              IntegrityRiskLevel.low,
               integrityProfile?.risk_level ?? IntegrityRiskLevel.low,
             ),
             last_flagged_at: input.completedAt,
@@ -3892,7 +4546,7 @@ export class GamificationRepository extends BaseRepository {
         const existingIntegrityEvent = await tx.integrityEvent.findFirst({
           where: {
             source_event_id: sourceEvent.id,
-            event_type: 'workout_session_review_required',
+            event_type: 'workout_session_integrity_advisory',
             is_resolved: false,
           },
           select: { id: true },
@@ -3905,13 +4559,14 @@ export class GamificationRepository extends BaseRepository {
             data: {
               user_id: input.userId,
               source_event_id: sourceEvent.id,
-              event_type: 'workout_session_review_required',
+              event_type: 'workout_session_integrity_advisory',
               reason_code:
-                input.sourceQualityNotes.find(
-                  (note) => note !== 'linked_pose_sessions_present',
-                ) ?? 'workout_review_required',
-              risk_level: IntegrityRiskLevel.medium,
+                input.sourceQualityNotes.find((note) =>
+                  note.startsWith('integrity_advisory:'),
+                ) ?? 'workout_integrity_advisory',
+              risk_level: IntegrityRiskLevel.low,
               details: {
+                advisory_only: true,
                 validation_state: input.validationState,
                 integrity_state: input.integrityState,
                 source_quality_notes: input.sourceQualityNotes,
@@ -3928,9 +4583,7 @@ export class GamificationRepository extends BaseRepository {
         where: { id: sourceEvent.id },
         data: {
           processed_at: input.completedAt,
-          source_status: requiresReview
-            ? ProgressionSourceStatus.reduced
-            : ProgressionSourceStatus.applied,
+          source_status: ProgressionSourceStatus.applied,
         },
       });
 
@@ -3955,9 +4608,7 @@ export class GamificationRepository extends BaseRepository {
         integrityEventId,
         rankUpdates,
         seasonPointsGranted,
-        sourceStatus: requiresReview
-          ? ProgressionSourceStatus.reduced
-          : ProgressionSourceStatus.applied,
+        sourceStatus: ProgressionSourceStatus.applied,
         totalXpGranted,
       };
     });

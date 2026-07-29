@@ -205,8 +205,8 @@ export default function FitModalScrollView({
           disabled={!shouldShowCue}
           hitSlop={8}
           onPress={handleScrollCuePress}
-          pointerEvents={shouldShowCue ? "auto" : "none"}
           style={[
+            { pointerEvents: shouldShowCue ? "auto" : "none" },
             s.scrollCue,
             { bottom: cueBottom },
             cueStyle,

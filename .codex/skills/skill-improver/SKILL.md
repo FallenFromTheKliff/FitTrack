@@ -24,10 +24,11 @@ This skill is explicit-only. Do not run it automatically.
 ## Default workflow
 
 1. Identify the exact failure pattern.
-2. Decide whether the failure came from trigger drift, weak workflow guidance, missing MCP routing, or missing examples.
-3. Find the narrowest section of the skill that should have prevented it.
-4. Patch only the failing section or its closest supporting reference.
-5. Update examples when the failure pattern or the better output is now known.
+2. Check whether the failed rule already existed in the skill. If it existed but was skipped, treat the problem as an enforcement or routing failure rather than missing prose.
+3. Decide whether the failure came from trigger drift, weak workflow guidance, missing MCP routing, missing examples, or a missing mechanical validator.
+4. Find the narrowest layer that should have prevented it: router, domain guidance, workflow contract, evidence collector, validator, or judge.
+5. Patch only the failing layer or its closest supporting reference.
+6. Update examples when the failure pattern or the better output is now known.
 
 ## Common failure families
 
@@ -60,12 +61,15 @@ This skill is explicit-only. Do not run it automatically.
 - conservative-but-approved scaffold failure where the gate passed a clean scaffold that still reads generic in screenshots
 - bad data-shape bias where the frontend was bent around underspecified backend semantics instead of escalating the canonical shape
 - AI domain prompts that fail to enforce strict contracts on lower-tier models
+- rule-present-but-skipped failures where the instruction was already clear but no state, evidence, hook, or validator made compliance observable
 
 ## Surgical edit rules
 
 - Do not rewrite the whole skill unless the failure is structural.
 - Preserve trigger boundaries and keep descriptions non-overlapping with sibling skills.
 - Keep `agents/openai.yaml` aligned with the real trigger behavior.
+- Do not add another paragraph when the same rule already existed. Prefer a required artifact, evidence field, state transition, hook check, or deterministic validator.
+- Keep skills responsible for intent, routing, and judgment. Put objective completion proof in scripts or repository-native checks.
 - Add a new reference file only when missing reference material would have prevented the failure.
 - If the failure is benchmark-lane drift, patch the orchestrating skill and the UI polish skill before tightening leaf implementation language.
 - If the failure is scaffold drift, patch the orchestrator and the frontend lanes before adding more polish rules.

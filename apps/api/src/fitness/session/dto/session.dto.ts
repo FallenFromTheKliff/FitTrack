@@ -6,13 +6,13 @@ import { FitnessGoal, PlanSource, SessionStatus } from '@prisma/client';
 export class StartSessionDTO {
   @ApiPropertyOptional({ example: '11111111-1111-4111-8111-111111111111' })
   @IsOptional()
-  @IsUUID('4', { message: 'plan_id must be a valid UUID' })
+  @IsUUID(undefined, { message: 'plan_id must be a valid UUID' })
   plan_id?: string;
 }
 
 export class LogExerciseSetDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  @IsUUID('4', { message: 'exercise_id must be a valid UUID' })
+  @IsUUID(undefined, { message: 'exercise_id must be a valid UUID' })
   exercise_id: string;
 
   @ApiProperty({ example: 1 })

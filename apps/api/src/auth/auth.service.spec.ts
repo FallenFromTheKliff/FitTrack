@@ -128,10 +128,12 @@ describe('AuthService', () => {
     otpService.issueOtp.mockResolvedValue(undefined);
 
     const result = await service.register({
+      accepted_terms: true,
       email: 'member@example.com',
       password: 'Password1',
       first_name: 'Fit',
       last_name: 'Track',
+      legal_version: '2026-07-28',
       phone: '+639171234567',
     });
 
@@ -156,10 +158,12 @@ describe('AuthService', () => {
 
     await expect(
       service.register({
+        accepted_terms: true,
         email: 'member@example.com',
         password: 'Password1',
         first_name: 'Fit',
         last_name: 'Track',
+        legal_version: '2026-07-28',
       }),
     ).rejects.toThrow(ConflictException);
   });

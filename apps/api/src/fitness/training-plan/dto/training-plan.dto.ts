@@ -21,7 +21,7 @@ import { TrimString } from '../../../common/validators';
 
 export class CreateTrainingPlanExerciseDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
-  @IsUUID('4', { message: 'exercise_id must be a valid UUID' })
+  @IsUUID(undefined, { message: 'exercise_id must be a valid UUID' })
   exercise_id: string;
 
   @ApiProperty({ example: 4 })
@@ -141,7 +141,7 @@ export class CreateTrainingPlanDTO {
 
 export class AssignTrainingPlanDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  @IsUUID('4', { message: 'member_id must be a valid UUID' })
+  @IsUUID(undefined, { message: 'member_id must be a valid UUID' })
   member_id: string;
 }
 
@@ -253,4 +253,39 @@ export class TrainingPlanDetailResponseDTO extends TrainingPlanSummaryResponseDT
     isArray: true,
   })
   schedule_days: TrainingPlanScheduleDayResponseDTO[];
+}
+
+export class TrainingProgressionSuggestionResponseDTO {
+  @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
+  plan_exercise_id: string;
+
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  exercise_id: string;
+
+  @ApiProperty({ example: 'Barbell Bench Press' })
+  exercise_name: string;
+
+  @ApiProperty({
+    enum: ['increase_load', 'increase_reps', 'maintain'],
+    example: 'increase_load',
+  })
+  action: 'increase_load' | 'increase_reps' | 'maintain';
+
+  @ApiPropertyOptional({ example: 10, nullable: true })
+  suggested_reps: number | null;
+
+  @ApiPropertyOptional({ example: 42.5, nullable: true })
+  suggested_weight_kg: number | null;
+
+  @ApiProperty({ enum: ['high', 'medium', 'low'], example: 'medium' })
+  confidence: 'high' | 'medium' | 'low';
+
+  @ApiProperty({
+    example:
+      'Recent completed sets met the prescribed rep target. Add a small load increase.',
+  })
+  rationale: string;
+
+  @ApiProperty({ example: 'history-rule-v1' })
+  source_revision: 'history-rule-v1';
 }

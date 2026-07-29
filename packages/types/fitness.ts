@@ -248,6 +248,24 @@ export type FitnessLeaderboardListParams = {
   page?: number;
 };
 
+export type FitnessMuscleLeaderboardListParams = {
+  limit?: number;
+  muscleKey: string;
+  page?: number;
+  scope: "lifetime" | "season";
+  seasonId?: string;
+};
+
+export type AdminGamificationMuscleLeaderboardListParams =
+  FitnessMuscleLeaderboardListParams & {
+    includeHidden?: boolean;
+    search?: string;
+  };
+
+export type FitnessSeasonHistoryListParams = {
+  limit?: 3 | 10;
+};
+
 export type FitnessMilestoneListParams = {
   includeLocked?: boolean;
 };
@@ -288,6 +306,19 @@ export type AdminGamificationSeasonStatusInput = {
   rationale: string;
   status: FitnessSeasonStatus;
 };
+
+export type AdminGamificationSeasonCreateInput = {
+  autoStartNext?: boolean;
+  description?: string | null;
+  endsAt: string;
+  rulesVersion?: string;
+  startsAt: string;
+  title: string;
+};
+
+export type AdminGamificationSeasonUpdateInput = Partial<
+  AdminGamificationSeasonCreateInput
+>;
 
 export type AdminGamificationCreatorStateInput = {
   adminNotes?: string | null;
@@ -435,6 +466,48 @@ export type TrainingPlanSummaryRecord = {
 
 export type TrainingPlanDetailRecord = TrainingPlanSummaryRecord & {
   scheduleDays: TrainingPlanScheduleDayRecord[];
+};
+
+export type CreateTrainingPlanExerciseInput = {
+  durationSeconds?: number;
+  exerciseId: string;
+  orderIndex?: number;
+  reps?: number;
+  restSeconds?: number;
+  sets: number;
+  weightKgTarget?: number;
+};
+
+export type CreateTrainingPlanScheduleDayInput = {
+  dayOfWeek: number;
+  exercises: CreateTrainingPlanExerciseInput[];
+  focusLabel?: string;
+  weekNumber: number;
+};
+
+export type CreateTrainingPlanInput = {
+  daysPerWeek: number;
+  durationWeeks: number;
+  goal: FitnessGoal;
+  schedule: CreateTrainingPlanScheduleDayInput[];
+  title: string;
+};
+
+export type TrainingProgressionAction =
+  | "increase_load"
+  | "increase_reps"
+  | "maintain";
+
+export type TrainingProgressionSuggestionRecord = {
+  action: TrainingProgressionAction;
+  confidence: "high" | "medium" | "low";
+  exerciseId: string;
+  exerciseName: string;
+  planExerciseId: string;
+  rationale: string;
+  sourceRevision: "history-rule-v1";
+  suggestedReps: number | null;
+  suggestedWeightKg: number | null;
 };
 
 export type WorkoutSessionPlanSummaryRecord = {
@@ -990,6 +1063,35 @@ export type FitnessLeaderboardEntryRecord = {
   userId: string;
 };
 
+export type FitnessMuscleLeaderboardEntryRecord = {
+  displayName: string;
+  isCurrentUser?: boolean;
+  lastEarnedAt: string | null;
+  muscleKey: string;
+  rankPosition: number;
+  scope: "lifetime" | "season";
+  seasonId: string | null;
+  seasonTitle: string | null;
+  userId: string;
+  xpPoints: number;
+};
+
+export type FitnessSeasonTopPerformerRecord = {
+  displayName: string;
+  rankPosition: number;
+  seasonPoints: number;
+  userId: string;
+};
+
+export type FitnessSeasonHistoryRecord = {
+  closedAt: string | null;
+  endsAt: string;
+  seasonId: string;
+  startsAt: string;
+  title: string;
+  topPerformers: FitnessSeasonTopPerformerRecord[];
+};
+
 export type FitnessProgressionActiveSeasonRecord = {
   endsAt: string;
   id: string;
@@ -1193,12 +1295,15 @@ export type FitnessIntegritySummaryRecord = {
 };
 
 export type AdminGamificationSeasonSummaryRecord = {
+  activatedAt: string | null;
   archivedAt: string | null;
+  autoStartNext: boolean;
   closedAt: string | null;
   disqualifiedCount: number;
   endsAt: string;
   hiddenCount: number;
   id: string;
+  rulesVersion: string;
   standingCount: number;
   startsAt: string;
   status: FitnessSeasonStatus;
@@ -1310,7 +1415,9 @@ export type AdminGamificationOverviewRecord = {
 };
 
 export type AdminGamificationSeasonGovernanceRecord = {
+  activatedAt: string | null;
   archivedAt: string | null;
+  autoStartNext: boolean;
   closedAt: string | null;
   seasonId: string;
   status: FitnessSeasonStatus;

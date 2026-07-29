@@ -4,7 +4,6 @@ import type { TabKey } from "@fittrack/app-config";
 export const AUTO_HELP_TABS: TabKey[] = [
   "nutrition",
   "mastery",
-  "workout",
   "chatbot",
 ];
 

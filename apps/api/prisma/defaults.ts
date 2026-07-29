@@ -580,9 +580,9 @@ async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
     },
     {
       key: 'fifty-kg-verified-lift',
-      title: '50 kg Verified Lift',
+      title: '50 kg Lift',
       description:
-        'Reach a 50 kg logged lift and submit image or MP4 proof for staff review.',
+        'Reach a 50 kg logged lift to unlock this milestone automatically.',
       category: MilestoneCategory.weighted_lifting,
       trigger_type: MilestoneTriggerType.summary_threshold,
       condition_payload: {
@@ -594,8 +594,8 @@ async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
         icon: 'shield-check',
       } satisfies Prisma.JsonObject,
       status: MilestoneDefinitionStatus.active,
-      verification_policy: MilestoneVerificationPolicy.manual_required,
-      evidence_requirement: MilestoneEvidenceRequirement.image_or_video,
+      verification_policy: MilestoneVerificationPolicy.auto,
+      evidence_requirement: MilestoneEvidenceRequirement.none,
       is_hidden: false,
       sort_order: 30,
     },
@@ -663,7 +663,7 @@ async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
       key: 'coaching-session-complete',
       title: 'Coaching Session Complete',
       description:
-        'Complete a booked coaching appointment and keep proof available for review.',
+        'Complete a booked coaching appointment to unlock this milestone automatically.',
       category: MilestoneCategory.coaching,
       trigger_type: MilestoneTriggerType.summary_threshold,
       condition_payload: {
@@ -675,8 +675,8 @@ async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
         icon: 'clipboard-check',
       } satisfies Prisma.JsonObject,
       status: MilestoneDefinitionStatus.active,
-      verification_policy: MilestoneVerificationPolicy.auto_then_review,
-      evidence_requirement: MilestoneEvidenceRequirement.image_or_video,
+      verification_policy: MilestoneVerificationPolicy.auto,
+      evidence_requirement: MilestoneEvidenceRequirement.none,
       is_hidden: false,
       sort_order: 70,
     },

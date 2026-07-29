@@ -29,18 +29,23 @@ import {
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
   AdminIntegrityCaseResponseDTO,
+  AdminMuscleLeaderboardFilterDTO,
   AdminManualExpGrantDTO,
+  AdminManualExpMemberFilterDTO,
   AdminMilestoneDefinitionDTO,
   AdminMilestoneDefinitionFilterDTO,
   AdminMilestoneDefinitionResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideDTO,
   AdminRankingOverrideResponseDTO,
+  AdminSeasonCreateDTO,
   AdminSeasonStandingFilterDTO,
   AdminSeasonStandingRowDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStatusDTO,
+  AdminSeasonUpdateDTO,
   CreateIntegrityCaseDTO,
+  MuscleLeaderboardRowDTO,
   ResolveIntegrityCaseDTO,
 } from './dto/gamification.dto';
 import { GamificationService } from './gamification.service';
@@ -82,6 +87,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 @ApiExtraModels(
   AdminGamificationOverviewResponseDTO,
   AdminGamificationSeasonListItemDTO,
+  MuscleLeaderboardRowDTO,
   AdminManualExpGrantDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStandingRowDTO,
@@ -112,6 +118,23 @@ export class GamificationAdminController {
     return this.gamificationService.getAdminOverview();
   }
 
+  @Get('manual-exp-members')
+  @ApiOperation({
+    summary: 'Search members eligible for audited manual EXP grants.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Up to 20 active members with active membership-card access loaded.',
+  })
+  listManualExpEligibleMembers(
+    @Query() filter: AdminManualExpMemberFilterDTO,
+  ) {
+    return this.gamificationService.listAdminManualExpEligibleMembers(
+      filter.search,
+    );
+  }
+
   @Get('seasons')
   @ApiOperation({
     summary: 'List gamification seasons for admin filters.',
@@ -131,6 +154,29 @@ export class GamificationAdminController {
   })
   listSeasons() {
     return this.gamificationService.listAdminSeasons();
+  }
+
+  @Post('seasons')
+  @ApiOperation({ summary: 'Create a draft gamification season.' })
+  createSeason(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AdminSeasonCreateDTO,
+  ) {
+    return this.gamificationService.adminCreateSeason(user.sub, dto);
+  }
+
+  @Patch('seasons/:seasonId')
+  @ApiOperation({ summary: 'Update a draft gamification season.' })
+  updateSeason(
+    @Param('seasonId', ParseUUIDPipe) seasonId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AdminSeasonUpdateDTO,
+  ) {
+    return this.gamificationService.adminUpdateSeason(
+      user.sub,
+      seasonId,
+      dto,
+    );
   }
 
   @Get('milestones')
@@ -285,6 +331,18 @@ export class GamificationAdminController {
   })
   listSeasonStandings(@Query() dto: AdminSeasonStandingFilterDTO) {
     return this.gamificationService.listAdminSeasonStandings(dto);
+  }
+
+  @Get('muscle-standings')
+  @ApiOperation({
+    summary: 'List true lifetime or season-scoped muscle EXP standings.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: paginatedEnvelopeSchema(getSchemaPath(MuscleLeaderboardRowDTO)),
+  })
+  listMuscleStandings(@Query() dto: AdminMuscleLeaderboardFilterDTO) {
+    return this.gamificationService.listMuscleLeaderboard(dto);
   }
 
   @Post('manual-exp-grants')

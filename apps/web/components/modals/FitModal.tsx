@@ -113,19 +113,78 @@ export default function FitModal({
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const activeOverlay =
+      modalRef.current?.closest<HTMLElement>(
+        '[data-fit-modal-overlay="true"]',
+      ) ?? null;
+    const backgroundSnapshots = Array.from(document.body.children)
+      .filter(
+        (element): element is HTMLElement =>
+          element instanceof HTMLElement &&
+          element !== activeOverlay &&
+          !["SCRIPT", "STYLE", "LINK"].includes(element.tagName),
+      )
+      .map((element) => ({
+        ariaHidden: element.getAttribute("aria-hidden"),
+        element,
+        hadInert: element.hasAttribute("inert"),
+      }));
+
+    backgroundSnapshots.forEach(({ element }) => {
+      element.setAttribute("aria-hidden", "true");
+      element.setAttribute("inert", "");
+    });
 
     const focusFrame = requestAnimationFrame(() => {
       modalRef.current?.focus({ preventScroll: true });
     });
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (closeDisabled) return;
       const dialogs = Array.from(
         document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
       );
       if (dialogs[dialogs.length - 1] !== modalRef.current) return;
-      event.preventDefault();
-      onCloseRef.current();
+
+      if (event.key === "Tab") {
+        const focusableElements = Array.from(
+          modalRef.current?.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ) ?? [],
+        ).filter(
+          (element) =>
+            element.getAttribute("aria-hidden") !== "true" &&
+            element.getClientRects().length > 0,
+        );
+
+        if (!focusableElements.length) {
+          event.preventDefault();
+          modalRef.current?.focus({ preventScroll: true });
+          return;
+        }
+
+        const firstFocusable = focusableElements[0];
+        const lastFocusable = focusableElements[focusableElements.length - 1];
+        const activeElement = document.activeElement;
+        const focusStartsOutside =
+          !(activeElement instanceof Node) ||
+          !modalRef.current?.contains(activeElement) ||
+          activeElement === modalRef.current;
+
+        if (
+          (event.shiftKey &&
+            (focusStartsOutside || activeElement === firstFocusable)) ||
+          (!event.shiftKey &&
+            (focusStartsOutside || activeElement === lastFocusable))
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? lastFocusable : firstFocusable).focus();
+        }
+        return;
+      }
+
+      if (event.key === "Escape" && !closeDisabled) {
+        event.preventDefault();
+        onCloseRef.current();
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -133,6 +192,17 @@ export default function FitModal({
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      backgroundSnapshots.forEach(({ ariaHidden, element, hadInert }) => {
+        if (ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", ariaHidden);
+        }
+
+        if (!hadInert) {
+          element.removeAttribute("inert");
+        }
+      });
       previousFocusRef.current?.focus({ preventScroll: true });
     };
   }, [isOpen, portalRoot, closeDisabled]);

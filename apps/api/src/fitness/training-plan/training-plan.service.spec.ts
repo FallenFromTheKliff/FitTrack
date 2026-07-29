@@ -19,12 +19,17 @@ describe('TrainingPlanService', () => {
     findPlanByIdOrThrow: jest.fn(),
     findActiveExercisesByIds: jest.fn(),
     createPlan: jest.fn(),
+    updatePlan: jest.fn(),
+    listRecentCompletedLogs: jest.fn(),
     replaceActivePlan: jest.fn(),
+    activateOwnedPlan: jest.fn(),
     deletePlanById: jest.fn(),
   };
 
   const relationshipService = {
     assertActiveClientRelationship: jest.fn(),
+    hasActiveCoach: jest.fn().mockResolvedValue(false),
+    getActiveCoachUserId: jest.fn().mockResolvedValue(null),
   };
 
   const makePlan = (overrides: Record<string, unknown> = {}) => ({
@@ -108,7 +113,8 @@ describe('TrainingPlanService', () => {
     });
   });
 
-  it('creates self-authored plans with transactional schedule input', async () => {
+  it('creates self-authored plans even when the member has an active coach', async () => {
+    relationshipService.hasActiveCoach.mockResolvedValue(true);
     repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
     repo.createPlan.mockResolvedValue(
       makePlan({
@@ -209,7 +215,7 @@ describe('TrainingPlanService', () => {
     relationshipService.assertActiveClientRelationship.mockResolvedValue(
       undefined,
     );
-    repo.createPlan.mockResolvedValue(
+    repo.replaceActivePlan.mockResolvedValue(
       makePlan({
         id: 'plan-2',
         user_id: 'member-1',
@@ -227,7 +233,7 @@ describe('TrainingPlanService', () => {
     expect(
       relationshipService.assertActiveClientRelationship,
     ).toHaveBeenCalledWith('coach-user-1', 'member-1');
-    expect(repo.createPlan).toHaveBeenCalledWith(
+    expect(repo.replaceActivePlan).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'member-1',
         coachUserId: 'coach-user-1',
@@ -238,12 +244,12 @@ describe('TrainingPlanService', () => {
     expect(result.coach_id).toBe('coach-user-1');
   });
 
-  it('creates AI-authored plans by replacing the active plan transactionally', async () => {
+  it('creates AI-authored plans as inactive drafts', async () => {
     repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
-    repo.replaceActivePlan.mockResolvedValue(
+    repo.createPlan.mockResolvedValue(
       makePlan({
         source: PlanSource.ai_generated,
-        is_active: true,
+        is_active: false,
       }),
     );
 
@@ -274,18 +280,18 @@ describe('TrainingPlanService', () => {
       ],
     });
 
-    expect(repo.replaceActivePlan).toHaveBeenCalledWith(
+    expect(repo.createPlan).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
         source: PlanSource.ai_generated,
-        isActive: true,
+        isActive: false,
         aiGenerationPrompt: {
           plan_input: { duration_weeks: 8, days_per_week: 4 },
         },
       }),
     );
     expect(result.source).toBe(PlanSource.ai_generated);
-    expect(result.is_active).toBe(true);
+    expect(result.is_active).toBe(false);
   });
 
   it('deletes plans that belong to the caller', async () => {
@@ -295,5 +301,88 @@ describe('TrainingPlanService', () => {
     await service.deletePlan('user-1', 'plan-1');
 
     expect(repo.deletePlanById).toHaveBeenCalledWith('plan-1');
+  });
+
+  it('selects an owned preset as the active training plan', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.activateOwnedPlan.mockResolvedValue(makePlan({ is_active: true }));
+
+    const result = await service.activatePlan('user-1', 'plan-1');
+
+    expect(repo.activateOwnedPlan).toHaveBeenCalledWith('user-1', 'plan-1');
+    expect(result.is_active).toBe(true);
+  });
+
+  it('blocks member deletion of coach-assigned training plans', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+
+    await expect(service.deletePlan('user-1', 'plan-1')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(repo.deletePlanById).not.toHaveBeenCalled();
+  });
+
+  it('keeps progression advice deterministic and history-backed', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue([
+      {
+        created_at: new Date('2026-07-27T10:00:00.000Z'),
+        exercise_id: 'exercise-1',
+        reps_completed: 12,
+        session_id: 'session-3',
+        weight_kg: { toNumber: () => 80 },
+      },
+      {
+        created_at: new Date('2026-07-25T10:00:00.000Z'),
+        exercise_id: 'exercise-1',
+        reps_completed: 11,
+        session_id: 'session-2',
+        weight_kg: { toNumber: () => 80 },
+      },
+      {
+        created_at: new Date('2026-07-23T10:00:00.000Z'),
+        exercise_id: 'exercise-1',
+        reps_completed: 10,
+        session_id: 'session-1',
+        weight_kg: { toNumber: () => 80 },
+      },
+    ]);
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'increase_load',
+        exercise_id: 'exercise-1',
+        source_revision: 'history-rule-v1',
+        suggested_reps: 10,
+        suggested_weight_kg: 82,
+      }),
+    ]);
+  });
+
+  it('blocks editing a coach-assigned plan copy', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+
+    await expect(
+      service.updatePlan('user-1', UserRole.member, 'plan-1', {
+        title: 'Changed title',
+        goal: FitnessGoal.bulking,
+        duration_weeks: 8,
+        days_per_week: 4,
+        schedule: [],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.updatePlan).not.toHaveBeenCalled();
   });
 });

@@ -71,6 +71,7 @@ export default function FitSearch({
     >
       <Search size={compact ? 18 : 20} color={colors.textMuted} strokeWidth={2} />
       <FitTextInput
+        data-search="true"
         id={id}
         name={name ?? fallbackName}
         aria-label={ariaLabel}

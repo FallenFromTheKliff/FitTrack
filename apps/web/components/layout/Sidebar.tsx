@@ -92,7 +92,7 @@ const MANAGEMENT_NAV_SECTIONS: NavSection[] = [
     items: [
       {
         href: "/gamification",
-        label: "Gamification",
+        label: "Ranking Governance",
         icon: Trophy,
         pageKey: "gamification",
       },

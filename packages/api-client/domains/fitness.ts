@@ -6,6 +6,7 @@ import type {
   CreateExerciseDraftProposalInput,
   CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
+  CreateTrainingPlanInput,
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
   ExerciseReviewEvidenceRecord,
@@ -33,6 +34,8 @@ import type {
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMuscleLeaderboardEntryRecord,
+  FitnessMuscleLeaderboardListParams,
   FitnessMilestoneListParams,
   FitnessMilestoneEvidenceSubmissionRecord,
   FitnessMilestoneProgressRecord,
@@ -46,6 +49,8 @@ import type {
   FitnessRankingProfileRecord,
   FitnessRankingVisibility,
   FitnessSeasonStandingRecord,
+  FitnessSeasonHistoryListParams,
+  FitnessSeasonHistoryRecord,
   LogWorkoutSetInput,
   MuscleDefinitionListParams,
   MuscleDefinitionRecord,
@@ -62,6 +67,7 @@ import type {
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
+  TrainingProgressionSuggestionRecord,
   UpdateFitnessRankingProfileInput,
   UpsertAdminMilestoneDefinitionInput,
   UpdateExerciseReviewSubmissionInput,
@@ -82,6 +88,7 @@ export type {
   CreateExerciseDraftProposalInput,
   CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
+  CreateTrainingPlanInput,
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
   ExerciseReviewEvidenceRecord,
@@ -104,6 +111,8 @@ export type {
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
   FitnessLeaderboardListParams,
+  FitnessMuscleLeaderboardEntryRecord,
+  FitnessMuscleLeaderboardListParams,
   FitnessMilestoneListParams,
   FitnessMilestoneEvidenceSubmissionRecord,
   FitnessMilestoneProgressRecord,
@@ -117,6 +126,8 @@ export type {
   FitnessRankingProfileRecord,
   FitnessRankingVisibility,
   FitnessSeasonStandingRecord,
+  FitnessSeasonHistoryListParams,
+  FitnessSeasonHistoryRecord,
   MuscleDefinitionListParams,
   MuscleDefinitionRecord,
   LogWorkoutSetInput,
@@ -137,6 +148,7 @@ export type {
   TrainingPlanDetailRecord,
   TrainingPlanListParams,
   TrainingPlanSummaryRecord,
+  TrainingProgressionSuggestionRecord,
   UpdateFitnessRankingProfileInput,
   UpsertAdminMilestoneDefinitionInput,
   UpdateExerciseReviewSubmissionInput,
@@ -273,6 +285,18 @@ type TrainingPlanSummaryApiRecord = {
 
 type TrainingPlanDetailApiRecord = TrainingPlanSummaryApiRecord & {
   schedule_days: TrainingPlanScheduleDayApiRecord[];
+};
+
+type TrainingProgressionSuggestionApiRecord = {
+  action: TrainingProgressionSuggestionRecord["action"];
+  confidence: TrainingProgressionSuggestionRecord["confidence"];
+  exercise_id: string;
+  exercise_name: string;
+  plan_exercise_id: string;
+  rationale: string;
+  source_revision: TrainingProgressionSuggestionRecord["sourceRevision"];
+  suggested_reps: number | null;
+  suggested_weight_kg: number | null;
 };
 
 type WorkoutSessionPlanSummaryApiRecord = {
@@ -456,6 +480,33 @@ type LeaderboardEntryApiRecord = {
   rank_position: number;
   total_xp: number;
   user_id: string;
+};
+
+type MuscleLeaderboardApiRecord = {
+  display_name: string;
+  is_current_user?: boolean;
+  last_earned_at: string | null;
+  muscle_key: string;
+  rank_position: number;
+  scope: FitnessMuscleLeaderboardEntryRecord["scope"];
+  season_id: string | null;
+  season_title: string | null;
+  user_id: string;
+  xp_points: number;
+};
+
+type SeasonHistoryApiRecord = {
+  closed_at: string | null;
+  ends_at: string;
+  season_id: string;
+  starts_at: string;
+  title: string;
+  top_performers: {
+    display_name: string;
+    rank_position: number;
+    season_points: number;
+    user_id: string;
+  }[];
 };
 
 type ProgressionActiveSeasonApiRecord = {
@@ -806,6 +857,45 @@ function mapTrainingPlanDetail(
   };
 }
 
+function mapTrainingProgressionSuggestion(
+  record: TrainingProgressionSuggestionApiRecord,
+): TrainingProgressionSuggestionRecord {
+  return {
+    action: record.action,
+    confidence: record.confidence,
+    exerciseId: record.exercise_id,
+    exerciseName: record.exercise_name,
+    planExerciseId: record.plan_exercise_id,
+    rationale: record.rationale,
+    sourceRevision: record.source_revision,
+    suggestedReps: record.suggested_reps,
+    suggestedWeightKg: record.suggested_weight_kg,
+  };
+}
+
+function toTrainingPlanMutationPayload(input: CreateTrainingPlanInput) {
+  return {
+    days_per_week: input.daysPerWeek,
+    duration_weeks: input.durationWeeks,
+    goal: input.goal,
+    schedule: input.schedule.map((day) => ({
+      day_of_week: day.dayOfWeek,
+      exercises: day.exercises.map((exercise) => ({
+        duration_seconds: exercise.durationSeconds,
+        exercise_id: exercise.exerciseId,
+        order_index: exercise.orderIndex,
+        reps: exercise.reps,
+        rest_seconds: exercise.restSeconds,
+        sets: exercise.sets,
+        weight_kg_target: exercise.weightKgTarget,
+      })),
+      focus_label: day.focusLabel,
+      week_number: day.weekNumber,
+    })),
+    title: input.title,
+  };
+}
+
 function mapExerciseLog(record: ExerciseLogApiRecord): ExerciseLogRecord {
   return {
     createdAt: record.created_at,
@@ -1076,6 +1166,41 @@ function mapLeaderboardEntry(
     rankPosition: record.rank_position,
     totalXp: record.total_xp,
     userId: record.user_id,
+  };
+}
+
+function mapMuscleLeaderboardEntry(
+  record: MuscleLeaderboardApiRecord,
+): FitnessMuscleLeaderboardEntryRecord {
+  return {
+    displayName: record.display_name,
+    isCurrentUser: record.is_current_user,
+    lastEarnedAt: record.last_earned_at,
+    muscleKey: record.muscle_key,
+    rankPosition: record.rank_position,
+    scope: record.scope,
+    seasonId: record.season_id,
+    seasonTitle: record.season_title,
+    userId: record.user_id,
+    xpPoints: record.xp_points,
+  };
+}
+
+function mapSeasonHistory(
+  record: SeasonHistoryApiRecord,
+): FitnessSeasonHistoryRecord {
+  return {
+    closedAt: record.closed_at,
+    endsAt: record.ends_at,
+    seasonId: record.season_id,
+    startsAt: record.starts_at,
+    title: record.title,
+    topPerformers: record.top_performers.map((performer) => ({
+      displayName: performer.display_name,
+      rankPosition: performer.rank_position,
+      seasonPoints: performer.season_points,
+      userId: performer.user_id,
+    })),
   };
 }
 
@@ -1483,6 +1608,18 @@ function toMasteryListParams(params?: FitnessMasteryListParams) {
   };
 }
 
+function toMuscleLeaderboardParams(
+  params: FitnessMuscleLeaderboardListParams,
+) {
+  return {
+    scope: params.scope,
+    muscle_key: params.muscleKey,
+    ...(params.page !== undefined ? { page: params.page } : {}),
+    ...(params.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params.seasonId ? { season_id: params.seasonId } : {}),
+  };
+}
+
 function toPlanListParams(params?: TrainingPlanListParams) {
   return {
     ...(params?.page !== undefined ? { page: params.page } : {}),
@@ -1768,11 +1905,92 @@ export function createFitnessApi(transport: ApiTransport) {
         data: result.data.map(mapTrainingPlanSummary),
       };
     },
+    async listClientPlans(
+      memberId: string,
+      params?: TrainingPlanListParams,
+    ): Promise<FitnessPaginatedResult<TrainingPlanSummaryRecord>> {
+      const result =
+        await unwrapPaginatedResponse<TrainingPlanSummaryApiRecord>(
+          transport.get(`/fitness/plans/client/${memberId}`, {
+            params: toPlanListParams(params),
+          }),
+          "Unable to load client fitness plans.",
+        );
+      return {
+        ...result,
+        data: result.data.map(mapTrainingPlanSummary),
+      };
+    },
     async getPlanById(planId: string) {
       return mapTrainingPlanDetail(
         await unwrapResponse<TrainingPlanDetailApiRecord>(
           transport.get(`/fitness/plans/${planId}`),
           "Unable to load fitness plan.",
+        ),
+      );
+    },
+    async createCustomExercise(input: CreateFitnessExerciseInput) {
+      return mapExercise(
+        await unwrapResponse<FitnessExerciseApiRecord>(
+          transport.post(
+            "/fitness/exercises/custom",
+            toExerciseMutationPayload(input),
+          ),
+          "Unable to create custom fitness exercise.",
+        ),
+      );
+    },
+    async createPlan(input: CreateTrainingPlanInput) {
+      return mapTrainingPlanDetail(
+        await unwrapResponse<TrainingPlanDetailApiRecord>(
+          transport.post(
+            "/fitness/plans",
+            toTrainingPlanMutationPayload(input),
+          ),
+          "Unable to create fitness plan.",
+        ),
+      );
+    },
+    async updatePlan(planId: string, input: CreateTrainingPlanInput) {
+      return mapTrainingPlanDetail(
+        await unwrapResponse<TrainingPlanDetailApiRecord>(
+          transport.put(
+            `/fitness/plans/${planId}`,
+            toTrainingPlanMutationPayload(input),
+          ),
+          "Unable to update fitness plan.",
+        ),
+      );
+    },
+    async getPlanProgressionSuggestions(planId: string) {
+      return (
+        await unwrapResponse<TrainingProgressionSuggestionApiRecord[]>(
+          transport.get(`/fitness/plans/${planId}/progression-suggestions`),
+          "Unable to load workout progression suggestions.",
+        )
+      ).map(mapTrainingProgressionSuggestion);
+    },
+    async deletePlan(planId: string) {
+      await unwrapResponse<{ message: string }>(
+        transport.delete(`/fitness/plans/${planId}`),
+        "Unable to delete fitness plan.",
+      );
+    },
+    async activatePlan(planId: string) {
+      return mapTrainingPlanDetail(
+        await unwrapResponse<TrainingPlanDetailApiRecord>(
+          transport.post(`/fitness/plans/${planId}/activate`),
+          "Unable to activate fitness plan.",
+        ),
+      );
+    },
+    async assignPlan(planId: string, memberId: string) {
+      return mapTrainingPlanDetail(
+        await unwrapResponse<TrainingPlanDetailApiRecord>(
+          transport.post(`/fitness/plans/${planId}/assign`, {
+            member_id: memberId,
+          }),
+          "Unable to assign fitness plan.",
         ),
       );
     },
@@ -1814,6 +2032,30 @@ export function createFitnessApi(transport: ApiTransport) {
         ...result,
         data: result.data.map(mapLeaderboardEntry),
       };
+    },
+    async listMuscleLeaderboard(
+      params: FitnessMuscleLeaderboardListParams,
+    ): Promise<FitnessPaginatedResult<FitnessMuscleLeaderboardEntryRecord>> {
+      const result = await unwrapPaginatedResponse<MuscleLeaderboardApiRecord>(
+        transport.get("/fitness/muscle-leaderboard", {
+          params: toMuscleLeaderboardParams(params),
+        }),
+        "Unable to load muscle leaderboard.",
+      );
+      return {
+        ...result,
+        data: result.data.map(mapMuscleLeaderboardEntry),
+      };
+    },
+    async listSeasonHistory(params?: FitnessSeasonHistoryListParams) {
+      return (
+        await unwrapResponse<SeasonHistoryApiRecord[]>(
+          transport.get("/fitness/season-history", {
+            params: params?.limit ? { limit: params.limit } : undefined,
+          }),
+          "Unable to load season history.",
+        )
+      ).map(mapSeasonHistory);
     },
     async getProgressionProfile() {
       return mapProgressionProfile(

@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fitnessIntegritySummaryQueryOptions,
   fitnessLeaderboardQueryOptions,
+  fitnessMuscleLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
   fitnessMilestonesQueryOptions,
   fitnessProgressionProfileQueryOptions,
   fitnessRankingProfileQueryOptions,
   fitnessSeasonStandingQueryOptions,
+  fitnessSeasonHistoryQueryOptions,
   claimFitnessMilestoneMutationOptions,
   updateFitnessRankingProfileMutationOptions,
 } from "@fittrack/query";
@@ -44,6 +46,7 @@ type AchievementCard = {
 
 type MasteryTab = "summary" | "milestones" | "muscles" | "leaderboard";
 type MuscleRankFilter = FitnessMasteryRank | "all";
+type LeaderboardMode = "overall" | "muscle";
 
 type RankingVisibilityOption = {
   description: string;
@@ -270,6 +273,13 @@ export function useMuscleMasteryScreen({
   const [milestonePage, setMilestonePage] = useState(1);
   const [musclePage, setMusclePage] = useState(1);
   const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const [leaderboardMode, setLeaderboardMode] =
+    useState<LeaderboardMode>("overall");
+  const [muscleLeaderboardScope, setMuscleLeaderboardScope] =
+    useState<"lifetime" | "season">("season");
+  const [selectedLeaderboardMuscle, setSelectedLeaderboardMuscle] =
+    useState("chest");
+  const [seasonHistoryLimit, setSeasonHistoryLimit] = useState<3 | 10>(3);
   const [celebrationKey, setCelebrationKey] = useState(0);
 
   const masteryQuery = useQuery({
@@ -282,6 +292,24 @@ export function useMuscleMasteryScreen({
       page: leaderboardPage,
     }),
     enabled: canLoadProgression,
+  });
+  const muscleLeaderboardQuery = useQuery({
+    ...fitnessMuscleLeaderboardQueryOptions(mobileApiClient, user?.id, {
+      limit: LEADERBOARD_PAGE_SIZE,
+      muscleKey: selectedLeaderboardMuscle,
+      page: leaderboardPage,
+      scope: muscleLeaderboardScope,
+    }),
+    enabled:
+      canLoadProgression &&
+      activeTab === "leaderboard" &&
+      leaderboardMode === "muscle",
+  });
+  const seasonHistoryQuery = useQuery({
+    ...fitnessSeasonHistoryQueryOptions(mobileApiClient, user?.id, {
+      limit: seasonHistoryLimit,
+    }),
+    enabled: canLoadProgression && activeTab === "leaderboard",
   });
   const progressionProfileQuery = useQuery({
     ...fitnessProgressionProfileQueryOptions(mobileApiClient, user?.id),
@@ -329,6 +357,7 @@ export function useMuscleMasteryScreen({
     progressionProfile,
   );
   const leaderboard = leaderboardQuery.data?.data ?? [];
+  const muscleLeaderboard = muscleLeaderboardQuery.data?.data ?? [];
   const leaderboardMeta = leaderboardQuery.data?.meta ?? {
     page: leaderboardPage,
     limit: LEADERBOARD_PAGE_SIZE,
@@ -336,6 +365,16 @@ export function useMuscleMasteryScreen({
     total_pages: Math.max(1, leaderboard.length ? 1 : 0),
   };
   const visibleLeaderboard = rankingVisibility === "private" ? [] : leaderboard;
+  const visibleMuscleLeaderboard =
+    rankingVisibility === "private" ? [] : muscleLeaderboard;
+  const leaderboardMuscleOptions = useMemo(() => {
+    const values = new Set(
+      mastery.map((entry) => entry.muscleGroup.trim().toLowerCase()),
+    );
+    values.add("chest");
+    return [...values].sort();
+  }, [mastery]);
+  const seasonHistory = seasonHistoryQuery.data ?? [];
   const topMuscle = mastery[0] ?? null;
   const highestRankEntry = resolveHighestRank(mastery);
   const totalXp =
@@ -450,7 +489,7 @@ export function useMuscleMasteryScreen({
   const totalXpGoal = Math.max(1000, Math.ceil((totalXp + 1) / 1000) * 1000);
   const totalXpProgress = totalXpGoal > 0 ? totalXp / totalXpGoal : 0;
 
-  const loadingQueries = [
+  const baseQueries = [
     masteryQuery,
     leaderboardQuery,
     progressionProfileQuery,
@@ -459,10 +498,17 @@ export function useMuscleMasteryScreen({
     milestonesQuery,
     integritySummaryQuery,
   ];
+  const activeQueries = [
+    ...baseQueries,
+    ...(activeTab === "leaderboard" ? [seasonHistoryQuery] : []),
+    ...(activeTab === "leaderboard" && leaderboardMode === "muscle"
+      ? [muscleLeaderboardQuery]
+      : []),
+  ];
   const isLoading =
     hasMemberCardAccess &&
-    loadingQueries.some((query) => query.status === "pending");
-  const isError = loadingQueries.some((query) => query.isError);
+    activeQueries.some((query) => query.status === "pending");
+  const isError = activeQueries.some((query) => query.isError);
   const errorMessage =
     (masteryQuery.error as Error | null)?.message ??
     (leaderboardQuery.error as Error | null)?.message ??
@@ -471,11 +517,17 @@ export function useMuscleMasteryScreen({
     (seasonStandingQuery.error as Error | null)?.message ??
     (milestonesQuery.error as Error | null)?.message ??
     (integritySummaryQuery.error as Error | null)?.message ??
+    (muscleLeaderboardQuery.error as Error | null)?.message ??
+    (seasonHistoryQuery.error as Error | null)?.message ??
     "Unable to load Muscle Mastery right now.";
 
   useEffect(() => {
     setMusclePage(1);
   }, [muscleRankFilter, muscleSearch]);
+
+  useEffect(() => {
+    setLeaderboardPage(1);
+  }, [leaderboardMode, muscleLeaderboardScope, selectedLeaderboardMuscle]);
 
   useEffect(() => {
     if (milestonePage > milestoneTotalPages) {
@@ -570,11 +622,20 @@ export function useMuscleMasteryScreen({
     isMemberLocked,
     isClaimingMilestone: claimMilestoneMutation.isPending,
     isRefreshing:
-      hasMemberCardAccess && loadingQueries.some((query) => query.isFetching),
+      hasMemberCardAccess && activeQueries.some((query) => query.isFetching),
     isUpdatingRankingVisibility: updateRankingProfileMutation.isPending,
     leaderboard: visibleLeaderboard,
+    leaderboardMode,
+    leaderboardMuscleOptions,
     leaderboardEntry,
     leaderboardMeta,
+    muscleLeaderboard: visibleMuscleLeaderboard,
+    muscleLeaderboardMeta: muscleLeaderboardQuery.data?.meta ?? {
+      page: leaderboardPage,
+      limit: LEADERBOARD_PAGE_SIZE,
+      total: 0,
+      total_pages: 0,
+    },
     memberLockMessage: resolveLockMessage(
       membershipCardStatus,
       hasMemberCardAccess,
@@ -599,7 +660,7 @@ export function useMuscleMasteryScreen({
     onOpenWorkout: handleOpenWorkout,
     onClaimMilestone: handleClaimMilestone,
     onRefresh: async () => {
-      await Promise.all(loadingQueries.map((query) => query.refetch()));
+      await Promise.all(activeQueries.map((query) => query.refetch()));
     },
     onSelectRankingVisibility: async (visibility: FitnessRankingVisibility) => {
       if (visibility === rankingVisibility || !user?.id) return;
@@ -619,16 +680,24 @@ export function useMuscleMasteryScreen({
       seasonStanding?.season ?? progressionProfile?.activeSeason ?? null,
     ),
     seasonRankLabel,
+    seasonHistory,
+    seasonHistoryLimit,
     seasonStanding,
     summaryCards,
     setActiveTab,
     setLeaderboardPage,
+    setLeaderboardMode,
+    setMuscleLeaderboardScope,
+    setSelectedLeaderboardMuscle,
+    setSeasonHistoryLimit,
     setMilestonePage,
     setMusclePage,
     setMuscleRankFilter,
     setMuscleSearch,
     sortedMilestones,
     statusMessage,
+    selectedLeaderboardMuscle,
+    muscleLeaderboardScope,
     topMuscle,
     totalXp,
     totalXpGoal,

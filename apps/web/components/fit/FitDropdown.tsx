@@ -80,6 +80,8 @@ export default function FitDropdown({
           aria-expanded={open}
           className={cn("fit-dropdown-trigger", fontClass, className)}
           data-filled={isSelected ? "true" : "false"}
+          data-option-count={options.length}
+          data-value={displayLabel}
           data-animate={canAnimate ? "true" : "false"}
           disabled={disabled}
           style={{

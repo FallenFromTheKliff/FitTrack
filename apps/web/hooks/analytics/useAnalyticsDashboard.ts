@@ -8,6 +8,7 @@ import {
   analyticsAttendanceQueryOptions,
   analyticsInsightDetailQueryOptions,
   analyticsInsightsQueryOptions,
+  analyticsOverviewQueryOptions,
   analyticsRevenueQueryOptions,
   analyticsSnapshotQueryOptions,
   exportAnalyticsPdfMutationOptions,
@@ -24,15 +25,14 @@ import { useTimedMessage } from "@fittrack/hooks";
 import { webApiClient } from "@/lib/api-client";
 import type { DeletionRequest } from "@/data/members/members";
 import {
-  ANALYTICS_DEFAULT_ATTENDANCE_FILTER,
-  type AnalyticsRevenueWindowFilter,
+  ANALYTICS_AGGREGATION_PERIOD_OPTIONS,
+  createAnalyticsDateWindow,
   deriveAttendanceDrilldownWindow,
   formatDateTime,
-  ANALYTICS_REVENUE_WINDOW_OPTIONS,
+  getDefaultAnalyticsDateWindow,
   toAttendanceChartSeries,
-  toAttendanceWindow,
   toRevenueChartSeries,
-  toRevenueWindow,
+  type AnalyticsAggregationPeriod,
   type AnalyticsAttendanceFilter,
 } from "@/app/(auth)/analytics/helpers";
 
@@ -48,6 +48,7 @@ const PDF_EXPORT_SECTION_OPTIONS: Array<{
   { label: "Performance KPIs", value: "kpis" },
   { label: "Daily Insights", value: "daily" },
   { label: "Revenue", value: "revenue" },
+  { label: "Attendance", value: "attendance" },
   { label: "Inventory", value: "inventory" },
   { label: "System Alerts", value: "alerts" },
   { label: "Recent Activities", value: "activities" },
@@ -57,6 +58,7 @@ const PDF_EXPORT_SECTION_OPTIONS: Array<{
 const DEFAULT_PDF_EXPORT_SECTIONS = PDF_EXPORT_SECTION_OPTIONS.map(
   (option) => option.value,
 );
+const DEFAULT_ANALYTICS_WINDOW = getDefaultAnalyticsDateWindow();
 
 function isFallbackBusinessInsight(
   insight: BusinessInsightRunDetailRecord | null | undefined,
@@ -86,12 +88,20 @@ function getAttendanceDrilldownSubtitle(
 export function useAnalyticsDashboard() {
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(3000);
-  const [attendanceFilter, setAttendanceFilter] =
-    useState<AnalyticsAttendanceFilter>(ANALYTICS_DEFAULT_ATTENDANCE_FILTER);
+  const [analyticsWindow, setAnalyticsWindow] =
+    useState(DEFAULT_ANALYTICS_WINDOW);
+  const [draftStartDate, setDraftStartDate] = useState(
+    DEFAULT_ANALYTICS_WINDOW.startDate,
+  );
+  const [draftEndDate, setDraftEndDate] = useState(
+    DEFAULT_ANALYTICS_WINDOW.endDate,
+  );
+  const [draftAggregationPeriod, setDraftAggregationPeriod] =
+    useState<AnalyticsAggregationPeriod>(
+      DEFAULT_ANALYTICS_WINDOW.period as AnalyticsAggregationPeriod,
+    );
   const [selectedDrilldown, setSelectedDrilldown] =
     useState<AttendanceDrilldownSelection | null>(null);
-  const [revenueWindowFilter, setRevenueWindowFilter] =
-    useState<AnalyticsRevenueWindowFilter>("6m");
   const [generatedInsight, setGeneratedInsight] =
     useState<BusinessInsightRunDetailRecord | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -99,23 +109,15 @@ export function useAnalyticsDashboard() {
     AnalyticsPdfSection[]
   >(DEFAULT_PDF_EXPORT_SECTIONS);
 
-  const revenueWindow = useMemo(
-    () => toRevenueWindow(revenueWindowFilter),
-    [revenueWindowFilter],
-  );
-  const attendanceWindow = useMemo(
-    () => toAttendanceWindow(attendanceFilter),
-    [attendanceFilter],
-  );
   const drilldownWindow = useMemo(
     () =>
       selectedDrilldown
         ? deriveAttendanceDrilldownWindow(
             selectedDrilldown.bucketStart,
-            attendanceFilter,
+            analyticsWindow.period as AnalyticsAttendanceFilter,
           )
         : null,
-    [attendanceFilter, selectedDrilldown],
+    [analyticsWindow.period, selectedDrilldown],
   );
 
   const snapshotQuery = useQuery({
@@ -136,14 +138,20 @@ export function useAnalyticsDashboard() {
     staleTime: 30_000,
     gcTime: 300_000,
   });
+  const overviewQuery = useQuery({
+    ...analyticsOverviewQueryOptions(webApiClient, analyticsWindow),
+    refetchOnMount: "always",
+    staleTime: 60_000,
+    gcTime: 300_000,
+  });
   const revenueQuery = useQuery({
-    ...analyticsRevenueQueryOptions(webApiClient, revenueWindow),
+    ...analyticsRevenueQueryOptions(webApiClient, analyticsWindow),
     refetchOnMount: "always",
     staleTime: 60_000,
     gcTime: 300_000,
   });
   const attendanceQuery = useQuery({
-    ...analyticsAttendanceQueryOptions(webApiClient, attendanceWindow),
+    ...analyticsAttendanceQueryOptions(webApiClient, analyticsWindow),
     refetchOnMount: "always",
     staleTime: 30_000,
     gcTime: 300_000,
@@ -180,14 +188,27 @@ export function useAnalyticsDashboard() {
   );
 
   const snapshot = snapshotQuery.data;
+  const overview = overviewQuery.data;
   const revenue = revenueQuery.data;
   const attendance = attendanceQuery.data;
-  const latestInsight = generatedInsight ?? latestInsightQuery.data ?? null;
+  const storedInsightMatchesWindow =
+    latestInsightQuery.data?.startDate.slice(0, 10) ===
+      analyticsWindow.startDate &&
+    latestInsightQuery.data?.endDate.slice(0, 10) === analyticsWindow.endDate &&
+    latestInsightQuery.data?.period === analyticsWindow.period;
+  const latestInsight =
+    generatedInsight ??
+    (storedInsightMatchesWindow ? latestInsightQuery.data : null) ??
+    null;
   const latestInsightIsFallback = isFallbackBusinessInsight(latestInsight);
   const revenueSeries = useMemo(() => toRevenueChartSeries(revenue), [revenue]);
   const attendanceSeries = useMemo(
-    () => toAttendanceChartSeries(attendance, attendanceFilter),
-    [attendance, attendanceFilter],
+    () =>
+      toAttendanceChartSeries(
+        attendance,
+        analyticsWindow.period as AnalyticsAttendanceFilter,
+      ),
+    [analyticsWindow.period, attendance],
   );
   const drilldownSeries = useMemo(
     () =>
@@ -223,9 +244,9 @@ export function useAnalyticsDashboard() {
     try {
       const result = await generateInsightMutation.mutateAsync({
         input: {
-          ...revenueWindow,
+          ...analyticsWindow,
           focus: "overview",
-          period: revenueWindow.period,
+          period: analyticsWindow.period,
         },
       });
       setGeneratedInsight(result);
@@ -245,12 +266,12 @@ export function useAnalyticsDashboard() {
 
     try {
       const result = await exportPdfMutation.mutateAsync({
-        attendanceEndDate: attendanceWindow.endDate,
-        attendancePeriod: attendanceWindow.period,
-        attendanceStartDate: attendanceWindow.startDate,
-        revenueEndDate: revenueWindow.endDate,
-        revenuePeriod: revenueWindow.period,
-        revenueStartDate: revenueWindow.startDate,
+        attendanceEndDate: analyticsWindow.endDate,
+        attendancePeriod: analyticsWindow.period,
+        attendanceStartDate: analyticsWindow.startDate,
+        revenueEndDate: analyticsWindow.endDate,
+        revenuePeriod: analyticsWindow.period,
+        revenueStartDate: analyticsWindow.startDate,
         selectedSections: selectedPdfSections,
       });
 
@@ -290,27 +311,73 @@ export function useAnalyticsDashboard() {
     setSelectedDrilldown(null);
   };
 
+  const handleApplyAnalyticsWindow = () => {
+    if (!draftStartDate || !draftEndDate) {
+      showMessage("Choose both a start and end date.");
+      return;
+    }
+
+    if (draftStartDate > draftEndDate) {
+      showMessage("Start date must be on or before the end date.");
+      return;
+    }
+
+    setAnalyticsWindow(
+      createAnalyticsDateWindow(
+        draftStartDate,
+        draftEndDate,
+        draftAggregationPeriod,
+      ),
+    );
+    setGeneratedInsight(null);
+    setSelectedDrilldown(null);
+    showMessage("Analytics date range applied.");
+  };
+
+  const handleResetAnalyticsWindow = () => {
+    setDraftStartDate(DEFAULT_ANALYTICS_WINDOW.startDate);
+    setDraftEndDate(DEFAULT_ANALYTICS_WINDOW.endDate);
+    setDraftAggregationPeriod(
+      DEFAULT_ANALYTICS_WINDOW.period as AnalyticsAggregationPeriod,
+    );
+    setAnalyticsWindow(DEFAULT_ANALYTICS_WINDOW);
+    setGeneratedInsight(null);
+    setSelectedDrilldown(null);
+    showMessage("Analytics date range reset.");
+  };
+
   return {
+    aggregationPeriodOptions: ANALYTICS_AGGREGATION_PERIOD_OPTIONS,
+    analyticsWindow,
+    analyticsWindowDirty:
+      draftStartDate !== analyticsWindow.startDate ||
+      draftEndDate !== analyticsWindow.endDate ||
+      draftAggregationPeriod !== analyticsWindow.period,
     attendance,
-    attendanceFilter,
-    attendanceFilterLabel: attendanceWindow.label,
+    attendanceFilter: analyticsWindow.period as AnalyticsAttendanceFilter,
+    attendanceFilterLabel: analyticsWindow.label,
     attendanceLoading: attendanceQuery.isLoading,
     attendanceSeries,
-    attendanceWindow,
+    attendanceWindow: analyticsWindow,
+    draftAggregationPeriod,
+    draftEndDate,
+    draftStartDate,
     generatedAtLabel: snapshot ? formatDateTime(snapshot.generatedAt) : null,
     drilldownAttendance: drilldownQuery.data,
     drilldownLoading: drilldownQuery.isFetching,
     drilldownSeries,
     drilldownSubtitle: getAttendanceDrilldownSubtitle(
-      attendanceFilter,
+      analyticsWindow.period as AnalyticsAttendanceFilter,
       selectedDrilldown,
     ),
     drilldownTitle: selectedDrilldown
       ? `Attendance breakdown for ${selectedDrilldown.label}`
       : "Attendance breakdown",
+    handleApplyAnalyticsWindow,
     handleCloseDrilldown,
     handleExportPdf,
     handleGenerateInsight,
+    handleResetAnalyticsWindow,
     handleSelectAttendancePoint,
     handleTogglePdfSection,
     isExportingPdf: isExportingPdf || exportPdfMutation.isPending,
@@ -320,18 +387,19 @@ export function useAnalyticsDashboard() {
     latestInsightLoading:
       insightHistoryQuery.isLoading || latestInsightQuery.isLoading,
     message,
+    overview,
+    overviewLoading: overviewQuery.isLoading,
     pdfExportSectionOptions: PDF_EXPORT_SECTION_OPTIONS,
-    revenueWindowFilter,
-    revenueWindowFilterOptions: ANALYTICS_REVENUE_WINDOW_OPTIONS,
     visibleActiveMemberCount,
     revenue,
     revenueLoading: revenueQuery.isLoading,
     revenueSeries,
-    revenueWindow,
+    revenueWindow: analyticsWindow,
     selectedDrilldown,
     selectedPdfSections,
-    setAttendanceFilter,
-    setRevenueWindowFilter,
+    setDraftAggregationPeriod,
+    setDraftEndDate,
+    setDraftStartDate,
     snapshot,
     snapshotLoading: snapshotQuery.isLoading,
   };

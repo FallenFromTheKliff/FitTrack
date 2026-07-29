@@ -29,6 +29,7 @@ import type {
   NativeEquipmentSnapshot,
   NativePoseFrame,
 } from "@/components/workout/NativeVisionPoseCamera.types";
+import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
 import type { ExerciseCreationDraft } from "@/components/modals/workout/ExerciseCreationReviewModal";
 import {
   buildExerciseAiDraftEvidence,
@@ -113,6 +114,11 @@ type LiveWorkoutSessionRecord = {
   id: string;
   startedAt: string;
   status: string;
+};
+
+type WorkoutLiveControllerOptions = {
+  cameraTarget?: WorkoutCameraTarget | null;
+  onCameraSetCompleted?: (target: WorkoutCameraTarget) => void;
 };
 
 const DEFAULT_POSE_FEEDBACK = [
@@ -1158,7 +1164,10 @@ function toSavedExerciseOptions(references: ExerciseReference[]) {
   return options;
 }
 
-export function useWorkoutLiveController() {
+export function useWorkoutLiveController(
+  options: WorkoutLiveControllerOptions = {},
+) {
+  const { cameraTarget = null, onCameraSetCompleted } = options;
   const { user } = useAuth();
   const { colors } = useTheme();
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
@@ -1283,6 +1292,8 @@ export function useWorkoutLiveController() {
   const subjectLockGestureConsumedRef = useRef(false);
   const subjectLockGestureStartMsRef = useRef<number | null>(null);
   const subjectLockLostFramesRef = useRef(0);
+  const autoCompletionKeyRef = useRef<string | null>(null);
+  const autoFinalizeSetRef = useRef<((repCount: number) => void) | null>(null);
 
   const setTrackedReps = (
     nextValue: number | ((currentValue: number) => number),
@@ -1293,6 +1304,14 @@ export function useWorkoutLiveController() {
         : nextValue;
     liveRepCountRef.current = resolvedValue;
     setReps(resolvedValue);
+    if (
+      isRecordingRef.current &&
+      cameraTarget &&
+      cameraTarget.targetReps > 0 &&
+      resolvedValue >= cameraTarget.targetReps
+    ) {
+      autoFinalizeSetRef.current?.(resolvedValue);
+    }
   };
 
   const setTrackedWorkoutLoadKg = (nextValue: number | null) => {
@@ -1580,10 +1599,11 @@ export function useWorkoutLiveController() {
   });
   const preferredPlan = useMemo(
     () =>
+      plansResponse.data.find((plan) => plan.id === cameraTarget?.planId) ??
       plansResponse.data.find((plan) => plan.isActive) ??
       plansResponse.data[0] ??
       null,
-    [plansResponse.data],
+    [cameraTarget?.planId, plansResponse.data],
   );
   const { data: planDetail = null } = useQuery({
     ...fitnessPlanDetailQueryOptions(mobileApiClient, preferredPlan?.id),
@@ -1630,6 +1650,19 @@ export function useWorkoutLiveController() {
   );
 
   const currentPlanExercise = useMemo(() => {
+    if (cameraTarget) {
+      const catalogExercise = exercisesResponse.data.find(
+        (exercise) => exercise.id === cameraTarget.exerciseId,
+      );
+      return {
+        exerciseId: cameraTarget.exerciseId,
+        exerciseName: cameraTarget.exerciseName,
+        muscleGroup: catalogExercise?.muscleGroup ?? "General",
+        notes: null,
+        reps: cameraTarget.targetReps,
+        sets: cameraTarget.totalSets,
+      };
+    }
     if (!planDetail) return null;
     const sortedDays = [...planDetail.scheduleDays].sort((left, right) => {
       if (left.weekNumber !== right.weekNumber)
@@ -1643,7 +1676,7 @@ export function useWorkoutLiveController() {
         (left, right) => left.orderIndex - right.orderIndex,
       )[0] ?? null
     );
-  }, [planDetail]);
+  }, [cameraTarget, exercisesResponse.data, planDetail]);
 
   const selectedExercise = useMemo(
     () => toSelectedExercise(currentPlanExercise, exercisesResponse.data),
@@ -2968,7 +3001,12 @@ export function useWorkoutLiveController() {
   };
 
   const ensureLiveWorkout = async () => {
-    if (!(workoutSessionId ?? liveActiveSession?.id ?? null)) {
+    const requestedSessionId =
+      cameraTarget?.sessionId ??
+      workoutSessionId ??
+      liveActiveSession?.id ??
+      null;
+    if (!requestedSessionId) {
       const startedSession = await startWorkoutSessionMutation.mutateAsync({
         input: {
           ...(preferredPlan?.id ? { planId: preferredPlan.id } : {}),
@@ -2976,6 +3014,8 @@ export function useWorkoutLiveController() {
         userId: user?.id,
       });
       setWorkoutSessionId(startedSession.id);
+    } else if (workoutSessionId !== requestedSessionId) {
+      setWorkoutSessionId(requestedSessionId);
     }
 
     let nextPoseSessionId = poseSessionId;
@@ -3066,7 +3106,7 @@ export function useWorkoutLiveController() {
     resetPoseTrackingBuffers();
 
     try {
-      let finalizedReps = reps;
+      let finalizedReps = liveRepCountRef.current;
       let finalizedLoadInputKg: number | null = null;
       let finalizedDetectedExerciseName =
         detectedExerciseName ?? confirmedExerciseLabelRef.current ?? null;
@@ -3186,7 +3226,11 @@ export function useWorkoutLiveController() {
         }
       }
 
-      const activeWorkoutId = workoutSessionId ?? liveActiveSession?.id ?? null;
+      const activeWorkoutId =
+        cameraTarget?.sessionId ??
+        workoutSessionId ??
+        liveActiveSession?.id ??
+        null;
       const finalizedTrackingLabel =
         confirmedExerciseLabelRef.current ??
         movementContractRef.current?.exercise ??
@@ -3206,7 +3250,12 @@ export function useWorkoutLiveController() {
           exercisesResponse.data,
           confirmedExerciseLabelRef.current,
         );
-      const loggedExercise = detectedExerciseMatch ?? selectedExercise;
+      const loggedExercise = cameraTarget
+        ? {
+            exerciseId: cameraTarget.exerciseId,
+            label: cameraTarget.exerciseName,
+          }
+        : detectedExerciseMatch ?? selectedExercise;
       if (activeWorkoutId && loggedExercise) {
         const loggedExerciseContext = inferExerciseEquipmentContext(
           finalizedTrackingLabel ?? loggedExercise.label,
@@ -3223,12 +3272,12 @@ export function useWorkoutLiveController() {
             ...(poseSessionId ? { poseSessionId } : {}),
             ...(finalizedReps > 0 ? { repsCompleted: finalizedReps } : {}),
             ...(loggedWeightKg !== null ? { weightKg: loggedWeightKg } : {}),
-            setNumber: 1,
+            setNumber: cameraTarget?.setNumber ?? 1,
           },
         });
       }
 
-      if (activeWorkoutId) {
+      if (activeWorkoutId && cameraTarget?.completeWorkoutAfterSet) {
         await completeWorkoutSessionMutation.mutateAsync({
           sessionId: activeWorkoutId,
           userId: user?.id,
@@ -3260,15 +3309,43 @@ export function useWorkoutLiveController() {
       disposePoseAnalyzer();
       showMessage(
         loggedExercise
-          ? "Workout saved to the live fitness stack."
-          : "Workout session closed, but no exercise reference was available for set logging.",
+          ? cameraTarget
+            ? `Set ${cameraTarget.setNumber} completed. Rest ${cameraTarget.restSeconds}s before the next set.`
+            : "Workout saved to the live fitness stack."
+          : "The pose session ended, but no exercise reference was available for set logging.",
       );
+      if (cameraTarget) {
+        onCameraSetCompleted?.(cameraTarget);
+      }
     } catch {
       showMessage("Failed to finish live workout.");
     } finally {
       setIsFinishing(false);
     }
   };
+
+  autoFinalizeSetRef.current = () => {
+    if (!cameraTarget || isFinishing) return;
+    const completionKey = `${cameraTarget.sessionId}:${cameraTarget.planExerciseId}:${cameraTarget.setNumber}`;
+    if (autoCompletionKeyRef.current === completionKey) return;
+    autoCompletionKeyRef.current = completionKey;
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    stopFrameLoop();
+    pause();
+    showMessage(
+      `${cameraTarget.targetReps} reps reached. Saving set ${cameraTarget.setNumber}...`,
+    );
+    void handleFinishConfirm();
+  };
+
+  useEffect(() => {
+    autoCompletionKeyRef.current = null;
+  }, [
+    cameraTarget?.planExerciseId,
+    cameraTarget?.sessionId,
+    cameraTarget?.setNumber,
+  ]);
 
   const handleFinishCancel = () => {
     if (isFinishing) return;

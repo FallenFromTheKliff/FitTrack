@@ -103,6 +103,7 @@ export class AuthService {
     );
 
     const user = await this.repo.createUserWithProfile({
+      acceptedPrivacyAt: new Date(),
       role: UserRole.member,
       status: UserStatus.pending,
       email,

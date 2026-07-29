@@ -53,6 +53,16 @@ Use this skill to prove a FitTrack route works in the browser, find objective ru
 10. Produce an evidence summary.
    - Include route, runtime source, role/account source if used, viewport(s), primary path clicked, gaps found by taxonomy, fixes made, residual risks, and artifacts/screenshots/log observations.
 
+## UI Evidence Contract
+
+- For user-visible workflow changes, load the canonical UI enforcement contract from `Research/Design/UI-UX-Enforcement/mechanical-enforcement-contract.md` through Obsidian when the vault is available.
+- Bind every required proof to route, role, viewport, data fixture, UI state, overlay, and revision. A route screenshot without this metadata is partial evidence.
+- Derive an impact-based matrix that includes relevant tabs, overlays, loading/empty/error/success states, disabled or permission-limited states, dense data, long text, and narrow/intermediate/full-width layouts.
+- Treat stale actions, broken journeys, overlap, clipping, uncontrolled overflow, unreachable controls, missing scroll ownership, broken modal focus behavior, critical runtime errors, and missing required evidence as hard blockers.
+- Screenshots prove appearance only. Pair them with snapshot-driven interaction, console/network checks when relevant, and explicit geometry or overflow inspection.
+- If the vault is unavailable, use the equivalent project-local contract and report that the durable standard could not be loaded.
+- Do not let an aesthetic critic or aggregate score waive a hard blocker.
+
 ## Tool Rules
 
 - Prefer Playwright MCP for page interaction because snapshots provide stable refs and accessibility structure.

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
-import { View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AppState, type AppStateStatus, View } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 import {
   Camera,
   runAtTargetFps,
@@ -137,9 +138,19 @@ export function NativeVisionPoseCamera({
   const equipmentSnapshotCaptureWarningShownRef = useRef(false);
   const equipmentSnapshotDeliveryWarningShownRef = useRef(false);
   const onEquipmentSnapshotRef = useRef(onEquipmentSnapshot);
+  const isFocused = useIsFocused();
+  const [appState, setAppState] = useState<AppStateStatus>(
+    AppState.currentState,
+  );
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(cameraFacing);
   const hasEquipmentSnapshotHandler = !!onEquipmentSnapshot;
+  const cameraShouldRun = isActive && isFocused && appState === "active";
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", setAppState);
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     onEquipmentSnapshotRef.current = onEquipmentSnapshot;
@@ -152,7 +163,11 @@ export function NativeVisionPoseCamera({
   }, [hasPermission, requestPermission]);
 
   useEffect(() => {
-    if (!equipmentSnapshotActive || !isActive || !hasEquipmentSnapshotHandler) {
+    if (
+      !equipmentSnapshotActive ||
+      !cameraShouldRun ||
+      !hasEquipmentSnapshotHandler
+    ) {
       return undefined;
     }
 
@@ -220,7 +235,7 @@ export function NativeVisionPoseCamera({
     cameraFacing,
     equipmentSnapshotActive,
     hasEquipmentSnapshotHandler,
-    isActive,
+    cameraShouldRun,
   ]);
 
   const emitPoseFrame = useMemo(
@@ -234,7 +249,7 @@ export function NativeVisionPoseCamera({
   const frameProcessor = useFrameProcessor(
     (frame) => {
       "worklet";
-      if (!isActive) return;
+      if (!cameraShouldRun) return;
 
       runAtTargetFps(TARGET_POSE_FPS, () => {
         "worklet";
@@ -259,7 +274,7 @@ export function NativeVisionPoseCamera({
         });
       });
     },
-    [cameraFacing, emitPoseFrame, isActive],
+    [cameraFacing, cameraShouldRun, emitPoseFrame],
   );
 
   if (!hasPermission || !device) {
@@ -272,7 +287,7 @@ export function NativeVisionPoseCamera({
       device={device}
       enableFpsGraph={false}
       frameProcessor={frameProcessor}
-      isActive={isActive}
+      isActive={cameraShouldRun}
       pixelFormat="yuv"
       preview
       resizeMode="cover"

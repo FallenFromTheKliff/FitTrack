@@ -25,6 +25,8 @@ Do not replace `$integration`. Route to `$integration` when the task is full-sta
    - Load only the selected downstream skill bodies before acting.
    - Use companion skills only when they add a distinct responsibility.
    - Keep this skill as coordinator; let the downstream skill own domain-specific procedure.
+   - For user-visible changes, select the relevant project design DNA and surface recipe, then activate the Broskie `core.ui-ux-change` recipe instead of relying on prose-only polish guidance.
+   - Treat missing, stale, draft, or `needs-review` DNA as a context-lock failure. Never promote generated design guidance to canonical without human approval.
 
 4. Choose execution mode.
    - `local-only`: default. The active agent does the work with selected skills.
@@ -51,6 +53,7 @@ Do not replace `$integration`. Route to `$integration` when the task is full-sta
 8. Verify.
    - Select verification from the touched surface: typecheck, lint, unit/integration tests, direct API checks, Swagger, Browser/Playwright, runtime health, or deployment log checks.
    - Use `$quality-assurance` for final bug sweeps or when evidence needs to be structured.
+   - For UI work, require an impact-based state matrix and hard-gate evidence as defined by `Research/Design/UI-UX-Enforcement/mechanical-enforcement-contract.md` in the Obsidian vault and validated by the Broskie UI enforcement CLI.
    - Report skipped verification honestly with the reason.
 
 ## Delegation Policy
@@ -94,6 +97,7 @@ Next recommended fix:
 - Use `$debugger` before patching tricky failures, repeated failed fixes, flaky tests, CI/local mismatches, or unclear runtime errors.
 - Use `$runtime-guardrails` before starting, stopping, killing, or diagnosing local stack processes, ports, blank local pages, or browser-tool confusion.
 - Use `browser-runtime-loop` when available for live local browser interaction loops; otherwise combine the Browser plugin with `$runtime-guardrails` and `$quality-assurance`.
+- Route subjective or route-wide UI work through a design plan before mutation; route objective UI closure through the evidence contract. Do not let a visual score override stale actions, overlap, clipping, missing states, broken overlays, or runtime errors.
 - Use `layout-wireframe-gate` when available for subjective or risky layout direction. Let it choose the cheapest honest approval artifact: no artifact for tiny polish, a layout delta packet for medium changes, screenshot or ASCII direction for high-risk composition, and static HTML only for major route/modal architecture or explicit preview requests.
 - Use `$railway-deployment` for Railway build, Dockerfile/Railpack/Nixpacks, healthcheck, production env, or deploy-log failures.
 - Use `$frontend` for web/mobile implementation and data wiring inside frontend ownership.

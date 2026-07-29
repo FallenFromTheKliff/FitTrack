@@ -30,7 +30,6 @@ import {
   Sparkles,
   Target,
   Trophy,
-  Upload,
   Users,
   XCircle,
 } from "lucide-react";
@@ -150,28 +149,6 @@ const TRIGGER_OPTIONS: Array<{
   { label: "Streak", value: "streak" },
   { label: "Manual", value: "manual" },
   { label: "Composite", value: "composite" },
-];
-
-const VERIFICATION_OPTIONS: Array<{
-  label: string;
-  value: FitnessMilestoneVerificationPolicy | "all";
-}> = [
-  { label: "All verification", value: "all" },
-  { label: "Automatic", value: "auto" },
-  { label: "Manual required", value: "manual_required" },
-  { label: "Auto then review", value: "auto_then_review" },
-  { label: "Staff attested", value: "staff_attested" },
-];
-
-const EVIDENCE_OPTIONS: Array<{
-  label: string;
-  value: FitnessMilestoneEvidenceRequirement | "all";
-}> = [
-  { label: "All evidence", value: "all" },
-  { label: "None", value: "none" },
-  { label: "Image", value: "image" },
-  { label: "Video", value: "video" },
-  { label: "Image or video", value: "image_or_video" },
 ];
 
 const EVIDENCE_STATUS_OPTIONS: Array<{
@@ -326,26 +303,6 @@ const RULE_TYPE_OPTIONS: Array<{
   { label: "Keep a streak", value: "streak" },
   { label: "Staff marks it done", value: "manual" },
   { label: "Advanced combo", value: "composite" },
-];
-
-const REVIEW_POLICY_OPTIONS: Array<{
-  label: string;
-  value: FitnessMilestoneVerificationPolicy;
-}> = [
-  { label: "Unlock automatically", value: "auto" },
-  { label: "Needs staff approval", value: "manual_required" },
-  { label: "Unlock, then review", value: "auto_then_review" },
-  { label: "Staff confirms in person", value: "staff_attested" },
-];
-
-const PROOF_OPTIONS: Array<{
-  label: string;
-  value: FitnessMilestoneEvidenceRequirement;
-}> = [
-  { label: "No proof", value: "none" },
-  { label: "Photo", value: "image" },
-  { label: "Video", value: "video" },
-  { label: "Photo or video", value: "image_or_video" },
 ];
 
 const STATUS_TONES: Record<string, string> = {
@@ -606,7 +563,7 @@ function buildPayload(draft: DefinitionDraft): UpsertAdminMilestoneDefinitionInp
     conditionPayload,
     description: draft.description.trim() || null,
     endsAt: draft.endsAt || null,
-    evidenceRequirement: draft.evidenceRequirement,
+    evidenceRequirement: "none",
     isHidden: draft.isHidden,
     key: draft.key.trim() || slugifyMilestoneKey(draft.title),
     rewardPayload,
@@ -615,7 +572,7 @@ function buildPayload(draft: DefinitionDraft): UpsertAdminMilestoneDefinitionInp
     status: draft.status,
     title: draft.title.trim(),
     triggerType: draft.triggerType,
-    verificationPolicy: draft.verificationPolicy,
+    verificationPolicy: "auto",
   };
 }
 
@@ -750,13 +707,6 @@ export default function MilestonesPage() {
 
   const definitionRows = definitions;
   const activeCount = definitions.filter((item) => item.status === "active").length;
-  const pendingDefinitionCount = definitions.reduce(
-    (total, item) => total + item.pendingReviewCount,
-    0,
-  );
-  const proofRequiredCount = definitions.filter(
-    (item) => item.evidenceRequirement !== "none",
-  ).length;
   const archivedCount = definitions.filter((item) => item.status === "archived").length;
 
   const openCreateModal = () => {
@@ -983,20 +933,16 @@ export default function MilestonesPage() {
             Management workspace
           </FitText>
           <FitText style={{ color: colors.textSecondary, marginTop: 2, fontSize: 13 }}>
-            Rules, proof queue, and coverage checks.
+            Automatic achievement rules, rewards, and coverage checks.
           </FitText>
         </div>
         <div className="milestones-command-actions">
-          <FitText style={{ color: colors.success, fontSize: 12, fontWeight: 800 }}>
-            Synced now
-          </FitText>
           <FitPill
             mode="toggle"
             active={tab}
             onChange={(key) => setTab(key as ManagementTab)}
             options={[
               { key: "rules", label: "Rules", icon: ListFilter },
-              { key: "evidence", label: "Evidence", icon: ClipboardCheck },
               { key: "insights", label: "Insights", icon: Grid2X2 },
             ]}
           />
@@ -1018,16 +964,16 @@ export default function MilestonesPage() {
         />
         <MetricCard
           icon={ShieldCheck}
-          label="Need proof"
-          value={String(proofRequiredCount)}
-          hint="Photo or MP4"
+          label="Auto evaluated"
+          value={String(definitions.length)}
+          hint="No proof"
           tone={colors.warning}
         />
         <MetricCard
           icon={ClipboardCheck}
-          label="Pending decisions"
-          value={String(pendingDefinitionCount)}
-          hint="Needs action"
+          label="Integrity policy"
+          value="Advisory"
+          hint="Non-blocking"
           tone={colors.success}
         />
         <MetricCard
@@ -1107,26 +1053,6 @@ export default function MilestonesPage() {
                     )
                   }
                 />
-                <FitSelect
-                  compact
-                  options={VERIFICATION_OPTIONS}
-                  value={definitionVerification}
-                  onChange={(event) =>
-                    setDefinitionVerification(
-                      event.target.value as AdminMilestoneDefinitionListParams["verificationPolicy"],
-                    )
-                  }
-                />
-                <FitSelect
-                  compact
-                  options={EVIDENCE_OPTIONS}
-                  value={definitionEvidence}
-                  onChange={(event) =>
-                    setDefinitionEvidence(
-                      event.target.value as AdminMilestoneDefinitionListParams["evidenceRequirement"],
-                    )
-                  }
-                />
               </div>
             </div>
             <RuleLibrary
@@ -1145,7 +1071,10 @@ export default function MilestonesPage() {
               </FitText>
               <FitPagination
                 currentPage={definitionsQuery.data?.meta.page ?? definitionPage}
-                totalPages={definitionsQuery.data?.meta.total_pages ?? 1}
+                totalPages={Math.max(
+                  1,
+                  definitionsQuery.data?.meta.total_pages ?? 1,
+                )}
                 onPageChange={setDefinitionPage}
                 showSinglePage
               />
@@ -1209,7 +1138,10 @@ export default function MilestonesPage() {
               </FitText>
               <FitPagination
                 currentPage={evidenceQuery.data?.meta.page ?? evidencePage}
-                totalPages={evidenceQuery.data?.meta.total_pages ?? 1}
+                totalPages={Math.max(
+                  1,
+                  evidenceQuery.data?.meta.total_pages ?? 1,
+                )}
                 onPageChange={setEvidencePage}
                 showSinglePage
               />
@@ -1228,9 +1160,7 @@ export default function MilestonesPage() {
       ) : (
         <MilestoneInsightsPanel
           definitions={definitions}
-          evidenceRecords={evidenceRecords}
           onCreate={openCreateModal}
-          onShowEvidence={() => setTab("evidence")}
         />
       )}
 
@@ -1238,7 +1168,7 @@ export default function MilestonesPage() {
         isOpen={isDefinitionModalOpen}
         onClose={closeDefinitionModal}
         title={editingDefinition ? "Edit milestone" : "Create milestone"}
-        subtitle="Set the goal first. Proof, reward, and review follow after."
+        subtitle="Set the goal and reward. Progress unlocks automatically from member activity."
         icon={Medal}
         maxWidth={860}
         containerStyle={{ maxHeight: "calc(100dvh - 72px)" }}
@@ -1305,8 +1235,8 @@ export default function MilestonesPage() {
               Stop new unlocks but keep history
             </FitText>
             <FitText style={{ display: "block", marginTop: 6, color: colors.textSecondary, fontSize: 13, lineHeight: 1.5 }}>
-              Existing member history and proof records stay intact. This rule leaves the active
-              library and can be restored later from the archived filter.
+              Existing member history stays intact. This rule leaves the active library and can
+              be restored later from the archived filter.
             </FitText>
           </div>
         </div>
@@ -1896,7 +1826,7 @@ function DefinitionInspector({
     return (
       <FitSection className="milestones-inspector-section" heading="Inspector">
         <FitText style={{ color: colors.textSecondary }}>
-          Select a milestone to inspect its rule, evidence policy, and lifecycle.
+          Select a milestone to inspect its automatic rule, reward, and lifecycle.
         </FitText>
       </FitSection>
     );
@@ -1968,7 +1898,7 @@ function DefinitionInspector({
                 color={STATUS_TONES[record.status] ?? colors.brand}
               />
               <FitText style={{ marginLeft: 8, fontSize: 11, color: colors.textSecondary }}>
-                {record.unlockedCount.toLocaleString()} unlocked / {record.pendingReviewCount.toLocaleString()} pending
+                {record.unlockedCount.toLocaleString()} unlocked / automatically evaluated
               </FitText>
             </div>
           </div>
@@ -1979,11 +1909,11 @@ function DefinitionInspector({
           <InspectorFact label="Trigger" value={formatLabel(record.triggerType)} />
           <InspectorFact
             label="Verification"
-            value={formatLabel(record.verificationPolicy)}
+            value="Automatic"
           />
           <InspectorFact
             label="Evidence"
-            value={formatLabel(record.evidenceRequirement)}
+            value="Not required"
           />
         </div>
 
@@ -2036,7 +1966,7 @@ function DefinitionInspector({
               Rule key: {record.key}
             </FitText>
             <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-              Generated from metric, target, reward, and proof settings. Use edit only when changing the rule.
+              Generated from the metric, target, and reward settings. Use edit only when changing the rule.
             </FitText>
           </div>
         </details>
@@ -2194,14 +2124,10 @@ function InspectorFact({ label, value }: { label: string; value: string }) {
 
 function MilestoneInsightsPanel({
   definitions,
-  evidenceRecords,
   onCreate,
-  onShowEvidence,
 }: {
   definitions: AdminMilestoneDefinitionRecord[];
-  evidenceRecords: FitnessMilestoneEvidenceSubmissionRecord[];
   onCreate: () => void;
-  onShowEvidence: () => void;
 }) {
   const { colors } = useTheme();
   const categoryCoverage = CATEGORY_OPTIONS.filter((option) => option.value !== "all").map(
@@ -2210,9 +2136,10 @@ function MilestoneInsightsPanel({
       count: definitions.filter((definition) => definition.category === option.value).length,
     }),
   );
-  const manualRules = definitions.filter((definition) => definition.verificationPolicy !== "auto").length;
-  const proofRules = definitions.filter((definition) => definition.evidenceRequirement !== "none").length;
-  const pendingProof = evidenceRecords.filter((record) => record.status === "pending").length;
+  const automaticRules = definitions.filter(
+    (definition) => definition.verificationPolicy === "auto",
+  ).length;
+  const coveredCategories = categoryCoverage.filter((item) => item.count > 0).length;
 
   return (
     <section className="milestones-insights-shell">
@@ -2227,7 +2154,6 @@ function MilestoneInsightsPanel({
           </FitText>
         </div>
         <div className="milestones-insights-actions">
-          <FitButton label="Review proof" icon={ClipboardCheck} variant="ghost" onClick={onShowEvidence} />
           <FitButton label="Create milestone" icon={Plus} onClick={onCreate} />
         </div>
       </div>
@@ -2242,24 +2168,24 @@ function MilestoneInsightsPanel({
         />
         <MetricCard
           icon={ShieldCheck}
-          label="Manual review"
-          value={String(manualRules)}
-          hint="staff governed"
-          tone={colors.warning}
-        />
-        <MetricCard
-          icon={Upload}
-          label="Proof rules"
-          value={String(proofRules)}
-          hint="media or attestation"
+          label="Automatic rules"
+          value={String(automaticRules)}
+          hint="evaluated from activity"
           tone={colors.success}
         />
         <MetricCard
-          icon={ClipboardCheck}
-          label="Pending proof"
-          value={String(pendingProof)}
-          hint="awaiting decision"
-          tone={pendingProof ? colors.warning : colors.textSecondary}
+          icon={Sparkles}
+          label="Coverage areas"
+          value={String(coveredCategories)}
+          hint="active rule categories"
+          tone={colors.brand}
+        />
+        <MetricCard
+          icon={Bot}
+          label="Integrity policy"
+          value="Advisory"
+          hint="warns without blocking"
+          tone={colors.textSecondary}
         />
       </div>
 
@@ -2287,11 +2213,11 @@ function MilestoneInsightsPanel({
             </div>
             <div>
               <ShieldCheck size={18} color={colors.success} />
-              <span>Require proof for heavy lifts, staff-attested wins, or high-value rewards.</span>
+              <span>Unlock achieved milestones automatically from validated member activity.</span>
             </div>
             <div>
-              <Upload size={18} color={colors.warning} />
-              <span>Keep MP4 evidence under 15 MiB through the R2 upload path.</span>
+              <Sparkles size={18} color={colors.warning} />
+              <span>Show suspicious workout records as advisories without blocking earned rewards.</span>
             </div>
             <div>
               <Bot size={18} color={colors.brand} />
@@ -2429,7 +2355,6 @@ function EvidenceInspector({
   const canReview = record.status === "pending";
   const hasUsableEvidenceUrl = !isPlaceholderEvidenceUrl(record.fileUrl);
   const mediaContent = record.evidenceType === "image" && hasUsableEvidenceUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
     <img src={record.fileUrl} alt={`${record.milestoneTitle ?? "Milestone"} proof`} />
   ) : (
     <div className="evidence-video-placeholder">
@@ -2610,9 +2535,6 @@ function DefinitionForm({
   const { colors } = useTheme();
   const selectedMetric = getMetricOption(draft.metric);
   const usesAdvancedRule = draft.triggerType === "composite";
-  const proofOptions = PROOF_OPTIONS.filter(
-    (option) => draft.verificationPolicy === "auto" || option.value !== "none",
-  );
   const previewCondition = usesAdvancedRule
     ? "Custom combo rule. Review Advanced options before saving."
     : describeCondition(buildSimpleCondition(draft));
@@ -2620,14 +2542,7 @@ function DefinitionForm({
     ? "Custom reward details."
     : describeReward(buildRewardPayload(draft));
   const goalReady = draft.title.trim().length > 0 && parsePositiveNumber(draft.target, 0) > 0;
-  const proofReady = goalReady;
-  const rewardReady = proofReady;
-  const selectedProofLabel =
-    proofOptions.find((option) => option.value === draft.evidenceRequirement)?.label ??
-    formatLabel(draft.evidenceRequirement);
-  const selectedReviewLabel =
-    REVIEW_POLICY_OPTIONS.find((option) => option.value === draft.verificationPolicy)?.label ??
-    formatLabel(draft.verificationPolicy);
+  const rewardReady = goalReady;
 
   const commitDraft = (nextDraft: DefinitionDraft) => {
     let next = { ...nextDraft };
@@ -2659,19 +2574,6 @@ function DefinitionForm({
     });
   };
 
-  const updateVerification = (value: FitnessMilestoneVerificationPolicy) => {
-    commitDraft({
-      ...draft,
-      evidenceRequirement:
-        value === "auto"
-          ? "none"
-          : draft.evidenceRequirement === "none"
-            ? "image_or_video"
-            : draft.evidenceRequirement,
-      verificationPolicy: value,
-    });
-  };
-
   const toggleAdvanced = () => {
     const nextAdvancedOpen = !draft.advancedOpen;
     commitDraft({
@@ -2699,9 +2601,8 @@ function DefinitionForm({
 
       <div className="milestone-form-steps" aria-label="Milestone setup steps">
         <span className="active"><b>1</b> Goal</span>
-        <span className={goalReady ? "active" : ""}><b>2</b> Proof</span>
-        <span className={proofReady ? "active" : ""}><b>3</b> Reward</span>
-        <span className={rewardReady ? "active" : ""}><b>4</b> Review</span>
+        <span className={goalReady ? "active" : ""}><b>2</b> Reward</span>
+        <span className={rewardReady ? "active" : ""}><b>3</b> Review</span>
       </div>
 
       <section className="milestone-form-section milestone-form-section--highlight">
@@ -2826,55 +2727,7 @@ function DefinitionForm({
         </div>
       </section>
 
-      {goalReady ? (
-        <section className="milestone-form-section">
-          <div className="milestone-section-heading">
-            <div className="milestone-section-icon milestone-section-icon--subtle">
-              <ShieldCheck size={17} color={colors.warning} />
-            </div>
-            <div>
-              <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
-                Proof
-              </FitText>
-              <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                Choose whether this unlocks automatically or waits for staff review.
-              </FitText>
-            </div>
-          </div>
-          <div className="milestone-form-grid">
-            <Field label="Who checks it?">
-              <FitSelect
-                fullWidth
-                options={REVIEW_POLICY_OPTIONS}
-                value={draft.verificationPolicy}
-                onChange={(event) =>
-                  updateVerification(event.target.value as FitnessMilestoneVerificationPolicy)
-                }
-              />
-            </Field>
-            <Field label="Proof required">
-              <FitSelect
-                fullWidth
-                options={proofOptions}
-                value={draft.evidenceRequirement}
-                onChange={(event) =>
-                  update(
-                    "evidenceRequirement",
-                    event.target.value as FitnessMilestoneEvidenceRequirement,
-                  )
-                }
-              />
-            </Field>
-          </div>
-          <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary }}>
-            Manual proof supports JPEG, PNG, or MP4. MP4 evidence is capped at 15 MiB through the R2 upload path.
-          </FitText>
-        </section>
-      ) : (
-        <LockedStage title="Proof" text="Add a title and valid goal number first." />
-      )}
-
-      {proofReady ? (
+      {rewardReady ? (
         <section className="milestone-form-section">
           <div className="milestone-section-heading">
             <div className="milestone-section-icon milestone-section-icon--subtle">
@@ -2927,7 +2780,7 @@ function DefinitionForm({
             {previewCondition}
           </FitText>
           <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-            {selectedReviewLabel} / {selectedProofLabel} / {previewReward}
+            Automatic unlock / No proof required / {previewReward}
           </FitText>
         </section>
       ) : null}
@@ -3243,26 +3096,6 @@ function DefinitionForm({
         }
       `}</style>
     </div>
-  );
-}
-
-function LockedStage({ text, title }: { text: string; title: string }) {
-  const { colors } = useTheme();
-  return (
-    <section
-      className="milestone-form-section milestone-form-section--locked"
-      style={{
-        border: `1px dashed ${colors.border}`,
-        background: colors.surface,
-      }}
-    >
-      <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
-        {title}
-      </FitText>
-      <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-        {text}
-      </FitText>
-    </section>
   );
 }
 

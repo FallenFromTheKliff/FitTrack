@@ -19,6 +19,7 @@ import { ExerciseService } from '../fitness/exercise/exercise.service';
 import { TrainingPlanDetailResponseDTO } from '../fitness/training-plan/dto/training-plan.dto';
 import type { TrainingPlanScheduleDayWriteInput } from '../fitness/training-plan/training-plan.repository';
 import { TrainingPlanService } from '../fitness/training-plan/training-plan.service';
+import { WorkoutSessionService } from '../fitness/session/session.service';
 import {
   ActiveTdeeResponseDTO,
   LogNutritionDTO,
@@ -166,6 +167,7 @@ export class AiService {
     private readonly userService: UserService,
     private readonly exerciseService: ExerciseService,
     private readonly trainingPlanService: TrainingPlanService,
+    private readonly workoutSessionService: WorkoutSessionService,
     private readonly nutritionService: NutritionService,
     private readonly aiClient: AiPythonClientService,
     private readonly eventEmitter: EventEmitter2,
@@ -353,6 +355,8 @@ export class AiService {
     const userContext = this.buildRequiredUserContext(userAggregate);
     const allowedExercises =
       await this.exerciseService.listActiveExercisesForGeneration();
+    const recentExerciseHistory =
+      await this.workoutSessionService.getRecentExerciseHistorySummary(userId);
 
     await this.aiClient.assertHealthy();
 
@@ -360,6 +364,7 @@ export class AiService {
       userContext,
       dto,
       allowedExercises,
+      recentExerciseHistory,
     );
     const promptBlueprint = this.buildPlanPromptBlueprint(
       userContext,
@@ -424,6 +429,7 @@ export class AiService {
     userContext: RequiredUserContext,
     dto: GeneratePlanDTO,
     allowedExercises: ActiveExerciseGenerationRecord[],
+    recentExerciseHistory: string | null,
   ): GeneratePlanInput {
     return {
       userContext: {
@@ -437,7 +443,11 @@ export class AiService {
       planInput: {
         duration_weeks: dto.duration_weeks,
         days_per_week: dto.days_per_week,
-        preferences: dto.preferences ?? null,
+        preferences: [dto.preferences?.trim(), recentExerciseHistory
+          ? `Use this recent workout history to calibrate exercise selection and volume: ${recentExerciseHistory}`
+          : null]
+          .filter(Boolean)
+          .join('\n') || null,
       },
       allowedExercises: allowedExercises.map((exercise) => ({
         name: exercise.name,

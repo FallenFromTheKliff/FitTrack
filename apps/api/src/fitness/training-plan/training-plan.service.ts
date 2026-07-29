@@ -13,6 +13,7 @@ import {
   CreateTrainingPlanDTO,
   TrainingPlanDetailResponseDTO,
   TrainingPlanExerciseResponseDTO,
+  TrainingProgressionSuggestionResponseDTO,
   TrainingPlanScheduleDayResponseDTO,
   TrainingPlanSummaryResponseDTO,
 } from './dto/training-plan.dto';
@@ -53,6 +54,22 @@ export class TrainingPlanService {
     };
   }
 
+  async listClientPlans(
+    coachUserId: string,
+    memberId: string,
+    dto: PaginationDTO,
+  ): Promise<PaginatedResult<TrainingPlanSummaryResponseDTO>> {
+    await this.relationshipService.assertActiveClientRelationship(
+      coachUserId,
+      memberId,
+    );
+    const result = await this.repo.listOwnedPlans(memberId, dto);
+    return {
+      data: result.data.map((plan) => this.toSummaryResponse(plan)),
+      meta: result.meta,
+    };
+  }
+
   async getPlanById(
     userId: string,
     planId: string,
@@ -64,7 +81,7 @@ export class TrainingPlanService {
 
   async createPlan(
     userId: string,
-    userRole: UserRole,
+    _userRole: UserRole,
     dto: CreateTrainingPlanDTO,
   ): Promise<TrainingPlanDetailResponseDTO> {
     this.assertScheduleConsistency(dto);
@@ -85,6 +102,107 @@ export class TrainingPlanService {
     return this.toDetailResponse(created);
   }
 
+  async updatePlan(
+    userId: string,
+    _userRole: UserRole,
+    planId: string,
+    dto: CreateTrainingPlanDTO,
+  ): Promise<TrainingPlanDetailResponseDTO> {
+    const plan = await this.repo.findPlanByIdOrThrow(planId);
+    this.assertPlanOwner(plan, userId);
+    this.assertPlanIsOwnerMutable(plan);
+
+    this.assertScheduleConsistency(dto);
+    await this.assertExercisesExist(dto);
+    const updated = await this.repo.updatePlan(planId, {
+      userId: plan.user_id,
+      coachUserId: plan.coach_id,
+      source: plan.source,
+      title: dto.title,
+      goal: dto.goal,
+      durationWeeks: dto.duration_weeks,
+      daysPerWeek: dto.days_per_week,
+      isTemplate: plan.is_template,
+      isActive: plan.is_active,
+      schedule: this.toScheduleWriteInput(dto.schedule),
+    });
+    return this.toDetailResponse(updated);
+  }
+
+  async getProgressionSuggestions(
+    userId: string,
+    planId: string,
+  ): Promise<TrainingProgressionSuggestionResponseDTO[]> {
+    const plan = await this.repo.findPlanByIdOrThrow(planId);
+    this.assertPlanOwner(plan, userId);
+    const exercises = plan.schedule_days.flatMap((day) => day.exercises);
+    const logs = await this.repo.listRecentCompletedLogs(
+      userId,
+      [...new Set(exercises.map((exercise) => exercise.exercise_id))],
+    );
+
+    return exercises.map((exercise) => {
+      const recent = logs
+        .filter((log) => log.exercise_id === exercise.exercise_id)
+        .slice(0, 6);
+      const prescribedReps = exercise.reps ?? null;
+      const latestWeight = recent.find((log) => log.weight_kg != null)
+        ?.weight_kg?.toNumber() ?? exercise.weight_kg_target?.toNumber() ?? null;
+      const completedReps = recent
+        .map((log) => log.reps_completed)
+        .filter((value): value is number => value != null);
+      const hitTarget =
+        prescribedReps != null &&
+        completedReps.length >= 3 &&
+        completedReps.slice(0, 3).every((value) => value >= prescribedReps);
+
+      if (hitTarget && latestWeight != null && latestWeight > 0) {
+        return {
+          plan_exercise_id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise.name,
+          action: 'increase_load' as const,
+          suggested_reps: prescribedReps,
+          suggested_weight_kg: Math.round(latestWeight * 1.025 * 2) / 2,
+          confidence: recent.length >= 6 ? ('high' as const) : ('medium' as const),
+          rationale:
+            'Recent completed sets met the prescribed rep target. Add a small load increase and keep the same reps.',
+          source_revision: 'history-rule-v1' as const,
+        };
+      }
+
+      if (hitTarget && prescribedReps != null) {
+        return {
+          plan_exercise_id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise.name,
+          action: 'increase_reps' as const,
+          suggested_reps: prescribedReps + 1,
+          suggested_weight_kg: latestWeight,
+          confidence: 'medium' as const,
+          rationale:
+            'Recent completed sets met the prescribed rep target. Add one rep before increasing load.',
+          source_revision: 'history-rule-v1' as const,
+        };
+      }
+
+      return {
+        plan_exercise_id: exercise.id,
+        exercise_id: exercise.exercise_id,
+        exercise_name: exercise.exercise.name,
+        action: 'maintain' as const,
+        suggested_reps: prescribedReps,
+        suggested_weight_kg: latestWeight,
+        confidence: recent.length > 0 ? ('medium' as const) : ('low' as const),
+        rationale:
+          recent.length > 0
+            ? 'Keep the current target until several recent sets consistently meet the prescribed reps.'
+            : 'No completed history is available yet. Start with the prescribed target and reassess after a few sessions.',
+        source_revision: 'history-rule-v1' as const,
+      };
+    });
+  }
+
   async createAiGeneratedPlan(
     userId: string,
     input: CreateAiGeneratedTrainingPlanInput,
@@ -98,15 +216,17 @@ export class TrainingPlanService {
       this.extractUniqueExerciseIds(input.schedule),
     );
 
-    const created = await this.repo.replaceActivePlan({
+    const activeCoachUserId =
+      await this.relationshipService.getActiveCoachUserId(userId);
+    const created = await this.repo.createPlan({
       userId,
-      coachUserId: null,
+      coachUserId: activeCoachUserId,
       source: PlanSource.ai_generated,
       title: input.title,
       goal: input.goal,
       durationWeeks: input.durationWeeks,
       daysPerWeek: input.daysPerWeek,
-      isActive: true,
+      isActive: false,
       isTemplate: false,
       aiGenerationPrompt: input.aiGenerationPrompt,
       schedule: input.schedule,
@@ -118,7 +238,44 @@ export class TrainingPlanService {
   async deletePlan(userId: string, planId: string): Promise<void> {
     const plan = await this.repo.findPlanByIdOrThrow(planId);
     this.assertPlanOwner(plan, userId);
+    this.assertPlanIsOwnerMutable(plan);
     await this.repo.deletePlanById(planId);
+  }
+
+  async activatePlan(
+    userId: string,
+    planId: string,
+  ): Promise<TrainingPlanDetailResponseDTO> {
+    const plan = await this.repo.findPlanByIdOrThrow(planId);
+    const isOwner = plan.user_id === userId;
+    const isManagingCoach = plan.coach_id === userId;
+    if (!isOwner && !isManagingCoach) {
+      this.assertPlanOwner(plan, userId);
+    }
+
+    if (
+      isOwner &&
+      plan.source === PlanSource.ai_generated &&
+      plan.coach_id
+    ) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Coach Approval Required',
+        status: 403,
+        detail:
+          'This AI suggestion is a draft for your coach to review before it can become active.',
+      });
+    }
+
+    if (plan.is_template) {
+      throw this.buildValidationException(
+        'Template Plan Cannot Be Activated',
+        'Only member-owned workout split presets can be selected for tracking.',
+      );
+    }
+
+    const activated = await this.repo.activateOwnedPlan(plan.user_id, planId);
+    return this.toDetailResponse(activated);
   }
 
   async assignPlan(
@@ -134,7 +291,7 @@ export class TrainingPlanService {
       memberId,
     );
 
-    const assignedPlan = await this.repo.createPlan({
+    const assignedPlan = await this.repo.replaceActivePlan({
       userId: memberId,
       coachUserId,
       source: PlanSource.coach_assigned,
@@ -188,6 +345,20 @@ export class TrainingPlanService {
         title: 'Training Plan Assignment Forbidden',
         status: 403,
         detail: 'Coaches can only assign training plans that they own.',
+      });
+    }
+  }
+
+  private assertPlanIsOwnerMutable(
+    plan: Pick<TrainingPlanDetailRecord, 'source' | 'coach_id'>,
+  ): void {
+    if (plan.source === PlanSource.coach_assigned && plan.coach_id) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Coach Assigned Plan Locked',
+        status: 403,
+        detail:
+          'Coach-assigned workout splits can be selected, but only the assigning coach can change or remove them.',
       });
     }
   }

@@ -23,6 +23,7 @@ import {
 import {
   IsEnum,
   IsBoolean,
+  IsDateString,
   IsObject,
   IsInt,
   IsIn,
@@ -55,6 +56,20 @@ export class MasteryFilterDTO {
     message: `rank must be one of: ${Object.values(MasteryRank).join(', ')}`,
   })
   rank?: MasteryRank;
+}
+
+export class AdminManualExpMemberFilterDTO {
+  @ApiPropertyOptional({
+    description: 'Member name or email. Results are limited to eligible members.',
+    example: 'seed.member.active',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(100, {
+    message: 'search must not exceed 100 characters',
+  })
+  search?: string;
 }
 
 export class MuscleMasteryResponseDTO {
@@ -1103,6 +1118,88 @@ export class AdminSeasonStatusDTO {
   rationale: string;
 }
 
+export class AdminSeasonCreateDTO {
+  @ApiProperty({ example: 'Season 2: Strength Cycle' })
+  @TrimString()
+  @IsString({ message: 'title must be a string' })
+  @MinLength(3, { message: 'title must be at least 3 characters' })
+  @MaxLength(120, { message: 'title must not exceed 120 characters' })
+  title: string;
+
+  @ApiPropertyOptional({
+    example: 'A time-bounded competitive season.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  @MaxLength(500, { message: 'description must not exceed 500 characters' })
+  description?: string | null;
+
+  @ApiPropertyOptional({ example: 'season-rules-v1' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'rules_version must be a string' })
+  @MaxLength(100, {
+    message: 'rules_version must not exceed 100 characters',
+  })
+  rules_version?: string;
+
+  @ApiProperty({ example: '2026-08-01T00:00:00.000Z' })
+  @IsDateString({}, { message: 'starts_at must be a valid ISO date string' })
+  starts_at: string;
+
+  @ApiProperty({ example: '2026-11-01T00:00:00.000Z' })
+  @IsDateString({}, { message: 'ends_at must be a valid ISO date string' })
+  ends_at: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean({ message: 'auto_start_next must be a boolean' })
+  auto_start_next?: boolean;
+}
+
+export class AdminSeasonUpdateDTO {
+  @ApiPropertyOptional({ example: 'Season 2: Strength Cycle' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'title must be a string' })
+  @MinLength(3, { message: 'title must be at least 3 characters' })
+  @MaxLength(120, { message: 'title must not exceed 120 characters' })
+  title?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'description must be a string' })
+  @MaxLength(500, { message: 'description must not exceed 500 characters' })
+  description?: string | null;
+
+  @ApiPropertyOptional({ example: 'season-rules-v1' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'rules_version must be a string' })
+  @MaxLength(100, {
+    message: 'rules_version must not exceed 100 characters',
+  })
+  rules_version?: string;
+
+  @ApiPropertyOptional({ example: '2026-08-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsDateString({}, { message: 'starts_at must be a valid ISO date string' })
+  starts_at?: string;
+
+  @ApiPropertyOptional({ example: '2026-11-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsDateString({}, { message: 'ends_at must be a valid ISO date string' })
+  ends_at?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean({ message: 'auto_start_next must be a boolean' })
+  auto_start_next?: boolean;
+}
+
 export class AdminCreatorStateDTO {
   @ApiProperty({
     enum: CreatorState,
@@ -1390,6 +1487,16 @@ export class AdminSeasonGovernanceResponseDTO {
   @ApiProperty({ enum: SeasonStatus, example: SeasonStatus.closed })
   status: SeasonStatus;
 
+  @ApiProperty({ example: false })
+  auto_start_next: boolean;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-04-01T00:00:00.000Z',
+    nullable: true,
+  })
+  activated_at: string | null;
+
   @ApiPropertyOptional({
     type: String,
     example: '2026-06-30T23:59:59.000Z',
@@ -1450,11 +1557,24 @@ export class AdminGamificationSeasonSummaryDTO {
   @ApiProperty({ enum: SeasonStatus, example: SeasonStatus.active })
   status: SeasonStatus;
 
+  @ApiProperty({ example: 'season-rules-v1' })
+  rules_version: string;
+
+  @ApiProperty({ example: false })
+  auto_start_next: boolean;
+
   @ApiProperty({ example: '2026-04-01T00:00:00.000Z' })
   starts_at: string;
 
   @ApiProperty({ example: '2026-06-30T23:59:59.000Z' })
   ends_at: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-04-01T00:00:00.000Z',
+    nullable: true,
+  })
+  activated_at: string | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -1481,6 +1601,134 @@ export class AdminGamificationSeasonSummaryDTO {
 }
 
 export class AdminGamificationSeasonListItemDTO extends AdminGamificationSeasonSummaryDTO {}
+
+export class MuscleLeaderboardFilterDTO extends PaginationDTO {
+  @ApiProperty({ enum: ['lifetime', 'season'], example: 'season' })
+  @IsIn(['lifetime', 'season'], {
+    message: 'scope must be either lifetime or season',
+  })
+  scope: 'lifetime' | 'season';
+
+  @ApiProperty({ example: 'chest' })
+  @TrimString()
+  @IsString({ message: 'muscle_key must be a string' })
+  @MaxLength(100, {
+    message: 'muscle_key must not exceed 100 characters',
+  })
+  muscle_key: string;
+
+  @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333' })
+  @IsOptional()
+  @IsUUID('4', { message: 'season_id must be a valid UUID' })
+  season_id?: string;
+}
+
+export class AdminMuscleLeaderboardFilterDTO extends MuscleLeaderboardFilterDTO {
+  @ApiPropertyOptional({ example: 'sera' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(100, {
+    message: 'search must not exceed 100 characters',
+  })
+  search?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean({ message: 'include_hidden must be a boolean' })
+  include_hidden?: boolean;
+}
+
+export class MuscleLeaderboardRowDTO {
+  @ApiProperty({ example: 1 })
+  rank_position: number;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  user_id: string;
+
+  @ApiProperty({ example: 'Fit Member' })
+  display_name: string;
+
+  @ApiProperty({ example: 'chest' })
+  muscle_key: string;
+
+  @ApiProperty({ enum: ['lifetime', 'season'], example: 'season' })
+  scope: 'lifetime' | 'season';
+
+  @ApiProperty({ example: 950 })
+  xp_points: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '33333333-3333-4333-8333-333333333333',
+    nullable: true,
+  })
+  season_id: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Spring 2026',
+    nullable: true,
+  })
+  season_title: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-04-23T09:30:00.000Z',
+    nullable: true,
+  })
+  last_earned_at: string | null;
+
+  @ApiPropertyOptional({ example: true })
+  is_current_user?: boolean;
+}
+
+export class SeasonTopPerformerDTO {
+  @ApiProperty({ example: 1 })
+  rank_position: number;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  user_id: string;
+
+  @ApiProperty({ example: 'Fit Member' })
+  display_name: string;
+
+  @ApiProperty({ example: 580 })
+  season_points: number;
+}
+
+export class SeasonHistorySummaryDTO {
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  season_id: string;
+
+  @ApiProperty({ example: 'Spring 2026' })
+  title: string;
+
+  @ApiProperty({ example: '2026-04-01T00:00:00.000Z' })
+  starts_at: string;
+
+  @ApiProperty({ example: '2026-06-30T23:59:59.000Z' })
+  ends_at: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '2026-06-30T23:59:59.000Z',
+    nullable: true,
+  })
+  closed_at: string | null;
+
+  @ApiProperty({ type: () => [SeasonTopPerformerDTO] })
+  top_performers: SeasonTopPerformerDTO[];
+}
+
+export class SeasonTopPerformerFilterDTO {
+  @ApiPropertyOptional({ enum: [3, 10], example: 3 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([3, 10], { message: 'limit must be either 3 or 10' })
+  limit?: 3 | 10;
+}
 
 export class AdminSeasonStandingFilterDTO extends PaginationDTO {
   @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333' })

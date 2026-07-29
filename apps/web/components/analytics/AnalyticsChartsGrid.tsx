@@ -44,6 +44,9 @@ export function AnalyticsChartsGrid({
         action={<DollarSign size={14} color={colors.brand} />}
         sectionClassName="mb-0"
         chartStyle={{ height: 220 }}
+        minWidth={1}
+        minHeight={1}
+        initialDimension={{ width: 720, height: 220 }}
       >
         <BarChart data={revenueSeries}>
           <XAxis dataKey="bucket" stroke={colors.textMuted} tick={{ fontSize: 11 }} />
@@ -57,7 +60,17 @@ export function AnalyticsChartsGrid({
       <FitSection heading="Revenue Distribution" action={<Users size={14} color={colors.brand} />} className="mb-0">
         <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 16px 10px" }}>
           <div style={{ width: "60%", height: 220 }}>
-            <FitChartContainer heading="" bare noPadding hideHeading contentPadding="0" chartStyle={{ height: 220 }}>
+            <FitChartContainer
+              heading=""
+              bare
+              noPadding
+              hideHeading
+              contentPadding="0"
+              chartStyle={{ height: 220 }}
+              minWidth={1}
+              minHeight={1}
+              initialDimension={{ width: 420, height: 220 }}
+            >
               <PieChart>
                 <Pie data={pieData} dataKey="value" innerRadius={45} outerRadius={80}>
                   {pieData.map((_, index) => <Cell key={index} fill={pieColors[index] ?? colors.brand} />)}
@@ -84,6 +97,9 @@ export function AnalyticsChartsGrid({
         action={<Activity size={14} color={colors.brand} />}
         sectionClassName="mb-0"
         chartStyle={{ height: 200 }}
+        minWidth={1}
+        minHeight={1}
+        initialDimension={{ width: 720, height: 200 }}
       >
         <BarChart data={attendanceSeries}>
           <XAxis dataKey="day" stroke={colors.textMuted} tick={{ fontSize: 11 }} />

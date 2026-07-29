@@ -7,7 +7,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {
-  ClipboardCheck,
   Dumbbell,
   Lock,
   RefreshCw,
@@ -203,6 +202,45 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       fontSize: 13,
       fontWeight: "700",
     },
+    leaderboardControls: {
+      gap: 8,
+      marginBottom: 10,
+    },
+    leaderboardControlRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    leaderboardChip: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      minHeight: 36,
+      paddingHorizontal: 12,
+      justifyContent: "center",
+    },
+    leaderboardChipText: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    seasonHistoryBlock: {
+      gap: 10,
+    },
+    seasonHistoryHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    seasonHistoryList: {
+      gap: 6,
+    },
+    seasonHistoryRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      paddingVertical: 7,
+    },
     list: {
       gap: 10,
     },
@@ -364,16 +402,17 @@ function formatTitle(value: string) {
 function getMilestoneStatusLabel(milestone: FitnessMilestoneProgressRecord) {
   if (milestone.status === "claimed") return "Claimed";
   if (milestone.status === "unlocked") return "Unlocked";
-  if (milestone.status === "pending_review") return "Pending review";
-  if (milestone.status === "rejected") return "Needs proof";
+  if (milestone.status === "pending_review" || milestone.status === "rejected") {
+    return "Recalculating";
+  }
   return "Locked";
 }
 
 function getMilestoneIcon(milestone: FitnessMilestoneProgressRecord): LucideIcon {
   if (milestone.status === "claimed") return Trophy;
   if (milestone.status === "unlocked") return Sparkles;
-  if (milestone.status === "pending_review") return ClipboardCheck;
   if (milestone.status === "rejected") return Sparkles;
+  if (milestone.status === "pending_review") return Sparkles;
   return Lock;
 }
 
@@ -383,8 +422,9 @@ function getMilestoneTone(
 ) {
   if (milestone.status === "claimed") return colors.success ?? colors.brand;
   if (milestone.status === "unlocked") return colors.brand;
-  if (milestone.status === "pending_review") return colors.warning;
-  if (milestone.status === "rejected") return colors.danger;
+  if (milestone.status === "pending_review" || milestone.status === "rejected") {
+    return colors.textMuted;
+  }
   return colors.textMuted;
 }
 
@@ -580,13 +620,11 @@ export default function MuscleMasteryScreenContent({
               const Icon = getMilestoneIcon(milestone);
               const tone = getMilestoneTone(milestone, colors);
               const canClaim = milestone.status === "unlocked";
-              const needsReview = milestone.status === "pending_review";
-              const wasRejected = milestone.status === "rejected";
-              const reviewHint = needsReview
-                ? "Waiting for staff or admin approval."
-                : wasRejected
-                  ? "Proof was rejected. Submit a new photo or video proof."
-                  : null;
+              const isRecalculating =
+                milestone.status === "pending_review" || milestone.status === "rejected";
+              const reviewHint = isRecalculating
+                ? "Progress is being recalculated automatically. Refresh shortly."
+                : null;
 
               return (
                 <View
@@ -763,17 +801,130 @@ export default function MuscleMasteryScreenContent({
     </>
   );
 
-  const renderLeaderboard = () => (
-    <>
-      <FitSection heading="Leaderboard" cardStyle={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+  const renderLeaderboard = () => {
+    const leaderboardEntries =
+      controller.leaderboardMode === "muscle"
+        ? controller.muscleLeaderboard
+        : controller.leaderboard;
+    const leaderboardMeta =
+      controller.leaderboardMode === "muscle"
+        ? controller.muscleLeaderboardMeta
+        : controller.leaderboardMeta;
+
+    return (
+      <>
+      <FitSection heading="Leaderboard" cardStyle={{ paddingHorizontal: 14, paddingVertical: 10 }}>
+        <View style={styles.leaderboardControls}>
+          <View style={styles.leaderboardControlRow}>
+            {[
+              { label: "Overall", value: "overall" as const },
+              { label: "By muscle", value: "muscle" as const },
+            ].map((option) => {
+              const active = controller.leaderboardMode === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => controller.setLeaderboardMode(option.value)}
+                  style={[
+                    styles.leaderboardChip,
+                    {
+                      backgroundColor: active
+                        ? colors.brand + "16"
+                        : colors.surfaceRaised,
+                      borderColor: active ? colors.brand : colors.border,
+                    },
+                  ]}
+                >
+                  <FitText
+                    style={[
+                      styles.leaderboardChipText,
+                      { color: active ? colors.brand : colors.textSecondary },
+                    ]}
+                  >
+                    {option.label}
+                  </FitText>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {controller.leaderboardMode === "muscle" ? (
+            <>
+              <View style={styles.leaderboardControlRow}>
+                {(["season", "lifetime"] as const).map((scope) => {
+                  const active = controller.muscleLeaderboardScope === scope;
+                  return (
+                    <Pressable
+                      key={scope}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => controller.setMuscleLeaderboardScope(scope)}
+                      style={[
+                        styles.leaderboardChip,
+                        {
+                          backgroundColor: active
+                            ? colors.brand + "16"
+                            : colors.surfaceRaised,
+                          borderColor: active ? colors.brand : colors.border,
+                        },
+                      ]}
+                    >
+                      <FitText
+                        style={[
+                          styles.leaderboardChipText,
+                          { color: active ? colors.brand : colors.textSecondary },
+                        ]}
+                      >
+                        {scope === "season" ? "This season" : "Lifetime"}
+                      </FitText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.leaderboardControlRow}>
+                {controller.leaderboardMuscleOptions.map((muscle) => {
+                  const active = controller.selectedLeaderboardMuscle === muscle;
+                  return (
+                    <Pressable
+                      key={muscle}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => controller.setSelectedLeaderboardMuscle(muscle)}
+                      style={[
+                        styles.leaderboardChip,
+                        {
+                          backgroundColor: active
+                            ? colors.brand + "16"
+                            : colors.surfaceRaised,
+                          borderColor: active ? colors.brand : colors.border,
+                        },
+                      ]}
+                    >
+                      <FitText
+                        style={[
+                          styles.leaderboardChipText,
+                          { color: active ? colors.brand : colors.textSecondary },
+                        ]}
+                      >
+                        {formatTitle(muscle)}
+                      </FitText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+        </View>
         {controller.rankingVisibility === "private" ? (
           <FitText style={styles.sectionMessage}>
             Your visible ranking is private. Progression still counts in history,
             but member-facing leaderboards hide your standing.
           </FitText>
-        ) : controller.leaderboard.length > 0 ? (
+        ) : leaderboardEntries.length > 0 ? (
           <View>
-            {controller.leaderboard.map((entry, index) => (
+            {leaderboardEntries.map((entry, index) => (
               <View key={`${entry.userId}-${entry.rankPosition}`}>
                 <View style={styles.leaderboardRow}>
                   <View
@@ -801,16 +952,21 @@ export default function MuscleMasteryScreenContent({
                   </View>
                   <View style={styles.leaderboardMeta}>
                     <FitText style={styles.leaderboardXp}>
-                      {entry.totalXp.toLocaleString("en-US")} EXP
+                      {(
+                        "xpPoints" in entry ? entry.xpPoints : entry.totalXp
+                      ).toLocaleString("en-US")} EXP
                     </FitText>
                     <FitText style={styles.leaderboardSubtitle}>
-                      {controller.leaderboardEntry?.userId === entry.userId
+                      {("isCurrentUser" in entry && entry.isCurrentUser) ||
+                      controller.leaderboardEntry?.userId === entry.userId
                         ? "You"
-                        : "Gym member"}
+                        : controller.leaderboardMode === "muscle"
+                          ? formatTitle(controller.selectedLeaderboardMuscle)
+                          : "Gym member"}
                     </FitText>
                   </View>
                 </View>
-                {index < controller.leaderboard.length - 1 ? (
+                {index < leaderboardEntries.length - 1 ? (
                   <View
                     style={[
                       styles.separator,
@@ -823,25 +979,94 @@ export default function MuscleMasteryScreenContent({
           </View>
         ) : (
           <FitText style={styles.sectionMessage}>
-            No visible leaderboard entries are available for this season yet.
+            No visible rankings match this leaderboard yet.
           </FitText>
         )}
       </FitSection>
       {controller.rankingVisibility !== "private" &&
-      controller.leaderboardMeta.total_pages > 1 ? (
+      leaderboardMeta.total_pages > 1 ? (
         <FitPager
-          currentPage={controller.leaderboardMeta.page}
+          currentPage={leaderboardMeta.page}
           onPageChange={controller.setLeaderboardPage}
           style={styles.sectionPager}
-          totalPages={controller.leaderboardMeta.total_pages}
+          totalPages={leaderboardMeta.total_pages}
         />
       ) : null}
+
+      <FitSection heading="Season history" cardStyle={{ padding: 14 }}>
+        <View style={styles.seasonHistoryBlock}>
+          <View style={styles.seasonHistoryHeader}>
+            <FitText style={styles.sectionMessage}>
+              Best performers from completed seasons
+            </FitText>
+            <View style={styles.leaderboardControlRow}>
+              {([3, 10] as const).map((limit) => {
+                const active = controller.seasonHistoryLimit === limit;
+                return (
+                  <Pressable
+                    key={limit}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => controller.setSeasonHistoryLimit(limit)}
+                    style={[
+                      styles.leaderboardChip,
+                      {
+                        backgroundColor: active
+                          ? colors.brand + "16"
+                          : colors.surfaceRaised,
+                        borderColor: active ? colors.brand : colors.border,
+                      },
+                    ]}
+                  >
+                    <FitText
+                      style={[
+                        styles.leaderboardChipText,
+                        { color: active ? colors.brand : colors.textSecondary },
+                      ]}
+                    >
+                      Top {limit}
+                    </FitText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          {controller.seasonHistory.length > 0 ? (
+            controller.seasonHistory.map((season) => (
+              <View key={season.seasonId} style={styles.seasonHistoryList}>
+                <FitText style={styles.leaderboardName}>{season.title}</FitText>
+                {season.topPerformers.map((performer) => (
+                  <View
+                    key={`${season.seasonId}-${performer.userId}`}
+                    style={styles.seasonHistoryRow}
+                  >
+                    <FitText style={[styles.leaderboardXp, { minWidth: 28 }]}>
+                      #{performer.rankPosition}
+                    </FitText>
+                    <FitText style={[styles.leaderboardName, { flex: 1 }]}>
+                      {performer.displayName}
+                    </FitText>
+                    <FitText style={styles.leaderboardSubtitle}>
+                      {performer.seasonPoints.toLocaleString("en-US")} pts
+                    </FitText>
+                  </View>
+                ))}
+              </View>
+            ))
+          ) : (
+            <FitText style={styles.sectionMessage}>
+              Completed season results will appear here after the first season closes.
+            </FitText>
+          )}
+        </View>
+      </FitSection>
     </>
   );
+  };
 
   return (
     <View style={styles.root}>
-      <View pointerEvents="none" style={styles.burstLayer}>
+      <View style={[styles.burstLayer, { pointerEvents: "none" }]}>
         <MilestoneClaimBurst
           activeKey={controller.celebrationKey}
           color={colors.brand}

@@ -17,13 +17,16 @@ import type {
   FitnessExerciseListParams,
   FitnessExerciseReviewSubmissionListParams,
   FitnessLeaderboardListParams,
+  FitnessMuscleLeaderboardListParams,
   FitnessMasteryListParams,
   FitnessMilestoneListParams,
+  FitnessSeasonHistoryListParams,
   LogWorkoutSetInput,
   MuscleDefinitionListParams,
   ReviewFitnessMilestoneEvidenceInput,
   StartPoseSessionInput,
   StartWorkoutSessionInput,
+  CreateTrainingPlanInput,
   SubmitFitnessMilestoneEvidenceInput,
   TrainingPlanListParams,
   UpdateFitnessRankingProfileInput,
@@ -251,6 +254,128 @@ export function fitnessPlansQueryOptions(
         };
       }
       return client.fitness.listPlans(params);
+    },
+  });
+}
+
+export function fitnessClientPlansQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  coachUserId?: string,
+  memberId?: string,
+  params?: TrainingPlanListParams,
+) {
+  return queryOptions({
+    queryKey: [
+      ...queryKeys.fitnessPlans(coachUserId, params),
+      "client",
+      memberId,
+    ],
+    queryFn: async () => {
+      if (!coachUserId || !memberId) {
+        return {
+          data: [],
+          meta: { page: 1, limit: params?.limit ?? 0, total: 0, total_pages: 0 },
+        };
+      }
+      return client.fitness.listClientPlans(memberId, params);
+    },
+  });
+}
+
+export function activateFitnessPlanMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ planId }: { planId: string; userId?: string }) =>
+      client.fitness.activatePlan(planId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function createFitnessPlanMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      input,
+    }: {
+      input: CreateTrainingPlanInput;
+      userId?: string;
+    }) => client.fitness.createPlan(input),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function updateFitnessPlanMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      input,
+      planId,
+    }: {
+      input: CreateTrainingPlanInput;
+      planId: string;
+      userId?: string;
+    }) => client.fitness.updatePlan(planId, input),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function createCustomFitnessExerciseMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      input,
+    }: {
+      input: CreateFitnessExerciseInput;
+      userId?: string;
+    }) => client.fitness.createCustomExercise(input),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function deleteFitnessPlanMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ planId }: { planId: string; userId?: string }) =>
+      client.fitness.deletePlan(planId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
+    },
+  });
+}
+
+export function assignFitnessPlanMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      memberId,
+      planId,
+    }: {
+      memberId: string;
+      planId: string;
+      userId?: string;
+    }) => client.fitness.assignPlan(planId, memberId),
+    onSuccess: async (_data, variables) => {
+      await invalidateFitnessQueries(queryClient, variables.userId);
     },
   });
 }
@@ -547,6 +672,57 @@ export function fitnessPlanDetailQueryOptions(
     queryFn: async () => {
       if (!planId) return null;
       return client.fitness.getPlanById(planId);
+    },
+  });
+}
+
+export function fitnessMuscleLeaderboardQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId: string | undefined,
+  params: FitnessMuscleLeaderboardListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessMuscleLeaderboard(userId, params),
+    queryFn: async () => {
+      if (!userId) {
+        return {
+          data: [],
+          meta: {
+            page: 1,
+            limit: params.limit ?? 0,
+            total: 0,
+            total_pages: 0,
+          },
+        };
+      }
+      return client.fitness.listMuscleLeaderboard(params);
+    },
+  });
+}
+
+export function fitnessSeasonHistoryQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  userId?: string,
+  params?: FitnessSeasonHistoryListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessSeasonHistory(userId, params?.limit),
+    queryFn: async () => {
+      if (!userId) return [];
+      return client.fitness.listSeasonHistory(params);
+    },
+  });
+}
+
+export function fitnessPlanProgressionQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  planId?: string,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessPlanProgression(planId),
+    queryFn: async () => {
+      if (!planId) return [];
+      return client.fitness.getPlanProgressionSuggestions(planId);
     },
   });
 }

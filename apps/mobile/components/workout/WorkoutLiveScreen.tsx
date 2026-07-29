@@ -1,17 +1,37 @@
+import { useCallback, useState } from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useRouter } from "expo-router";
 
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import ExerciseConfirmationModal from "@/components/modals/workout/ExerciseConfirmationModal";
 import ExerciseCreationReviewModal from "@/components/modals/workout/ExerciseCreationReviewModal";
 import ExerciseModal from "@/components/modals/workout/ExerciseModal";
 import { FitText } from "@/components/fit/FitText";
+import FitButton from "@/components/fit/FitButton";
 import { WorkoutContextSection } from "@/components/workout/WorkoutContextSection";
 import { WorkoutTrackingSection } from "@/components/workout/WorkoutTrackingSection";
+import { MobileWorkoutToday } from "@/components/workout/MobileWorkoutToday";
+import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
 import { useWorkoutLiveController } from "../../hooks/workout/useWorkoutLiveController";
 
 export function WorkoutLiveScreen() {
-  const controller = useWorkoutLiveController();
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<WorkoutCameraTarget | null>(
+    null,
+  );
+  const [cameraCompletion, setCameraCompletion] =
+    useState<WorkoutCameraTarget | null>(null);
+  const handleCameraSetCompleted = useCallback((target: WorkoutCameraTarget) => {
+    setCameraCompletion(target);
+    setShowCamera(false);
+    setCameraTarget(null);
+  }, []);
+  const controller = useWorkoutLiveController({
+    cameraTarget,
+    onCameraSetCompleted: handleCameraSetCompleted,
+  });
+  const router = useRouter();
   const screenStyle = useAnimatedStyle(() => ({ opacity: controller.opacity.value }));
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: controller.translateY.value }]
@@ -34,7 +54,80 @@ export function WorkoutLiveScreen() {
               </FitText>
             </View>
           ) : null}
-          <WorkoutTrackingSection
+          {!showCamera ? (
+            <MobileWorkoutToday
+              cameraCompletion={cameraCompletion}
+              onManagePlans={() => router.push("/workout-plans")}
+              onShowCamera={(target) => {
+                setCameraTarget(target);
+                setShowCamera(true);
+              }}
+            />
+          ) : (
+            <>
+              {cameraTarget ? (
+                <View
+                  style={{
+                    backgroundColor: controller.colors.surfaceRaised,
+                    borderRadius: 8,
+                    gap: 4,
+                    marginBottom: 10,
+                    padding: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      alignItems: "center",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <FitText
+                        style={{
+                          color: controller.colors.brand,
+                          fontSize: 9,
+                          fontWeight: "900",
+                          letterSpacing: 0.8,
+                        }}
+                      >
+                        CAMERA TARGET
+                      </FitText>
+                      <FitText
+                        style={{
+                          color: controller.colors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: "900",
+                        }}
+                      >
+                        {cameraTarget.exerciseName}
+                      </FitText>
+                      <FitText
+                        style={{
+                          color: controller.colors.textMuted,
+                          fontSize: 11,
+                        }}
+                      >
+                        Set {cameraTarget.setNumber} of {cameraTarget.totalSets} ·{" "}
+                        {cameraTarget.targetReps} reps
+                        {cameraTarget.targetWeightKg != null
+                          ? ` · ${cameraTarget.targetWeightKg} kg`
+                          : ""}
+                      </FitText>
+                    </View>
+                    <FitButton
+                      label="Manual"
+                      onPress={() => {
+                        controller.onPause();
+                        setShowCamera(false);
+                        setCameraTarget(null);
+                      }}
+                      variant="ghost"
+                    />
+                  </View>
+                </View>
+              ) : null}
+              <WorkoutTrackingSection
             cameraActive={controller.cameraActive}
             cameraFacing={controller.cameraFacing}
             cameraRemountKey={controller.cameraRemountKey}
@@ -75,32 +168,35 @@ export function WorkoutLiveScreen() {
             subjectLockStatusText={controller.subjectLockStatusText}
             subjectLocked={controller.subjectLocked}
             trackingDisabledReason={controller.trackingDisabledReason}
-          />
-          <WorkoutContextSection
-            calories={controller.calories}
-            colors={controller.colors}
-            exerciseFocusText={controller.exerciseFocusText}
-            exerciseRecommendation={controller.exerciseRecommendation}
-            feedbackItems={controller.feedbackItems}
-            onOpenExerciseModal={controller.onOpenExerciseModal}
-            planStatusText={controller.planStatusText}
-            reps={controller.reps}
-            s={controller.s}
-            seconds={controller.seconds}
-            sessionStatusText={controller.sessionStatusText}
-          />
+              />
+              {cameraTarget ? null : (
+                <WorkoutContextSection
+                  calories={controller.calories}
+                  colors={controller.colors}
+                  exerciseFocusText={controller.exerciseFocusText}
+                  exerciseRecommendation={controller.exerciseRecommendation}
+                  feedbackItems={controller.feedbackItems}
+                  onOpenExerciseModal={controller.onOpenExerciseModal}
+                  planStatusText={controller.planStatusText}
+                  reps={controller.reps}
+                  s={controller.s}
+                  seconds={controller.seconds}
+                  sessionStatusText={controller.sessionStatusText}
+                />
+              )}
+            </>
+          )}
         </Animated.View>
       </Animated.ScrollView>
       <ConfirmModal
         isVisible={controller.finishVisible}
-        title="Finish Workout?"
-        message="This will end your current session, finalize pose tracking, and save one live workout set."
-        yesLabel="Finish"
+        title="Save This Set?"
+        message="FitTrack will finalize the pose count and save only the current planned set. The workout stays open until every required set is complete."
+        yesLabel="Save Set"
         noLabel="Keep Going"
-        isDestructive
         isLoading={controller.isFinishing}
-        loadingLabel="FINISHING WORKOUT"
-        loadingTitle="Closing session"
+        loadingLabel="SAVING SET"
+        loadingTitle="Finalizing pose count"
         onYes={controller.onFinishConfirm}
         onNo={controller.onFinishCancel}
       />

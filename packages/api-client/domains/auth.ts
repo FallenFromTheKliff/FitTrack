@@ -11,9 +11,11 @@ export type LoginCredentials = {
 };
 
 export type RegisterPayload = {
+  accepted_terms: true;
   email: string;
   first_name: string;
   last_name: string;
+  legal_version: string;
   password: string;
   phone?: string;
 };

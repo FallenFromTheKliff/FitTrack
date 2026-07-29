@@ -2,11 +2,11 @@ import {
   Body,
   Controller,
   Delete,
-  GoneException,
   Get,
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -28,9 +28,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationDTO } from '../../user/dto/user-dto';
 import {
+  AssignTrainingPlanDTO,
   CreateTrainingPlanDTO,
   TrainingPlanDetailResponseDTO,
   TrainingPlanExerciseResponseDTO,
+  TrainingProgressionSuggestionResponseDTO,
   TrainingPlanScheduleDayResponseDTO,
   TrainingPlanSummaryResponseDTO,
 } from './dto/training-plan.dto';
@@ -47,11 +49,13 @@ const paginationMetaSchema = {
   required: ['page', 'limit', 'total', 'total_pages'],
 };
 
-function apiEnvelopeSchema(schemaRef: string) {
+function apiEnvelopeSchema(schemaRef: string, isArray = false) {
   return {
     type: 'object',
     properties: {
-      data: { $ref: schemaRef },
+      data: isArray
+        ? { type: 'array', items: { $ref: schemaRef } }
+        : { $ref: schemaRef },
     },
     required: ['data'],
   };
@@ -77,6 +81,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   TrainingPlanDetailResponseDTO,
   TrainingPlanScheduleDayResponseDTO,
   TrainingPlanExerciseResponseDTO,
+  TrainingProgressionSuggestionResponseDTO,
 )
 @Controller('fitness')
 export class TrainingPlanController {
@@ -95,6 +100,19 @@ export class TrainingPlanController {
   })
   listPlans(@CurrentUser() user: JwtPayload, @Query() dto: PaginationDTO) {
     return this.trainingPlanService.listPlans(user.sub, dto);
+  }
+
+  @Get('plans/client/:memberId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List workout presets for an active coach client.' })
+  listClientPlans(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: PaginationDTO,
+  ) {
+    return this.trainingPlanService.listClientPlans(user.sub, memberId, dto);
   }
 
   @Get('plans/:id')
@@ -118,6 +136,28 @@ export class TrainingPlanController {
     return this.trainingPlanService.getPlanById(user.sub, id);
   }
 
+  @Get('plans/:id/progression-suggestions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Get conservative progression targets derived from completed workout history.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Progression suggestions returned.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(TrainingProgressionSuggestionResponseDTO),
+      true,
+    ),
+  })
+  getProgressionSuggestions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.trainingPlanService.getProgressionSuggestions(user.sub, id);
+  }
+
   @Post('plans')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -136,6 +176,24 @@ export class TrainingPlanController {
     return this.trainingPlanService.createPlan(user.sub, user.role, dto);
   }
 
+  @Put('plans/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateTrainingPlanDTO })
+  @ApiOperation({ summary: 'Update an owned mutable training plan.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Training plan updated.',
+    schema: apiEnvelopeSchema(getSchemaPath(TrainingPlanDetailResponseDTO)),
+  })
+  updatePlan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateTrainingPlanDTO,
+  ) {
+    return this.trainingPlanService.updatePlan(user.sub, user.role, id, dto);
+  }
+
   @Delete('plans/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -151,10 +209,31 @@ export class TrainingPlanController {
     return { message: 'Training plan deleted.' };
   }
 
+  @Post('plans/:id/activate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Select one owned training plan as the active workout split.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Training plan activated.',
+    schema: apiEnvelopeSchema(getSchemaPath(TrainingPlanDetailResponseDTO)),
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Training plan not found.' })
+  activatePlan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.trainingPlanService.activatePlan(user.sub, id);
+  }
+
   @Post('plans/:id/assign')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.staff)
+  @Roles(UserRole.coach)
   @ApiBearerAuth('access-token')
+  @ApiBody({ type: AssignTrainingPlanDTO })
   @ApiOperation({
     summary: 'Copy a coach-owned training plan to an actively related member.',
   })
@@ -165,9 +244,11 @@ export class TrainingPlanController {
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @ApiResponse({ status: 404, description: 'Training plan not found.' })
-  assignPlan(@Param('id', ParseUUIDPipe) id: string) {
-    throw new GoneException(
-      `Coach-user training plan assignment is no longer supported for plan ${id}.`,
-    );
+  assignPlan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AssignTrainingPlanDTO,
+  ) {
+    return this.trainingPlanService.assignPlan(user.sub, id, dto.member_id);
   }
 }

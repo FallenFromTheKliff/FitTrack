@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { Platform, View } from "react-native";
+import { Linking, Platform, View } from "react-native";
 import {
   Circle,
   Cpu,
@@ -180,10 +180,10 @@ export function WorkoutTrackingSection({
                   visibleEquipmentBoxes.map((box, index) => (
                     <View
                       key={`${box.label ?? "equipment"}-${index}`}
-                      pointerEvents="none"
                       style={{
                         borderColor: "#FFD84D",
                         borderRadius: 14,
+                        pointerEvents: "none",
                         borderWidth: 3,
                         left: `${Math.max(0, Math.min(1, box.x ?? 0)) * 100}%`,
                         position: "absolute",
@@ -196,10 +196,10 @@ export function WorkoutTrackingSection({
                   ))
                 ) : equipmentDetected ? (
                   <View
-                    pointerEvents="none"
                     style={{
                       borderColor: "#FFD84D",
                       borderRadius: 20,
+                      pointerEvents: "none",
                       borderStyle: "dashed",
                       borderWidth: 3,
                       height: "28%",
@@ -212,10 +212,10 @@ export function WorkoutTrackingSection({
                   />
                 ) : null}
                 <View
-                  pointerEvents="none"
                   style={{
                     alignItems: "center",
                     alignSelf: "center",
+                    pointerEvents: "none",
                     backgroundColor: equipmentDetected
                       ? "rgba(255, 216, 77, 0.92)"
                       : "rgba(0,0,0,0.68)",
@@ -269,7 +269,7 @@ export function WorkoutTrackingSection({
         {(!cameraActive || !permissionGranted) && !isCameraSwitching ? (
           <View style={s.initButtonWrap}>
             <FitButton
-              label="Initialize Camera"
+              label={permissionGranted ? "Start Camera" : "Allow Camera Access"}
               icon={Cpu}
               variant="primary"
               onPress={() => { void onInitCamera(); }}
@@ -278,9 +278,19 @@ export function WorkoutTrackingSection({
             />
             <FitText style={{ marginTop: 10, fontSize: 12, color: colors.textMuted, textAlign: "center" }}>
               {permissionGranted
-                ? "Tap to prepare the camera before you start tracking."
-                : "Camera permission is required for live pose tracking."}
+                ? "Prepare the preview, then begin the current planned set."
+                : "Camera tracking is optional. You can return to manual logging at any time."}
             </FitText>
+            {!permissionGranted && Platform.OS !== "web" ? (
+              <FitButton
+                label="Open Device Settings"
+                onPress={() => {
+                  void Linking.openSettings();
+                }}
+                variant="ghost"
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
           </View>
         ) : null}
         <View style={s.previewOverlayTop}>

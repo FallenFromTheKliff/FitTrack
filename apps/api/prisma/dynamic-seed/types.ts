@@ -14,11 +14,22 @@ export type DynamicSeedTarget = 'local' | 'railway';
 export type DynamicSeedConfig = {
   allowRemoteReset: boolean;
   anchorDate: Date;
+  bookingDensity: 'low' | 'normal' | 'high';
+  coachActiveRate: number;
+  coachFormerRate: number;
+  coachPausedRate: number;
   confirmRemoteReset?: string;
+  historyEndDate: Date;
+  historyMonths: number;
+  historyStartDate: Date;
   mode: DynamicSeedMode;
+  pendingPaymentRate: number;
   seed: number;
+  sessionDensity: 'low' | 'normal' | 'high';
+  splitPresetsPerMember: number;
   target: DynamicSeedTarget;
   users: number;
+  workoutDensity: 'low' | 'normal' | 'high';
 };
 
 export type MemberPersona =

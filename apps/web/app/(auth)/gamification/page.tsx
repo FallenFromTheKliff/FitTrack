@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminGamificationMuscleLeaderboardListParams,
+  AdminGamificationSeasonCreateInput,
   AdminManualExpGrantInput,
   AdminGamificationSeasonStandingListParams,
   FitnessRankingGovernanceStatus,
@@ -27,17 +29,22 @@ import type {
   AdminGamificationRankingProfileRecord,
   AdminGamificationSeasonStandingRecord,
   AdminGamificationSeasonSummaryRecord,
+  FitnessMuscleLeaderboardEntryRecord,
   FitnessRankingVisibility,
   FitnessSeasonStatus,
   MemberRecord,
+  MuscleDefinitionRecord,
 } from "@fittrack/types";
 import {
-  adminMembersQueryOptions,
+  adminGamificationManualExpMembersQueryOptions,
+  adminGamificationMuscleStandingsQueryOptions,
   adminGamificationSeasonStandingsQueryOptions,
   adminGamificationSeasonsQueryOptions,
   adminGamificationOverviewQueryOptions,
+  createAdminGamificationSeasonMutationOptions,
   createAdminManualExpGrantMutationOptions,
   fitnessAchievementReviewsQueryOptions,
+  fitnessMuscleDefinitionsQueryOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
   updateAdminGamificationRankingOverrideMutationOptions,
   updateAdminGamificationSeasonStatusMutationOptions,
@@ -63,13 +70,20 @@ import {
 } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import { ConfirmModal, FitModal } from "@/components/modals";
+import RankingReviewModal from "@/components/gamification/RankingReviewModal";
+import {
+  GovernanceWorkbench,
+  type GovernanceView,
+} from "@/components/gamification/GovernanceWorkbench";
 import {
   ACHIEVEMENT_REVIEW_STATUS_COLORS,
   type AchievementReviewRecord,
   type AchievementReviewStatus,
 } from "@/data/progress/milestones";
+import styles from "./gamification.module.css";
 
 export const dynamic = "force-dynamic";
+const legacyGovernanceQueueEnabled = false;
 
 const RANKING_GOVERNANCE_OPTIONS: {
   label: string;
@@ -121,6 +135,13 @@ type ManualExpDraft = {
   rationale: string;
   userId: string;
 };
+type SeasonDraft = {
+  autoStartNext: boolean;
+  description: string;
+  endsAt: string;
+  startsAt: string;
+  title: string;
+};
 type AdminConfirmationState = {
   confirmIcon?: LucideIcon;
   confirmLabel: string;
@@ -141,6 +162,22 @@ function formatDateTime(value?: string | null) {
   });
 }
 
+function formatSeasonRemaining(endsAt: string, now: number) {
+  const remainingMs = new Date(endsAt).getTime() - now;
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    return "Closing on the next lifecycle sweep";
+  }
+
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h remaining`;
+  if (hours > 0) return `${hours}h ${minutes}m remaining`;
+  return `${Math.max(1, minutes)}m remaining`;
+}
+
 function labelize(value: string) {
   return value
     .split(/[_\s-]+/g)
@@ -154,15 +191,6 @@ function getMemberDisplayName(member: MemberRecord) {
   const lastName = member.profile?.lastName?.trim() ?? "";
   const fullName = `${firstName} ${lastName}`.trim();
   return fullName || member.email;
-}
-
-function isManualExpEligibleMember(member: MemberRecord) {
-  const status = member.status?.toLowerCase();
-  return (
-    (!status || status === "active") &&
-    member.membershipCard?.status === "active" &&
-    !member.deletedAt
-  );
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -381,13 +409,32 @@ function AdminGamificationPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<GamificationTab>("overview");
+  const [activeTab] = useState<GamificationTab>("overview");
   const [confirmationState, setConfirmationState] =
     useState<AdminConfirmationState | null>(null);
+  const [manualExpOpen, setManualExpOpen] = useState(false);
+  const [seasonManagerOpen, setSeasonManagerOpen] = useState(false);
+  const [seasonDraft, setSeasonDraft] = useState<SeasonDraft>({
+    autoStartNext: true,
+    description: "",
+    endsAt: "",
+    startsAt: "",
+    title: "",
+  });
+  const [governanceView, setGovernanceView] =
+    useState<GovernanceView>("integrity");
+  const [manualMemberSearch, setManualMemberSearch] = useState("");
   const [seasonRationale, setSeasonRationale] = useState(
     "Admin lifecycle review completed.",
   );
+  const [seasonClock, setSeasonClock] = useState(() => Date.now());
   const [seasonStandingPage, setSeasonStandingPage] = useState(1);
+  const [leaderboardMode, setLeaderboardMode] =
+    useState<"overall" | "muscle">("overall");
+  const [muscleStandingPage, setMuscleStandingPage] = useState(1);
+  const [muscleStandingScope, setMuscleStandingScope] =
+    useState<"lifetime" | "season">("season");
+  const [selectedStandingMuscle, setSelectedStandingMuscle] = useState("chest");
   const [seasonStandingSearch, setSeasonStandingSearch] = useState("");
   const [seasonFilterId, setSeasonFilterId] = useState("");
   const [seasonMuscleFilter, setSeasonMuscleFilter] = useState("");
@@ -417,20 +464,40 @@ function AdminGamificationPage() {
     userId: "",
   });
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setSeasonClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const overviewQuery = useQuery(
     adminGamificationOverviewQueryOptions(webApiClient),
   );
-  const membersQuery = useQuery(
-    adminMembersQueryOptions(webApiClient, { role: "member" }),
+  const deferredManualMemberSearch = useDeferredValue(
+    manualMemberSearch.trim(),
   );
-  const manualExpEligibleMembers = useMemo(
-    () => (membersQuery.data ?? []).filter(isManualExpEligibleMember),
-    [membersQuery.data],
+  const membersQuery = useQuery({
+    ...adminGamificationManualExpMembersQueryOptions(
+      webApiClient,
+      deferredManualMemberSearch,
+    ),
+    enabled: manualExpOpen && deferredManualMemberSearch.length >= 2,
+  });
+  const manualExpEligibleMembers = membersQuery.data ?? [];
+  const muscleDefinitionsQuery = useQuery({
+    ...fitnessMuscleDefinitionsQueryOptions(webApiClient),
+    enabled: manualExpOpen || leaderboardMode === "muscle",
+  });
+  const manualExpMuscleDefinitions = useMemo(
+    () =>
+      (muscleDefinitionsQuery.data ?? []).filter(
+        (definition) => definition.isActive,
+      ),
+    [muscleDefinitionsQuery.data],
   );
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
       includeArchived: seasonIncludeArchived,
-      limit: 6,
+      limit: 10,
       page: seasonStandingPage,
       ...(seasonFilterId ? { seasonId: seasonFilterId } : {}),
       ...(seasonMuscleFilter.trim()
@@ -465,6 +532,35 @@ function AdminGamificationPage() {
       seasonFilterParams,
     ),
   );
+  const muscleStandingParams =
+    useMemo<AdminGamificationMuscleLeaderboardListParams>(
+      () => ({
+        limit: 10,
+        muscleKey: selectedStandingMuscle,
+        page: muscleStandingPage,
+        scope: muscleStandingScope,
+        ...(muscleStandingScope === "season" && seasonFilterId
+          ? { seasonId: seasonFilterId }
+          : {}),
+        ...(seasonStandingSearch.trim()
+          ? { search: seasonStandingSearch.trim() }
+          : {}),
+      }),
+      [
+        muscleStandingPage,
+        muscleStandingScope,
+        seasonFilterId,
+        seasonStandingSearch,
+        selectedStandingMuscle,
+      ],
+    );
+  const muscleStandingsQuery = useQuery({
+    ...adminGamificationMuscleStandingsQueryOptions(
+      webApiClient,
+      muscleStandingParams,
+    ),
+    enabled: leaderboardMode === "muscle",
+  });
   const milestoneReviewsQuery = useQuery({
     ...fitnessAchievementReviewsQueryOptions(webApiClient),
     enabled: false,
@@ -474,6 +570,9 @@ function AdminGamificationPage() {
       webApiClient,
       queryClient,
     ),
+  );
+  const createSeasonMutation = useMutation(
+    createAdminGamificationSeasonMutationOptions(webApiClient, queryClient),
   );
   const integrityMutation = useMutation(
     resolveAdminGamificationIntegrityCaseMutationOptions(
@@ -518,17 +617,13 @@ function AdminGamificationPage() {
   ]);
 
   useEffect(() => {
-    const members = manualExpEligibleMembers;
-    setManualExpDraft((current) => {
-      if (members.length === 0) {
-        return current.userId ? { ...current, userId: "" } : current;
-      }
-      if (current.userId && members.some((member) => member.id === current.userId)) {
-        return current;
-      }
-      return { ...current, userId: members[0].id };
-    });
-  }, [manualExpEligibleMembers]);
+    setMuscleStandingPage(1);
+  }, [
+    muscleStandingScope,
+    seasonFilterId,
+    seasonStandingSearch,
+    selectedStandingMuscle,
+  ]);
 
   const overview = overviewQuery.data;
   const activeSeasonActions = useMemo(
@@ -542,9 +637,11 @@ function AdminGamificationPage() {
     overviewQuery.error ??
     seasonsQuery.error ??
     seasonStandingsQuery.error ??
+    muscleStandingsQuery.error ??
     membersQuery.error ??
     milestoneReviewsQuery.error ??
     seasonMutation.error ??
+    createSeasonMutation.error ??
     integrityMutation.error ??
     manualExpMutation.error ??
     rankingMutation.error;
@@ -563,19 +660,20 @@ function AdminGamificationPage() {
   };
   const overviewBottomCardStyle = {
     ...panelStyle,
-    padding: 14,
+    padding: 0,
     display: "grid",
-    gap: 10,
-    gridTemplateRows: "auto minmax(0, 1fr)",
-    minHeight: 250,
-    overflow: "visible",
+    gap: 0,
+    overflow: "hidden",
   };
   const overviewBottomContentStyle = {
     ...subPanelStyle,
+    border: 0,
+    borderRadius: 0,
     display: "grid",
-    gap: 8,
+    gap: 10,
     minWidth: 0,
     overflow: "visible",
+    padding: 14,
   };
   const muted = { color: colors.textMuted, fontSize: 13, lineHeight: 1.5 };
 
@@ -588,32 +686,14 @@ function AdminGamificationPage() {
   const resolveIntegrityCase = (
     caseId: string,
     status: "resolved_valid" | "resolved_invalid",
-  ) => {
-    const rationale =
-      integrityNotes[caseId]?.trim() ||
+    rationale = integrityNotes[caseId]?.trim() ||
       (status === "resolved_valid"
         ? "Manual review confirmed this progression can stand."
-        : "Manual review confirmed this progression should stay invalid.");
-
-    setConfirmationState({
-      confirmIcon: status === "resolved_valid" ? ShieldCheck : EyeOff,
-      confirmLabel:
-        status === "resolved_valid" ? "Resolve valid" : "Resolve invalid",
-      isDanger: status === "resolved_invalid",
-      message:
-        status === "resolved_valid"
-          ? "This closes the integrity case and keeps the related progression in force."
-          : "This closes the integrity case and preserves the invalid progression decision.",
-      title:
-        status === "resolved_valid"
-          ? "Resolve Integrity Case As Valid?"
-          : "Resolve Integrity Case As Invalid?",
-      onConfirm: () => {
-        integrityMutation.mutate({
-          caseId,
-          payload: { status, rationale },
-        });
-      },
+        : "Manual review confirmed this progression should stay invalid."),
+  ) => {
+    integrityMutation.mutate({
+      caseId,
+      payload: { status, rationale },
     });
   };
 
@@ -641,6 +721,103 @@ function AdminGamificationPage() {
             rationale,
             adminNote: governanceStatus === "normal" ? null : rationale,
           },
+        });
+      },
+    });
+  };
+
+  const moderateStanding = (
+    standing: AdminGamificationSeasonStandingRecord,
+    governanceStatus: Extract<
+      FitnessRankingGovernanceStatus,
+      "normal" | "hidden_by_admin" | "disqualified"
+    >,
+    rationale: string,
+  ) => {
+    const actionLabel =
+      governanceStatus === "normal"
+        ? "be restored to the rankings"
+        : governanceStatus === "hidden_by_admin"
+          ? "be hidden from the rankings"
+          : "be disqualified from this season";
+
+    setConfirmationState({
+      confirmIcon:
+        governanceStatus === "normal" ? ShieldCheck : ShieldAlert,
+      confirmLabel:
+        governanceStatus === "normal"
+          ? "Restore ranking"
+          : governanceStatus === "hidden_by_admin"
+            ? "Hide from rankings"
+            : "Disqualify",
+      isDanger: governanceStatus === "disqualified",
+      message: `${standing.memberName} will ${actionLabel}. Their FitTrack account will remain active.`,
+      title: "Confirm Ranking Decision?",
+      onConfirm: () => {
+        rankingMutation.mutate({
+          userId: standing.userId,
+          payload: {
+            governanceStatus,
+            rationale,
+            adminNote: governanceStatus === "normal" ? null : rationale,
+          },
+        });
+      },
+    });
+  };
+
+  const openSeasonManager = () => {
+    if (!seasonDraft.startsAt || !seasonDraft.endsAt) {
+      const startsAt = new Date();
+      startsAt.setDate(startsAt.getDate() + 7);
+      startsAt.setHours(0, 0, 0, 0);
+      const endsAt = new Date(startsAt);
+      endsAt.setDate(endsAt.getDate() + 90);
+      endsAt.setHours(23, 59, 0, 0);
+      setSeasonDraft((current) => ({
+        ...current,
+        endsAt: toLocalDateTimeInput(endsAt),
+        startsAt: toLocalDateTimeInput(startsAt),
+      }));
+    }
+    setSeasonManagerOpen(true);
+  };
+
+  const submitSeasonDraft = () => {
+    const startsAt = new Date(seasonDraft.startsAt);
+    const endsAt = new Date(seasonDraft.endsAt);
+    if (
+      !seasonDraft.title.trim() ||
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      endsAt <= startsAt
+    ) {
+      setConfirmationState({
+        confirmIcon: ShieldAlert,
+        confirmLabel: "Close",
+        message:
+          "Add a season title and a valid date window where the end is after the start.",
+        title: "Season Schedule Needs Attention",
+        onConfirm: () => undefined,
+      });
+      return;
+    }
+
+    const payload: AdminGamificationSeasonCreateInput = {
+      autoStartNext: seasonDraft.autoStartNext,
+      description: seasonDraft.description.trim() || null,
+      endsAt: endsAt.toISOString(),
+      startsAt: startsAt.toISOString(),
+      title: seasonDraft.title.trim(),
+    };
+    createSeasonMutation.mutate(payload, {
+      onSuccess: () => {
+        setSeasonDraft({
+          autoStartNext: true,
+          description: "",
+          endsAt: "",
+          startsAt: "",
+          title: "",
         });
       },
     });
@@ -689,6 +866,7 @@ function AdminGamificationPage() {
         : {}),
     };
 
+    setManualExpOpen(false);
     setConfirmationState({
       confirmIcon: PlusCircle,
       confirmLabel: "Grant EXP",
@@ -704,7 +882,9 @@ function AdminGamificationPage() {
                 amount: "75",
                 appointmentId: "",
                 muscleGroup: "",
+                userId: "",
               }));
+              setManualMemberSearch("");
             },
           },
         );
@@ -719,7 +899,7 @@ function AdminGamificationPage() {
       hideHeading
       bare
       noPadding
-      className={`${themeTransition} gamification-admin-shell`}
+      className={`${themeTransition} gamification-admin-shell ${styles.adminShell}`}
       style={{
         ...fadeIn,
         height: "100%",
@@ -731,168 +911,214 @@ function AdminGamificationPage() {
       }}
     >
       <div
+        data-ui="gamification-admin-page"
+        className={styles.adminPage}
         style={{
           display: "grid",
           gap: 10,
         }}
       >
         <div
-          className="gamification-governance-header"
+          data-ui="gamification-command-center"
+          className={`gamification-governance-header ${styles.commandCenter}`}
           style={{
             border: `1px solid ${colors.border}`,
-            borderRadius: 8,
-            padding: 10,
+            borderRadius: 6,
+            padding: 12,
             backgroundColor: colors.surface,
             display: "grid",
-            gridTemplateColumns:
-              "minmax(0, 1fr) minmax(360px, 0.42fr)",
+            gridTemplateColumns: "minmax(0, 1fr)",
             gap: 8,
-            alignItems: "center",
             minHeight: 0,
           }}
         >
-          <div style={{ display: "grid", gap: 7, minHeight: 0 }}>
-            <FitPill
-              mode="status"
-              label="Governance View"
-              color={colors.brand}
-              style={{ width: "fit-content" }}
-            />
-            <FitText
-              as="h1"
-              style={{
-                fontSize: 18,
-                lineHeight: 1.12,
-                letterSpacing: 0,
-                fontWeight: 900,
-              }}
-            >
-              Seasons, rankings, integrity, and XP trust.
-            </FitText>
-            {overview?.activeSeason ? (
-              <div
-                className="gamification-active-season-panel"
-                style={{
-                  ...subPanelStyle,
-                  display: "grid",
-                  gap: 10,
-                  gridTemplateColumns:
-                    "minmax(0, 1fr) minmax(210px, 0.36fr) minmax(190px, auto)",
-                  alignItems: "center",
-                }}
-              >
-                <div
+          <div
+            style={{
+              alignItems: "flex-start",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              justifyContent: "space-between",
+            }}
+          >
+            <div className={styles.commandIdentity} style={{ display: "grid", gap: 5, minWidth: 240 }}>
+              <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                <FitText
+                  as="h2"
                   style={{
-                    alignItems: "center",
-                    display: "flex",
-                    gap: 10,
-                    justifyContent: "space-between",
+                    fontSize: 18,
+                    lineHeight: 1.15,
+                    letterSpacing: 0,
+                    fontWeight: 900,
                   }}
                 >
-                  <div>
-                    <FitText style={{ display: "block", fontSize: 16, fontWeight: 900 }}>
-                      {overview.activeSeason.title}
-                    </FitText>
-                    <FitText style={muted}>
-                      {labelize(overview.activeSeason.status)} /{" "}
-                      {overview.activeSeason.standingCount} standings /{" "}
-                      {overview.activeSeason.hiddenCount} hidden /{" "}
-                      {overview.activeSeason.disqualifiedCount} disqualified
-                    </FitText>
-                  </div>
+                  {overview?.activeSeason?.title ?? "No active season"}
+                </FitText>
+                {overview?.activeSeason ? (
                   <FitPill
                     mode="status"
                     label={labelize(overview.activeSeason.status)}
                     color={colors.brand}
                   />
-                </div>
-                <FitTextArea
-                  aria-label="Lifecycle rationale"
-                  id="gamification-season-lifecycle-rationale"
-                  value={seasonRationale}
-                  onChange={(event) => setSeasonRationale(event.target.value)}
-                  rows={1}
-                  placeholder="Lifecycle rationale"
-                  style={{ minHeight: 38 }}
+                ) : null}
+              </div>
+              <FitText style={muted}>
+                {overview?.activeSeason
+                  ? `${overview.activeSeason.standingCount} standings / ${overview.activeSeason.hiddenCount} hidden / ${overview.activeSeason.disqualifiedCount} disqualified`
+                  : "Create or activate a season to begin tracking standings."}
+              </FitText>
+            </div>
+            <div
+              className={`gamification-sync-card ${styles.commandActions}`}
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                justifyContent: "flex-end",
+              }}
+            >
+              <FitButton
+                variant="ghost"
+                icon={Crown}
+                label="Manage seasons"
+                onClick={openSeasonManager}
+                style={{ minHeight: 34, paddingInline: 10 }}
+              />
+              <span data-ui="gamification-manual-exp-trigger">
+                <FitButton
+                  variant="primary"
+                  icon={PlusCircle}
+                  label="Grant EXP"
+                  onClick={() => setManualExpOpen(true)}
+                  style={{ minHeight: 36, minWidth: 112, paddingInline: 14 }}
                 />
-                <div
-                  className="gamification-active-season-actions"
-                  style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+              </span>
+              <FitButton
+                variant="ghost"
+                icon={RefreshCcw}
+                label="Refresh"
+                loading={overviewQuery.isFetching}
+                onClick={() => overviewQuery.refetch()}
+                style={{ minHeight: 34, paddingInline: 10 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 7, minHeight: 0 }}>
+            {overview?.activeSeason ? (
+              <div
+                data-ui="gamification-active-season"
+                className={`gamification-active-season-panel ${styles.activeSeason}`}
+                style={{
+                  ...subPanelStyle,
+                  backgroundColor: "transparent",
+                  border: 0,
+                  borderRadius: 0,
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr)",
+                  padding: 0,
+                }}
+              >
+                <details
+                  data-ui="gamification-season-controls"
+                  style={{
+                    borderTop: `1px solid ${colors.border}`,
+                  }}
                 >
-                  {activeSeasonActions.map((status) => (
-                    <FitButton
-                      key={status}
-                      variant={status === "archived" ? "ghost" : "primary"}
-                      icon={status === "archived" ? Archive : CheckCircle2}
-                      label={
-                        status === "archived"
-                          ? "Archive"
-                          : status === "closed"
-                            ? "Close"
-                            : labelize(status)
-                      }
-                      loading={seasonMutation.isPending}
-                      style={{ minHeight: 34, minWidth: 86, paddingInline: 10 }}
-                      textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
-                      onClick={() =>
-                        setConfirmationState({
-                          confirmIcon:
-                            status === "archived" ? Archive : CheckCircle2,
-                          confirmLabel: `Move to ${labelize(status)}`,
-                          isDanger: status === "archived",
-                          message: `${overview.activeSeason!.title} will move from ${labelize(overview.activeSeason!.status)} to ${labelize(status)}. This affects season availability and admin reporting.`,
-                          title: "Confirm Season Lifecycle Change?",
-                          onConfirm: () => {
-                            seasonMutation.mutate({
-                              seasonId: overview.activeSeason!.id,
-                              payload: {
-                                status,
-                                rationale:
-                                  seasonRationale.trim() ||
-                                  "Admin lifecycle review completed.",
-                              },
-                            });
-                          },
-                        })
-                      }
+                  <summary
+                    style={{
+                      alignItems: "center",
+                      color: colors.textSecondary,
+                      cursor: "pointer",
+                      display: "flex",
+                      fontSize: 13,
+                      fontWeight: 800,
+                      minHeight: 32,
+                    }}
+                  >
+                    <span>Season controls</span>
+                  </summary>
+                  <div
+                    className="gamification-season-control-grid"
+                    style={{
+                      alignItems: "end",
+                      display: "grid",
+                      gap: 10,
+                      gridTemplateColumns: "minmax(220px, 1fr) auto",
+                      marginTop: 10,
+                    }}
+                  >
+                    <FitTextArea
+                      aria-label="Lifecycle rationale"
+                      id="gamification-season-lifecycle-rationale"
+                      value={seasonRationale}
+                      onChange={(event) => setSeasonRationale(event.target.value)}
+                      rows={2}
+                      placeholder="Lifecycle rationale"
+                      style={{ minHeight: 58 }}
                     />
-                  ))}
-                  {activeSeasonActions.length === 0 ? (
-                    <FitText style={muted}>
-                      This season has no safe next lifecycle move.
-                    </FitText>
-                  ) : null}
-                </div>
+                    <div
+                      className="gamification-active-season-actions"
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      {activeSeasonActions.map((status) => (
+                        <FitButton
+                          key={status}
+                          variant={status === "archived" ? "ghost" : "primary"}
+                          icon={status === "archived" ? Archive : CheckCircle2}
+                          label={
+                            status === "archived"
+                              ? "Archive"
+                              : status === "closed"
+                                ? "Close"
+                                : labelize(status)
+                          }
+                          loading={seasonMutation.isPending}
+                          style={{ minHeight: 34, minWidth: 86, paddingInline: 10 }}
+                          textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
+                          onClick={() =>
+                            setConfirmationState({
+                              confirmIcon:
+                                status === "archived" ? Archive : CheckCircle2,
+                              confirmLabel: `Move to ${labelize(status)}`,
+                              isDanger: status === "archived",
+                              message: `${overview.activeSeason!.title} will move from ${labelize(overview.activeSeason!.status)} to ${labelize(status)}. This affects season availability and admin reporting.`,
+                              title: "Confirm Season Lifecycle Change?",
+                              onConfirm: () => {
+                                seasonMutation.mutate({
+                                  seasonId: overview.activeSeason!.id,
+                                  payload: {
+                                    status,
+                                    rationale:
+                                      seasonRationale.trim() ||
+                                      "Admin lifecycle review completed.",
+                                  },
+                                });
+                              },
+                            })
+                          }
+                        />
+                      ))}
+                      {activeSeasonActions.length === 0 ? (
+                        <FitText style={muted}>
+                          No safe lifecycle move is currently available.
+                        </FitText>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
               </div>
             ) : (
               <FitText style={muted}>
                 No active season is currently eligible for lifecycle controls.
               </FitText>
             )}
-          </div>
-          <div
-            className="gamification-sync-card"
-            style={{
-              ...panelStyle,
-              padding: 6,
-              display: "grid",
-              gap: 10,
-              alignContent: "space-between",
-            }}
-          >
-            <FitText style={{ ...muted, textTransform: "uppercase" }}>
-              Latest sync
-            </FitText>
-            <FitText style={{ fontSize: 18, fontWeight: 800 }}>
-              {overview ? formatDateTime(overview.generatedAt) : "Loading"}
-            </FitText>
-            <FitButton
-              variant="ghost"
-              icon={RefreshCcw}
-              label="REFRESH"
-              loading={overviewQuery.isFetching}
-              onClick={() => overviewQuery.refetch()}
-            />
           </div>
         </div>
 
@@ -910,46 +1136,13 @@ function AdminGamificationPage() {
           </div>
         ) : null}
 
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          {[
-            { label: "Governance Overview", value: "overview" as const },
-          ].map((tab) => {
-            const isActive = activeTab === tab.value;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setActiveTab(tab.value)}
-                style={{
-                  border: `1px solid ${isActive ? colors.brand : colors.border}`,
-                  backgroundColor: isActive
-                    ? `${colors.brand}16`
-                    : colors.surfaceRaised,
-                  borderRadius: 999,
-                  color: isActive ? colors.brand : colors.textSecondary,
-                  cursor: "pointer",
-                  fontWeight: 800,
-                  padding: "8px 14px",
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
         {activeTab === "overview" ? (
           <div
+            data-ui="gamification-overview"
             className="gamification-overview-grid"
             style={{
               display: "grid",
-              gridTemplateRows: "auto minmax(430px, auto) minmax(250px, auto)",
+              gridTemplateRows: "auto",
               gap: 14,
               minHeight: 0,
               overflow: "visible",
@@ -958,17 +1151,33 @@ function AdminGamificationPage() {
             <MetricGrid overview={overview} />
 
             <div style={{ minHeight: 0, overflow: "visible" }}>
-              <SeasonPerformanceTable
+              {leaderboardMode === "overall" ? (
+                <SeasonPerformanceTable
                 includeArchived={seasonIncludeArchived}
+                leaderboardMode={leaderboardMode}
                 muscleFilter={seasonMuscleFilter}
                 onIncludeArchivedChange={setSeasonIncludeArchived}
+                onLeaderboardModeChange={setLeaderboardMode}
                 onMuscleFilterChange={setSeasonMuscleFilter}
                 onPageChange={setSeasonStandingPage}
                 onSearchChange={setSeasonStandingSearch}
                 onSeasonChange={setSeasonFilterId}
                 onVisibilityChange={setSeasonVisibilityFilter}
                 onGovernanceChange={setSeasonGovernanceFilter}
+                onModerate={moderateStanding}
+                onOpenManualExp={() => setManualExpOpen(true)}
+                onOpenSeasonManager={openSeasonManager}
+                onRefresh={() => {
+                  void Promise.all([
+                    overviewQuery.refetch(),
+                    seasonStandingsQuery.refetch(),
+                  ]);
+                }}
+                moderationPending={rankingMutation.isPending}
                 page={seasonStandingPage}
+                refreshing={
+                  overviewQuery.isFetching || seasonStandingsQuery.isFetching
+                }
                 search={seasonStandingSearch}
                 selectedGovernance={seasonGovernanceFilter}
                 selectedSeasonId={seasonFilterId}
@@ -976,237 +1185,451 @@ function AdminGamificationPage() {
                 seasons={seasonsQuery.data ?? []}
                 standings={seasonStandingsQuery.data}
               />
+              ) : (
+                <MusclePerformanceTable
+                  governanceProfiles={overview?.rankings.profiles ?? []}
+                  leaderboardMode={leaderboardMode}
+                  moderationPending={rankingMutation.isPending}
+                  muscleDefinitions={manualExpMuscleDefinitions}
+                  onLeaderboardModeChange={setLeaderboardMode}
+                  onModerate={moderateStanding}
+                  onMuscleChange={setSelectedStandingMuscle}
+                  onOpenManualExp={() => setManualExpOpen(true)}
+                  onOpenSeasonManager={openSeasonManager}
+                  onPageChange={setMuscleStandingPage}
+                  onRefresh={() => {
+                    void Promise.all([
+                      overviewQuery.refetch(),
+                      muscleStandingsQuery.refetch(),
+                    ]);
+                  }}
+                  onScopeChange={setMuscleStandingScope}
+                  onSearchChange={setSeasonStandingSearch}
+                  onSeasonChange={setSeasonFilterId}
+                  page={muscleStandingPage}
+                  refreshing={
+                    overviewQuery.isFetching || muscleStandingsQuery.isFetching
+                  }
+                  scope={muscleStandingScope}
+                  search={seasonStandingSearch}
+                  selectedMuscle={selectedStandingMuscle}
+                  selectedSeasonId={seasonFilterId}
+                  seasons={seasonsQuery.data ?? []}
+                  standings={muscleStandingsQuery.data}
+                />
+              )}
             </div>
 
-        <div
-          className="gamification-bottom-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 14,
-            alignItems: "stretch",
-            minHeight: 0,
-          }}
-        >
-          <FitSection
-            heading="Integrity Review"
-            action={<ShieldAlert size={16} color={colors.brand} />}
-            style={overviewBottomCardStyle}
-            bare
-          >
-            <RecordList emptyCopy="No open integrity cases.">
-              {overview?.integrity.cases.slice(0, 1).map((integrityCase) => (
-                <div key={integrityCase.caseId} style={overviewBottomContentStyle}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <FitText style={{ display: "block", fontWeight: 800 }}>
-                        {integrityCase.memberName}
-                      </FitText>
-                      <FitText
-                        style={{
-                          ...muted,
-                          display: "-webkit-box",
-                          marginTop: 4,
-                          overflow: "hidden",
-                          WebkitBoxOrient: "vertical",
-                          WebkitLineClamp: 1,
-                        }}
-                      >
-                        {integrityCase.summary ?? "No case summary provided."}
-                      </FitText>
-                    </div>
-                    <FitPill
-                      mode="status"
-                      label={labelize(integrityCase.riskLevel)}
-                      color={
-                        integrityCase.riskLevel === "high"
-                          ? colors.danger
-                          : colors.brand
-                      }
-                    />
-                  </div>
-                  <FitTextArea
-                    aria-label="Reviewer rationale for this integrity decision"
-                    id={`gamification-integrity-rationale-${integrityCase.caseId}`}
-                    rows={2}
-                    value={integrityNotes[integrityCase.caseId] ?? ""}
-                    onChange={(event) =>
-                      updateDraft(
-                        setIntegrityNotes,
-                        integrityCase.caseId,
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Reviewer rationale for this integrity decision"
-                    style={{ marginTop: 10 }}
-                  />
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                    <FitButton
-                      variant="ghost"
-                      icon={ShieldCheck}
-                      label="Resolve valid"
-                      loading={integrityMutation.isPending}
-                      style={{ minHeight: 32, padding: "6px 10px" }}
-                      textStyle={{ fontSize: 11, fontWeight: 800 }}
-                      onClick={() =>
-                        resolveIntegrityCase(
-                          integrityCase.caseId,
-                          "resolved_valid",
-                        )
-                      }
-                    />
-                    <FitButton
-                      variant="danger"
-                      icon={EyeOff}
-                      label="Resolve invalid"
-                      loading={integrityMutation.isPending}
-                      style={{ minHeight: 32, padding: "6px 10px" }}
-                      textStyle={{ fontSize: 11, fontWeight: 800 }}
-                      onClick={() =>
-                        resolveIntegrityCase(
-                          integrityCase.caseId,
-                          "resolved_invalid",
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-            </RecordList>
-          </FitSection>
-          <FitSection
-            heading="Ranking Governance"
-            action={<Crown size={16} color={colors.brand} />}
-            style={overviewBottomCardStyle}
-            bare
-          >
-            <RecordList emptyCopy="No admin-governed ranking profiles yet.">
-              {overview?.rankings.profiles.slice(0, 1).map((profile) => (
-                <div key={profile.userId} style={overviewBottomContentStyle}>
-                  <ProfileHeading
-                    title={profile.memberName}
-                    subtitle={`${labelize(profile.governanceStatus)} / ${labelize(
-                      profile.visibility,
-                    )}`}
-                  />
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      gridTemplateColumns: "minmax(0, 1fr) auto",
-                      marginTop: 10,
-                    }}
-                  >
-                    <FitDropdown
-                      fullWidth
-                      value={
-                        rankingStateDrafts[profile.userId] ??
-                        (profile.governanceStatus === "disqualified"
-                          ? "normal"
-                          : "hidden_by_admin")
-                      }
-                      options={RANKING_GOVERNANCE_OPTIONS}
-                      onChange={(value) =>
-                        setRankingStateDrafts((current) => ({
-                          ...current,
-                          [profile.userId]: value as RankingStateDraftMap[string],
-                        }))
-                      }
-                    />
-                    <FitButton
-                      variant="primary"
-                      icon={ShieldCheck}
-                      label="Apply"
-                      loading={rankingMutation.isPending}
-                      onClick={() => updateRanking(profile)}
-                      style={{ minHeight: 36, padding: "8px 12px" }}
-                      textStyle={{ fontSize: 11, fontWeight: 800 }}
-                    />
-                  </div>
-                  <FitTextArea
-                    aria-label="Admin note for this ranking governance decision"
-                    id={`gamification-ranking-governance-note-${profile.userId}`}
-                    rows={2}
-                    value={rankingNotes[profile.userId] ?? ""}
-                    onChange={(event) =>
-                      updateDraft(
-                        setRankingNotes,
-                        profile.userId,
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Admin note for this ranking governance decision"
-                    style={{ marginTop: 8 }}
-                  />
-                </div>
-              ))}
-            </RecordList>
-          </FitSection>
-
-          <ManualExpGrantPanel
-            draft={manualExpDraft}
-            isLoading={manualExpMutation.isPending}
-            members={manualExpEligibleMembers}
-            onDraftChange={setManualExpDraft}
-            onSubmit={submitManualExpGrant}
-            style={overviewBottomCardStyle}
-          />
-
-        <FitSection
-          heading="Audit And Corrections"
-          action={<Activity size={16} color={colors.brand} />}
-          style={overviewBottomCardStyle}
-          bare
-        >
-          <RecordList emptyCopy="No moderation actions have been recorded yet.">
-            {overview?.audit.recentActions.slice(0, 1).map((action) => (
-              <div
-                key={action.id}
-                style={{
-                  ...overviewBottomContentStyle,
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
-                  gap: 12,
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <FitText style={{ display: "block", fontWeight: 800 }}>
-                    {labelize(action.actionType)}
-                  </FitText>
-                  <FitText style={{ ...muted, display: "block", marginTop: 4 }}>
-                    {action.targetName} / {formatDateTime(action.createdAt)}
-                  </FitText>
-                  {action.rationale ? (
-                    <FitText style={{ ...muted, marginTop: 6 }}>
-                      {action.rationale}
-                    </FitText>
-                  ) : null}
-                </div>
+            {legacyGovernanceQueueEnabled ? (
+            <FitSection
+              heading="Governance Queue"
+              action={
                 <FitPill
                   mode="status"
-                  label={
-                    action.progressionGrantId
-                      ? "XP grant"
-                      : action.integrityCaseId
-                        ? "Integrity"
-                        : action.seasonId
-                          ? "Season"
-                          : "Profile"
-                  }
+                  label={`${(overview?.integrity.cases.length ?? 0) + (overview?.rankings.profiles.length ?? 0)} actionable`}
                   color={colors.brand}
                 />
+              }
+              className={`gamification-governance-workspace ${styles.governanceWorkspace}`}
+              style={overviewBottomCardStyle}
+              bare
+            >
+              <GovernanceWorkbench
+                activeView={governanceView}
+                formatDateTime={formatDateTime}
+                integrityPending={integrityMutation.isPending}
+                labelize={labelize}
+                onActiveViewChange={setGovernanceView}
+                onApplyRanking={updateRanking}
+                onRankingDraftChange={(userId, value) =>
+                  setRankingStateDrafts((current) => ({
+                    ...current,
+                    [userId]: value,
+                  }))
+                }
+                onRankingNoteChange={(userId, value) =>
+                  updateDraft(setRankingNotes, userId, value)
+                }
+                onResolveIntegrity={resolveIntegrityCase}
+                overview={overview}
+                rankingDrafts={rankingStateDrafts}
+                rankingNotes={rankingNotes}
+                rankingPending={rankingMutation.isPending}
+              />
+              <div
+                aria-hidden="true"
+                className={styles.governanceBody}
+                hidden
+                style={{ display: "none" }}
+              >
+              <div
+                role="tablist"
+                aria-label="Gamification governance views"
+                data-ui="gamification-governance-tabs"
+                data-ui-peer-contract="quiet-equal"
+                className={styles.governanceTabs}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  borderBottom: `1px solid ${colors.border}`,
+                }}
+              >
+                {[
+                  {
+                    id: "integrity" as const,
+                    icon: ShieldAlert,
+                    label: "Integrity",
+                    count: overview?.integrity.cases.length ?? 0,
+                  },
+                  {
+                    id: "rankings" as const,
+                    icon: Crown,
+                    label: "Rankings",
+                    count: overview?.rankings.profiles.length ?? 0,
+                  },
+                  {
+                    id: "audit" as const,
+                    icon: Activity,
+                    label: "Audit log",
+                    count: overview?.audit.recentActions.length ?? 0,
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const selected = governanceView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="tab"
+                      id={`gamification-governance-tab-${item.id}`}
+                      aria-controls={`gamification-governance-panel-${item.id}`}
+                      aria-selected={selected}
+                      data-ui={`gamification-governance-tab-${item.id}`}
+                      className={styles.governanceTab}
+                      onClick={() => setGovernanceView(item.id)}
+                      style={{
+                        alignItems: "center",
+                        backgroundColor: "transparent",
+                        border: 0,
+                        borderBottom: selected
+                          ? `2px solid ${colors.brand}`
+                          : "2px solid transparent",
+                        color: selected ? colors.textPrimary : colors.textMuted,
+                        cursor: "pointer",
+                        display: "flex",
+                        gap: 8,
+                        justifyContent: "center",
+                        minHeight: 46,
+                        padding: "8px 12px",
+                      }}
+                    >
+                      <Icon size={15} color={selected ? colors.brand : colors.textMuted} />
+                      <FitText
+                        as="span"
+                        style={{
+                          color: "inherit",
+                          fontSize: 12,
+                          fontWeight: selected ? 800 : 700,
+                        }}
+                      >
+                        {item.label}
+                      </FitText>
+                      <FitText
+                        as="span"
+                        style={{
+                          color: selected ? colors.brand : colors.textMuted,
+                          fontSize: 11,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {item.count}
+                      </FitText>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </RecordList>
-        </FitSection>
-        </div>
+
+              {governanceView === "integrity" ? (
+                <div
+                  role="tabpanel"
+                  id="gamification-governance-panel-integrity"
+                  aria-labelledby="gamification-governance-tab-integrity"
+                  className={`gamification-integrity-review-panel ${styles.governancePanel}`}
+                  data-ui="gamification-integrity-review-panel"
+                  style={overviewBottomContentStyle}
+                >
+                  <div>
+                    <FitText style={{ display: "block", fontWeight: 800 }}>
+                      Review suspicious progression
+                    </FitText>
+                    <FitText style={muted}>
+                      Confirm whether an AI-flagged result should remain valid before it affects trusted rankings.
+                    </FitText>
+                  </div>
+                  <RecordList emptyCopy="No open integrity cases.">
+                    {overview?.integrity.cases.slice(0, 1).map((integrityCase) => (
+                      <div
+                        key={integrityCase.caseId}
+                        className={styles.governanceRecord}
+                        style={subPanelStyle}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                          }}
+                        >
+                          <div>
+                            <FitText style={{ display: "block", fontWeight: 800 }}>
+                              {integrityCase.memberName}
+                            </FitText>
+                            <FitText
+                              style={{
+                                ...muted,
+                                display: "-webkit-box",
+                                marginTop: 4,
+                                overflow: "hidden",
+                                WebkitBoxOrient: "vertical",
+                                WebkitLineClamp: 1,
+                              }}
+                            >
+                              {integrityCase.summary ?? "No case summary provided."}
+                            </FitText>
+                          </div>
+                          <FitPill
+                            mode="status"
+                            label={labelize(integrityCase.riskLevel)}
+                            color={
+                              integrityCase.riskLevel === "high"
+                                ? colors.danger
+                                : colors.brand
+                            }
+                          />
+                        </div>
+                        <label
+                          htmlFor={`gamification-integrity-rationale-${integrityCase.caseId}`}
+                          style={{ display: "grid", gap: 6, marginTop: 10 }}
+                        >
+                          <FitText
+                            style={{
+                              color: colors.textSecondary,
+                              fontSize: 12,
+                              fontWeight: 750,
+                            }}
+                          >
+                            Reviewer rationale
+                          </FitText>
+                          <FitTextArea
+                            aria-label="Reviewer rationale for this integrity decision"
+                            id={`gamification-integrity-rationale-${integrityCase.caseId}`}
+                            rows={2}
+                            value={integrityNotes[integrityCase.caseId] ?? ""}
+                            onChange={(event) =>
+                              updateDraft(
+                                setIntegrityNotes,
+                                integrityCase.caseId,
+                                event.target.value,
+                              )
+                            }
+                            placeholder="Explain why this activity is valid or invalid."
+                          />
+                        </label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                          <FitButton
+                            variant="ghost"
+                            icon={ShieldCheck}
+                            label="Resolve valid"
+                            loading={integrityMutation.isPending}
+                            style={{ minHeight: 32, padding: "6px 10px" }}
+                            textStyle={{ fontSize: 11, fontWeight: 800 }}
+                            onClick={() =>
+                              resolveIntegrityCase(
+                                integrityCase.caseId,
+                                "resolved_valid",
+                              )
+                            }
+                          />
+                          <FitButton
+                            variant="danger"
+                            icon={EyeOff}
+                            label="Resolve invalid"
+                            loading={integrityMutation.isPending}
+                            style={{ minHeight: 32, padding: "6px 10px" }}
+                            textStyle={{ fontSize: 11, fontWeight: 800 }}
+                            onClick={() =>
+                              resolveIntegrityCase(
+                                integrityCase.caseId,
+                                "resolved_invalid",
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </RecordList>
+                </div>
+              ) : governanceView === "rankings" ? (
+                <div
+                  role="tabpanel"
+                  id="gamification-governance-panel-rankings"
+                  aria-labelledby="gamification-governance-tab-rankings"
+                  className={`gamification-ranking-governance-panel ${styles.governancePanel}`}
+                  data-ui="gamification-ranking-governance-panel"
+                  style={overviewBottomContentStyle}
+                >
+                  <div>
+                    <FitText style={{ display: "block", fontWeight: 800 }}>
+                      Control public ranking eligibility
+                    </FitText>
+                    <FitText style={muted}>
+                      Restore, hide, or disqualify an exceptional profile without changing earned workout history.
+                    </FitText>
+                  </div>
+                  <RecordList emptyCopy="No admin-governed ranking profiles yet.">
+                    {overview?.rankings.profiles.slice(0, 1).map((profile) => (
+                      <div
+                        key={profile.userId}
+                        className={styles.governanceRecord}
+                        style={subPanelStyle}
+                      >
+                        <ProfileHeading
+                          title={profile.memberName}
+                          subtitle={`${labelize(profile.governanceStatus)} / ${labelize(
+                            profile.visibility,
+                          )}`}
+                        />
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 8,
+                            gridTemplateColumns: "minmax(0, 1fr) auto",
+                            marginTop: 10,
+                          }}
+                        >
+                          <FitDropdown
+                            fullWidth
+                            value={
+                              rankingStateDrafts[profile.userId] ??
+                              (profile.governanceStatus === "disqualified"
+                                ? "normal"
+                                : "hidden_by_admin")
+                            }
+                            options={RANKING_GOVERNANCE_OPTIONS}
+                            onChange={(value) =>
+                              setRankingStateDrafts((current) => ({
+                                ...current,
+                                [profile.userId]:
+                                  value as RankingStateDraftMap[string],
+                              }))
+                            }
+                          />
+                          <FitButton
+                            variant="primary"
+                            icon={ShieldCheck}
+                            label="Apply"
+                            loading={rankingMutation.isPending}
+                            onClick={() => updateRanking(profile)}
+                            style={{ minHeight: 36, padding: "8px 12px" }}
+                            textStyle={{ fontSize: 11, fontWeight: 800 }}
+                          />
+                        </div>
+                        <FitTextArea
+                          aria-label="Admin note for this ranking governance decision"
+                          id={`gamification-ranking-governance-note-${profile.userId}`}
+                          rows={2}
+                          value={rankingNotes[profile.userId] ?? ""}
+                          onChange={(event) =>
+                            updateDraft(
+                              setRankingNotes,
+                              profile.userId,
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Admin note for this ranking governance decision"
+                          style={{
+                            marginTop: 8,
+                            width: "100%",
+                            minHeight: 52,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </RecordList>
+                </div>
+              ) : (
+                <div
+                  role="tabpanel"
+                  id="gamification-governance-panel-audit"
+                  aria-labelledby="gamification-governance-tab-audit"
+                  className={`gamification-audit-panel ${styles.governancePanel}`}
+                  data-ui="gamification-audit-panel"
+                  style={overviewBottomContentStyle}
+                >
+                  <div>
+                    <FitText style={{ display: "block", fontWeight: 800 }}>
+                      Trace moderation and corrections
+                    </FitText>
+                    <FitText style={muted}>
+                      Review recent immutable admin actions so corrections remain explainable.
+                    </FitText>
+                  </div>
+                  <div
+                    data-ui="gamification-audit-records"
+                    style={{
+                      maxHeight: "none",
+                      overflowY: "visible",
+                      paddingRight: 4,
+                    }}
+                  >
+                    <RecordList emptyCopy="No moderation actions have been recorded yet.">
+                      {overview?.audit.recentActions.slice(0, 5).map((action) => (
+                        <div
+                          key={action.id}
+                          className={styles.auditRecord}
+                          style={{
+                            ...subPanelStyle,
+                            alignItems: "center",
+                            display: "grid",
+                            gap: 12,
+                            gridTemplateColumns: "minmax(0, 1fr) auto",
+                          }}
+                        >
+                          <div>
+                            <FitText style={{ display: "block", fontWeight: 800 }}>
+                              {labelize(action.actionType)}
+                            </FitText>
+                            <FitText style={{ ...muted, display: "block", marginTop: 4 }}>
+                              {action.targetName} / {formatDateTime(action.createdAt)}
+                            </FitText>
+                            {action.rationale ? (
+                              <FitText style={{ ...muted, marginTop: 6 }}>
+                                {action.rationale}
+                              </FitText>
+                            ) : null}
+                          </div>
+                          <FitPill
+                            mode="status"
+                            label={
+                              action.progressionGrantId
+                                ? "XP grant"
+                                : action.integrityCaseId
+                                  ? "Integrity"
+                                  : action.seasonId
+                                    ? "Season"
+                                    : "Profile"
+                            }
+                            color={colors.brand}
+                          />
+                        </div>
+                      ))}
+                    </RecordList>
+                  </div>
+                </div>
+              )}
+              </div>
+            </FitSection>
+            ) : null}
           </div>
         ) : (
           <MilestoneManagementPanel
@@ -1224,6 +1647,10 @@ function AdminGamificationPage() {
         )}
       </div>
       <style>{`
+        .gamification-metric-item + .gamification-metric-item {
+          border-left: 1px solid ${colors.border};
+        }
+
         @media (max-width: 1180px) {
           .gamification-governance-header {
             grid-template-columns: minmax(0, 1fr) !important;
@@ -1231,6 +1658,10 @@ function AdminGamificationPage() {
           }
 
           .gamification-active-season-panel {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .gamification-season-control-grid {
             grid-template-columns: minmax(0, 1fr) !important;
           }
 
@@ -1254,17 +1685,426 @@ function AdminGamificationPage() {
             grid-template-rows: auto !important;
           }
 
+          .gamification-metric-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .gamification-metric-item:nth-child(3) {
+            border-left: 0;
+          }
+
+          .gamification-metric-item:nth-child(n + 3) {
+            border-top: 1px solid ${colors.border};
+          }
+
           .gamification-bottom-grid {
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }
 
         @media (max-width: 640px) {
+          .gamification-metric-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .gamification-metric-item + .gamification-metric-item {
+            border-left: 0;
+            border-top: 1px solid ${colors.border};
+          }
+
           .gamification-sync-card {
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>
+      <FitModal
+        isOpen={seasonManagerOpen}
+        onClose={() => setSeasonManagerOpen(false)}
+        title="Season planner"
+        subtitle="Schedule the next ranking season or manually start an eligible draft."
+        icon={Crown}
+        maxWidth={760}
+        closeAriaLabel="Close season planner"
+        containerStyle={{
+          borderRadius: 6,
+          maxHeight: "calc(100dvh - 64px)",
+        }}
+        contentStyle={{
+          maxHeight: "calc(100dvh - 204px)",
+          padding: 18,
+        }}
+        footer={
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              justifyContent: "flex-end",
+              width: "100%",
+            }}
+          >
+            <FitButton
+              variant="ghost"
+              label="Close"
+              disabled={createSeasonMutation.isPending}
+              onClick={() => setSeasonManagerOpen(false)}
+              style={{ minHeight: 36, minWidth: 88 }}
+            />
+            <FitButton
+              variant="primary"
+              icon={PlusCircle}
+              label="Create draft"
+              loading={createSeasonMutation.isPending}
+              disabled={
+                !seasonDraft.title.trim() ||
+                !seasonDraft.startsAt ||
+                !seasonDraft.endsAt
+              }
+              onClick={submitSeasonDraft}
+              style={{ minHeight: 36, minWidth: 126 }}
+            />
+          </div>
+        }
+      >
+        <div style={{ display: "grid", gap: 18 }}>
+          {overview?.activeSeason ? (
+            <section
+              style={{
+                alignItems: "center",
+                backgroundColor: `${colors.brand}12`,
+                border: `1px solid ${colors.brand}50`,
+                borderLeft: `3px solid ${colors.brand}`,
+                borderRadius: 5,
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                padding: "12px 14px",
+              }}
+            >
+              <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                <FitText style={{ color: colors.textMuted, fontSize: 11, fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Active season
+                </FitText>
+                <FitText style={{ fontSize: 15, fontWeight: 850 }}>
+                  {overview.activeSeason.title}
+                </FitText>
+                <FitText style={muted}>
+                  {formatSeasonRemaining(overview.activeSeason.endsAt, seasonClock)}
+                  {" · "}Auto-closes {formatDateTime(overview.activeSeason.endsAt)}
+                </FitText>
+              </div>
+              <FitButton
+                variant="danger"
+                icon={CheckCircle2}
+                label="Close season"
+                loading={seasonMutation.isPending}
+                onClick={() =>
+                  setConfirmationState({
+                    confirmIcon: CheckCircle2,
+                    confirmLabel: "Close season",
+                    message: `${overview.activeSeason!.title} will stop immediately. Its final standings will remain available in season history.`,
+                    title: "Close Active Season?",
+                    onConfirm: () => {
+                      seasonMutation.mutate({
+                        seasonId: overview.activeSeason!.id,
+                        payload: {
+                          status: "closed",
+                          rationale:
+                            seasonRationale.trim() ||
+                            "Admin manually closed the active season.",
+                        },
+                      });
+                    },
+                  })
+                }
+                style={{ minHeight: 36, minWidth: 118 }}
+              />
+            </section>
+          ) : (
+            <section
+              style={{
+                border: `1px dashed ${colors.border}`,
+                borderRadius: 7,
+                padding: 12,
+              }}
+            >
+              <FitText style={muted}>
+                No season is active. Start an eligible draft below or wait for its scheduled auto-start.
+              </FitText>
+            </section>
+          )}
+          <section
+            style={{
+              borderTop: `1px solid ${colors.border}`,
+              display: "grid",
+              gap: 12,
+              paddingTop: 16,
+            }}
+          >
+            <div style={{ borderLeft: `3px solid ${colors.brand}`, paddingLeft: 10 }}>
+              <FitText
+                as="h3"
+                style={{ fontSize: 16, fontWeight: 900, lineHeight: 1.2 }}
+              >
+                Schedule a season
+              </FitText>
+              <FitText style={{ ...muted, marginTop: 3 }}>
+                Drafts start automatically at their scheduled time when no other season is active.
+              </FitText>
+            </div>
+            <label style={{ display: "grid", gap: 6 }}>
+              <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 800 }}>
+                Season name
+              </FitText>
+              <FitTextInput
+                aria-label="Season name"
+                value={seasonDraft.title}
+                placeholder="e.g. FitTrack Strength Season"
+                onChange={(event) =>
+                  setSeasonDraft((current) => ({ ...current, title: event.target.value }))
+                }
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 800 }}>
+                Description (optional)
+              </FitText>
+              <FitTextArea
+                aria-label="Season description"
+                value={seasonDraft.description}
+                rows={2}
+                placeholder="What this season emphasizes"
+                onChange={(event) =>
+                  setSeasonDraft((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 800 }}>
+                  Starts
+                </FitText>
+                <FitTextInput
+                  aria-label="Season start date and time"
+                  type="datetime-local"
+                  value={seasonDraft.startsAt}
+                  onChange={(event) =>
+                    setSeasonDraft((current) => ({
+                      ...current,
+                      startsAt: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 800 }}>
+                  Ends
+                </FitText>
+                <FitTextInput
+                  aria-label="Season end date and time"
+                  type="datetime-local"
+                  value={seasonDraft.endsAt}
+                  onChange={(event) =>
+                    setSeasonDraft((current) => ({
+                      ...current,
+                      endsAt: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <label
+              style={{
+                alignItems: "center",
+                border: `1px solid ${colors.border}`,
+                borderRadius: 4,
+                cursor: "pointer",
+                display: "flex",
+                gap: 10,
+                minHeight: 42,
+                padding: "8px 10px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={seasonDraft.autoStartNext}
+                onChange={(event) =>
+                  setSeasonDraft((current) => ({
+                    ...current,
+                    autoStartNext: event.target.checked,
+                  }))
+                }
+              />
+              <span>
+                <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+                  Auto-start when eligible
+                </FitText>
+                <FitText style={{ ...muted, display: "block", marginTop: 2 }}>
+                  Starts after the scheduled time only when no active season exists.
+                </FitText>
+              </span>
+            </label>
+          </section>
+
+          <section
+            style={{
+              borderTop: `1px solid ${colors.border}`,
+              display: "grid",
+              gap: 10,
+              paddingTop: 16,
+            }}
+          >
+            <div style={{ borderLeft: `3px solid ${colors.brand}`, paddingLeft: 10 }}>
+              <FitText
+                as="h3"
+                style={{ fontSize: 16, fontWeight: 900, lineHeight: 1.2 }}
+              >
+                Scheduled drafts
+              </FitText>
+              <FitText style={{ ...muted, marginTop: 3 }}>
+                Manual start remains available for demos and schedule changes.
+              </FitText>
+            </div>
+            {(seasonsQuery.data ?? []).filter((season) => season.status === "draft").length ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                {(seasonsQuery.data ?? [])
+                  .filter((season) => season.status === "draft")
+                  .map((season) => (
+                    <div
+                      key={season.id}
+                      style={{
+                        alignItems: "center",
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 4,
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 10,
+                        justifyContent: "space-between",
+                        padding: 10,
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 3 }}>
+                        <FitText style={{ fontSize: 13, fontWeight: 850 }}>
+                          {season.title}
+                        </FitText>
+                        <FitText style={muted}>
+                          {formatDateTime(season.startsAt)} – {formatDateTime(season.endsAt)}
+                        </FitText>
+                        <FitText style={{ ...muted, fontSize: 11 }}>
+                          {season.autoStartNext ? "Auto-start enabled" : "Manual start only"}
+                        </FitText>
+                      </div>
+                      <FitButton
+                        variant="ghost"
+                        icon={CheckCircle2}
+                        label={overview?.activeSeason ? "Active season running" : "Start now"}
+                        disabled={Boolean(overview?.activeSeason)}
+                        loading={seasonMutation.isPending}
+                        onClick={() =>
+                          seasonMutation.mutate({
+                            seasonId: season.id,
+                            payload: {
+                              status: "active",
+                              rationale: "Admin manually started the scheduled season.",
+                            },
+                          })
+                        }
+                        style={{ minHeight: 34, minWidth: 116 }}
+                      />
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  border: `1px dashed ${colors.border}`,
+                  borderRadius: 6,
+                  padding: 14,
+                  textAlign: "center",
+                }}
+              >
+                <FitText style={muted}>No draft seasons are scheduled yet.</FitText>
+              </div>
+            )}
+          </section>
+        </div>
+      </FitModal>
+      <FitModal
+        isOpen={manualExpOpen}
+        onClose={() => {
+          setManualExpOpen(false);
+          setManualMemberSearch("");
+        }}
+        title="Grant Manual EXP"
+        subtitle="Apply an audited correction after verified member activity."
+        icon={PlusCircle}
+        maxWidth={600}
+        closeAriaLabel="Close manual EXP grant"
+        containerStyle={{
+          borderRadius: 8,
+          maxHeight: "calc(100dvh - 64px)",
+        }}
+        contentStyle={{
+          maxHeight: "calc(100dvh - 224px)",
+          padding: 18,
+        }}
+        footer={
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              justifyContent: "flex-end",
+              width: "100%",
+            }}
+          >
+            <FitButton
+              variant="ghost"
+              label="Cancel"
+              disabled={manualExpMutation.isPending}
+              onClick={() => {
+                setManualExpOpen(false);
+                setManualMemberSearch("");
+              }}
+              style={{ minHeight: 36, minWidth: 88 }}
+              textStyle={{ fontSize: 12, fontWeight: 750 }}
+            />
+            <span
+              data-ui="gamification-manual-exp-submit"
+              style={{ display: "block" }}
+            >
+              <FitButton
+                variant="primary"
+                icon={PlusCircle}
+                label="Grant EXP"
+                loading={manualExpMutation.isPending}
+                disabled={!manualExpDraft.userId}
+                onClick={submitManualExpGrant}
+                style={{ minHeight: 36, minWidth: 124 }}
+                textStyle={{ fontSize: 12, fontWeight: 800 }}
+              />
+            </span>
+          </div>
+        }
+      >
+        <ManualExpGrantPanel
+          draft={manualExpDraft}
+          members={manualExpEligibleMembers}
+          memberSearch={manualMemberSearch}
+          membersLoading={membersQuery.isFetching}
+          muscleDefinitions={manualExpMuscleDefinitions}
+          musclesLoading={muscleDefinitionsQuery.isFetching}
+          onDraftChange={setManualExpDraft}
+          onMemberSearchChange={setManualMemberSearch}
+        />
+      </FitModal>
       <ConfirmModal
         isOpen={confirmationState !== null}
         title={confirmationState?.title ?? "Confirm action"}
@@ -1291,15 +2131,23 @@ function AdminGamificationPage() {
 
 function SeasonPerformanceTable({
   includeArchived,
+  leaderboardMode,
+  moderationPending,
   muscleFilter,
   onGovernanceChange,
   onIncludeArchivedChange,
+  onLeaderboardModeChange,
+  onModerate,
   onMuscleFilterChange,
+  onOpenManualExp,
+  onOpenSeasonManager,
   onPageChange,
+  onRefresh,
   onSearchChange,
   onSeasonChange,
   onVisibilityChange,
   page,
+  refreshing,
   search,
   selectedGovernance,
   selectedSeasonId,
@@ -1308,15 +2156,30 @@ function SeasonPerformanceTable({
   standings,
 }: {
   includeArchived: boolean;
+  leaderboardMode: "overall" | "muscle";
+  moderationPending: boolean;
   muscleFilter: string;
   onGovernanceChange: (value: FitnessRankingGovernanceStatus | "") => void;
   onIncludeArchivedChange: (value: boolean) => void;
+  onLeaderboardModeChange: (value: "overall" | "muscle") => void;
+  onModerate: (
+    standing: AdminGamificationSeasonStandingRecord,
+    status: Extract<
+      FitnessRankingGovernanceStatus,
+      "normal" | "hidden_by_admin" | "disqualified"
+    >,
+    rationale: string,
+  ) => void;
   onMuscleFilterChange: (value: string) => void;
+  onOpenManualExp: () => void;
+  onOpenSeasonManager: () => void;
   onPageChange: (page: number) => void;
+  onRefresh: () => void;
   onSearchChange: (value: string) => void;
   onSeasonChange: (value: string) => void;
   onVisibilityChange: (value: FitnessRankingVisibility | "") => void;
   page: number;
+  refreshing: boolean;
   search: string;
   selectedGovernance: FitnessRankingGovernanceStatus | "";
   selectedSeasonId: string;
@@ -1330,9 +2193,11 @@ function SeasonPerformanceTable({
     | undefined;
 }) {
   const { colors } = useTheme();
+  const [reviewTarget, setReviewTarget] =
+    useState<AdminGamificationSeasonStandingRecord | null>(null);
   const rows = standings?.data ?? [];
   const meta = standings?.meta ?? {
-    limit: 6,
+    limit: 10,
     page,
     total: 0,
     total_pages: 1,
@@ -1349,7 +2214,30 @@ function SeasonPerformanceTable({
       key: "rank",
       heading: "Rank",
       render: (row) => (
-        <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
+        <FitText
+          style={{
+            alignItems: "center",
+            backgroundColor:
+              row.rankPosition && row.rankPosition <= 3
+                ? `${colors.brand}18`
+                : "transparent",
+            border:
+              row.rankPosition && row.rankPosition <= 3
+                ? `1px solid ${colors.brand}55`
+                : "1px solid transparent",
+            borderRadius: 8,
+            color:
+              row.rankPosition && row.rankPosition <= 3
+                ? colors.brand
+                : colors.textPrimary,
+            display: "inline-flex",
+            fontSize: 12,
+            fontWeight: 900,
+            height: 28,
+            justifyContent: "center",
+            minWidth: 32,
+          }}
+        >
           {row.rankPosition ? `#${row.rankPosition}` : "--"}
         </FitText>
       ),
@@ -1379,7 +2267,16 @@ function SeasonPerformanceTable({
       heading: "Season",
       render: (row, themeColors) => (
         <div style={{ display: "grid", gap: 2 }}>
-          <FitText style={{ display: "block", fontSize: 13, fontWeight: 760 }}>
+          <FitText
+            style={{
+              display: "block",
+              fontSize: 13,
+              fontWeight: 760,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {row.seasonTitle}
           </FitText>
           <FitText
@@ -1396,12 +2293,12 @@ function SeasonPerformanceTable({
     },
     {
       key: "exp",
-      heading: "EXP",
+      heading: "Season score",
       align: "right",
       render: (row, themeColors) => (
         <div style={{ display: "grid", gap: 2, justifyItems: "end" }}>
           <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
-            {row.totalXp.toLocaleString("en-US")} XP
+            {row.seasonPoints.toLocaleString("en-US")} pts
           </FitText>
           <FitText
             style={{
@@ -1410,7 +2307,7 @@ function SeasonPerformanceTable({
               fontSize: 11,
             }}
           >
-            {row.seasonPoints.toLocaleString("en-US")} season pts
+            {row.totalXp.toLocaleString("en-US")} total XP
           </FitText>
         </div>
       ),
@@ -1488,14 +2385,33 @@ function SeasonPerformanceTable({
         </FitText>
       ),
     },
+    {
+      key: "review",
+      heading: "",
+      align: "right",
+      render: (row) => (
+        <FitButton
+          variant={
+            row.rankPosition && row.rankPosition <= 3 ? "primary" : "ghost"
+          }
+          icon={ShieldAlert}
+          label="Review"
+          onClick={() => setReviewTarget(row)}
+          style={{ minHeight: 32, minWidth: 86, paddingInline: 10 }}
+          textStyle={{ fontSize: 11, fontWeight: 800 }}
+        />
+      ),
+    },
   ];
   const rangeStart = meta.total ? (meta.page - 1) * meta.limit + 1 : 0;
   const rangeEnd = Math.min(meta.total, meta.page * meta.limit);
 
   return (
+    <>
     <FitSection
-      heading="Season Leaderboard"
-      action={<Trophy size={16} color={colors.brand} />}
+      heading=""
+      hideHeading
+      className={styles.leaderboard}
       bare
       noPadding
       style={{
@@ -1507,19 +2423,87 @@ function SeasonPerformanceTable({
         padding: 12,
         display: "grid",
         gridTemplateRows: "auto",
-        minHeight: 430,
+        minHeight: 0,
       }}
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateRows: "auto auto auto",
-          gap: 0,
-          minHeight: 0,
-          overflow: "visible",
-        }}
-      >
+      <div className={styles.leaderboardBody}>
+        <div className={styles.leaderboardHeader}>
+          <div className={styles.leaderboardHeading}>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <FitText
+                as="h3"
+                style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.2 }}
+              >
+                Season standings
+              </FitText>
+              <span
+                aria-label={`${meta.total.toLocaleString("en-US")} competitors`}
+                style={{
+                  alignItems: "baseline",
+                  borderLeft: `2px solid ${colors.brand}`,
+                  display: "inline-flex",
+                  gap: 5,
+                  paddingLeft: 8,
+                }}
+              >
+                <FitText style={{ color: colors.brand, fontSize: 13, fontWeight: 900 }}>
+                  {meta.total.toLocaleString("en-US")}
+                </FitText>
+                <FitText style={{ color: colors.textSecondary, fontSize: 11, fontWeight: 700 }}>
+                  competitors
+                </FitText>
+              </span>
+            </div>
+            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+              Compare member momentum, earned EXP, milestones, and ranking eligibility.
+            </FitText>
+          </div>
+          <div className={styles.leaderboardActions}>
+            <div style={{ display: "flex", gap: 4 }}>
+              <FitButton
+                variant={leaderboardMode === "overall" ? "primary" : "ghost"}
+                label="Overall"
+                onClick={() => onLeaderboardModeChange("overall")}
+                style={{ minHeight: 32, minWidth: 72, paddingInline: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: 800 }}
+              />
+              <FitButton
+                variant={leaderboardMode === "muscle" ? "primary" : "ghost"}
+                label="By muscle"
+                onClick={() => onLeaderboardModeChange("muscle")}
+                style={{ minHeight: 32, minWidth: 84, paddingInline: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: 800 }}
+              />
+            </div>
+            <FitButton
+              variant="ghost"
+              icon={Crown}
+              label="Manage seasons"
+              onClick={onOpenSeasonManager}
+              style={{ minHeight: 32, paddingInline: 9 }}
+              textStyle={{ fontSize: 11, fontWeight: 760 }}
+            />
+            <FitButton
+              variant="primary"
+              icon={PlusCircle}
+              label="Grant EXP"
+              onClick={onOpenManualExp}
+              style={{ minHeight: 32, minWidth: 98, paddingInline: 10 }}
+              textStyle={{ fontSize: 11, fontWeight: 800 }}
+            />
+            <FitButton
+              variant="ghost"
+              icon={RefreshCcw}
+              label="Refresh"
+              loading={refreshing}
+              onClick={onRefresh}
+              style={{ minHeight: 32, paddingInline: 9 }}
+              textStyle={{ fontSize: 11, fontWeight: 760 }}
+            />
+          </div>
+        </div>
         <div
+          className={styles.filterToolbar}
           style={{
             display: "grid",
             gap: 8,
@@ -1531,16 +2515,11 @@ function SeasonPerformanceTable({
           }}
         >
           <FitSearch
+            ariaLabel="Search member"
             compact
             placeholder="Search member"
             value={search}
             onChangeText={onSearchChange}
-          />
-          <FitSearch
-            compact
-            placeholder="Muscle or EXP area"
-            value={muscleFilter}
-            onChangeText={onMuscleFilterChange}
           />
           <FitDropdown
             fullWidth
@@ -1548,51 +2527,84 @@ function SeasonPerformanceTable({
             options={seasonOptions}
             onChange={onSeasonChange}
           />
-          <FitDropdown
-            fullWidth
-            value={selectedVisibility}
-            options={SEASON_VISIBILITY_OPTIONS}
-            onChange={(value) =>
-              onVisibilityChange(value as FitnessRankingVisibility | "")
-            }
-          />
-          <FitDropdown
-            fullWidth
-            value={selectedGovernance}
-            options={SEASON_GOVERNANCE_OPTIONS}
-            onChange={(value) =>
-              onGovernanceChange(
-                value as FitnessRankingGovernanceStatus | "",
-              )
-            }
-          />
-          <label
-            style={{
-              alignItems: "center",
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
-              color: colors.textSecondary,
-              display: "flex",
-              gap: 10,
-              minHeight: 38,
-              padding: "0 14px",
-            }}
-          >
-            <input
-              checked={includeArchived}
-              onChange={(event) => onIncludeArchivedChange(event.target.checked)}
-              type="checkbox"
-            />
-            Include archived
-          </label>
+          <details className={styles.advancedFilters}>
+            <summary style={{ borderColor: colors.border, color: colors.textSecondary }}>
+              Advanced filters
+              <span>
+                {[muscleFilter, selectedVisibility, selectedGovernance]
+                  .filter(Boolean)
+                  .length + (includeArchived ? 1 : 0)}
+              </span>
+            </summary>
+            <div
+              className={styles.advancedFilterGrid}
+              style={{
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                boxShadow: "0 18px 48px rgba(0, 0, 0, 0.24)",
+              }}
+            >
+              <FitSearch
+                ariaLabel="Filter by muscle or EXP area"
+                compact
+                placeholder="Muscle or EXP area"
+                value={muscleFilter}
+                onChangeText={onMuscleFilterChange}
+              />
+              <FitDropdown
+                fullWidth
+                value={selectedVisibility}
+                options={SEASON_VISIBILITY_OPTIONS}
+                onChange={(value) =>
+                  onVisibilityChange(value as FitnessRankingVisibility | "")
+                }
+              />
+              <FitDropdown
+                fullWidth
+                value={selectedGovernance}
+                options={SEASON_GOVERNANCE_OPTIONS}
+                onChange={(value) =>
+                  onGovernanceChange(
+                    value as FitnessRankingGovernanceStatus | "",
+                  )
+                }
+              />
+              <label
+                className={styles.archivedToggle}
+                style={{
+                  borderColor: colors.border,
+                  color: colors.textSecondary,
+                }}
+              >
+                <input
+                  checked={includeArchived}
+                  onChange={(event) => onIncludeArchivedChange(event.target.checked)}
+                  type="checkbox"
+                />
+                Include archived
+              </label>
+            </div>
+          </details>
         </div>
 
+        <FitText
+          data-season-performance-scroll-hint="true"
+          style={{
+            color: colors.textSecondary,
+            fontSize: 11,
+            paddingTop: 8,
+          }}
+        >
+          Scroll horizontally to review every leaderboard field.
+        </FitText>
         <div
+          className={styles.tableViewport}
           style={{
             minWidth: 0,
             minHeight: 0,
-            overflow: "auto",
-            padding: "10px 0 0",
+            overflowX: "visible",
+            overflowY: "visible",
+            padding: "4px 0 0",
           }}
           data-season-performance-table="true"
         >
@@ -1601,6 +2613,7 @@ function SeasonPerformanceTable({
             rows={rows}
             getRowKey={(row) => `${row.userId}-${row.seasonId}`}
             emptyMessage="No season standings match the current filters."
+            emptyStateHeight={480}
             compact
             overflowX
             style={{
@@ -1611,12 +2624,24 @@ function SeasonPerformanceTable({
           />
         </div>
         <style>{`
-          [data-season-performance-table="true"] th,
+          [data-season-performance-table="true"] th {
+            padding: 7px 10px !important;
+          }
           [data-season-performance-table="true"] td {
-            padding: 9px 10px !important;
+            line-height: 1.25 !important;
+            padding: 6px 10px !important;
+          }
+          [data-season-performance-scroll-hint="true"] {
+            display: none;
+          }
+          @media (max-width: 900px) {
+            [data-season-performance-scroll-hint="true"] {
+              display: block;
+            }
           }
         `}</style>
         <div
+          className={styles.tableFooter}
           style={{
             alignItems: "center",
             borderTop: `1px solid ${colors.border}`,
@@ -1629,16 +2654,485 @@ function SeasonPerformanceTable({
           <FitText style={{ color: colors.textSecondary, fontSize: 12 }}>
             Showing {rangeStart} to {rangeEnd} of {meta.total} results
           </FitText>
-          <FitPagination
-            currentPage={meta.page}
-            totalPages={Math.max(1, meta.total_pages)}
-            onPageChange={onPageChange}
-            ariaLabel="Season standing pagination"
-            showSinglePage
-          />
+          {meta.total > 0 ? (
+            <FitPagination
+              currentPage={meta.page}
+              totalPages={Math.max(1, meta.total_pages)}
+              onPageChange={onPageChange}
+              ariaLabel="Season standing pagination"
+              showSinglePage
+            />
+          ) : (
+            <span aria-hidden="true" />
+          )}
         </div>
       </div>
     </FitSection>
+    <RankingReviewModal
+      standing={reviewTarget}
+      isPending={moderationPending}
+      onClose={() => setReviewTarget(null)}
+      onDecision={(standing, status, rationale) => {
+        setReviewTarget(null);
+        onModerate(standing, status, rationale);
+      }}
+    />
+    </>
+  );
+}
+
+function toLocalDateTimeInput(value: Date) {
+  const offsetMs = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function MusclePerformanceTable({
+  governanceProfiles,
+  leaderboardMode,
+  moderationPending,
+  muscleDefinitions,
+  onLeaderboardModeChange,
+  onModerate,
+  onMuscleChange,
+  onOpenManualExp,
+  onOpenSeasonManager,
+  onPageChange,
+  onRefresh,
+  onScopeChange,
+  onSearchChange,
+  onSeasonChange,
+  page,
+  refreshing,
+  scope,
+  search,
+  selectedMuscle,
+  selectedSeasonId,
+  seasons,
+  standings,
+}: {
+  governanceProfiles: AdminGamificationRankingProfileRecord[];
+  leaderboardMode: "overall" | "muscle";
+  moderationPending: boolean;
+  muscleDefinitions: MuscleDefinitionRecord[];
+  onLeaderboardModeChange: (value: "overall" | "muscle") => void;
+  onModerate: (
+    standing: AdminGamificationSeasonStandingRecord,
+    status: Extract<
+      FitnessRankingGovernanceStatus,
+      "normal" | "hidden_by_admin" | "disqualified"
+    >,
+    rationale: string,
+  ) => void;
+  onMuscleChange: (value: string) => void;
+  onOpenManualExp: () => void;
+  onOpenSeasonManager: () => void;
+  onPageChange: (page: number) => void;
+  onRefresh: () => void;
+  onScopeChange: (value: "lifetime" | "season") => void;
+  onSearchChange: (value: string) => void;
+  onSeasonChange: (value: string) => void;
+  page: number;
+  refreshing: boolean;
+  scope: "lifetime" | "season";
+  search: string;
+  selectedMuscle: string;
+  selectedSeasonId: string;
+  seasons: AdminGamificationSeasonSummaryRecord[];
+  standings:
+    | {
+        data: FitnessMuscleLeaderboardEntryRecord[];
+        meta: { limit: number; page: number; total: number; total_pages: number };
+      }
+    | undefined;
+}) {
+  const { colors } = useTheme();
+  const [reviewTarget, setReviewTarget] =
+    useState<AdminGamificationSeasonStandingRecord | null>(null);
+  const rows = standings?.data ?? [];
+  const meta = standings?.meta ?? {
+    limit: 10,
+    page,
+    total: 0,
+    total_pages: 1,
+  };
+  const rangeStart = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
+  const rangeEnd = Math.min(meta.page * meta.limit, meta.total);
+  const muscleOptions = muscleDefinitions.map((definition) => ({
+    label: definition.name,
+    value: definition.key,
+  }));
+  const seasonOptions = [
+    { label: "Current season", value: "" },
+    ...seasons
+      .filter((season) => season.status === "active" || season.status === "closed")
+      .map((season) => ({
+        label: `${season.title} (${labelize(season.status)})`,
+        value: season.id,
+      })),
+  ];
+  const selectedSeason =
+    seasons.find((season) => season.id === selectedSeasonId) ??
+    seasons.find((season) => season.status === "active") ??
+    null;
+  const openReview = (row: FitnessMuscleLeaderboardEntryRecord) => {
+    const profile = governanceProfiles.find(
+      (candidate) => candidate.userId === row.userId,
+    );
+
+    setReviewTarget({
+      displayAlias: profile?.displayAlias ?? row.displayName,
+      governanceStatus: profile?.governanceStatus ?? "normal",
+      isDisqualified: profile?.seasonIsDisqualified ?? false,
+      isHidden: profile?.seasonIsHidden ?? false,
+      lastEarnedAt: row.lastEarnedAt,
+      memberName: profile?.memberName ?? row.displayName,
+      milestoneClaimedCount: 0,
+      milestoneUnlockedCount: 0,
+      rankPosition: row.rankPosition,
+      seasonId: row.seasonId ?? selectedSeason?.id ?? "lifetime",
+      seasonPoints: row.xpPoints,
+      seasonStatus: selectedSeason?.status ?? "active",
+      seasonTitle:
+        row.scope === "season"
+          ? row.seasonTitle ?? selectedSeason?.title ?? "Current season"
+          : "Lifetime muscle ranking",
+      topMuscle: labelize(row.muscleKey),
+      topMuscleXp: row.xpPoints,
+      totalXp: row.xpPoints,
+      userId: row.userId,
+      visibility: profile?.visibility ?? "public",
+    });
+  };
+  const columns: FitTableColumn<FitnessMuscleLeaderboardEntryRecord>[] = [
+    {
+      key: "rank",
+      heading: "Rank",
+      render: (row) => (
+        <FitText
+          style={{
+            alignItems: "center",
+            backgroundColor:
+              row.rankPosition <= 3 ? `${colors.brand}18` : "transparent",
+            border:
+              row.rankPosition <= 3
+                ? `1px solid ${colors.brand}55`
+                : "1px solid transparent",
+            borderRadius: 8,
+            color:
+              row.rankPosition <= 3 ? colors.brand : colors.textPrimary,
+            display: "inline-flex",
+            fontSize: 12,
+            fontWeight: 900,
+            height: 28,
+            justifyContent: "center",
+            minWidth: 32,
+          }}
+        >
+          #{row.rankPosition}
+        </FitText>
+      ),
+    },
+    {
+      key: "participant",
+      heading: "Participant",
+      render: (row) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
+            {row.displayName}
+          </FitText>
+          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            {row.isCurrentUser ? "Current account" : "Gym member"}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "muscle",
+      heading: "Muscle",
+      render: (row) => (
+        <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 750 }}>
+          {labelize(row.muscleKey)}
+        </FitText>
+      ),
+    },
+    {
+      key: "scope",
+      heading: "Scope",
+      render: (row) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText
+            title={row.scope === "season" ? row.seasonTitle ?? "Current season" : "Lifetime"}
+            style={{
+              color: colors.textPrimary,
+              display: "block",
+              fontSize: 12,
+              fontWeight: 800,
+              maxWidth: 210,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {row.scope === "season" ? row.seasonTitle ?? "Current season" : "Lifetime"}
+          </FitText>
+          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            {labelize(row.scope)}
+          </FitText>
+        </div>
+      ),
+    },
+    {
+      key: "experience",
+      heading: "Muscle EXP",
+      align: "right",
+      render: (row) => (
+        <FitText style={{ color: colors.brand, fontSize: 13, fontWeight: 900 }}>
+          {row.xpPoints.toLocaleString("en-US")} EXP
+        </FitText>
+      ),
+    },
+    {
+      key: "last-earned",
+      heading: "Last Earned",
+      render: (row) => (
+        <FitText style={{ color: colors.textSecondary, fontSize: 12 }}>
+          {row.lastEarnedAt ? formatDateTime(row.lastEarnedAt) : "No activity yet"}
+        </FitText>
+      ),
+    },
+    {
+      key: "review",
+      heading: "",
+      align: "right",
+      render: (row) => (
+        <FitButton
+          variant={row.rankPosition <= 3 ? "primary" : "ghost"}
+          icon={ShieldAlert}
+          label="Review"
+          onClick={() => openReview(row)}
+          style={{ minHeight: 32, minWidth: 86, paddingInline: 10 }}
+          textStyle={{ fontSize: 11, fontWeight: 800 }}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <>
+    <FitSection
+      heading=""
+      hideHeading
+      className={styles.leaderboard}
+      bare
+      noPadding
+      style={{
+        backgroundColor: colors.surfaceRaised,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        marginBottom: 0,
+        overflow: "hidden",
+        padding: 12,
+        display: "grid",
+        gridTemplateRows: "auto",
+        minHeight: 0,
+      }}
+    >
+      <div className={styles.leaderboardBody}>
+        <div className={styles.leaderboardHeader}>
+          <div className={styles.leaderboardHeading}>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <FitText as="h3" style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.2 }}>
+                Muscle standings
+              </FitText>
+              <span
+                aria-label={`${meta.total.toLocaleString("en-US")} competitors`}
+                style={{
+                  alignItems: "baseline",
+                  borderLeft: `2px solid ${colors.brand}`,
+                  display: "inline-flex",
+                  gap: 5,
+                  paddingLeft: 8,
+                }}
+              >
+                <FitText style={{ color: colors.brand, fontSize: 13, fontWeight: 900 }}>
+                  {meta.total.toLocaleString("en-US")}
+                </FitText>
+                <FitText style={{ color: colors.textSecondary, fontSize: 11, fontWeight: 700 }}>
+                  competitors
+                </FitText>
+              </span>
+            </div>
+            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+              Compare true per-muscle EXP without changing the overall season ranking.
+            </FitText>
+          </div>
+          <div className={styles.leaderboardActions}>
+            <div style={{ display: "flex", gap: 4 }}>
+              <FitButton
+                variant={leaderboardMode === "overall" ? "primary" : "ghost"}
+                label="Overall"
+                onClick={() => onLeaderboardModeChange("overall")}
+                style={{ minHeight: 32, minWidth: 72, paddingInline: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: 800 }}
+              />
+              <FitButton
+                variant={leaderboardMode === "muscle" ? "primary" : "ghost"}
+                label="By muscle"
+                onClick={() => onLeaderboardModeChange("muscle")}
+                style={{ minHeight: 32, minWidth: 84, paddingInline: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: 800 }}
+              />
+            </div>
+            <FitButton
+              variant="ghost"
+              icon={Crown}
+              label="Manage seasons"
+              onClick={onOpenSeasonManager}
+              style={{ minHeight: 32, paddingInline: 9 }}
+              textStyle={{ fontSize: 11, fontWeight: 760 }}
+            />
+            <FitButton
+              variant="primary"
+              icon={PlusCircle}
+              label="Grant EXP"
+              onClick={onOpenManualExp}
+              style={{ minHeight: 32, minWidth: 98, paddingInline: 10 }}
+              textStyle={{ fontSize: 11, fontWeight: 800 }}
+            />
+            <FitButton
+              variant="ghost"
+              icon={RefreshCcw}
+              label="Refresh"
+              loading={refreshing}
+              onClick={onRefresh}
+              style={{ minHeight: 32, paddingInline: 9 }}
+              textStyle={{ fontSize: 11, fontWeight: 760 }}
+            />
+          </div>
+        </div>
+
+        <div
+          className={styles.muscleFilterToolbar}
+          style={{
+            display: "grid",
+            gap: 8,
+            gridTemplateColumns: "minmax(180px, 1.4fr) repeat(3, minmax(150px, 1fr))",
+            padding: 10,
+            borderBottom: `1px solid ${colors.border}`,
+            backgroundColor: colors.surfaceRaised,
+            borderRadius: "8px 8px 0 0",
+          }}
+        >
+          <FitSearch
+            ariaLabel="Search muscle standing member"
+            compact
+            placeholder="Search member"
+            value={search}
+            onChangeText={onSearchChange}
+          />
+          <FitDropdown
+            fullWidth
+            value={selectedMuscle}
+            options={
+              muscleOptions.length > 0
+                ? muscleOptions
+                : [{ label: labelize(selectedMuscle), value: selectedMuscle }]
+            }
+            onChange={onMuscleChange}
+          />
+          <FitDropdown
+            fullWidth
+            value={scope}
+            options={[
+              { label: "This season", value: "season" },
+              { label: "Lifetime", value: "lifetime" },
+            ]}
+            onChange={(value) => onScopeChange(value as "lifetime" | "season")}
+          />
+          {scope === "season" ? (
+            <FitDropdown
+              fullWidth
+              value={selectedSeasonId}
+              options={seasonOptions}
+              onChange={onSeasonChange}
+            />
+          ) : (
+            <div />
+          )}
+        </div>
+
+        <div
+          className={styles.tableViewport}
+          data-muscle-performance-table="true"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            overflowX: "visible",
+            overflowY: "visible",
+            padding: "4px 0 0",
+          }}
+        >
+          <FitTable
+            columns={columns}
+            rows={rows}
+            getRowKey={(row) =>
+              `${row.userId}-${row.scope}-${row.seasonId ?? "lifetime"}-${row.muscleKey}`
+            }
+            emptyMessage="No muscle standings match the current filters."
+            emptyStateHeight={480}
+            compact
+            style={{ border: 0, borderRadius: 0 }}
+            tableStyle={{ minWidth: 1080, tableLayout: "fixed" }}
+          />
+        </div>
+        <style>{`
+          [data-muscle-performance-table="true"] th {
+            padding: 7px 10px !important;
+          }
+          [data-muscle-performance-table="true"] td {
+            line-height: 1.25 !important;
+            padding: 6px 10px !important;
+          }
+        `}</style>
+        <div
+          className={styles.tableFooter}
+          style={{
+            alignItems: "center",
+            borderTop: `1px solid ${colors.border}`,
+            display: "flex",
+            gap: 12,
+            justifyContent: "space-between",
+            padding: "10px 2px 0",
+          }}
+        >
+          <FitText style={{ color: colors.textSecondary, fontSize: 12 }}>
+            Showing {rangeStart} to {rangeEnd} of {meta.total} results
+          </FitText>
+          {meta.total > 0 ? (
+            <FitPagination
+              currentPage={meta.page}
+              totalPages={Math.max(1, meta.total_pages)}
+              onPageChange={onPageChange}
+              ariaLabel="Muscle standing pagination"
+              showSinglePage
+            />
+          ) : (
+            <span aria-hidden="true" />
+          )}
+        </div>
+      </div>
+    </FitSection>
+    <RankingReviewModal
+      standing={reviewTarget}
+      reviewContext="muscle"
+      isPending={moderationPending}
+      onClose={() => setReviewTarget(null)}
+      onDecision={(standing, status, rationale) => {
+        setReviewTarget(null);
+        onModerate(standing, status, rationale);
+      }}
+    />
+    </>
   );
 }
 
@@ -2030,31 +3524,38 @@ function MetricGrid({
 
   return (
     <div
+      className={`gamification-metric-grid ${styles.metricGrid}`}
+      data-ui="gamification-metric-strip"
       style={{
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 6,
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-        gap: 8,
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        overflow: "hidden",
       }}
     >
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (
           <div
+            className={`gamification-metric-item ${styles.metricItem}`}
+            data-ui="gamification-metric-item"
             key={metric.label}
             style={{
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surface,
-              borderRadius: 8,
-              padding: 8,
+              alignItems: "center",
               display: "grid",
-              gap: 4,
+              gap: 8,
+              gridTemplateColumns: "auto minmax(0, 1fr) auto",
+              minHeight: 52,
+              padding: "8px 12px",
             }}
           >
             <Icon size={15} color={colors.brand} />
-            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
               {metric.label}
             </FitText>
-            <FitText style={{ fontSize: 19, fontWeight: 900 }}>
+            <FitText style={{ fontSize: 18, fontWeight: 900 }}>
               {metric.value}
             </FitText>
           </div>
@@ -2063,71 +3564,157 @@ function MetricGrid({
     </div>
   );
 }
-
 function ManualExpGrantPanel({
   draft,
-  isLoading,
   members,
+  memberSearch,
+  membersLoading,
+  muscleDefinitions,
+  musclesLoading,
   onDraftChange,
-  onSubmit,
-  style,
+  onMemberSearchChange,
 }: {
   draft: ManualExpDraft;
-  isLoading: boolean;
   members: MemberRecord[];
+  memberSearch: string;
+  membersLoading: boolean;
+  muscleDefinitions: MuscleDefinitionRecord[];
+  musclesLoading: boolean;
   onDraftChange: Dispatch<SetStateAction<ManualExpDraft>>;
-  onSubmit: () => void;
-  style: CSSProperties;
+  onMemberSearchChange: (value: string) => void;
 }) {
   const { colors } = useTheme();
-  const memberOptions = members.map((member) => ({
-    label: getMemberDisplayName(member),
-    value: member.id,
-  }));
   const selectedMember = members.find((member) => member.id === draft.userId);
+  const visibleMembers = members.slice(0, 20);
   const inputShell: CSSProperties = {
     alignItems: "center",
     backgroundColor: colors.fieldBg,
     border: `1px solid ${colors.fieldBorder}`,
     borderRadius: 8,
     display: "flex",
-    minHeight: 38,
+    minHeight: 36,
     padding: "0 10px",
+  };
+  const fieldShell: CSSProperties = {
+    display: "grid",
+    gap: 6,
+  };
+  const fieldLabel: CSSProperties = {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: 750,
   };
 
   const updateDraft = (patch: Partial<ManualExpDraft>) =>
     onDraftChange((current) => ({ ...current, ...patch }));
 
   return (
-    <FitSection
-      heading="Manual EXP Grant"
-      action={<PlusCircle size={16} color={colors.brand} />}
-      style={style}
-      bare
+    <div
+      data-ui="gamification-manual-exp-form"
+       style={{ display: "grid", gap: 10 }}
     >
-      <div style={{ display: "grid", gap: 10 }}>
-        <div>
-          <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-            Post-session allocation for active members with verified
-            membership-card access who completed coach work without camera
-            tracking.
-          </FitText>
-        </div>
-        <FitDropdown
-          fullWidth
-          value={draft.userId}
-          options={memberOptions}
-          placeholder={
-            members.length === 0 ? "No eligible members loaded" : "Select member"
-          }
-          disabled={members.length === 0}
-          onChange={(userId) => updateDraft({ userId })}
+      <div
+        data-ui="gamification-manual-exp-workflow"
+        style={{ display: "grid", gap: 8 }}
+      >
+         <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+           Search eligible active members by name or email.
+        </FitText>
+        <FitSearch
+          ariaLabel="Search eligible member for manual EXP"
+          placeholder="Search member name or email"
+          value={memberSearch}
+          onChangeText={(value) => {
+            onMemberSearchChange(value);
+            updateDraft({ userId: "" });
+          }}
         />
-        {selectedMember ? (
+        <div
+          data-ui="gamification-manual-exp-member-results"
+          role="listbox"
+          aria-label="Eligible member search results"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "grid",
+             maxHeight: 176,
+            overflowY: "auto",
+          }}
+        >
+          {memberSearch.trim().length < 2 ? (
+            <FitText style={{ color: colors.textMuted, padding: 12 }}>
+              Enter at least 2 characters to search.
+            </FitText>
+          ) : membersLoading ? (
+            <FitText style={{ color: colors.textMuted, padding: 12 }}>
+              Searching eligible members...
+            </FitText>
+          ) : visibleMembers.length === 0 ? (
+            <FitText style={{ color: colors.textMuted, padding: 12 }}>
+              No eligible members match this search.
+            </FitText>
+          ) : (
+            visibleMembers.map((member) => {
+              const selected = member.id === draft.userId;
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => updateDraft({ userId: member.id })}
+                  style={{
+                    backgroundColor: selected
+                      ? `${colors.brand}18`
+                      : "transparent",
+                    border: 0,
+                    borderBottom: `1px solid ${colors.border}`,
+                    color: colors.textPrimary,
+                    cursor: "pointer",
+                    display: "grid",
+                    gap: 3,
+                    padding: "10px 12px",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 800 }}>
+                    {getMemberDisplayName(member)}
+                  </span>
+                  <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                    {member.email}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+        {members.length > visibleMembers.length ? (
           <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-            {selectedMember.email}
+            Showing the first 20 matches. Refine the search to narrow the list.
           </FitText>
         ) : null}
+         {selectedMember ? (
+           <div
+             style={{
+               alignItems: "center",
+               backgroundColor: `${colors.brand}12`,
+               border: `1px solid ${colors.brand}45`,
+               borderRadius: 6,
+               display: "flex",
+               justifyContent: "space-between",
+               minHeight: 36,
+               padding: "7px 10px",
+             }}
+           >
+             <FitText style={{ fontSize: 12, fontWeight: 800 }}>
+               {getMemberDisplayName(selectedMember)}
+             </FitText>
+             <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+               Selected member
+             </FitText>
+           </div>
+         ) : null}
+      </div>
         <div
           style={{
             display: "grid",
@@ -2135,75 +3722,112 @@ function ManualExpGrantPanel({
             gridTemplateColumns: "110px minmax(0, 1fr)",
           }}
         >
-          <label style={inputShell}>
-            <FitTextInput
-              aria-label="Manual EXP amount"
-              id="gamification-manual-exp-amount"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={draft.amount}
-              placeholder="EXP"
-              onChange={(event) =>
-                updateDraft({
-                  amount: event.target.value.replace(/[^0-9]/g, ""),
-                })
-              }
-            />
+          <label style={fieldShell}>
+            <FitText style={fieldLabel}>EXP amount</FitText>
+            <span style={inputShell}>
+              <FitTextInput
+                aria-label="Manual EXP amount"
+                id="gamification-manual-exp-amount"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={draft.amount}
+                placeholder="e.g. 75"
+                onChange={(event) =>
+                  updateDraft({
+                    amount: event.target.value.replace(/[^0-9]/g, ""),
+                  })
+                }
+              />
+            </span>
           </label>
-          <label style={inputShell}>
-            <FitTextInput
-              aria-label="Manual EXP muscle group"
-              id="gamification-manual-exp-muscle-group"
-              value={draft.muscleGroup}
-              placeholder="Muscle group (optional)"
-              onChange={(event) =>
-                updateDraft({ muscleGroup: event.target.value })
-              }
-            />
+          <label style={fieldShell}>
+            <FitText style={fieldLabel}>Muscle group (optional)</FitText>
+            <span
+              data-ui="gamification-manual-exp-muscle"
+              style={inputShell}
+            >
+              <FitTextInput
+                aria-label="Manual EXP muscle group"
+                aria-autocomplete="list"
+                aria-controls="gamification-manual-exp-muscle-options"
+                id="gamification-manual-exp-muscle-group"
+                list="gamification-manual-exp-muscle-options"
+                role="combobox"
+                value={draft.muscleGroup}
+                placeholder={
+                  musclesLoading ? "Loading muscles..." : "Search or select"
+                }
+                onChange={(event) =>
+                  updateDraft({ muscleGroup: event.target.value })
+                }
+              />
+              <datalist id="gamification-manual-exp-muscle-options">
+                {muscleDefinitions.map((definition) => (
+                  <option key={definition.id} value={definition.key}>
+                    {definition.name}
+                  </option>
+                ))}
+              </datalist>
+            </span>
           </label>
         </div>
-        <label style={inputShell}>
-          <FitTextInput
-            aria-label="Manual EXP appointment ID"
-            id="gamification-manual-exp-appointment-id"
-            value={draft.appointmentId}
-            placeholder="Appointment ID (optional)"
-            onChange={(event) =>
-              updateDraft({ appointmentId: event.target.value })
-            }
-          />
+        <label style={fieldShell}>
+          <FitText style={fieldLabel}>Related appointment (optional)</FitText>
+          <span style={inputShell}>
+            <FitTextInput
+              aria-label="Manual EXP appointment ID"
+              id="gamification-manual-exp-appointment-id"
+              value={draft.appointmentId}
+              placeholder="Paste the verified appointment ID when available"
+              onChange={(event) =>
+                updateDraft({ appointmentId: event.target.value })
+              }
+            />
+          </span>
         </label>
-        <div
-          style={{
-            ...inputShell,
-            alignItems: "stretch",
-            minHeight: 76,
-            padding: 10,
-          }}
-        >
-          <FitTextArea
-            aria-label="Reviewer rationale"
-            id="gamification-manual-exp-rationale"
-            rows={3}
-            value={draft.rationale}
-            placeholder="Reviewer rationale"
-            onChange={(event) =>
-              updateDraft({ rationale: event.target.value })
-            }
-          />
-        </div>
-        <FitButton
-          variant="primary"
-          icon={PlusCircle}
-          label="Grant EXP"
-          loading={isLoading}
-          disabled={members.length === 0}
-          onClick={onSubmit}
-          style={{ minHeight: 36 }}
-          textStyle={{ fontSize: 12, fontWeight: 850 }}
-        />
-      </div>
-    </FitSection>
+        <label style={fieldShell}>
+          <FitText style={fieldLabel}>Reviewer rationale</FitText>
+          <span
+            style={{
+              ...inputShell,
+              alignItems: "stretch",
+              minHeight: 76,
+              padding: 10,
+            }}
+          >
+            <FitTextArea
+              aria-label="Reviewer rationale"
+              id="gamification-manual-exp-rationale"
+              rows={3}
+              value={draft.rationale}
+              placeholder="Explain the verified activity and why this adjustment is appropriate."
+              onChange={(event) =>
+                updateDraft({ rationale: event.target.value })
+              }
+            />
+          </span>
+        </label>
+        {selectedMember ? (
+          <div
+            style={{
+              backgroundColor: colors.surfaceRaised,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 6,
+              display: "grid",
+              gap: 3,
+              padding: "9px 10px",
+            }}
+          >
+            <FitText style={{ fontSize: 11, fontWeight: 800 }}>
+              Grant summary
+            </FitText>
+            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+              {draft.amount || "0"} EXP to {getMemberDisplayName(selectedMember)}
+              {draft.muscleGroup ? ` · ${draft.muscleGroup}` : " · General"}
+            </FitText>
+          </div>
+        ) : null}
+    </div>
   );
 }
 

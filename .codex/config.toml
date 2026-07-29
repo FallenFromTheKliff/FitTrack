@@ -5,7 +5,7 @@ job_max_runtime_seconds = 1800
 
 [mcp_servers.graphify]
 command = "C:/Users/HOUSTON/.local/bin/graphify-mcp.exe"
-args = ["C:/FitTrack_rebuilt_20260330_212527/artifacts/graphify/graphify-out/graph.json"]
+args = ["C:/FitTrack_rebuilt_20260330_212527/graphify-out/graph.json"]
 cwd = "C:/FitTrack_rebuilt_20260330_212527"
 enabled = true
 required = false

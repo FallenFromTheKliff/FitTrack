@@ -11,6 +11,11 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuthEntrance } from "@/hooks/animations/feature/useAuthEntrance";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import {
+  FITTRACK_LEGAL_VERSION,
+  FITTRACK_PRIVACY_SECTIONS,
+  FITTRACK_TERMS_SECTIONS,
+} from "@fittrack/app-config";
 import { makeAuthStyles } from "@/styles/shared/AuthStyles";
 import {
   coerceAuthPhilippineMobileInput,
@@ -24,8 +29,9 @@ import {
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
+import { LegalDocumentSections } from "@/components/legal/LegalDocumentSections";
 import OTPModal from "@/components/modals/auth/OTPModal";
-import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import SettingsModal from "@/components/modals/settings/SettingsModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
 
 const PASS_REQ_HEIGHT = 210;
@@ -107,7 +113,9 @@ export default function RegisterScreen() {
       lastName: data.lastName,
       email: normalizedEmail,
       phone: normalizedPhone || undefined,
-      password: data.password
+      password: data.password,
+      acceptedTerms: true,
+      legalVersion: FITTRACK_LEGAL_VERSION,
     });
     if ("user" in result) {
       setPendingEmail(normalizedEmail);
@@ -326,9 +334,23 @@ export default function RegisterScreen() {
               ) : null}
             </FormShell>
             <FitText style={s.termsText}>
-              By creating an account, you agree to our{" "}
-              <FitText style={s.termsLink}>Terms of Service</FitText> and{" "}
-              <FitText style={s.termsLink}>Privacy Policy</FitText>
+              Review our{" "}
+              <FitText
+                accessibilityRole="button"
+                onPress={() => setShowTermsModal(true)}
+                style={s.termsLink}
+              >
+                Terms of Service
+              </FitText>{" "}
+              and{" "}
+              <FitText
+                accessibilityRole="button"
+                onPress={() => setShowTermsModal(true)}
+                style={s.termsLink}
+              >
+                Data Privacy Notice
+              </FitText>
+              .
             </FitText>
             <FitText style={s.copyright}>
               (c) 2026 SertFit Gym. All rights reserved.
@@ -344,20 +366,61 @@ export default function RegisterScreen() {
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}
       />
-      <ConfirmModal
-        isVisible={showTermsModal}
-        title="Accept Terms and Privacy Policy?"
-        message="Before creating your account, review and accept SertFit Gym's account creation terms and data privacy policy. FitTrack stores registration details, contact information, verification status, and app activity needed to run your gym account. Your data will only be used for account security, membership access, booking records, coaching support, payments, service notifications, and legally required gym operations."
-        yesLabel="I AGREE"
-        noLabel="NOT NOW"
-        yesIcon={ShieldCheck}
-        onNo={() => {
+      <SettingsModal
+        visible={showTermsModal}
+        title="Terms & Data Privacy"
+        icon={ShieldCheck}
+        showScrollHint
+        onClose={() => {
           setShowTermsModal(false);
-          setStatusTone("danger");
-          showStatus("Accept the terms and privacy policy before creating an account.");
         }}
-        onYes={handleAcceptTerms}
-      />
+      >
+        <View style={{ gap: 18, paddingBottom: 8 }}>
+          <LegalDocumentSections
+            eyebrow="Terms of Service"
+            sections={FITTRACK_TERMS_SECTIONS}
+          />
+          <LegalDocumentSections
+            eyebrow="Philippine Data Privacy Notice"
+            sections={FITTRACK_PRIVACY_SECTIONS}
+          />
+          <View
+            style={{
+              borderTopColor: colors.border,
+              borderTopWidth: 1,
+              gap: 10,
+              paddingTop: 14,
+            }}
+          >
+            <FitText style={[s.termsText, { textAlign: "left" }]}>
+              By continuing, you confirm that you reviewed policy version{" "}
+              {FITTRACK_LEGAL_VERSION} and accept the Terms of Service and Data
+              Privacy Notice.
+            </FitText>
+            <FitButton
+              label="I ACCEPT & CREATE ACCOUNT"
+              variant="primary"
+              icon={ShieldCheck}
+              onPress={handleAcceptTerms}
+              disabled={isLoading}
+              style={{ width: "100%" }}
+            />
+            <FitButton
+              label="NOT NOW"
+              variant="ghost"
+              onPress={() => {
+                setShowTermsModal(false);
+                setStatusTone("danger");
+                showStatus(
+                  "Accept the terms and privacy notice before creating an account.",
+                );
+              }}
+              disabled={isLoading}
+              style={{ width: "100%" }}
+            />
+          </View>
+        </View>
+      </SettingsModal>
     </>
   );
 }

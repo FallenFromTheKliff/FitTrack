@@ -29,6 +29,10 @@ type ActiveExerciseLookup = {
   id: string;
 };
 
+type PlanExerciseLookup = {
+  id: string;
+};
+
 type PoseSessionOwnershipRecord = {
   id: string;
   user_id: string;
@@ -163,6 +167,38 @@ export class WorkoutSessionRepository extends BaseRepository {
     });
   }
 
+  findPlanExercise(
+    planId: string,
+    exerciseId: string,
+  ): Promise<PlanExerciseLookup | null> {
+    return this.prisma.planExercise.findFirst({
+      where: {
+        exercise_id: exerciseId,
+        schedule_day: { plan_id: planId },
+      },
+      orderBy: [{ order_index: 'asc' }, { created_at: 'asc' }],
+      select: { id: true },
+    });
+  }
+
+  listRecentExerciseLogsForAi(userId: string) {
+    return this.prisma.exerciseLog.findMany({
+      where: {
+        user_id: userId,
+        session: { status: SessionStatus.completed },
+      },
+      orderBy: { created_at: 'desc' },
+      take: 40,
+      select: {
+        created_at: true,
+        reps_completed: true,
+        set_number: true,
+        weight_kg: true,
+        exercise: { select: { name: true } },
+      },
+    });
+  }
+
   findPoseSessionByIdOrThrow(
     poseSessionId: string,
   ): Promise<PoseSessionOwnershipRecord> {
@@ -223,6 +259,7 @@ export class WorkoutSessionRepository extends BaseRepository {
     weightKg: Prisma.Decimal | null;
     durationSeconds: number | null;
     poseSessionId: string | null;
+    planExerciseId: string | null;
     loggedAt: Date;
   }): Promise<ExerciseLogRecord> {
     try {
@@ -232,6 +269,7 @@ export class WorkoutSessionRepository extends BaseRepository {
             session: { connect: { id: input.sessionId } },
             user: { connect: { id: input.userId } },
             exercise: { connect: { id: input.exerciseId } },
+            plan_exercise_id: input.planExerciseId,
             set_number: input.setNumber,
             reps_completed: input.repsCompleted,
             reps_ai_counted: input.repsAiCounted,

@@ -12,7 +12,6 @@ import {
   FitSection,
   FitTable,
   FitText,
-  FitTextInput,
 } from "@/components/fit";
 import { EXERCISE_CATEGORY_OPTIONS } from "@/components/exercise-lab/exercise-lab-data";
 import {
@@ -26,6 +25,7 @@ import { useExerciseLabPage } from "./ExerciseLabPageContext";
 
 export function ExerciseLabReviewSurface() {
   const {
+    activeMuscleDefinitions,
     colors,
     isCompact,
     openReviewModal,
@@ -116,18 +116,18 @@ export function ExerciseLabReviewSurface() {
                 setReviewCategory(value as FitnessExerciseCategory | "")
               }
             />
-            <FitTextInput
-              name="exercise-review-muscle-filter"
+            <FitDropdown
+              fullWidth
+              ariaLabel="Exercise review muscle filter"
               value={reviewMuscleFilter}
-              onChange={(event) => setReviewMuscleFilter(event.target.value)}
-              placeholder="Muscle group"
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: 8,
-                backgroundColor: colors.fieldBg,
-                padding: "0 14px",
-                minHeight: 38,
-              }}
+              options={[
+                { label: "All muscles", value: "" },
+                ...activeMuscleDefinitions.map((definition) => ({
+                  label: definition.name,
+                  value: definition.key,
+                })),
+              ]}
+              onChange={setReviewMuscleFilter}
             />
             <FitPill
               mode="status"
@@ -215,7 +215,7 @@ export function ExerciseLabReviewSurface() {
         ) : null}
         <style>{`
           .exercise-review-top-row {
-            grid-template-columns: minmax(360px, max-content) minmax(0, 1fr) !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
 
           .exercise-review-title-nav {
@@ -224,10 +224,10 @@ export function ExerciseLabReviewSurface() {
 
           .exercise-review-controls {
             grid-template-columns:
-              minmax(150px, 1fr)
-              minmax(102px, 0.55fr)
-              minmax(112px, 0.58fr)
-              minmax(94px, 0.46fr)
+              minmax(220px, 1fr)
+              minmax(130px, 0.55fr)
+              minmax(150px, 0.65fr)
+              minmax(150px, 0.65fr)
               auto !important;
           }
 

@@ -61,7 +61,7 @@ export const modalStyles = (colors: ThemeColors) => ({
   },
   subtitle: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     margin: 0,
     lineHeight: 1.2
   } as CSSProperties,

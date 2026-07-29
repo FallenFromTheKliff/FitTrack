@@ -918,16 +918,16 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
   workout: {
     title: "Workout",
     description:
-      "Workout is the live training screen: it manages member access, camera tracking, exercise selection, subject lock, and the final save step for a tracked set.",
+      "Workout turns the active weekly plan into today's ordered exercises. Complete sets manually by default, review progression suggestions, and use camera rep counting only when it helps.",
     steps: [
-      "Confirm your access state and exercise reference before starting a tracked set.",
-      "Keep your body visible to the camera and use lock controls when live tracking is active.",
-      "Read Connected Plan and Live Pose Feedback below the camera when you need to understand what the tracker is using and what form cues it is giving.",
-      "Tap a card below when tracking, exercise references, or finishing the session needs explanation.",
+      "Confirm today's plan and start the workout.",
+      "Complete each exercise set in order; FitTrack starts the configured rest timer automatically.",
+      "Review the suggested next target as guidance from recent completed workouts.",
+      "Open camera tracking only for an eligible exercise when you want automated rep counting.",
     ],
     detailTitle: "Workout sections",
     detailIntro:
-      "These cards follow the workout flow from access checks through live tracking and session save.",
+      "The default journey is plan, exercises, sets, rest, and completion. Camera controls are an optional secondary mode.",
     detailCards: [
       {
         title: "Membership access",

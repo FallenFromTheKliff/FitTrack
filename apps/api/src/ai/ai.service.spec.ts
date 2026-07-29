@@ -11,6 +11,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { ExerciseService } from '../fitness/exercise/exercise.service';
 import { TrainingPlanService } from '../fitness/training-plan/training-plan.service';
+import { WorkoutSessionService } from '../fitness/session/session.service';
 import { NutritionService } from '../nutrition/nutrition.service';
 import { UserService } from '../user/user.service';
 import { AI_SESSION_ARCHIVED_EVENT } from './events/ai-session-archived.event';
@@ -33,6 +34,10 @@ describe('AiService', () => {
 
   const trainingPlanService = {
     createAiGeneratedPlan: jest.fn(),
+  };
+
+  const workoutSessionService = {
+    getRecentExerciseHistorySummary: jest.fn().mockResolvedValue(null),
   };
 
   const nutritionService = {
@@ -78,6 +83,7 @@ describe('AiService', () => {
         { provide: UserService, useValue: userService },
         { provide: ExerciseService, useValue: exerciseService },
         { provide: TrainingPlanService, useValue: trainingPlanService },
+        { provide: WorkoutSessionService, useValue: workoutSessionService },
         { provide: NutritionService, useValue: nutritionService },
         { provide: AiPythonClientService, useValue: aiClient },
         { provide: EventEmitter2, useValue: eventEmitter },

@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { submitAppFeedbackMutationOptions } from "@fittrack/query";
+import { FITTRACK_TERMS_SECTIONS } from "@fittrack/app-config";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,13 +14,14 @@ import {
   isAutomaticHelpEnabled,
   setAutomaticHelpEnabled as setAutomaticHelpEnabledPreference,
 } from "@/lib/help-preferences";
-import { HELP_FAQS, LEGAL_INFO_CARDS } from "@/data/settings";
+import { HELP_FAQS } from "@/data/settings";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
 
 import { FitText, AnimatedFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
 import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
+import { LegalDocumentSections } from "@/components/legal/LegalDocumentSections";
 
 type FeedbackFormValues = {
   category: "bug_report" | "feature_request" | "general_feedback";
@@ -262,12 +264,10 @@ export function TermsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <Animated.View style={[s.body, surfaceStyle]}>
-      {LEGAL_INFO_CARDS.map((card) => (
-        <View key={card.title} style={s.infoCard}>
-          <FitText style={s.infoCardTitle}>{card.title}</FitText>
-          <FitText style={s.infoCardHint}>{card.body}</FitText>
-        </View>
-      ))}
+      <LegalDocumentSections
+        eyebrow="Terms of Service"
+        sections={FITTRACK_TERMS_SECTIONS}
+      />
       <View style={s.footer}>
         <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
       </View>

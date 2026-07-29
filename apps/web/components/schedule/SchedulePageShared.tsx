@@ -1,6 +1,9 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { CalendarDays, ClipboardList, UsersRound } from "lucide-react";
 import type {
   RecurringCoachingBillingCycleRecord,
@@ -18,7 +21,10 @@ import { COACH_SPECIALTY_OPTIONS } from "./GymOperationsOverlayShared";
 import { addDays } from "@/app/(auth)/schedule/helpers";
 
 export type GymOperationsTab = "schedule" | "coaches" | "appointments";
-export type ScheduleSurfaceTab = "coach-schedule" | "venue-bookings";
+export type ScheduleSurfaceTab =
+  | "month-calendar"
+  | "coach-schedule"
+  | "venue-bookings";
 export type ScheduleRangeMode = "weekly" | "daily";
 export type CoachVisibilityScope = "all" | "hidden" | "visible";
 export type RecurringPlanActionMode = "single" | "future" | "cancel";
@@ -108,6 +114,7 @@ export const SCHEDULE_SURFACE_TABS: Array<{
   key: ScheduleSurfaceTab;
   label: string;
 }> = [
+  { key: "month-calendar", label: "Month Calendar" },
   { key: "coach-schedule", label: "Coach Schedule" },
   { key: "venue-bookings", label: "Venue Bookings" },
 ];
@@ -220,8 +227,10 @@ export function normalizeScheduleSurfaceTab(
   value: string | null,
   canViewVenueBookings = true,
 ): ScheduleSurfaceTab {
+  if (!canViewVenueBookings) return "coach-schedule";
   if (canViewVenueBookings && value === "venues") return "venue-bookings";
-  return "coach-schedule";
+  if (value === "coaches") return "coach-schedule";
+  return "month-calendar";
 }
 
 export const COACH_PROFILE_FIELDS: FieldConfig[] = [
@@ -462,6 +471,8 @@ export function GymOperationsModeTabs({
   return (
     <div
       className="gym-operations-mode-tabs"
+      data-ui="gym-operations-primary-tabs"
+      data-option-count={GYM_OPERATIONS_TABS.length}
       style={{
         display: "inline-grid",
         gridTemplateColumns: "repeat(3, minmax(104px, 1fr))",
@@ -480,6 +491,7 @@ export function GymOperationsModeTabs({
         return (
           <button
             key={tab.key}
+            data-ui={`gym-operations-tab-${tab.key}`}
             type="button"
             onClick={() => onChange(tab.key)}
             role="tab"
@@ -506,6 +518,75 @@ export function GymOperationsModeTabs({
           >
             <Icon size={14} strokeWidth={2.3} />
             {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function GymOperationsScheduleViewSwitcher({
+  activeView,
+  colors,
+  onChange,
+}: {
+  activeView: ScheduleSurfaceTab;
+  colors: ReturnType<typeof useTheme>["colors"];
+  onChange: (view: ScheduleSurfaceTab) => void;
+}) {
+  return (
+    <div
+      data-ui="gym-operations-schedule-view-switcher"
+      data-option-count={SCHEDULE_SURFACE_TABS.length}
+      role="tablist"
+      aria-label="Schedule view"
+      style={{
+        alignItems: "center",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+      }}
+    >
+      <FitText
+        excludeGlobalScale
+        style={{
+          color: colors.textMuted,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          marginRight: 4,
+          textTransform: "uppercase",
+        }}
+      >
+        View
+      </FitText>
+      {SCHEDULE_SURFACE_TABS.map((view) => {
+        const isActive = activeView === view.key;
+        return (
+          <button
+            key={view.key}
+            data-component-option="true"
+            data-ui={`gym-operations-schedule-view-${view.key}`}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(view.key)}
+            style={{
+              backgroundColor: isActive ? `${colors.brand}18` : "transparent",
+              border: `1px solid ${
+                isActive ? `${colors.brand}55` : colors.border
+              }`,
+              borderRadius: 7,
+              color: isActive ? colors.brand : colors.textSecondary,
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 750,
+              minHeight: 34,
+              minWidth: 112,
+              padding: "6px 11px",
+            }}
+          >
+            {view.label}
           </button>
         );
       })}

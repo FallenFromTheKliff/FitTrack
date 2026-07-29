@@ -13,6 +13,7 @@ describe('AnalyticsService', () => {
     getCoachEarningsMetrics: jest.fn(),
     getCoachingAppointmentCount: jest.fn(),
     getCurrentActiveMembers: jest.fn(),
+    getFeedbackMetrics: jest.fn(),
     getMemberMetrics: jest.fn(),
     getOverviewMetrics: jest.fn(),
     getRecentActivityCountSince: jest.fn(),
@@ -213,6 +214,11 @@ describe('AnalyticsService', () => {
     repo.getCheckInCount.mockResolvedValue(11);
     repo.getVenueBookingCount.mockResolvedValue(9);
     repo.getCoachingAppointmentCount.mockResolvedValue(6);
+    repo.getFeedbackMetrics.mockResolvedValue({
+      app_feedback_submissions: 12,
+      coach_satisfaction_rating: new Prisma.Decimal('4.7'),
+      venue_feedback_rating: new Prisma.Decimal('4.5'),
+    });
     repo.getRecentActivityCountSince.mockResolvedValue(14);
     repo.listSystemAlerts.mockResolvedValue([
       {
@@ -253,6 +259,11 @@ describe('AnalyticsService', () => {
         new_members: 5,
         check_ins: 42,
         coaching_sessions: 7,
+        active_members: 18,
+        session_completion_rate: 116.7,
+        coach_satisfaction_rating: 4.7,
+        venue_feedback_rating: 4.5,
+        app_feedback_submissions: 12,
       },
       system_alerts: [
         {

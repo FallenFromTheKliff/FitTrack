@@ -21,9 +21,11 @@ import {
 } from "@/lib/api-client";
 
 type RegisterInput = {
+  acceptedTerms: true;
   email: string;
   firstName: string;
   lastName: string;
+  legalVersion: string;
   phone?: string;
   password: string;
 };
@@ -163,9 +165,11 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       try {
         const res = await controller.register(
           {
+            accepted_terms: data.acceptedTerms,
             email: data.email,
             first_name: data.firstName,
             last_name: data.lastName,
+            legal_version: data.legalVersion,
             password: data.password,
             phone: data.phone || undefined,
           },

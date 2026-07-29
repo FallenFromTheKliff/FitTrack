@@ -7,6 +7,14 @@ import {
   bookingsQueryOptions,
   cancelAppointmentMutationOptions,
   cancelBookingMutationOptions,
+  activateFitnessPlanMutationOptions,
+  createFitnessPlanMutationOptions,
+  createCustomFitnessExerciseMutationOptions,
+  deleteFitnessPlanMutationOptions,
+  fitnessExercisesQueryOptions,
+  fitnessPlanDetailQueryOptions,
+  fitnessSessionDetailQueryOptions,
+  logWorkoutSetMutationOptions,
   createAppointmentMutationOptions,
   createBookingMutationOptions,
   claimFitnessMilestoneMutationOptions,
@@ -208,15 +216,36 @@ export function useMemberOnlyMasteryData({
 
 export function useMemberOnlyWorkoutData({
   hasMemberCardAccess,
+  planId,
+  sessionId,
   userId,
 }: {
   hasMemberCardAccess: boolean;
+  planId?: string;
+  sessionId?: string;
   userId?: string;
 }) {
   const queryClient = useQueryClient();
 
   return {
     completeMutation: useMutation(completeWorkoutSessionMutationOptions(webApiClient, queryClient)),
+    activatePlanMutation: useMutation(activateFitnessPlanMutationOptions(webApiClient, queryClient)),
+    createPlanMutation: useMutation(createFitnessPlanMutationOptions(webApiClient, queryClient)),
+    createCustomExerciseMutation: useMutation(createCustomFitnessExerciseMutationOptions(webApiClient, queryClient)),
+    deletePlanMutation: useMutation(deleteFitnessPlanMutationOptions(webApiClient, queryClient)),
+    exercisesQuery: useQuery({
+      ...fitnessExercisesQueryOptions(webApiClient, { limit: 100, page: 1 }),
+      enabled: !!userId && hasMemberCardAccess,
+    }),
+    planDetailQuery: useQuery({
+      ...fitnessPlanDetailQueryOptions(webApiClient, planId),
+      enabled: !!planId && !!userId && hasMemberCardAccess,
+    }),
+    sessionDetailQuery: useQuery({
+      ...fitnessSessionDetailQueryOptions(webApiClient, sessionId),
+      enabled: !!sessionId && !!userId && hasMemberCardAccess,
+    }),
+    logSetMutation: useMutation(logWorkoutSetMutationOptions(webApiClient, queryClient)),
     plansQuery: useQuery({
       ...fitnessPlansQueryOptions(webApiClient, userId, { limit: 20, page: 1 }),
       enabled: !!userId && hasMemberCardAccess,

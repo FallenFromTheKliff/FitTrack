@@ -18,11 +18,8 @@ import {
   normalizeExerciseMuscleTargets,
 } from "@fittrack/utils";
 
-import type { AchievementReviewRecord } from "@/data/progress/milestones";
-
-export type SurfaceMode = "library" | "milestones" | "muscles" | "review";
+export type SurfaceMode = "library" | "muscles" | "review";
 export type LibraryScope = "active" | "all";
-export type MilestoneScope = "all" | "closed" | "pending";
 export type MuscleDefinitionDraft = {
   aliases: string;
   bodyRegion: string;
@@ -63,7 +60,6 @@ export const SURFACE_MODE_OPTIONS: Array<{ label: string; value: SurfaceMode }> 
   { label: "Review", value: "review" },
   { label: "Library", value: "library" },
   { label: "Muscles", value: "muscles" },
-  { label: "Milestones", value: "milestones" },
 ];
 export const CREATOR_STATE_OPTIONS = [
   { label: "None", value: "none" },
@@ -126,32 +122,6 @@ export function formatDateTime(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-export function getMilestoneMetric(review: AchievementReviewRecord) {
-  const match = review.badgeLabel.match(/\d+/);
-  if (match) {
-    return { label: "earned", value: `${match[0]}x` };
-  }
-
-  if (review.badgeLabel.toLowerCase().includes("streak")) {
-    return { label: "streak", value: "7d" };
-  }
-
-  return { label: "badge", value: review.memberInitials };
-}
-
-export function getMilestonePrimaryTag(review: AchievementReviewRecord) {
-  return review.badgeLabel
-    .replace(/\s+Milestone$/i, "")
-    .replace(/\s+Badge$/i, "");
-}
-
-export function getMilestoneSecondaryTag(review: AchievementReviewRecord) {
-  if (review.badgeLabel.toLowerCase().includes("streak")) return "consistency";
-  if (review.badgeLabel.toLowerCase().includes("boxing")) return "skill";
-  if (review.badgeLabel.toLowerCase().includes("workout")) return "volume";
-  return "progress";
 }
 
 function tokenize(value: string) {

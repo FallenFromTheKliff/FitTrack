@@ -26,6 +26,7 @@ Use this skill when the main need is presentation polish after the flow, ownersh
 - 2026-04-20: narrowed the skill so premium motion-system design, component-level animation choice, and Notion motion-bible maintenance now hand off to `ui-animator`.
 - 2026-04-20: added stronger static-quality failure rules for annotation leakage, clean-but-generic composition, and admin-family drift so conservative premium work gets rejected before QA.
 - 2026-05-17: added `layout-wireframe-gate` and `component-decorator` handoffs for manual relayout approval and post-scaffold component anatomy work.
+- 2026-07-29: added user-selected reference authority, FitTrack density translation, operational-table density parity, overlay completeness, explicit scroll ownership, and disposable Stitch artifact cleanup.
 
 ## First pass
 
@@ -35,6 +36,16 @@ Use this skill when the main need is presentation polish after the flow, ownersh
   - `references/polish-rubric.md`
   - the repo `frontend` skill when reuse architecture or runtime rules matter
   - the nearest touched route, component, or style helper
+
+## Approved visual reference contract
+
+- When the user explicitly selects a subset of generated or uploaded reference screens, that subset is authoritative. Do not average it with rejected frames from the same board.
+- Translate the approved composition, hierarchy, disclosure, and interaction model into FitTrack density and typography. Do not copy an oversized generated pixel scale literally.
+- Treat referenced modals, drawers, menus, empty states, and destructive confirmations as part of the design, not optional follow-up work.
+- Default to one page-level vertical scroll owner. Use bounded internal scrolling only for intentionally long lists, inspectors, tables, and modal bodies.
+- For desktop operational tables, compare row height and information density with the nearest approved sibling route. Prefer a two-line row anatomy, keep repeated labels on one line with ellipsis, and fit the primary six-to-ten-row task surface inside the actual app viewport when doing so does not hide data or controls. A vertically paginated table must not also own vertical scrolling; calibrate its page size so pagination remains visible. Horizontal table scrolling is reserved for narrow responsive layouts where columns physically cannot fit.
+- Files downloaded from Stitch or another design generator are temporary implementation inputs. Delete them after extraction and verification unless the user explicitly asks to preserve them.
+- Before closure, verify that the live route still reflects the selected frames rather than nearby rejected concepts.
 
 ## Scope boundaries
 

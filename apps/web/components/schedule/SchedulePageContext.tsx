@@ -1156,8 +1156,10 @@ function useGymOperationsPageState() {
     if (activeScheduleSurfaceTab === normalizedSurfaceParam) return;
 
     const nextParams = new URLSearchParams(searchParams.toString());
-    if (activeScheduleSurfaceTab === "coach-schedule") {
+    if (activeScheduleSurfaceTab === "month-calendar") {
       nextParams.delete("schedule_view");
+    } else if (activeScheduleSurfaceTab === "coach-schedule") {
+      nextParams.set("schedule_view", "coaches");
     } else {
       nextParams.set("schedule_view", "venues");
     }

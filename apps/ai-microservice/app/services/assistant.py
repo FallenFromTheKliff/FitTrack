@@ -56,6 +56,7 @@ class OpenRouterAssistantSettings:
     fallback_model: str | None
     http_referer: str | None
     app_title: str | None
+    request_timeout_seconds: float
 
 
 class AssistantProvider(Protocol):
@@ -71,7 +72,7 @@ class AssistantProvider(Protocol):
 
 class OpenRouterAssistantProvider:
     _DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-    _REQUEST_TIMEOUT_SECONDS = 10.0
+    _DEFAULT_REQUEST_TIMEOUT_SECONDS = 25.0
 
     def classify_intent(
         self,
@@ -397,7 +398,7 @@ class OpenRouterAssistantProvider:
                 f"{settings.base_url.rstrip('/')}/chat/completions",
                 json=request_payload,
                 headers=self._build_headers(settings),
-                timeout=self._REQUEST_TIMEOUT_SECONDS,
+                timeout=settings.request_timeout_seconds,
             )
         except httpx.TimeoutException as exc:
             raise ServiceError(
@@ -428,14 +429,24 @@ class OpenRouterAssistantProvider:
         request_label: str,
     ) -> httpx.Response:
         last_response: httpx.Response | None = None
+        last_timeout: ServiceError | None = None
         for request_payload in payloads:
-            response = self._post_chat_completion(settings, request_payload)
+            try:
+                response = self._post_chat_completion(settings, request_payload)
+            except ServiceError as exc:
+                if exc.title != "Assistant Provider Timeout":
+                    raise
+                last_timeout = exc
+                continue
             if response.status_code < 400:
                 return response
             last_response = response
 
-        assert last_response is not None
-        raise self._build_upstream_error(last_response, request_label=request_label)
+        if last_response is not None:
+            raise self._build_upstream_error(last_response, request_label=request_label)
+        if last_timeout is not None:
+            raise last_timeout
+        raise RuntimeError(f"No OpenRouter request variants were configured for {request_label}.")
 
     def _build_fallback_chat_variants(
         self,
@@ -633,7 +644,18 @@ class OpenRouterAssistantProvider:
             fallback_model=fallback_model.strip() if fallback_model and fallback_model.strip() else None,
             http_referer=os.getenv("OPENROUTER_HTTP_REFERER"),
             app_title=os.getenv("OPENROUTER_APP_TITLE"),
+            request_timeout_seconds=self._read_request_timeout_seconds(),
         )
+
+    def _read_request_timeout_seconds(self) -> float:
+        raw_value = os.getenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS")
+        if not raw_value:
+            return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
+        try:
+            parsed = float(raw_value)
+        except ValueError:
+            return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
+        return min(55.0, max(5.0, parsed))
 
     def _first_configured_env(self, *keys: str) -> str | None:
         for key in keys:

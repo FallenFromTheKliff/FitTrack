@@ -25,20 +25,17 @@ import type {
   FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
-  FitnessMilestoneEvidenceSubmissionRecord,
   MuscleDefinitionRecord,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
 } from "@fittrack/api-client";
 import {
-  adminMilestoneEvidenceQueryOptions,
   archiveMuscleDefinitionMutationOptions,
   createMuscleDefinitionMutationOptions,
   createFitnessExerciseMutationOptions,
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
-  reviewFitnessMilestoneEvidenceMutationOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
   updateMuscleDefinitionMutationOptions,
@@ -64,11 +61,6 @@ import type {
   FitTableAction,
   FitTableColumn,
 } from "@/components/fit/FitTable";
-import {
-  type AchievementReviewRecord,
-  type AchievementReviewStatus,
-} from "@/data/progress/milestones";
-
 import { createExerciseDraft } from "@/components/exercise-lab/exercise-lab-data";
 import {
   CREATOR_DECISION_STATES,
@@ -89,7 +81,6 @@ import {
   type ExerciseDraft,
   type ExerciseReviewCandidateLike,
   type LibraryScope,
-  type MilestoneScope,
   type MuscleDefinitionDraft,
   type SheetState,
   type SurfaceMode,
@@ -98,48 +89,6 @@ import type {
   EditorColors,
   ExerciseEditorTab,
 } from "@/components/exercise-lab/ExerciseContractEditors";
-
-function getEvidenceReviewStatus(
-  status: FitnessMilestoneEvidenceSubmissionRecord["status"],
-): AchievementReviewStatus {
-  if (status === "approved") return "Approved";
-  if (status === "rejected") return "Rejected";
-  return "Pending";
-}
-
-function getEvidenceMemberInitials(record: FitnessMilestoneEvidenceSubmissionRecord) {
-  if (record.memberInitials?.trim()) return record.memberInitials.trim();
-  const source = record.memberName?.trim() || record.memberEmail?.trim() || "Member";
-  return source
-    .split(/\s+|@/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-function mapMilestoneEvidenceToReview(
-  record: FitnessMilestoneEvidenceSubmissionRecord,
-): AchievementReviewRecord {
-  const title = record.milestoneTitle?.trim() || "Milestone proof";
-  const memberName = record.memberName?.trim() || "Member";
-  return {
-    badgeLabel: title,
-    id: record.id,
-    memberEmail: record.memberEmail?.trim() || "No email on file",
-    memberId: record.userId,
-    memberInitials: getEvidenceMemberInitials(record),
-    memberName,
-    proofCaption:
-      record.caption?.trim() ||
-      `${record.evidenceType} proof submitted for ${title}.`,
-    proofImageUrl: record.fileUrl,
-    reviewedAt: record.reviewedAt ?? undefined,
-    reviewerNotes: record.reviewerNotes ?? undefined,
-    status: getEvidenceReviewStatus(record.status),
-    submittedAt: record.createdAt,
-  };
-}
 
 function useExerciseLabPageState() {
   const { colors, settings } = useTheme();
@@ -160,12 +109,13 @@ function useExerciseLabPageState() {
   const [muscleSearch, setMuscleSearch] = useState("");
   const [muscleDraft, setMuscleDraft] = useState<MuscleDefinitionDraft>({
     aliases: "",
-    bodyRegion: "arms",
+    bodyRegion: "",
     key: "",
     name: "",
     sortOrder: 500,
   });
   const [editingMuscleId, setEditingMuscleId] = useState<string | null>(null);
+  const [muscleEditorOpen, setMuscleEditorOpen] = useState(false);
   const [musclePage, setMusclePage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewSearch, setReviewSearch] = useState("");
@@ -198,13 +148,6 @@ function useExerciseLabPageState() {
   const [creatorStateDraft, setCreatorStateDraft] =
     useState<FitnessCreatorState>("none");
   const [creatorGovernanceNote, setCreatorGovernanceNote] = useState("");
-  const [milestoneReviews, setMilestoneReviews] = useState<
-    AchievementReviewRecord[]
-  >([]);
-  const [milestoneScope, setMilestoneScope] =
-    useState<MilestoneScope>("pending");
-  const [selectedMilestoneId, setSelectedMilestoneId] = useState("");
-  const [milestoneNotes, setMilestoneNotes] = useState("");
   const [isCompact, setIsCompact] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(900);
   const canAnimate = settings.animationLevel !== "none";
@@ -239,33 +182,16 @@ function useExerciseLabPageState() {
     if (
       requestedTab === "review" ||
       requestedTab === "library" ||
-      requestedTab === "muscles" ||
-      requestedTab === "milestones"
+      requestedTab === "muscles"
     ) {
       setMode(requestedTab);
     }
-
-    const requestedMilestoneScope = searchParams.get("milestone_scope");
-    if (
-      requestedMilestoneScope === "pending" ||
-      requestedMilestoneScope === "closed" ||
-      requestedMilestoneScope === "all"
-    ) {
-      setMilestoneScope(requestedMilestoneScope);
-    }
   }, [router, searchParams]);
 
-  const replaceSurfaceRoute = (
-    nextMode: SurfaceMode,
-    nextMilestoneScope = milestoneScope,
-  ) => {
+  const replaceSurfaceRoute = (nextMode: SurfaceMode) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", nextMode);
-    if (nextMode === "milestones") {
-      params.set("milestone_scope", nextMilestoneScope);
-    } else {
-      params.delete("milestone_scope");
-    }
+    params.delete("milestone_scope");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
@@ -275,11 +201,6 @@ function useExerciseLabPageState() {
   const handleModeChange = (nextMode: SurfaceMode) => {
     setMode(nextMode);
     replaceSurfaceRoute(nextMode);
-  };
-
-  const handleMilestoneScopeChange = (nextScope: MilestoneScope) => {
-    setMilestoneScope(nextScope);
-    replaceSurfaceRoute("milestones", nextScope);
   };
 
   const reviewQueueQuery = useQuery(
@@ -314,26 +235,6 @@ function useExerciseLabPageState() {
       ...(muscleSearch.trim() ? { search: muscleSearch.trim() } : {}),
     }),
   );
-  const milestoneEvidenceQuery = useQuery(
-    adminMilestoneEvidenceQueryOptions(webApiClient, {
-      limit: 50,
-      page: 1,
-      status: "all",
-    }),
-  );
-
-  useEffect(() => {
-    const reviews = (milestoneEvidenceQuery.data?.data ?? []).map(
-      mapMilestoneEvidenceToReview,
-    );
-    setMilestoneReviews(reviews);
-    setSelectedMilestoneId((current) =>
-      current && reviews.some((review) => review.id === current)
-        ? current
-        : (reviews[0]?.id ?? ""),
-    );
-  }, [milestoneEvidenceQuery.data?.data]);
-
   const createExerciseMutation = useMutation(
     createFitnessExerciseMutationOptions(webApiClient, queryClient),
   );
@@ -352,10 +253,6 @@ function useExerciseLabPageState() {
   const updateExerciseMutation = useMutation(
     updateFitnessExerciseMutationOptions(webApiClient, queryClient),
   );
-  const reviewMilestoneEvidenceMutation = useMutation(
-    reviewFitnessMilestoneEvidenceMutationOptions(webApiClient, queryClient),
-  );
-
   const reviewCandidates =
     reviewQueueQuery.data?.data ?? EMPTY_REVIEW_CANDIDATES;
   const visibleReviewCandidates = reviewCandidates;
@@ -388,39 +285,6 @@ function useExerciseLabPageState() {
           : selectedCreatorTone === "brand"
             ? colors.brand
             : colors.textMuted;
-  const filteredMilestones = useMemo(() => {
-    if (milestoneScope === "all") return milestoneReviews;
-    if (milestoneScope === "closed") {
-      return milestoneReviews.filter((review) => review.status !== "Pending");
-    }
-    return milestoneReviews.filter((review) => review.status === "Pending");
-  }, [milestoneReviews, milestoneScope]);
-  const pendingMilestoneCount = useMemo(
-    () =>
-      milestoneReviews.filter((review) => review.status === "Pending").length,
-    [milestoneReviews],
-  );
-  const closedMilestoneCount = milestoneReviews.length - pendingMilestoneCount;
-  const milestoneWorkbenchMotionKey = `${milestoneScope}-${selectedMilestoneId || "empty"}`;
-
-  useEffect(() => {
-    if (!filteredMilestones.length) return;
-    const stillSelected = filteredMilestones.some(
-      (review) => review.id === selectedMilestoneId,
-    );
-    if (!stillSelected) {
-      setSelectedMilestoneId(filteredMilestones[0].id);
-    }
-  }, [filteredMilestones, selectedMilestoneId]);
-
-  const selectedMilestone =
-    filteredMilestones.find((review) => review.id === selectedMilestoneId) ??
-    null;
-
-  useEffect(() => {
-    setMilestoneNotes(selectedMilestone?.reviewerNotes ?? "");
-  }, [selectedMilestone]);
-
   useEffect(() => {
     setCreatorStateDraft(selectedCandidate?.creatorState ?? "none");
     setCreatorGovernanceNote(selectedCandidate?.creatorGovernanceNote ?? "");
@@ -741,44 +605,6 @@ function useExerciseLabPageState() {
     }
   };
 
-  const handleMilestoneDecision = async (status: AchievementReviewStatus) => {
-    if (!selectedMilestone) return;
-    const trimmedNotes = milestoneNotes.trim();
-    if (status === "Rejected" && !trimmedNotes) {
-      showMessage("Add a short reviewer note before declining this claim.");
-      return;
-    }
-
-    try {
-      const reviewed = await reviewMilestoneEvidenceMutation.mutateAsync({
-        evidenceSubmissionId: selectedMilestone.id,
-        payload: {
-          reviewerNotes: trimmedNotes || null,
-          status: status === "Approved" ? "approved" : "rejected",
-        },
-      });
-      const updatedReview = mapMilestoneEvidenceToReview(reviewed);
-      setMilestoneReviews((current) =>
-        current.map((review) =>
-          review.id === selectedMilestone.id ? updatedReview : review,
-        ),
-      );
-      showMessage(
-        status === "Approved"
-          ? `${selectedMilestone.badgeLabel} was approved.`
-          : `${selectedMilestone.badgeLabel} was declined.`,
-      );
-    } catch (error) {
-      showMessage(
-        getErrorMessage(error, "Unable to save this milestone decision."),
-      );
-    }
-  };
-
-  const handleOpenClosedMilestones = () => {
-    handleMilestoneScopeChange("closed");
-  };
-
   const handleArchiveToggle = async (
     exercise: FitnessExerciseRecord,
     nextActive = !exercise.isActive,
@@ -803,11 +629,21 @@ function useExerciseLabPageState() {
     setEditingMuscleId(definition?.id ?? null);
     setMuscleDraft({
       aliases: definition?.aliases.join(", ") ?? "",
-      bodyRegion: definition?.bodyRegion ?? "arms",
+      bodyRegion: definition?.bodyRegion ?? "",
       key: definition?.key ?? "",
       name: definition?.name ?? "",
       sortOrder: definition?.sortOrder ?? 500,
     });
+  };
+
+  const openMuscleEditor = (definition?: MuscleDefinitionRecord) => {
+    resetMuscleDraft(definition);
+    setMuscleEditorOpen(true);
+  };
+
+  const closeMuscleEditor = () => {
+    setMuscleEditorOpen(false);
+    resetMuscleDraft();
   };
 
   const toMuscleDefinitionPayload = ():
@@ -849,6 +685,7 @@ function useExerciseLabPageState() {
         showMessage(`${muscleDraft.name.trim()} was added to Muscle Library.`);
       }
       resetMuscleDraft();
+      setMuscleEditorOpen(false);
     } catch (error) {
       showMessage(getErrorMessage(error, "Unable to save muscle definition."));
     }
@@ -1330,7 +1167,7 @@ function useExerciseLabPageState() {
       icon: Pencil,
       label: "Edit",
       ariaLabel: (definition) => `Edit ${definition.name}`,
-      onClick: resetMuscleDraft,
+      onClick: openMuscleEditor,
       variant: "ghost",
     },
     {
@@ -1399,7 +1236,6 @@ function useExerciseLabPageState() {
     archiveMuscleDefinitionMutation,
     canAnimate,
     closestMatch,
-    closedMilestoneCount,
     colors,
     completedDefinitionItems,
     confirmationIcon,
@@ -1423,16 +1259,12 @@ function useExerciseLabPageState() {
     fadeIn,
     feedbackMessage,
     filteredMatches,
-    filteredMilestones,
     formError,
     fullMotion,
     handleCloseSheet,
     handleConfirmAction,
     handleCreatorGovernanceUpdate,
-    handleMilestoneDecision,
-    handleMilestoneScopeChange,
     handleModeChange,
-    handleOpenClosedMilestones,
     handleOpenCreate,
     handleOpenPublish,
     handleReject,
@@ -1451,26 +1283,24 @@ function useExerciseLabPageState() {
     matchDrawerOpen,
     matchSearch,
     matchSuggestions,
-    milestoneDecisionPending: reviewMilestoneEvidenceMutation.isPending,
-    milestoneNotes,
-    milestoneScope,
-    milestoneWorkbenchMotionKey,
     mode,
     muscleDefinitions,
     muscleDefinitionsQuery,
     muscleDraft,
+    muscleEditorOpen,
     musclePage,
     muscleSearch,
     muscleTableActions,
     muscleTableColumns,
     muscleTotalPages,
     openReviewModal,
-    pendingMilestoneCount,
+    openMuscleEditor,
     publishCandidate,
     rejectRationale,
     rejectTarget,
     rejectValidationError,
     resetMuscleDraft,
+    closeMuscleEditor,
     reviewCategory,
     reviewLibraryQuery,
     reviewMeta,
@@ -1486,7 +1316,6 @@ function useExerciseLabPageState() {
     selectedCandidate,
     selectedCandidateId,
     selectedCreatorToneColor,
-    selectedMilestone,
     setActiveEditorTab,
     setConfirmationState,
     setCreatorGovernanceNote,
@@ -1500,7 +1329,6 @@ function useExerciseLabPageState() {
     setLibrarySearch,
     setMatchDrawerOpen,
     setMatchSearch,
-    setMilestoneNotes,
     setMode,
     setMuscleDraft,
     setMusclePage,
@@ -1515,7 +1343,6 @@ function useExerciseLabPageState() {
     setReviewSearch,
     setReviewStatus,
     setSelectedCandidateId,
-    setSelectedMilestoneId,
     sheetPending,
     sheetState,
     showMessage,

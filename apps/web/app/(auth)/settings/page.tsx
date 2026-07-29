@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { Bell, FileText, Palette } from "lucide-react";
+import { useState } from "react";
+import { Bell, FileText, Palette, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import {
+  FITTRACK_LEGAL_VERSION,
+  FITTRACK_PRIVACY_SECTIONS,
+  FITTRACK_TERMS_SECTIONS,
+  type FitTrackLegalSection,
+} from "@fittrack/app-config";
 
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -19,7 +25,12 @@ import FeedbackInboxSection from "@/components/settings/FeedbackInboxSection";
 import NotificationPreferencesSection from "@/components/settings/NotificationPreferencesSection";
 import SecuritySettingsSection from "@/components/settings/SecuritySettingsSection";
 
-type SettingsModalKey = "appearance" | "notifications" | "terms" | null;
+type SettingsModalKey =
+  | "appearance"
+  | "notifications"
+  | "privacy"
+  | "terms"
+  | null;
 
 function SettingsLaunchCard({
   body,
@@ -97,7 +108,7 @@ function PreferenceLaunchSection({
         style={{
           display: "grid",
           gap: 10,
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           padding: 16,
         }}
       >
@@ -119,46 +130,72 @@ function PreferenceLaunchSection({
           body="Policies, agreements, and account responsibilities."
           onClick={() => onOpen("terms")}
         />
+        <SettingsLaunchCard
+          icon={ShieldCheck}
+          label="Data Privacy"
+          body="Data use, retention, providers, and your Philippine privacy rights."
+          onClick={() => onOpen("privacy")}
+        />
       </div>
     </FitSection>
   );
 }
 
-function TermsModalContent() {
+function LegalModalContent({
+  eyebrow,
+  sections,
+}: {
+  eyebrow: string;
+  sections: readonly FitTrackLegalSection[];
+}) {
   const { colors } = useTheme();
-  const sections: Array<{ heading: string; body: ReactNode }> = [
-    {
-      heading: "Account Responsibility",
-      body: "FitTrack accounts are tied to the named gym member, coach, staff member, or administrator. Keep credentials private and report suspicious access to SertFit staff.",
-    },
-    {
-      heading: "Bookings And Payments",
-      body: "Venue reservations, coach appointments, and membership payments remain subject to staff verification when paid by cash or when a provider callback is still processing.",
-    },
-    {
-      heading: "Health And Training",
-      body: "Workout, nutrition, assessment, and AI guidance support gym activity but do not replace professional medical advice or in-person coaching judgment.",
-    },
-    {
-      heading: "Data And Communication",
-      body: "FitTrack uses booking, attendance, progress, payment, and feedback records to operate the gym portal and send relevant account notices.",
-    },
-  ];
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {sections.map((section) => (
-        <div
-          key={section.heading}
+    <div style={{ display: "grid", gap: 0 }}>
+      <div
+        style={{
+          borderBottom: `1px solid ${colors.border}`,
+          display: "grid",
+          gap: 4,
+          padding: "0 0 14px",
+        }}
+      >
+        <FitText
+          as="p"
           style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 8,
-            display: "grid",
-            gap: 6,
-            padding: 12,
+            color: colors.brand,
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
           }}
         >
-          <FitText style={{ fontSize: 13, fontWeight: 850 }}>{section.heading}</FitText>
+          {eyebrow}
+        </FitText>
+        <FitText
+          as="p"
+          style={{ color: colors.textMuted, fontSize: 12.5, lineHeight: 1.5 }}
+        >
+          Policy version {FITTRACK_LEGAL_VERSION}. Plain-language summary for
+          FitTrack members, coaches, staff, and administrators.
+        </FitText>
+      </div>
+      {sections.map((section, index) => (
+        <div
+          key={section.title}
+          style={{
+            borderBottom:
+              index === sections.length - 1
+                ? undefined
+                : `1px solid ${colors.border}`,
+            display: "grid",
+            gap: 6,
+            padding: "14px 0",
+          }}
+        >
+          <FitText style={{ fontSize: 13.5, fontWeight: 850 }}>
+            {section.title}
+          </FitText>
           <FitText as="p" style={{ color: colors.textMuted, fontSize: 12.5, lineHeight: 1.5 }}>
             {section.body}
           </FitText>
@@ -227,7 +264,23 @@ export default function GymSettingsPage() {
           icon={FileText}
           maxWidth={680}
         >
-          <TermsModalContent />
+          <LegalModalContent
+            eyebrow="Terms of Service"
+            sections={FITTRACK_TERMS_SECTIONS}
+          />
+        </FitModal>
+        <FitModal
+          isOpen={activeModal === "privacy"}
+          onClose={() => setActiveModal(null)}
+          title="Data Privacy Notice"
+          subtitle="How SertFit Gym processes FitTrack data and how to exercise your rights."
+          icon={ShieldCheck}
+          maxWidth={720}
+        >
+          <LegalModalContent
+            eyebrow="Philippine Data Privacy Notice"
+            sections={FITTRACK_PRIVACY_SECTIONS}
+          />
         </FitModal>
       </FitSection>
     );

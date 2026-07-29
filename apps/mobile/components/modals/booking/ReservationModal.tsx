@@ -11,6 +11,8 @@ import {
 } from "lucide-react-native";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
+  FITTRACK_PAYMENT_POLICY_SUMMARY,
   PAYMONGO_AVAILABILITY,
   WEEKDAY_NAMES,
   isPaymongoCheckoutEnabled,
@@ -916,26 +918,26 @@ export default function ReservationModal({
 
     if (paymentOption === "paymongo_downpayment") {
       setReservationConfirmation({
-        title: "Confirm PayMongo payment?",
-        message: `Confirm the testing PayMongo payment for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.`,
-        yesLabel: "Confirm Payment",
+        title: "Review policy and pay?",
+        message: `Confirm the testing PayMongo payment for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
+        yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
       });
       return;
     }
 
     if (paymentOption === "cash_full") {
       setReservationConfirmation({
-        title: "Submit full cash payment?",
-        message: `Submit a full cash payment request for ${formatCurrency(totalAmount)} for ${venueName} on ${scheduleLabel}. Staff will still verify the payment before it is treated as fully paid.`,
-        yesLabel: "Submit Full Payment",
+        title: "Review policy and submit?",
+        message: `Submit a full cash payment request for ${formatCurrency(totalAmount)} for ${venueName} on ${scheduleLabel}. Staff will still verify the payment before it is treated as fully paid.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
+        yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
       });
       return;
     }
 
     setReservationConfirmation({
-      title: "Submit cash downpayment?",
-      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} will stay due on or after the booking date.`,
-      yesLabel: "Submit Downpayment",
+      title: "Review policy and submit?",
+      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} will stay due on or after the booking date.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
+      yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
     });
   };
 

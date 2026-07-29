@@ -15,7 +15,7 @@ import {
   RelationshipStatus,
 } from '@prisma/client';
 import { seedExternalId, seedId } from '../ids';
-import { daysFrom, fixedTime } from '../time';
+import { dateInsideRange, daysFrom, fixedTime } from '../time';
 import type { DynamicSeedContext } from '../types';
 
 const AMENITY_SEEDS = [
@@ -71,6 +71,39 @@ const COACH_SPECIALIZATIONS = [
 
 function coachProfileIdFor(coachKey: string) {
   return seedId(`coach-profile:${coachKey}`);
+}
+
+function densityCount(
+  density: DynamicSeedContext['config']['sessionDensity'],
+  low: number,
+  normal: number,
+  high: number,
+) {
+  if (density === 'low') {
+    return low;
+  }
+  if (density === 'high') {
+    return high;
+  }
+  return normal;
+}
+
+function relationshipStatusFor(ctx: DynamicSeedContext, ratio: number) {
+  if (ratio < ctx.config.coachFormerRate) {
+    return RelationshipStatus.terminated;
+  }
+  if (ratio < ctx.config.coachFormerRate + ctx.config.coachPausedRate) {
+    return RelationshipStatus.paused;
+  }
+  if (
+    ratio <
+    ctx.config.coachFormerRate +
+      ctx.config.coachPausedRate +
+      ctx.config.coachActiveRate
+  ) {
+    return RelationshipStatus.active;
+  }
+  return RelationshipStatus.pending;
 }
 
 async function seedAmenities(ctx: DynamicSeedContext) {
@@ -220,13 +253,17 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
 
 async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
   const coachKeys = ctx.state.coachAccountKeys;
-  const memberKeys = ctx.state.premiumMemberKeys.slice(0, 42);
+  const memberKeys = ctx.state.premiumMemberKeys.slice(
+    0,
+    Math.max(8, Math.round(ctx.state.premiumMemberKeys.length * 0.72)),
+  );
   const paymentRows: Prisma.PaymentCreateManyInput[] = [];
   const recurringPlanRows: Prisma.RecurringCoachingPlanCreateManyInput[] = [];
   const billingRows: Prisma.RecurringCoachingBillingCycleCreateManyInput[] = [];
   const appointmentRows: Prisma.CoachAppointmentCreateManyInput[] = [];
   const relationshipRows: Prisma.CoachClientRelationshipCreateManyInput[] = [];
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
+  const appointmentsPerMember = densityCount(ctx.config.sessionDensity, 2, 5, 9);
 
   memberKeys.forEach((memberKey, index) => {
     const coachKey = coachKeys[index % coachKeys.length];
@@ -234,29 +271,59 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     const memberId = ctx.state.userIds[memberKey];
     const recurringPlanId = seedId(`recurring-plan:${memberKey}`);
     const amount = new Prisma.Decimal(index % 3 === 0 ? '2400' : '1800');
+    const ratio = (index % 100) / 100;
+    // Workout presets use the same even-index cohort for coach-managed plans.
+    // Keep those members actively related to their assigned coach so demo data
+    // never advertises a plan that the coach is forbidden to manage.
     const relationshipStatus =
-      index % 9 === 0 ? RelationshipStatus.paused : RelationshipStatus.active;
+      index % 2 === 0
+        ? RelationshipStatus.active
+        : relationshipStatusFor(ctx, ratio);
+    const relationshipStart = dateInsideRange(
+      ctx.config.historyStartDate,
+      ctx.config.historyEndDate,
+      (index + 1) / (memberKeys.length + 2),
+      9,
+    );
+    const relationshipEnd =
+      relationshipStatus === RelationshipStatus.terminated
+        ? daysFrom(relationshipStart, 60 + (index % 45), 17)
+        : null;
 
     relationshipRows.push({
       id: seedId(`coach-relationship:${coachKey}:${memberKey}`),
       coach_id: coachId,
-      created_at: daysFrom(ctx.config.anchorDate, -45 + (index % 16), 9),
+      created_at: relationshipStart,
+      ended_at: relationshipEnd,
       member_id: memberId,
       notes:
-        relationshipStatus === RelationshipStatus.paused
-          ? 'Paused relationship retained for coach filters.'
-          : 'Active coaching relationship with measurable goals.',
-      started_at: daysFrom(ctx.config.anchorDate, -45 + (index % 16), 9),
+        relationshipStatus === RelationshipStatus.active
+          ? 'Active coaching relationship with measurable goals.'
+          : relationshipStatus === RelationshipStatus.paused
+            ? 'Paused relationship retained for coach filters.'
+            : relationshipStatus === RelationshipStatus.terminated
+              ? 'Former coaching relationship retained for history filters.'
+              : 'Pending coaching relationship awaiting payment or confirmation.',
+      started_at:
+        relationshipStatus === RelationshipStatus.pending
+          ? null
+          : relationshipStart,
       status: relationshipStatus,
     });
 
     recurringPlanRows.push({
       id: recurringPlanId,
       coach_id: coachId,
-      completed_sessions: 2 + (index % 4),
+      completed_sessions:
+        relationshipStatus === RelationshipStatus.pending
+          ? 0
+          : Math.min(appointmentsPerMember, 1 + (index % appointmentsPerMember)),
       created_by: adminId,
       duration_minutes: index % 2 === 0 ? 60 : 45,
-      end_date: daysFrom(ctx.config.anchorDate, 45 + (index % 20)),
+      end_date:
+        relationshipStatus === RelationshipStatus.terminated
+          ? relationshipEnd ?? daysFrom(ctx.config.anchorDate, -7)
+          : daysFrom(ctx.config.anchorDate, 45 + (index % 20)),
       frequency:
         index % 4 === 0
           ? RecurringCoachingFrequency.biweekly
@@ -264,23 +331,31 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
       member_id: memberId,
       preferred_days: [1 + (index % 5), 3 + (index % 2)],
       preferred_time: fixedTime(index % 2 === 0 ? '16:00:00' : '18:00:00'),
-      start_date: daysFrom(ctx.config.anchorDate, -28 + (index % 12)),
+      start_date: relationshipStart,
       status:
-        index % 12 === 0
+        relationshipStatus === RelationshipStatus.terminated
+          ? RecurringCoachingPlanStatus.completed
+          : relationshipStatus === RelationshipStatus.paused
           ? RecurringCoachingPlanStatus.paused
-          : RecurringCoachingPlanStatus.active,
+          : relationshipStatus === RelationshipStatus.pending
+            ? RecurringCoachingPlanStatus.paused
+            : RecurringCoachingPlanStatus.active,
       total_sessions: 8,
     });
 
     for (let cycleIndex = 0; cycleIndex < 2; cycleIndex += 1) {
       const cycleStart = daysFrom(
-        ctx.config.anchorDate,
-        -28 + cycleIndex * 28,
+        relationshipStart,
+        cycleIndex * 28,
         0,
       );
       const billingPaymentId = seedId(
         `payment:recurring-coaching:${memberKey}:${cycleIndex}`,
       );
+      const isPendingPayment =
+        relationshipStatus === RelationshipStatus.pending ||
+        (cycleIndex === 1 && ratio < ctx.config.pendingPaymentRate);
+      const isPaid = !isPendingPayment && cycleIndex === 0;
       billingRows.push({
         id: seedId(`recurring-cycle:${memberKey}:${cycleIndex}`),
         amount,
@@ -288,13 +363,13 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         cycle_start_date: cycleStart,
         due_date: daysFrom(cycleStart, 3, 0),
         grace_period_ends_at: daysFrom(cycleStart, 7, 23, 59),
-        paid_at: cycleIndex === 0 ? daysFrom(cycleStart, 2, 13) : null,
+        paid_at: isPaid ? daysFrom(cycleStart, 2, 13) : null,
         payment_id: billingPaymentId,
         recurring_plan_id: recurringPlanId,
         status:
-          cycleIndex === 0
+          isPaid
             ? RecurringCoachingBillingCycleStatus.paid
-            : index % 5 === 0
+            : isPendingPayment
               ? RecurringCoachingBillingCycleStatus.awaiting_verification
               : RecurringCoachingBillingCycleStatus.due,
       });
@@ -312,30 +387,37 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         payment_stage: PaymentStage.full,
         provider: PaymentProvider.cash,
         provider_ref: null,
-        status:
-          cycleIndex === 0
-            ? PaymentStatus.completed
-            : PaymentStatus.awaiting_verification,
+        status: isPaid
+          ? PaymentStatus.completed
+          : PaymentStatus.awaiting_verification,
         user_id: memberId,
-        verified_at: cycleIndex === 0 ? daysFrom(cycleStart, 2, 14) : null,
-        verified_by: cycleIndex === 0 ? adminId : null,
+        verified_at: isPaid ? daysFrom(cycleStart, 2, 14) : null,
+        verified_by: isPaid ? adminId : null,
       });
     }
 
-    for (let apptIndex = 0; apptIndex < 3; apptIndex += 1) {
+    for (let apptIndex = 0; apptIndex < appointmentsPerMember; apptIndex += 1) {
+      const position =
+        appointmentsPerMember === 1
+          ? 1
+          : apptIndex / Math.max(1, appointmentsPerMember - 1);
+      const scheduledAt =
+        apptIndex < Math.max(1, Math.floor(appointmentsPerMember * 0.65))
+          ? dateInsideRange(
+              relationshipStart,
+              ctx.config.historyEndDate,
+              Math.min(0.95, position),
+              8 + ((index + apptIndex) % 10),
+            )
+          : daysFrom(ctx.config.anchorDate, 3 + index + apptIndex * 3, 15);
       const status =
-        apptIndex === 0
+        relationshipStatus === RelationshipStatus.pending
+          ? AppointmentStatus.pending_payment
+          : scheduledAt < ctx.config.anchorDate && apptIndex % 8 !== 0
           ? AppointmentStatus.completed
-          : apptIndex === 1
+          : scheduledAt >= ctx.config.anchorDate
             ? AppointmentStatus.confirmed
-            : index % 7 === 0
-              ? AppointmentStatus.no_show
-              : AppointmentStatus.pending_payment;
-      const scheduledAt = daysFrom(
-        ctx.config.anchorDate,
-        apptIndex === 0 ? -12 - (index % 6) : 3 + index + apptIndex * 5,
-        15 + (index % 4),
-      );
+            : AppointmentStatus.no_show;
       const appointmentId = seedId(
         `coach-appointment:${memberKey}:${apptIndex}`,
       );

@@ -46,6 +46,7 @@ export default function ConfirmModal({
   const [visible, setVisible] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const onCancelRef = useRef(onCancel);
   const titleId = useId();
@@ -93,15 +94,61 @@ export default function ConfirmModal({
     if (!isOpen || !portalRoot) return;
 
     const previousOverflow = document.body.style.overflow;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const overlay = overlayRef.current;
+    const backgroundSiblings = Array.from(document.body.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element !== overlay,
+    );
+    const previousBackgroundState = backgroundSiblings.map((element) => ({
+      element,
+      inert: element.inert,
+      ariaHidden: element.getAttribute("aria-hidden"),
+    }));
+
     document.body.style.overflow = "hidden";
+    previousBackgroundState.forEach(({ element }) => {
+      element.inert = true;
+      element.setAttribute("aria-hidden", "true");
+    });
     const focusFrame = requestAnimationFrame(() => {
       dialogRef.current?.focus({ preventScroll: true });
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || isLoading) return;
-      event.preventDefault();
-      onCancelRef.current();
+      if (event.key === "Escape" && !isLoading) {
+        event.preventDefault();
+        onCancelRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hidden && element.offsetParent !== null);
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus({ preventScroll: true });
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -109,6 +156,19 @@ export default function ConfirmModal({
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      previousBackgroundState.forEach(({ element, inert, ariaHidden }) => {
+        element.inert = inert;
+        if (ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", ariaHidden);
+        }
+      });
+      requestAnimationFrame(() => {
+        if (previouslyFocused?.isConnected) {
+          previouslyFocused.focus({ preventScroll: true });
+        }
+      });
     };
   }, [isLoading, isOpen, portalRoot]);
 
@@ -116,6 +176,7 @@ export default function ConfirmModal({
 
   return createPortal(
     <div
+      ref={overlayRef}
       style={{
         alignItems: "center",
         backgroundColor: colors.overlay,

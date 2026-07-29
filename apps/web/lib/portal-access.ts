@@ -49,7 +49,7 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     "member-bookings": WEB_MEMBER_ROLES,
     "member-nutrition": [],
     "member-mastery": [],
-    "member-workout": [],
+    "member-workout": WEB_MEMBER_ROLES,
     "member-profile": WEB_MEMBER_ROLES,
   };
 

@@ -76,6 +76,7 @@ model User {
   progression_grants          ProgressionGrantLedger[]
   progression_profile         UserProgressionProfile?
   seasonal_standings          SeasonalStanding[]
+  seasonal_muscle_standings   SeasonalMuscleStanding[]
   milestone_progress          UserMilestoneProgress[]
   milestone_evidence_submissions MilestoneEvidenceSubmission[] @relation("milestone_evidence_submitter")
   milestone_evidence_reviews     MilestoneEvidenceSubmission[] @relation("milestone_evidence_reviewer")
@@ -1256,20 +1257,23 @@ model UserProgressionProfile {
 }
 
 model SeasonDefinition {
-  id            String       @id @default(uuid()) @db.Uuid
-  title         String       @db.VarChar(160)
-  description   String?
-  status        SeasonStatus @default(draft)
-  rules_version String       @default("v1") @db.VarChar(50)
-  starts_at     DateTime     @db.Timestamptz(6)
-  ends_at       DateTime     @db.Timestamptz(6)
-  closed_at     DateTime?    @db.Timestamptz(6)
-  archived_at   DateTime?    @db.Timestamptz(6)
-  created_at    DateTime     @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime     @updatedAt @db.Timestamptz(6)
+  id              String       @id @default(uuid()) @db.Uuid
+  title           String       @db.VarChar(160)
+  description     String?
+  status          SeasonStatus @default(draft)
+  rules_version   String       @default("v1") @db.VarChar(50)
+  starts_at       DateTime     @db.Timestamptz(6)
+  ends_at         DateTime     @db.Timestamptz(6)
+  auto_start_next Boolean      @default(false)
+  activated_at    DateTime?    @db.Timestamptz(6)
+  closed_at       DateTime?    @db.Timestamptz(6)
+  archived_at     DateTime?    @db.Timestamptz(6)
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @updatedAt @db.Timestamptz(6)
 
   active_user_profiles UserProgressionProfile[] @relation("active_progression_season")
   standings            SeasonalStanding[]
+  muscle_standings     SeasonalMuscleStanding[]
   progression_grants   ProgressionGrantLedger[]
   moderation_actions   ModerationActionRecord[]
 
@@ -1296,6 +1300,28 @@ model SeasonalStanding {
   @@index([season_id, season_points])
   @@index([user_id])
   @@map("seasonal_standings")
+}
+
+model SeasonalMuscleStanding {
+  id              String    @id @default(uuid()) @db.Uuid
+  season_id       String    @db.Uuid
+  user_id         String    @db.Uuid
+  muscle_group    String    @db.VarChar(100)
+  muscle_points   Int       @default(0)
+  rank_position   Int?
+  is_hidden       Boolean   @default(false)
+  is_disqualified Boolean   @default(false)
+  last_earned_at  DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+
+  season SeasonDefinition @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([season_id, user_id, muscle_group])
+  @@index([season_id, muscle_group, muscle_points])
+  @@index([user_id, season_id])
+  @@map("seasonal_muscle_standings")
 }
 
 model MilestoneDefinition {

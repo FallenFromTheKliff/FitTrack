@@ -30,6 +30,10 @@ import {
   Star,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
+import {
+  FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
+  FITTRACK_PAYMENT_POLICY_SUMMARY,
+} from "@fittrack/app-config";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import type {
@@ -79,6 +83,7 @@ import {
 } from "@/data/bookings";
 import { mobileApiClient } from "@/lib/api-client";
 import { toMobileBookings } from "@/utils/venueBookings";
+import { CoachClientWorkoutPlan } from "@/components/bookings/CoachClientWorkoutPlan";
 
 import { FitButton, FitCard, FitFilter, FitPager, FitSearch, FitText } from "@/components/fit";
 import {
@@ -112,6 +117,7 @@ const COACH_SECTION_OPTIONS = [
 const COACH_CLIENT_DETAIL_TABS = [
   { label: "Overview", value: "overview" },
   { label: "Schedule", value: "schedule" },
+  { label: "Workout", value: "workout" },
   { label: "Feedback", value: "feedback" },
 ] as const;
 const COACH_CLIENT_DURATION_OPTIONS = [
@@ -2559,6 +2565,13 @@ export default function BookingsScreen() {
                   </View>
                 ) : null}
 
+                {clientDetailTab === "workout" && user?.id ? (
+                  <CoachClientWorkoutPlan
+                    coachUserId={user.id}
+                    memberId={clientDetail.id}
+                  />
+                ) : null}
+
                 {clientDetailTab === "feedback" ? (
                   <View style={{ gap: 14 }}>
                     <FitText
@@ -2941,14 +2954,10 @@ export default function BookingsScreen() {
                 pendingAppointmentPayment.stage === "full"
                   ? " No remaining balance will be due after the full payment is confirmed."
                   : " The remaining balance will stay due after this payment is verified."
-              }`
+              }\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`
             : ""
         }
-        yesLabel={
-          pendingAppointmentPayment?.provider === "paymongo"
-            ? "Confirm Payment"
-            : "Submit"
-        }
+        yesLabel={FITTRACK_PAYMENT_ACCEPTANCE_LABEL}
         noLabel="Cancel"
         isLoading={payAppointmentMutation.isPending}
         loadingLabel={

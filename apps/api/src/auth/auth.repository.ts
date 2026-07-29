@@ -335,6 +335,7 @@ export class AuthRepository extends BaseRepository {
    * Used by self-registration (pending) and admin-create (active).
    */
   createUserWithProfile(data: {
+    acceptedPrivacyAt?: Date;
     role: UserRole;
     status: UserStatus;
     email: string;
@@ -352,6 +353,8 @@ export class AuthRepository extends BaseRepository {
           role: data.role,
           status: data.status,
           email_verified_at: data.emailVerifiedAt,
+          has_accepted_privacy: Boolean(data.acceptedPrivacyAt),
+          privacy_accepted_at: data.acceptedPrivacyAt,
           qr_code_token: data.qrCodeToken,
         },
       });

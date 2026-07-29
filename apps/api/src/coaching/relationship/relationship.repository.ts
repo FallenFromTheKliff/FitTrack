@@ -224,6 +224,32 @@ export class RelationshipRepository extends BaseRepository {
     );
   }
 
+  async hasActiveRelationshipForMember(memberId: string): Promise<boolean> {
+    const count = await this.prisma.coachClientRelationship.count({
+      where: {
+        member_id: memberId,
+        status: RelationshipStatus.active,
+      },
+    });
+    return count > 0;
+  }
+
+  async findActiveCoachUserIdForMember(
+    memberId: string,
+  ): Promise<string | null> {
+    const relationship = await this.prisma.coachClientRelationship.findFirst({
+      where: {
+        member_id: memberId,
+        status: RelationshipStatus.active,
+      },
+      orderBy: { started_at: 'desc' },
+      select: {
+        coach: { select: { user_id: true } },
+      },
+    });
+    return relationship?.coach.user_id ?? null;
+  }
+
   createRelationship(input: {
     coachId: string;
     memberId: string;

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, UsersRound } from "lucide-react";
+import { Search, UsersRound } from "lucide-react";
 import type { StaffAppointmentRecord } from "@fittrack/api-client";
 import type { ThemeColors } from "@fittrack/types";
 
-import { FitButton, FitPill, FitText } from "@/components/fit";
+import { FitButton, FitPagination, FitPill, FitSelect, FitText } from "@/components/fit";
 import type { Booking, Resource } from "@/data/schedule-constants";
 import type { VenueBookingRecord } from "@/contexts/ScheduleContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -30,6 +30,24 @@ type CoachAppointmentsTableProps = {
   appointments: StaffAppointmentRecord[];
   colors: ThemeColors;
   onOpenReview: (appointment: StaffAppointmentRecord) => void;
+  resetKey?: string;
+};
+
+type CoachDirectoryResource = Resource & {
+  availabilityCount: number;
+  email: string;
+  hourlyRate: number | null;
+  isActive: boolean;
+};
+
+type CoachDirectoryProps = {
+  coaches: CoachDirectoryResource[];
+  colors: ThemeColors;
+  onSelect: (coachId: string) => void;
+  onVisibilityChange: (scope: "all" | "visible" | "hidden") => void;
+  selectedCoachId: string | null;
+  visibilityOptions: Array<{ label: string; value: string }>;
+  visibilityScope: "all" | "visible" | "hidden";
 };
 
 type VenueBookingsTableProps = {
@@ -56,6 +74,255 @@ type CoachIconRailProps = {
 const COACH_APPOINTMENT_GRID =
   "minmax(220px, 1.25fr) minmax(170px, 0.9fr) minmax(210px, 1fr) minmax(100px, 0.42fr)";
 const COACH_APPOINTMENT_MIN_WIDTH = 720;
+const COACH_APPOINTMENTS_PAGE_SIZE = 5;
+
+export function CoachDirectory({
+  coaches,
+  colors,
+  onSelect,
+  onVisibilityChange,
+  selectedCoachId,
+  visibilityOptions,
+  visibilityScope,
+}: CoachDirectoryProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const visibleCoaches = useMemo(
+    () =>
+      coaches.filter((coach) => {
+        const matchesVisibility =
+          visibilityScope === "all" ||
+          (visibilityScope === "visible" && coach.isActive) ||
+          (visibilityScope === "hidden" && !coach.isActive);
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          `${coach.name} ${coach.email}`.toLowerCase().includes(normalizedQuery);
+        return matchesVisibility && matchesQuery;
+      }),
+    [coaches, normalizedQuery, visibilityScope],
+  );
+
+  return (
+    <aside
+      aria-label="Coach directory"
+      data-option-count={coaches.length}
+      data-ui="gym-operations-coach-directory"
+      style={{
+        alignSelf: "start",
+        backgroundColor: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        display: "grid",
+        gap: 12,
+        minHeight: 0,
+        padding: 12,
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: 10,
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "grid", gap: 2 }}>
+          <FitText
+            excludeGlobalScale
+            style={{ color: colors.textPrimary, fontSize: 14, fontWeight: 800 }}
+          >
+            Coach directory
+          </FitText>
+          <FitText
+            data-ui="gym-operations-coach-count"
+            excludeGlobalScale
+            style={{ color: colors.textMuted, fontSize: 11 }}
+          >
+            {coaches.length} total · {visibleCoaches.length} shown
+          </FitText>
+        </div>
+        <FitPill
+          bgOpacity="12"
+          borderOpacity="28"
+          color={colors.brand}
+          fontSize={9}
+          fontWeight={800}
+          label={`${coaches.filter((coach) => coach.isActive).length} VISIBLE`}
+          mode="status"
+          style={{ borderRadius: 6 }}
+        />
+      </div>
+
+      <label
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surfaceRaised,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 7,
+          display: "flex",
+          gap: 8,
+          minHeight: 38,
+          padding: "0 10px",
+        }}
+      >
+        <Search aria-hidden size={14} color={colors.textMuted} />
+        <input
+          aria-label="Search coaches"
+          data-search
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search name or email"
+          type="search"
+          value={searchQuery}
+          style={{
+            background: "transparent",
+            border: 0,
+            color: colors.textPrimary,
+            font: "inherit",
+            fontSize: 12,
+            minWidth: 0,
+            outline: "none",
+            width: "100%",
+          }}
+        />
+      </label>
+
+      <FitSelect
+        aria-label="Coach visibility filter"
+        compact
+        fullWidth
+        onChange={(event) =>
+          onVisibilityChange(
+            event.target.value as "all" | "visible" | "hidden",
+          )
+        }
+        options={visibilityOptions}
+        style={{ borderRadius: 7, minHeight: 38 }}
+        value={visibilityScope}
+      />
+
+      <div
+        aria-label="Available coaches"
+        data-ui="gym-operations-coach-directory-list"
+        role="listbox"
+        style={{
+          display: "grid",
+          gap: 6,
+          maxHeight: "min(58vh, 620px)",
+          minHeight: 0,
+          overflowY: "auto",
+          paddingRight: 3,
+          scrollbarGutter: "stable",
+        }}
+      >
+        {visibleCoaches.length > 0 ? (
+          visibleCoaches.map((coach) => {
+            const isSelected = coach.id === selectedCoachId;
+            return (
+              <button
+                aria-selected={isSelected}
+                data-component-option
+                key={coach.id}
+                onClick={() => onSelect(coach.id)}
+                role="option"
+                type="button"
+                style={{
+                  alignItems: "center",
+                  backgroundColor: isSelected
+                    ? `${colors.brand}16`
+                    : colors.surfaceRaised,
+                  border: `1px solid ${
+                    isSelected ? `${colors.brand}55` : colors.border
+                  }`,
+                  borderRadius: 7,
+                  color: colors.textPrimary,
+                  cursor: "pointer",
+                  display: "grid",
+                  font: "inherit",
+                  gap: 9,
+                  gridTemplateColumns: "34px minmax(0, 1fr) auto",
+                  minHeight: 58,
+                  padding: "8px 9px",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: isSelected
+                      ? colors.brand
+                      : `${colors.brand}18`,
+                    borderRadius: 7,
+                    color: isSelected ? colors.onBrand : colors.brand,
+                    display: "flex",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    height: 34,
+                    justifyContent: "center",
+                    width: 34,
+                  }}
+                >
+                  {coach.initials || getDisplayInitials(coach.name)}
+                </span>
+                <span style={{ display: "grid", gap: 3, minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 750,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {coach.name}
+                  </span>
+                  <span
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 10.5,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {coach.availabilityCount} weekly slots
+                    {coach.hourlyRate != null
+                      ? ` · PHP ${coach.hourlyRate.toLocaleString("en-PH")}/hr`
+                      : ""}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    color: coach.isActive ? colors.success : colors.textMuted,
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {coach.isActive ? "VISIBLE" : "HIDDEN"}
+                </span>
+              </button>
+            );
+          })
+        ) : (
+          <div
+            style={{
+              border: `1px dashed ${colors.border}`,
+              borderRadius: 7,
+              color: colors.textMuted,
+              fontSize: 12,
+              padding: "18px 12px",
+              textAlign: "center",
+            }}
+          >
+            No coaches match this search.
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
 const VENUE_BOOKING_GRID =
   "minmax(220px, 1.2fr) minmax(180px, 0.95fr) minmax(210px, 1fr) minmax(100px, 0.42fr)";
 const VENUE_BOOKING_MIN_WIDTH = 740;
@@ -64,10 +331,29 @@ export function CoachAppointmentsTable({
   appointments,
   colors,
   onOpenReview,
+  resetKey,
 }: CoachAppointmentsTableProps) {
   const { settings } = useTheme();
   const canAnimate = settings.animationLevel !== "none";
-  const rowMinHeight = 58;
+  const rowMinHeight = 76;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(appointments.length / COACH_APPOINTMENTS_PAGE_SIZE),
+  );
+  const pageStart = (currentPage - 1) * COACH_APPOINTMENTS_PAGE_SIZE;
+  const visibleAppointments = appointments.slice(
+    pageStart,
+    pageStart + COACH_APPOINTMENTS_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [resetKey]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   if (appointments.length === 0) {
     return (
@@ -92,47 +378,57 @@ export function CoachAppointmentsTable({
 
   return (
     <div
-      style={{
-        width: "100%",
-        maxWidth: "100%",
-        height: "100%",
-        minHeight: Math.max(170, appointments.length * rowMinHeight + 34),
-        display: "grid",
-        gridTemplateRows: `34px repeat(${appointments.length}, minmax(${rowMinHeight}px, 1fr))`,
-        borderTop: `1px solid ${colors.border}`,
-        borderBottom: `1px solid ${colors.border}`,
-        overflowX: "auto",
-        overflowY: "hidden",
-        WebkitOverflowScrolling: "touch",
-      }}
+      data-ui="gym-operations-appointments-collection"
+      style={{ display: "grid", gap: 12, minWidth: 0 }}
     >
       <div
+        data-ui="gym-operations-appointments-table-viewport"
         style={{
+          width: "100%",
+          maxWidth: "100%",
+          maxHeight: "clamp(300px, calc(100dvh - 460px), 430px)",
+          minHeight: 0,
           display: "grid",
-          gridTemplateColumns: COACH_APPOINTMENT_GRID,
-          gap: 10,
-          alignItems: "center",
+          gridTemplateRows: `34px repeat(${visibleAppointments.length}, minmax(${rowMinHeight}px, 1fr))`,
+          borderTop: `1px solid ${colors.border}`,
           borderBottom: `1px solid ${colors.border}`,
-          minWidth: COACH_APPOINTMENT_MIN_WIDTH,
-          padding: "0 2px",
+          overflowX: "auto",
+          overflowY: "auto",
+          scrollbarGutter: "stable",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        {["MEMBER", "COACH", "SCHEDULE", "ACTION"].map((label) => (
-          <FitText
-            excludeGlobalScale
-            key={label}
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: colors.textMuted,
-              letterSpacing: "0.08em",
-            }}
-          >
-            {label}
-          </FitText>
-        ))}
-      </div>
-      {appointments.map((appointment, index) => {
+        <div
+          style={{
+            backgroundColor: colors.surface,
+            position: "sticky",
+            top: 0,
+            zIndex: 2,
+            display: "grid",
+            gridTemplateColumns: COACH_APPOINTMENT_GRID,
+            gap: 10,
+            alignItems: "center",
+            borderBottom: `1px solid ${colors.border}`,
+            minWidth: COACH_APPOINTMENT_MIN_WIDTH,
+            padding: "0 2px",
+          }}
+        >
+          {["MEMBER", "COACH", "SCHEDULE", "ACTION"].map((label) => (
+            <FitText
+              excludeGlobalScale
+              key={label}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: colors.textMuted,
+                letterSpacing: "0.08em",
+              }}
+            >
+              {label}
+            </FitText>
+          ))}
+        </div>
+        {visibleAppointments.map((appointment, index) => {
         const memberName = getPersonDisplayName(
           appointment.user?.profile,
           appointment.user?.email,
@@ -155,7 +451,7 @@ export function CoachAppointmentsTable({
               minHeight: rowMinHeight,
               minWidth: COACH_APPOINTMENT_MIN_WIDTH,
               borderBottom:
-                index === appointments.length - 1
+                index === visibleAppointments.length - 1
                   ? "none"
                   : `1px solid ${colors.border}80`,
               padding: "10px 2px",
@@ -272,6 +568,7 @@ export function CoachAppointmentsTable({
               {appointment.status === "cancelled" || appointment.status === "no_show" ? (
                 <FitButton
                   variant="ghost"
+                  data-ui="gym-operations-review-appointment"
                   label="CLOSED"
                   aria-label={`Open closed appointment for ${memberName} with ${coachName} on ${dateLabel} at ${timeLabel}`}
                   onClick={() => onOpenReview(appointment)}
@@ -285,6 +582,7 @@ export function CoachAppointmentsTable({
               ) : (
                 <FitButton
                   variant={appointment.status === "pending_coach" ? "primary" : "ghost"}
+                  data-ui="gym-operations-review-appointment"
                   label={appointmentActionLabel.toUpperCase()}
                   aria-label={`${appointmentActionLabel} appointment for ${memberName} with ${coachName} on ${dateLabel} at ${timeLabel}`}
                   onClick={() => onOpenReview(appointment)}
@@ -299,7 +597,39 @@ export function CoachAppointmentsTable({
             </div>
           </div>
         );
-      })}
+        })}
+      </div>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          justifyContent: "space-between",
+        }}
+      >
+        <FitText
+          data-ui="gym-operations-appointments-page-location"
+          excludeGlobalScale
+          style={{ color: colors.textMuted, fontSize: 11.5 }}
+        >
+          {pageStart + 1}–
+          {Math.min(
+            pageStart + COACH_APPOINTMENTS_PAGE_SIZE,
+            appointments.length,
+          )}{" "}
+          of {appointments.length} appointments
+        </FitText>
+        <div data-ui="gym-operations-appointments-pagination">
+          <FitPagination
+            ariaLabel="Coach appointments pagination"
+            currentPage={currentPage}
+            maxVisiblePages={5}
+            onPageChange={setCurrentPage}
+            totalPages={totalPages}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -338,7 +668,7 @@ export function VenueBookingsTable({
     <div
       style={{
         minHeight: 170,
-        maxHeight: 360,
+        maxHeight: "clamp(360px, 52dvh, 520px)",
         maxWidth: "100%",
         borderRadius: 8,
         border: `1px solid ${colors.border}`,
@@ -408,7 +738,7 @@ export function VenueBookingsTable({
               gridTemplateColumns: VENUE_BOOKING_GRID,
               gap: 10,
               alignItems: "center",
-              minHeight: 58,
+              minHeight: 82,
               minWidth: VENUE_BOOKING_MIN_WIDTH,
               borderRadius: 8,
               border: `1px solid ${colors.border}55`,
@@ -489,6 +819,7 @@ export function VenueBookingsTable({
                       ? "primary"
                       : "ghost"
                   }
+                  data-ui="gym-operations-review-venue-booking"
                   label={venueActionLabel.toUpperCase()}
                   aria-label={`${venueActionLabel} venue booking for ${memberName} at ${venueName} on ${venueDateLabel}, ${venueTimeLabel}`}
                   onClick={() => onOpenReview(booking)}
@@ -648,43 +979,7 @@ export function CoachIconRail({
 }: CoachIconRailProps) {
   const isRow = orientation === "row";
   const railHeight = isRow ? undefined : maxHeight ?? undefined;
-  const coachRailPageSize = isRow ? 8 : 6;
-  const [coachRailPage, setCoachRailPage] = useState(1);
   const [pendingViewStaffId, setPendingViewStaffId] = useState<string | null>(null);
-  const coachRailTotalPages = Math.max(1, Math.ceil(filteredStaff.length / coachRailPageSize));
-  const showCoachRailPagination = coachRailTotalPages > 1;
-  const coachRailPageNumbers = Array.from(
-    { length: coachRailTotalPages },
-    (_, index) => index + 1,
-  );
-  const paginatedStaff = filteredStaff.slice(
-    (coachRailPage - 1) * coachRailPageSize,
-    coachRailPage * coachRailPageSize,
-  );
-  const paginationArrowStyle = {
-    minHeight: 36,
-    minWidth: 36,
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    padding: 0,
-  };
-  const paginationPageStyle = (isActive: boolean) => ({
-    minHeight: 36,
-    minWidth: 36,
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    padding: 0,
-    border: `1px solid ${isActive ? `${colors.brand}55` : colors.border}`,
-    backgroundColor: isActive ? `${colors.brand}18` : colors.surfaceRaised,
-    color: isActive ? colors.brand : colors.textSecondary,
-  });
-
-  useEffect(() => {
-    if (coachRailPage <= coachRailTotalPages) return;
-    setCoachRailPage(coachRailTotalPages);
-  }, [coachRailPage, coachRailTotalPages]);
 
   useEffect(() => {
     if (!pendingViewStaffId) return;
@@ -712,6 +1007,7 @@ export function CoachIconRail({
     <aside
       ref={railRef}
       className="gym-operations-coach-rail"
+      data-ui="gym-operations-coach-selection"
       style={{
         height: railHeight,
         minHeight: railHeight,
@@ -719,15 +1015,9 @@ export function CoachIconRail({
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
         display: "grid",
-        gridTemplateRows: isRow
-          ? showCoachRailPagination
-            ? "auto auto"
-            : "auto"
-          : showCoachRailPagination
-            ? "56px minmax(0, 1fr) auto"
-            : "56px minmax(0, 1fr)",
+        gridTemplateRows: isRow ? "auto" : "56px minmax(0, 1fr)",
         gridTemplateColumns: isRow ? "56px minmax(0, 1fr)" : undefined,
-        overflow: "visible",
+        overflow: "hidden",
       }}
       aria-label="Coach icon rail"
     >
@@ -773,8 +1063,8 @@ export function CoachIconRail({
           alignItems: isRow ? "center" : undefined,
         }}
       >
-        {paginatedStaff.length ? (
-          paginatedStaff.map((staff) => {
+        {filteredStaff.length ? (
+          filteredStaff.map((staff) => {
             const bookingCount = bookings.filter((booking) => booking.resourceId === staff.id).length;
             const coachMeta = staff as Resource & {
               availabilityCount?: number;
@@ -805,81 +1095,6 @@ export function CoachIconRail({
           </FitText>
         )}
       </div>
-      {showCoachRailPagination ? (
-        <div
-          className="gym-operations-coach-rail-pagination"
-          style={{
-            padding: 8,
-            gridColumn: isRow ? "1 / -1" : undefined,
-            borderTop: isRow ? `1px solid ${colors.border}` : `1px solid ${colors.border}`,
-            borderLeft: "none",
-            borderBottom: "none",
-            backgroundColor: colors.surfaceRaised,
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
-          <FitButton
-            variant="ghost"
-            iconOnly
-            icon={isRow ? ChevronLeft : ChevronUp}
-            iconSize={15}
-            disabled={coachRailPage === 1}
-            onClick={() => setCoachRailPage((page) => Math.max(1, page - 1))}
-            aria-label="Previous coach page"
-            style={paginationArrowStyle}
-          />
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            {coachRailPageNumbers.map((page) => {
-              const isActive = page === coachRailPage;
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  aria-current={isActive ? "page" : undefined}
-                  aria-label={`Go to coach page ${page}`}
-                  onClick={() => setCoachRailPage(page)}
-                  className="fit-pagination-button"
-                  style={paginationPageStyle(isActive)}
-                >
-                  <FitText
-                    as="span"
-                    excludeGlobalScale
-                    style={{
-                      color: "inherit",
-                      fontSize: 12,
-                      fontWeight: isActive ? 800 : 700,
-                    }}
-                  >
-                    {page}
-                  </FitText>
-                </button>
-              );
-            })}
-          </div>
-          <FitButton
-            variant="ghost"
-            iconOnly
-            icon={isRow ? ChevronRight : ChevronDown}
-            iconSize={15}
-            disabled={coachRailPage === coachRailTotalPages}
-            onClick={() => setCoachRailPage((page) => Math.min(coachRailTotalPages, page + 1))}
-            aria-label="Next coach page"
-            style={paginationArrowStyle}
-          />
-        </div>
-      ) : null}
     </aside>
   );
 }

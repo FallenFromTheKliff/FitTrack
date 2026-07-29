@@ -23,6 +23,26 @@ import {
 
 export class RegisterDTO {
   @ApiProperty({
+    example: true,
+    description:
+      'Explicit acceptance of the active FitTrack Terms of Service and Data Privacy Notice.',
+  })
+  @IsIn([true], {
+    message: 'accepted_terms must be true to create an account',
+  })
+  accepted_terms: true;
+
+  @ApiProperty({
+    example: '2026-07-28',
+    description: 'Legal policy version reviewed during registration.',
+  })
+  @IsString({ message: 'legal_version must be a string' })
+  @IsIn(['2026-07-28'], {
+    message: 'legal_version must match the active policy version',
+  })
+  legal_version: string;
+
+  @ApiProperty({
     example: 'juan@gmail.com',
     description:
       'Must use an allowed provider domain such as Gmail, Yahoo, Outlook, iCloud, or fittrack.com.',

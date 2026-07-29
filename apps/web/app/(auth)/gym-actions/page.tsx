@@ -345,10 +345,25 @@ export default function GymActionsPage() {
     [auditLogs, transactions],
   );
   const recentActivities = useMemo(
-    () =>
-      isAdmin
+    () => {
+      const source = isAdmin
         ? (snapshotQuery.data?.recentActivities ?? [])
-        : staffSafeRecentActivities,
+        : staffSafeRecentActivities;
+      const unique = new Map<string, AnalyticsRecentActivityRecord>();
+
+      for (const activity of source) {
+        const signature = [
+          activity.title,
+          activity.description,
+          activity.actorName,
+          activity.status,
+          activity.occurredAt,
+        ].join("|");
+        if (!unique.has(signature)) unique.set(signature, activity);
+      }
+
+      return [...unique.values()];
+    },
     [isAdmin, snapshotQuery.data?.recentActivities, staffSafeRecentActivities],
   );
   const filteredRecentActivities = recentActivities.filter(

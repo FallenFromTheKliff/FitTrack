@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useThemeTransition } from "@/hooks/animations/core/useThemeTransition";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { FITTRACK_PRIVACY_SECTIONS } from "@fittrack/app-config";
 import { makePrefModalStyles } from "@/styles/modals/PrefStyles";
 import { changePasswordSchema, type ChangePasswordData } from "@fittrack/validators";
 import { revisePassword } from "@fittrack/utils";
@@ -18,7 +19,7 @@ import { PASSWORD_REQUIREMENTS } from "@/data/settings";
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitInputField from "@/components/fit/FitInputField";
-import { FitSquareToggle } from "@/components/fit/FitSquareToggle";
+import { LegalDocumentSections } from "@/components/legal/LegalDocumentSections";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import NoticeModal from "@/components/modals/shared/NoticeModal";
 
@@ -199,62 +200,16 @@ export function PasswordPanel({ onClose }: { onClose: () => void }) {
 }
 
 export function PrivacyPanel({ onClose }: { onClose: () => void }) {
-  const { colors, settings } = useTheme();
+  const { colors } = useTheme();
   const { surfaceStyle } = useThemeTransition();
   const s = useMemo(() => makePrefModalStyles(colors), [colors]);
-  const [activityVisible, setActivityVisible] = useState(true);
-  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
 
   return (
     <Animated.View style={[s.body, surfaceStyle]}>
-      <FitText style={s.sectionLabel}>VISIBILITY</FitText>
-      <View style={s.infoCard}>
-        <View style={s.toggleRow}>
-          <View style={s.toggleInfo}>
-            <FitText style={s.toggleLabel}>
-              Activity Visible to Trainers
-            </FitText>
-            <FitText style={s.toggleHint}>
-              Allow trainers to view your workout history
-            </FitText>
-          </View>
-          <FitSquareToggle
-            value={activityVisible}
-            onValueChange={setActivityVisible}
-            activeColor={colors.brand}
-            inactiveColor={colors.border}
-            useAnimations={settings.animationLevel === "full"}
-            accessibilityLabel="Activity visible to trainers"
-          />
-        </View>
-        <View style={s.infoCardDivider} />
-        <View style={s.toggleRow}>
-          <View style={s.toggleInfo}>
-            <FitText style={s.toggleLabel}>Usage Analytics</FitText>
-            <FitText style={s.toggleHint}>
-              Anonymous usage data will only be used to improve FitTrack
-              reliability and gym service quality.
-            </FitText>
-          </View>
-          <FitSquareToggle
-            value={analyticsEnabled}
-            onValueChange={setAnalyticsEnabled}
-            activeColor={colors.brand}
-            inactiveColor={colors.border}
-            useAnimations={settings.animationLevel === "full"}
-            accessibilityLabel="Usage analytics"
-          />
-        </View>
-      </View>
-      <FitText style={s.sectionLabel}>DATA</FitText>
-      <View style={s.infoCard}>
-        <FitText style={s.infoCardTitle}>Data Export</FitText>
-        <FitText style={s.infoCardHint}>
-          Your FitTrack records include workouts, bookings, and profile history.
-          Your data will only be used for your account, gym operations, and
-          legally required service records.
-        </FitText>
-      </View>
+      <LegalDocumentSections
+        eyebrow="Philippine Data Privacy Notice"
+        sections={FITTRACK_PRIVACY_SECTIONS}
+      />
       <View style={s.footer}>
         <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
       </View>

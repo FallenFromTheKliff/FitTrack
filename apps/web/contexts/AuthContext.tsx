@@ -121,6 +121,8 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
       lastName: string;
       password: string;
       phone?: string;
+      acceptedTerms: true;
+      legalVersion: string;
     }) => {
       try {
         const data = await registerMutation.mutateAsync({
@@ -129,6 +131,8 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
           last_name: payload.lastName,
           password: payload.password,
           phone: payload.phone,
+          accepted_terms: payload.acceptedTerms,
+          legal_version: payload.legalVersion,
         });
         if (!data.success)
           return {

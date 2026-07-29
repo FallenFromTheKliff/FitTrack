@@ -4,7 +4,6 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   ArrowRight,
   BarChart3,
   CalendarClock,
@@ -45,8 +44,10 @@ import {
   FitSection,
   FitSelect,
   FitText,
+  FitTextInput,
 } from "@/components/fit";
 import { FitModal } from "@/components/modals";
+import { AnalyticsPresentationGrid } from "@/components/analytics/AnalyticsPresentationGrid";
 import {
   ANALYTICS_SECTION_FILTER_OPTIONS,
   useAnalyticsSectionFilter,
@@ -86,6 +87,7 @@ const SYSTEM_ALERTS_PAGE_SIZE = 6;
 const PDF_EXPORT_SECTION_DESCRIPTIONS: Record<string, string> = {
   activities: "Recent admin activity and operational movement.",
   alerts: "Inventory and equipment alerts that need attention.",
+  attendance: "Check-in totals, trends, and peak attendance windows.",
   daily: "Daily business signals and quick operational notes.",
   inventory: "Stock, equipment, and fulfillment indicators.",
   kpis: "Performance, attendance, booking, coach, and feedback indicators.",
@@ -1091,6 +1093,7 @@ function AdminAnalyticsPage() {
   const router = useRouter();
   const { colors, activeThemeKey } = useTheme();
   const panelRadius = 8;
+  const recordRadius = 6;
   const controlRadius = 7;
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
@@ -1207,37 +1210,60 @@ function AdminAnalyticsPage() {
 
     return Object.entries(groupedActions);
   }, [latestRecommendedActions]);
-  const analyticsSupportTextColor =
-    activeThemeKey === "night" ? colors.textMuted : colors.textSecondary;
+  const analyticsSupportTextColor = colors.textSecondary;
   const fitTrackOrange = colors.brand;
   const analyticsSectionGradient = `radial-gradient(ellipse 46% 42% at 0% 0%, ${colors.brand}12 0%, ${colors.brand}08 38%, transparent 100%), ${colors.surface}`;
   const analyticsRaisedGradient = `radial-gradient(ellipse 46% 42% at 0% 0%, ${colors.brand}12 0%, transparent 100%), ${colors.surfaceRaised}`;
   const analyticsFallbackGradient = `radial-gradient(ellipse 46% 42% at 0% 0%, ${colors.warning}14 0%, transparent 100%), ${colors.surface}`;
+  const rangeRevenueTotals = analytics.overview?.revenue ?? analytics.revenue?.totals;
+  const topRangeRevenueSource = analytics.revenue?.topRevenueSources[0] ?? null;
+  const hasLatestInsight = Boolean(analytics.latestInsight);
+  const latestAttendancePoint =
+    analytics.attendanceSeries[analytics.attendanceSeries.length - 1] ?? null;
+  const isAnalyticsModalOpen =
+    isPdfModalOpen || Boolean(analytics.selectedDrilldown);
+  const dateInputStyle: CSSProperties = {
+    backgroundColor: colors.surfaceRaised,
+    border: `1px solid ${colors.border}`,
+    borderRadius: controlRadius,
+    color: colors.textPrimary,
+    colorScheme: activeThemeKey === "night" ? "dark" : "light",
+    height: 40,
+    minHeight: 40,
+    padding: "0 12px",
+    width: "100%",
+  };
 
   const dailyInsightCards = [
     {
-      label: "Active Members",
-      value: analytics.visibleActiveMemberCount,
-      helper: "Accounts with active member access right now.",
+      label: "Members Added",
+      value: analytics.overview?.newMembers ?? 0,
+      helper: `New member accounts inside ${analytics.analyticsWindow.label.toLowerCase()}.`,
       icon: Users,
+      loading: analytics.overviewLoading,
     },
     {
-      label: "Sessions Today",
-      value: analytics.snapshot?.dailyInsights.sessionsToday ?? 0,
-      helper: "Check-ins recorded since midnight.",
+      label: "Coaching Sessions",
+      value: analytics.overview?.completedCoachingSessions ?? 0,
+      helper: "Completed coaching sessions inside the selected range.",
       icon: Clock3,
+      loading: analytics.overviewLoading,
     },
     {
-      label: "Recent Activities",
-      value: analytics.snapshot?.dailyInsights.recentActivities ?? 0,
-      helper: "Operational events captured in the last 24 hours.",
+      label: "Check-ins",
+      value: analytics.overview?.totalCheckIns ?? 0,
+      helper: "Member check-ins recorded inside the selected range.",
       icon: TrendingUp,
+      loading: analytics.overviewLoading,
     },
     {
-      label: "Live Alerts",
-      value: systemAlerts.length,
-      helper: "Inventory and equipment warnings waiting for staff action.",
-      icon: AlertTriangle,
+      label: "Top Revenue Source",
+      value: topRangeRevenueSource?.sourceLabel ?? "No revenue yet",
+      helper: topRangeRevenueSource
+        ? `${formatCompactMoney(topRangeRevenueSource.revenue)} inside the selected range.`
+        : "No completed revenue was recorded inside the selected range.",
+      icon: BarChart3,
+      loading: analytics.revenueLoading,
     },
     {
       label: "Peak Check-in Window",
@@ -1246,12 +1272,14 @@ function AdminAnalyticsPage() {
         ? `${analytics.attendance.peakHours[0].checkIns} check-ins in the current attendance window.`
         : "No attendance peak has been recorded in the current window.",
       icon: BarChart3,
+      loading: analytics.attendanceLoading,
     },
     {
-      label: "Revenue Window",
+      label: "Range Revenue",
       value: analytics.revenueLoading ? "--" : formatCompactMoney(selectedRevenueValue),
-      helper: `${selectedRevenueLabel} in the selected revenue window.`,
+      helper: `${selectedRevenueLabel} inside the selected range.`,
       icon: BarChart3,
+      loading: analytics.revenueLoading,
     },
   ];
 
@@ -1259,48 +1287,44 @@ function AdminAnalyticsPage() {
   const performanceKpis = [
     {
       icon: BarChart3,
-      label: "All-Time Revenue",
-      value: formatCompactMoney(
-        analytics.snapshot?.performanceKpis.totalRevenue ?? 0,
-      ),
+      label: "Total Revenue",
+      loading: analytics.overviewLoading,
+      value: formatCompactMoney(rangeRevenueTotals?.totalRevenue ?? 0),
+    },
+    {
+      icon: BarChart3,
+      label: "Membership Revenue",
+      loading: analytics.overviewLoading,
+      value: formatCompactMoney(rangeRevenueTotals?.membershipRevenue ?? 0),
     },
     {
       icon: CalendarClock,
-      label: "All-Time Venue Bookings",
-      value: String(
-        analytics.snapshot?.performanceKpis.totalVenueBookings ?? 0,
-      ),
+      label: "Venue Booking Revenue",
+      loading: analytics.overviewLoading,
+      value: formatCompactMoney(rangeRevenueTotals?.bookingRevenue ?? 0),
     },
     {
-      icon: TrendingUp,
-      label: "All-Time Coaching Appointments",
-      value: String(
-        analytics.snapshot?.performanceKpis.totalCoachingAppointments ?? 0,
-      ),
-    },
-    {
-      icon: Users,
-      label: "Total Active Members",
-      value: String(analytics.snapshot?.performanceKpis.activeMembers ?? 0),
+      icon: PackageSearch,
+      label: "Retail Product Revenue",
+      loading: analytics.overviewLoading,
+      value: formatCompactMoney(rangeRevenueTotals?.productRevenue ?? 0),
     },
     {
       icon: Users,
       label: "Members Added",
-      value: String(analytics.snapshot?.performanceKpis.newMembers ?? 0),
+      loading: analytics.overviewLoading,
+      value: String(analytics.overview?.newMembers ?? 0),
     },
     {
       icon: Clock3,
-      label: "All-Time Check-ins",
-      value: String(analytics.snapshot?.performanceKpis.checkIns ?? 0),
-    },
-    {
-      icon: Clock3,
-      label: `${analytics.attendanceFilterLabel} Check-ins`,
-      value: String(analytics.attendance?.totalCheckIns ?? 0),
+      label: "Check-ins",
+      loading: analytics.overviewLoading,
+      value: String(analytics.overview?.totalCheckIns ?? 0),
     },
     {
       icon: BarChart3,
       label: "Peak Check-in Window",
+      loading: analytics.attendanceLoading,
       value: peakAttendanceWindow
         ? `${peakAttendanceWindow.hourLabel} - ${peakAttendanceWindow.checkIns}`
         : "No peak yet",
@@ -1308,36 +1332,45 @@ function AdminAnalyticsPage() {
     {
       icon: Sparkles,
       label: "Completed Coaching Sessions",
-      value: String(analytics.snapshot?.performanceKpis.coachingSessions ?? 0),
+      loading: analytics.overviewLoading,
+      value: String(analytics.overview?.completedCoachingSessions ?? 0),
     },
     {
       icon: TrendingUp,
-      label: "Coach Commission",
+      label: "Coaching Gym Share",
+      loading: analytics.revenueLoading,
       value: `${formatCompactMoney(coachingCommissionTotal)} / ${coachingCommissionRate}%`,
     },
-    {
-      icon: TrendingUp,
-      label: "Session Completion Rate",
-      value: `${analytics.snapshot?.performanceKpis.sessionCompletionRate ?? 0}%`,
-    },
-    {
-      icon: Sparkles,
-      label: "Coach Satisfaction Rating",
-      value: `${analytics.snapshot?.performanceKpis.coachSatisfactionRating ?? 0}/5`,
-    },
-    {
-      icon: BarChart3,
-      label: "Venue Feedback Rating",
-      value: `${analytics.snapshot?.performanceKpis.venueFeedbackRating ?? 0}/5`,
-    },
-    {
-      icon: PackageSearch,
-      label: "App Feedback Submissions",
-      value: String(
-        analytics.snapshot?.performanceKpis.appFeedbackSubmissions ?? 0,
-      ),
-    },
   ];
+  const visiblePerformanceKpis =
+    sectionFilter === "all" ? performanceKpis.slice(0, 6) : performanceKpis;
+  const headlinePerformanceKpi = visiblePerformanceKpis[0] ?? null;
+  const revenuePerformanceKpis = visiblePerformanceKpis.slice(1, 4);
+  const operationsPerformanceKpis = visiblePerformanceKpis.slice(4);
+  const fallbackDashboardSummary = `Revenue reached ${formatCompactMoney(
+    rangeRevenueTotals?.totalRevenue ?? 0,
+  )} with ${(analytics.overview?.totalCheckIns ?? 0).toLocaleString(
+    "en-PH",
+  )} check-ins and ${(analytics.overview?.newMembers ?? 0).toLocaleString(
+    "en-PH",
+  )} new members in ${analytics.analyticsWindow.label.toLowerCase()}.`;
+  const drilldownPeakHours =
+    analytics.drilldownAttendance?.peakHours ??
+    analytics.attendance?.peakHours ??
+    [];
+  const peakCheckInCount = drilldownPeakHours.reduce(
+    (highest, peak) => Math.max(highest, peak.checkIns),
+    0,
+  );
+  const tiedPeakHours = drilldownPeakHours.filter(
+    (peak) => peak.checkIns === peakCheckInCount,
+  );
+  const peakHourSummary =
+    tiedPeakHours.length > 1
+      ? `${tiedPeakHours.length} time windows tied at ${peakCheckInCount} check-ins`
+      : tiedPeakHours.length === 1
+        ? `${tiedPeakHours[0].hourLabel} leads with ${peakCheckInCount} check-ins`
+        : "No peak attendance window yet";
 
   const liveAlertLaneLabel = `${systemAlerts.length} live alert lane${systemAlerts.length === 1 ? "" : "s"}`;
   return (
@@ -1366,15 +1399,21 @@ function AdminAnalyticsPage() {
         </div>
       ) : null}
 
-      <div className={`analytics-shell analytics-shell--${sectionFilter}`}>
+      <div
+        className={`analytics-shell analytics-shell--${sectionFilter}`}
+        inert={isAnalyticsModalOpen}
+        aria-hidden={isAnalyticsModalOpen || undefined}
+      >
         <div
           className="analytics-section-filter"
+          role="navigation"
+          aria-label="Analytics sections"
           style={{
             alignItems: "center",
             display: "flex",
             gap: 12,
             gridColumn: "1 / -1",
-            justifyContent: "flex-end",
+            justifyContent: "flex-start",
             minWidth: 0,
           }}
         >
@@ -1386,6 +1425,337 @@ function AdminAnalyticsPage() {
             style={{ flexWrap: "wrap" }}
           />
         </div>
+
+        <div
+          className="analytics-date-range-panel"
+          style={{
+            alignItems: "end",
+            background: analyticsSectionGradient,
+            border: `1px solid ${colors.border}`,
+            borderRadius: panelRadius,
+            display: "grid",
+            gap: 12,
+            gridColumn: "1 / -1",
+            gridTemplateColumns:
+              "minmax(220px, 1.35fr) repeat(3, minmax(150px, 0.8fr)) auto",
+            padding: 12,
+          }}
+        >
+          <div style={{ alignSelf: "center", display: "grid", gap: 4 }}>
+            <div className="analytics-inline-icon-row" style={{ gap: 8 }}>
+              <CalendarClock size={17} color={colors.brand} />
+              <FitText
+                as="p"
+                style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 900 }}
+              >
+                Analytics date range
+              </FitText>
+            </div>
+            <FitText
+              as="p"
+              style={{
+                color: analyticsSupportTextColor,
+                fontSize: 11.5,
+                lineHeight: 1.45,
+              }}
+            >
+              Applied: {analytics.analyticsWindow.label}.
+            </FitText>
+          </div>
+
+          <label style={{ display: "grid", gap: 5 }}>
+            <FitText
+              as="span"
+              style={{
+                color: analyticsSupportTextColor,
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              Start date
+            </FitText>
+            <FitTextInput
+              aria-label="Analytics start date"
+              type="date"
+              value={analytics.draftStartDate}
+              max={analytics.draftEndDate || undefined}
+              style={dateInputStyle}
+              onChange={(event) =>
+                analytics.setDraftStartDate(event.target.value)
+              }
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 5 }}>
+            <FitText
+              as="span"
+              style={{
+                color: analyticsSupportTextColor,
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              End date
+            </FitText>
+            <FitTextInput
+              aria-label="Analytics end date"
+              type="date"
+              value={analytics.draftEndDate}
+              min={analytics.draftStartDate || undefined}
+              style={dateInputStyle}
+              onChange={(event) =>
+                analytics.setDraftEndDate(event.target.value)
+              }
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 5 }}>
+            <FitText
+              as="span"
+              style={{
+                color: analyticsSupportTextColor,
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              Group results by
+            </FitText>
+            <FitSelect
+              value={analytics.draftAggregationPeriod}
+              onChange={(event) =>
+                analytics.setDraftAggregationPeriod(
+                  event.target
+                    .value as typeof analytics.draftAggregationPeriod,
+                )
+              }
+              options={[...analytics.aggregationPeriodOptions]}
+              name="analyticsAggregationPeriod"
+            />
+          </label>
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: 8,
+              justifyContent: "flex-end",
+            }}
+          >
+            <FitButton
+              data-ui="analytics-range-reset"
+              variant="ghost"
+              label="RESET"
+              onClick={analytics.handleResetAnalyticsWindow}
+              disabled={!analytics.analyticsWindowDirty}
+              style={{ minHeight: 40 }}
+            />
+            <FitButton
+              data-ui="analytics-range-apply"
+              variant="primary"
+              label="APPLY RANGE"
+              onClick={analytics.handleApplyAnalyticsWindow}
+              disabled={!analytics.analyticsWindowDirty}
+              style={{ minHeight: 40, whiteSpace: "nowrap" }}
+            />
+          </div>
+        </div>
+
+        {shouldShowSection("kpis") ? (
+          <div id="analytics-kpis" className="analytics-anchor-section">
+            <FitSection
+              heading="Performance KPIs"
+              bare
+              action={
+                <FitButton
+                  data-ui="analytics-drilldown-trigger"
+                  variant="ghost"
+                  icon={BarChart3}
+                  label="EXPLORE ATTENDANCE"
+                  disabled={!latestAttendancePoint}
+                  onClick={() => {
+                    if (!latestAttendancePoint) return;
+                    analytics.handleSelectAttendancePoint(
+                      latestAttendancePoint.bucketStart,
+                      latestAttendancePoint.label,
+                    );
+                  }}
+                  style={{ minHeight: 34 }}
+                  textStyle={{ fontSize: 11 }}
+                />
+              }
+            >
+              <div className="analytics-kpi-board analytics-card-grid analytics-card-grid--three">
+                {headlinePerformanceKpi ? (
+                  <div
+                    className="analytics-kpi-headline"
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: recordRadius,
+                      background: analyticsSectionGradient,
+                      padding: 14,
+                    }}
+                  >
+                    <div className="analytics-inline-icon-row" style={{ gap: 10 }}>
+                      <div
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: controlRadius,
+                          backgroundColor: `${colors.brand}18`,
+                          color: colors.brand,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <headlinePerformanceKpi.icon size={17} />
+                      </div>
+                      <div style={{ display: "grid", gap: 2 }}>
+                        <FitText
+                          as="p"
+                          style={{
+                            fontSize: 13,
+                            color: analyticsSupportTextColor,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Headline outcome
+                        </FitText>
+                        <FitText
+                          as="p"
+                          style={{ fontSize: 14, color: colors.textPrimary }}
+                        >
+                          {headlinePerformanceKpi.label}
+                        </FitText>
+                      </div>
+                    </div>
+                    <FitText
+                      as="p"
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 850,
+                        marginTop: 12,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {headlinePerformanceKpi.loading
+                        ? "--"
+                        : headlinePerformanceKpi.value}
+                    </FitText>
+                    <FitText
+                      as="p"
+                      style={{
+                        color: analyticsSupportTextColor,
+                        fontSize: 12.5,
+                        marginTop: 8,
+                      }}
+                    >
+                      {analytics.analyticsWindow.label}
+                    </FitText>
+                  </div>
+                ) : null}
+
+                <div
+                  className="analytics-kpi-group"
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: recordRadius,
+                    background: colors.surface,
+                    padding: 12,
+                  }}
+                >
+                  <div className="analytics-kpi-group-heading">
+                    <FitText
+                      as="p"
+                      style={{ fontSize: 13, fontWeight: 800 }}
+                    >
+                      Revenue mix
+                    </FitText>
+                    <FitText
+                      as="p"
+                      style={{ color: analyticsSupportTextColor, fontSize: 12 }}
+                    >
+                      Contributors
+                    </FitText>
+                  </div>
+                  <div className="analytics-kpi-record-list">
+                    {revenuePerformanceKpis.map((kpi) => (
+                      <div className="analytics-kpi-record" key={kpi.label}>
+                        <div className="analytics-inline-icon-row" style={{ gap: 8 }}>
+                          <kpi.icon size={15} color={colors.brand} />
+                          <FitText
+                            as="p"
+                            style={{
+                              color: analyticsSupportTextColor,
+                              fontSize: 12.5,
+                            }}
+                          >
+                            {kpi.label.replace(" Revenue", "")}
+                          </FitText>
+                        </div>
+                        <FitText as="p" style={{ fontSize: 14, fontWeight: 750 }}>
+                          {kpi.loading ? "--" : kpi.value}
+                        </FitText>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div
+                  className="analytics-kpi-group"
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: recordRadius,
+                    background: colors.surface,
+                    padding: 12,
+                  }}
+                >
+                  <div className="analytics-kpi-group-heading">
+                    <FitText
+                      as="p"
+                      style={{ fontSize: 13, fontWeight: 800 }}
+                    >
+                      Member activity
+                    </FitText>
+                    <FitText
+                      as="p"
+                      style={{ color: analyticsSupportTextColor, fontSize: 12 }}
+                    >
+                      {analytics.analyticsWindow.label}
+                    </FitText>
+                  </div>
+                  <div className="analytics-kpi-record-list">
+                    {operationsPerformanceKpis.map((kpi) => (
+                      <div className="analytics-kpi-record" key={kpi.label}>
+                        <div className="analytics-inline-icon-row" style={{ gap: 8 }}>
+                          <kpi.icon size={15} color={colors.brand} />
+                          <FitText
+                            as="p"
+                            style={{
+                              color: analyticsSupportTextColor,
+                              fontSize: 12.5,
+                            }}
+                          >
+                            {kpi.label}
+                          </FitText>
+                        </div>
+                        <FitText as="p" style={{ fontSize: 14, fontWeight: 750 }}>
+                          {kpi.loading ? "--" : kpi.value}
+                        </FitText>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <AnalyticsPresentationGrid
+                attendanceSeries={analytics.attendanceSeries}
+                colors={colors}
+                periodLabel={analytics.analyticsWindow.label}
+                revenueSeries={analytics.revenueSeries}
+              />
+            </FitSection>
+          </div>
+        ) : null}
 
         {shouldShowSection("insights") ? (
           <div id="analytics-insights" className="analytics-anchor-section">
@@ -1434,7 +1804,10 @@ function AdminAnalyticsPage() {
                       </FitText>
                       <FitText
                         as="p"
-                        style={{ fontSize: 11.5, color: colors.textMuted }}
+                        style={{
+                          fontSize: 11.5,
+                          color: analyticsSupportTextColor,
+                        }}
                       >
                         Generate a focused readout, then export the selected
                         report sections.
@@ -1462,7 +1835,8 @@ function AdminAnalyticsPage() {
                       textStyle={{ fontSize: 11.5 }}
                     />
                     <FitButton
-                      variant="primary"
+                      data-ui="analytics-pdf-trigger"
+                      variant="ghost"
                       icon={Download}
                       label={
                         analytics.isExportingPdf
@@ -1513,21 +1887,25 @@ function AdminAnalyticsPage() {
                             textTransform: "uppercase",
                           }}
                         >
-                          AI Generated Insight: {selectedInsightSectionLabel}
+                          {hasLatestInsight
+                            ? analytics.latestInsightIsFallback
+                              ? `Dashboard Insight: ${selectedInsightSectionLabel}`
+                              : `AI Generated Insight: ${selectedInsightSectionLabel}`
+                            : "No AI insight generated"}
                         </FitText>
                         <FitText
                           as="p"
                           style={{
-                            color: colors.textMuted,
+                            color: analyticsSupportTextColor,
                             fontSize: 11.5,
                             lineHeight: 1.4,
                           }}
                         >
-                          {analytics.generatedAtLabel
-                            ? `Updated ${analytics.generatedAtLabel}`
-                            : analytics.latestInsight
-                              ? `Generated ${formatDateTime(analytics.latestInsight.createdAt)}`
-                              : "No generated insight yet"}
+                          {hasLatestInsight
+                            ? analytics.generatedAtLabel
+                              ? `Updated ${analytics.generatedAtLabel}`
+                              : `Generated ${formatDateTime(analytics.latestInsight!.createdAt)}`
+                            : "Generate a focused readout when a decision needs deeper context."}
                         </FitText>
                       </div>
                       {analytics.latestInsightIsFallback ? (
@@ -1536,21 +1914,21 @@ function AdminAnalyticsPage() {
                           style={{
                             gap: 7,
                             justifyContent: "flex-end",
-                            color: colors.warning,
+                            color: analyticsSupportTextColor,
                           }}
                         >
-                          <AlertTriangle size={13} color={colors.warning} />
+                          <BarChart3 size={13} color={analyticsSupportTextColor} />
                           <FitText
                             as="p"
                             style={{
-                              fontSize: 11,
-                              color: colors.warning,
-                              fontWeight: 800,
+                              fontSize: 12,
+                              color: analyticsSupportTextColor,
+                              fontWeight: 700,
                               letterSpacing: "0.04em",
                               textTransform: "uppercase",
                             }}
                           >
-                            Fallback mode
+                            Dashboard data
                           </FitText>
                         </div>
                       ) : null}
@@ -1564,20 +1942,6 @@ function AdminAnalyticsPage() {
                         overflow: "auto",
                       }}
                     >
-                      {analytics.latestInsightIsFallback ? (
-                        <FitText
-                          as="p"
-                          style={{
-                            fontSize: 12,
-                            color: colors.warning,
-                            lineHeight: 1.45,
-                            marginBottom: 6,
-                          }}
-                        >
-                          The external AI provider was unavailable, so this
-                          panel is using deterministic analytics data instead.
-                        </FitText>
-                      ) : null}
                       <FitText
                         as="p"
                         style={{
@@ -1589,8 +1953,10 @@ function AdminAnalyticsPage() {
                       >
                         {analytics.latestInsightLoading
                           ? "Loading the latest business insight..."
-                          : (analytics.latestInsight?.summary
-                            ? `> ${analytics.latestInsight.summary}`
+                          : (analytics.latestInsightIsFallback
+                            ? fallbackDashboardSummary
+                            : analytics.latestInsight?.summary
+                              ? analytics.latestInsight.summary
                             : "No generated insight yet. Use Generate AI Insights to create a fresh business readout.")}
                       </FitText>
                     </div>
@@ -1599,7 +1965,7 @@ function AdminAnalyticsPage() {
                       <FitText
                         as="p"
                         style={{
-                          color: colors.textMuted,
+                          color: analyticsSupportTextColor,
                           fontSize: 10.5,
                           fontWeight: 850,
                           letterSpacing: "0.1em",
@@ -1652,77 +2018,13 @@ function AdminAnalyticsPage() {
           </div>
         ) : null}
 
-        {shouldShowSection("kpis") ? (
-        <div id="analytics-kpis" className="analytics-anchor-section">
-          <FitSection heading="Performance KPIs" bare>
-            <div style={{ marginBottom: 6 }}>
-              <FitText
-                as="p"
-                style={{
-                  fontSize: 10.5,
-                  color: colors.textMuted,
-                  lineHeight: 1.35,
-                }}
-              >
-                Revenue, attendance, booking, coach, and feedback signals are
-                grouped for the current operations readout.
-              </FitText>
-            </div>
-            <div className="analytics-card-grid analytics-card-grid--three">
-              {performanceKpis.map((kpi) => (
-                <div
-                  key={kpi.label}
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: panelRadius,
-                    background: analyticsSectionGradient,
-                    padding: 12,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
-                  <div
-                    className="analytics-inline-icon-row"
-                    style={{ gap: 10 }}
-                  >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: controlRadius,
-                        backgroundColor: colors.surfaceRaised,
-                        color: colors.brand,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <kpi.icon size={16} />
-                    </div>
-                    <FitText
-                      as="p"
-                      style={{ fontSize: 12, color: colors.textMuted }}
-                    >
-                      {kpi.label}
-                    </FitText>
-                  </div>
-                  <FitText as="p" style={{ fontSize: 22, fontWeight: 800 }}>
-                    {analytics.snapshotLoading ? "--" : kpi.value}
-                  </FitText>
-                </div>
-              ))}
-            </div>
-          </FitSection>
-        </div>
-        ) : null}
-
         {shouldShowSection("alerts") ? (
           <div id="analytics-alerts" className="analytics-operations-stack">
             <FitSection
               heading="System Alerts"
               bare
               action={
-                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
+                <FitText style={{ fontSize: 12, color: analyticsSupportTextColor }}>
                   {liveAlertLaneLabel}
                 </FitText>
               }
@@ -1757,7 +2059,7 @@ function AdminAnalyticsPage() {
                               ? analyticsRaisedGradient
                               : analyticsSectionGradient,
                           border: `1px solid ${colors.border}`,
-                          borderRadius: panelRadius,
+                          borderRadius: recordRadius,
                         }}
                       >
                         <div
@@ -1788,7 +2090,7 @@ function AdminAnalyticsPage() {
                               fontWeight: 800,
                               letterSpacing: "0.12em",
                               textTransform: "uppercase",
-                              color: colors.textMuted,
+                              color: analyticsSupportTextColor,
                             }}
                           >
                             {getAlertLaneLabel(alert.kind)}
@@ -1844,7 +2146,7 @@ function AdminAnalyticsPage() {
                 <div className="analytics-alert-pagination">
                   <FitText
                     as="p"
-                    style={{ color: colors.textMuted, fontSize: 12 }}
+                    style={{ color: analyticsSupportTextColor, fontSize: 12 }}
                   >
                     Showing {systemAlertOffset + 1}-
                     {Math.min(
@@ -1867,14 +2169,14 @@ function AdminAnalyticsPage() {
 
         {shouldShowSection("daily") ? (
         <div id="analytics-daily" className="analytics-anchor-section">
-          <FitSection heading="Daily Insights" bare>
+          <FitSection heading="Range Insights" bare>
           <div className="analytics-card-grid analytics-card-grid--three">
             {dailyInsightCards.map((card) => (
               <div
                 key={card.label}
                 style={{
                   border: `1px solid ${colors.border}`,
-                  borderRadius: panelRadius,
+                  borderRadius: recordRadius,
                   background: analyticsRaisedGradient,
                   padding: 10,
                   display: "grid",
@@ -1898,7 +2200,7 @@ function AdminAnalyticsPage() {
                 <div>
                   <FitText
                     as="p"
-                    style={{ fontSize: 12, color: colors.textMuted }}
+                    style={{ fontSize: 12, color: analyticsSupportTextColor }}
                   >
                     {card.label}
                   </FitText>
@@ -1906,14 +2208,14 @@ function AdminAnalyticsPage() {
                     as="p"
                     style={{ fontSize: 23, fontWeight: 800, marginTop: 3 }}
                   >
-                    {analytics.snapshotLoading ? "--" : card.value}
+                    {card.loading ? "--" : card.value}
                   </FitText>
                 </div>
                 <FitText
                   as="p"
                   style={{
                     fontSize: 12,
-                    color: colors.textMuted,
+                    color: analyticsSupportTextColor,
                     lineHeight: 1.55,
                   }}
                 >
@@ -1945,7 +2247,7 @@ function AdminAnalyticsPage() {
                     as="p"
                     style={{
                       fontSize: 12,
-                      color: colors.textMuted,
+                      color: analyticsSupportTextColor,
                     }}
                   >
                     {analytics.revenueWindow.label}
@@ -1956,25 +2258,13 @@ function AdminAnalyticsPage() {
                       fontSize: 11,
                       letterSpacing: "0.14em",
                       textTransform: "uppercase",
-                      color: colors.textMuted,
+                      color: analyticsSupportTextColor,
                     }}
                   >
                     {selectedRevenueLabel}
                   </FitText>
                 </div>
                 <div className="analytics-revenue-filter-controls">
-                  <FitSelect
-                    compact
-                    value={analytics.revenueWindowFilter}
-                    onChange={(event) =>
-                      analytics.setRevenueWindowFilter(
-                        event.target
-                          .value as typeof analytics.revenueWindowFilter,
-                      )
-                    }
-                    options={[...analytics.revenueWindowFilterOptions]}
-                    name="analyticsRevenueWindow"
-                  />
                   <FitSelect
                     compact
                     value={revenueSourceFilter}
@@ -1997,7 +2287,7 @@ function AdminAnalyticsPage() {
                 as="p"
                 style={{
                   fontSize: 12,
-                  color: colors.textMuted,
+                  color: analyticsSupportTextColor,
                   lineHeight: 1.55,
                 }}
               >
@@ -2020,7 +2310,7 @@ function AdminAnalyticsPage() {
                     fontWeight: 700,
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
-                    color: colors.textMuted,
+                    color: analyticsSupportTextColor,
                     marginBottom: 12,
                   }}
                 >
@@ -2040,11 +2330,11 @@ function AdminAnalyticsPage() {
                     />
                     <XAxis
                       dataKey="bucket"
-                      stroke={colors.textMuted}
+                      stroke={analyticsSupportTextColor}
                       tick={{ fontSize: 11 }}
                     />
                     <YAxis
-                      stroke={colors.textMuted}
+                      stroke={analyticsSupportTextColor}
                       tick={{ fontSize: 11 }}
                     />
                     <Tooltip
@@ -2070,7 +2360,7 @@ function AdminAnalyticsPage() {
                     fontWeight: 700,
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
-                    color: colors.textMuted,
+                    color: analyticsSupportTextColor,
                   }}
                 >
                   Revenue mix
@@ -2098,7 +2388,10 @@ function AdminAnalyticsPage() {
                           </FitText>
                           <FitText
                             as="p"
-                            style={{ fontSize: 12, color: colors.textMuted }}
+                            style={{
+                              fontSize: 12,
+                              color: analyticsSupportTextColor,
+                            }}
                           >
                             {source.sharePercentage.toFixed(1)}% of revenue
                           </FitText>
@@ -2129,7 +2422,7 @@ function AdminAnalyticsPage() {
                       as="p"
                       style={{
                         fontSize: 13,
-                        color: colors.textMuted,
+                        color: analyticsSupportTextColor,
                         lineHeight: 1.7,
                       }}
                     >
@@ -2156,6 +2449,13 @@ function AdminAnalyticsPage() {
         maxWidth={780}
         footer={
           <div className="analytics-pdf-modal-footer">
+            <FitText
+              as="p"
+              style={{ color: analyticsSupportTextColor, fontSize: 12.5 }}
+            >
+              {analytics.selectedPdfSections.length} of{" "}
+              {analytics.pdfExportSectionOptions.length} sections selected
+            </FitText>
             <FitButton
               variant="primary"
               icon={Download}
@@ -2187,11 +2487,11 @@ function AdminAnalyticsPage() {
                 className="analytics-pdf-option-card"
                 style={{
                   border: `1px solid ${
-                    isSelected ? fitTrackOrange : colors.border
+                    isSelected ? `${fitTrackOrange}88` : colors.border
                   }`,
-                  borderRadius: panelRadius,
+                  borderRadius: controlRadius,
                   background: isSelected
-                    ? `radial-gradient(ellipse 52% 48% at 0% 0%, ${fitTrackOrange}18 0%, transparent 100%), ${colors.surfaceRaised}`
+                    ? `radial-gradient(ellipse 52% 48% at 0% 0%, ${fitTrackOrange}0c 0%, transparent 100%), ${colors.surfaceRaised}`
                     : colors.surface,
                   cursor: "pointer",
                   display: "grid",
@@ -2213,42 +2513,20 @@ function AdminAnalyticsPage() {
                   }}
                 />
                 <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
-                  <div
-                    style={{
-                      alignItems: "start",
-                      display: "flex",
-                      gap: 10,
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <FitText
-                      as="p"
-                      style={{
-                        color: colors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {option.label}
-                    </FitText>
-                    <FitText
-                      as="p"
-                      style={{
-                        color: isSelected ? fitTrackOrange : colors.textMuted,
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {isSelected ? "Included" : "Excluded"}
-                    </FitText>
-                  </div>
                   <FitText
                     as="p"
                     style={{
-                      color: colors.textMuted,
+                      color: colors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {option.label}
+                  </FitText>
+                  <FitText
+                    as="p"
+                    style={{
+                      color: analyticsSupportTextColor,
                       fontSize: 12,
                       lineHeight: 1.5,
                     }}
@@ -2282,39 +2560,63 @@ function AdminAnalyticsPage() {
           >
             {analytics.drilldownAttendance &&
             analytics.drilldownSeries.length ? (
-              <div style={{ height: 320 }}>
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  minWidth={1}
-                  minHeight={1}
-                  initialDimension={{ width: 560, height: 320 }}
+              <div
+                style={{
+                  height: 320,
+                  display: "grid",
+                  gridTemplateRows: "auto minmax(0, 1fr)",
+                  gap: 8,
+                }}
+              >
+                <FitText
+                  as="p"
+                  style={{
+                    color: analyticsSupportTextColor,
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
                 >
-                  <BarChart data={analytics.drilldownSeries}>
-                    <CartesianGrid
-                      stroke={`${colors.border}88`}
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="label"
-                      stroke={colors.textMuted}
-                      tick={{ fontSize: 11 }}
-                    />
-                    <YAxis stroke={colors.textMuted} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: colors.surface,
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: controlRadius,
-                      }}
-                    />
-                    <Bar
-                      dataKey="checkIns"
-                      fill={colors.brand}
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                  Daily check-ins
+                </FitText>
+                <div style={{ minHeight: 0 }}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={1}
+                    minHeight={1}
+                    initialDimension={{ width: 560, height: 286 }}
+                  >
+                    <BarChart data={analytics.drilldownSeries}>
+                      <CartesianGrid
+                        stroke={`${colors.border}88`}
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="label"
+                        stroke={analyticsSupportTextColor}
+                        interval="preserveStartEnd"
+                        minTickGap={24}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <YAxis
+                        stroke={analyticsSupportTextColor}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: colors.surface,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: controlRadius,
+                        }}
+                      />
+                      <Bar
+                        dataKey="checkIns"
+                        fill={colors.brand}
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             ) : (
               <div
@@ -2334,7 +2636,7 @@ function AdminAnalyticsPage() {
                     as="p"
                     style={{
                       fontSize: 13,
-                      color: colors.textMuted,
+                      color: analyticsSupportTextColor,
                       lineHeight: 1.7,
                       marginTop: 8,
                     }}
@@ -2355,61 +2657,93 @@ function AdminAnalyticsPage() {
               backgroundColor: colors.surface,
               padding: 14,
               display: "grid",
-              gap: 14,
+              gap: 12,
             }}
           >
+            <div className="analytics-drilldown-summary">
+              <div>
+                <FitText
+                  as="p"
+                  style={{ fontSize: 13, color: analyticsSupportTextColor }}
+                >
+                  Selected Slice
+                </FitText>
+                <FitText
+                  as="p"
+                  style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}
+                >
+                  {analytics.selectedDrilldown?.label ?? "--"}
+                </FitText>
+              </div>
+              <div>
+                <FitText
+                  as="p"
+                  style={{ fontSize: 13, color: analyticsSupportTextColor }}
+                >
+                  Check-ins in View
+                </FitText>
+                <FitText
+                  as="p"
+                  style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}
+                >
+                  {analytics.drilldownAttendance?.totalCheckIns ??
+                    analytics.attendance?.totalCheckIns ??
+                    0}
+                </FitText>
+              </div>
+            </div>
             <div>
-              <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
-                Selected Slice
+              <FitText
+                as="p"
+                style={{
+                  fontSize: 13,
+                  color: analyticsSupportTextColor,
+                  fontWeight: 700,
+                }}
+              >
+                Peak attendance
               </FitText>
               <FitText
                 as="p"
-                style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}
+                style={{
+                  color: analyticsSupportTextColor,
+                  fontSize: 12.5,
+                  lineHeight: 1.4,
+                  marginTop: 3,
+                }}
               >
-                {analytics.selectedDrilldown?.label ?? "--"}
+                {peakHourSummary}
               </FitText>
-            </div>
-            <div>
-              <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
-                Check-ins in View
-              </FitText>
-              <FitText
-                as="p"
-                style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}
+              <div
+                className="analytics-peak-signal-grid"
+                style={{ marginTop: 8 }}
               >
-                {analytics.drilldownAttendance?.totalCheckIns ??
-                  analytics.attendance?.totalCheckIns ??
-                  0}
-              </FitText>
-            </div>
-            <div>
-              <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
-                Peak Hour Signals
-              </FitText>
-              <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-                {(
-                  analytics.drilldownAttendance?.peakHours ??
-                  analytics.attendance?.peakHours ??
-                  []
-                ).map((peak) => (
+                {drilldownPeakHours.map((peak) => (
                   <div
                     key={peak.hourLabel}
                     style={{
                       border: `1px solid ${colors.border}`,
                       borderRadius: controlRadius,
-                      padding: 12,
+                      padding: "9px 10px",
                       backgroundColor: colors.surfaceRaised,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
                     }}
                   >
                     <FitText
                       as="p"
-                      style={{ fontSize: 12, color: colors.textMuted }}
+                      style={{
+                        fontSize: 13,
+                        color: analyticsSupportTextColor,
+                      }}
                     >
                       {peak.hourLabel}
                     </FitText>
                     <FitText
                       as="p"
-                      style={{ fontSize: 17, fontWeight: 700, marginTop: 4 }}
+                      style={{ fontSize: 15, fontWeight: 700 }}
                     >
                       {peak.checkIns} check-ins
                     </FitText>
@@ -2448,18 +2782,22 @@ function AdminAnalyticsPage() {
 
         .analytics-shell--all #analytics-insights {
           grid-column: 1 / -1;
+          grid-row: 4;
+        }
+
+        .analytics-shell--all .analytics-date-range-panel {
           grid-row: 2;
         }
 
         .analytics-shell--all #analytics-alerts {
           grid-column: 1 / -1;
-          grid-row: 4;
+          grid-row: 5;
           align-self: start;
         }
 
         .analytics-shell--all #analytics-daily {
           grid-column: 1 / -1;
-          grid-row: 5;
+          grid-row: 6;
         }
 
         .analytics-shell--all #analytics-kpis {
@@ -2469,7 +2807,7 @@ function AdminAnalyticsPage() {
 
         .analytics-shell--all #analytics-revenue {
           grid-column: 1 / -1;
-          grid-row: 6;
+          grid-row: 7;
         }
 
         .analytics-shell:not(.analytics-shell--all) {
@@ -2483,8 +2821,15 @@ function AdminAnalyticsPage() {
 
         .analytics-ai-panel {
           grid-template-rows: auto minmax(0, 1fr);
-          height: 568px;
           min-width: 0;
+        }
+
+        .analytics-shell--insights .analytics-ai-panel {
+          height: 568px;
+        }
+
+        .analytics-shell--all .analytics-ai-panel {
+          height: auto;
         }
 
         .analytics-ai-command-row {
@@ -2498,6 +2843,18 @@ function AdminAnalyticsPage() {
 
         .analytics-ai-generated-card {
           grid-template-rows: auto minmax(0, 1fr) 144px;
+        }
+
+        .analytics-shell--all .analytics-ai-generated-card {
+          grid-template-rows: auto auto auto;
+        }
+
+        .analytics-shell--all .analytics-ai-generated-body {
+          max-height: 132px;
+        }
+
+        .analytics-shell--all .analytics-ai-recommendations {
+          max-height: 144px;
         }
 
         .analytics-ai-recommendations {
@@ -2551,6 +2908,93 @@ function AdminAnalyticsPage() {
 
         .analytics-card-grid--three {
           grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .analytics-kpi-board {
+          display: grid;
+          grid-template-columns: minmax(230px, 0.8fr) minmax(270px, 1fr) minmax(270px, 1fr);
+          gap: 10px;
+          align-items: stretch;
+        }
+
+        .analytics-presentation-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+          gap: 10px;
+          margin-top: 10px;
+        }
+
+        .analytics-presentation-wide {
+          grid-column: 1 / -1;
+        }
+
+        .analytics-composition-layout {
+          align-items: center;
+          display: grid;
+          grid-template-columns: minmax(170px, 1fr) minmax(150px, 0.75fr);
+          gap: 6px;
+          padding: 8px;
+        }
+
+        .analytics-composition-legend {
+          display: grid;
+          gap: 10px;
+          padding-right: 10px;
+        }
+
+        .analytics-composition-row {
+          align-items: center;
+          display: flex;
+          gap: 7px;
+          min-width: 0;
+        }
+
+        .analytics-chart-empty {
+          align-items: center;
+          color: ${analyticsSupportTextColor};
+          display: flex;
+          font-size: 13px;
+          height: 100%;
+          justify-content: center;
+          line-height: 1.5;
+          min-height: 180px;
+          padding: 20px;
+          text-align: center;
+        }
+
+        .analytics-kpi-headline {
+          min-height: 0;
+        }
+
+        .analytics-kpi-group,
+        .analytics-kpi-headline {
+          min-width: 0;
+        }
+
+        .analytics-kpi-group-heading,
+        .analytics-kpi-record {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .analytics-kpi-group-heading {
+          border-bottom: 1px solid ${colors.border};
+          padding-bottom: 8px;
+        }
+
+        .analytics-kpi-record-list {
+          display: grid;
+        }
+
+        .analytics-kpi-record {
+          min-height: 35px;
+          padding: 7px 0;
+        }
+
+        .analytics-kpi-record + .analytics-kpi-record {
+          border-top: 1px solid ${colors.border};
         }
 
         .analytics-alert-grid {
@@ -2742,7 +3186,8 @@ function AdminAnalyticsPage() {
 
         .analytics-pdf-modal-footer {
           display: flex;
-          justify-content: flex-end;
+          align-items: center;
+          justify-content: space-between;
           gap: 10px;
           width: 100%;
           flex-wrap: wrap;
@@ -2755,33 +3200,21 @@ function AdminAnalyticsPage() {
           overflow: hidden;
         }
 
-        #analytics-kpis .analytics-card-grid--three > div {
-          min-height: 112px;
-          align-content: space-between;
-        }
-
         #analytics-daily .analytics-card-grid--three > div {
           min-height: 110px;
           align-content: start;
         }
 
-        #analytics-kpis .analytics-card-grid--three > div p:first-of-type {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-        }
-
-        #analytics-kpis .analytics-card-grid--three > div > p:last-child {
-          font-size: 19px !important;
-          line-height: 1.1 !important;
-          overflow-wrap: anywhere;
-          word-break: normal;
-        }
-
         .analytics-inline-icon-row {
           gap: 12px;
           align-items: center;
+        }
+
+        .analytics-drilldown-summary,
+        .analytics-peak-signal-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
         }
 
         .analytics-peak-grid > button {
@@ -2801,6 +3234,26 @@ function AdminAnalyticsPage() {
           background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
         }
 
+        .analytics-date-range-panel > * {
+          min-width: 0;
+        }
+
+        @media (max-width: 1500px) and (min-width: 1181px) {
+          .analytics-date-range-panel {
+            align-items: stretch !important;
+            grid-template-columns: repeat(3, minmax(160px, 1fr)) auto !important;
+          }
+
+          .analytics-date-range-panel > div:first-child {
+            grid-column: 1 / -1;
+          }
+
+          .analytics-date-range-panel > div:last-child {
+            align-self: end;
+            grid-column: 4;
+          }
+        }
+
         @media (max-width: 1180px) {
           .analytics-shell {
             grid-template-columns: 1fr;
@@ -2815,6 +3268,14 @@ function AdminAnalyticsPage() {
             width: 100%;
           }
 
+          .analytics-date-range-panel {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .analytics-date-range-panel > div:first-child {
+            grid-column: 1 / -1;
+          }
+
           #analytics-insights,
           #analytics-alerts,
           #analytics-daily,
@@ -2824,11 +3285,22 @@ function AdminAnalyticsPage() {
           }
 
           .analytics-card-grid--three,
+          .analytics-kpi-board,
+          .analytics-presentation-grid,
           .analytics-alert-grid,
           .analytics-revenue-board,
           .analytics-attendance-grid,
           .analytics-revenue-chart,
           .analytics-modal-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-presentation-wide {
+            grid-column: auto;
+          }
+
+          .analytics-drilldown-summary,
+          .analytics-peak-signal-grid {
             grid-template-columns: 1fr;
           }
 
@@ -2846,11 +3318,27 @@ function AdminAnalyticsPage() {
         }
 
         @media (max-width: 900px) {
+          .analytics-date-range-panel {
+            grid-template-columns: 1fr !important;
+          }
+
+          .analytics-date-range-panel > div:first-child {
+            grid-column: auto;
+          }
+
           .analytics-ai-command-row {
             align-items: flex-start;
           }
 
           .analytics-card-grid--three {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-kpi-board {
+            grid-template-columns: 1fr;
+          }
+
+          .analytics-composition-layout {
             grid-template-columns: 1fr;
           }
 
