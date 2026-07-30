@@ -20,3 +20,11 @@ enabled_tools = [
   "shortest_path",
 ]
 default_tools_approval_mode = "approve"
+
+[mcp_servers.storybook]
+url = "http://127.0.0.1:6006/mcp"
+enabled = true
+required = false
+startup_timeout_sec = 10
+tool_timeout_sec = 30
+default_tools_approval_mode = "approve"

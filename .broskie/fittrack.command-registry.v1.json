@@ -1,7 +1,7 @@
 {
   "schema_version": "command-registry.v1",
   "project_id": "fittrack",
-  "revision": 2,
+  "revision": 3,
   "runner_kind": "pnpm-script",
   "commands": [
     {
@@ -247,6 +247,17 @@
       "allowed_exit_codes": [0]
     },
     {
+      "command_id": "ui.playwright.test",
+      "package_dir": ".",
+      "script": "test:ui",
+      "script_args": [],
+      "execution_class": "verify",
+      "approval_mode": "auto",
+      "timeout_seconds": 1200,
+      "max_output_bytes": 2097152,
+      "allowed_exit_codes": [0]
+    },
+    {
       "command_id": "web.build",
       "package_dir": "apps/web",
       "script": "build",
@@ -266,6 +277,17 @@
       "approval_mode": "auto",
       "timeout_seconds": 600,
       "max_output_bytes": 1048576,
+      "allowed_exit_codes": [0]
+    },
+    {
+      "command_id": "web.storybook.build",
+      "package_dir": "apps/web",
+      "script": "storybook:build",
+      "script_args": [],
+      "execution_class": "build",
+      "approval_mode": "auto",
+      "timeout_seconds": 1200,
+      "max_output_bytes": 2097152,
       "allowed_exit_codes": [0]
     },
     {

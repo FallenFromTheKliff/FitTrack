@@ -55,11 +55,11 @@ export type ExerciseDraft = {
 export const DRAWER_WIDTH = 420;
 export const EMPTY_REVIEW_CANDIDATES: ExerciseReviewSubmissionRecord[] = [];
 export const EMPTY_LIBRARY_EXERCISES: FitnessExerciseRecord[] = [];
-export const MUSCLE_LIBRARY_PAGE_SIZE = 7;
+export const MUSCLE_LIBRARY_PAGE_SIZE = 8;
 export const SURFACE_MODE_OPTIONS: Array<{ label: string; value: SurfaceMode }> = [
-  { label: "Review", value: "review" },
-  { label: "Library", value: "library" },
-  { label: "Muscles", value: "muscles" },
+  { label: "Review queue", value: "review" },
+  { label: "Exercise library", value: "library" },
+  { label: "Muscle groups", value: "muscles" },
 ];
 export const CREATOR_STATE_OPTIONS = [
   { label: "None", value: "none" },

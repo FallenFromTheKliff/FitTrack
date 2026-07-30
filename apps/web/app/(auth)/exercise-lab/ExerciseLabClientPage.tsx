@@ -100,7 +100,7 @@ function CoachExerciseLabPage() {
       hideHeading
       bare
       noPadding
-      className={themeTransition}
+      className={`${themeTransition} exercise-lab-page-body`}
       style={fadeIn}
     >
       <div style={{ display: "grid", gap: 14 }}>
@@ -309,6 +309,31 @@ function ExerciseLabPageStyles() {
 
   return (
     <style>{`
+      @media (max-height: 820px) and (min-width: 681px) {
+        .exercise-lab-page-body {
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        .exercise-lab-page-body > div {
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        .exercise-review-surface {
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        .exercise-review-surface > div {
+          height: auto !important;
+        }
+
+        .exercise-review-table-shell {
+          min-height: 400px !important;
+        }
+      }
+
       .exercise-lab-queue-card,
       .exercise-lab-drawer-option,
       .exercise-lab-action-dock {

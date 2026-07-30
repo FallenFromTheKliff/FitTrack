@@ -13,7 +13,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
-  PanelRightOpen,
+  ChevronRight,
   Pencil,
   RefreshCcw,
   X,
@@ -205,7 +205,7 @@ function useExerciseLabPageState() {
 
   const reviewQueueQuery = useQuery(
     fitnessExerciseReviewSubmissionsQueryOptions(webApiClient, {
-      limit: 3,
+      limit: 8,
       page: reviewPage,
       ...(reviewStatus ? { status: reviewStatus } : {}),
       ...(reviewSearch.trim() ? { search: reviewSearch.trim() } : {}),
@@ -220,7 +220,7 @@ function useExerciseLabPageState() {
   );
   const libraryQuery = useQuery(
     fitnessExercisesQueryOptions(webApiClient, {
-      limit: 4,
+      limit: 8,
       page: libraryPage,
       includeInactive: libraryScope === "all",
       ...(librarySearch.trim() ? { search: librarySearch.trim() } : {}),
@@ -885,20 +885,44 @@ function useExerciseLabPageState() {
         heading: "Submission",
         align: "left",
         render: (candidate) => (
-          <div style={{ display: "grid", gap: 5, minWidth: 180 }}>
-            <FitText style={{ fontSize: 14, fontWeight: 800 }}>
+          <div style={{ display: "grid", gap: 3, minWidth: 210 }}>
+            <FitText
+              style={{ fontSize: 12.5, fontWeight: 850, lineHeight: "17px" }}
+            >
               {candidate.title}
             </FitText>
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+            <FitText
+              style={{
+                fontSize: 12,
+                lineHeight: "16px",
+                color: colors.textSecondary,
+              }}
+            >
               {candidate.proposedName}
             </FitText>
-            <FitPill
-              mode="status"
-              label={toTitleCase(candidate.status)}
-              color={getReviewStatusColor(candidate.status, colors)}
-              fontSize={11}
-              style={{ width: "fit-content" }}
-            />
+            <div
+              style={{
+                alignItems: "center",
+                color: getReviewStatusColor(candidate.status, colors),
+                display: "inline-flex",
+                fontSize: 10.5,
+                fontWeight: 800,
+                gap: 5,
+                lineHeight: "13px",
+                width: "fit-content",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  backgroundColor: "currentColor",
+                  borderRadius: "50%",
+                  height: 5,
+                  width: 5,
+                }}
+              />
+              {toTitleCase(candidate.status)}
+            </div>
           </div>
         ),
       },
@@ -919,19 +943,32 @@ function useExerciseLabPageState() {
                     ? colors.brand
                     : colors.textMuted;
           return (
-            <div style={{ display: "grid", gap: 6, minWidth: 165 }}>
-              <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+            <div style={{ display: "grid", gap: 3, minWidth: 190 }}>
+              <FitText
+                style={{ fontSize: 12.5, fontWeight: 800, lineHeight: "17px" }}
+              >
                 {candidate.creatorDisplayName ?? "Creator member"}
               </FitText>
-              <FitText style={{ fontSize: 11.5, color: colors.textSecondary }}>
+              <FitText
+                style={{
+                  fontSize: 11.5,
+                  lineHeight: "16px",
+                  color: colors.textSecondary,
+                }}
+              >
                 {candidate.creatorEmail ?? "Email unavailable"}
               </FitText>
               <FitPill
                 mode="status"
                 label={candidate.creatorStateLabel}
                 color={toneColor}
-                fontSize={11}
-                style={{ width: "fit-content" }}
+                fontSize={9.5}
+                style={{
+                  flexShrink: 0,
+                  marginTop: 1,
+                  paddingBlock: 1,
+                  width: "fit-content",
+                }}
               />
             </div>
           );
@@ -943,10 +980,18 @@ function useExerciseLabPageState() {
         align: "left",
         render: (candidate) => (
           <div style={{ display: "grid", gap: 3 }}>
-            <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+            <FitText
+              style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
+            >
               {toTitleCase(candidate.category)}
             </FitText>
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+            <FitText
+              style={{
+                fontSize: 12,
+                lineHeight: "16px",
+                color: colors.textSecondary,
+              }}
+            >
               {toTitleCase(candidate.muscleGroup)}
             </FitText>
           </div>
@@ -954,16 +999,24 @@ function useExerciseLabPageState() {
       },
       {
         key: "match",
-        heading: "Match",
+        heading: "Closest match",
         align: "left",
         render: (candidate) => {
           const match = reviewMatchByCandidateId.get(candidate.id);
           return (
             <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
-              <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+              <FitText
+                style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
+              >
                 {match?.exercise.name ?? candidate.matchHint ?? "Manual review"}
               </FitText>
-              <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+              <FitText
+                style={{
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  color: colors.textSecondary,
+                }}
+              >
                 {match ? `${Math.max(58, Math.min(96, match.score))}% fit` : "No close match"}
               </FitText>
             </div>
@@ -976,10 +1029,18 @@ function useExerciseLabPageState() {
         align: "left",
         render: (candidate) => (
           <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
-            <FitText style={{ fontSize: 13, fontWeight: 800 }}>
+            <FitText
+              style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
+            >
               {getEvidenceSummary(candidate.evidenceBars)}
             </FitText>
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+            <FitText
+              style={{
+                fontSize: 12,
+                lineHeight: "16px",
+                color: colors.textSecondary,
+              }}
+            >
               {candidate.sourceLabel}
             </FitText>
           </div>
@@ -990,7 +1051,13 @@ function useExerciseLabPageState() {
         heading: "Submitted",
         align: "left",
         render: (candidate) => (
-          <FitText style={{ fontSize: 12.5, color: colors.textSecondary }}>
+          <FitText
+            style={{
+              fontSize: 12.5,
+              lineHeight: "17px",
+              color: colors.textSecondary,
+            }}
+          >
             {formatDate(candidate.createdAt)}
           </FitText>
         ),
@@ -1007,8 +1074,29 @@ function useExerciseLabPageState() {
         label: "Review",
         ariaLabel: (candidate) => `Review ${candidate.title}`,
         variant: "ghost",
-        icon: PanelRightOpen,
         onClick: openReviewModal,
+        style: {
+          borderRadius: 7,
+          minHeight: 34,
+          minWidth: 82,
+        },
+      },
+      {
+        label: "Open review",
+        ariaLabel: (candidate) => `Open review for ${candidate.title}`,
+        variant: "ghost",
+        icon: ChevronRight,
+        iconOnly: true,
+        iconSize: 16,
+        onClick: openReviewModal,
+        style: {
+          backgroundColor: "transparent",
+          border: 0,
+          borderRadius: 5,
+          minHeight: 30,
+          minWidth: 30,
+          padding: 4,
+        },
       },
     ],
     [],

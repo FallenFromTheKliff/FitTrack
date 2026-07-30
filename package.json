@@ -44,11 +44,17 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test:ui": "playwright test",
+    "test:ui:headed": "playwright test --headed",
+    "test:ui:report": "playwright show-report .artifacts/playwright/report",
+    "storybook": "pnpm --filter @fittrack/web storybook",
+    "storybook:build": "pnpm --filter @fittrack/web storybook:build",
     "clean": "node tasks/clean-workspaces.mjs",
     "refresh:packages-db-client": "pnpm clean && pnpm install && pnpm db:migrate:generate"
   },
   "devDependencies": {
     "@playwright/mcp": "^0.0.68",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4.2.1",
     "localtunnel": "^2.0.2",
     "swagger-mcp": "^1.0.8",

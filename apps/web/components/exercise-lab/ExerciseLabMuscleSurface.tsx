@@ -83,7 +83,7 @@ export function ExerciseLabMuscleSurface() {
             }}
           >
             <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
-              Muscle Library
+              Muscle definitions
             </FitText>
             <ExerciseLabModeNavigation />
           </div>
@@ -189,13 +189,15 @@ export function ExerciseLabMuscleSurface() {
           <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
             Showing {visibleMuscleDefinitions.length} of {muscleDefinitions.length} definitions
           </FitText>
-          <FitPagination
-            ariaLabel="Muscle library pagination"
-            currentPage={musclePage}
-            totalPages={muscleTotalPages}
-            onPageChange={setMusclePage}
-            showSinglePage
-          />
+          {muscleDefinitions.length > 0 ? (
+            <FitPagination
+              ariaLabel="Muscle library pagination"
+              currentPage={musclePage}
+              totalPages={muscleTotalPages}
+              onPageChange={setMusclePage}
+              showSinglePage
+            />
+          ) : null}
         </div>
 
         <style>{`

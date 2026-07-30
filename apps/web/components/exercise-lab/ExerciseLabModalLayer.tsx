@@ -30,10 +30,7 @@ import {
 import { ConfirmModal, FitModal } from "@/components/modals";
 import { EXERCISE_CATEGORY_OPTIONS } from "@/components/exercise-lab/exercise-lab-data";
 import { ExerciseLabDrawer, ExerciseLabField } from "@/components/exercise-lab/ExerciseLabShell";
-import {
-  ExerciseEditorTabs,
-  MovementProfileEditor,
-} from "@/components/exercise-lab/ExerciseContractEditors";
+import { MovementProfileEditor } from "@/components/exercise-lab/ExerciseContractEditors";
 import { MuscleTargetsEditor } from "@/components/exercise-lab/MuscleTargetsEditor";
 import { HandShapeProfileEditor } from "@/components/exercise-lab/HandShapeProfileEditor";
 import {
@@ -44,8 +41,36 @@ import {
   getReviewStatusColor,
   toTitleCase,
 } from "@/components/exercise-lab/exerciseLabShared";
+import type { ExerciseEditorTab } from "@/components/exercise-lab/ExerciseContractEditorShared";
 
 import { useExerciseLabPage } from "./ExerciseLabPageContext";
+
+const EXERCISE_EDITOR_STEPS: Array<{
+  description: string;
+  label: string;
+  tab: ExerciseEditorTab;
+}> = [
+  {
+    label: "Details",
+    description: "Name, category, and coaching guidance",
+    tab: "basics",
+  },
+  {
+    label: "Training map",
+    description: "Primary and supporting muscles",
+    tab: "muscles",
+  },
+  {
+    label: "Tracking setup",
+    description: "Optional movement and hand tracking",
+    tab: "movement",
+  },
+  {
+    label: "Media & review",
+    description: "References and final validation",
+    tab: "media",
+  },
+];
 
 export function ExerciseLabModalLayer() {
   const {
@@ -112,6 +137,19 @@ export function ExerciseLabModalLayer() {
   const selectedCandidateEvidenceBars = selectedCandidate
     ? getEvidenceBars(selectedCandidate.evidenceBars)
     : [];
+  const activeEditorStep =
+    activeEditorTab === "basics"
+      ? 0
+      : activeEditorTab === "muscles"
+        ? 1
+        : activeEditorTab === "movement" || activeEditorTab === "hands"
+          ? 2
+          : 3;
+  const editorStep = EXERCISE_EDITOR_STEPS[activeEditorStep];
+  const goToEditorStep = (step: number) => {
+    const target = EXERCISE_EDITOR_STEPS[step];
+    if (target) setActiveEditorTab(target.tab);
+  };
 
   return (
     <>      <FitModal
@@ -535,14 +573,10 @@ export function ExerciseLabModalLayer() {
               : "Create global exercise"
         }
         subtitle={
-          sheetState?.mode === "publish"
-            ? "Convert a client custom exercise into a reusable FitTrack movement."
-            : sheetState?.mode === "edit"
-              ? "Update taxonomy, guidance, and active state for an existing global record."
-              : "Create a canonical exercise that other users can access."
+          `Step ${activeEditorStep + 1} of ${EXERCISE_EDITOR_STEPS.length} · ${editorStep.description}`
         }
         icon={sheetState?.mode === "publish" ? ShieldCheck : Plus}
-        maxWidth={980}
+        maxWidth={1120}
         footer={
           <div
             style={{
@@ -553,7 +587,13 @@ export function ExerciseLabModalLayer() {
               width: "100%",
             }}
           >
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <FitButton
+                label="Cancel"
+                variant="ghost"
+                disabled={sheetPending}
+                onClick={handleCloseSheet}
+              />
               {sheetState?.mode === "publish" ? (
                 <FitButton
                   label="Leave private"
@@ -569,19 +609,38 @@ export function ExerciseLabModalLayer() {
                 />
               ) : null}
             </div>
-            <FitButton
-              disabled={Boolean(draftValidationError) || sheetPending}
-              label={
-                sheetState?.mode === "edit"
-                  ? "Save global exercise"
-                  : sheetState?.mode === "publish"
-                    ? "Publish global"
-                    : "Create global exercise"
-              }
-              loading={sheetPending}
-              onClick={() => void handleSheetSubmit()}
-              title={draftValidationError ?? undefined}
-            />
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {activeEditorStep > 0 ? (
+                <FitButton
+                  label="Back"
+                  variant="ghost"
+                  disabled={sheetPending}
+                  onClick={() => goToEditorStep(activeEditorStep - 1)}
+                />
+              ) : null}
+              {activeEditorStep < EXERCISE_EDITOR_STEPS.length - 1 ? (
+                <FitButton
+                  icon={ChevronRight}
+                  label="Continue"
+                  disabled={sheetPending}
+                  onClick={() => goToEditorStep(activeEditorStep + 1)}
+                />
+              ) : (
+                <FitButton
+                  disabled={Boolean(draftValidationError) || sheetPending}
+                  label={
+                    sheetState?.mode === "edit"
+                      ? "Save global exercise"
+                      : sheetState?.mode === "publish"
+                        ? "Publish global"
+                        : "Create global exercise"
+                  }
+                  loading={sheetPending}
+                  onClick={() => void handleSheetSubmit()}
+                  title={draftValidationError ?? undefined}
+                />
+              )}
+            </div>
           </div>
         }
       >
@@ -719,7 +778,7 @@ export function ExerciseLabModalLayer() {
                 display: "grid",
                 gap: 16,
                 padding: 18,
-                borderRadius: 22,
+                borderRadius: 10,
                 border: `1px solid ${colors.border}`,
                 backgroundColor: colors.surface,
               }}
@@ -727,100 +786,145 @@ export function ExerciseLabModalLayer() {
               <div
                 style={{
                   display: "grid",
-                  gap: 14,
-                  padding: 14,
-                  borderRadius: 18,
+                  gap: 0,
+                  gridTemplateColumns: isCompact
+                    ? "minmax(0, 1fr)"
+                    : "repeat(4, minmax(0, 1fr))",
+                  borderRadius: 8,
                   border: `1px solid ${colors.border}`,
                   backgroundColor: colors.surfaceRaised,
+                  overflow: "hidden",
                 }}
               >
-                <div
-                  style={{
-                    alignItems: "flex-start",
-                    display: "flex",
-                    gap: 12,
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <FitText style={{ fontSize: 11, color: colors.brand }}>
-                      exercise definition
-                    </FitText>
-                    <FitText style={{ fontSize: 18, fontWeight: 800 }}>
-                      Canonical movement record
-                    </FitText>
-                    <FitText
-                      style={{ fontSize: 12.5, color: colors.textSecondary }}
-                    >
-                      Save only the fields admins and mobile sessions can trust:
-                      name, taxonomy, coaching guidance, and optional media.
-                    </FitText>
-                  </div>
-                  <div
-                    style={{
-                      borderRadius: 999,
-                      border: `1px solid ${colors.brand}45`,
-                      backgroundColor: `${colors.brand}12`,
-                      padding: "7px 12px",
-                    }}
-                  >
-                    <FitText
+                {EXERCISE_EDITOR_STEPS.map((step, index) => {
+                  const isActive = index === activeEditorStep;
+                  const isComplete = index < activeEditorStep;
+
+                  return (
+                    <button
+                      key={step.label}
+                      type="button"
+                      aria-current={isActive ? "step" : undefined}
+                      onClick={() => goToEditorStep(index)}
                       style={{
-                        color: colors.brand,
-                        fontSize: 12,
-                        fontWeight: 800,
+                        alignItems: "flex-start",
+                        backgroundColor: isActive
+                          ? `${colors.brand}14`
+                          : "transparent",
+                        border: 0,
+                        borderBottom: isActive
+                          ? `2px solid ${colors.brand}`
+                          : "2px solid transparent",
+                        borderRight:
+                          !isCompact && index < EXERCISE_EDITOR_STEPS.length - 1
+                            ? `1px solid ${colors.border}`
+                            : 0,
+                        color: colors.textPrimary,
+                        cursor: "pointer",
+                        display: "grid",
+                        gap: 5,
+                        minHeight: 78,
+                        padding: "13px 14px",
+                        textAlign: "left",
                       }}
                     >
-                      {completedDefinitionItems}/{definitionChecklist.length} ready
-                    </FitText>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 8,
-                    gridTemplateColumns: isCompact
-                      ? "minmax(0, 1fr)"
-                      : "repeat(2, minmax(0, 1fr))",
-                  }}
-                >
-                  {definitionChecklist.map((item) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        alignItems: "center",
-                        display: "flex",
-                        gap: 8,
-                        minWidth: 0,
-                      }}
-                    >
-                      {item.complete ? (
-                        <CheckCircle2 size={14} color={colors.success} />
-                      ) : (
-                        <X size={14} color={colors.textMuted} />
-                      )}
-                      <FitText
+                      <span
                         style={{
-                          color: item.complete
-                            ? colors.textSecondary
-                            : colors.textMuted,
-                          fontSize: 12,
-                          lineHeight: 1.4,
+                          alignItems: "center",
+                          display: "flex",
+                          gap: 8,
                         }}
                       >
-                        {item.label}
-                      </FitText>
-                    </div>
-                  ))}
-                </div>
+                        <span
+                          style={{
+                            alignItems: "center",
+                            backgroundColor:
+                              isActive || isComplete
+                                ? colors.brand
+                                : colors.surface,
+                            border: `1px solid ${
+                              isActive || isComplete
+                                ? colors.brand
+                                : colors.border
+                            }`,
+                            borderRadius: 6,
+                            color:
+                              isActive || isComplete
+                                ? colors.textPrimary
+                                : colors.textSecondary,
+                            display: "inline-flex",
+                            fontSize: 11,
+                            fontWeight: 900,
+                            height: 22,
+                            justifyContent: "center",
+                            width: 22,
+                          }}
+                        >
+                          {isComplete ? (
+                            <CheckCircle2 size={13} />
+                          ) : (
+                            index + 1
+                          )}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 850 }}>
+                          {step.label}
+                        </span>
+                      </span>
+                      <span
+                        style={{
+                          color: colors.textSecondary,
+                          fontSize: 11.5,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {step.description}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              <ExerciseEditorTabs
-                activeTab={activeEditorTab}
-                colors={editorColors}
-                onChange={setActiveEditorTab}
-              />
+              <div
+                style={{
+                  alignItems: "flex-start",
+                  display: "flex",
+                  gap: 12,
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "grid", gap: 4 }}>
+                  <FitText style={{ fontSize: 17, fontWeight: 900 }}>
+                    {editorStep.label}
+                  </FitText>
+                  <FitText
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 12.5,
+                    }}
+                  >
+                    {editorStep.description}
+                  </FitText>
+                </div>
+                <div
+                  style={{
+                    border: `1px solid ${colors.brand}45`,
+                    backgroundColor: `${colors.brand}10`,
+                    borderRadius: 7,
+                    padding: "6px 9px",
+                  }}
+                >
+                  <FitText
+                    style={{
+                      color: colors.brand,
+                      fontSize: 11.5,
+                      fontWeight: 850,
+                    }}
+                  >
+                    {completedDefinitionItems}/{definitionChecklist.length} requirements ready
+                  </FitText>
+                </div>
+              </div>
 
               {activeEditorTab === "basics" ? (
                 <>
@@ -954,25 +1058,65 @@ export function ExerciseLabModalLayer() {
                 />
               ) : null}
 
-              {activeEditorTab === "movement" ? (
-                <MovementProfileEditor
-                  colors={editorColors}
-                  exerciseName={draft.name}
-                  onChange={(nextProfile) =>
-                    setDraftField("movementProfile", nextProfile)
-                  }
-                  value={draft.movementProfile}
-                />
-              ) : null}
+              {activeEditorTab === "movement" ||
+              activeEditorTab === "hands" ? (
+                <div style={{ display: "grid", gap: 14 }}>
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      paddingBottom: 12,
+                      borderBottom: `1px solid ${colors.border}`,
+                    }}
+                  >
+                    <FitButton
+                      active={activeEditorTab === "movement"}
+                      label="Movement rig"
+                      variant={
+                        activeEditorTab === "movement" ? "primary" : "ghost"
+                      }
+                      onClick={() => setActiveEditorTab("movement")}
+                      style={{ minHeight: 34, borderRadius: 7 }}
+                    />
+                    <FitButton
+                      active={activeEditorTab === "hands"}
+                      label="Hand shapes"
+                      variant={activeEditorTab === "hands" ? "primary" : "ghost"}
+                      onClick={() => setActiveEditorTab("hands")}
+                      style={{ minHeight: 34, borderRadius: 7 }}
+                    />
+                    <FitText
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 11.5,
+                        marginLeft: isCompact ? 0 : "auto",
+                      }}
+                    >
+                      Optional advanced setup for camera-assisted tracking.
+                    </FitText>
+                  </div>
 
-              {activeEditorTab === "hands" ? (
-                <HandShapeProfileEditor
-                  colors={editorColors}
-                  onChange={(nextProfile) =>
-                    setDraftField("handShapeProfile", nextProfile)
-                  }
-                  value={draft.handShapeProfile}
-                />
+                  {activeEditorTab === "movement" ? (
+                    <MovementProfileEditor
+                      colors={editorColors}
+                      exerciseName={draft.name}
+                      onChange={(nextProfile) =>
+                        setDraftField("movementProfile", nextProfile)
+                      }
+                      value={draft.movementProfile}
+                    />
+                  ) : (
+                    <HandShapeProfileEditor
+                      colors={editorColors}
+                      onChange={(nextProfile) =>
+                        setDraftField("handShapeProfile", nextProfile)
+                      }
+                      value={draft.handShapeProfile}
+                    />
+                  )}
+                </div>
               ) : null}
 
               {activeEditorTab === "media" ? (
@@ -1030,6 +1174,95 @@ export function ExerciseLabModalLayer() {
                     />
                   </div>
                 </ExerciseLabField>
+                </div>
+              ) : null}
+
+              {activeEditorTab === "media" ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                    borderRadius: 8,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surfaceRaised,
+                  }}
+                >
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <FitText style={{ fontSize: 13.5, fontWeight: 900 }}>
+                      Definition review
+                    </FitText>
+                    <FitText
+                      style={{
+                        color:
+                          completedDefinitionItems === definitionChecklist.length
+                            ? colors.success
+                            : colors.brand,
+                        fontSize: 12,
+                        fontWeight: 850,
+                      }}
+                    >
+                      {completedDefinitionItems}/{definitionChecklist.length} ready
+                    </FitText>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      gridTemplateColumns: isCompact
+                        ? "minmax(0, 1fr)"
+                        : "repeat(2, minmax(0, 1fr))",
+                    }}
+                  >
+                    {definitionChecklist.map((item) => (
+                      <div
+                        key={item.label}
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          gap: 8,
+                          minWidth: 0,
+                        }}
+                      >
+                        {item.complete ? (
+                          <CheckCircle2 size={14} color={colors.success} />
+                        ) : (
+                          <X size={14} color={colors.textMuted} />
+                        )}
+                        <FitText
+                          style={{
+                            color: item.complete
+                              ? colors.textSecondary
+                              : colors.textMuted,
+                            fontSize: 12,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {item.label}
+                        </FitText>
+                      </div>
+                    ))}
+                  </div>
+                  {draftValidationError ? (
+                    <FitText
+                      style={{
+                        color: colors.brand,
+                        fontSize: 11.5,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Complete the unresolved requirement before saving:{" "}
+                      {draftValidationError}
+                    </FitText>
+                  ) : null}
                 </div>
               ) : null}
             </div>

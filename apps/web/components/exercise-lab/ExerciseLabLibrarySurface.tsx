@@ -56,7 +56,7 @@ export function ExerciseLabLibrarySurface() {
             <div style={surfaceTopRowStyle}>
               <div style={surfaceTitleNavStyle}>
                 <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
-                  Global Library
+                  Canonical exercises
                 </FitText>
                 <ExerciseLabModeNavigation />
               </div>
@@ -185,13 +185,15 @@ export function ExerciseLabLibrarySurface() {
                   Showing page {Math.min(libraryMeta.page, libraryTotalPages)} of {libraryTotalPages} /{" "}
                   {libraryMeta.total} total exercises
                 </FitText>
-                <FitPagination
-                  ariaLabel="Exercise library pagination"
-                  currentPage={Math.min(libraryMeta.page, libraryTotalPages)}
-                  totalPages={libraryTotalPages}
-                  onPageChange={setLibraryPage}
-                  showSinglePage
-                />
+                {libraryMeta.total > 0 ? (
+                  <FitPagination
+                    ariaLabel="Exercise library pagination"
+                    currentPage={Math.min(libraryMeta.page, libraryTotalPages)}
+                    totalPages={libraryTotalPages}
+                    onPageChange={setLibraryPage}
+                    showSinglePage
+                  />
+                ) : null}
               </div>
             ) : null}
             <style>{`

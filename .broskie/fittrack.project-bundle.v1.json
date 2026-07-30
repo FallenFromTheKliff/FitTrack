@@ -5,7 +5,7 @@
     "project_id": "fittrack",
     "display_name": "FitTrack",
     "project_types": ["ai", "api", "infra", "mobile", "web"],
-    "revision": 3,
+    "revision": 4,
     "status": "active",
     "knowledge_refs": [
       "vault://Memory/Projects/FitTrack/Capability-Map/INDEX",
@@ -24,28 +24,52 @@
         "label": "Public web",
         "kind": "web",
         "actor_ids": ["guest", "member"],
-        "command_ids": ["web.build", "web.lint", "web.typecheck"]
+        "command_ids": [
+          "ui.playwright.test",
+          "web.build",
+          "web.lint",
+          "web.storybook.build",
+          "web.typecheck"
+        ]
       },
       {
         "surface_id": "management-web",
         "label": "Admin and staff web",
         "kind": "web",
         "actor_ids": ["admin", "staff"],
-        "command_ids": ["web.build", "web.lint", "web.typecheck"]
+        "command_ids": [
+          "ui.playwright.test",
+          "web.build",
+          "web.lint",
+          "web.storybook.build",
+          "web.typecheck"
+        ]
       },
       {
         "surface_id": "coach-web",
         "label": "Coach web",
         "kind": "web",
         "actor_ids": ["coach"],
-        "command_ids": ["web.build", "web.lint", "web.typecheck"]
+        "command_ids": [
+          "ui.playwright.test",
+          "web.build",
+          "web.lint",
+          "web.storybook.build",
+          "web.typecheck"
+        ]
       },
       {
         "surface_id": "member-web",
         "label": "Member web",
         "kind": "web",
         "actor_ids": ["member"],
-        "command_ids": ["web.build", "web.lint", "web.typecheck"]
+        "command_ids": [
+          "ui.playwright.test",
+          "web.build",
+          "web.lint",
+          "web.storybook.build",
+          "web.typecheck"
+        ]
       },
       {
         "surface_id": "mobile-auth",
@@ -92,8 +116,10 @@
       "stack.stop",
       "stack.web",
       "stack.web.ai",
+      "ui.playwright.test",
       "web.build",
       "web.lint",
+      "web.storybook.build",
       "web.typecheck"
     ],
     "runtime_prerequisites": [
