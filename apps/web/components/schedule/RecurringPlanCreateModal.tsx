@@ -2,7 +2,10 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo } from "react";
-import type { RecurringCoachingPlanPreviewResult } from "@fittrack/api-client";
+import type {
+  RecurringCoachingPlanPreviewResult,
+  RecurringCoachingPlanRecord,
+} from "@fittrack/api-client";
 
 import { FitButton, FitPill, FitSelect, FitText } from "@/components/fit";
 import { FitModal } from "@/components/modals";
@@ -31,9 +34,11 @@ type Props = {
   onClose: () => void;
   onConfirm: (skipConflicts: boolean) => void;
   onPreview: () => void;
+  onRepeatLastSchedule: () => void;
   onResetPreview: () => void;
   onToggleDay: (day: number) => void;
   preview: RecurringCoachingPlanPreviewResult | null;
+  repeatablePlan: RecurringCoachingPlanRecord | null;
   setForm: Dispatch<SetStateAction<RecurringPlanFormState>>;
 };
 
@@ -48,9 +53,11 @@ export function RecurringPlanCreateModal({
   onClose,
   onConfirm,
   onPreview,
+  onRepeatLastSchedule,
   onResetPreview,
   onToggleDay,
   preview,
+  repeatablePlan,
   setForm,
 }: Props) {
   const { colors } = useTheme();
@@ -207,7 +214,10 @@ export function RecurringPlanCreateModal({
                 <FitSelect
                   value={form.frequency}
                   onChange={(event) =>
-                    patchForm({ frequency: event.target.value as RecurringPlanFormState["frequency"] })
+                    patchForm({
+                      frequency: event.target.value as RecurringPlanFormState["frequency"],
+                      ...(event.target.value === "monthly" ? { durationMonths: 1 } : {}),
+                    })
                   }
                   options={RECURRING_FREQUENCY_OPTIONS}
                   compact
@@ -275,31 +285,175 @@ export function RecurringPlanCreateModal({
                 style={fieldStyle}
               />
             </div>
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 6 }}>
               <FitText excludeGlobalScale style={controlLabelStyle}>
-                Preferred Days
+                Fixed Full Quote (PHP)
               </FitText>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {WEEKDAY_OPTIONS.map((day) => {
-                  const active = form.preferredDays.includes(day.value);
-                  return (
-                    <FitButton
-                      key={day.value}
-                      variant={active ? "primary" : "ghost"}
-                      label={day.label}
-                      onClick={() => onToggleDay(day.value)}
-                      style={{
-                        minHeight: 34,
-                        minWidth: 48,
-                        borderRadius: 12,
-                        padding: "7px 10px",
-                      }}
-                      textStyle={{ fontSize: 11, fontWeight: 800 }}
-                    />
-                  );
-                })}
-              </div>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={form.quotedAmount || ""}
+                onChange={(event) =>
+                  patchForm({ quotedAmount: Number(event.target.value) || 0 })
+                }
+                style={fieldStyle}
+              />
+              <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+                The member pays this quote in full through PayMongo. It is not a credit balance.
+              </FitText>
             </div>
+            {form.frequency === "monthly" ? (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  borderTop: `1px solid ${colors.border}`,
+                  paddingTop: 12,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                  <FitText excludeGlobalScale style={controlLabelStyle}>
+                    Actual Session Dates (max 5 per gym week)
+                  </FitText>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <FitButton
+                      variant="ghost"
+                      label="REPEAT LAST SCHEDULE"
+                      onClick={onRepeatLastSchedule}
+                      disabled={!repeatablePlan || isBusy}
+                      style={{ minHeight: 30, padding: "5px 9px", borderRadius: 8 }}
+                      textStyle={{ fontSize: 10, fontWeight: 800 }}
+                    />
+                    <FitButton
+                      variant="ghost"
+                      label="ADD SESSION"
+                      onClick={() =>
+                        patchForm({
+                          scheduleItems: [
+                            ...form.scheduleItems,
+                            {
+                              date: form.startDate,
+                              time: form.preferredTime,
+                              durationMinutes: form.durationMinutes,
+                            },
+                          ],
+                        })
+                      }
+                      disabled={form.scheduleItems.length >= 60}
+                      style={{ minHeight: 30, padding: "5px 9px", borderRadius: 8 }}
+                      textStyle={{ fontSize: 10, fontWeight: 800 }}
+                    />
+                  </div>
+                </div>
+                <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+                  {repeatablePlan
+                    ? "Repeat copies the latest monthly dates one month forward as an editable prefill. Review it before fresh approval and payment."
+                    : "Select a member with a previous monthly plan to enable repeat-last-schedule."}
+                </FitText>
+                {form.scheduleItems.length === 0 ? (
+                  <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.warning }}>
+                    Add every actual appointment date and time. No appointment rows are created until payment succeeds.
+                  </FitText>
+                ) : null}
+                {form.scheduleItems.map((item, index) => (
+                  <div
+                    key={`${index}-${item.date}-${item.time}`}
+                    style={{ display: "grid", gridTemplateColumns: "1fr 1fr 92px auto", gap: 8, alignItems: "end" }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted }}>DATE {index + 1}</FitText>
+                      <input
+                        type="date"
+                        min={minStartDate}
+                        value={item.date}
+                        onChange={(event) =>
+                          patchForm({
+                            scheduleItems: form.scheduleItems.map((current, currentIndex) =>
+                              currentIndex === index ? { ...current, date: event.target.value } : current,
+                            ),
+                          })
+                        }
+                        style={fieldStyle}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted }}>TIME</FitText>
+                      <input
+                        type="time"
+                        value={item.time}
+                        onChange={(event) =>
+                          patchForm({
+                            scheduleItems: form.scheduleItems.map((current, currentIndex) =>
+                              currentIndex === index ? { ...current, time: event.target.value } : current,
+                            ),
+                          })
+                        }
+                        style={fieldStyle}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <FitText excludeGlobalScale style={{ fontSize: 10, color: colors.textMuted }}>MIN</FitText>
+                      <input
+                        type="number"
+                        min={30}
+                        max={180}
+                        step={15}
+                        value={item.durationMinutes}
+                        onChange={(event) =>
+                          patchForm({
+                            scheduleItems: form.scheduleItems.map((current, currentIndex) =>
+                              currentIndex === index
+                                ? { ...current, durationMinutes: Number(event.target.value) || 60 }
+                                : current,
+                            ),
+                          })
+                        }
+                        style={fieldStyle}
+                      />
+                    </div>
+                    <FitButton
+                      variant="ghost"
+                      label="REMOVE"
+                      onClick={() =>
+                        patchForm({
+                          scheduleItems: form.scheduleItems.filter((_, currentIndex) => currentIndex !== index),
+                        })
+                      }
+                      style={{ minHeight: 42, padding: "8px 9px", borderRadius: 8 }}
+                      textStyle={{ fontSize: 10, fontWeight: 800, color: colors.danger }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {form.frequency !== "monthly" ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <FitText excludeGlobalScale style={controlLabelStyle}>
+                  Preferred Days
+                </FitText>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {WEEKDAY_OPTIONS.map((day) => {
+                    const active = form.preferredDays.includes(day.value);
+                    return (
+                      <FitButton
+                        key={day.value}
+                        variant={active ? "primary" : "ghost"}
+                        label={day.label}
+                        onClick={() => onToggleDay(day.value)}
+                        style={{
+                          minHeight: 34,
+                          minWidth: 48,
+                          borderRadius: 12,
+                          padding: "7px 10px",
+                        }}
+                        textStyle={{ fontSize: 11, fontWeight: 800 }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

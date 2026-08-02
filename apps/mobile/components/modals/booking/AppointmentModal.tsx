@@ -51,7 +51,7 @@ type Props = {
 type CoachRecord = CoachProfileRecord;
 
 type AppointmentStep = "coach" | "time";
-type AppointmentPlanMode = "single" | "pack" | "recurring";
+type AppointmentPlanMode = "single" | "recurring";
 type AppointmentConfirmationState = {
   message: string;
   title: string;
@@ -87,18 +87,6 @@ const PLAN_OPTION_CARDS: PlanOptionCard[] = [
     key: "single",
     sessionCount: 1,
     title: "Single Session",
-  },
-  {
-    body: "Start with this slot and mark the booking as a multi-session pack request.",
-    key: "pack",
-    sessionCount: 3,
-    title: "3-Session Pack",
-  },
-  {
-    body: "Start with this slot and mark the request for a recurring coach plan.",
-    key: "recurring",
-    sessionCount: 4,
-    title: "Recurring Plan",
   },
 ];
 
@@ -211,6 +199,15 @@ function formatCurrency(value: number) {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function getMaxBookableDateKey() {
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
+  const year = maxDate.getFullYear();
+  const month = String(maxDate.getMonth() + 1).padStart(2, "0");
+  const day = String(maxDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function roundCurrency(value: number) {
@@ -394,23 +391,12 @@ export default function AppointmentModal({
       PLAN_OPTION_CARDS[0],
     [planMode],
   );
-  const splitAmountDueNow = useMemo(
-    () => roundCurrency(estimatedTotalAmount * 0.3),
-    [estimatedTotalAmount],
-  );
-  const splitRemainingBalance = useMemo(
-    () => roundCurrency(Math.max(0, estimatedTotalAmount - splitAmountDueNow)),
-    [estimatedTotalAmount, splitAmountDueNow],
-  );
   const canShowPaymentBreakdown = hasSelectedSlot && hasValidCoachRate;
   const totalAmountLabel = canShowPaymentBreakdown
     ? formatCurrency(estimatedTotalAmount)
     : "Pending";
-  const downpaymentLabel = canShowPaymentBreakdown
-    ? formatCurrency(splitAmountDueNow)
-    : "Pending";
-  const remainingBalanceLabel = canShowPaymentBreakdown
-    ? formatCurrency(splitRemainingBalance)
+  const fullPaymentLabel = canShowPaymentBreakdown
+    ? formatCurrency(estimatedTotalAmount)
     : "Pending";
   const paymentEstimateSummary = useMemo(() => {
     if (!hasSelectedSlot) {
@@ -430,7 +416,7 @@ export default function AppointmentModal({
     }
 
     return {
-      body: `Estimated total is ${formatCurrency(estimatedTotalAmount)}. After the coach accepts, open Bookings to choose PayMongo or cash for the ${formatCurrency(splitAmountDueNow)} downpayment or full payment.`,
+      body: `Estimated total is ${formatCurrency(estimatedTotalAmount)}. After the coach accepts, open Bookings to complete PayMongo full payment. No payment means no confirmed appointment.`,
       eyebrow: "After coach acceptance",
       title: "Payment unlocks later",
     };
@@ -438,7 +424,6 @@ export default function AppointmentModal({
     estimatedTotalAmount,
     hasSelectedSlot,
     hasValidCoachRate,
-    splitAmountDueNow,
   ]);
 
   const backdropStyle = useAnimatedStyle(() => ({
@@ -578,10 +563,8 @@ export default function AppointmentModal({
     const coachName = getCoachName(selectedCoach);
     const planCopy =
       planMode === "single"
-        ? "This reserves one coach session."
-        : planMode === "pack"
-          ? "This reserves the first session and flags the booking as a 3-session pack request for staff confirmation."
-          : "This reserves the first session and flags the booking as a recurring coach plan request for admin confirmation.";
+        ? "This requests one coach session."
+        : "This proposes a monthly coaching rhythm for coach approval.";
 
     setAppointmentConfirmation({
       title: "Send coach request?",
@@ -1019,10 +1002,10 @@ export default function AppointmentModal({
                         </View>
                         <View style={s.paymentBreakdownColumn}>
                           <FitText style={s.previewSectionTitle}>
-                            DOWNPAYMENT
+                            FULL PAYMENT
                           </FitText>
                           <FitText style={s.paymentBreakdownValue}>
-                            {downpaymentLabel}
+                            {fullPaymentLabel}
                           </FitText>
                         </View>
                         <View style={s.paymentBreakdownColumn}>
@@ -1030,7 +1013,7 @@ export default function AppointmentModal({
                             REMAINING
                           </FitText>
                           <FitText style={s.paymentBreakdownValue}>
-                            {remainingBalanceLabel}
+                            {canShowPaymentBreakdown ? formatCurrency(0) : "Pending"}
                           </FitText>
                         </View>
                       </View>
@@ -1082,6 +1065,7 @@ export default function AppointmentModal({
         isVisible={isCalOpen}
         selectedDate={selectedDate}
         blockPast
+        maxDate={getMaxBookableDateKey()}
         defaultYear={new Date().getFullYear()}
         defaultMonth={new Date().getMonth() + 1}
         blockedDates={bookedCoachDates}

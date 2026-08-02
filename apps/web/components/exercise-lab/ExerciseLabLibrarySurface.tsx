@@ -13,7 +13,7 @@ import {
 import { EXERCISE_CATEGORY_OPTIONS } from "@/components/exercise-lab/exercise-lab-data";
 import { getErrorMessage } from "@/components/exercise-lab/exerciseLabShared";
 
-import { ExerciseLabModeNavigation } from "./ExerciseLabModeNavigation";
+import { ExerciseLabSurfaceFrame } from "./ExerciseLabSurfaceFrame";
 import { useExerciseLabPage } from "./ExerciseLabPageContext";
 
 export function ExerciseLabLibrarySurface() {
@@ -33,178 +33,141 @@ export function ExerciseLabLibrarySurface() {
     setLibraryPage,
     setLibraryScope,
     setLibrarySearch,
-    surfaceControlsStyle,
-    surfaceTitleNavStyle,
-    surfaceTopRowStyle,
   } = useExerciseLabPage();
   const libraryTotalPages = Math.max(1, libraryMeta?.total_pages ?? 1);
 
-  return (          <section
-            style={{
-              display: "grid",
-              gap: 14,
-              padding: 14,
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surfaceRaised,
-              gridTemplateRows: isCompact ? undefined : "auto minmax(0, 1fr) auto",
-              height: isCompact ? "auto" : "100%",
-              minHeight: 0,
-              overflow: isCompact ? "visible" : "hidden",
-            }}
-          >
-            <div style={surfaceTopRowStyle}>
-              <div style={surfaceTitleNavStyle}>
-                <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
-                  Canonical exercises
-                </FitText>
-                <ExerciseLabModeNavigation />
-              </div>
-              <div style={surfaceControlsStyle}>
-                <FitSearch
-                  ariaLabel="Search global exercises"
-                  name="exercise-library-search"
-                  placeholder="Search exercise name, muscle group, or notes..."
-                  value={librarySearch}
-                  onChangeText={setLibrarySearch}
-                />
-                <FitDropdown
-                    fullWidth
-                    value={libraryCategory}
-                    onChange={setLibraryCategory}
-                    options={[
-                      { label: "All categories", value: "" },
-                      ...EXERCISE_CATEGORY_OPTIONS.map((option) => ({
-                        label: option.label,
-                        value: option.value,
-                      })),
-                    ]}
-                />
-                <FitPill
-                  mode="toggle"
-                  active={libraryScope}
-                  onChange={setLibraryScope}
-                  options={[
-                    { key: "active", label: "Active only" },
-                    { key: "all", label: "Include archived" },
-                  ]}
-                />
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    justifyContent: isCompact ? "flex-start" : "flex-end",
-                  }}
-                >
-                  <FitButton
-                    icon={Plus}
-                    label="Create"
-                    onClick={handleOpenCreate}
-                    style={{ minHeight: 34 }}
-                    textStyle={{ whiteSpace: "nowrap" }}
-                  />
-                  <FitButton
-                    icon={RefreshCcw}
-                    label="Refresh"
-                    variant="ghost"
-                    onClick={() => void libraryQuery.refetch()}
-                    style={{ minHeight: 34 }}
-                  />
-                </div>
-              </div>
-            </div>
+  return (
+    <ExerciseLabSurfaceFrame
+      className="exercise-library-surface"
+      actions={
+        <>
+          <FitButton
+            icon={Plus}
+            label="Create"
+            onClick={handleOpenCreate}
+            style={{ borderRadius: 6, minHeight: 36, minWidth: 104 }}
+            textStyle={{ whiteSpace: "nowrap" }}
+          />
+          <FitButton
+            icon={RefreshCcw}
+            label="Refresh"
+            variant="ghost"
+            onClick={() => void libraryQuery.refetch()}
+            style={{ borderRadius: 6, minHeight: 36, minWidth: 100 }}
+          />
+        </>
+      }
+      toolbar={
+        <div className="exercise-library-toolbar">
+          <FitSearch
+            ariaLabel="Search global exercises"
+            compact
+            name="exercise-library-search"
+            placeholder="Search exercise name, muscle group, or keyword"
+            value={librarySearch}
+            onChangeText={setLibrarySearch}
+          />
+          <FitDropdown
+            compact
+            fullWidth
+            value={libraryCategory}
+            onChange={setLibraryCategory}
+            options={[
+              { label: "All categories", value: "" },
+              ...EXERCISE_CATEGORY_OPTIONS.map((option) => ({
+                label: option.label,
+                value: option.value,
+              })),
+            ]}
+          />
+          <FitPill
+            mode="toggle"
+            active={libraryScope}
+            onChange={setLibraryScope}
+            options={[
+              { key: "active", label: "Active only" },
+              { key: "all", label: "Include archived" },
+            ]}
+            style={{ minHeight: 36 }}
+          />
+        </div>
+      }
+      footer={
+        <>
+          <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+            Showing page {Math.min(libraryMeta?.page ?? 1, libraryTotalPages)} of{" "}
+            {libraryTotalPages} / {libraryMeta?.total ?? 0} total exercises
+          </FitText>
+          {libraryMeta && libraryMeta.total > 0 ? (
+            <FitPagination
+              ariaLabel="Exercise library pagination"
+              currentPage={Math.min(libraryMeta.page, libraryTotalPages)}
+              totalPages={libraryTotalPages}
+              onPageChange={setLibraryPage}
+              showSinglePage
+            />
+          ) : null}
+        </>
+      }
+    >
+      {libraryQuery.isError ? (
+        <div
+          style={{
+            alignItems: "center",
+            backgroundColor: `${colors.danger}10`,
+            color: colors.danger,
+            display: "flex",
+            justifyContent: "center",
+            padding: 18,
+          }}
+        >
+          <FitText style={{ fontSize: 14, color: colors.danger }}>
+            {getErrorMessage(
+              libraryQuery.error,
+              "Unable to load the global exercise library.",
+            )}
+          </FitText>
+        </div>
+      ) : (
+        <FitTable
+          columns={libraryTableColumns}
+          rows={libraryItems}
+          getRowKey={(exercise) => exercise.id}
+          isLoading={libraryQuery.isLoading}
+          loadingMessage="Loading global exercise records..."
+          emptyMessage="No global exercises match the current filters yet."
+          emptyStateHeight={isCompact ? 220 : "100%"}
+          actions={libraryTableActions}
+          compact
+          overflowX
+          style={{ borderRadius: 0, border: 0, height: "100%" }}
+        />
+      )}
 
-            <div
-              style={{
-                display: "grid",
-                minHeight: 0,
-                overflow: "hidden",
-              }}
-            >
-              {libraryQuery.isError ? (
-                <div
-                  style={{
-                    padding: 18,
-                    borderRadius: 8,
-                    border: `1px solid ${colors.danger}40`,
-                    backgroundColor: `${colors.danger}10`,
-                  }}
-                >
-                  <FitText style={{ fontSize: 14, color: colors.danger }}>
-                    {getErrorMessage(
-                      libraryQuery.error,
-                      "Unable to load the global exercise library.",
-                    )}
-                  </FitText>
-                </div>
-              ) : (
-                <div
-                  className="exercise-lab-table-shell"
-                  style={{
-                    minHeight: 0,
-                    overflow: "hidden",
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 8,
-                    backgroundColor: colors.surface,
-                  }}
-                >
-                  <FitTable
-                    columns={libraryTableColumns}
-                    rows={libraryItems}
-                    getRowKey={(exercise) => exercise.id}
-                    isLoading={libraryQuery.isLoading}
-                    loadingMessage="Loading global exercise records..."
-                    emptyMessage="No global exercises match the current filters yet."
-                    actions={libraryTableActions}
-                    compact
-                    overflowX
-                    style={{ borderRadius: 0, border: 0 }}
-                  />
-                </div>
-              )}
-            </div>
+      <style>{`
+        .exercise-library-toolbar {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: minmax(320px, 1.7fr) minmax(190px, 0.7fr) auto;
+          min-width: 0;
+        }
 
-            {libraryMeta ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 8,
-                  backgroundColor: colors.surface,
-                  padding: "8px 10px",
-                }}
-              >
-                <FitText
-                  style={{ fontSize: 12.5, color: colors.textSecondary }}
-                >
-                  Showing page {Math.min(libraryMeta.page, libraryTotalPages)} of {libraryTotalPages} /{" "}
-                  {libraryMeta.total} total exercises
-                </FitText>
-                {libraryMeta.total > 0 ? (
-                  <FitPagination
-                    ariaLabel="Exercise library pagination"
-                    currentPage={Math.min(libraryMeta.page, libraryTotalPages)}
-                    totalPages={libraryTotalPages}
-                    onPageChange={setLibraryPage}
-                    showSinglePage
-                  />
-                ) : null}
-              </div>
-            ) : null}
-            <style>{`
-              .exercise-lab-table-shell table th,
-              .exercise-lab-table-shell table td {
-                text-align: left !important;
-              }
+        @media (max-width: 1120px) {
+          .exercise-library-toolbar {
+            grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr);
+          }
 
-              .exercise-lab-table-shell table td:last-child > div {
-                justify-content: flex-start !important;
-              }
-            `}</style>
-          </section>  );
+          .exercise-library-toolbar > :last-child {
+            grid-column: 1 / -1;
+          }
+        }
+
+        @media (max-width: 680px) {
+          .exercise-library-toolbar {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+      `}</style>
+    </ExerciseLabSurfaceFrame>
+  );
 }

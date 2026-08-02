@@ -14,6 +14,7 @@ import FitModal from "@/components/modals/FitModal";
 type Props = {
   highlightedDates?: string[];
   isOpen: boolean;
+  maxDate?: string | null;
   minDate?: string | null;
   selectedDate?: string;
   onSelect: (dateYmd: string) => void;
@@ -23,6 +24,7 @@ type Props = {
 export default function CalendarModal({
   highlightedDates = [],
   isOpen,
+  maxDate,
   minDate,
   selectedDate,
   onSelect,
@@ -47,6 +49,7 @@ export default function CalendarModal({
   const offset = getDay(startOfMonth(cursor));
   const todayYmd = formatDateYMD(new Date());
   const minDateYmd = minDate === null ? null : minDate ?? todayYmd;
+  const maxDateYmd = maxDate ?? null;
   const selectedYmd = selectedDate ?? "";
   const highlightedDateSet = useMemo(
     () => new Set(highlightedDates),
@@ -84,7 +87,12 @@ export default function CalendarModal({
               onSelect(todayYmd);
               onClose();
             }}
-            disabled={Boolean(minDateYmd && todayYmd < minDateYmd)}
+            disabled={
+              Boolean(
+                (minDateYmd && todayYmd < minDateYmd) ||
+                  (maxDateYmd && todayYmd > maxDateYmd),
+              )
+            }
             style={s.calendarTodayBtn}
           >
             Today
@@ -120,7 +128,10 @@ export default function CalendarModal({
                 if (!cell) return <div key={`empty-${index}`} style={s.calendarEmptyCell} />;
                 const isSelected = cell.ymd === selectedYmd;
                 const isToday = cell.ymd === todayYmd;
-                const isDisabled = Boolean(minDateYmd && cell.ymd < minDateYmd);
+                const isDisabled = Boolean(
+                  (minDateYmd && cell.ymd < minDateYmd) ||
+                    (maxDateYmd && cell.ymd > maxDateYmd),
+                );
                 const isHighlighted = highlightedDateSet.has(cell.ymd);
                 const canShowHighlight =
                   isHighlighted && !isSelected && !isDisabled && cell.ymd >= todayYmd;
@@ -187,17 +198,25 @@ export default function CalendarModal({
           <div style={s.calendarYearGrid}>
             {yearCells.map((value) => {
               const isActive = value === year;
+              const yearStartYmd = `${value}-01-01`;
+              const yearEndYmd = `${value}-12-31`;
+              const isDisabled = Boolean(
+                (minDateYmd && yearEndYmd < minDateYmd) ||
+                  (maxDateYmd && yearStartYmd > maxDateYmd),
+              );
               return (
                 <FitButton
                   key={value}
                   variant={isActive ? "primary" : "ghost"}
                   label={String(value)}
                   onClick={() => {
+                    if (isDisabled) return;
                     setCursor(new Date(value, monthIndex, 1));
                     setCurrentView("MONTHS");
                   }}
+                  disabled={isDisabled}
                   style={s.calendarPickerBtn(isActive)}
-                  aria-label={`Select year ${value}`}
+                  aria-label={isDisabled ? `${value} is unavailable` : `Select year ${value}`}
                 />
               );
             })}

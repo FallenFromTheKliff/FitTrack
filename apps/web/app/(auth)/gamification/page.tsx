@@ -2361,6 +2361,7 @@ function SeasonPerformanceTable({
             mode="status"
             label={labelize(row.visibility)}
             color={row.visibility === "private" ? themeColors.warning : themeColors.brand}
+            style={{ borderRadius: 6 }}
           />
           <FitPill
             mode="status"
@@ -2372,6 +2373,7 @@ function SeasonPerformanceTable({
                   ? themeColors.warning
                   : themeColors.success
             }
+            style={{ borderRadius: 6 }}
           />
         </div>
       ),

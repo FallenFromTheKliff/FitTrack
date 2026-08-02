@@ -44,7 +44,7 @@ export class RecurringCoachingPlanController {
 
   @Post('preview')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.coach)
   @ApiOperation({
     summary:
       'Preview generated recurring coaching sessions and conflicts without persisting rows.',
@@ -59,10 +59,10 @@ export class RecurringCoachingPlanController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.coach)
   @ApiOperation({
     summary:
-      'Create a recurring coaching plan and persist generated child appointments.',
+      'Create a coach-authored recurring schedule. Appointments are created only after the member completes full PayMongo payment.',
   })
   @ApiResponse({ status: 201, description: 'Recurring coaching plan created.' })
   createPlan(
@@ -70,6 +70,14 @@ export class RecurringCoachingPlanController {
     @Body() dto: CreateRecurringCoachingPlanDTO,
   ) {
     return this.recurringPlanService.createPlan(user, dto);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'List recurring coaching plans visible to the authenticated role.',
+  })
+  listPlans(@CurrentUser() user: JwtPayload) {
+    return this.recurringPlanService.listPlans(user);
   }
 
   @Get(':id/sessions')
@@ -110,7 +118,7 @@ export class RecurringCoachingPlanController {
 
   @Patch(':id/sessions/bulk')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.coach)
   @ApiOperation({
     summary:
       'Update future non-completed sessions from a selected recurring session forward.',
@@ -126,7 +134,7 @@ export class RecurringCoachingPlanController {
 
   @Patch(':id/sessions/:sessionId')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.coach)
   @ApiOperation({
     summary:
       'Reschedule or skip one session without changing the parent recurrence template.',
@@ -149,7 +157,7 @@ export class RecurringCoachingPlanController {
 
   @Patch(':id/cancel')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.coach)
   @ApiOperation({
     summary:
       'Cancel a recurring coaching plan and future non-completed sessions only.',

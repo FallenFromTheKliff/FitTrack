@@ -24,6 +24,7 @@ export {
   createRecurringCoachingPlanMutationOptions,
   payRecurringCoachingBillingCycleMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
+  recurringCoachingPlansQueryOptions,
   recurringCoachingPlanSessionsQueryOptions,
   updateRecurringCoachingSessionMutationOptions,
 } from "./recurring-coaching-plans";

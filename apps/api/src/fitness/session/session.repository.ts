@@ -170,9 +170,11 @@ export class WorkoutSessionRepository extends BaseRepository {
   findPlanExercise(
     planId: string,
     exerciseId: string,
+    planExerciseId?: string,
   ): Promise<PlanExerciseLookup | null> {
     return this.prisma.planExercise.findFirst({
       where: {
+        ...(planExerciseId ? { id: planExerciseId } : {}),
         exercise_id: exerciseId,
         schedule_day: { plan_id: planId },
       },

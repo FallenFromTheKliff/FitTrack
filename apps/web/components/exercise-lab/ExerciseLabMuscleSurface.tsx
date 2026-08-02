@@ -13,7 +13,8 @@ import {
 import { FitModal } from "@/components/modals";
 import { getErrorMessage } from "@/components/exercise-lab/exerciseLabShared";
 
-import { ExerciseLabModeNavigation } from "./ExerciseLabModeNavigation";
+import { ExerciseLabSurfaceFrame } from "./ExerciseLabSurfaceFrame";
+import { ExerciseLabField } from "./ExerciseLabShell";
 import { useExerciseLabPage } from "./ExerciseLabPageContext";
 
 export function ExerciseLabMuscleSurface() {
@@ -50,89 +51,66 @@ export function ExerciseLabMuscleSurface() {
 
   return (
     <>
-      <section
-        style={{
-          display: "grid",
-          gap: 12,
-          padding: 14,
-          borderRadius: 8,
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.surfaceRaised,
-          gridTemplateRows: isCompact ? undefined : "auto auto minmax(0, 1fr) auto",
-          height: isCompact ? "auto" : "100%",
-          minHeight: 0,
-          overflow: isCompact ? "visible" : "hidden",
-        }}
-      >
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            gap: 10,
-            justifyContent: "space-between",
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              minWidth: 0,
-            }}
-          >
-            <FitText style={{ fontSize: 18, fontWeight: 950, whiteSpace: "nowrap" }}>
-              Muscle definitions
-            </FitText>
-            <ExerciseLabModeNavigation />
-          </div>
-          <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+      <ExerciseLabSurfaceFrame
+        className="exercise-muscle-surface"
+        actions={
+          <>
             <FitPill
               mode="status"
               label={`${muscleDefinitions.length} definitions`}
               color={colors.brand}
+              style={{ borderRadius: 6, minHeight: 32 }}
             />
             <FitButton
               icon={Plus}
-              label="Create muscle"
+              label="Add muscle"
               onClick={() => openMuscleEditor()}
-              style={{ minHeight: 34 }}
+              style={{ borderRadius: 6, minHeight: 36, minWidth: 116 }}
             />
-          </div>
-        </div>
-
-        <div
-          style={{
-            alignItems: "center",
-            display: "grid",
-            gap: 8,
-            gridTemplateColumns: isCompact ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto",
-          }}
-        >
+            <FitButton
+              icon={RefreshCcw}
+              label="Refresh"
+              variant="ghost"
+              onClick={() => void muscleDefinitionsQuery.refetch()}
+              style={{ borderRadius: 6, minHeight: 36, minWidth: 100 }}
+            />
+          </>
+        }
+        toolbar={
           <FitSearch
             ariaLabel="Search muscle library"
+            compact
             name="muscle-library-search"
-            placeholder="Search muscles, aliases, or body region..."
+            placeholder="Search muscles, aliases, or body region"
             value={muscleSearch}
             onChangeText={setMuscleSearch}
           />
-          <FitButton
-            icon={RefreshCcw}
-            label="Refresh"
-            variant="ghost"
-            onClick={() => void muscleDefinitionsQuery.refetch()}
-            style={{ minHeight: 34 }}
-          />
-        </div>
-
+        }
+        footer={
+          <>
+            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+              Showing {visibleMuscleDefinitions.length} of {muscleDefinitions.length} definitions
+            </FitText>
+            {muscleDefinitions.length > 0 ? (
+              <FitPagination
+                ariaLabel="Muscle library pagination"
+                currentPage={musclePage}
+                totalPages={muscleTotalPages}
+                onPageChange={setMusclePage}
+                showSinglePage
+              />
+            ) : null}
+          </>
+        }
+      >
         {muscleDefinitionsQuery.isError ? (
           <div
             style={{
-              padding: 18,
-              borderRadius: 8,
-              border: `1px solid ${colors.danger}40`,
+              alignItems: "center",
               backgroundColor: `${colors.danger}10`,
+              display: "flex",
+              justifyContent: "center",
+              padding: 18,
             }}
           >
             <FitText style={{ fontSize: 14, color: colors.danger }}>
@@ -143,74 +121,26 @@ export function ExerciseLabMuscleSurface() {
             </FitText>
           </div>
         ) : (
-          <div
-            className="exercise-lab-table-shell"
-            style={{
-              minHeight: 0,
-              overflow: "hidden",
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
-              backgroundColor: colors.surface,
-            }}
-          >
-            <FitTable
-              columns={muscleTableColumns}
-              rows={visibleMuscleDefinitions}
-              getRowKey={(definition) => definition.id}
-              isLoading={muscleDefinitionsQuery.isLoading}
-              loadingMessage="Loading muscle definitions..."
-              emptyMessage={
-                muscleSearch.trim()
-                  ? "No muscle definitions match the current search."
-                  : "No muscle definitions are available yet."
-              }
-              actions={muscleTableActions}
-              onRowClick={openMuscleEditor}
-              compact
-              overflowX
-              style={{ border: 0, borderRadius: 0 }}
-            />
-          </div>
+          <FitTable
+            columns={muscleTableColumns}
+            rows={visibleMuscleDefinitions}
+            getRowKey={(definition) => definition.id}
+            isLoading={muscleDefinitionsQuery.isLoading}
+            loadingMessage="Loading muscle definitions..."
+            emptyMessage={
+              muscleSearch.trim()
+                ? "No muscle definitions match the current search."
+                : "No muscle definitions are available yet."
+            }
+            emptyStateHeight={isCompact ? 220 : "100%"}
+            actions={muscleTableActions}
+            onRowClick={openMuscleEditor}
+            compact
+            overflowX
+            style={{ border: 0, borderRadius: 0, height: "100%" }}
+          />
         )}
-
-        <div
-          style={{
-            alignItems: "center",
-            border: `1px solid ${colors.border}`,
-            borderRadius: 8,
-            backgroundColor: colors.surface,
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            padding: "8px 10px",
-          }}
-        >
-          <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-            Showing {visibleMuscleDefinitions.length} of {muscleDefinitions.length} definitions
-          </FitText>
-          {muscleDefinitions.length > 0 ? (
-            <FitPagination
-              ariaLabel="Muscle library pagination"
-              currentPage={musclePage}
-              totalPages={muscleTotalPages}
-              onPageChange={setMusclePage}
-              showSinglePage
-            />
-          ) : null}
-        </div>
-
-        <style>{`
-          .exercise-lab-table-shell table th,
-          .exercise-lab-table-shell table td {
-            text-align: left !important;
-          }
-
-          .exercise-lab-table-shell table td:last-child > div {
-            justify-content: flex-start !important;
-          }
-        `}</style>
-      </section>
+      </ExerciseLabSurfaceFrame>
 
       <FitModal
         isOpen={muscleEditorOpen}
@@ -218,6 +148,34 @@ export function ExerciseLabMuscleSurface() {
         title={editingMuscleId ? "Edit muscle definition" : "Create muscle definition"}
         subtitle="Maintain the canonical muscle names used by exercise targeting, rankings, and workout analytics."
         maxWidth={680}
+        containerStyle={{
+          borderRadius: 8,
+          height: "min(560px, calc(100dvh - 40px))",
+          maxHeight: "calc(100dvh - 40px)",
+        }}
+        headerStyle={{ padding: "14px 18px" }}
+        contentStyle={{ maxHeight: "none", minHeight: 0, padding: "16px 18px" }}
+        footerStyle={{ padding: "12px 18px" }}
+        footer={
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
+              width: "100%",
+            }}
+          >
+            <FitButton label="Cancel" variant="ghost" onClick={closeMuscleEditor} />
+            <FitButton
+              label={editingMuscleId ? "Save muscle" : "Create muscle"}
+              loading={
+                createMuscleDefinitionMutation.isPending ||
+                updateMuscleDefinitionMutation.isPending
+              }
+              onClick={() => void handleSaveMuscleDefinition()}
+            />
+          </div>
+        }
       >
         <div style={{ display: "grid", gap: 12 }}>
           <div
@@ -229,91 +187,83 @@ export function ExerciseLabMuscleSurface() {
                 : "repeat(2, minmax(0, 1fr))",
             }}
           >
-            <FitTextInput
-              name="muscle-definition-name"
-              placeholder="Muscle name, e.g. Biceps"
-              value={muscleDraft.name}
-              onChange={(event) =>
-                setMuscleDraft((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-              style={fieldStyle}
-            />
-            <FitTextInput
-              disabled={Boolean(editingMuscleId)}
-              name="muscle-definition-key"
-              placeholder="Optional key, auto-generated if blank"
-              value={muscleDraft.key}
-              onChange={(event) =>
-                setMuscleDraft((current) => ({
-                  ...current,
-                  key: event.target.value,
-                }))
-              }
-              style={{ ...fieldStyle, opacity: editingMuscleId ? 0.55 : 1 }}
-            />
-            <FitTextInput
-              name="muscle-definition-region"
-              placeholder="Body region, e.g. arms"
-              value={muscleDraft.bodyRegion}
-              onChange={(event) =>
-                setMuscleDraft((current) => ({
-                  ...current,
-                  bodyRegion: event.target.value,
-                }))
-              }
-              style={fieldStyle}
-            />
-            <FitTextInput
-              name="muscle-definition-sort-order"
-              placeholder="Sort order"
-              type="number"
-              value={String(muscleDraft.sortOrder)}
-              onChange={(event) =>
-                setMuscleDraft((current) => ({
-                  ...current,
-                  sortOrder: Number(event.target.value),
-                }))
-              }
-              style={fieldStyle}
-            />
+            <ExerciseLabField label="Display name" hint="The name shown throughout FitTrack.">
+              <FitTextInput
+                name="muscle-definition-name"
+                placeholder="Muscle name, e.g. Biceps"
+                value={muscleDraft.name}
+                onChange={(event) =>
+                  setMuscleDraft((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                style={fieldStyle}
+              />
+            </ExerciseLabField>
+            <ExerciseLabField label="Key" hint="Immutable after creation to preserve history.">
+              <FitTextInput
+                disabled={Boolean(editingMuscleId)}
+                name="muscle-definition-key"
+                placeholder="Auto-generated if blank"
+                value={muscleDraft.key}
+                onChange={(event) =>
+                  setMuscleDraft((current) => ({
+                    ...current,
+                    key: event.target.value,
+                  }))
+                }
+                style={{ ...fieldStyle, opacity: editingMuscleId ? 0.55 : 1 }}
+              />
+            </ExerciseLabField>
+            <ExerciseLabField label="Body region" hint="Used by filters and movement grouping.">
+              <FitTextInput
+                name="muscle-definition-region"
+                placeholder="e.g. Upper Body"
+                value={muscleDraft.bodyRegion}
+                onChange={(event) =>
+                  setMuscleDraft((current) => ({
+                    ...current,
+                    bodyRegion: event.target.value,
+                  }))
+                }
+                style={fieldStyle}
+              />
+            </ExerciseLabField>
+            <ExerciseLabField label="Sort order" hint="Lower numbers appear first.">
+              <FitTextInput
+                name="muscle-definition-sort-order"
+                placeholder="Sort order"
+                type="number"
+                value={String(muscleDraft.sortOrder)}
+                onChange={(event) =>
+                  setMuscleDraft((current) => ({
+                    ...current,
+                    sortOrder: Number(event.target.value),
+                  }))
+                }
+                style={fieldStyle}
+              />
+            </ExerciseLabField>
           </div>
-          <FitTextInput
-            name="muscle-definition-aliases"
-            placeholder="Aliases separated by comma"
-            value={muscleDraft.aliases}
-            onChange={(event) =>
-              setMuscleDraft((current) => ({
-                ...current,
-                aliases: event.target.value,
-              }))
-            }
-            style={fieldStyle}
-          />
+          <ExerciseLabField label="Aliases" hint="Separate alternate names with commas.">
+            <FitTextInput
+              name="muscle-definition-aliases"
+              placeholder="pectoralis major, pecs, chest muscles"
+              value={muscleDraft.aliases}
+              onChange={(event) =>
+                setMuscleDraft((current) => ({
+                  ...current,
+                  aliases: event.target.value,
+                }))
+              }
+              style={fieldStyle}
+            />
+          </ExerciseLabField>
           <FitText as="p" style={{ color: colors.textSecondary, fontSize: 12.5 }}>
             Aliases help normalize imported exercise data. The key becomes immutable after
             creation so historical rankings and workout records stay connected.
           </FitText>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: 10,
-              justifyContent: "flex-end",
-            }}
-          >
-            <FitButton label="Cancel" variant="ghost" onClick={closeMuscleEditor} />
-            <FitButton
-              label={editingMuscleId ? "Save changes" : "Create muscle"}
-              loading={
-                createMuscleDefinitionMutation.isPending ||
-                updateMuscleDefinitionMutation.isPending
-              }
-              onClick={() => void handleSaveMuscleDefinition()}
-            />
-          </div>
         </div>
       </FitModal>
     </>

@@ -100,7 +100,7 @@ export function MuscleTargetsEditor({
             border: `1px solid ${
               total === 100 ? "#3ed875" : colors.borderStrong
             }`,
-            borderRadius: 999,
+            borderRadius: 6,
             color: total === 100 ? "#3ed875" : colors.primary,
             fontSize: 12,
             fontWeight: 900,

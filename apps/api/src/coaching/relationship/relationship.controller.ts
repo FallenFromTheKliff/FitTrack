@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -26,6 +27,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   CoachingReviewResponseDTO,
+  CoachClientFilterDTO,
   CreateReviewDTO,
   RelationshipCoachSummaryResponseDTO,
   RelationshipMemberSummaryResponseDTO,
@@ -118,20 +120,21 @@ export class RelationshipController {
 
   @Get('clients')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.staff)
+  @Roles(UserRole.coach)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Deprecated coach-user client relationship endpoint.',
+    summary: 'Get the authenticated coach client relationships.',
   })
   @ApiResponse({
     status: 200,
     description: 'Coach client relationships returned.',
     schema: paginatedEnvelopeSchema(getSchemaPath(RelationshipResponseDTO)),
   })
-  getMyClients() {
-    throw new GoneException(
-      'Coach user relationship endpoints are no longer supported.',
-    );
+  getMyClients(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: CoachClientFilterDTO,
+  ) {
+    return this.relationshipService.getMyClients(user.sub, dto);
   }
 
   @Patch('relationships/:id')

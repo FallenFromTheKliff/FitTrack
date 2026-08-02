@@ -195,6 +195,7 @@ const gymKnowledgeKeys = {
 };
 
 const recurringCoachingPlanKeys = {
+  list: () => ["recurring-coaching-plans", "list"] as const,
   sessions: (params?: RecurringPlanSessionsKey) =>
     params?.planId
       ? (["recurring-coaching-plans", params.planId, "sessions"] as const)
@@ -577,6 +578,7 @@ export const queryKeys = {
   staffCoaches: staffKeys.coaches,
   staffCoachDetail: staffKeys.coachDetail,
   recurringCoachingPlanSessions: recurringCoachingPlanKeys.sessions,
+  recurringCoachingPlans: recurringCoachingPlanKeys.list,
   venues: memberKeys.venues,
   archivedVenues: memberKeys.archivedVenues,
   venueDetail: memberKeys.venueDetail,

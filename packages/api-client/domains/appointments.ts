@@ -331,7 +331,7 @@ export function createAppointmentsApi(transport: ApiTransport) {
     initiateDownpayment(
       appointmentId: string,
       provider: AppointmentPaymentProvider = "paymongo",
-      paymentStage: AppointmentPaymentStage = "downpayment",
+      paymentStage: AppointmentPaymentStage = "full",
     ) {
       return unwrapResponse<AppointmentCheckoutApiRecord>(
         transport.post(

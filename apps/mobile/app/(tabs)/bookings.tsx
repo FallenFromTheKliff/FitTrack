@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Modal,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,8 +42,11 @@ import type {
   AppointmentPaymentStage,
   CoachAppointmentScheduleRecord,
   CreateCoachManagedAppointmentPayload,
+  RecurringCoachingPlanInput,
   SubmitCoachAppointmentFeedbackPayload,
   VenueBookingRecord,
+  RecurringCoachingBillingCycleRecord,
+  RecurringCoachingPlanRecord,
 } from "@fittrack/api-client";
 
 import {
@@ -58,8 +62,13 @@ import {
   payAppointmentDownpaymentMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
+  recurringCoachingPlansQueryOptions,
 } from "@fittrack/query";
-import { normalizeBookingStatus, toDateTimeRange } from "@fittrack/app-core";
+import {
+  normalizeBookingStatus,
+  repeatMonthlyScheduleDraft,
+  toDateTimeRange,
+} from "@fittrack/app-core";
 import {
   formatBookingDate,
   formatGroupLabel,
@@ -132,6 +141,11 @@ type BookingSection = "bookings" | "appointments" | "clients" | "earnings";
 type CoachSection = Extract<BookingSection, "clients" | "appointments" | "earnings">;
 type CoachClientDetailTab = (typeof COACH_CLIENT_DETAIL_TABS)[number]["value"];
 type CoachClientFormMessage = { tone: "error" | "success"; text: string };
+type MonthlyPlanDraftRow = {
+  date: string;
+  durationMinutes: string;
+  time: string;
+};
 type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
 type AppointmentPaymentProvider = "cash" | "paymongo";
 type CoachClientSummary = {
@@ -350,6 +364,69 @@ function getCoachFormErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function RecurringPlanMobilePanel({
+  error,
+  isLoading,
+  onPay,
+  payingCycleId,
+  plans,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  onPay: (plan: RecurringCoachingPlanRecord, cycle: RecurringCoachingBillingCycleRecord) => void;
+  payingCycleId: string | null;
+  plans: RecurringCoachingPlanRecord[];
+}) {
+  const { colors } = useTheme();
+  const plan = plans.find((item) => ["awaiting_payment", "active"].includes(item.status));
+  const cycle = plan?.billingCycles?.find((item) => ["due", "processing"].includes(item.status));
+  if (!isLoading && !error && (!plan || !cycle)) return null;
+
+  const pendingCount = plan?.scheduleItems?.filter((item) => item.status === "pending_payment").length ?? 0;
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderRadius: 18,
+        borderWidth: 1,
+        gap: 10,
+        marginBottom: 14,
+        padding: 14,
+      }}
+    >
+      <FitText style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "900" }}>
+        Coach-created monthly plan
+      </FitText>
+      <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+        Your coach owns the dates. Full PayMongo payment activates the actual sessions; skipping a session does not create a refund or credit.
+      </FitText>
+      {isLoading ? <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Loading payment requests…</FitText> : null}
+      {error ? <FitText style={{ color: colors.warning, fontSize: 12 }}>{error}</FitText> : null}
+      {plan && cycle ? (
+        <>
+          <FitCard
+            icon={CalendarCheck}
+            iconSize={18}
+            label={plan.frequency === "monthly" ? "Monthly coaching" : "Recurring coaching"}
+            subtitle={`${pendingCount} session date${pendingCount === 1 ? "" : "s"} waiting for full payment.`}
+            trailingLabel={formatPeso(Number(cycle.amount))}
+            trailingLabelColor={colors.brand}
+            noChevron
+          />
+          <FitButton
+            label={payingCycleId === cycle.id ? "OPENING PAYMONGO…" : "PAY IN FULL WITH PAYMONGO"}
+            onPress={() => onPay(plan, cycle)}
+            disabled={payingCycleId !== null}
+            loading={payingCycleId === cycle.id}
+            style={{ minHeight: 42 }}
+          />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 export default function BookingsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -376,6 +453,13 @@ export default function BookingsScreen() {
   const isFrozen = user?.status === "frozen";
   const queryClient = useQueryClient();
 
+  const recurringPlansQuery = useQuery({
+    ...recurringCoachingPlansQueryOptions(mobileApiClient),
+    enabled: isFocused && !!user?.id && (isUserRole || isCoachRole),
+    staleTime: 20_000,
+    gcTime: 300_000,
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [statusFilter, setStatusFilter] = useState<ExtendedStatusFilter>("all");
@@ -395,10 +479,49 @@ export default function BookingsScreen() {
   );
   const [clientDetailTab, setClientDetailTab] =
     useState<CoachClientDetailTab>("overview");
+  const lastMonthlyPlanForClient = useMemo<RecurringCoachingPlanRecord | null>(() => {
+    if (!clientDetail?.id) return null;
+
+    const candidates = (recurringPlansQuery.data ?? []).filter(
+      (plan) =>
+        plan.frequency === "monthly" &&
+        plan.status !== "cancelled" &&
+        plan.memberId === clientDetail.id &&
+        (plan.scheduleItems?.length ?? 0) > 0,
+    );
+
+    return (
+      [...candidates].sort((left, right) => {
+        const leftDate = Math.max(
+          ...(left.scheduleItems ?? []).map((item) =>
+            new Date(item.scheduledAt).getTime(),
+          ),
+        );
+        const rightDate = Math.max(
+          ...(right.scheduleItems ?? []).map((item) =>
+            new Date(item.scheduledAt).getTime(),
+          ),
+        );
+        return rightDate - leftDate;
+      })[0] ?? null
+    );
+  }, [clientDetail?.id, recurringPlansQuery.data]);
   const [pendingAppointmentPayment, setPendingAppointmentPayment] =
     useState<PendingAppointmentPayment | null>(null);
   const [paymentConfirmation, setPaymentConfirmation] =
     useState<PaymentConfirmationState | null>(null);
+  const [payingRecurringCycleId, setPayingRecurringCycleId] = useState<string | null>(null);
+  const [recurringPlanPaymentError, setRecurringPlanPaymentError] = useState<string | null>(null);
+  const [isMonthlyPlanOpen, setIsMonthlyPlanOpen] = useState(false);
+  const [monthlyPlanQuote, setMonthlyPlanQuote] = useState("");
+  const [monthlyPlanRows, setMonthlyPlanRows] = useState<MonthlyPlanDraftRow[]>(
+    [],
+  );
+  const [monthlyPlanMessage, setMonthlyPlanMessage] =
+    useState<CoachClientFormMessage | null>(null);
+  const [monthlyPlanCalendarRowIndex, setMonthlyPlanCalendarRowIndex] =
+    useState<number | null>(null);
+  const [isCreatingMonthlyPlan, setIsCreatingMonthlyPlan] = useState(false);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
   const [pendingCoachAction, setPendingCoachAction] =
@@ -880,6 +1003,14 @@ export default function BookingsScreen() {
       await invalidateCoachScheduleQueries(queryClient, user?.id);
     },
   });
+  const createRecurringPlanMutation = useMutation({
+    mutationFn: (payload: RecurringCoachingPlanInput) =>
+      mobileApiClient.recurringCoachingPlans.create(payload),
+    onSuccess: async () => {
+      await recurringPlansQuery.refetch();
+      await invalidateCoachScheduleQueries(queryClient, user?.id);
+    },
+  });
   const submitClientFeedbackMutation = useMutation({
     mutationFn: ({
       appointmentId,
@@ -1177,6 +1308,218 @@ export default function BookingsScreen() {
     clientScheduleTime,
     createClientAppointmentMutation,
     refetchCoachSchedule,
+  ]);
+
+  const handleRepeatLastMonthlySchedule = useCallback(() => {
+    const previousPlan = lastMonthlyPlanForClient;
+    if (!previousPlan?.scheduleItems?.length) return;
+
+    const repeatedRows = repeatMonthlyScheduleDraft(
+      previousPlan.scheduleItems,
+    ).map((row) => ({
+      date: row.date,
+      time: row.time,
+      durationMinutes: String(row.durationMinutes),
+    }));
+
+    if (repeatedRows.length === 0) return;
+
+    setMonthlyPlanRows(repeatedRows);
+    setMonthlyPlanQuote(previousPlan.quotedAmount);
+    setMonthlyPlanMessage({
+      tone: "success",
+      text: "Last monthly schedule copied as an editable prefill. Review dates, conflicts, and quote before creating a fresh plan.",
+    });
+  }, [lastMonthlyPlanForClient]);
+
+  const handleOpenMonthlyPlan = useCallback(() => {
+    const previousPlan = lastMonthlyPlanForClient;
+    const repeatedRows = previousPlan?.scheduleItems?.length
+      ? repeatMonthlyScheduleDraft(previousPlan.scheduleItems).map((row) => ({
+          date: row.date,
+          time: row.time,
+          durationMinutes: String(row.durationMinutes),
+        }))
+      : [];
+
+    if (repeatedRows.length > 0) {
+      setMonthlyPlanRows(repeatedRows);
+      setMonthlyPlanQuote(previousPlan?.quotedAmount ?? "");
+      setMonthlyPlanMessage({
+        tone: "success",
+        text: "Last monthly schedule copied as an editable prefill. Review dates, conflicts, and quote before creating a fresh plan.",
+      });
+      setIsMonthlyPlanOpen(true);
+      return;
+    }
+
+    const nextInputs = getDefaultCoachScheduleInputs();
+    setMonthlyPlanRows([
+      {
+        date: nextInputs.date,
+        time: nextInputs.time,
+        durationMinutes: "60",
+      },
+    ]);
+    setMonthlyPlanQuote("");
+    setMonthlyPlanMessage(null);
+    setIsMonthlyPlanOpen(true);
+  }, [lastMonthlyPlanForClient]);
+
+  const updateMonthlyPlanRow = useCallback(
+    (index: number, patch: Partial<MonthlyPlanDraftRow>) => {
+      setMonthlyPlanRows((current) =>
+        current.map((row, rowIndex) =>
+          rowIndex === index ? { ...row, ...patch } : row,
+        ),
+      );
+      setMonthlyPlanMessage(null);
+    },
+    [],
+  );
+
+  const handleAddMonthlyPlanRow = useCallback(() => {
+    setMonthlyPlanRows((current) => {
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + current.length + 1);
+      return [
+        ...current,
+        {
+          date: toDateInputValue(nextDate),
+          time: current[0]?.time ?? "17:00",
+          durationMinutes: current[0]?.durationMinutes ?? "60",
+        },
+      ];
+    });
+    setMonthlyPlanMessage(null);
+  }, []);
+
+  const handleRemoveMonthlyPlanRow = useCallback((index: number) => {
+    setMonthlyPlanRows((current) =>
+      current.length <= 1 ? current : current.filter((_, rowIndex) => rowIndex !== index),
+    );
+    setMonthlyPlanMessage(null);
+  }, []);
+
+  const handleCreateMonthlyPlan = useCallback(async () => {
+    if (!clientDetail?.id) return;
+
+    const coachId =
+      coachScheduleRaw.find((appointment) => appointment.userId === clientDetail.id)
+        ?.coachId ?? coachScheduleRaw[0]?.coachId;
+    const quotedAmount = Number(monthlyPlanQuote.trim());
+
+    if (!coachId) {
+      setMonthlyPlanMessage({
+        tone: "error",
+        text: "This client has no coach relationship available yet.",
+      });
+      return;
+    }
+
+    if (!Number.isFinite(quotedAmount) || quotedAmount <= 0) {
+      setMonthlyPlanMessage({
+        tone: "error",
+        text: "Enter the full monthly quote. Credits and down payments are not used.",
+      });
+      return;
+    }
+
+    if (monthlyPlanRows.length === 0) {
+      setMonthlyPlanMessage({
+        tone: "error",
+        text: "Add at least one actual appointment date.",
+      });
+      return;
+    }
+
+    const scheduleItems: RecurringCoachingPlanInput["scheduleItems"] = [];
+    let previousTimestamp = 0;
+
+    for (const [index, row] of monthlyPlanRows.entries()) {
+      const durationMinutes = Number(row.durationMinutes);
+      const scheduledAt = buildLocalScheduleDate(row.date, row.time);
+
+      if (
+        !scheduledAt ||
+        Number.isNaN(scheduledAt.getTime()) ||
+        scheduledAt.getTime() <= Date.now()
+      ) {
+        setMonthlyPlanMessage({
+          tone: "error",
+          text: `Enter a valid future date and 24-hour time for session ${index + 1}.`,
+        });
+        return;
+      }
+
+      if (scheduledAt.getTime() <= previousTimestamp) {
+        setMonthlyPlanMessage({
+          tone: "error",
+          text: "Monthly sessions must be listed in chronological order without duplicates.",
+        });
+        return;
+      }
+
+      if (
+        !COACH_CLIENT_DURATION_OPTIONS.some(
+          (option) => option.value === durationMinutes,
+        )
+      ) {
+        setMonthlyPlanMessage({
+          tone: "error",
+          text: `Choose a valid duration for session ${index + 1}.`,
+        });
+        return;
+      }
+
+      previousTimestamp = scheduledAt.getTime();
+      scheduleItems.push({
+        durationMinutes,
+        scheduledAt: scheduledAt.toISOString(),
+        sequenceIndex: index + 1,
+      });
+    }
+
+    setIsCreatingMonthlyPlan(true);
+    setMonthlyPlanMessage(null);
+    try {
+      await createRecurringPlanMutation.mutateAsync({
+        coachId,
+        durationMinutes: scheduleItems[0]?.durationMinutes ?? 60,
+        durationMonths: 1,
+        endDate: monthlyPlanRows[monthlyPlanRows.length - 1]?.date ?? monthlyPlanRows[0]?.date ?? "",
+        frequency: "monthly",
+        memberId: clientDetail.id,
+        preferredDays: Array.from(
+          new Set(
+            scheduleItems.map((item) => new Date(item.scheduledAt).getUTCDay()),
+          ),
+        ),
+        preferredTime: monthlyPlanRows[0]?.time ?? "17:00",
+        quotedAmount,
+        scheduleItems,
+        startDate: monthlyPlanRows[0]?.date ?? "",
+      });
+      setIsMonthlyPlanOpen(false);
+      setClientDetailTab("overview");
+      setClientScheduleMessage({
+        tone: "success",
+        text: "Monthly plan created. The client can review and pay the full quote in Bookings.",
+      });
+    } catch (error) {
+      setMonthlyPlanMessage({
+        tone: "error",
+        text: getCoachFormErrorMessage(error, "Unable to create monthly plan."),
+      });
+    } finally {
+      setIsCreatingMonthlyPlan(false);
+    }
+  }, [
+    clientDetail?.id,
+    coachScheduleRaw,
+    createRecurringPlanMutation,
+    monthlyPlanQuote,
+    monthlyPlanRows,
   ]);
 
   const handleSubmitClientFeedback = useCallback(async () => {
@@ -1490,6 +1833,8 @@ export default function BookingsScreen() {
       setSelectedClientFeedbackAppointmentId("");
       setClientScheduleMessage(null);
       setClientFeedbackMessage(null);
+      setIsMonthlyPlanOpen(false);
+      setMonthlyPlanCalendarRowIndex(null);
       return;
     }
 
@@ -1758,6 +2103,34 @@ export default function BookingsScreen() {
     user?.id,
   ]);
 
+  const handlePayRecurringCycle = useCallback(
+    async (
+      _plan: RecurringCoachingPlanRecord,
+      cycle: RecurringCoachingBillingCycleRecord,
+    ) => {
+      try {
+        setRecurringPlanPaymentError(null);
+        setPayingRecurringCycleId(cycle.id);
+        const result = await mobileApiClient.recurringCoachingPlans.payBillingCycle(
+          cycle.recurringPlanId,
+          cycle.id,
+          { provider: "paymongo" },
+        );
+        if (!result.checkoutUrl) {
+          throw new Error("PayMongo did not return a checkout link. No appointment was activated.");
+        }
+        await Linking.openURL(result.checkoutUrl);
+      } catch (error) {
+        setRecurringPlanPaymentError(
+          error instanceof Error ? error.message : "Unable to start PayMongo payment.",
+        );
+      } finally {
+        setPayingRecurringCycleId(null);
+      }
+    },
+    [],
+  );
+
   const sectionOptions = isCoachRole ? COACH_SECTION_OPTIONS : MEMBER_SECTION_OPTIONS;
   const chipOptions = FILTER_OPTIONS;
   const searchPlaceholder =
@@ -1897,6 +2270,15 @@ export default function BookingsScreen() {
         scrollEventThrottle={16}
       >
         <Animated.View style={contentStyle}>
+          {isUserRole ? (
+            <RecurringPlanMobilePanel
+              error={recurringPlanPaymentError}
+              isLoading={recurringPlansQuery.isPending}
+              onPay={(plan, cycle) => void handlePayRecurringCycle(plan, cycle)}
+              payingCycleId={payingRecurringCycleId}
+              plans={recurringPlansQuery.data ?? []}
+            />
+          ) : null}
           {isLoading ? (
             <View style={s.emptyState}>
               <EmptyStateIcon
@@ -2307,6 +2689,34 @@ export default function BookingsScreen() {
                         </FitText>
                       )}
                     </View>
+                    <Pressable
+                      onPress={handleOpenMonthlyPlan}
+                      style={{
+                        alignItems: "center",
+                        backgroundColor: colors.brand,
+                        borderRadius: 12,
+                        flexDirection: "row",
+                        gap: 8,
+                        justifyContent: "center",
+                        minHeight: 46,
+                        paddingHorizontal: 14,
+                      }}
+                    >
+                      <CalendarPlus
+                        color={colors.onBrand ?? "#FFFFFF"}
+                        size={17}
+                        strokeWidth={2.5}
+                      />
+                      <FitText
+                        style={{
+                          color: colors.onBrand ?? "#FFFFFF",
+                          fontSize: 12,
+                          fontWeight: "900",
+                        }}
+                      >
+                        CREATE MONTHLY PLAN
+                      </FitText>
+                    </Pressable>
                   </View>
                 ) : null}
 
@@ -2818,6 +3228,340 @@ export default function BookingsScreen() {
         </View>
       </Modal>
       <Modal
+        visible={isMonthlyPlanOpen && clientDetail != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isCreatingMonthlyPlan) setIsMonthlyPlanOpen(false);
+        }}
+      >
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.58)",
+              justifyContent: "flex-end",
+              padding: 12,
+            },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: 22,
+              borderWidth: 1,
+              maxHeight: "94%",
+              width: "100%",
+            }}
+          >
+            <ScrollView
+              contentContainerStyle={{ gap: 14, padding: 20 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View
+                style={{
+                  alignItems: "flex-start",
+                  flexDirection: "row",
+                  gap: 12,
+                  justifyContent: "space-between",
+                }}
+              >
+                <View style={{ flex: 1, gap: 4 }}>
+                  <FitText
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: "900",
+                    }}
+                  >
+                    Create monthly plan
+                  </FitText>
+                  <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                    {clientDetail?.name ?? "Client"} · actual appointment dates
+                  </FitText>
+                </View>
+                <Pressable
+                  disabled={isCreatingMonthlyPlan}
+                  onPress={() => setIsMonthlyPlanOpen(false)}
+                  style={{
+                    alignItems: "center",
+                    borderColor: colors.border,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    height: 40,
+                    justifyContent: "center",
+                    width: 40,
+                  }}
+                >
+                  <FitText
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 18,
+                      fontWeight: "800",
+                    }}
+                  >
+                    ×
+                  </FitText>
+                </Pressable>
+              </View>
+
+              <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
+                You allocate the schedule after discussing goals and
+                availability offline. The client sees this plan and pays the
+                full quote through PayMongo before any session is confirmed.
+              </FitText>
+
+              <View style={{ gap: 6 }}>
+                <FitText
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 11,
+                    fontWeight: "900",
+                  }}
+                >
+                  FULL MONTHLY QUOTE (PHP)
+                </FitText>
+                <TextInput
+                  value={monthlyPlanQuote}
+                  onChangeText={(value) => {
+                    setMonthlyPlanQuote(value);
+                    setMonthlyPlanMessage(null);
+                  }}
+                  keyboardType="decimal-pad"
+                  placeholder="12000"
+                  placeholderTextColor={colors.textMuted}
+                  style={{
+                    backgroundColor: colors.surfaceRaised,
+                    borderColor: colors.border,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    color: colors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: "800",
+                    minHeight: 46,
+                    paddingHorizontal: 12,
+                  }}
+                />
+              </View>
+
+              <View style={{ gap: 10 }}>
+                <View
+                  style={{
+                    alignItems: "center",
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <FitText
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 11,
+                      fontWeight: "900",
+                    }}
+                  >
+                    ACTUAL SESSION DATES ({monthlyPlanRows.length})
+                  </FitText>
+                  <View style={{ alignItems: "flex-end", gap: 4 }}>
+                    <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+                      Max 5 per week
+                    </FitText>
+                    {lastMonthlyPlanForClient ? (
+                      <Pressable
+                        disabled={isCreatingMonthlyPlan}
+                        onPress={handleRepeatLastMonthlySchedule}
+                        hitSlop={8}
+                      >
+                        <FitText
+                          style={{ color: colors.brand, fontSize: 10, fontWeight: "900" }}
+                        >
+                          REPEAT LAST SCHEDULE
+                        </FitText>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+                {monthlyPlanRows.map((row, index) => (
+                  <View
+                    key={`monthly-plan-row-${index}`}
+                    style={{
+                      backgroundColor: colors.surfaceRaised,
+                      borderColor: colors.border,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      gap: 10,
+                      padding: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <FitText
+                        style={{
+                          color: colors.brand,
+                          fontSize: 12,
+                          fontWeight: "900",
+                        }}
+                      >
+                        SESSION {index + 1}
+                      </FitText>
+                      {monthlyPlanRows.length > 1 ? (
+                        <Pressable
+                          onPress={() => handleRemoveMonthlyPlanRow(index)}
+                          hitSlop={8}
+                        >
+                          <FitText
+                            style={{
+                              color: colors.danger,
+                              fontSize: 11,
+                              fontWeight: "900",
+                            }}
+                          >
+                            REMOVE
+                          </FitText>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      onPress={() => setMonthlyPlanCalendarRowIndex(index)}
+                      style={{
+                        borderColor: colors.border,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        justifyContent: "center",
+                        minHeight: 44,
+                        paddingHorizontal: 12,
+                      }}
+                    >
+                      <FitText
+                        style={{
+                          color: colors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {formatBookingDate(row.date)}
+                      </FitText>
+                    </Pressable>
+                    <TextInput
+                      value={row.time}
+                      onChangeText={(value) =>
+                        updateMonthlyPlanRow(index, { time: value })
+                      }
+                      placeholder="17:00"
+                      placeholderTextColor={colors.textMuted}
+                      style={{
+                        borderColor: colors.border,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        color: colors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: "700",
+                        minHeight: 44,
+                        paddingHorizontal: 12,
+                      }}
+                    />
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {COACH_CLIENT_DURATION_OPTIONS.map((option) => {
+                        const isActive = row.durationMinutes === String(option.value);
+                        return (
+                          <Pressable
+                            key={option.value}
+                            onPress={() =>
+                              updateMonthlyPlanRow(index, {
+                                durationMinutes: String(option.value),
+                              })
+                            }
+                            style={{
+                              backgroundColor: isActive
+                                ? colors.brand + "22"
+                                : colors.surface,
+                              borderColor: isActive ? colors.brand : colors.border,
+                              borderRadius: 9,
+                              borderWidth: 1,
+                              minHeight: 38,
+                              justifyContent: "center",
+                              paddingHorizontal: 10,
+                            }}
+                          >
+                            <FitText
+                              style={{
+                                color: isActive ? colors.brand : colors.textPrimary,
+                                fontSize: 11,
+                                fontWeight: "800",
+                              }}
+                            >
+                              {option.label}
+                            </FitText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+                {monthlyPlanRows.length < 60 ? (
+                  <Pressable
+                    onPress={handleAddMonthlyPlanRow}
+                    style={{
+                      alignItems: "center",
+                      borderColor: colors.brand,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      minHeight: 44,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FitText
+                      style={{ color: colors.brand, fontSize: 12, fontWeight: "900" }}
+                    >
+                      + ADD SESSION DATE
+                    </FitText>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {monthlyPlanMessage ? (
+                <FitText
+                  style={{
+                    color:
+                      monthlyPlanMessage.tone === "success"
+                        ? colors.success
+                        : colors.danger,
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {monthlyPlanMessage.text}
+                </FitText>
+              ) : null}
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <FitButton
+                  disabled={isCreatingMonthlyPlan}
+                  flex={1}
+                  label="Cancel"
+                  onPress={() => setIsMonthlyPlanOpen(false)}
+                  variant="ghost"
+                />
+                <FitButton
+                  flex={1}
+                  label="Create plan"
+                  loading={isCreatingMonthlyPlan}
+                  loadingLabel="CREATING"
+                  onPress={() => void handleCreateMonthlyPlan()}
+                  variant="primary"
+                />
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal
         visible={reviewTarget != null}
         transparent
         animationType="fade"
@@ -3067,6 +3811,23 @@ export default function BookingsScreen() {
           }}
         />
       ) : null}
+      <CalendarModal
+        isVisible={monthlyPlanCalendarRowIndex != null}
+        selectedDate={
+          monthlyPlanCalendarRowIndex != null
+            ? monthlyPlanRows[monthlyPlanCalendarRowIndex]?.date ?? ""
+            : ""
+        }
+        minDate={getTodayString()}
+        defaultYear={new Date().getFullYear()}
+        defaultMonth={new Date().getMonth() + 1}
+        onSelect={(date) => {
+          if (monthlyPlanCalendarRowIndex == null) return;
+          updateMonthlyPlanRow(monthlyPlanCalendarRowIndex, { date });
+          setMonthlyPlanCalendarRowIndex(null);
+        }}
+        onClose={() => setMonthlyPlanCalendarRowIndex(null)}
+      />
       <CalendarModal
         isVisible={isClientScheduleCalendarOpen}
         selectedDate={clientScheduleDate}

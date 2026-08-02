@@ -128,6 +128,8 @@ function GymOperationsPageBody() {
     cancelAppointmentPending,
     cancelRecurringPlanMutation,
     canManageCoaching,
+    canManageGymOperations,
+    canViewVenueBookings,
     coachAppointments,
     coachDetailsOpen,
     coachFilterId,
@@ -176,6 +178,7 @@ function GymOperationsPageBody() {
     handlePreviewRecurringPlan,
     handleRecurringFutureUpdate,
     handleRecurringPlanCancel,
+    handleRepeatLastRecurringSchedule,
     handleRecurringSessionReschedule,
     handleRecurringSessionSkip,
     handleRejectAppointment,
@@ -214,6 +217,7 @@ function GymOperationsPageBody() {
     recurringPlanOpen,
     recurringPlanPreview,
     recurringPlanSessions,
+    repeatableRecurringPlan,
     recurringRemainingCount,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
@@ -314,9 +318,9 @@ function GymOperationsPageBody() {
 
   return (
     <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      sensors={canManageGymOperations ? sensors : []}
+      onDragStart={canManageGymOperations ? handleDragStart : () => undefined}
+      onDragEnd={canManageGymOperations ? handleDragEnd : () => undefined}
     >
       <FitSection
         as="section"
@@ -339,7 +343,7 @@ function GymOperationsPageBody() {
             marginBottom: 14,
           }}
         >
-          {canManageCoaching ? (
+          {canManageGymOperations ? (
             <GymOperationsModeTabs
               activeTab={activeOperationsTab}
               onChange={setActiveOperationsTab}
@@ -366,7 +370,7 @@ function GymOperationsPageBody() {
                   onClick={() => {
                     void refreshGymOperationsData();
                   }}
-                  aria-label="Refresh Gym Operations data"
+                  aria-label={isCoach ? "Refresh sessions" : "Refresh Gym Operations data"}
                   style={{
                     minHeight: 38,
                     borderRadius: 8,
@@ -376,7 +380,7 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                {activeScheduleSurfaceTab === "coach-schedule" && isAdmin ? (
+                {activeScheduleSurfaceTab === "coach-schedule" && canManageCoaching ? (
                   <FitButton
                     variant="primary"
                     data-ui="gym-operations-create-recurring-plan"
@@ -400,7 +404,7 @@ function GymOperationsPageBody() {
                     textStyle={{ fontSize: 11, fontWeight: 800 }}
                   />
                 ) : null}
-                {canManageCoaching ? (
+                {canViewVenueBookings ? (
                   <FitButton
                     variant="primary"
                     data-ui={
@@ -441,7 +445,7 @@ function GymOperationsPageBody() {
                   onClick={() => {
                     void refreshGymOperationsData();
                   }}
-                  aria-label="Refresh Gym Operations data"
+                  aria-label={isCoach ? "Refresh sessions" : "Refresh Gym Operations data"}
                   style={{
                     minHeight: 38,
                     borderRadius: 8,
@@ -499,10 +503,10 @@ function GymOperationsPageBody() {
         {activeOperationsTab === "schedule" ? (
           <div
             data-ui="gym-operations-schedule-panel"
-            data-option-count={3}
+            data-option-count={canManageGymOperations ? 3 : 1}
             style={{ display: "grid", gap: 12 }}
           >
-            {canManageCoaching ? (
+            {canManageGymOperations ? (
               <div
                 style={{
                   alignItems: "center",
@@ -535,7 +539,7 @@ function GymOperationsPageBody() {
                 }}
               >
                 <CoachIconRail
-                  draggable
+                  draggable={canManageGymOperations}
                   railRef={leftRailRef}
                   maxHeight={coachRailAsRow ? null : scheduleRosterMaxHeight}
                   orientation={coachRailAsRow ? "row" : "column"}
@@ -543,8 +547,10 @@ function GymOperationsPageBody() {
                   bookings={rosterBookings}
                   selectedStaffId={focusedCoachId}
                   onStaffPreview={handleCoachFocus}
-                  onStaffClick={handleStaffClick}
-                  requireSecondClickToOpen
+                  onStaffClick={
+                    canManageGymOperations ? handleStaffClick : () => undefined
+                  }
+                  requireSecondClickToOpen={canManageGymOperations}
                   colors={colors}
                 />
                 <div
@@ -925,7 +931,7 @@ function GymOperationsPageBody() {
           </div>
         ) : null}
 
-        {activeOperationsTab === "appointments" && canManageCoaching ? (
+        {activeOperationsTab === "appointments" && canManageGymOperations ? (
           <div
             className="gym-operations-work-panel"
             data-ui="gym-operations-appointments-panel"
@@ -1086,7 +1092,7 @@ function GymOperationsPageBody() {
           </div>
         ) : null}
 
-        {activeOperationsTab === "coaches" && canManageCoaching ? (
+        {activeOperationsTab === "coaches" && canManageGymOperations ? (
           <div
             className="gym-operations-coaches-grid"
             data-ui="gym-operations-coaches-panel"
@@ -1569,7 +1575,7 @@ function GymOperationsPageBody() {
         </div>
 
         <StaffDetailsModal
-          isOpen={coachDetailsOpen && canManageCoaching}
+          isOpen={coachDetailsOpen && canManageGymOperations}
           coachName={activeCoach?.name ?? "Coach"}
           coachBio={activeCoach?.bio ?? null}
           coachCertifications={activeCoach?.certifications ?? []}
@@ -1641,14 +1647,16 @@ function GymOperationsPageBody() {
           inputInvalid={recurringPlanInputInvalid}
           isBusy={recurringCreateBusy}
           isCreatePending={createRecurringPlanMutation.isPending}
-          isOpen={isAdmin && recurringPlanOpen}
+          isOpen={canManageCoaching && recurringPlanOpen}
           memberOptions={memberOptions}
           onClose={() => setRecurringPlanOpen(false)}
           onConfirm={(skipConflicts) => void handleConfirmRecurringPlan(skipConflicts)}
           onPreview={() => void handlePreviewRecurringPlan()}
+          onRepeatLastSchedule={handleRepeatLastRecurringSchedule}
           onResetPreview={() => setRecurringPlanPreview(null)}
           onToggleDay={toggleRecurringPlanDay}
           preview={recurringPlanPreview}
+          repeatablePlan={repeatableRecurringPlan}
           setForm={setRecurringPlanForm}
         />
         <GymOperationsCoachAppointmentModal
@@ -1764,7 +1772,7 @@ function GymOperationsPageBody() {
           setSelectedTime={setRecurringActionTime}
         />
         <GymOperationsCreateVenueBookingModal
-          isOpen={canManageCoaching && createVenueBookingOpen}
+          isOpen={canManageGymOperations && createVenueBookingOpen}
           isSubmitting={createVenueBookingMutation.isPending}
           onClose={() => setCreateVenueBookingOpen(false)}
           onCreate={(payload) => void handleCreateVenueBooking(payload)}
@@ -1773,7 +1781,7 @@ function GymOperationsPageBody() {
           venueOptions={bookableVenueOptions}
         />
         <GymOperationsCreateCoachBookingModal
-          isOpen={canManageCoaching && createCoachBookingOpen}
+          isOpen={canManageGymOperations && createCoachBookingOpen}
           isSubmitting={createCoachBookingMutation.isPending}
           onClose={() => setCreateCoachBookingOpen(false)}
           onCreate={(payload) => void handleCreateCoachBooking(payload)}

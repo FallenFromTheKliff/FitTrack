@@ -524,7 +524,15 @@ export class AppointmentService {
   ): Promise<AppointmentCheckoutResponseDTO> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
-    const paymentStage = dto.payment_stage ?? PaymentStage.downpayment;
+    this.assertMemberAppointmentPaymentPolicy(
+      dto.provider,
+      dto.payment_stage,
+      userRole,
+    );
+    const paymentStage = this.resolveAppointmentInitialPaymentStage(
+      dto.payment_stage,
+      userRole,
+    );
     this.assertSupportedDownpaymentProvider(dto.provider);
 
     const existingIdempotentPayment =
@@ -825,6 +833,13 @@ export class AppointmentService {
         ? { recurring_state: RecurringCoachingSessionState.completed }
         : {}),
     });
+
+    if (appointment.recurring_plan_id) {
+      await this.recurringPlanService.markWorkoutAssignmentCompleted({
+        appointmentId: appointment.id,
+        completedAt,
+      });
+    }
 
     this.emitAppointmentCompleted({
       appointmentId: updated.id,
@@ -1259,6 +1274,59 @@ export class AppointmentService {
     this.assertAppointmentOwnership(appointment, userId);
   }
 
+  private assertMemberAppointmentPaymentPolicy(
+    provider: PaymentProvider,
+    paymentStage: Extract<
+      PaymentStage,
+      typeof PaymentStage.downpayment | typeof PaymentStage.full
+    > | undefined,
+    role: UserRole,
+  ): void {
+    if (this.isStaffPaymentProcessor(role)) {
+      return;
+    }
+
+    if (provider !== PaymentProvider.paymongo) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Online Payment Required',
+        status: 403,
+        detail:
+          'Member and coach appointment payments must be completed in full through PayMongo. Cash is available through the cashier flow only.',
+      });
+    }
+
+    if (paymentStage === PaymentStage.downpayment) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Full Payment Required',
+          status: 422,
+          detail:
+            'Appointment payments must be made in full before the appointment is confirmed.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private resolveAppointmentInitialPaymentStage(
+    paymentStage: Extract<
+      PaymentStage,
+      typeof PaymentStage.downpayment | typeof PaymentStage.full
+    > | undefined,
+    role: UserRole,
+  ): Extract<
+    PaymentStage,
+    typeof PaymentStage.downpayment | typeof PaymentStage.full
+  > {
+    if (!this.isStaffPaymentProcessor(role)) {
+      return PaymentStage.full;
+    }
+
+    return paymentStage ?? PaymentStage.downpayment;
+  }
+
   private isStaffPaymentProcessor(role: UserRole): boolean {
     return role === UserRole.admin || role === UserRole.staff;
   }
@@ -1329,7 +1397,7 @@ export class AppointmentService {
           title: 'Appointment Cannot Be Cancelled',
           status: 422,
           detail:
-            'Only pending, payment-pending, or confirmed appointments can be cancelled. Paid downpayments remain non-refundable.',
+            'Only pending, payment-pending, or confirmed appointments can be cancelled. Payment handling follows the applicable payment policy.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );

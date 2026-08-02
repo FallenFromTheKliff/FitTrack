@@ -167,8 +167,19 @@ export class WorkoutSessionService {
     }
 
     const planExercise = session.plan_id
-      ? await this.repo.findPlanExercise(session.plan_id, dto.exercise_id)
+      ? await this.repo.findPlanExercise(
+          session.plan_id,
+          dto.exercise_id,
+          dto.plan_exercise_id,
+        )
       : null;
+
+    if (dto.plan_exercise_id && !planExercise) {
+      throw this.buildValidationException(
+        'Invalid Plan Exercise',
+        'The selected plan exercise does not belong to this workout session.',
+      );
+    }
 
     let repsAiCounted: number | null = null;
     if (dto.pose_session_id) {

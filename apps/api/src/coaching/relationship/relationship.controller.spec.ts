@@ -74,18 +74,23 @@ describe('RelationshipController', () => {
     expect(getGuardMetadata('getMyRelationships')).toEqual([JwtAuthGuard]);
   });
 
-  it('marks coach-user client list reads as gone', () => {
-    expect(() => controller.getMyClients()).toThrow(
-      'Coach user relationship endpoints are no longer supported.',
+  it('loads the authenticated coach client list through JWT auth', async () => {
+    relationshipService.getMyClients.mockResolvedValue({ data: [], meta: {} });
+
+    await controller.getMyClients(
+      { sub: 'coach-user-1' } as never,
+      { page: 1, limit: 20 } as never,
+    );
+
+    expect(relationshipService.getMyClients).toHaveBeenCalledWith(
+      'coach-user-1',
+      { page: 1, limit: 20 },
     );
     expect(getGuardMetadata('getMyClients')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('getMyClients')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('getMyClients')).toEqual([UserRole.coach]);
   });
 
   it('marks coach-user relationship updates as gone', () => {

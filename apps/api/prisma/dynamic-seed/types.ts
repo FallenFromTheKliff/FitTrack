@@ -19,6 +19,7 @@ export type DynamicSeedConfig = {
   coachFormerRate: number;
   coachPausedRate: number;
   confirmRemoteReset?: string;
+  exerciseHistory: number;
   historyEndDate: Date;
   historyMonths: number;
   historyStartDate: Date;

@@ -173,11 +173,10 @@ export type CreateMuscleDefinitionInput = {
   sortOrder?: number;
 };
 
-export type UpdateMuscleDefinitionInput = Partial<
-  CreateMuscleDefinitionInput
-> & {
-  isActive?: boolean;
-};
+export type UpdateMuscleDefinitionInput =
+  Partial<CreateMuscleDefinitionInput> & {
+    isActive?: boolean;
+  };
 
 export type FitnessExerciseReviewSubmissionListParams = {
   category?: FitnessExerciseCategory;
@@ -316,9 +315,8 @@ export type AdminGamificationSeasonCreateInput = {
   title: string;
 };
 
-export type AdminGamificationSeasonUpdateInput = Partial<
-  AdminGamificationSeasonCreateInput
->;
+export type AdminGamificationSeasonUpdateInput =
+  Partial<AdminGamificationSeasonCreateInput>;
 
 export type AdminGamificationCreatorStateInput = {
   adminNotes?: string | null;
@@ -505,7 +503,7 @@ export type TrainingProgressionSuggestionRecord = {
   exerciseName: string;
   planExerciseId: string;
   rationale: string;
-  sourceRevision: "history-rule-v1";
+  sourceRevision: "history-rule-v2";
   suggestedReps: number | null;
   suggestedWeightKg: number | null;
 };
@@ -570,6 +568,7 @@ export type StartWorkoutSessionInput = {
 export type LogWorkoutSetInput = {
   durationSeconds?: number;
   exerciseId: string;
+  planExerciseId?: string;
   poseSessionId?: string;
   repsCompleted?: number;
   setNumber: number;
@@ -788,10 +787,7 @@ export type PoseRepAngleDataRecord = {
   timestamp: number;
 };
 
-export type ExerciseMuscleTargetRole =
-  | "primary"
-  | "secondary"
-  | "stabilizer";
+export type ExerciseMuscleTargetRole = "primary" | "secondary" | "stabilizer";
 
 export type ExerciseMuscleTargetRecord = {
   allocationPercent: number;
@@ -905,9 +901,7 @@ export type ExerciseReviewEvidenceRecord =
   | number[]
   | ExerciseAiDraftEvidenceRecord;
 
-export type ExerciseDraftProposalSource =
-  | "ai"
-  | "deterministic_fallback";
+export type ExerciseDraftProposalSource = "ai" | "deterministic_fallback";
 
 export type CreateExerciseDraftProposalInput = {
   category?: FitnessExerciseCategory;
@@ -1259,7 +1253,10 @@ export type SubmitFitnessMilestoneEvidenceInput = {
 
 export type ReviewFitnessMilestoneEvidenceInput = {
   reviewerNotes?: string | null;
-  status: Extract<FitnessMilestoneEvidenceSubmissionStatus, "approved" | "rejected">;
+  status: Extract<
+    FitnessMilestoneEvidenceSubmissionStatus,
+    "approved" | "rejected"
+  >;
 };
 
 export type FitnessAchievementReviewRecord = {

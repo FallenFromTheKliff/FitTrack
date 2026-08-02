@@ -49,6 +49,7 @@ async function main() {
       `mode=${config.mode}`,
       `users=${config.users}`,
       `seed=${config.seed}`,
+      `exerciseHistory=${config.exerciseHistory}`,
       `history=${config.historyStartDate.toISOString()}..${config.historyEndDate.toISOString()}`,
       `densities=session:${config.sessionDensity}/workout:${config.workoutDensity}/booking:${config.bookingDensity}`,
     ].join(' '),

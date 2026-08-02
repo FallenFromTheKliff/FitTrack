@@ -9,7 +9,6 @@ import {
   FitDropdown,
   FitPagination,
   FitSearch,
-  FitSection,
   FitTable,
   FitText,
 } from "@/components/fit";
@@ -19,7 +18,7 @@ import {
   getErrorMessage,
 } from "@/components/exercise-lab/exerciseLabShared";
 
-import { ExerciseLabModeNavigation } from "./ExerciseLabModeNavigation";
+import { ExerciseLabSurfaceFrame } from "./ExerciseLabSurfaceFrame";
 import { useExerciseLabPage } from "./ExerciseLabPageContext";
 
 export function ExerciseLabReviewSurface() {
@@ -46,51 +45,22 @@ export function ExerciseLabReviewSurface() {
   } = useExerciseLabPage();
 
   return (
-    <FitSection
+    <ExerciseLabSurfaceFrame
       className="exercise-review-surface"
-      heading=""
-      hideHeading
-      noPadding
-      style={{
-        border: `1px solid ${colors.border}`,
-        backgroundColor: colors.surfaceRaised,
-        borderRadius: 8,
-        marginBottom: 0,
-        padding: 18,
-        height: isCompact ? "auto" : "100%",
-        overflow: isCompact ? "visible" : "hidden",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gap: 14,
-          gridTemplateRows: isCompact
-            ? undefined
-            : "auto auto minmax(0, 1fr) auto",
-          height: isCompact ? "auto" : "100%",
-          minHeight: 0,
-        }}
-      >
-        <div className="exercise-review-command-row">
-          <ExerciseLabModeNavigation />
-          <FitButton
-            label="Review next"
-            disabled={visibleReviewCandidates.length === 0}
-            onClick={() => {
-              const nextCandidate = visibleReviewCandidates[0];
-              if (nextCandidate) openReviewModal(nextCandidate);
-            }}
-            style={{
-              borderRadius: 7,
-              minHeight: 40,
-              minWidth: 126,
-              paddingInline: 18,
-            }}
-            textStyle={{ fontSize: 12, fontWeight: 850 }}
-          />
-        </div>
-
+      tableMinWidth={1320}
+      actions={
+        <FitButton
+          label="Review next"
+          disabled={visibleReviewCandidates.length === 0}
+          onClick={() => {
+            const nextCandidate = visibleReviewCandidates[0];
+            if (nextCandidate) openReviewModal(nextCandidate);
+          }}
+          style={{ borderRadius: 6, minHeight: 36, minWidth: 118 }}
+          textStyle={{ fontSize: 12, fontWeight: 850 }}
+        />
+      }
+      toolbar={
         <div className="exercise-review-filter-row">
           <FitSearch
             ariaLabel="Search exercise review queue"
@@ -101,6 +71,7 @@ export function ExerciseLabReviewSurface() {
             onChangeText={setReviewSearch}
           />
           <FitDropdown
+            compact
             fullWidth
             ariaLabel="Exercise review status filter"
             value={reviewStatus}
@@ -110,6 +81,7 @@ export function ExerciseLabReviewSurface() {
             }
           />
           <FitDropdown
+            compact
             fullWidth
             ariaLabel="Exercise review category filter"
             value={reviewCategory}
@@ -125,6 +97,7 @@ export function ExerciseLabReviewSurface() {
             }
           />
           <FitDropdown
+            compact
             fullWidth
             ariaLabel="Exercise review muscle filter"
             value={reviewMuscleFilter}
@@ -138,134 +111,90 @@ export function ExerciseLabReviewSurface() {
             onChange={setReviewMuscleFilter}
           />
         </div>
-
-        <div
-          className="exercise-review-table-shell"
-          style={{
-            minHeight: 0,
-            overflow: "hidden",
-            border: `1px solid ${colors.border}`,
-            borderRadius: 7,
-            backgroundColor: colors.surface,
-            display: "grid",
-            gridTemplateRows: "minmax(0, 1fr)",
-          }}
-        >
-          <FitTable
-            columns={reviewTableColumns}
-            rows={visibleReviewCandidates}
-            getRowKey={(candidate) => candidate.id}
-            getRowClassName={(candidate) =>
-              candidate.id === selectedCandidateId ? "is-selected" : undefined
-            }
-            isLoading={reviewQueueQuery.isLoading}
-            loadingMessage="Loading exercise review queue..."
-            emptyMessage={
-              reviewSearch.trim() || reviewCategory || reviewMuscleFilter.trim()
-                ? "No exercise submissions match the current filters."
-                : "The review queue is clear."
-            }
-            emptyStateHeight={isCompact ? 220 : "100%"}
-            actions={reviewTableActions}
-            actionsHeading="Action"
-            compact
-            onRowClick={openReviewModal}
-            overflowX
-            style={{
-              borderRadius: 0,
-              border: 0,
-              height: "100%",
-              overflowY: "hidden",
-            }}
-            tableStyle={{ minWidth: 1320, tableLayout: "fixed" }}
-          />
-        </div>
-
-        {reviewQueueQuery.isError ? (
-          <div
-            style={{
-              border: `1px solid ${colors.danger}45`,
-              borderRadius: 8,
-              backgroundColor: `${colors.danger}10`,
-              padding: 12,
-            }}
-          >
-            <FitText style={{ color: colors.danger, fontSize: 13 }}>
-              {getErrorMessage(
-                reviewQueueQuery.error,
-                "Unable to load the exercise review queue.",
-              )}
-            </FitText>
-          </div>
-        ) : null}
-
-        {reviewMeta ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              flexWrap: "wrap",
-              borderTop: `1px solid ${colors.border}`,
-              backgroundColor: "transparent",
-              minHeight: 48,
-              padding: "10px 58px 0 2px",
-            }}
-          >
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-              Showing{" "}
-              {reviewMeta.total === 0 ? 0 : (reviewMeta.page - 1) * 8 + 1} to{" "}
-              {Math.min(reviewMeta.page * 8, reviewMeta.total)} of{" "}
-              {reviewMeta.total} submissions
-            </FitText>
+      }
+      footer={
+        <>
+          <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+            Showing {reviewMeta?.total === 0 ? 0 : ((reviewMeta?.page ?? 1) - 1) * 8 + 1} to{" "}
+            {Math.min((reviewMeta?.page ?? 1) * 8, reviewMeta?.total ?? 0)} of{" "}
+            {reviewMeta?.total ?? 0} submissions
+          </FitText>
+          <div style={{ alignItems: "center", display: "flex", gap: 10 }}>
+            {reviewMeta && reviewMeta.total > 0 ? (
+              <FitPagination
+                ariaLabel="Exercise review table pagination"
+                currentPage={reviewMeta.page}
+                totalPages={Math.max(1, reviewMeta.total_pages)}
+                onPageChange={setReviewPage}
+              />
+            ) : null}
             <div
+              aria-label="Eight submissions per page"
               style={{
                 alignItems: "center",
-                display: "flex",
-                gap: 10,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 6,
+                display: "inline-flex",
+                fontSize: 11.5,
+                fontWeight: 750,
+                minHeight: 32,
+                paddingInline: 10,
               }}
             >
-              {reviewMeta.total > 0 ? (
-                <FitPagination
-                  ariaLabel="Exercise review table pagination"
-                  currentPage={reviewMeta.page}
-                  totalPages={Math.max(1, reviewMeta.total_pages)}
-                  onPageChange={setReviewPage}
-                />
-              ) : null}
-              <div
-                aria-label="Eight submissions per page"
-                style={{
-                  alignItems: "center",
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 7,
-                  color: colors.textSecondary,
-                  display: "inline-flex",
-                  fontSize: 11.5,
-                  fontWeight: 750,
-                  minHeight: 34,
-                  paddingInline: 10,
-                }}
-              >
-                8 / page
-              </div>
+              8 / page
             </div>
           </div>
-        ) : null}
-        <style>{`
-          .exercise-review-command-row {
-            align-items: center;
-            display: flex;
-            gap: 18px;
-            justify-content: space-between;
-            min-width: 0;
+        </>
+      }
+    >
+      {reviewQueueQuery.isError ? (
+        <div
+          style={{
+            alignItems: "center",
+            backgroundColor: `${colors.danger}10`,
+            display: "flex",
+            justifyContent: "center",
+            padding: 18,
+          }}
+        >
+          <FitText style={{ color: colors.danger, fontSize: 13 }}>
+            {getErrorMessage(
+              reviewQueueQuery.error,
+              "Unable to load the exercise review queue.",
+            )}
+          </FitText>
+        </div>
+      ) : (
+        <FitTable
+          columns={reviewTableColumns}
+          rows={visibleReviewCandidates}
+          getRowKey={(candidate) => candidate.id}
+          getRowClassName={(candidate) =>
+            candidate.id === selectedCandidateId ? "is-selected" : undefined
           }
+          isLoading={reviewQueueQuery.isLoading}
+          loadingMessage="Loading exercise review queue..."
+          emptyMessage={
+            reviewSearch.trim() || reviewCategory || reviewMuscleFilter.trim()
+              ? "No exercise submissions match the current filters."
+              : "The review queue is clear."
+          }
+          emptyStateHeight={isCompact ? 220 : "100%"}
+          actions={reviewTableActions}
+          actionsHeading="Action"
+          compact
+          onRowClick={openReviewModal}
+          overflowX
+          style={{ borderRadius: 0, border: 0, height: "100%" }}
+          tableStyle={{ minWidth: 1320, tableLayout: "fixed" }}
+        />
+      )}
 
+        <style>{`
           .exercise-review-filter-row {
             align-items: center;
             display: grid;
-            gap: 14px;
+            gap: 10px;
             grid-template-columns:
               minmax(280px, 1.5fr)
               minmax(170px, 0.75fr)
@@ -274,66 +203,41 @@ export function ExerciseLabReviewSurface() {
             min-width: 0;
           }
 
-          .exercise-review-table-shell {
-            display: grid;
-            grid-template-rows: minmax(0, 1fr);
-            min-height: 0;
-          }
-
-          .exercise-review-table-shell table th,
-          .exercise-review-table-shell table td {
-            text-align: left !important;
-          }
-
-          .exercise-review-table-shell table th:nth-child(1) {
+          .exercise-review-surface table th:nth-child(1) {
             width: 20%;
           }
 
-          .exercise-review-table-shell table th:nth-child(2) {
+          .exercise-review-surface table th:nth-child(2) {
             width: 20%;
           }
 
-          .exercise-review-table-shell table th:nth-child(3) {
+          .exercise-review-surface table th:nth-child(3) {
             width: 9%;
           }
 
-          .exercise-review-table-shell table th:nth-child(4) {
+          .exercise-review-surface table th:nth-child(4) {
             width: 15%;
           }
 
-          .exercise-review-table-shell table th:nth-child(5) {
+          .exercise-review-surface table th:nth-child(5) {
             width: 15%;
           }
 
-          .exercise-review-table-shell table th:nth-child(6) {
+          .exercise-review-surface table th:nth-child(6) {
             width: 10%;
           }
 
-          .exercise-review-table-shell table th:last-child {
+          .exercise-review-surface table th:last-child {
             width: 124px;
           }
 
-          .exercise-review-table-shell table th {
-            height: 40px;
-            padding-block: 8px !important;
+          .exercise-review-surface table td {
+            height: 60px;
           }
 
-          .exercise-review-table-shell table td {
-            height: 68px;
-            padding-block: 7px !important;
-          }
-
-          .exercise-review-table-shell table td p,
-          .exercise-review-table-shell table td span {
+          .exercise-review-surface table td p,
+          .exercise-review-surface table td span {
             line-height: 16px;
-          }
-
-          .exercise-review-table-shell table tbody tr:last-child td {
-            border-bottom: 0 !important;
-          }
-
-          .exercise-review-table-shell table td:last-child > div {
-            justify-content: flex-end !important;
           }
 
           @media (max-width: 1420px) {
@@ -353,21 +257,11 @@ export function ExerciseLabReviewSurface() {
           }
 
           @media (max-width: 680px) {
-            .exercise-review-command-row {
-              align-items: stretch;
-              flex-direction: column;
-            }
-
             .exercise-review-filter-row {
               grid-template-columns: minmax(0, 1fr);
             }
-
-            .exercise-lab-mode-navigation {
-              width: 100%;
-            }
           }
         `}</style>
-      </div>
-    </FitSection>
+    </ExerciseLabSurfaceFrame>
   );
 }

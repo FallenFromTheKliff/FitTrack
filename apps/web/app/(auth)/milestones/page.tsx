@@ -13,11 +13,8 @@ import {
   ClipboardCheck,
   Copy,
   Dumbbell,
-  Eye,
-  FileVideo,
   Flame,
   Grid2X2,
-  Image as ImageIcon,
   ListFilter,
   Medal,
   MoreHorizontal,
@@ -31,30 +28,24 @@ import {
   Target,
   Trophy,
   Users,
-  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AdminMilestoneDefinitionListParams,
   AdminMilestoneDefinitionRecord,
-  AdminMilestoneEvidenceListParams,
   FitnessMilestoneCategory,
   FitnessMilestoneDefinitionStatus,
   FitnessMilestoneEvidenceRequirement,
-  FitnessMilestoneEvidenceSubmissionRecord,
-  FitnessMilestoneEvidenceSubmissionStatus,
   FitnessMilestoneTriggerType,
   FitnessMilestoneVerificationPolicy,
   UpsertAdminMilestoneDefinitionInput,
 } from "@fittrack/types";
 import {
-  adminMilestoneEvidenceQueryOptions,
   adminMilestonesQueryOptions,
   archiveAdminMilestoneMutationOptions,
   createAdminMilestoneMutationOptions,
   restoreAdminMilestoneMutationOptions,
-  reviewFitnessMilestoneEvidenceMutationOptions,
   updateAdminMilestoneMutationOptions,
 } from "@fittrack/query";
 
@@ -68,17 +59,15 @@ import {
   FitSearch,
   FitSection,
   FitSelect,
-  FitTable,
   FitText,
   FitTextArea,
   FitTextInput,
 } from "@/components/fit";
-import type { FitTableColumn } from "@/components/fit/FitTable";
 import { FitModal } from "@/components/modals";
 
 export const dynamic = "force-dynamic";
 
-type ManagementTab = "rules" | "evidence" | "insights";
+type ManagementTab = "rules" | "insights";
 
 type DefinitionDraft = {
   advancedOpen: boolean;
@@ -149,16 +138,6 @@ const TRIGGER_OPTIONS: Array<{
   { label: "Streak", value: "streak" },
   { label: "Manual", value: "manual" },
   { label: "Composite", value: "composite" },
-];
-
-const EVIDENCE_STATUS_OPTIONS: Array<{
-  label: string;
-  value: FitnessMilestoneEvidenceSubmissionStatus | "all";
-}> = [
-  { label: "Pending", value: "pending" },
-  { label: "Approved", value: "approved" },
-  { label: "Rejected", value: "rejected" },
-  { label: "All proof", value: "all" },
 ];
 
 const METRIC_OPTIONS: MetricOption[] = [
@@ -354,21 +333,6 @@ function slugifyMilestoneKey(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function isPlaceholderEvidenceUrl(value: string | null | undefined) {
-  if (!value) return true;
-  try {
-    const { hostname } = new URL(value);
-    return (
-      hostname === "fittrack.local" ||
-      hostname.endsWith(".fittrack.local") ||
-      hostname === "fittrack.dev" ||
-      hostname.endsWith(".fittrack.dev")
-    );
-  } catch {
-    return false;
-  }
 }
 
 function isAdvancedCondition(value: Record<string, unknown> | null | undefined) {
@@ -594,20 +558,16 @@ export default function MilestonesPage() {
   const [definitionEvidence, setDefinitionEvidence] =
     useState<AdminMilestoneDefinitionListParams["evidenceRequirement"]>("all");
   const [selectedDefinitionId, setSelectedDefinitionId] = useState<string | null>(null);
+  const [isDefinitionDetailsOpen, setIsDefinitionDetailsOpen] = useState(false);
   const [editingDefinition, setEditingDefinition] =
     useState<AdminMilestoneDefinitionRecord | null>(null);
   const [definitionToArchive, setDefinitionToArchive] =
     useState<AdminMilestoneDefinitionRecord | null>(null);
   const [isDefinitionModalOpen, setIsDefinitionModalOpen] = useState(false);
+  const [definitionStep, setDefinitionStep] = useState<1 | 2 | 3>(1);
   const [draft, setDraft] = useState<DefinitionDraft>(createDefaultDraft);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [evidenceSearch, setEvidenceSearch] = useState("");
-  const [evidenceStatus, setEvidenceStatus] =
-    useState<AdminMilestoneEvidenceListParams["status"]>("pending");
-  const [evidencePage, setEvidencePage] = useState(1);
-  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
-  const [reviewNotes, setReviewNotes] = useState("");
 
   const definitionParams = useMemo<AdminMilestoneDefinitionListParams>(
     () => ({
@@ -633,46 +593,13 @@ export default function MilestonesPage() {
     ],
   );
 
-  const evidenceParams = useMemo<AdminMilestoneEvidenceListParams>(
-    () => ({
-      limit: 8,
-      page: evidencePage,
-      search: evidenceSearch,
-      status: evidenceStatus,
-    }),
-    [evidencePage, evidenceSearch, evidenceStatus],
-  );
-
   const definitionsQuery = useQuery(
     adminMilestonesQueryOptions(webApiClient, definitionParams),
   );
-  const evidenceQuery = useQuery(
-    adminMilestoneEvidenceQueryOptions(webApiClient, evidenceParams),
-  );
 
   const definitions = definitionsQuery.data?.data ?? [];
-  const evidenceRecords = evidenceQuery.data?.data ?? [];
   const selectedDefinition =
-    definitions.find((item) => item.id === selectedDefinitionId) ??
-    definitions[0] ??
-    null;
-  const selectedEvidence =
-    evidenceRecords.find((item) => item.id === selectedEvidenceId) ??
-    evidenceRecords[0] ??
-    null;
-
-  useEffect(() => {
-    if (selectedDefinition && selectedDefinition.id !== selectedDefinitionId) {
-      setSelectedDefinitionId(selectedDefinition.id);
-    }
-  }, [selectedDefinition, selectedDefinitionId]);
-
-  useEffect(() => {
-    if (selectedEvidence && selectedEvidence.id !== selectedEvidenceId) {
-      setSelectedEvidenceId(selectedEvidence.id);
-      setReviewNotes("");
-    }
-  }, [selectedEvidence, selectedEvidenceId]);
+    definitions.find((item) => item.id === selectedDefinitionId) ?? null;
 
   useEffect(() => {
     setDefinitionPage(1);
@@ -684,10 +611,6 @@ export default function MilestonesPage() {
     definitionTrigger,
     definitionVerification,
   ]);
-
-  useEffect(() => {
-    setEvidencePage(1);
-  }, [evidenceSearch, evidenceStatus]);
 
   const createMutation = useMutation(
     createAdminMilestoneMutationOptions(webApiClient, queryClient),
@@ -701,10 +624,6 @@ export default function MilestonesPage() {
   const restoreMutation = useMutation(
     restoreAdminMilestoneMutationOptions(webApiClient, queryClient),
   );
-  const reviewMutation = useMutation(
-    reviewFitnessMilestoneEvidenceMutationOptions(webApiClient, queryClient),
-  );
-
   const definitionRows = definitions;
   const activeCount = definitions.filter((item) => item.status === "active").length;
   const archivedCount = definitions.filter((item) => item.status === "archived").length;
@@ -712,6 +631,7 @@ export default function MilestonesPage() {
   const openCreateModal = () => {
     setEditingDefinition(null);
     setDraft(createDefaultDraft());
+    setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
   };
@@ -719,6 +639,7 @@ export default function MilestonesPage() {
   const openEditModal = (record: AdminMilestoneDefinitionRecord) => {
     setEditingDefinition(record);
     setDraft(draftFromRecord(record));
+    setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
   };
@@ -732,6 +653,7 @@ export default function MilestonesPage() {
       status: "draft",
       title: `${sourceDraft.title} Copy`,
     });
+    setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
   };
@@ -739,6 +661,7 @@ export default function MilestonesPage() {
   const closeDefinitionModal = () => {
     setIsDefinitionModalOpen(false);
     setEditingDefinition(null);
+    setDefinitionStep(1);
     setFormError(null);
   };
 
@@ -813,110 +736,15 @@ export default function MilestonesPage() {
     });
   };
 
-  const reviewEvidence = (
-    record: FitnessMilestoneEvidenceSubmissionRecord,
-    status: Extract<FitnessMilestoneEvidenceSubmissionStatus, "approved" | "rejected">,
-  ) => {
-    setActionMessage(null);
-    reviewMutation.mutate(
-      {
-        evidenceSubmissionId: record.id,
-        payload: {
-          reviewerNotes: reviewNotes.trim() || null,
-          status,
-        },
-      },
-      {
-        onError: (error) => setActionMessage(getErrorMessage(error)),
-        onSuccess: () => {
-          setReviewNotes("");
-          setActionMessage(
-            status === "approved"
-              ? "Milestone proof approved."
-              : "Milestone proof rejected.",
-          );
-        },
-      },
-    );
-  };
-
-  const evidenceColumns = useMemo<
-    FitTableColumn<FitnessMilestoneEvidenceSubmissionRecord>[]
-  >(
-    () => [
-      {
-        key: "member",
-        heading: "Member",
-        render: (row) => (
-          <div style={stackStyle}>
-            <FitText style={{ fontSize: 14, fontWeight: 800 }}>
-              {row.memberName ?? "FitTrack member"}
-            </FitText>
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-              {row.memberEmail ?? row.userId}
-            </FitText>
-          </div>
-        ),
-      },
-      {
-        key: "milestone",
-        heading: "Milestone",
-        render: (row) => (
-          <div style={stackStyle}>
-            <FitText style={{ fontSize: 14, fontWeight: 800 }}>
-              {row.milestoneTitle ?? "Milestone"}
-            </FitText>
-            <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-              {row.caption || "No caption"}
-            </FitText>
-          </div>
-        ),
-      },
-      {
-        key: "evidence",
-        heading: "Evidence",
-        render: (row) => (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {row.evidenceType === "video" ? (
-              <FileVideo size={16} color={colors.brand} />
-            ) : (
-              <ImageIcon size={16} color={colors.brand} />
-            )}
-            <FitText style={{ fontSize: 13 }}>
-              {formatLabel(row.evidenceType)}
-            </FitText>
-          </div>
-        ),
-      },
-      {
-        key: "status",
-        heading: "Status",
-        render: (row) => (
-          <FitPill
-            mode="status"
-            label={formatLabel(row.status)}
-            color={STATUS_TONES[row.status] ?? colors.brand}
-          />
-        ),
-      },
-      {
-        key: "submitted",
-        heading: "Submitted",
-        render: (row) => (
-          <FitText style={{ fontSize: 13 }}>{formatDate(row.createdAt)}</FitText>
-        ),
-      },
-    ],
-    [colors],
-  );
-  const selectEvidenceRecord = (record: FitnessMilestoneEvidenceSubmissionRecord) => {
-    setSelectedEvidenceId(record.id);
-    setReviewNotes("");
-  };
-
   const isSavingDefinition = createMutation.isPending || updateMutation.isPending;
   const canSaveDefinition =
     draft.title.trim().length > 0 && parsePositiveNumber(draft.target, 0) > 0;
+  const canContinueDefinition =
+    definitionStep === 1
+      ? canSaveDefinition
+      : definitionStep === 2
+        ? parsePositiveNumber(draft.xpBonus, 0) >= 0
+        : canSaveDefinition;
   const hasDefinitionFilters =
     definitionCategory !== "all" ||
     definitionStatus !== "active" ||
@@ -927,25 +755,19 @@ export default function MilestonesPage() {
 
   return (
     <div className={`${themeTransition} milestones-admin-shell`}>
-      <section className="milestones-command-panel">
-        <div className="milestones-command-copy">
-          <FitText as="h2" style={{ fontSize: 20, fontWeight: 900 }}>
-            Management workspace
-          </FitText>
-          <FitText style={{ color: colors.textSecondary, marginTop: 2, fontSize: 13 }}>
-            Automatic achievement rules, rewards, and coverage checks.
-          </FitText>
-        </div>
-        <div className="milestones-command-actions">
+      <section className="milestones-route-toolbar">
+        <div className="milestones-route-tabs">
           <FitPill
             mode="toggle"
             active={tab}
             onChange={(key) => setTab(key as ManagementTab)}
             options={[
-              { key: "rules", label: "Rules", icon: ListFilter },
+              { key: "rules", label: "Manage milestones", icon: ListFilter },
               { key: "insights", label: "Insights", icon: Grid2X2 },
             ]}
           />
+        </div>
+        <div className="milestones-route-actions">
           <FitButton
             label="Create milestone"
             icon={Plus}
@@ -954,10 +776,10 @@ export default function MilestonesPage() {
         </div>
       </section>
 
-      <section className="milestones-stat-grid">
+      <section className="milestones-stat-strip">
         <MetricCard
           icon={Medal}
-          label="Active rules"
+          label="Active milestones"
           value={String(definitionsQuery.data?.meta.total ?? 0)}
           hint={`${activeCount} on page`}
           tone={colors.brand}
@@ -978,7 +800,7 @@ export default function MilestonesPage() {
         />
         <MetricCard
           icon={Archive}
-          label="Archived rules"
+          label="Archived milestones"
           value={String(archivedCount)}
           hint="Hidden"
           tone={colors.textSecondary}
@@ -997,7 +819,7 @@ export default function MilestonesPage() {
         <section className="milestones-workspace">
           <FitSection
             className="milestones-library-section"
-            heading="Rules Library"
+            heading="Milestone library"
             action={
               <FitButton
                 label="Clear filters"
@@ -1055,16 +877,21 @@ export default function MilestonesPage() {
                 />
               </div>
             </div>
-            <RuleLibrary
-              rows={definitionRows}
-              selectedId={selectedDefinition?.id ?? null}
-              isLoading={definitionsQuery.isLoading}
-              onArchive={archiveDefinition}
-              onDuplicate={duplicateDefinition}
-              onEdit={openEditModal}
-              onRestore={restoreDefinition}
-              onSelect={(row) => setSelectedDefinitionId(row.id)}
-            />
+            <div className="milestones-rules-table-frame">
+              <RuleLibrary
+                rows={definitionRows}
+                selectedId={isDefinitionDetailsOpen ? selectedDefinition?.id ?? null : null}
+                isLoading={definitionsQuery.isLoading}
+                onArchive={archiveDefinition}
+                onDuplicate={duplicateDefinition}
+                onEdit={openEditModal}
+                onRestore={restoreDefinition}
+                onSelect={(row) => {
+                  setSelectedDefinitionId(row.id);
+                  setIsDefinitionDetailsOpen(true);
+                }}
+              />
+            </div>
             <div className="milestones-pagination-row">
               <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
                 {definitionsQuery.data?.meta.total ?? 0} definitions
@@ -1080,82 +907,6 @@ export default function MilestonesPage() {
               />
             </div>
           </FitSection>
-
-          <DefinitionInspector
-            record={selectedDefinition}
-            onEdit={openEditModal}
-            onArchive={archiveDefinition}
-            onDuplicate={duplicateDefinition}
-            onRestore={restoreDefinition}
-          />
-        </section>
-      ) : tab === "evidence" ? (
-        <section className="milestones-workspace">
-          <FitSection className="milestones-library-section" heading="Proof Queue">
-            <div className="milestones-toolbar">
-              <FitSearch
-                value={evidenceSearch}
-                onChangeText={setEvidenceSearch}
-                placeholder="Search member, milestone, or key..."
-                compact
-              />
-              <div className="milestones-filter-row">
-                <FitSelect
-                  compact
-                  options={EVIDENCE_STATUS_OPTIONS}
-                  value={evidenceStatus}
-                  onChange={(event) =>
-                    setEvidenceStatus(
-                      event.target.value as AdminMilestoneEvidenceListParams["status"],
-                    )
-                  }
-                />
-              </div>
-            </div>
-            <FitTable
-              columns={evidenceColumns}
-              rows={evidenceRecords}
-              getRowKey={(row) => row.id}
-              isLoading={evidenceQuery.isLoading}
-              loadingMessage="Loading milestone evidence..."
-              emptyMessage="No milestone proof items match the current filters."
-              compact
-              onRowClick={selectEvidenceRecord}
-              actions={[
-                {
-                  label: "Open",
-                  variant: "ghost",
-                  icon: Eye,
-                  iconOnly: true,
-                  ariaLabel: (row) => `Open proof for ${row.milestoneTitle ?? "milestone"}`,
-                  onClick: selectEvidenceRecord,
-                },
-              ]}
-            />
-            <div className="milestones-pagination-row">
-              <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-                {evidenceQuery.data?.meta.total ?? 0} proof items
-              </FitText>
-              <FitPagination
-                currentPage={evidenceQuery.data?.meta.page ?? evidencePage}
-                totalPages={Math.max(
-                  1,
-                  evidenceQuery.data?.meta.total_pages ?? 1,
-                )}
-                onPageChange={setEvidencePage}
-                showSinglePage
-              />
-            </div>
-          </FitSection>
-
-          <EvidenceInspector
-            isPending={reviewMutation.isPending}
-            record={selectedEvidence}
-            reviewNotes={reviewNotes}
-            onReviewNotesChange={setReviewNotes}
-            onApprove={(record) => reviewEvidence(record, "approved")}
-            onReject={(record) => reviewEvidence(record, "rejected")}
-          />
         </section>
       ) : (
         <MilestoneInsightsPanel
@@ -1165,28 +916,78 @@ export default function MilestonesPage() {
       )}
 
       <FitModal
+        isOpen={isDefinitionDetailsOpen && Boolean(selectedDefinition)}
+        onClose={() => setIsDefinitionDetailsOpen(false)}
+        title="Milestone details"
+        subtitle="Inspect the automatic rule, reward, progress source, and lifecycle without compressing the library."
+        icon={Medal}
+        maxWidth={760}
+      >
+        <DefinitionInspector
+          record={selectedDefinition}
+          onEdit={(record) => {
+            setIsDefinitionDetailsOpen(false);
+            openEditModal(record);
+          }}
+          onArchive={(record) => {
+            setIsDefinitionDetailsOpen(false);
+            archiveDefinition(record);
+          }}
+          onDuplicate={(record) => {
+            setIsDefinitionDetailsOpen(false);
+            duplicateDefinition(record);
+          }}
+          onRestore={(record) => {
+            setIsDefinitionDetailsOpen(false);
+            restoreDefinition(record);
+          }}
+        />
+      </FitModal>
+
+      <FitModal
         isOpen={isDefinitionModalOpen}
         onClose={closeDefinitionModal}
         title={editingDefinition ? "Edit milestone" : "Create milestone"}
         subtitle="Set the goal and reward. Progress unlocks automatically from member activity."
         icon={Medal}
-        maxWidth={860}
+        maxWidth={1000}
         containerStyle={{ maxHeight: "calc(100dvh - 72px)" }}
         contentStyle={{ maxHeight: "calc(100dvh - 232px)" }}
         footer={
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <div className="milestone-modal-footer">
             <FitButton
               label="Cancel"
               variant="ghost"
               onClick={closeDefinitionModal}
             />
-            <FitButton
-              label={editingDefinition ? "Save milestone" : "Create milestone"}
-              icon={Save}
-              loading={isSavingDefinition}
-              disabled={!canSaveDefinition}
-              onClick={submitDefinition}
-            />
+            <div className="milestone-modal-footer-actions">
+              {definitionStep > 1 ? (
+                <FitButton
+                  label="Back"
+                  variant="ghost"
+                  onClick={() =>
+                    setDefinitionStep((current) => (current - 1) as 1 | 2 | 3)
+                  }
+                />
+              ) : null}
+              {definitionStep < 3 ? (
+                <FitButton
+                  label="Next"
+                  disabled={!canContinueDefinition}
+                  onClick={() =>
+                    setDefinitionStep((current) => (current + 1) as 1 | 2 | 3)
+                  }
+                />
+              ) : (
+                <FitButton
+                  label={editingDefinition ? "Save milestone" : "Create milestone"}
+                  icon={Save}
+                  loading={isSavingDefinition}
+                  disabled={!canSaveDefinition}
+                  onClick={submitDefinition}
+                />
+              )}
+            </div>
           </div>
         }
       >
@@ -1195,6 +996,7 @@ export default function MilestonesPage() {
           error={formError}
           onApplyQuickRule={applyQuickRule}
           onChange={setDraft}
+          step={definitionStep}
         />
       </FitModal>
 
@@ -1253,35 +1055,51 @@ export default function MilestonesPage() {
           padding-bottom: 0;
         }
 
-        .milestones-command-panel {
+        .milestones-route-toolbar {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 14px;
-          border: 1px solid ${colors.border};
-          border-radius: 14px;
-          background: ${colors.surface};
-          padding: 12px 16px;
+          gap: 12px;
+          border-bottom: 1px solid ${colors.border};
+          padding: 0 0 8px;
           flex-shrink: 0;
         }
 
-        .milestones-command-copy {
-          min-width: 0;
-        }
-
-        .milestones-command-actions {
+        .milestones-route-actions,
+        .milestone-modal-footer-actions {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 8px;
           flex-wrap: wrap;
           justify-content: flex-end;
         }
 
-        .milestones-stat-grid {
+        .milestones-stat-strip {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
+          gap: 0;
+          border: 1px solid ${colors.border};
+          border-radius: 10px;
+          overflow: hidden;
           flex-shrink: 0;
+        }
+
+        .milestones-stat-strip > * {
+          border: 0 !important;
+          border-radius: 0 !important;
+          border-right: 1px solid ${colors.border} !important;
+        }
+
+        .milestones-stat-strip > *:last-child {
+          border-right: 0 !important;
+        }
+
+        .milestone-modal-footer {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
         }
 
         .milestones-action-banner {
@@ -1293,10 +1111,8 @@ export default function MilestonesPage() {
         }
 
         .milestones-workspace {
-          display: grid;
-          grid-template-columns: minmax(0, 1.52fr) minmax(320px, 0.58fr);
-          gap: 14px;
-          align-items: stretch;
+          display: flex;
+          flex-direction: column;
           flex: 1;
           min-height: 0;
           overflow: hidden;
@@ -1315,8 +1131,7 @@ export default function MilestonesPage() {
           gap: 8px;
         }
 
-        .milestones-library-section,
-        .milestones-inspector-section {
+        .milestones-library-section {
           min-height: 0;
           margin-bottom: 0 !important;
           display: flex;
@@ -1324,12 +1139,22 @@ export default function MilestonesPage() {
           overflow: hidden;
         }
 
-        .milestones-library-section > div:last-child,
-        .milestones-inspector-section > div:last-child {
+        .milestones-library-section > div:last-child {
           flex: 1;
           min-height: 0;
           display: flex;
           flex-direction: column;
+        }
+
+        .milestones-rules-table-frame {
+          display: flex;
+          flex: 0 0 510px;
+          width: 100%;
+          height: 510px;
+          min-height: 510px;
+          max-height: 510px;
+          min-width: 0;
+          overflow: hidden;
         }
 
         .milestone-confirm-body {
@@ -1383,21 +1208,22 @@ export default function MilestonesPage() {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .milestones-stat-grid {
+          .milestones-stat-strip {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
         @media (max-width: 720px) {
-          .milestones-command-panel {
+          .milestones-route-toolbar {
             flex-direction: column;
+            align-items: stretch;
           }
 
-          .milestones-command-actions {
+          .milestones-route-actions {
             justify-content: flex-start;
           }
 
-          .milestones-stat-grid,
+          .milestones-stat-strip,
           .milestones-filter-row {
             grid-template-columns: 1fr;
           }
@@ -1515,10 +1341,10 @@ function RuleLibrary({
             <Medal size={24} color={colors.brand} />
           </div>
           <FitText style={{ display: "block", fontSize: 16, fontWeight: 900 }}>
-            No rules match these filters
+            No milestones match these filters
           </FitText>
           <FitText style={{ display: "block", marginTop: 4, color: colors.textSecondary, fontSize: 13 }}>
-            Try clearing filters or create a rule for workouts, nutrition, bookings, coaching, or Brodigy AI.
+            Try clearing filters or create a milestone for workouts, nutrition, bookings, coaching, or Brodigy AI.
           </FitText>
         </div>
         <style>{ruleStyles}</style>
@@ -1532,8 +1358,7 @@ function RuleLibrary({
         <span>Milestone</span>
         <span>Category</span>
         <span>Trigger</span>
-        <span>Verification</span>
-        <span>Proof</span>
+        <span>Evaluation</span>
         <span>Status</span>
         <span>Progress</span>
         <span>Actions</span>
@@ -1587,14 +1412,12 @@ function RuleLibrary({
                   {getMetricLabel(metric)}
                 </FitText>
               </span>
-              <span>
-                <FitText style={{ fontSize: 12, fontWeight: 800 }}>
-                  {formatLabel(row.verificationPolicy)}
+              <span className="milestone-rule-evaluation">
+                <FitText style={{ display: "block", fontSize: 12, fontWeight: 800 }}>
+                  {row.verificationPolicy === "auto" ? "Automatic" : formatLabel(row.verificationPolicy)}
                 </FitText>
-              </span>
-              <span>
-                <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
-                  {formatLabel(row.evidenceRequirement)}
+                <FitText style={{ display: "block", marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                  {row.evidenceRequirement === "none" ? "No proof" : formatLabel(row.evidenceRequirement)}
                 </FitText>
               </span>
               <span>
@@ -1694,7 +1517,7 @@ function ruleBoardStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     .milestone-rule-head,
     .milestone-rule-row {
       display: grid;
-      grid-template-columns: minmax(220px, 1.35fr) minmax(96px, 0.55fr) minmax(132px, 0.8fr) minmax(94px, 0.55fr) minmax(76px, 0.45fr) minmax(80px, 0.5fr) minmax(108px, 0.65fr) minmax(136px, 136px);
+      grid-template-columns: minmax(260px, 1.7fr) minmax(104px, 0.58fr) minmax(150px, 0.9fr) minmax(112px, 0.62fr) minmax(86px, 0.48fr) minmax(118px, 0.68fr) minmax(136px, 136px);
       align-items: center;
       gap: 10px;
     }
@@ -1713,7 +1536,7 @@ function ruleBoardStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     .milestone-rule-body {
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
+      overflow-y: hidden;
       overflow-x: hidden;
     }
 
@@ -1724,8 +1547,8 @@ function ruleBoardStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       border-bottom: 1px solid ${colors.border};
       background: transparent;
       color: ${colors.textPrimary};
-      min-height: 74px;
-      padding: 10px 12px;
+      min-height: 56px;
+      padding: 7px 12px;
       text-align: left;
       cursor: pointer;
       transition: background 160ms ease, border-color 160ms ease;
@@ -1756,6 +1579,20 @@ function ruleBoardStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       align-items: center;
       gap: 10px;
       min-width: 0;
+    }
+
+    .milestone-rule-main > span:last-child,
+    .milestone-rule-row > span,
+    .milestone-rule-evaluation {
+      min-width: 0;
+    }
+
+    .milestone-rule-main > span:last-child > *,
+    .milestone-rule-row > span:not(.milestone-rule-main):not(.milestone-rule-actions) > * {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .milestone-rule-icon {
@@ -1801,7 +1638,7 @@ function ruleBoardStyles(colors: ReturnType<typeof useTheme>["colors"]) {
 
       .milestone-rule-head,
       .milestone-rule-row {
-        min-width: 1040px;
+        min-width: 1120px;
       }
     }
   `;
@@ -1823,13 +1660,7 @@ function DefinitionInspector({
   const { colors } = useTheme();
 
   if (!record) {
-    return (
-      <FitSection className="milestones-inspector-section" heading="Inspector">
-        <FitText style={{ color: colors.textSecondary }}>
-          Select a milestone to inspect its automatic rule, reward, and lifecycle.
-        </FitText>
-      </FitSection>
-    );
+    return null;
   }
 
   const metric = String(record.conditionPayload?.metric ?? "");
@@ -1837,19 +1668,7 @@ function DefinitionInspector({
   const sources = getConnectedSources(record);
 
   return (
-    <FitSection
-      className="milestones-inspector-section"
-      heading="Inspector"
-      action={
-        <FitButton
-          icon={Pencil}
-          iconOnly
-          variant="ghost"
-          aria-label={`Edit ${record.title}`}
-          onClick={() => onEdit(record)}
-        />
-      }
-    >
+    <div className="milestones-details-panel">
       <div className="milestones-inspector-scroll">
         <div className="milestones-inspector-identity">
           <div
@@ -1997,6 +1816,12 @@ function DefinitionInspector({
         </div>
       </div>
       <style>{`
+        .milestones-details-panel {
+          display: flex;
+          min-height: 0;
+          flex-direction: column;
+        }
+
         .milestones-inspector-scroll {
           display: flex;
           flex: 1;
@@ -2096,7 +1921,7 @@ function DefinitionInspector({
           gap: 6px;
         }
       `}</style>
-    </FitSection>
+    </div>
   );
 }
 
@@ -2140,191 +1965,291 @@ function MilestoneInsightsPanel({
     (definition) => definition.verificationPolicy === "auto",
   ).length;
   const coveredCategories = categoryCoverage.filter((item) => item.count > 0).length;
+  const totalRules = Math.max(definitions.length, 1);
+  const automaticPercent = Math.round((automaticRules / totalRules) * 100);
+  const atRiskRules = [...definitions]
+    .filter((definition) => definition.pendingReviewCount > 0 || definition.unlockedCount === 0)
+    .sort((left, right) => right.pendingReviewCount - left.pendingReviewCount)
+    .slice(0, 4);
+  const mostUnlocked = [...definitions]
+    .sort((left, right) => right.unlockedCount - left.unlockedCount)
+    .slice(0, 4);
+  const maxCategoryCount = Math.max(1, ...categoryCoverage.map((item) => item.count));
 
   return (
     <section className="milestones-insights-shell">
-      <div className="milestones-insights-hero">
+      <div className="milestones-insights-header">
         <div>
-          <FitText as="h2" style={{ display: "block", fontSize: 24, fontWeight: 950 }}>
-            Milestone system health
+          <FitText as="h2" style={{ display: "block", fontSize: 19, fontWeight: 950 }}>
+            Milestone insights
           </FitText>
-          <FitText style={{ display: "block", marginTop: 5, color: colors.textSecondary, fontSize: 13 }}>
-            See whether the rule library is grounded across workouts, nutrition, coaching,
-            bookings, weighted lifts, and Brodigy AI.
+          <FitText style={{ display: "block", marginTop: 3, color: colors.textSecondary, fontSize: 12 }}>
+            Coverage, evaluation health, and the rules that need attention.
           </FitText>
         </div>
-        <div className="milestones-insights-actions">
-          <FitButton label="Create milestone" icon={Plus} onClick={onCreate} />
-        </div>
+        <FitButton label="Create milestone" icon={Plus} onClick={onCreate} />
       </div>
 
-      <div className="milestones-insight-grid">
-        <MetricCard
-          icon={Medal}
-          label="Rules on page"
-          value={String(definitions.length)}
-          hint="filtered library"
-          tone={colors.brand}
-        />
-        <MetricCard
-          icon={ShieldCheck}
-          label="Automatic rules"
-          value={String(automaticRules)}
-          hint="evaluated from activity"
-          tone={colors.success}
-        />
-        <MetricCard
-          icon={Sparkles}
-          label="Coverage areas"
-          value={String(coveredCategories)}
-          hint="active rule categories"
-          tone={colors.brand}
-        />
-        <MetricCard
-          icon={Bot}
-          label="Integrity policy"
-          value="Advisory"
-          hint="warns without blocking"
-          tone={colors.textSecondary}
-        />
-      </div>
-
-      <div className="milestones-insights-two-column">
-        <FitSection heading="Coverage Map">
-          <div className="milestones-coverage-grid">
+      <div className="milestones-insights-dashboard">
+        <section className="milestones-insight-panel milestones-coverage-panel">
+          <div className="milestones-panel-heading">
+            <div>
+              <FitText as="h3" style={{ fontSize: 15, fontWeight: 900 }}>Category coverage</FitText>
+              <FitText style={{ display: "block", marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                {coveredCategories} categories represented on this page
+              </FitText>
+            </div>
+            <Grid2X2 size={17} color={colors.brand} />
+          </div>
+          <div className="milestones-coverage-list">
             {categoryCoverage.map((item) => (
-              <div key={item.label} className={item.count ? "coverage-item active" : "coverage-item"}>
-                <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary }}>
-                  {item.label}
-                </FitText>
-                <FitText style={{ display: "block", marginTop: 4, fontSize: 20, fontWeight: 950 }}>
-                  {item.count}
-                </FitText>
+              <div key={item.label} className="milestones-coverage-row">
+                <span>{item.label}</span>
+                <span className="milestones-coverage-track">
+                  <span style={{ width: `${(item.count / maxCategoryCount) * 100}%` }} />
+                </span>
+                <strong>{item.count}</strong>
               </div>
             ))}
           </div>
-        </FitSection>
+        </section>
 
-        <FitSection heading="Operator Checklist">
-          <div className="milestones-checklist">
+        <section className="milestones-insight-panel milestones-evaluation-panel">
+          <div className="milestones-panel-heading">
             <div>
-              <Sparkles size={18} color={colors.brand} />
-              <span>Use quick numeric goals for 1st, 10th, 50th, and 100th moments.</span>
+              <FitText as="h3" style={{ fontSize: 15, fontWeight: 900 }}>Evaluation breakdown</FitText>
+              <FitText style={{ display: "block", marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                How progress is verified
+              </FitText>
             </div>
-            <div>
-              <ShieldCheck size={18} color={colors.success} />
-              <span>Unlock achieved milestones automatically from validated member activity.</span>
+            <ShieldCheck size={17} color={colors.success} />
+          </div>
+          <div className="milestones-evaluation-content">
+            <div
+              className="milestones-evaluation-donut"
+              style={{ background: `conic-gradient(${colors.success} 0 ${automaticPercent}%, ${colors.border} ${automaticPercent}% 100%)` }}
+            >
+              <div><strong>{automaticPercent}%</strong><span>automatic</span></div>
             </div>
-            <div>
-              <Sparkles size={18} color={colors.warning} />
-              <span>Show suspicious workout records as advisories without blocking earned rewards.</span>
-            </div>
-            <div>
-              <Bot size={18} color={colors.brand} />
-              <span>Ground Brodigy AI achievements in completed actions, not vague chat volume.</span>
+            <div className="milestones-evaluation-legend">
+              <span><i style={{ background: colors.success }} />Automatic <strong>{automaticRules}</strong></span>
+              <span><i style={{ background: colors.border }} />Other <strong>{definitions.length - automaticRules}</strong></span>
+              <span><i style={{ background: colors.warning }} />Integrity <strong>Advisory</strong></span>
             </div>
           </div>
-        </FitSection>
+        </section>
+
+        <section className="milestones-insight-panel milestones-list-panel">
+          <div className="milestones-panel-heading">
+            <div>
+              <FitText as="h3" style={{ fontSize: 15, fontWeight: 900 }}>Needs attention</FitText>
+              <FitText style={{ display: "block", marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                Pending review or no recorded unlocks
+              </FitText>
+            </div>
+            <AlertTriangle size={17} color={colors.warning} />
+          </div>
+          <div className="milestones-compact-list">
+            {atRiskRules.length ? atRiskRules.map((definition) => (
+              <div key={definition.id}>
+                <span><strong>{definition.title}</strong><small>{formatLabel(definition.category)}</small></span>
+                <b>{definition.pendingReviewCount ? `${definition.pendingReviewCount} pending` : "0 unlocks"}</b>
+              </div>
+            )) : <div className="milestones-insight-empty">No rules need attention.</div>}
+          </div>
+        </section>
+
+        <section className="milestones-insight-panel milestones-list-panel">
+          <div className="milestones-panel-heading">
+            <div>
+              <FitText as="h3" style={{ fontSize: 15, fontWeight: 900 }}>Most unlocked</FitText>
+              <FitText style={{ display: "block", marginTop: 2, fontSize: 11, color: colors.textSecondary }}>
+                Highest member adoption on this page
+              </FitText>
+            </div>
+            <Trophy size={17} color={colors.brand} />
+          </div>
+          <div className="milestones-compact-list">
+            {mostUnlocked.length ? mostUnlocked.map((definition) => (
+              <div key={definition.id}>
+                <span><strong>{definition.title}</strong><small>{formatLabel(definition.category)}</small></span>
+                <b>{definition.unlockedCount.toLocaleString()}</b>
+              </div>
+            )) : <div className="milestones-insight-empty">No unlock activity yet.</div>}
+          </div>
+        </section>
       </div>
 
       <style>{`
         .milestones-insights-shell {
           display: flex;
+          flex: 1;
+          min-height: 0;
           flex-direction: column;
-          gap: 14px;
+          gap: 10px;
+          overflow: hidden;
         }
 
-        .milestones-insights-hero {
+        .milestones-insights-header {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
+          align-items: center;
           gap: 16px;
           border: 1px solid ${colors.border};
-          border-radius: 14px;
+          border-radius: 10px;
           background: ${colors.surface};
-          padding: 16px;
+          padding: 12px 14px;
+          flex-shrink: 0;
         }
 
-        .milestones-insights-actions {
-          display: flex;
+        .milestones-insights-dashboard {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: repeat(2, minmax(0, 1fr));
           gap: 10px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
+          flex: 1;
+          min-height: 0;
         }
 
-        .milestones-insight-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .milestones-insights-two-column {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-          gap: 14px;
-        }
-
-        .milestones-coverage-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .coverage-item {
+        .milestones-insight-panel {
+          min-width: 0;
+          min-height: 0;
+          overflow: hidden;
           border: 1px solid ${colors.border};
           border-radius: 10px;
-          background: ${colors.surfaceRaised};
-          padding: 12px;
+          background: ${colors.surface};
+          padding: 13px;
         }
 
-        .coverage-item.active {
-          border-color: ${colors.brand}55;
-          background: ${colors.brand}10;
+        .milestones-panel-heading {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
         }
 
-        .milestones-checklist {
+        .milestones-coverage-list,
+        .milestones-compact-list {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .milestones-coverage-list {
+          gap: 7px;
+        }
+
+        .milestones-coverage-row {
+          display: grid;
+          grid-template-columns: minmax(90px, 0.8fr) minmax(100px, 1.4fr) 24px;
+          align-items: center;
+          gap: 9px;
+          color: ${colors.textSecondary};
+          font-size: 11px;
+        }
+
+        .milestones-coverage-track {
+          height: 6px;
+          border-radius: 999px;
+          background: ${colors.border};
+          overflow: hidden;
+        }
+
+        .milestones-coverage-track span {
+          display: block;
+          height: 100%;
+          min-width: 2px;
+          border-radius: inherit;
+          background: ${colors.brand};
+        }
+
+        .milestones-evaluation-content {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 26px;
+          min-height: 165px;
+        }
+
+        .milestones-evaluation-donut {
+          width: 124px;
+          height: 124px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          flex-shrink: 0;
+        }
+
+        .milestones-evaluation-donut > div {
+          width: 88px;
+          height: 88px;
+          border-radius: 50%;
+          display: grid;
+          place-content: center;
+          text-align: center;
+          background: ${colors.surface};
+        }
+
+        .milestones-evaluation-donut strong { font-size: 22px; }
+        .milestones-evaluation-donut span { color: ${colors.textSecondary}; font-size: 10px; }
+
+        .milestones-evaluation-legend {
           display: flex;
           flex-direction: column;
           gap: 10px;
+          min-width: 150px;
         }
 
-        .milestones-checklist div {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          border: 1px solid ${colors.border};
-          border-radius: 10px;
-          background: ${colors.surfaceRaised};
-          padding: 12px;
-          color: ${colors.textPrimary};
-          font-size: 13px;
-          font-weight: 750;
-          line-height: 1.45;
+        .milestones-evaluation-legend span {
+          display: grid;
+          grid-template-columns: 8px 1fr auto;
+          align-items: center;
+          gap: 8px;
+          color: ${colors.textSecondary};
+          font-size: 11px;
         }
+
+        .milestones-evaluation-legend i {
+          width: 8px;
+          height: 8px;
+          border-radius: 2px;
+        }
+
+        .milestones-compact-list > div {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          min-height: 43px;
+          border-top: 1px solid ${colors.border};
+          padding: 7px 2px;
+        }
+
+        .milestones-compact-list > div:first-child { border-top: 0; }
+        .milestones-compact-list span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+        .milestones-compact-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+        .milestones-compact-list small { color: ${colors.textSecondary}; font-size: 10px; }
+        .milestones-compact-list b { color: ${colors.brand}; font-size: 11px; white-space: nowrap; }
+        .milestones-insight-empty { color: ${colors.textSecondary}; font-size: 12px; }
 
         @media (max-width: 980px) {
-          .milestones-insight-grid,
-          .milestones-insights-two-column {
+          .milestones-insights-shell { overflow: visible; }
+          .milestones-insights-dashboard {
             grid-template-columns: 1fr;
+            grid-template-rows: none;
           }
-
-          .milestones-insights-hero {
-            flex-direction: column;
-          }
-
-          .milestones-insights-actions {
-            justify-content: flex-start;
-          }
-
-          .milestones-coverage-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+          .milestones-insights-header { align-items: flex-start; flex-direction: column; }
         }
       `}</style>
     </section>
   );
 }
 
+/*
+ * Legacy manual-proof inspector retained only as historical source until the
+ * corresponding API surface is removed. It is intentionally not compiled or
+ * reachable: milestones now unlock from recorded activity without uploads.
 function EvidenceInspector({
   isPending,
   onApprove,
@@ -2344,10 +2269,50 @@ function EvidenceInspector({
 
   if (!record) {
     return (
-      <FitSection heading="Proof Inspector">
-        <FitText style={{ color: colors.textSecondary }}>
-          Select proof to review the attached image or MP4 evidence.
-        </FitText>
+      <FitSection className="milestones-inspector-section" heading="Proof inspector">
+        <div className="milestone-proof-empty">
+          <div className="milestone-proof-empty-icon">
+            <ClipboardCheck size={24} color={colors.brand} />
+          </div>
+          <FitText style={{ display: "block", fontSize: 16, fontWeight: 900 }}>
+            Select a proof review
+          </FitText>
+          <FitText
+            style={{
+              display: "block",
+              maxWidth: 300,
+              color: colors.textSecondary,
+              fontSize: 13,
+              lineHeight: 1.5,
+              textAlign: "center",
+            }}
+          >
+            Manual proof appears only for legacy or evidence-based milestones. Choose a queue item to inspect its image or video.
+          </FitText>
+        </div>
+        <style>{`
+          .milestone-proof-empty {
+            min-height: clamp(280px, 46vh, 520px);
+            display: grid;
+            place-content: center;
+            justify-items: center;
+            gap: 10px;
+            border: 1px dashed ${colors.border};
+            border-radius: 12px;
+            background: ${colors.surfaceRaised};
+            padding: 24px;
+          }
+
+          .milestone-proof-empty-icon {
+            width: 48px;
+            height: 48px;
+            display: grid;
+            place-items: center;
+            border: 1px solid ${colors.brand}55;
+            border-radius: 12px;
+            background: ${colors.brand}12;
+          }
+        `}</style>
       </FitSection>
     );
   }
@@ -2371,7 +2336,7 @@ function EvidenceInspector({
   );
 
   return (
-    <FitSection heading="Proof Inspector">
+    <FitSection className="milestones-inspector-section" heading="Proof inspector">
       <div className="evidence-review-card">
         <div className="evidence-review-person">
           <div className="evidence-avatar">
@@ -2520,17 +2485,20 @@ function EvidenceInspector({
     </FitSection>
   );
 }
+*/
 
 function DefinitionForm({
   draft,
   error,
   onApplyQuickRule,
   onChange,
+  step,
 }: {
   draft: DefinitionDraft;
   error: string | null;
   onApplyQuickRule: () => void;
   onChange: (next: DefinitionDraft) => void;
+  step: 1 | 2 | 3;
 }) {
   const { colors } = useTheme();
   const selectedMetric = getMetricOption(draft.metric);
@@ -2583,7 +2551,7 @@ function DefinitionForm({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="milestone-definition-form">
       {error ? (
         <div
           style={{
@@ -2600,53 +2568,54 @@ function DefinitionForm({
       ) : null}
 
       <div className="milestone-form-steps" aria-label="Milestone setup steps">
-        <span className="active"><b>1</b> Goal</span>
-        <span className={goalReady ? "active" : ""}><b>2</b> Reward</span>
-        <span className={rewardReady ? "active" : ""}><b>3</b> Review</span>
+        <span className={step >= 1 ? "active" : ""} aria-current={step === 1 ? "step" : undefined}>
+          <b>{step > 1 ? <CheckCircle2 size={13} /> : 1}</b> Goal
+        </span>
+        <span className={step >= 2 ? "active" : ""} aria-current={step === 2 ? "step" : undefined}>
+          <b>{step > 2 ? <CheckCircle2 size={13} /> : 2}</b> Reward
+        </span>
+        <span className={step >= 3 ? "active" : ""} aria-current={step === 3 ? "step" : undefined}>
+          <b>3</b> Review
+        </span>
       </div>
 
-      <section className="milestone-form-section milestone-form-section--highlight">
-        <div className="milestone-section-heading">
-          <div className="milestone-section-icon">
-            <Target size={17} color={colors.brand} />
+      {step === 1 ? <section className="milestone-form-section milestone-goal-layout">
+        <div className="milestone-goal-column">
+          <div className="milestone-column-heading">
+            <Target size={16} color={colors.brand} />
+            <FitText style={{ fontSize: 14, fontWeight: 900 }}>Milestone identity</FitText>
           </div>
-          <div>
-            <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
-              Goal
-            </FitText>
-            <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-              Name the milestone and choose the number that unlocks it.
-            </FitText>
+          <div className="milestone-form-grid milestone-detail-grid">
+            <Field label="Title">
+              <FitTextInput
+                value={draft.title}
+                onChange={(event) => update("title", event.target.value)}
+                placeholder="First Weighted Lift"
+              />
+            </Field>
+            <Field label="Short code">
+              <FitTextInput
+                value={draft.key}
+                onChange={(event) => update("key", event.target.value)}
+                placeholder={slugifyMilestoneKey(draft.title) || "first-weighted-lift"}
+              />
+            </Field>
           </div>
-        </div>
-
-        <div className="milestone-form-grid milestone-detail-grid">
-          <Field label="Title">
-            <FitTextInput
-              value={draft.title}
-              onChange={(event) => update("title", event.target.value)}
-              placeholder="First Weighted Lift"
+          <Field label="Member-facing description">
+            <FitTextArea
+              value={draft.description}
+              onChange={(event) => update("description", event.target.value)}
+              placeholder="Describe what the member must complete."
+              style={{ minHeight: 96 }}
             />
           </Field>
-          <Field label="Short code">
-            <FitTextInput
-              value={draft.key}
-              onChange={(event) => update("key", event.target.value)}
-              placeholder={slugifyMilestoneKey(draft.title) || "first-weighted-lift"}
-            />
-          </Field>
         </div>
 
-        <Field className="milestone-description-field" label="Member-facing description">
-          <FitTextArea
-            value={draft.description}
-            onChange={(event) => update("description", event.target.value)}
-            placeholder="Describe what the member must complete."
-            style={{ minHeight: 52 }}
-          />
-        </Field>
-
-        <div className="milestone-form-grid milestone-form-grid--three milestone-goal-controls">
+        <div className="milestone-goal-column milestone-unlock-column">
+          <div className="milestone-column-heading">
+            <SlidersHorizontal size={16} color={colors.brand} />
+            <FitText style={{ fontSize: 14, fontWeight: 900 }}>Unlock rule</FitText>
+          </div>
           <Field label="What should count?">
             <FitSelect
               fullWidth
@@ -2658,39 +2627,43 @@ function DefinitionForm({
               onChange={(event) => updateMetric(event.target.value)}
             />
           </Field>
-          <Field label="Goal number">
-            <FitTextInput
-              type="number"
-              min={1}
-              value={draft.target}
-              onChange={(event) => update("target", event.target.value)}
-              placeholder="1, 50, 100..."
-            />
-          </Field>
-          <div className="milestone-target-row" aria-label="Quick goal numbers">
-            {QUICK_TARGETS.map((target) => (
-              <button
-                key={target}
-                type="button"
-                className={draft.target === String(target) ? "active" : ""}
-                onClick={() => update("target", String(target))}
-              >
-                {target === 1 ? "1st" : target.toLocaleString()}
-              </button>
-            ))}
+          <div className="milestone-target-controls">
+            <Field label="Target number">
+              <FitTextInput
+                type="number"
+                min={1}
+                value={draft.target}
+                onChange={(event) => update("target", event.target.value)}
+                placeholder="1, 50, 100..."
+              />
+            </Field>
+            <div className="milestone-target-row" aria-label="Quick goal numbers">
+              {QUICK_TARGETS.map((target) => (
+                <button
+                  key={target}
+                  type="button"
+                  className={draft.target === String(target) ? "active" : ""}
+                  onClick={() => update("target", String(target))}
+                >
+                  {target === 1 ? "1st" : target.toLocaleString()}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        <div className="milestone-helper-card milestone-helper-card--goal">
-          <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary }}>
-            {selectedMetric.helper}
-          </FitText>
-          <FitButton
-            label="Use quick rule"
-            icon={SlidersHorizontal}
-            variant="ghost"
-            onClick={onApplyQuickRule}
-          />
+          <div className="milestone-helper-card milestone-helper-card--goal">
+            <span className="milestone-helper-copy">
+              <CheckCircle2 size={15} color={colors.success} />
+              <FitText style={{ fontSize: 12, color: colors.textSecondary }}>
+                {selectedMetric.helper}
+              </FitText>
+            </span>
+            <FitButton
+              label="Use quick rule"
+              icon={SlidersHorizontal}
+              variant="ghost"
+              onClick={onApplyQuickRule}
+            />
+          </div>
         </div>
 
         <div className="milestone-form-grid milestone-form-grid--three milestone-rule-settings">
@@ -2725,25 +2698,42 @@ function DefinitionForm({
             />
           </Field>
         </div>
-      </section>
+      </section> : null}
 
-      {rewardReady ? (
-        <section className="milestone-form-section">
-          <div className="milestone-section-heading">
-            <div className="milestone-section-icon milestone-section-icon--subtle">
-              <Medal size={17} color={colors.success} />
-            </div>
-            <div>
-              <FitText style={{ display: "block", fontSize: 13, fontWeight: 900 }}>
-                Reward
-              </FitText>
-              <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                Badge and XP shown when the milestone is claimed.
-              </FitText>
+      {step === 2 && rewardReady ? (
+        <section className="milestone-reward-layout">
+          <div className="milestone-member-preview">
+            <FitText style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 850 }}>
+              Member preview
+            </FitText>
+            <div className="milestone-preview-medallion"><Dumbbell size={32} /></div>
+            <FitText as="h3" style={{ fontSize: 18, fontWeight: 950, textAlign: "center" }}>
+              {draft.title.trim() || "Untitled milestone"}
+            </FitText>
+            <FitText style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center" }}>
+              Unlock after {previewCondition.toLowerCase()}.
+            </FitText>
+            <div className="milestone-preview-reward">
+              <Sparkles size={18} color={colors.success} />
+              <strong>{parsePositiveNumber(draft.xpBonus, 0)} EXP</strong>
             </div>
           </div>
-          <div className="milestone-form-grid milestone-form-grid--three">
-            <Field label="XP bonus">
+
+          <section className="milestone-form-section milestone-reward-config">
+            <div className="milestone-section-heading">
+              <div className="milestone-section-icon milestone-section-icon--subtle">
+                <Medal size={17} color={colors.success} />
+              </div>
+              <div>
+                <FitText style={{ display: "block", fontSize: 15, fontWeight: 900 }}>
+                  Reward configuration
+                </FitText>
+                <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  Choose the reward members see when the goal unlocks.
+                </FitText>
+              </div>
+            </div>
+            <Field label="EXP reward">
               <FitTextInput
                 type="number"
                 min={0}
@@ -2751,15 +2741,7 @@ function DefinitionForm({
                 onChange={(event) => update("xpBonus", event.target.value)}
               />
             </Field>
-            <Field label="Badge color">
-              <FitSelect
-                fullWidth
-                options={BADGE_TONE_OPTIONS}
-                value={draft.badgeTone}
-                onChange={(event) => update("badgeTone", event.target.value)}
-              />
-            </Field>
-            <Field label="Badge icon">
+            <Field label="Badge">
               <FitSelect
                 fullWidth
                 options={BADGE_ICON_OPTIONS}
@@ -2767,33 +2749,75 @@ function DefinitionForm({
                 onChange={(event) => update("badgeIcon", event.target.value)}
               />
             </Field>
+            <Field label="Badge tone">
+              <FitSelect
+                fullWidth
+                options={BADGE_TONE_OPTIONS}
+                value={draft.badgeTone}
+                onChange={(event) => update("badgeTone", event.target.value)}
+              />
+            </Field>
+            <label className="milestone-checkbox-row milestone-visibility-row">
+              <input
+                type="checkbox"
+                checked={!draft.isHidden}
+                onChange={(event) => update("isHidden", !event.target.checked)}
+              />
+              Show locked milestone to members
+            </label>
+          </section>
+        </section>
+      ) : null}
+
+      {step === 3 && rewardReady ? (
+        <section className="milestone-review-layout">
+          <div className="milestone-review-summary">
+            <FitText as="h3" style={{ fontSize: 16, fontWeight: 950 }}>Summary</FitText>
+            <div className="milestone-summary-group">
+              <span>Goal</span>
+              <strong>{draft.title || "Untitled milestone"}</strong>
+              <p>{draft.description || "No member-facing description."}</p>
+            </div>
+            <div className="milestone-summary-grid">
+              <InspectorFact label="Unlock rule" value={previewCondition} />
+              <InspectorFact label="Category" value={formatLabel(draft.category)} />
+              <InspectorFact label="Status" value={formatLabel(draft.status)} />
+              <InspectorFact label="Reward" value={previewReward} />
+            </div>
+            <div className="milestone-review-readiness">
+              <CheckCircle2 size={16} color={colors.success} />
+              <span>Required goal and reward fields are complete.</span>
+            </div>
+          </div>
+
+          <div className="milestone-member-preview milestone-member-preview--review">
+            <FitText style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 850 }}>
+              Member preview
+            </FitText>
+            <div className="milestone-preview-medallion"><Dumbbell size={34} /></div>
+            <FitText as="h3" style={{ fontSize: 18, fontWeight: 950, textAlign: "center" }}>
+              {draft.title.trim() || "Untitled milestone"}
+            </FitText>
+            <FitText style={{ fontSize: 13, color: colors.textSecondary, textAlign: "center", lineHeight: 1.5 }}>
+              {draft.description || previewCondition}
+            </FitText>
+            <div className="milestone-preview-reward">
+              <Sparkles size={18} color={colors.success} />
+              <strong>{parsePositiveNumber(draft.xpBonus, 0)} EXP</strong>
+            </div>
           </div>
         </section>
       ) : null}
 
-      {rewardReady ? (
-        <section className="milestone-preview-card">
-          <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, fontWeight: 800 }}>
-            Review before saving
-          </FitText>
-          <FitText style={{ display: "block", marginTop: 6, fontSize: 14, fontWeight: 850 }}>
-            {previewCondition}
-          </FitText>
-          <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-            Automatic unlock / No proof required / {previewReward}
-          </FitText>
-        </section>
-      ) : null}
-
-      <button
+      {step === 1 ? <button
         type="button"
         className="milestone-advanced-toggle"
         onClick={toggleAdvanced}
       >
         {draft.advancedOpen ? "Hide schedule and visibility" : "Schedule and visibility"}
-      </button>
+      </button> : null}
 
-      {draft.advancedOpen ? (
+      {step === 1 && draft.advancedOpen ? (
         <section className="milestone-form-section">
           <div className="milestone-form-grid milestone-form-grid--three">
             <Field label="Starts at">
@@ -2849,21 +2873,42 @@ function DefinitionForm({
       ) : null}
 
       <style>{`
+        .milestone-definition-form {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
         .milestone-form-steps {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          padding: 0 4px 2px;
         }
 
         .milestone-form-steps span {
           display: flex;
           align-items: center;
           gap: 8px;
-          border-bottom: 1px solid ${colors.border};
           color: ${colors.textSecondary};
-          padding-bottom: 8px;
+          padding: 6px 0 10px;
           font-size: 12px;
           font-weight: 850;
+          position: relative;
+        }
+
+        .milestone-form-steps span::after {
+          content: "";
+          position: absolute;
+          left: 30px;
+          right: -12px;
+          bottom: 0;
+          height: 1px;
+          background: ${colors.border};
+        }
+
+        .milestone-form-steps span:last-child::after {
+          right: 0;
         }
 
         .milestone-form-steps b {
@@ -2878,14 +2923,130 @@ function DefinitionForm({
         }
 
         .milestone-form-steps span.active {
-          border-bottom-color: ${colors.brand};
           color: ${colors.brand};
+        }
+
+        .milestone-form-steps span.active::after {
+          background: ${colors.brand};
         }
 
         .milestone-form-steps span.active b {
           border-color: ${colors.brand};
           background: ${colors.brand};
           color: #ffffff;
+        }
+
+        .milestone-reward-layout,
+        .milestone-review-layout {
+          display: grid;
+          grid-template-columns: minmax(280px, 0.82fr) minmax(360px, 1.18fr);
+          gap: 16px;
+          min-height: 388px;
+        }
+
+        .milestone-member-preview,
+        .milestone-review-summary {
+          min-width: 0;
+          border: 1px solid ${colors.border};
+          border-radius: 12px;
+          background: ${colors.surfaceRaised};
+          padding: 18px;
+        }
+
+        .milestone-member-preview {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+        }
+
+        .milestone-preview-medallion {
+          width: 72px;
+          height: 72px;
+          display: grid;
+          place-items: center;
+          border: 2px solid ${colors.brand};
+          border-radius: 20px;
+          color: ${colors.brand};
+          background: ${colors.brand}0D;
+          transform: rotate(45deg);
+        }
+
+        .milestone-preview-medallion > * {
+          transform: rotate(-45deg);
+        }
+
+        .milestone-preview-reward {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-top: 1px solid ${colors.border};
+          padding-top: 12px;
+          font-size: 16px;
+        }
+
+        .milestone-reward-config {
+          justify-content: flex-start;
+          gap: 12px;
+          padding: 18px;
+        }
+
+        .milestone-visibility-row {
+          margin-top: 2px;
+          border: 1px solid ${colors.border};
+          border-radius: 10px;
+          background: ${colors.surface};
+          padding: 12px;
+        }
+
+        .milestone-review-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .milestone-summary-group {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          border-bottom: 1px solid ${colors.border};
+          padding-bottom: 14px;
+        }
+
+        .milestone-summary-group span {
+          color: ${colors.textSecondary};
+          font-size: 11px;
+          font-weight: 850;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .milestone-summary-group p {
+          margin: 0;
+          color: ${colors.textSecondary};
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .milestone-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .milestone-review-readiness {
+          margin-top: auto;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          border: 1px solid ${colors.success}55;
+          border-radius: 10px;
+          background: ${colors.success}12;
+          padding: 11px;
+          color: ${colors.textPrimary};
+          font-size: 12px;
+          font-weight: 800;
         }
 
         .milestone-form-section {
@@ -2898,12 +3059,13 @@ function DefinitionForm({
           padding: 12px;
         }
 
-        .milestone-form-section--highlight {
-          border-color: ${colors.brand}55;
-          background: ${colors.brand}10;
+        .milestone-goal-layout {
           display: grid;
-          grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 0;
           align-items: start;
+          padding: 0;
+          overflow: hidden;
         }
 
         .milestone-form-section--locked {
@@ -2916,23 +3078,36 @@ function DefinitionForm({
           gap: 10px;
         }
 
-        .milestone-form-section--highlight .milestone-section-heading,
+        .milestone-goal-column {
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          gap: 12px;
+          padding: 18px;
+        }
+
+        .milestone-unlock-column {
+          border-left: 1px solid ${colors.border};
+        }
+
+        .milestone-column-heading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding-bottom: 2px;
+        }
+
         .milestone-rule-settings {
           grid-column: 1 / -1;
+          border-top: 1px solid ${colors.border};
+          padding: 14px 18px 18px;
         }
 
-        .milestone-detail-grid,
-        .milestone-description-field {
-          grid-column: 1;
-        }
-
-        .milestone-goal-controls,
-        .milestone-helper-card--goal {
-          grid-column: 2;
-        }
-
-        .milestone-goal-controls {
-          grid-template-columns: minmax(0, 1fr) 82px minmax(160px, 0.75fr);
+        .milestone-target-controls {
+          display: grid;
+          grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.35fr);
+          align-items: end;
+          gap: 10px;
         }
 
         .milestone-section-icon {
@@ -2984,7 +3159,14 @@ function DefinitionForm({
         }
 
         .milestone-helper-card--goal {
-          min-height: 62px;
+          min-height: 58px;
+        }
+
+        .milestone-helper-copy {
+          display: flex;
+          min-width: 0;
+          align-items: flex-start;
+          gap: 8px;
         }
 
         .milestone-target-row {
@@ -3067,21 +3249,26 @@ function DefinitionForm({
         }
 
         @media (max-width: 760px) {
-          .milestone-form-section--highlight {
+          .milestone-reward-layout,
+          .milestone-review-layout {
+            grid-template-columns: 1fr;
+            min-height: 0;
+          }
+
+          .milestone-goal-layout,
+          .milestone-target-controls {
             grid-template-columns: 1fr;
           }
 
-          .milestone-detail-grid,
-          .milestone-description-field,
-          .milestone-goal-controls,
-          .milestone-helper-card--goal,
-          .milestone-rule-settings {
-            grid-column: 1;
+          .milestone-unlock-column {
+            border-top: 1px solid ${colors.border};
+            border-left: 0;
           }
 
           .milestone-form-steps,
           .milestone-form-grid,
-          .milestone-form-grid--three {
+          .milestone-form-grid--three,
+          .milestone-summary-grid {
             grid-template-columns: 1fr;
           }
 

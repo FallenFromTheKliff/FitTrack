@@ -153,6 +153,7 @@ export class TrainingPlanRepository extends BaseRepository {
     Array<{
       created_at: Date;
       exercise_id: string;
+      plan_exercise_id: string | null;
       reps_completed: number | null;
       session_id: string;
       weight_kg: Prisma.Decimal | null;
@@ -173,6 +174,7 @@ export class TrainingPlanRepository extends BaseRepository {
       select: {
         created_at: true,
         exercise_id: true,
+        plan_exercise_id: true,
         reps_completed: true,
         session_id: true,
         weight_kg: true,

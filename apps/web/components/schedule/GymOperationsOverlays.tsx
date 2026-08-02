@@ -292,8 +292,7 @@ export function GymOperationsCreateVenueBookingModal({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [note, setNote] = useState("");
-  const [paymentStage, setPaymentStage] =
-    useState<StaffInitialPaymentStage>("full");
+  const paymentStage: StaffInitialPaymentStage = "full";
   const [errorText, setErrorText] = useState("");
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
@@ -324,7 +323,6 @@ export function GymOperationsCreateVenueBookingModal({
     setStartTime("09:00");
     setEndTime("10:00");
     setNote("");
-    setPaymentStage("full");
     setErrorText("");
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions, venueOptions]);
@@ -503,7 +501,7 @@ export function GymOperationsCreateVenueBookingModal({
 
     setCreateConfirm({
       confirmLabel: "CREATE BOOKING",
-      message: `Create this manual venue booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
+      message: `Create this manual venue booking and record ${formatPeso(amountDueNow)} as full cash payment?`,
       onConfirm: submitVenueBooking,
       title: "Confirm venue booking",
     });
@@ -753,37 +751,12 @@ export function GymOperationsCreateVenueBookingModal({
             />
           ) : null}
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Payment option
-            </FitText>
-            <FitSelect
-              id="manual-venue-booking-payment-option"
-              name="manualVenueBookingPaymentOption"
-              aria-label="Manual venue booking payment option"
-              value={paymentStage}
-              onChange={(event) =>
-                setPaymentStage(event.target.value as StaffInitialPaymentStage)
-              }
-              options={[
-                { label: "Cash Full Payment", value: "full" },
-                { label: "Cash Downpayment", value: "downpayment" },
-              ]}
-              compact
-              fullWidth
-            />
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted }}
-            >
-              {paymentStage === "downpayment"
-                ? `${formatPeso(amountDueNow)} is recorded now; ${formatPeso(remainingBalance)} remains pending full payment.`
-                : `${formatPeso(amountDueNow)} confirms this booking as fully paid.`}
-            </FitText>
-          </div>
+          <FitText
+            excludeGlobalScale
+            style={{ fontSize: 12, color: colors.textMuted }}
+          >
+            Cashier bookings record the full amount immediately. Member self-service cash and downpayment options are not available here.
+          </FitText>
 
           {hasConflict || errorText || venueAvailabilityMessage ? (
             <div
@@ -894,8 +867,7 @@ export function GymOperationsCreateCoachBookingModal({
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [slotValue, setSlotValue] = useState("");
   const [note, setNote] = useState("");
-  const [paymentStage, setPaymentStage] =
-    useState<StaffInitialPaymentStage>("full");
+  const paymentStage: StaffInitialPaymentStage = "full";
   const [errorText, setErrorText] = useState("");
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
@@ -929,7 +901,6 @@ export function GymOperationsCreateCoachBookingModal({
     setDatePickerOpen(false);
     setSlotValue("");
     setNote("");
-    setPaymentStage("full");
     setErrorText("");
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions]);
@@ -1004,9 +975,6 @@ export function GymOperationsCreateCoachBookingModal({
     estimatedCoachTotal,
     paymentStage,
   );
-  const remainingBalance = roundCurrency(
-    Math.max(estimatedCoachTotal - amountDueNow, 0),
-  );
   const canSubmit =
     Boolean(memberId) &&
     Boolean(coachId) &&
@@ -1047,7 +1015,7 @@ export function GymOperationsCreateCoachBookingModal({
 
     setCreateConfirm({
       confirmLabel: "CREATE COACH BOOKING",
-      message: `Create this manual coach booking and record ${formatPeso(amountDueNow)} as ${paymentStage === "downpayment" ? "cash downpayment" : "full cash payment"}?`,
+      message: `Create this manual coach booking and record ${formatPeso(amountDueNow)} as full cash payment?`,
       onConfirm: submitCoachBooking,
       title: "Confirm coach booking",
     });
@@ -1322,37 +1290,12 @@ export function GymOperationsCreateCoachBookingModal({
             ]}
           />
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Payment option
-            </FitText>
-            <FitSelect
-              id="manual-coach-booking-payment-option"
-              name="manualCoachBookingPaymentOption"
-              aria-label="Manual coach booking payment option"
-              value={paymentStage}
-              onChange={(event) =>
-                setPaymentStage(event.target.value as StaffInitialPaymentStage)
-              }
-              options={[
-                { label: "Cash Full Payment", value: "full" },
-                { label: "Cash Downpayment", value: "downpayment" },
-              ]}
-              compact
-              fullWidth
-            />
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted }}
-            >
-              {paymentStage === "downpayment"
-                ? `${formatPeso(amountDueNow)} is recorded now; ${formatPeso(remainingBalance)} remains pending full payment.`
-                : `${formatPeso(amountDueNow)} confirms this booking as fully paid.`}
-            </FitText>
-          </div>
+          <FitText
+            excludeGlobalScale
+            style={{ fontSize: 12, color: colors.textMuted }}
+          >
+            Cashier bookings record the full amount immediately. Member self-service cash and downpayment options are not available here.
+          </FitText>
 
           {errorText ? (
             <div

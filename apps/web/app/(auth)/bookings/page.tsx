@@ -11,17 +11,23 @@ import {
   Info,
   type LucideIcon,
   MessageSquareText,
-  Repeat,
   Send,
-  Ticket,
   UserRoundCheck,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { CoachAvailabilityResponse } from "@fittrack/api-client";
+import type {
+  CoachAvailabilityResponse,
+  RecurringCoachingBillingCycleRecord,
+  RecurringCoachingPlanRecord,
+} from "@fittrack/api-client";
 import { expandCoachAvailabilitySlots, formatBookingDate } from "@fittrack/utils";
 import { isPaymongoCheckoutEnabled, WEEKDAY_NAMES } from "@fittrack/app-config";
 import type { CoachProfileRecord, VenueRecord } from "@fittrack/types";
-import { activeCoachesQueryOptions, coachAvailabilityQueryOptions } from "@fittrack/query";
+import {
+  activeCoachesQueryOptions,
+  coachAvailabilityQueryOptions,
+  recurringCoachingPlansQueryOptions,
+} from "@fittrack/query";
 
 import FitButton from "@/components/fit/FitButton";
 import { FitPagination, FitSelect } from "@/components/fit";
@@ -53,11 +59,10 @@ import { useMemberOnlyAccess, useMemberOnlyBookingsData } from "@/hooks/member-o
 type BookingMode = "find" | "bookings";
 type CoachRatingFilter = "all" | "4" | "4.5";
 type CoachSkillFilter = "all" | string;
-type CoachBookingIntent = "single" | "pack" | "recurring";
+type CoachBookingIntent = "single" | "recurring";
 type ComposerPanelMode = "details" | "feedback";
 type BookingPanelMode = "details" | "timeline" | "feedback";
 type AppointmentInitialPaymentStage = "downpayment" | "full";
-type AppointmentPaymentProvider = "cash" | "paymongo";
 type AppointmentSlotOption = {
   durationMin: number;
   label: string;
@@ -65,14 +70,12 @@ type AppointmentSlotOption = {
 };
 type PendingAppointmentPayment = {
   booking: MemberBookingItem;
-  provider: AppointmentPaymentProvider;
-  stage: AppointmentInitialPaymentStage;
 };
 type PaymentConfirmationState = {
   message: string;
   title: string;
 };
-type ReservationPaymentOption = "paymongo_downpayment" | "cash_downpayment" | "cash_full";
+type ReservationPaymentOption = "paymongo_full";
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
 const BOOKING_MODE_OPTIONS: ReadonlyArray<{ icon: LucideIcon; label: string; value: BookingMode }> = [
@@ -91,8 +94,8 @@ const BOOKING_RECORDS_PAGE_SIZE = 8;
 const BOOKING_TOOLBAR_FILTER_WIDTH = 168;
 const BOOKING_TOOLBAR_SEARCH_WIDTH = 278;
 
-const REQUEST_TIME_OPTIONS = Array.from({ length: 31 }, (_, index) => {
-  const totalMinutes = 6 * 60 + index * 30;
+const REQUEST_TIME_OPTIONS = Array.from({ length: 16 }, (_, index) => {
+  const totalMinutes = 6 * 60 + index * 60;
   const hour = Math.floor(totalMinutes / 60);
   const minute = totalMinutes % 60;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -111,20 +114,6 @@ const BOOKING_INTENT_OPTIONS: ReadonlyArray<{
     label: "Single Session",
     sessionCount: 1,
     value: "single",
-  },
-  {
-    description: "Reserve a small block of sessions.",
-    icon: Ticket,
-    label: "Multi-Session Pack",
-    sessionCount: 3,
-    value: "pack",
-  },
-  {
-    description: "Plan a repeated weekly coaching rhythm.",
-    icon: Repeat,
-    label: "Recurring Plan",
-    sessionCount: 4,
-    value: "recurring",
   },
 ];
 
@@ -211,6 +200,12 @@ function formatDateChoice(value: string) {
 function getTodayDateInputValue() {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
+function getMaxBookableDateInputValue() {
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
+  return `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, "0")}-${String(maxDate.getDate()).padStart(2, "0")}`;
 }
 
 function timeToMinutes(value: string) {
@@ -1141,23 +1136,6 @@ function isAppointmentPaymentActionable(activeSection: BookingSection, booking: 
   );
 }
 
-function canStartFullAppointmentPayment(activeSection: BookingSection, booking: MemberBookingItem | null) {
-  if (activeSection !== "appointments" || !booking) return false;
-  return (
-    booking.status === "pending_payment" &&
-    booking.activePaymentStage !== "downpayment" &&
-    Number(booking.totalAmount ?? booking.amountDueNow ?? 0) > 0
-  );
-}
-
-function getAppointmentPaymentStage(booking: MemberBookingItem | null): AppointmentInitialPaymentStage {
-  if (booking?.activePaymentStage === "full") {
-    return "full";
-  }
-
-  return "downpayment";
-}
-
 function getAppointmentPaymentAmount(booking: MemberBookingItem, stage: AppointmentInitialPaymentStage) {
   if (stage === "full") {
     return Number(booking.totalAmount ?? booking.amountDueNow ?? 0);
@@ -2042,26 +2020,22 @@ function BookingInspectorActionFooter({
   actionsOpen,
   canCancel,
   canPayAppointment,
-  canPayAppointmentInFull,
   mode,
   onCancel,
   onPayAppointment,
   onSetActionsOpen,
   onSetMode,
   paymentLoading,
-  paymentStage,
 }: {
   actionsOpen: boolean;
   canCancel: boolean;
   canPayAppointment: boolean;
-  canPayAppointmentInFull: boolean;
   mode: BookingPanelMode;
   onCancel: () => void;
-  onPayAppointment: (provider: AppointmentPaymentProvider, stage: AppointmentInitialPaymentStage) => void;
+  onPayAppointment: (provider: "paymongo", stage: "full") => void;
   onSetActionsOpen: (value: boolean) => void;
   onSetMode: (mode: BookingPanelMode) => void;
   paymentLoading: boolean;
-  paymentStage: AppointmentInitialPaymentStage;
 }) {
   const { colors } = useTheme();
   const compactActionStyle: CSSProperties = {
@@ -2125,56 +2099,17 @@ function BookingInspectorActionFooter({
             />
           ))}
           {canPayAppointment ? (
-            <>
-              <FitButton
-                variant="primary"
-                label={paymentStage === "full" ? "PAYMONGO FULL" : "PAYMONGO DOWNPAYMENT"}
-                fullWidth
-                disabled={paymentLoading}
-                loading={paymentLoading}
-                loadingLabel="CONFIRMING"
-                onClick={() => onPayAppointment("paymongo", paymentStage)}
-                style={{ ...compactActionStyle, gridColumn: "1 / -1" }}
-                textStyle={compactTextStyle}
-              />
-              <FitButton
-                variant="ghost"
-                label={paymentStage === "full" ? "CASH FULL" : "CASH DOWNPAYMENT"}
-                fullWidth
-                disabled={paymentLoading}
-                loading={paymentLoading}
-                loadingLabel="SENDING"
-                onClick={() => onPayAppointment("cash", paymentStage)}
-                style={compactActionStyle}
-                textStyle={compactTextStyle}
-              />
-              {paymentStage !== "full" && canPayAppointmentInFull ? (
-                <>
-                  <FitButton
-                    variant="ghost"
-                    label="PAYMONGO FULL"
-                    fullWidth
-                    disabled={paymentLoading}
-                    loading={paymentLoading}
-                    loadingLabel="CONFIRMING"
-                    onClick={() => onPayAppointment("paymongo", "full")}
-                    style={compactActionStyle}
-                    textStyle={compactTextStyle}
-                  />
-                  <FitButton
-                    variant="ghost"
-                    label="CASH FULL"
-                    fullWidth
-                    disabled={paymentLoading}
-                    loading={paymentLoading}
-                    loadingLabel="SENDING"
-                    onClick={() => onPayAppointment("cash", "full")}
-                    style={compactActionStyle}
-                    textStyle={compactTextStyle}
-                  />
-                </>
-              ) : null}
-            </>
+            <FitButton
+              variant="primary"
+              label="PAYMONGO FULL"
+              fullWidth
+              disabled={paymentLoading}
+              loading={paymentLoading}
+              loadingLabel="CONFIRMING"
+              onClick={() => onPayAppointment("paymongo", "full")}
+              style={{ ...compactActionStyle, gridColumn: "1 / -1" }}
+              textStyle={compactTextStyle}
+            />
           ) : null}
           {canCancel ? (
             <FitButton
@@ -2419,8 +2354,6 @@ function RequestCoachModal({
   const appointmentTotal = selectedSlot && hasValidCoachRate
     ? Math.round(selectedCoachRate * (selectedSlot.durationMin / 60) * 100) / 100
     : 0;
-  const appointmentDownpayment = Math.round(appointmentTotal * 0.3 * 100) / 100;
-  const appointmentBalance = Math.max(0, Math.round((appointmentTotal - appointmentDownpayment) * 100) / 100);
   const canSubmit = Boolean(selectedCoach && preferredDate && selectedSlot && hasValidCoachRate) && !isSelectedCoachDateBooked && !isSubmitting;
   const availabilityStatus = !selectedCoach
     ? "Select a coach to load live availability."
@@ -2608,7 +2541,7 @@ function RequestCoachModal({
                 ? "Choose a live available slot before booking this trainer."
                 : !hasValidCoachRate
                   ? "This coach needs a valid hourly rate before members can request the appointment."
-                  : `Estimated total: ${formatMoney(appointmentTotal)}. After coach acceptance, booking details will offer PayMongo or cash payment for the ${formatMoney(appointmentDownpayment)} downpayment or full payment. Remaining balance on split payment: ${formatMoney(appointmentBalance)}.`}
+                  : `Estimated total: ${formatMoney(appointmentTotal)}. After coach acceptance, booking details open PayMongo full payment. The appointment is not confirmed without payment.`}
             </MemberText>
           </div>
 
@@ -2628,6 +2561,7 @@ function RequestCoachModal({
       <CalendarModal
         highlightedDates={highlightedCoachDates}
         isOpen={datePickerOpen}
+        maxDate={getMaxBookableDateInputValue()}
         minDate={getTodayDateInputValue()}
         selectedDate={preferredDate}
         onClose={() => setDatePickerOpen(false)}
@@ -2656,9 +2590,10 @@ function RequestCoachModal({
 type ReservationSubmitInput = {
   date: string;
   payload: {
+    coachId?: string;
     durationHours: number;
-    paymentStage?: "downpayment" | "full";
-    provider?: "cash" | "paymongo";
+    paymentStage?: "full";
+    provider?: "paymongo";
     purpose?: string;
     startTime: string;
     venueId: string | number;
@@ -2672,6 +2607,7 @@ type ReservationSubmitResult = {
 };
 
 function MemberReservationModal({
+  coaches,
   existingReservations,
   isOpen,
   isSubmitting,
@@ -2681,6 +2617,7 @@ function MemberReservationModal({
   userId,
   venues,
 }: {
+  coaches: CoachProfileRecord[];
   existingReservations: MemberBookingItem[];
   isOpen: boolean;
   isSubmitting: boolean;
@@ -2696,11 +2633,12 @@ function MemberReservationModal({
   const [errorText, setErrorText] = useState("");
   const [endTime, setEndTime] = useState("");
   const [paymentOption, setPaymentOption] = useState<ReservationPaymentOption>(
-    canUsePaymongo ? "paymongo_downpayment" : "cash_downpayment",
+    "paymongo_full",
   );
   const [paymentConfirmation, setPaymentConfirmation] = useState<PaymentConfirmationState | null>(null);
   const [reservationDate, setReservationDate] = useState(getTodayDateInputValue());
   const [reservationNotes, setReservationNotes] = useState("");
+  const [selectedCoachId, setSelectedCoachId] = useState("");
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [successText, setSuccessText] = useState("");
@@ -2712,16 +2650,19 @@ function MemberReservationModal({
   );
   const selectedVenue =
     reservableVenues.find((venue) => String(venue.id) === selectedVenueId) ?? reservableVenues[0] ?? null;
+  const selectedCoach =
+    coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null;
   const durationHours = getReservationDurationHours(startTime, endTime);
   const minimumHours = selectedVenue?.minimumHours ?? 1;
   const venueRate = Number(selectedVenue?.hourlyRate ?? 0);
-  const totalAmount = Math.round(venueRate * durationHours * 100) / 100;
-  const downpaymentAmount = Math.round(totalAmount * 0.3 * 100) / 100;
-  const remainingBalance = Math.max(0, Math.round((totalAmount - downpaymentAmount) * 100) / 100);
+  const coachRate = Number(selectedCoach?.hourlyRate ?? 0);
+  const venueAmount = Math.round(venueRate * durationHours * 100) / 100;
+  const coachAmount = Math.round(coachRate * durationHours * 100) / 100;
+  const totalAmount = Math.round((venueAmount + coachAmount) * 100) / 100;
   const hasPricedDuration = durationHours > 0;
   const isFreeReservation = hasPricedDuration && totalAmount <= 0;
-  const paymentProvider = paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
-  const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const paymentProvider = isFreeReservation ? undefined : "paymongo" as const;
+  const paymentStage = isFreeReservation ? undefined : "full" as const;
   const hasActiveOverlap = useMemo(() => {
     if (!selectedVenue || !reservationDate || !startTime || !endTime) return false;
 
@@ -2748,6 +2689,7 @@ function MemberReservationModal({
     Boolean(selectedVenue && reservationDate && startTime && endTime) &&
     durationHours >= minimumHours &&
     isFutureLocalStart(reservationDate, startTime) &&
+    (isFreeReservation || canUsePaymongo) &&
     !hasActiveOverlap &&
     !isSubmitting;
 
@@ -2778,6 +2720,10 @@ function MemberReservationModal({
       setErrorText(`This venue requires at least ${minimumHours} hour${minimumHours === 1 ? "" : "s"}.`);
       return;
     }
+    if (!isFreeReservation && !canUsePaymongo) {
+      setErrorText("PayMongo checkout is unavailable. Cash bookings are available at the cashier only.");
+      return;
+    }
 
     setErrorText("");
     setSuccessText("");
@@ -2786,6 +2732,7 @@ function MemberReservationModal({
       const result = await onSubmit({
         date: reservationDate,
         payload: {
+          coachId: selectedCoach ? String(selectedCoach.id) : undefined,
           durationHours,
           paymentStage: isFreeReservation ? undefined : paymentStage,
           provider: isFreeReservation ? undefined : paymentProvider,
@@ -2799,8 +2746,8 @@ function MemberReservationModal({
 
       if (result?.checkout_url) {
         setPaymentConfirmation({
-          title: "Payment confirmed",
-          message: `Testing PayMongo downpayment of ${formatMoney(downpaymentAmount)} was confirmed for ${selectedVenue.name} on ${formatBookingDate(reservationDate)} at ${formatTimeChoice(startTime)}. You remain in Bookings while front desk verification updates the reservation status. Remaining balance: ${formatMoney(remainingBalance)}.`,
+          title: "Checkout ready",
+          message: `Complete the PayMongo full-payment checkout for ${selectedVenue.name} on ${formatBookingDate(reservationDate)} at ${formatTimeChoice(startTime)}. The booking is not confirmed until payment succeeds.`,
         });
         setStartTime("");
         setEndTime("");
@@ -2811,9 +2758,7 @@ function MemberReservationModal({
       setSuccessText(
         isFreeReservation
           ? `${selectedVenue.name} is now reserved for ${formatBookingDate(reservationDate)}.`
-          : paymentOption === "cash_full"
-            ? `Cash payment submitted for ${formatMoney(totalAmount)}. Staff will verify it before the reservation is treated as fully paid.`
-            : `Downpayment submitted for ${formatMoney(downpaymentAmount)}. The remaining ${formatMoney(remainingBalance)} stays due on or after the booking date.`,
+          : `Full payment submitted for ${formatMoney(totalAmount)}. Your reservation is confirmed after PayMongo succeeds.`,
       );
       setStartTime("");
       setEndTime("");
@@ -2859,11 +2804,9 @@ function MemberReservationModal({
                     ? "Submitting..."
                     : isFreeReservation
                       ? "Confirm Reservation"
-                      : paymentOption === "paymongo_downpayment"
-                        ? "Confirm Payment"
-                        : paymentOption === "cash_full"
-                          ? "Submit Full Payment"
-                          : "Submit Downpayment"
+                      : canUsePaymongo
+                        ? "Pay Full Amount"
+                        : "PayMongo Unavailable"
                 }
                 onClick={() => void submitReservation()}
                 disabled={!canSubmit}
@@ -2934,6 +2877,26 @@ function MemberReservationModal({
                   />
                 </div>
 
+                <div style={{ display: "grid", gap: 8 }}>
+                  <MemberText variant="brand">Coach Add-on</MemberText>
+                  <FitSelect
+                    aria-label="Optional coach add-on"
+                    fullWidth
+                    value={selectedCoachId}
+                    onChange={(event) => setSelectedCoachId(event.currentTarget.value)}
+                    options={[
+                      { label: "No coach add-on", value: "" },
+                      ...coaches.map((coach) => ({
+                        label: `${getCoachName(coach)} / ${coach.hourlyRate ? `${formatMoney(coach.hourlyRate)}/hr` : "Rate pending"}`,
+                        value: String(coach.id),
+                      })),
+                    ]}
+                  />
+                  <MemberText variant="muted">
+                    Optional. The selected coach is checked again for availability when you submit.
+                  </MemberText>
+                </div>
+
                 <div className="bookings-request-datetime-grid">
                   <RequestFieldButton
                     icon={CalendarDays}
@@ -2962,43 +2925,23 @@ function MemberReservationModal({
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
-                  <MemberText variant="brand">Payment Option</MemberText>
-                  <div className="bookings-request-intent-grid">
-                    {[
-                      {
-                        body: canUsePaymongo ? "Confirm a testing downpayment in-app." : "PayMongo is currently disabled.",
-                        disabled: !canUsePaymongo || isFreeReservation,
-                        label: "PayMongo Downpayment",
-                        value: "paymongo_downpayment" as const,
-                      },
-                      {
-                        body: "Submit a cash downpayment for staff verification.",
-                        disabled: isFreeReservation,
-                        label: "Cash Downpayment",
-                        value: "cash_downpayment" as const,
-                      },
-                      {
-                        body: "Submit full cash payment for staff verification.",
-                        disabled: isFreeReservation,
-                        label: "Cash Full Payment",
-                        value: "cash_full" as const,
-                      },
-                    ].map((option) => (
-                      <FitButton
-                        key={option.value}
-                        variant="card"
-                        active={paymentOption === option.value}
-                        disabled={option.disabled}
-                        onClick={() => setPaymentOption(option.value)}
-                        style={{ borderRadius: 8, minHeight: 78, padding: 10 }}
-                      >
-                        <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 850 }}>{option.label}</span>
-                          <span style={{ color: colors.textMuted, fontSize: 11.5, lineHeight: 1.35 }}>{option.body}</span>
-                        </span>
-                      </FitButton>
-                    ))}
-                  </div>
+                  <MemberText variant="brand">Payment</MemberText>
+                  <FitButton
+                    variant="card"
+                    active={paymentOption === "paymongo_full"}
+                    disabled={!canUsePaymongo || isFreeReservation}
+                    onClick={() => setPaymentOption("paymongo_full")}
+                    style={{ borderRadius: 8, minHeight: 78, padding: 10, textAlign: "left" }}
+                  >
+                    <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 850 }}>PayMongo Full Payment</span>
+                      <span style={{ color: colors.textMuted, fontSize: 11.5, lineHeight: 1.35 }}>
+                        {canUsePaymongo
+                          ? `Pay ${formatMoney(totalAmount)} now. No payment means no booking.`
+                          : "PayMongo is unavailable. Cash bookings are created by the cashier only."}
+                      </span>
+                    </span>
+                  </FitButton>
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -3030,12 +2973,10 @@ function MemberReservationModal({
                   </MemberText>
                   <MemberText variant="muted">
                     {!hasPricedDuration
-                      ? "Choose a time range to calculate the reservation price and payment split."
+                      ? "Choose an hourly time range to calculate the reservation price."
                       : isFreeReservation
                         ? "No checkout is required for this reservation."
-                        : paymentOption === "cash_full"
-                          ? "Staff verification is required before full cash payment is treated as paid."
-                          : `Confirm now ${formatMoney(downpaymentAmount)}. Remaining balance: ${formatMoney(remainingBalance)}.`}
+                        : `Full payment of ${formatMoney(totalAmount)} is required through PayMongo before confirmation.`}
                   </MemberText>
                 </div>
               </>
@@ -3050,6 +2991,7 @@ function MemberReservationModal({
       <CalendarModal
         highlightedDates={[]}
         isOpen={datePickerOpen}
+        maxDate={getMaxBookableDateInputValue()}
         minDate={getTodayDateInputValue()}
         selectedDate={reservationDate}
         onClose={() => setDatePickerOpen(false)}
@@ -3327,6 +3269,97 @@ function BookingsPageStyles({ colors }: { colors: ThemeColors }) {
   );
 }
 
+function RecurringPlanPaymentPanel({
+  error,
+  isLoading,
+  onPay,
+  payingCycleId,
+  plans,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  onPay: (plan: RecurringCoachingPlanRecord, cycle: RecurringCoachingBillingCycleRecord) => void;
+  payingCycleId: string | null;
+  plans: RecurringCoachingPlanRecord[];
+}) {
+  const { colors } = useTheme();
+  const payablePlans = plans.filter((plan) =>
+    ["awaiting_payment", "active"].includes(plan.status),
+  );
+
+  return (
+    <section
+      aria-label="Recurring coaching payment requests"
+      style={{
+        display: "grid",
+        gap: 10,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        backgroundColor: colors.surface,
+        padding: 14,
+      }}
+    >
+      <div style={{ display: "grid", gap: 3 }}>
+        <FitText style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
+          Coach-created monthly plans
+        </FitText>
+        <MemberText variant="muted">
+          Your coach sets the dates. Pay the fixed monthly quote in full to activate those actual appointments.
+        </MemberText>
+      </div>
+      {isLoading ? <MemberText variant="muted">Loading coach plans…</MemberText> : null}
+      {error ? <MemberText variant="muted">{error}</MemberText> : null}
+      {!isLoading && payablePlans.length === 0 ? (
+        <MemberText variant="muted">No payment request is waiting for you.</MemberText>
+      ) : null}
+      {payablePlans.map((plan) => {
+        const cycle = plan.billingCycles?.find((item) =>
+          ["due", "processing"].includes(item.status),
+        );
+        if (!cycle) return null;
+        const pendingScheduleCount = plan.scheduleItems?.filter(
+          (item) => item.status === "pending_payment",
+        ).length ?? 0;
+        return (
+          <div
+            key={plan.id}
+            style={{
+              display: "grid",
+              gap: 8,
+              borderTop: `1px solid ${colors.border}`,
+              paddingTop: 10,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <FitText style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 800 }}>
+                {plan.frequency === "monthly" ? "Monthly coaching" : "Recurring coaching"}
+              </FitText>
+              <FitText style={{ color: colors.brand, fontSize: 13, fontWeight: 850 }}>
+                {formatMoney(Number(cycle.amount))}
+              </FitText>
+            </div>
+            <MemberText variant="muted">
+              {pendingScheduleCount > 0
+                ? `${pendingScheduleCount} actual session date${pendingScheduleCount === 1 ? "" : "s"} waiting for payment.`
+                : "Review the schedule before paying."}
+            </MemberText>
+            <FitButton
+              variant="primary"
+              label={payingCycleId === cycle.id ? "OPENING PAYMONGO…" : "PAY IN FULL WITH PAYMONGO"}
+              onClick={() => onPay(plan, cycle)}
+              disabled={payingCycleId !== null}
+              loading={payingCycleId === cycle.id}
+              loadingLabel="Opening PayMongo…"
+              style={{ minHeight: 36, borderRadius: 8 }}
+              textStyle={{ fontSize: 10, fontWeight: 850 }}
+            />
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 export default function BookingsPage() {
   const { colors } = useTheme();
   const { user } = useMemberOnlyAccess("Bookings");
@@ -3363,7 +3396,38 @@ export default function BookingsPage() {
     text: string;
     tone: "danger" | "success";
   } | null>(null);
+  const [payingRecurringCycleId, setPayingRecurringCycleId] = useState<string | null>(null);
+  const [recurringPlanPaymentError, setRecurringPlanPaymentError] = useState<string | null>(null);
   const data = useMemberOnlyBookingsData(user?.id);
+  const recurringPlansQuery = useQuery({
+    ...recurringCoachingPlansQueryOptions(webApiClient),
+    enabled: Boolean(user?.id),
+    staleTime: 20_000,
+  });
+  const handlePayRecurringCycle = async (
+    _plan: RecurringCoachingPlanRecord,
+    cycle: RecurringCoachingBillingCycleRecord,
+  ) => {
+    try {
+      setRecurringPlanPaymentError(null);
+      setPayingRecurringCycleId(cycle.id);
+      const result = await webApiClient.recurringCoachingPlans.payBillingCycle(
+        cycle.recurringPlanId,
+        cycle.id,
+        { provider: "paymongo" },
+      );
+      if (!result.checkoutUrl) {
+        throw new Error("PayMongo did not return a checkout link. No appointment was activated.");
+      }
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      setRecurringPlanPaymentError(
+        error instanceof Error ? error.message : "Unable to start PayMongo payment.",
+      );
+    } finally {
+      setPayingRecurringCycleId(null);
+    }
+  };
   const coachFilters = useMemo(
     () => ({
       ...(coachSkillFilter !== "all" ? { specialization: coachSkillFilter } : {}),
@@ -3451,8 +3515,6 @@ export default function BookingsPage() {
     typeof selected.coachId === "string" &&
     selected.coachId.length > 0;
   const canPaySelectedAppointment = isAppointmentPaymentActionable(activeSection, selected);
-  const canPaySelectedAppointmentInFull = canStartFullAppointmentPayment(activeSection, selected);
-  const selectedAppointmentPaymentStage = getAppointmentPaymentStage(selected);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1259px)");
@@ -3531,7 +3593,6 @@ export default function BookingsPage() {
     const totalAmount = Number.isFinite(hourlyRate)
       ? Math.round(hourlyRate * (input.selectedSlot.durationMin / 60) * 100) / 100
       : 0;
-    const downpaymentAmount = Math.round(totalAmount * 0.3 * 100) / 100;
 
     await data.createAppointmentMutation.mutateAsync({
       payload: {
@@ -3547,7 +3608,7 @@ export default function BookingsPage() {
 
     const scheduleLabel = `${formatDateChoice(input.preferredDate)} at ${input.selectedSlot.label}`;
     setBookingDraftState(
-      `${selectedIntentOption.label} request sent to ${getCoachName(selectedCoach)} for ${scheduleLabel}. Estimated total: ${formatMoney(totalAmount)}. Payment options unlock after coach acceptance; downpayment estimate: ${formatMoney(downpaymentAmount)}.`,
+      `${selectedIntentOption.label} request sent to ${getCoachName(selectedCoach)} for ${scheduleLabel}. Estimated total: ${formatMoney(totalAmount)}. PayMongo full payment unlocks after coach acceptance; no payment means no confirmed appointment.`,
     );
     setBookingMode("bookings");
     setActiveSection("appointments");
@@ -3584,18 +3645,15 @@ export default function BookingsPage() {
 
     await data.payAppointmentMutation.mutateAsync({
       appointmentId: pendingAppointmentPayment.booking.id,
-      paymentStage: pendingAppointmentPayment.stage,
-      provider: pendingAppointmentPayment.provider,
+      paymentStage: "full",
+      provider: "paymongo",
       userId: user?.id,
     });
 
     setPendingAppointmentPayment(null);
     setPaymentConfirmation({
-      title: payment.provider === "paymongo" ? "Payment confirmed" : "Cash payment submitted",
-      message:
-        payment.provider === "paymongo"
-          ? `Testing ${payment.stage === "full" ? "full payment" : "downpayment"} of ${formatMoney(getAppointmentPaymentAmount(payment.booking, payment.stage))} was confirmed for ${payment.booking.resourceName}. You remain in Bookings while front desk verification updates the appointment status.`
-          : `Cash ${payment.stage === "full" ? "full payment" : "downpayment"} of ${formatMoney(getAppointmentPaymentAmount(payment.booking, payment.stage))} was submitted for ${payment.booking.resourceName}. Staff will verify it before the appointment status changes.`,
+      title: "Checkout ready",
+      message: `Complete the PayMongo full payment of ${formatMoney(getAppointmentPaymentAmount(payment.booking, "full"))} for ${payment.booking.resourceName}. The appointment is not confirmed until full payment succeeds.`,
     });
   };
 
@@ -3692,7 +3750,7 @@ export default function BookingsPage() {
             totalPages={coachTotalPages}
           />
 
-          <div className="bookings-composer-rail" style={{ alignSelf: "stretch", display: "grid", height: "100%", minHeight: 0 }}>
+          <div className="bookings-composer-rail" style={{ alignSelf: "stretch", display: "grid", gap: 12, height: "100%", minHeight: 0 }}>
             <MemberInspectorPanel
               ariaLabel="Booking Composer"
               footer={
@@ -3856,7 +3914,14 @@ export default function BookingsPage() {
             totalPages={bookingTotalPages}
           />
 
-          <div className="bookings-composer-rail" style={{ alignSelf: "stretch", display: "grid", height: "100%", minHeight: 0 }}>
+          <div className="bookings-composer-rail" style={{ alignSelf: "stretch", display: "grid", gap: 12, height: "100%", minHeight: 0 }}>
+            <RecurringPlanPaymentPanel
+              error={recurringPlanPaymentError}
+              isLoading={recurringPlansQuery.isPending}
+              onPay={(plan, cycle) => void handlePayRecurringCycle(plan, cycle)}
+              payingCycleId={payingRecurringCycleId}
+              plans={recurringPlansQuery.data ?? []}
+            />
             <MemberInspectorPanel
               ariaLabel="Booking Details"
               footer={
@@ -3869,16 +3934,14 @@ export default function BookingsPage() {
                       !data.cancelAppointmentMutation.isPending
                     }
                     canPayAppointment={canPaySelectedAppointment}
-                    canPayAppointmentInFull={canPaySelectedAppointmentInFull}
                     mode={bookingPanelMode}
                     onCancel={handleCancelSelectedBooking}
-                    onPayAppointment={(provider, stage) => {
-                      setPendingAppointmentPayment({ booking: selected, provider, stage });
+                    onPayAppointment={() => {
+                      setPendingAppointmentPayment({ booking: selected });
                     }}
                     onSetActionsOpen={setBookingActionsOpen}
                     onSetMode={setBookingPanelMode}
                     paymentLoading={data.payAppointmentMutation.isPending}
-                    paymentStage={selectedAppointmentPaymentStage}
                   />
                 ) : undefined
               }
@@ -4003,16 +4066,14 @@ export default function BookingsPage() {
                 !data.cancelAppointmentMutation.isPending
               }
               canPayAppointment={canPaySelectedAppointment}
-              canPayAppointmentInFull={canPaySelectedAppointmentInFull}
               mode={bookingPanelMode}
               onCancel={handleCancelSelectedBooking}
-              onPayAppointment={(provider, stage) => {
-                setPendingAppointmentPayment({ booking: selected, provider, stage });
+              onPayAppointment={() => {
+                setPendingAppointmentPayment({ booking: selected });
               }}
               onSetActionsOpen={setBookingActionsOpen}
               onSetMode={setBookingPanelMode}
               paymentLoading={data.payAppointmentMutation.isPending}
-              paymentStage={selectedAppointmentPaymentStage}
             />
           ) : undefined
         }
@@ -4039,7 +4100,7 @@ export default function BookingsPage() {
             setPendingAppointmentPayment(null);
           }
         }}
-        title={pendingAppointmentPayment?.provider === "paymongo" ? "Confirm PayMongo payment?" : "Submit cash payment?"}
+        title="Confirm PayMongo full payment?"
         subtitle="Coach appointment payment"
         icon={CalendarCheck}
         maxWidth={460}
@@ -4054,9 +4115,9 @@ export default function BookingsPage() {
             />
             <FitButton
               variant="primary"
-              label={pendingAppointmentPayment?.provider === "paymongo" ? "Confirm Payment" : "Submit"}
+              label="Open Checkout"
               loading={data.payAppointmentMutation.isPending}
-              loadingLabel={pendingAppointmentPayment?.provider === "paymongo" ? "Confirming..." : "Submitting..."}
+              loadingLabel="Preparing..."
               onClick={() => void handleConfirmAppointmentPayment()}
               style={{ flex: 1 }}
             />
@@ -4066,17 +4127,14 @@ export default function BookingsPage() {
         {pendingAppointmentPayment ? (
           <div style={{ display: "grid", gap: 10 }}>
             <MemberText variant="subtitle">
-              {pendingAppointmentPayment.provider === "paymongo" ? "Confirm the testing PayMongo payment" : "Submit a cash payment request"} for the{" "}
-              {pendingAppointmentPayment.stage === "full" ? "full payment" : "downpayment"} on{" "}
+              Confirm the PayMongo full payment for the{" "}
               {pendingAppointmentPayment.booking.resourceName}.
             </MemberText>
             <MemberText variant="brand">
-              Amount: {formatMoney(getAppointmentPaymentAmount(pendingAppointmentPayment.booking, pendingAppointmentPayment.stage))}
+              Amount: {formatMoney(getAppointmentPaymentAmount(pendingAppointmentPayment.booking, "full"))}
             </MemberText>
             <MemberText variant="muted">
-              {pendingAppointmentPayment.stage === "full"
-                ? "No remaining balance should be due after the full payment is confirmed."
-                : "The remaining balance stays due after this payment is verified."}
+              The appointment is not confirmed until the full PayMongo payment succeeds.
             </MemberText>
           </div>
         ) : null}
@@ -4107,6 +4165,7 @@ export default function BookingsPage() {
         ) : null}
       </FitModal>
       <MemberReservationModal
+        coaches={coaches}
         existingReservations={reservations}
         isOpen={reservationModalOpen}
         isSubmitting={data.createBookingMutation.isPending}

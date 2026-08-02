@@ -660,7 +660,7 @@ describe('AppointmentService', () => {
     expect(repo.updateAppointment).not.toHaveBeenCalled();
   });
 
-  it('starts a paymongo downpayment checkout for a pending-payment appointment', async () => {
+  it('starts a full PayMongo checkout for a pending-payment appointment', async () => {
     paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
     repo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue({
       id: 'appt-1',
@@ -668,6 +668,7 @@ describe('AppointmentService', () => {
       coach_id: 'coach-1',
       status: 'pending_payment',
       is_free_session: false,
+      total_amount: new Prisma.Decimal('1200'),
       downpayment_amount: new Prisma.Decimal('360'),
       balance_amount: new Prisma.Decimal('840'),
       downpayment_paid_at: null,
@@ -682,8 +683,8 @@ describe('AppointmentService', () => {
       user_id: 'member-1',
       payable_type: PayableType.coaching,
       payable_id: 'appt-1',
-      payment_stage: PaymentStage.downpayment,
-      amount: new Prisma.Decimal('360'),
+      payment_stage: PaymentStage.full,
+      amount: new Prisma.Decimal('1200'),
       provider: PaymentProvider.paymongo,
       idempotency_key: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
       status: PaymentStatus.pending,
@@ -699,7 +700,7 @@ describe('AppointmentService', () => {
       'member-1',
       UserRole.member,
       'appt-1',
-      { provider: PaymentProvider.paymongo },
+      { provider: PaymentProvider.paymongo, payment_stage: PaymentStage.full },
       '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
     );
 
@@ -707,13 +708,13 @@ describe('AppointmentService', () => {
       expect.objectContaining({
         payable_type: PayableType.coaching,
         payable_id: 'appt-1',
-        payment_stage: PaymentStage.downpayment,
+        payment_stage: PaymentStage.full,
         provider: PaymentProvider.paymongo,
       }),
     );
     expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith({
-      amount: 36000,
-      description: 'Coaching appointment downpayment',
+      amount: 120000,
+      description: 'Coaching appointment full payment',
       idempotencyKey: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
       metadata: {
         payment_id: 'payment-1',

@@ -2283,6 +2283,9 @@ export function createFitnessApi(transport: ApiTransport) {
           transport.post(`/fitness/sessions/${sessionId}/sets`, {
             exercise_id: input.exerciseId,
             set_number: input.setNumber,
+            ...(input.planExerciseId
+              ? { plan_exercise_id: input.planExerciseId }
+              : {}),
             ...(input.repsCompleted !== undefined
               ? { reps_completed: input.repsCompleted }
               : {}),

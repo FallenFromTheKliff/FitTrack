@@ -82,6 +82,27 @@ describe('TrainingPlanService', () => {
     ...overrides,
   });
 
+  const makeCompletedSessionLogs = (input: {
+    sessionId: string;
+    reps: number;
+    weightKg: number | null;
+    createdAt: string;
+    sets?: number;
+  }) =>
+    Array.from({ length: input.sets ?? 4 }, (_, setIndex) => ({
+      created_at: new Date(
+        new Date(input.createdAt).getTime() + setIndex * 1_000,
+      ),
+      exercise_id: 'exercise-1',
+      plan_exercise_id: 'plan-exercise-1',
+      reps_completed: input.reps,
+      session_id: input.sessionId,
+      weight_kg:
+        input.weightKg == null
+          ? null
+          : { toNumber: () => input.weightKg as number },
+    }));
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -327,30 +348,84 @@ describe('TrainingPlanService', () => {
     expect(repo.deletePlanById).not.toHaveBeenCalled();
   });
 
-  it('keeps progression advice deterministic and history-backed', async () => {
+  it('returns a low-confidence baseline when no complete history exists', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue([]);
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'maintain',
+        confidence: 'low',
+        exercise_id: 'exercise-1',
+        source_revision: 'history-rule-v2',
+        suggested_reps: 10,
+        suggested_weight_kg: 80,
+      }),
+    ]);
+  });
+
+  it('adds one rep after one complete successful workout', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue(
+      makeCompletedSessionLogs({
+        sessionId: 'session-1',
+        reps: 10,
+        weightKg: 80,
+        createdAt: '2026-07-27T10:00:00.000Z',
+      }),
+    );
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'increase_reps',
+        confidence: 'medium',
+        suggested_reps: 11,
+        suggested_weight_kg: 80,
+      }),
+    ]);
+  });
+
+  it('does not treat several sets from one workout as repeated workout evidence', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue(
+      makeCompletedSessionLogs({
+        sessionId: 'session-1',
+        reps: 12,
+        weightKg: 80,
+        createdAt: '2026-07-27T10:00:00.000Z',
+      }),
+    );
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'maintain',
+        suggested_reps: 12,
+        suggested_weight_kg: 80,
+      }),
+    ]);
+  });
+
+  it('adds a safe two kilograms after two top-range successes at a heavier load', async () => {
     repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
     repo.listRecentCompletedLogs.mockResolvedValue([
-      {
-        created_at: new Date('2026-07-27T10:00:00.000Z'),
-        exercise_id: 'exercise-1',
-        reps_completed: 12,
-        session_id: 'session-3',
-        weight_kg: { toNumber: () => 80 },
-      },
-      {
-        created_at: new Date('2026-07-25T10:00:00.000Z'),
-        exercise_id: 'exercise-1',
-        reps_completed: 11,
-        session_id: 'session-2',
-        weight_kg: { toNumber: () => 80 },
-      },
-      {
-        created_at: new Date('2026-07-23T10:00:00.000Z'),
-        exercise_id: 'exercise-1',
-        reps_completed: 10,
-        session_id: 'session-1',
-        weight_kg: { toNumber: () => 80 },
-      },
+      ...makeCompletedSessionLogs({
+        sessionId: 'session-2',
+        reps: 12,
+        weightKg: 80,
+        createdAt: '2026-07-27T10:00:00.000Z',
+      }),
+      ...makeCompletedSessionLogs({
+        sessionId: 'session-1',
+        reps: 12,
+        weightKg: 80,
+        createdAt: '2026-07-20T10:00:00.000Z',
+      }),
     ]);
 
     await expect(
@@ -358,10 +433,85 @@ describe('TrainingPlanService', () => {
     ).resolves.toEqual([
       expect.objectContaining({
         action: 'increase_load',
-        exercise_id: 'exercise-1',
-        source_revision: 'history-rule-v1',
+        confidence: 'high',
+        source_revision: 'history-rule-v2',
         suggested_reps: 10,
         suggested_weight_kg: 82,
+      }),
+    ]);
+  });
+
+  it('adds only one kilogram for a lighter working load', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue([
+      ...makeCompletedSessionLogs({
+        sessionId: 'session-2',
+        reps: 12,
+        weightKg: 26,
+        createdAt: '2026-07-27T10:00:00.000Z',
+      }),
+      ...makeCompletedSessionLogs({
+        sessionId: 'session-1',
+        reps: 12,
+        weightKg: 26,
+        createdAt: '2026-07-20T10:00:00.000Z',
+      }),
+    ]);
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'increase_load',
+        suggested_weight_kg: 27,
+      }),
+    ]);
+  });
+
+  it('ignores workout occurrences that do not contain every prescribed set', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue(
+      makeCompletedSessionLogs({
+        sessionId: 'session-incomplete',
+        reps: 12,
+        weightKg: 80,
+        createdAt: '2026-07-27T10:00:00.000Z',
+        sets: 3,
+      }),
+    );
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'maintain',
+        confidence: 'low',
+        suggested_weight_kg: 80,
+      }),
+    ]);
+  });
+
+  it('ignores the same exercise when it belongs to another plan prescription', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.listRecentCompletedLogs.mockResolvedValue(
+      makeCompletedSessionLogs({
+        sessionId: 'session-other-plan-slot',
+        reps: 12,
+        weightKg: 40,
+        createdAt: '2026-07-27T10:00:00.000Z',
+      }).map((log) => ({
+        ...log,
+        plan_exercise_id: 'another-plan-exercise',
+      })),
+    );
+
+    await expect(
+      service.getProgressionSuggestions('user-1', 'plan-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        action: 'maintain',
+        confidence: 'low',
+        suggested_weight_kg: 80,
       }),
     ]);
   });

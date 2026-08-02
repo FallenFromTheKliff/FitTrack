@@ -188,7 +188,9 @@ export class InitiateAppointmentPaymentDTO {
 
   @ApiPropertyOptional({
     enum: [PaymentStage.downpayment, PaymentStage.full],
-    example: PaymentStage.downpayment,
+    example: PaymentStage.full,
+    description:
+      'Members and coaches must use full. The downpayment value is retained for cashier/admin compatibility only.',
   })
   @IsOptional()
   @IsIn([PaymentStage.downpayment, PaymentStage.full], {

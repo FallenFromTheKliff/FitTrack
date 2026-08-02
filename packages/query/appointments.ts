@@ -43,7 +43,7 @@ export function payAppointmentDownpaymentMutationOptions(
     mutationFn: ({
       appointmentId,
       provider = "paymongo",
-      paymentStage = "downpayment",
+      paymentStage = "full",
       userId,
     }: {
       appointmentId: string;

@@ -263,10 +263,21 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
   const appointmentRows: Prisma.CoachAppointmentCreateManyInput[] = [];
   const relationshipRows: Prisma.CoachClientRelationshipCreateManyInput[] = [];
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
-  const appointmentsPerMember = densityCount(ctx.config.sessionDensity, 2, 5, 9);
+  const appointmentsPerMember = densityCount(
+    ctx.config.sessionDensity,
+    2,
+    5,
+    9,
+  );
 
   memberKeys.forEach((memberKey, index) => {
-    const coachKey = coachKeys[index % coachKeys.length];
+    // Keep Luca's member portal demo connected to the same Seed Coach that owns
+    // her active workout plan. This is intentionally explicit: the UI must not
+    // present a coach plan without a matching active coaching relationship.
+    const isLucaDemoMember = memberKey === 'member-premium';
+    const coachKey = isLucaDemoMember
+      ? 'coach'
+      : coachKeys[index % coachKeys.length];
     const coachId = ctx.state.coachProfileIds[coachKey];
     const memberId = ctx.state.userIds[memberKey];
     const recurringPlanId = seedId(`recurring-plan:${memberKey}`);
@@ -276,7 +287,7 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     // Keep those members actively related to their assigned coach so demo data
     // never advertises a plan that the coach is forbidden to manage.
     const relationshipStatus =
-      index % 2 === 0
+      isLucaDemoMember || index % 2 === 0
         ? RelationshipStatus.active
         : relationshipStatusFor(ctx, ratio);
     const relationshipStart = dateInsideRange(
@@ -317,12 +328,15 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
       completed_sessions:
         relationshipStatus === RelationshipStatus.pending
           ? 0
-          : Math.min(appointmentsPerMember, 1 + (index % appointmentsPerMember)),
+          : Math.min(
+              appointmentsPerMember,
+              1 + (index % appointmentsPerMember),
+            ),
       created_by: adminId,
       duration_minutes: index % 2 === 0 ? 60 : 45,
       end_date:
         relationshipStatus === RelationshipStatus.terminated
-          ? relationshipEnd ?? daysFrom(ctx.config.anchorDate, -7)
+          ? (relationshipEnd ?? daysFrom(ctx.config.anchorDate, -7))
           : daysFrom(ctx.config.anchorDate, 45 + (index % 20)),
       frequency:
         index % 4 === 0
@@ -336,19 +350,15 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         relationshipStatus === RelationshipStatus.terminated
           ? RecurringCoachingPlanStatus.completed
           : relationshipStatus === RelationshipStatus.paused
-          ? RecurringCoachingPlanStatus.paused
-          : relationshipStatus === RelationshipStatus.pending
             ? RecurringCoachingPlanStatus.paused
-            : RecurringCoachingPlanStatus.active,
+            : relationshipStatus === RelationshipStatus.pending
+              ? RecurringCoachingPlanStatus.paused
+              : RecurringCoachingPlanStatus.active,
       total_sessions: 8,
     });
 
     for (let cycleIndex = 0; cycleIndex < 2; cycleIndex += 1) {
-      const cycleStart = daysFrom(
-        relationshipStart,
-        cycleIndex * 28,
-        0,
-      );
+      const cycleStart = daysFrom(relationshipStart, cycleIndex * 28, 0);
       const billingPaymentId = seedId(
         `payment:recurring-coaching:${memberKey}:${cycleIndex}`,
       );
@@ -366,12 +376,11 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         paid_at: isPaid ? daysFrom(cycleStart, 2, 13) : null,
         payment_id: billingPaymentId,
         recurring_plan_id: recurringPlanId,
-        status:
-          isPaid
-            ? RecurringCoachingBillingCycleStatus.paid
-            : isPendingPayment
-              ? RecurringCoachingBillingCycleStatus.awaiting_verification
-              : RecurringCoachingBillingCycleStatus.due,
+        status: isPaid
+          ? RecurringCoachingBillingCycleStatus.paid
+          : isPendingPayment
+            ? RecurringCoachingBillingCycleStatus.awaiting_verification
+            : RecurringCoachingBillingCycleStatus.due,
       });
       paymentRows.push({
         id: billingPaymentId,
@@ -414,10 +423,10 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         relationshipStatus === RelationshipStatus.pending
           ? AppointmentStatus.pending_payment
           : scheduledAt < ctx.config.anchorDate && apptIndex % 8 !== 0
-          ? AppointmentStatus.completed
-          : scheduledAt >= ctx.config.anchorDate
-            ? AppointmentStatus.confirmed
-            : AppointmentStatus.no_show;
+            ? AppointmentStatus.completed
+            : scheduledAt >= ctx.config.anchorDate
+              ? AppointmentStatus.confirmed
+              : AppointmentStatus.no_show;
       const appointmentId = seedId(
         `coach-appointment:${memberKey}:${apptIndex}`,
       );

@@ -25,6 +25,11 @@ import {
 } from './training-plan.repository';
 
 const DEFAULT_REST_SECONDS = 60;
+const PROGRESSION_REP_BAND_SIZE = 2;
+
+function safeLoadIncrementKg(currentWeightKg: number) {
+  return currentWeightKg >= 50 ? 2 : 1;
+}
 
 export type CreateAiGeneratedTrainingPlanInput = {
   goal: FitnessGoal;
@@ -136,53 +141,131 @@ export class TrainingPlanService {
     const plan = await this.repo.findPlanByIdOrThrow(planId);
     this.assertPlanOwner(plan, userId);
     const exercises = plan.schedule_days.flatMap((day) => day.exercises);
-    const logs = await this.repo.listRecentCompletedLogs(
-      userId,
-      [...new Set(exercises.map((exercise) => exercise.exercise_id))],
-    );
+    const logs = await this.repo.listRecentCompletedLogs(userId, [
+      ...new Set(exercises.map((exercise) => exercise.exercise_id)),
+    ]);
 
     return exercises.map((exercise) => {
-      const recent = logs
-        .filter((log) => log.exercise_id === exercise.exercise_id)
-        .slice(0, 6);
+      const recent = logs.filter(
+        (log) =>
+          log.exercise_id === exercise.exercise_id &&
+          log.plan_exercise_id === exercise.id,
+      );
       const prescribedReps = exercise.reps ?? null;
-      const latestWeight = recent.find((log) => log.weight_kg != null)
-        ?.weight_kg?.toNumber() ?? exercise.weight_kg_target?.toNumber() ?? null;
-      const completedReps = recent
-        .map((log) => log.reps_completed)
-        .filter((value): value is number => value != null);
-      const hitTarget =
-        prescribedReps != null &&
-        completedReps.length >= 3 &&
-        completedReps.slice(0, 3).every((value) => value >= prescribedReps);
+      const prescribedSets = Math.max(1, exercise.sets);
+      const sessionGroups = recent.reduce<Map<string, typeof recent>>(
+        (groups, log) => {
+          const sessionLogs = groups.get(log.session_id) ?? [];
+          sessionLogs.push(log);
+          groups.set(log.session_id, sessionLogs);
+          return groups;
+        },
+        new Map(),
+      );
+      const occurrences = [...sessionGroups.values()]
+        .map((sessionLogs) => {
+          const completedSets = sessionLogs
+            .filter((log) => log.reps_completed != null)
+            .slice(0, prescribedSets);
+          if (completedSets.length < prescribedSets) {
+            return null;
+          }
 
-      if (hitTarget && latestWeight != null && latestWeight > 0) {
+          return {
+            minimumReps: Math.min(
+              ...completedSets.map((log) => log.reps_completed as number),
+            ),
+            weightKg:
+              completedSets
+                .find((log) => log.weight_kg != null)
+                ?.weight_kg?.toNumber() ?? null,
+          };
+        })
+        .filter(
+          (
+            occurrence,
+          ): occurrence is { minimumReps: number; weightKg: number | null } =>
+            occurrence != null,
+        )
+        .slice(0, 6);
+      const latestOccurrence = occurrences[0];
+      const latestWeight =
+        latestOccurrence?.weightKg ??
+        exercise.weight_kg_target?.toNumber() ??
+        null;
+      const topOfRepBand =
+        prescribedReps == null
+          ? null
+          : prescribedReps + PROGRESSION_REP_BAND_SIZE;
+      const latestReachedBase =
+        prescribedReps != null &&
+        latestOccurrence != null &&
+        latestOccurrence.minimumReps >= prescribedReps;
+      const latestReachedTop =
+        topOfRepBand != null &&
+        latestOccurrence != null &&
+        latestOccurrence.minimumReps >= topOfRepBand;
+      const previousReachedTop =
+        topOfRepBand != null &&
+        occurrences[1] != null &&
+        occurrences[1].minimumReps >= topOfRepBand;
+
+      if (
+        latestReachedTop &&
+        previousReachedTop &&
+        latestWeight != null &&
+        latestWeight > 0
+      ) {
+        const incrementKg = safeLoadIncrementKg(latestWeight);
         return {
           plan_exercise_id: exercise.id,
           exercise_id: exercise.exercise_id,
           exercise_name: exercise.exercise.name,
           action: 'increase_load' as const,
           suggested_reps: prescribedReps,
-          suggested_weight_kg: Math.round(latestWeight * 1.025 * 2) / 2,
-          confidence: recent.length >= 6 ? ('high' as const) : ('medium' as const),
-          rationale:
-            'Recent completed sets met the prescribed rep target. Add a small load increase and keep the same reps.',
-          source_revision: 'history-rule-v1' as const,
+          suggested_weight_kg: Math.round((latestWeight + incrementKg) * 2) / 2,
+          confidence: 'high' as const,
+          rationale: `The last two completed workouts reached the top of the rep range for every prescribed set. Add ${incrementKg} kg and return to the base rep target.`,
+          source_revision: 'history-rule-v2' as const,
         };
       }
 
-      if (hitTarget && prescribedReps != null) {
+      if (latestReachedTop && previousReachedTop && prescribedReps != null) {
         return {
           plan_exercise_id: exercise.id,
           exercise_id: exercise.exercise_id,
           exercise_name: exercise.exercise.name,
           action: 'increase_reps' as const,
-          suggested_reps: prescribedReps + 1,
+          suggested_reps: (topOfRepBand ?? prescribedReps) + 1,
           suggested_weight_kg: latestWeight,
-          confidence: 'medium' as const,
+          confidence: 'high' as const,
           rationale:
-            'Recent completed sets met the prescribed rep target. Add one rep before increasing load.',
-          source_revision: 'history-rule-v1' as const,
+            'The last two completed workouts reached the top of the rep range. Add one rep because this exercise has no recorded load.',
+          source_revision: 'history-rule-v2' as const,
+        };
+      }
+
+      if (
+        latestReachedBase &&
+        prescribedReps != null &&
+        topOfRepBand != null &&
+        latestOccurrence.minimumReps < topOfRepBand
+      ) {
+        return {
+          plan_exercise_id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise.name,
+          action: 'increase_reps' as const,
+          suggested_reps: Math.min(
+            topOfRepBand,
+            latestOccurrence.minimumReps + 1,
+          ),
+          suggested_weight_kg: latestWeight,
+          confidence:
+            occurrences.length >= 2 ? ('high' as const) : ('medium' as const),
+          rationale:
+            'Every prescribed set reached the current target in the latest completed workout. Add one rep per set and keep the load unchanged.',
+          source_revision: 'history-rule-v2' as const,
         };
       }
 
@@ -191,14 +274,19 @@ export class TrainingPlanService {
         exercise_id: exercise.exercise_id,
         exercise_name: exercise.exercise.name,
         action: 'maintain' as const,
-        suggested_reps: prescribedReps,
+        suggested_reps:
+          latestReachedTop && topOfRepBand != null
+            ? topOfRepBand
+            : prescribedReps,
         suggested_weight_kg: latestWeight,
-        confidence: recent.length > 0 ? ('medium' as const) : ('low' as const),
-        rationale:
-          recent.length > 0
-            ? 'Keep the current target until several recent sets consistently meet the prescribed reps.'
-            : 'No completed history is available yet. Start with the prescribed target and reassess after a few sessions.',
-        source_revision: 'history-rule-v1' as const,
+        confidence:
+          occurrences.length > 0 ? ('medium' as const) : ('low' as const),
+        rationale: latestReachedTop
+          ? 'The latest workout reached the top of the rep range. Repeat it once more before increasing load.'
+          : occurrences.length > 0
+            ? 'Keep the current target because the latest complete workout did not finish every prescribed set at the target reps.'
+            : 'No complete workout history is available yet. Start with the prescribed target and reassess after the first completed session.',
+        source_revision: 'history-rule-v2' as const,
       };
     });
   }
@@ -253,11 +341,7 @@ export class TrainingPlanService {
       this.assertPlanOwner(plan, userId);
     }
 
-    if (
-      isOwner &&
-      plan.source === PlanSource.ai_generated &&
-      plan.coach_id
-    ) {
+    if (isOwner && plan.source === PlanSource.ai_generated && plan.coach_id) {
       throw new ForbiddenException({
         type: 'FORBIDDEN',
         title: 'Coach Approval Required',

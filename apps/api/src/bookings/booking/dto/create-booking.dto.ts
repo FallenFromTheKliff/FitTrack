@@ -61,9 +61,9 @@ export class CreateBookingDTO {
 
   @ApiPropertyOptional({
     enum: CreateBookingPaymentStage,
-    example: CreateBookingPaymentStage.downpayment,
+    example: CreateBookingPaymentStage.full,
     description:
-      'Choose whether the initial reservation collects only the downpayment or the full booking amount.',
+      'Self-service facility reservations are paid in full through PayMongo. The legacy downpayment value is retained only for internal compatibility and is rejected for member/coach requests.',
   })
   @IsOptional()
   @IsEnum(CreateBookingPaymentStage, {

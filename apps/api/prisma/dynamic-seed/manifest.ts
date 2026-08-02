@@ -94,6 +94,7 @@ export type DynamicSeedManifest = {
     coachActiveRate: number;
     coachFormerRate: number;
     coachPausedRate: number;
+    exerciseHistory: number;
     historyEndDate: string;
     historyMonths: number;
     historyStartDate: string;
@@ -145,6 +146,7 @@ export async function writeDynamicSeedManifest(args: {
       coachActiveRate: args.config.coachActiveRate,
       coachFormerRate: args.config.coachFormerRate,
       coachPausedRate: args.config.coachPausedRate,
+      exerciseHistory: args.config.exerciseHistory,
       historyEndDate: args.config.historyEndDate.toISOString(),
       historyMonths: args.config.historyMonths,
       historyStartDate: args.config.historyStartDate.toISOString(),

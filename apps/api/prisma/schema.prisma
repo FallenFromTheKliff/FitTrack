@@ -672,6 +672,7 @@ model CoachAppointment {
   user_id               String                         @db.Uuid
   coach_id              String                         @db.Uuid
   recurring_plan_id     String?                        @db.Uuid
+  recurring_schedule_item_id String?                   @unique @db.Uuid
   status                AppointmentStatus              @default(pending_coach)
   recurring_state       RecurringCoachingSessionState?
   original_scheduled_at DateTime?                      @db.Timestamptz(6)
@@ -700,6 +701,8 @@ model CoachAppointment {
   user           User                   @relation("member", fields: [user_id], references: [id])
   coach          CoachProfile           @relation(fields: [coach_id], references: [id])
   recurring_plan RecurringCoachingPlan? @relation(fields: [recurring_plan_id], references: [id], onDelete: SetNull)
+  recurring_schedule_item RecurringCoachingScheduleItem? @relation("recurring_schedule_item_appointment", fields: [recurring_schedule_item_id], references: [id], onDelete: SetNull)
+  workout_assignment CoachWorkoutAssignment?
   review         CoachReview?
 
   @@index([user_id, status])
@@ -727,6 +730,7 @@ model RecurringCoachingPlan {
   id                  String                      @id @default(uuid()) @db.Uuid
   member_id           String                      @db.Uuid
   coach_id            String                      @db.Uuid
+  training_plan_id    String?                     @db.Uuid
   created_by          String?                     @db.Uuid
   frequency           RecurringCoachingFrequency
   preferred_days      Int[]                       @default([])
@@ -734,9 +738,11 @@ model RecurringCoachingPlan {
   start_date          DateTime                    @db.Date
   end_date            DateTime                    @db.Date
   duration_minutes    Int                         @default(60)
+  quoted_amount       Decimal                     @default(0) @db.Decimal(10, 2)
   status              RecurringCoachingPlanStatus @default(active)
   total_sessions      Int                         @default(0)
   completed_sessions  Int                         @default(0)
+  coach_approved_at   DateTime?                   @db.Timestamptz(6)
   cancellation_reason String?
   cancelled_at        DateTime?                   @db.Timestamptz(6)
   created_at          DateTime                    @default(now()) @db.Timestamptz(6)
@@ -744,13 +750,36 @@ model RecurringCoachingPlan {
 
   member       User               @relation("recurring_plan_member", fields: [member_id], references: [id])
   coach        CoachProfile       @relation(fields: [coach_id], references: [id])
+  training_plan TrainingPlan?     @relation("coaching_recurring_plan", fields: [training_plan_id], references: [id], onDelete: SetNull)
   appointments CoachAppointment[]
   billing_cycles RecurringCoachingBillingCycle[]
+  schedule_items RecurringCoachingScheduleItem[]
 
   @@index([member_id, status])
   @@index([coach_id, status])
+  @@index([training_plan_id])
   @@index([status, start_date, end_date])
   @@map("recurring_coaching_plans")
+}
+
+model RecurringCoachingScheduleItem {
+  id                  String                              @id @default(uuid()) @db.Uuid
+  recurring_plan_id   String                              @db.Uuid
+  sequence_index      Int                                 @db.SmallInt
+  scheduled_at        DateTime                            @db.Timestamptz(6)
+  duration_minutes    Int                                 @default(60)
+  amount              Decimal                             @default(0) @db.Decimal(10, 2)
+  status              RecurringCoachingScheduleItemStatus @default(pending_payment)
+  created_at          DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime                            @updatedAt @db.Timestamptz(6)
+
+  recurring_plan RecurringCoachingPlan @relation(fields: [recurring_plan_id], references: [id], onDelete: Cascade)
+  appointment   CoachAppointment?     @relation("recurring_schedule_item_appointment")
+
+  @@unique([recurring_plan_id, sequence_index])
+  @@unique([recurring_plan_id, scheduled_at])
+  @@index([recurring_plan_id, status, scheduled_at])
+  @@map("recurring_coaching_schedule_items")
 }
 
 model RecurringCoachingBillingCycle {
@@ -778,9 +807,12 @@ model RecurringCoachingBillingCycle {
 enum RecurringCoachingFrequency {
   weekly
   biweekly
+  monthly
 }
 
 enum RecurringCoachingPlanStatus {
+  draft
+  awaiting_payment
   active
   paused
   cancelled
@@ -993,6 +1025,8 @@ model TrainingPlan {
   coach         User?                 @relation("coach_trainer", fields: [coach_id], references: [id])
   schedule_days TrainingScheduleDay[]
   sessions      WorkoutSession[]
+  workout_assignments CoachWorkoutAssignment[]
+  coaching_recurring_plans RecurringCoachingPlan[] @relation("coaching_recurring_plan")
 
   // Partial unique via raw migration:
   // CREATE UNIQUE INDEX one_active_plan_per_user
@@ -1019,6 +1053,7 @@ model TrainingScheduleDay {
 
   plan      TrainingPlan   @relation(fields: [plan_id], references: [id], onDelete: Cascade)
   exercises PlanExercise[]
+  workout_assignments CoachWorkoutAssignment[]
 
   @@index([plan_id, week_number, day_of_week])
   @@map("training_schedule_days")
@@ -1062,10 +1097,49 @@ model WorkoutSession {
   user          User          @relation(fields: [user_id], references: [id])
   plan          TrainingPlan? @relation(fields: [plan_id], references: [id])
   exercise_logs ExerciseLog[]
+  coach_workout_assignment CoachWorkoutAssignment?
 
   @@index([user_id, status])
   @@index([user_id, started_at(sort: Desc)])
   @@map("workout_sessions")
+}
+
+model CoachWorkoutAssignment {
+  id                       String                        @id @default(uuid()) @db.Uuid
+  appointment_id           String                        @unique @db.Uuid
+  training_plan_id         String                        @db.Uuid
+  training_schedule_day_id String                        @db.Uuid
+  workout_session_id       String?                       @unique @db.Uuid
+  sequence_index           Int                           @db.SmallInt
+  source                   CoachWorkoutAssignmentSource  @default(automatic)
+  state                    CoachWorkoutAssignmentState   @default(assigned)
+  assigned_at              DateTime                      @default(now()) @db.Timestamptz(6)
+  held_at                  DateTime?                     @db.Timestamptz(6)
+  completed_at             DateTime?                     @db.Timestamptz(6)
+  override_reason          String?
+  created_at               DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime                      @updatedAt @db.Timestamptz(6)
+
+  appointment   CoachAppointment    @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  training_plan TrainingPlan        @relation(fields: [training_plan_id], references: [id], onDelete: Cascade)
+  schedule_day  TrainingScheduleDay @relation(fields: [training_schedule_day_id], references: [id], onDelete: Cascade)
+  workout_session WorkoutSession?   @relation(fields: [workout_session_id], references: [id], onDelete: SetNull)
+
+  @@index([training_plan_id, sequence_index, state])
+  @@index([training_schedule_day_id, state])
+  @@map("coach_workout_assignments")
+}
+
+enum CoachWorkoutAssignmentSource {
+  automatic
+  coach_override
+}
+
+enum CoachWorkoutAssignmentState {
+  assigned
+  held
+  completed
+  skipped
 }
 
 enum SessionStatus {
@@ -1300,6 +1374,12 @@ model SeasonalStanding {
   @@index([season_id, season_points])
   @@index([user_id])
   @@map("seasonal_standings")
+}
+
+enum RecurringCoachingScheduleItemStatus {
+  pending_payment
+  activated
+  cancelled
 }
 
 model SeasonalMuscleStanding {

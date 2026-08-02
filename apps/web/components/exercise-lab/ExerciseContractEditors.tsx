@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircle2 } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -160,6 +161,15 @@ const FRAME_LABELS: Record<MovementEditorMode, Record<ExerciseRigKeyframeKind, s
     start: "Setup",
   },
 };
+
+const TRACKING_SETUP_STEPS = [
+  { label: "Movement type", shortLabel: "Type" },
+  { label: "Template", shortLabel: "Template" },
+  { label: "Angles", shortLabel: "Angles" },
+  { label: "Counting rules", shortLabel: "Counting" },
+  { label: "Safeguards", shortLabel: "Safeguards" },
+  { label: "Preview", shortLabel: "Preview" },
+] as const;
 
 const SIDE_ANGLE_TRIPLES = {
   elbow: {
@@ -563,6 +573,7 @@ export function MovementProfileEditor({
     () => profile?.movementContract ?? buildFallbackPoseMovementContract(exerciseName),
     [exerciseName, profile?.movementContract],
   );
+  const editorRootRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [animationProgress, setAnimationProgress] = useState(0);
   const [activeKind, setActiveKind] = useSafeKeyframeKind(keyframes);
@@ -570,6 +581,7 @@ export function MovementProfileEditor({
   const dragPointerIdRef = useRef<number | null>(null);
   const lastDragAtRef = useRef(0);
   const [previewMotion, setPreviewMotion] = useState(false);
+  const [activeSetupStep, setActiveSetupStep] = useState(0);
   const [selectedTemplate, setSelectedTemplate] =
     useState<RigTemplateKey | null>(null);
   const [regenerateConfirmTemplate, setRegenerateConfirmTemplate] =
@@ -578,6 +590,20 @@ export function MovementProfileEditor({
     useState<SpatialRulePreset | null>(null);
   const [viewTransform, setViewTransform] = useState<RigViewTransform>("front");
   const viewDefaultKeyRef = useRef("");
+
+  useEffect(() => {
+    const editorRoot = editorRootRef.current;
+    if (!editorRoot) return;
+
+    let scrollContainer: HTMLElement | null = editorRoot.parentElement;
+    while (scrollContainer) {
+      if (scrollContainer.scrollHeight > scrollContainer.clientHeight + 2) {
+        scrollContainer.scrollTo({ top: 0, behavior: "auto" });
+        break;
+      }
+      scrollContainer = scrollContainer.parentElement;
+    }
+  }, [activeSetupStep]);
   const activeIndex = Math.max(
     0,
     keyframes.findIndex((frame) => frame.kind === activeKind),
@@ -956,17 +982,103 @@ export function MovementProfileEditor({
 
   return (
     <>
-    <section style={panelStyle(colors)}>
-      <div>
-        <strong style={{ color: colors.text }}>Visual movement editor</strong>
-        <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-          Build the rep contract in order: movement type, side model, editable
-          keyframes, then counting rules. The saved coordinates stay normalized
-          even when using mirror or rotation previews.
-        </p>
+    <section ref={editorRootRef} style={{ display: "grid", gap: 12 }}>
+      <div
+        style={{
+          alignItems: "flex-start",
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <strong style={{ color: colors.text }}>Visual movement editor</strong>
+          <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+            Configure one decision at a time. Completed stages stay visible in
+            the setup map without crowding the active workspace.
+          </p>
+        </div>
+        <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>
+          {activeSetupStep + 1} of {TRACKING_SETUP_STEPS.length}
+        </span>
       </div>
 
-      <div style={panelStyle(colors)}>
+      <div
+        aria-label="Tracking setup progress"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          border: `1px solid ${colors.border}`,
+          borderRadius: 8,
+          overflow: "hidden",
+        }}
+      >
+        {TRACKING_SETUP_STEPS.map((step, index) => {
+          const complete =
+            index === 0
+              ? Boolean(contract)
+              : index === 1
+                ? Boolean(rig)
+                : index === 2
+                  ? keyframes.length >= 2
+                  : index === 3
+                    ? Boolean(contract)
+                    : index === 4
+                      ? Boolean(contract?.spatialRequirements)
+                      : Boolean(rig && contract);
+          const active = index === activeSetupStep;
+          return (
+            <button
+              key={step.label}
+              type="button"
+              aria-current={active ? "step" : undefined}
+              onClick={() => {
+                setActiveSetupStep(index);
+                if (index === 5 && rig) setPreviewMotion(true);
+              }}
+              style={{
+                alignItems: "center",
+                backgroundColor: active ? `${colors.primary}16` : colors.surface,
+                border: 0,
+                borderBottom: active ? `2px solid ${colors.primary}` : "2px solid transparent",
+                borderRight:
+                  index < TRACKING_SETUP_STEPS.length - 1
+                    ? `1px solid ${colors.border}`
+                    : 0,
+                color: active ? colors.text : colors.textMuted,
+                cursor: "pointer",
+                display: "flex",
+                gap: 7,
+                justifyContent: "center",
+                minHeight: 44,
+                padding: "8px 6px",
+              }}
+            >
+              <span
+                style={{
+                  alignItems: "center",
+                  backgroundColor: complete ? "#3ed875" : active ? colors.primary : colors.card,
+                  border: `1px solid ${complete ? "#3ed875" : active ? colors.primary : colors.border}`,
+                  borderRadius: 4,
+                  color: complete || active ? "#111" : colors.textMuted,
+                  display: "inline-flex",
+                  fontSize: 9,
+                  fontWeight: 900,
+                  height: 18,
+                  justifyContent: "center",
+                  width: 18,
+                }}
+              >
+                {complete ? <CheckCircle2 size={11} /> : index + 1}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 850 }}>{step.shortLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {activeSetupStep === 0 ? <div style={panelStyle(colors)}>
         <FieldLabel colors={colors}>1. Movement type</FieldLabel>
         <div
           style={{
@@ -1002,9 +1114,9 @@ export function MovementProfileEditor({
             </button>
           ))}
         </div>
-      </div>
+      </div> : null}
 
-      {contract ? (
+      {activeSetupStep === 4 && contract ? (
         <div style={panelStyle(colors)}>
           <div
             style={{
@@ -1028,7 +1140,7 @@ export function MovementProfileEditor({
             <span
               style={{
                 border: `1px solid ${colors.border}`,
-                borderRadius: 999,
+                borderRadius: 6,
                 color: colors.textMuted,
                 fontSize: 12,
                 fontWeight: 800,
@@ -1096,11 +1208,74 @@ export function MovementProfileEditor({
         </div>
       ) : null}
 
-      {!rig || !keyframes.length ? (
+      {activeSetupStep === 1 ? (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "grid",
+            gap: 12,
+            padding: 16,
+          }}
+        >
+          <div>
+            <FieldLabel colors={colors}>2. Movement template</FieldLabel>
+            <strong style={{ color: colors.text }}>
+              Start from the closest movement pattern
+            </strong>
+            <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+              Templates create an editable starter rig. They never replace the
+              exercise-specific angles and safeguards you review next.
+            </p>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            }}
+          >
+            {RIG_TEMPLATE_OPTIONS.map((template) => (
+              <button
+                key={template.value}
+                onClick={() => setSelectedTemplate(template.value)}
+                style={{
+                  ...miniButtonStyle(colors, selectedTemplate === template.value),
+                  borderRadius: 6,
+                }}
+                type="button"
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <button
+              disabled={!selectedTemplate && !generatedContract}
+              onClick={() => createGeneratedProfile(selectedTemplate ?? undefined)}
+              style={{
+                ...miniButtonStyle(colors, Boolean(selectedTemplate ?? generatedContract)),
+                borderRadius: 6,
+                opacity: selectedTemplate || generatedContract ? 1 : 0.45,
+              }}
+              type="button"
+            >
+              {rig ? "Regenerate starter rig" : "Generate starter rig"}
+            </button>
+            <span style={{ color: rig ? "#3ed875" : colors.textMuted, fontSize: 12, fontWeight: 800 }}>
+              {rig
+                ? `${keyframes.length} editable keyframes ready`
+                : "Choose a template to unlock angle editing"}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {activeSetupStep === 2 || activeSetupStep === 5 ? (!rig || !keyframes.length ? (
         <div
           style={{
             border: `1px dashed ${colors.borderStrong}`,
-            borderRadius: 16,
+            borderRadius: 8,
             color: colors.textMuted,
             display: "grid",
             gap: 12,
@@ -1537,9 +1712,9 @@ export function MovementProfileEditor({
             </div>
           </div>
         </>
-      )}
+      )) : null}
 
-      {contract ? (
+      {activeSetupStep === 3 && contract ? (
         <div style={panelStyle(colors)}>
           <div
             style={{
@@ -1709,12 +1884,66 @@ export function MovementProfileEditor({
             ) : null}
           </div>
 
-          <div style={{ ...panelStyle(colors), marginTop: 14 }}>
-            <strong style={{ color: colors.text }}>Spatial awareness rules</strong>
-            <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-              Use these to stop curls from counting as push-ups, reject one-arm
-              motion on bilateral exercises, and require real body travel.
-            </p>
+        </div>
+      ) : null}
+
+      {activeSetupStep === 4 && contract ? (
+          <details
+            style={{
+              ...panelStyle(colors),
+              borderRadius: 8,
+              overflow: "hidden",
+              padding: 0,
+            }}
+          >
+            <summary
+              style={{
+                alignItems: "center",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                listStyle: "none",
+                padding: "14px 16px",
+              }}
+            >
+              <span>
+                <strong style={{ color: colors.text }}>Advanced thresholds</strong>
+                <span
+                  style={{
+                    color: colors.textMuted,
+                    display: "block",
+                    fontSize: 13,
+                    marginTop: 3,
+                  }}
+                >
+                  Fine-tune spatial checks only when the selected preset needs it.
+                </span>
+              </span>
+              <span
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 6,
+                  color: colors.textMuted,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: "5px 8px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Optional
+              </span>
+            </summary>
+            <div
+              style={{
+                borderTop: `1px solid ${colors.border}`,
+                padding: 16,
+              }}
+            >
+              <strong style={{ color: colors.text }}>Spatial awareness rules</strong>
+              <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+                Use these to stop curls from counting as push-ups, reject one-arm
+                motion on bilateral exercises, and require real body travel.
+              </p>
             {spatialPreset === "none" ? (
               <p
                 style={{
@@ -1850,8 +2079,8 @@ export function MovementProfileEditor({
                 />
               </div>
             )}
-          </div>
-        </div>
+            </div>
+          </details>
       ) : null}
     </section>
     <ConfirmModal

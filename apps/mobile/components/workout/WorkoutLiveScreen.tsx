@@ -79,10 +79,11 @@ export function WorkoutLiveScreen() {
                     style={{
                       alignItems: "center",
                       flexDirection: "row",
+                      gap: 12,
                       justifyContent: "space-between",
                     }}
                   >
-                    <View style={{ flex: 1, gap: 2 }}>
+                    <View style={{ flex: 1, flexShrink: 1, gap: 2, minWidth: 0 }}>
                       <FitText
                         style={{
                           color: controller.colors.brand,
@@ -123,6 +124,16 @@ export function WorkoutLiveScreen() {
                         setCameraTarget(null);
                       }}
                       variant="ghost"
+                      accessibilityLabel="Return to manual workout entry"
+                      style={{
+                        alignSelf: "center",
+                        flexGrow: 0,
+                        flexShrink: 0,
+                        minHeight: 38,
+                        minWidth: 96,
+                        paddingHorizontal: 10,
+                      }}
+                      textStyle={{ flexShrink: 0, fontSize: 12, fontWeight: "800" }}
                     />
                   </View>
                 </View>

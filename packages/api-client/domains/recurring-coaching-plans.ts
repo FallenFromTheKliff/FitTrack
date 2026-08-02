@@ -1,8 +1,10 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse } from "../request";
 
-export type RecurringCoachingFrequency = "weekly" | "biweekly";
+export type RecurringCoachingFrequency = "weekly" | "biweekly" | "monthly";
 export type RecurringCoachingPlanStatus =
+  | "draft"
+  | "awaiting_payment"
   | "active"
   | "paused"
   | "cancelled"
@@ -31,8 +33,18 @@ export type RecurringCoachingPlanInput = {
   memberNotes?: string;
   preferredDays: number[];
   preferredTime: string;
+  quotedAmount?: number;
+  scheduleItems?: RecurringCoachingScheduleItemInput[];
   sessionOverrides?: RecurringCoachingSessionOverrideInput[];
   startDate: string;
+  trainingPlanId?: string;
+};
+
+export type RecurringCoachingScheduleItemInput = {
+  amount?: number;
+  durationMinutes?: number;
+  scheduledAt: string;
+  sequenceIndex: number;
 };
 
 export type RecurringCoachingSessionOverrideInput = {
@@ -92,6 +104,7 @@ export type RecurringCoachingPreviewSession = {
 export type RecurringCoachingPlanRecord = {
   billingCycles?: RecurringCoachingBillingCycleRecord[];
   coachId: string;
+  coachApprovedAt: string | null;
   completedSessions: number;
   endDate: string;
   frequency: RecurringCoachingFrequency;
@@ -102,6 +115,19 @@ export type RecurringCoachingPlanRecord = {
   startDate: string;
   status: RecurringCoachingPlanStatus;
   totalSessions: number;
+  quotedAmount: string;
+  scheduleItems?: RecurringCoachingScheduleItemRecord[];
+  trainingPlanId: string | null;
+};
+
+export type RecurringCoachingScheduleItemRecord = {
+  amount: string;
+  appointmentId: string | null;
+  durationMinutes: number;
+  id: string;
+  scheduledAt: string;
+  sequenceIndex: number;
+  status: string;
 };
 
 export type RecurringCoachingPlanSessionRecord = {
@@ -114,6 +140,12 @@ export type RecurringCoachingPlanSessionRecord = {
   recurringState: RecurringCoachingSessionState | null;
   scheduledAt: string;
   status: string;
+  workoutAssignment: {
+    sequenceIndex: number;
+    trainingScheduleDayId: string;
+    source: string;
+    state: string;
+  } | null;
 };
 
 export type RecurringCoachingPlanPreviewResult = {
@@ -160,6 +192,7 @@ type PreviewApiRecord = {
 type PlanApiRecord = {
   billing_cycles?: BillingCycleApiRecord[];
   coach_id: string;
+  coach_approved_at: string | null;
   completed_sessions: number;
   end_date: string;
   frequency: RecurringCoachingFrequency;
@@ -170,6 +203,19 @@ type PlanApiRecord = {
   start_date: string;
   status: RecurringCoachingPlanStatus;
   total_sessions: number;
+  quoted_amount: string;
+  schedule_items?: ScheduleItemApiRecord[];
+  training_plan_id: string | null;
+};
+
+type ScheduleItemApiRecord = {
+  amount: string;
+  appointment_id: string | null;
+  duration_minutes: number;
+  id: string;
+  scheduled_at: string;
+  sequence_index: number;
+  status: string;
 };
 
 type BillingCycleApiRecord = {
@@ -195,6 +241,12 @@ type PlanSessionApiRecord = {
   recurring_state: RecurringCoachingSessionState | null;
   scheduled_at: string;
   status: string;
+  workout_assignment: {
+    sequence_index: number;
+    training_schedule_day_id: string;
+    source: string;
+    state: string;
+  } | null;
 };
 
 type PlanMutationApiRecord = {
@@ -223,6 +275,21 @@ function toPlanPayload(input: RecurringCoachingPlanInput) {
     ...(input.memberNotes ? { member_notes: input.memberNotes } : {}),
     preferred_days: input.preferredDays,
     preferred_time: input.preferredTime,
+    ...(input.quotedAmount !== undefined
+      ? { quoted_amount: input.quotedAmount }
+      : {}),
+    ...(input.scheduleItems?.length
+      ? {
+          schedule_items: input.scheduleItems.map((item) => ({
+            ...(item.amount !== undefined ? { amount: item.amount } : {}),
+            ...(item.durationMinutes !== undefined
+              ? { duration_minutes: item.durationMinutes }
+              : {}),
+            scheduled_at: item.scheduledAt,
+            sequence_index: item.sequenceIndex,
+          })),
+        }
+      : {}),
     ...(input.sessionOverrides?.length
       ? {
           session_overrides: input.sessionOverrides.map((override) => ({
@@ -237,6 +304,7 @@ function toPlanPayload(input: RecurringCoachingPlanInput) {
         }
       : {}),
     start_date: input.startDate,
+    ...(input.trainingPlanId ? { training_plan_id: input.trainingPlanId } : {}),
   };
 }
 
@@ -283,6 +351,7 @@ function mapPlan(record: PlanApiRecord): RecurringCoachingPlanRecord {
   return {
     billingCycles: record.billing_cycles?.map(mapBillingCycle),
     coachId: record.coach_id,
+    coachApprovedAt: record.coach_approved_at,
     completedSessions: record.completed_sessions,
     endDate: record.end_date,
     frequency: record.frequency,
@@ -293,6 +362,23 @@ function mapPlan(record: PlanApiRecord): RecurringCoachingPlanRecord {
     startDate: record.start_date,
     status: record.status,
     totalSessions: record.total_sessions,
+    quotedAmount: record.quoted_amount,
+    scheduleItems: record.schedule_items?.map(mapScheduleItem),
+    trainingPlanId: record.training_plan_id,
+  };
+}
+
+function mapScheduleItem(
+  record: ScheduleItemApiRecord,
+): RecurringCoachingScheduleItemRecord {
+  return {
+    amount: record.amount,
+    appointmentId: record.appointment_id,
+    durationMinutes: record.duration_minutes,
+    id: record.id,
+    scheduledAt: record.scheduled_at,
+    sequenceIndex: record.sequence_index,
+    status: record.status,
   };
 }
 
@@ -326,6 +412,15 @@ function mapSession(
     recurringState: record.recurring_state,
     scheduledAt: record.scheduled_at,
     status: record.status,
+    workoutAssignment: record.workout_assignment
+      ? {
+          sequenceIndex: record.workout_assignment.sequence_index,
+          trainingScheduleDayId:
+            record.workout_assignment.training_schedule_day_id,
+          source: record.workout_assignment.source,
+          state: record.workout_assignment.state,
+        }
+      : null,
   };
 }
 
@@ -350,6 +445,13 @@ function mapBillingCyclePaymentResult(
 
 export function createRecurringCoachingPlansApi(transport: ApiTransport) {
   return {
+    async list() {
+      const result = await unwrapResponse<PlanApiRecord[]>(
+        transport.get("/bookings/recurring-coaching-plans"),
+        "Unable to load recurring coaching plans.",
+      );
+      return result.map(mapPlan);
+    },
     async preview(input: RecurringCoachingPlanInput) {
       const result = await unwrapResponse<PreviewApiRecord>(
         transport.post("/bookings/recurring-coaching-plans/preview", toPlanPayload(input)),

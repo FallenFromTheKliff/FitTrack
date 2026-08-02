@@ -43,6 +43,7 @@ function getRolesMetadata(
 describe('AppointmentController', () => {
   const appointmentService = {
     createAppointment: jest.fn(),
+    setAvailability: jest.fn(),
     getCoachAppointments: jest.fn(),
     getMyAppointments: jest.fn(),
     respondToAppointment: jest.fn(),
@@ -62,17 +63,24 @@ describe('AppointmentController', () => {
     jest.clearAllMocks();
   });
 
-  it('marks coach-user availability replacement as gone', () => {
-    expect(() => controller.setAvailability()).toThrow(
-      'Coach user availability endpoints are no longer supported.',
+  it('keeps coach availability replacement on the authenticated coach surface', async () => {
+    appointmentService.setAvailability.mockResolvedValue(null);
+
+    await controller.setAvailability(
+      { sub: 'coach-user-1' } as never,
+      { slots: [] },
+    );
+
+    expect(appointmentService.setAvailability).toHaveBeenCalledWith(
+      'coach-user-1',
+      { slots: [] },
     );
     expect(getGuardMetadata('setAvailability')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
     expect(getRolesMetadata('setAvailability')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
+      UserRole.coach,
     ]);
   });
 
@@ -159,7 +167,7 @@ describe('AppointmentController', () => {
     expect(getRolesMetadata('respondToAppointment')).toEqual([UserRole.coach]);
   });
 
-  it('returns a non-refundable message after cancelling an appointment', async () => {
+  it('returns the generic payment-policy message after cancelling an appointment', async () => {
     appointmentService.cancelAppointment.mockResolvedValue(undefined);
 
     await expect(
@@ -169,7 +177,7 @@ describe('AppointmentController', () => {
         { reason: 'Need to reschedule.' },
       ),
     ).resolves.toEqual({
-      message: 'Appointment cancelled. Paid downpayments are non-refundable.',
+        message: 'Appointment cancelled. Payment handling follows the applicable payment policy.',
     });
 
     expect(appointmentService.cancelAppointment).toHaveBeenCalledWith(
@@ -181,7 +189,7 @@ describe('AppointmentController', () => {
     expect(getGuardMetadata('cancelAppointment')).toEqual([JwtAuthGuard]);
   });
 
-  it('passes the idempotency key through for appointment downpayments', async () => {
+  it('passes the idempotency key through for appointment payment checkout', async () => {
     appointmentService.initiateDownpayment.mockResolvedValue({
       appointment_id: 'appt-1',
       status: 'pending_payment',

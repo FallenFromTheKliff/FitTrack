@@ -48,7 +48,8 @@ const EXERCISE_SEEDS = [
   {
     key: 'barbell-bench',
     category: ExerciseCategory.strength,
-    description: 'Classic horizontal barbell press for chest and triceps strength.',
+    description:
+      'Classic horizontal barbell press for chest and triceps strength.',
     muscleGroup: 'chest',
     name: 'Barbell Bench Press',
   },
@@ -69,7 +70,8 @@ const EXERCISE_SEEDS = [
   {
     key: 'shoulder-press',
     category: ExerciseCategory.strength,
-    description: 'Vertical press pattern for shoulders, triceps, and trunk stability.',
+    description:
+      'Vertical press pattern for shoulders, triceps, and trunk stability.',
     muscleGroup: 'shoulders',
     name: 'Seated Dumbbell Shoulder Press',
   },
@@ -153,7 +155,8 @@ const EXERCISE_SEEDS = [
   {
     key: 'hip-thrust',
     category: ExerciseCategory.strength,
-    description: 'Glute-dominant hip extension movement for lower-body strength.',
+    description:
+      'Glute-dominant hip extension movement for lower-body strength.',
     muscleGroup: 'glutes',
     name: 'Barbell Hip Thrust',
   },
@@ -386,6 +389,18 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
   });
 }
 
+type SeedPlanExerciseDescriptor = {
+  dayOfWeek: number;
+  durationSeconds: number | null;
+  exerciseId: string;
+  exerciseKey: string;
+  planExerciseId: string;
+  reps: number | null;
+  scheduleDayId: string;
+  sets: number;
+  weightKg: number | null;
+};
+
 async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
   const memberKeys = ctx.state.premiumMemberKeys.slice(0, 36);
   const coachKeys = ctx.state.coachAccountKeys;
@@ -396,26 +411,47 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
   const exerciseLogRows: Prisma.ExerciseLogCreateManyInput[] = [];
   const poseRows: Prisma.PoseSessionCreateManyInput[] = [];
   const reviewRows: Prisma.ExerciseReviewSubmissionCreateManyInput[] = [];
-  const sessionsPerMember =
-    ctx.config.workoutDensity === 'low'
-      ? 2
-      : ctx.config.workoutDensity === 'high'
-        ? 10
-        : 5;
+  const activePlanExercisesByMember = new Map<
+    string,
+    SeedPlanExerciseDescriptor[]
+  >();
+  const poseProfileKeyByExerciseId = new Map<string, string>(
+    POSE_PROFILE_EXERCISE_KEYS.flatMap((exerciseKey) => {
+      const exerciseId = ctx.state.exerciseIds[exerciseKey];
+      return exerciseId ? ([[exerciseId, exerciseKey]] as const) : [];
+    }),
+  );
+  const lucaHistoryTarget = Math.min(12, ctx.config.exerciseHistory);
+  const remainingHistory = ctx.config.exerciseHistory - lucaHistoryTarget;
+  const otherMemberCount = Math.max(1, memberKeys.length - 1);
+  const baseHistoryPerOtherMember = Math.floor(
+    remainingHistory / otherMemberCount,
+  );
+  const otherHistoryRemainder = remainingHistory % otherMemberCount;
   const presetsPerMember = ctx.config.splitPresetsPerMember;
 
   for (const [memberIndex, memberKey] of memberKeys.entries()) {
     const userId = ctx.state.userIds[memberKey];
-    const coachKey = coachKeys[memberIndex % coachKeys.length];
+    // Luca is the demo member used in the member portal walkthrough. Keep this
+    // explicit so her active PPL plan is always a real Seed Coach assignment,
+    // rather than an AI draft that happens to share the same title.
+    const isLucaDemoMember = memberKey === 'member-premium';
+    const coachKey = isLucaDemoMember
+      ? 'coach'
+      : coachKeys[memberIndex % coachKeys.length];
     const activePlanId = seedId(`training-plan:${memberKey}`);
 
-    for (let presetIndex = 0; presetIndex < presetsPerMember; presetIndex += 1) {
+    for (
+      let presetIndex = 0;
+      presetIndex < presetsPerMember;
+      presetIndex += 1
+    ) {
       const planId =
         presetIndex === 0
           ? activePlanId
           : seedId(`training-plan:${memberKey}:preset:${presetIndex}`);
       const source =
-        memberIndex % 2 === 0
+        isLucaDemoMember || memberIndex % 2 === 0
           ? PlanSource.coach_assigned
           : presetIndex === 0
             ? PlanSource.ai_generated
@@ -529,157 +565,240 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               (memberIndex + presetIndex + dayIndex + orderIndex) %
                 exerciseKeys.length
             ];
+          const planExerciseId = seedId(
+            `plan-exercise:${memberKey}:${presetIndex}:${dayIndex}:${orderIndex}`,
+          );
+          const reps = exerciseKey === 'run' ? null : 8 + orderIndex * 2;
+          const sets = exerciseKey === 'run' ? 1 : 3;
+          const durationSeconds =
+            exerciseKey === 'run' || exerciseKey === 'plank'
+              ? 600 + orderIndex * 60
+              : null;
+          const weightKg =
+            exerciseKey === 'run' || exerciseKey === 'plank'
+              ? null
+              : 25 + memberIndex + orderIndex * 5;
           planExerciseRows.push({
-            id: seedId(
-              `plan-exercise:${memberKey}:${presetIndex}:${dayIndex}:${orderIndex}`,
-            ),
-            duration_seconds:
-              exerciseKey === 'run' || exerciseKey === 'plank'
-                ? 600 + orderIndex * 60
-                : null,
+            id: planExerciseId,
+            duration_seconds: durationSeconds,
             exercise_id: ctx.state.exerciseIds[exerciseKey],
             notes: 'Plan exercise with realistic set prescription.',
             order_index: orderIndex,
-            reps: exerciseKey === 'run' ? null : 8 + orderIndex * 2,
+            reps,
             rest_seconds: exerciseKey === 'run' ? 90 : 75,
             schedule_day_id: scheduleDayId,
-            sets: exerciseKey === 'run' ? 1 : 3,
+            sets,
             weight_kg_target:
-              exerciseKey === 'run' || exerciseKey === 'plank'
-                ? null
-                : new Prisma.Decimal(25 + memberIndex + orderIndex * 5),
+              weightKg == null ? null : new Prisma.Decimal(weightKg),
           });
+
+          if (presetIndex === 0) {
+            const activePlanExercises =
+              activePlanExercisesByMember.get(memberKey) ?? [];
+            activePlanExercises.push({
+              dayOfWeek: dayIndex,
+              durationSeconds,
+              exerciseId: ctx.state.exerciseIds[exerciseKey],
+              exerciseKey,
+              planExerciseId,
+              reps,
+              scheduleDayId,
+              sets,
+              weightKg,
+            });
+            activePlanExercisesByMember.set(memberKey, activePlanExercises);
+          }
         }
       }
     }
 
-    for (let sessionIndex = 0; sessionIndex < sessionsPerMember; sessionIndex += 1) {
+    const activePlanExercises =
+      activePlanExercisesByMember.get(memberKey) ?? [];
+    const activePlanDays = [
+      ...activePlanExercises.reduce<Map<string, SeedPlanExerciseDescriptor[]>>(
+        (days, exercise) => {
+          const dayExercises = days.get(exercise.scheduleDayId) ?? [];
+          dayExercises.push(exercise);
+          days.set(exercise.scheduleDayId, dayExercises);
+          return days;
+        },
+        new Map(),
+      ),
+    ].map(([, dayExercises]) => dayExercises);
+    const otherMemberIndex = Math.max(0, memberIndex - 1);
+    const sessionsForMember = isLucaDemoMember
+      ? lucaHistoryTarget
+      : baseHistoryPerOtherMember +
+        (otherMemberIndex < otherHistoryRemainder ? 1 : 0);
+    const historyEndBeforeToday = daysFrom(ctx.config.historyEndDate, -1, 20);
+    const effectiveHistoryStart =
+      ctx.config.historyStartDate <= historyEndBeforeToday
+        ? ctx.config.historyStartDate
+        : daysFrom(historyEndBeforeToday, -1, 8);
+
+    for (
+      let sessionIndex = 0;
+      sessionIndex < sessionsForMember;
+      sessionIndex += 1
+    ) {
+      const selectedExercises = isLucaDemoMember
+        ? activePlanDays[sessionIndex % activePlanDays.length]
+        : ctx.rng.pick(activePlanDays);
       const sessionId = seedId(`workout-session:${memberKey}:${sessionIndex}`);
       const startedAt = dateInsideRange(
-        ctx.config.historyStartDate,
-        ctx.config.historyEndDate,
-        (memberIndex + sessionIndex + 1) /
-          (memberKeys.length + sessionsPerMember + 2),
-        17,
+        effectiveHistoryStart,
+        historyEndBeforeToday,
+        (sessionIndex + 1) / (sessionsForMember + 1),
+        ctx.rng.int(7, 19),
       );
+      const durationSeconds = ctx.rng.int(2_400, 4_500);
+      const completedAt = new Date(
+        startedAt.getTime() + durationSeconds * 1_000,
+      );
+      let totalVolumeKg = 0;
+      const firstLogIdByExercise = new Map<string, string>();
+
+      for (const [exerciseIndex, exercise] of selectedExercises.entries()) {
+        const performanceDelta = isLucaDemoMember
+          ? 2
+          : ctx.rng.pick([-1, 0, 0, 1, 1, 2]);
+        const completedReps =
+          exercise.reps == null
+            ? null
+            : Math.max(1, exercise.reps + performanceDelta);
+        const completedWeightKg =
+          exercise.weightKg == null
+            ? null
+            : Math.max(
+                1,
+                exercise.weightKg +
+                  (isLucaDemoMember ? 0 : ctx.rng.pick([-1, 0, 0, 1])),
+              );
+
+        for (let setIndex = 0; setIndex < exercise.sets; setIndex += 1) {
+          const exerciseLogId = seedId(
+            `exercise-log:${memberKey}:${sessionIndex}:${exercise.planExerciseId}:${setIndex}`,
+          );
+          firstLogIdByExercise.set(
+            exercise.exerciseId,
+            firstLogIdByExercise.get(exercise.exerciseId) ?? exerciseLogId,
+          );
+          exerciseLogRows.push({
+            id: exerciseLogId,
+            created_at: new Date(
+              startedAt.getTime() +
+                (10 + exerciseIndex * 12 + setIndex * 3) * 60_000,
+            ),
+            duration_seconds:
+              completedReps == null ? exercise.durationSeconds : null,
+            exercise_id: exercise.exerciseId,
+            plan_exercise_id: exercise.planExerciseId,
+            reps_ai_counted: completedReps,
+            reps_completed: completedReps,
+            reps_target: exercise.reps,
+            session_id: sessionId,
+            set_number: setIndex + 1,
+            user_id: userId,
+            weight_kg:
+              completedWeightKg == null
+                ? null
+                : new Prisma.Decimal(completedWeightKg),
+          });
+
+          if (completedWeightKg != null && completedReps != null) {
+            totalVolumeKg += completedWeightKg * completedReps;
+          }
+        }
+      }
+
       sessionRows.push({
         id: sessionId,
-        completed_at: daysFrom(startedAt, 0, startedAt.getHours() + 1, 10),
-        duration_seconds: 3600 + memberIndex * 20,
-        last_activity_at: daysFrom(startedAt, 0, startedAt.getHours() + 1, 10),
+        completed_at: completedAt,
+        duration_seconds: durationSeconds,
+        last_activity_at: completedAt,
         plan_id: activePlanId,
         started_at: startedAt,
         status: SessionStatus.completed,
-        total_volume_kg: new Prisma.Decimal(
-          1800 + memberIndex * 42 + sessionIndex * 100,
-        ),
+        total_volume_kg: new Prisma.Decimal(totalVolumeKg),
         user_id: userId,
       });
 
-      for (let setIndex = 0; setIndex < 3; setIndex += 1) {
-        const exerciseKey =
-          exerciseKeys[(memberIndex + setIndex + setIndex) % exerciseKeys.length];
-        const exerciseLogId = seedId(
-          `exercise-log:${memberKey}:${sessionIndex}:${setIndex}`,
+      const poseExercise = selectedExercises.find((exercise) =>
+        poseProfileKeyByExerciseId.has(exercise.exerciseId),
+      );
+      const profileKey = poseExercise
+        ? poseProfileKeyByExerciseId.get(poseExercise.exerciseId)
+        : undefined;
+      const poseExerciseLogId = poseExercise
+        ? firstLogIdByExercise.get(poseExercise.exerciseId)
+        : undefined;
+
+      if (poseExercise && profileKey && poseExerciseLogId) {
+        const poseSessionId = seedId(
+          `pose-session:${memberKey}:${sessionIndex}`,
         );
-        const planExerciseId = seedId(
-          `plan-exercise:${memberKey}:0:${setIndex}:${setIndex}`,
-        );
-        exerciseLogRows.push({
-          id: exerciseLogId,
-          created_at: daysFrom(
-            startedAt,
-            0,
-            startedAt.getHours(),
-            15 + setIndex * 10,
-          ),
-          duration_seconds: exerciseKey === 'run' ? 900 : null,
-          exercise_id: ctx.state.exerciseIds[exerciseKey],
-          plan_exercise_id: planExerciseId,
-          reps_ai_counted: exerciseKey === 'run' ? null : 8 + setIndex,
-          reps_completed: exerciseKey === 'run' ? null : 8 + setIndex,
-          reps_target: exerciseKey === 'run' ? null : 10,
-          session_id: sessionId,
-          set_number: setIndex + 1,
+        const countedReps = poseExercise.reps ?? ctx.rng.int(8, 15);
+        poseRows.push({
+          id: poseSessionId,
+          analysis_summary: {
+            countedReps,
+            issues: memberIndex % 5 === 0 ? ['depth variance'] : [],
+            source: 'dynamic-seed',
+          },
+          classification_confidence: new Prisma.Decimal('0.810'),
+          confidence_avg: new Prisma.Decimal('0.840'),
+          detected_exercise_name: profileKey,
+          detected_profile_id: seedId(`pose-profile:${profileKey}`),
+          ended_at: completedAt,
+          exercise_hint: poseExercise.exerciseKey,
+          exercise_log_id: poseExerciseLogId,
+          rep_count_ai: countedReps,
+          started_at: startedAt,
+          subject_lock_confidence: new Prisma.Decimal('0.780'),
           user_id: userId,
-          weight_kg:
-            exerciseKey === 'run' || exerciseKey === 'plank'
-              ? null
-              : new Prisma.Decimal(22.5 + memberIndex + setIndex * 5),
         });
 
-        if (setIndex === 0) {
-          const poseSessionId = seedId(
-            `pose-session:${memberKey}:${sessionIndex}`,
-          );
-          const profileKey = POSE_PROFILE_EXERCISE_KEYS.some(
-            (profileExerciseKey) => profileExerciseKey === exerciseKey,
-          )
-            ? exerciseKey
-            : 'push-up';
-          poseRows.push({
-            id: poseSessionId,
-            analysis_summary: {
-              countedReps: 8 + sessionIndex,
-              issues: memberIndex % 5 === 0 ? ['depth variance'] : [],
-              source: 'dynamic-seed',
-            },
-            classification_confidence: new Prisma.Decimal('0.810'),
-            confidence_avg: new Prisma.Decimal('0.840'),
-            detected_exercise_name: profileKey,
-            detected_profile_id: seedId(`pose-profile:${profileKey}`),
-            ended_at: daysFrom(startedAt, 0, startedAt.getHours(), 30),
-            exercise_hint: exerciseKey,
-            exercise_log_id: exerciseLogId,
-            rep_count_ai: 8 + sessionIndex,
-            started_at: startedAt,
-            subject_lock_confidence: new Prisma.Decimal('0.780'),
+        if (memberIndex < 8 && sessionIndex === 1) {
+          reviewRows.push({
+            id: seedId(`exercise-review:${memberKey}`),
+            category: ExerciseCategory.strength,
+            description:
+              'Movement submitted from pose finalization for admin review.',
+            evidence_bars: [
+              { label: 'visibility', value: 0.82 },
+              { label: 'phase', value: 0.77 },
+            ],
+            hand_shape_profile: { grip: 'neutral' },
+            instructions:
+              'Review movement and map it to the current exercise catalog.',
+            match_hint: `Looks close to the seeded ${profileKey} profile.`,
+            movement_profile: { pattern: 'seeded_history_movement' },
+            muscle_group: 'general',
+            muscle_targets: ['primary'],
+            origin_label: 'client custom',
+            pose_session_id: poseSessionId,
+            proposed_name: `Review ${profileKey}`,
+            published_exercise_id:
+              memberIndex % 3 === 0 ? poseExercise.exerciseId : null,
+            queue_tag: 'needs match',
+            review_notes:
+              memberIndex % 3 === 0
+                ? 'Mapped to an exercise selected from the current catalog.'
+                : null,
+            reviewed_at:
+              memberIndex % 3 === 0
+                ? daysFrom(ctx.config.anchorDate, -2, 12)
+                : null,
+            source_label: 'detected workout movement',
+            status:
+              memberIndex % 3 === 0
+                ? ExerciseReviewSubmissionStatus.published
+                : ExerciseReviewSubmissionStatus.pending,
+            summary: 'Seeded movement review backed by workout history.',
+            title: 'Review seeded workout movement',
+            trigger_label: 'history fixture review',
             user_id: userId,
           });
-
-          if (memberIndex < 8 && sessionIndex === 1) {
-            reviewRows.push({
-              id: seedId(`exercise-review:${memberKey}`),
-              category: ExerciseCategory.strength,
-              description:
-                'Unknown movement submitted from pose finalization for admin review.',
-              evidence_bars: [
-                { label: 'visibility', value: 0.82 },
-                { label: 'phase', value: 0.77 },
-              ],
-              hand_shape_profile: { grip: 'neutral' },
-              instructions:
-                'Review movement, map to existing catalog, or publish as new.',
-              match_hint: 'Looks close to push-up pattern.',
-              movement_profile: { pattern: 'bodyweight_press' },
-              muscle_group: 'chest',
-              muscle_targets: ['chest', 'triceps'],
-              origin_label: 'client custom',
-              pose_session_id: poseSessionId,
-              proposed_name: 'Incline Push Pattern',
-              published_exercise_id:
-                memberIndex % 3 === 0 ? ctx.state.exerciseIds['push-up'] : null,
-              queue_tag: 'needs match',
-              review_notes:
-                memberIndex % 3 === 0
-                  ? 'Published to push-up catalog during seeded review.'
-                  : null,
-              reviewed_at:
-                memberIndex % 3 === 0
-                  ? daysFrom(ctx.config.anchorDate, -2, 12)
-                  : null,
-              source_label: 'detected unknown movement',
-              status:
-                memberIndex % 3 === 0
-                  ? ExerciseReviewSubmissionStatus.published
-                  : ExerciseReviewSubmissionStatus.pending,
-              summary:
-                'Unknown bodyweight press pattern with solid visibility.',
-              title: 'Review seeded bodyweight press',
-              trigger_label: 'unknown after 3 reps',
-              user_id: userId,
-            });
-          }
         }
       }
     }
@@ -766,7 +885,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       archived_at: null,
       auto_start_next: false,
       closed_at: daysFrom(ctx.config.anchorDate, -26, 23, 59),
-      description: 'Completed season retained for historical top-performer review.',
+      description:
+        'Completed season retained for historical top-performer review.',
       ends_at: daysFrom(ctx.config.anchorDate, -26, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, -115, 0),
@@ -778,7 +898,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       activated_at: daysFrom(ctx.config.anchorDate, -115, 0),
       auto_start_next: false,
       closed_at: daysFrom(ctx.config.anchorDate, -26, 23, 59),
-      description: 'Completed season retained for historical top-performer review.',
+      description:
+        'Completed season retained for historical top-performer review.',
       ends_at: daysFrom(ctx.config.anchorDate, -26, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, -115, 0),
@@ -793,7 +914,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       archived_at: null,
       auto_start_next: true,
       closed_at: null,
-      description: 'Scheduled season that starts automatically after the active season.',
+      description:
+        'Scheduled season that starts automatically after the active season.',
       ends_at: daysFrom(ctx.config.anchorDate, 155, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, 66, 0),
@@ -803,7 +925,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
     create: {
       id: upcomingSeasonId,
       auto_start_next: true,
-      description: 'Scheduled season that starts automatically after the active season.',
+      description:
+        'Scheduled season that starts automatically after the active season.',
       ends_at: daysFrom(ctx.config.anchorDate, 155, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, 66, 0),
@@ -1061,10 +1184,16 @@ async function seedGamification(ctx: DynamicSeedContext) {
           user_id: ctx.state.userIds[memberKey],
         },
         {
-          id: seedId(`season-muscle:${previousSeasonId}:${memberKey}:${muscle}`),
+          id: seedId(
+            `season-muscle:${previousSeasonId}:${memberKey}:${muscle}`,
+          ),
           is_disqualified: false,
           is_hidden: false,
-          last_earned_at: daysFrom(ctx.config.anchorDate, -28 - muscleIndex, 20),
+          last_earned_at: daysFrom(
+            ctx.config.anchorDate,
+            -28 - muscleIndex,
+            20,
+          ),
           muscle_group: muscle,
           muscle_points: 820 - memberIndex * 8 + muscleIndex * 30,
           rank_position: memberIndex + 1,

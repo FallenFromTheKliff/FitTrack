@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CoachWorkoutAssignmentSource,
+  CoachWorkoutAssignmentState,
   PaymentProvider,
   RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
@@ -15,6 +17,7 @@ import {
   IsISO8601,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
@@ -30,6 +33,40 @@ import {
 import { TrimString } from '../../../common/validators';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class RecurringCoachingScheduleItemDTO {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt({ message: 'sequence_index must be an integer' })
+  @Min(1, { message: 'sequence_index must be at least 1' })
+  @Max(120, { message: 'sequence_index must not exceed 120' })
+  sequence_index: number;
+
+  @ApiProperty({ example: '2026-05-06T05:00:00.000Z' })
+  @IsISO8601(
+    {},
+    { message: 'scheduled_at must be a valid ISO 8601 date string' },
+  )
+  scheduled_at: string;
+
+  @ApiPropertyOptional({ example: 60 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'duration_minutes must be an integer' })
+  @Min(30, { message: 'duration_minutes must be at least 30' })
+  @Max(180, { message: 'duration_minutes must not exceed 180' })
+  duration_minutes?: number;
+
+  @ApiPropertyOptional({ example: 1200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'amount must be a valid amount with at most 2 decimals' },
+  )
+  @Min(0, { message: 'amount must not be negative' })
+  amount?: number;
+}
 
 export class RecurringCoachingPlanBaseDTO {
   @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
@@ -102,6 +139,35 @@ export class RecurringCoachingPlanBaseDTO {
   @IsString({ message: 'member_notes must be a string' })
   @MaxLength(500, { message: 'member_notes must not exceed 500 characters' })
   member_notes?: string;
+
+  @ApiPropertyOptional({
+    example: 14400,
+    description:
+      'Fixed full price for the requested monthly schedule. No wallet or credit balance is created.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'quoted_amount must be a valid amount with at most 2 decimals' },
+  )
+  @Min(0, { message: 'quoted_amount must not be negative' })
+  quoted_amount?: number;
+
+  @ApiPropertyOptional({ example: '77777777-7777-4777-8777-777777777777' })
+  @IsOptional()
+  @IsUUID('all', { message: 'training_plan_id must be a valid UUID' })
+  training_plan_id?: string;
+
+  @ApiPropertyOptional({ type: RecurringCoachingScheduleItemDTO, isArray: true })
+  @IsOptional()
+  @IsArray({ message: 'schedule_items must be an array' })
+  @ArrayMaxSize(120, {
+    message: 'schedule_items must not exceed 120 entries',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => RecurringCoachingScheduleItemDTO)
+  schedule_items?: RecurringCoachingScheduleItemDTO[];
 }
 
 export class PreviewRecurringCoachingPlanDTO extends RecurringCoachingPlanBaseDTO {}
@@ -158,6 +224,7 @@ export class CreateRecurringCoachingPlanDTO extends RecurringCoachingPlanBaseDTO
   @ValidateNested({ each: true })
   @Type(() => RecurringPlanSessionOverrideDTO)
   session_overrides?: RecurringPlanSessionOverrideDTO[];
+
 }
 
 export class UpdateRecurringPlanSessionDTO {
@@ -346,6 +413,47 @@ export class RecurringCoachingPlanSessionResponseDTO {
 
   @ApiPropertyOptional({ example: false })
   conflict: boolean;
+
+  @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
+    nullable: true,
+    example: {
+      sequence_index: 1,
+      training_schedule_day_id: '44444444-4444-4444-8444-444444444444',
+      source: CoachWorkoutAssignmentSource.automatic,
+      state: CoachWorkoutAssignmentState.assigned,
+    },
+  })
+  workout_assignment: {
+    sequence_index: number;
+    training_schedule_day_id: string;
+    source: CoachWorkoutAssignmentSource;
+    state: CoachWorkoutAssignmentState;
+  } | null;
+}
+
+export class RecurringCoachingScheduleItemResponseDTO {
+  @ApiProperty({ example: '99999999-9999-4999-8999-999999999999' })
+  id: string;
+
+  @ApiProperty({ example: 1 })
+  sequence_index: number;
+
+  @ApiProperty({ example: '2026-05-06T05:00:00.000Z' })
+  scheduled_at: string;
+
+  @ApiProperty({ example: 60 })
+  duration_minutes: number;
+
+  @ApiProperty({ example: '1200.00' })
+  amount: string;
+
+  @ApiProperty({ example: 'pending_payment' })
+  status: string;
+
+  @ApiPropertyOptional({ example: null })
+  appointment_id: string | null;
 }
 
 export class RecurringCoachingPlanResponseDTO {
@@ -357,6 +465,9 @@ export class RecurringCoachingPlanResponseDTO {
 
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   coach_id: string;
+
+  @ApiPropertyOptional({ example: '77777777-7777-4777-8777-777777777777' })
+  training_plan_id: string | null;
 
   @ApiProperty({ enum: RecurringCoachingFrequency })
   frequency: RecurringCoachingFrequency;
@@ -381,6 +492,15 @@ export class RecurringCoachingPlanResponseDTO {
 
   @ApiProperty({ example: 3 })
   completed_sessions: number;
+
+  @ApiProperty({ example: '14400.00' })
+  quoted_amount: string;
+
+  @ApiPropertyOptional({ example: '2026-05-01T01:00:00.000Z' })
+  coach_approved_at: string | null;
+
+  @ApiPropertyOptional({ type: RecurringCoachingScheduleItemResponseDTO, isArray: true })
+  schedule_items?: RecurringCoachingScheduleItemResponseDTO[];
 
   @ApiPropertyOptional({
     type: RecurringCoachingBillingCycleResponseDTO,

@@ -964,6 +964,7 @@ function useExerciseLabPageState() {
                 color={toneColor}
                 fontSize={9.5}
                 style={{
+                  borderRadius: 6,
                   flexShrink: 0,
                   marginTop: 1,
                   paddingBlock: 1,
@@ -1128,6 +1129,7 @@ function useExerciseLabPageState() {
           label={toTitleCase(exercise.category)}
           color={c.brand}
           fontSize={11}
+          style={{ borderRadius: 6 }}
         />
       ),
     },
@@ -1151,6 +1153,7 @@ function useExerciseLabPageState() {
           label={exercise.isActive ? "Active" : "Archived"}
           color={exercise.isActive ? c.success : c.textMuted}
           fontSize={11}
+          style={{ borderRadius: 6 }}
         />
       ),
     },
@@ -1246,6 +1249,20 @@ function useExerciseLabPageState() {
         <FitText style={{ fontSize: 13, color: c.textSecondary }}>
           {definition.sortOrder}
         </FitText>
+      ),
+    },
+    {
+      key: "status",
+      heading: "Status",
+      align: "left",
+      render: (definition, c) => (
+        <FitPill
+          mode="status"
+          label={definition.isActive ? "Active" : "Archived"}
+          color={definition.isActive ? c.success : c.textMuted}
+          fontSize={11}
+          style={{ borderRadius: 6 }}
+        />
       ),
     },
   ];

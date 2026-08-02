@@ -11,6 +11,7 @@ loadEnv(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 const DEFAULT_USERS = 100;
 const DEFAULT_SEED = 20260523;
 const DEFAULT_HISTORY_MONTHS = 12;
+const DEFAULT_EXERCISE_HISTORY = 50;
 export const REMOTE_RESET_CONFIRMATION = 'RESET_REMOTE_DYNAMIC_SEED';
 
 function getFlag(argv: readonly string[], name: string) {
@@ -40,6 +41,11 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseNonNegativeInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 function parseRate(value: string | undefined, fallback: number) {
   const parsed = Number.parseFloat(value ?? '');
   if (!Number.isFinite(parsed)) {
@@ -48,13 +54,15 @@ function parseRate(value: string | undefined, fallback: number) {
   return Math.min(1, Math.max(0, parsed));
 }
 
-function parseDensity(
-  value: string | undefined,
-): 'low' | 'normal' | 'high' {
+function parseDensity(value: string | undefined): 'low' | 'normal' | 'high' {
   return value === 'low' || value === 'high' ? value : 'normal';
 }
 
-function parseDateFlag(value: string | undefined, fallback: Date, flag: string) {
+function parseDateFlag(
+  value: string | undefined,
+  fallback: Date,
+  flag: string,
+) {
   const parsed = value ? new Date(value) : fallback;
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`Invalid --${flag} value. Use an ISO date string.`);
@@ -92,11 +100,7 @@ export function parseDynamicSeedConfig(
     startOfUtcToday(),
     'anchor-date',
   );
-  const historyEndDate = parseDateFlag(
-    getFlag(argv, 'to'),
-    anchorDate,
-    'to',
-  );
+  const historyEndDate = parseDateFlag(getFlag(argv, 'to'), anchorDate, 'to');
   const historyStartDate = parseDateFlag(
     getFlag(argv, 'from'),
     monthsBefore(historyEndDate, historyMonths),
@@ -107,6 +111,21 @@ export function parseDynamicSeedConfig(
     throw new Error('--from must be earlier than or equal to --to.');
   }
 
+  const workoutDensity = parseDensity(getFlag(argv, 'workout-density'));
+  const densityHistoryDefault =
+    workoutDensity === 'low'
+      ? Math.floor(DEFAULT_EXERCISE_HISTORY / 2)
+      : workoutDensity === 'high'
+        ? DEFAULT_EXERCISE_HISTORY * 2
+        : DEFAULT_EXERCISE_HISTORY;
+  const exerciseHistory = Math.min(
+    5_000,
+    parseNonNegativeInt(
+      getFlag(argv, 'exercise-history') ?? getFlag(argv, 'exercise_history'),
+      densityHistoryDefault,
+    ),
+  );
+
   return {
     allowRemoteReset: hasFlag(argv, 'allow-remote-reset'),
     anchorDate,
@@ -115,6 +134,7 @@ export function parseDynamicSeedConfig(
     coachFormerRate: parseRate(getFlag(argv, 'coach-former-rate'), 0.15),
     coachPausedRate: parseRate(getFlag(argv, 'coach-paused-rate'), 0.08),
     confirmRemoteReset: getFlag(argv, 'confirm'),
+    exerciseHistory,
     historyEndDate,
     historyMonths,
     historyStartDate,
@@ -128,7 +148,7 @@ export function parseDynamicSeedConfig(
     ),
     target: parseTarget(getFlag(argv, 'target')),
     users,
-    workoutDensity: parseDensity(getFlag(argv, 'workout-density')),
+    workoutDensity,
   };
 }
 

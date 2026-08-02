@@ -15,6 +15,11 @@ export class LogExerciseSetDTO {
   @IsUUID(undefined, { message: 'exercise_id must be a valid UUID' })
   exercise_id: string;
 
+  @ApiPropertyOptional({ example: '77777777-7777-4777-8777-777777777777' })
+  @IsOptional()
+  @IsUUID(undefined, { message: 'plan_exercise_id must be a valid UUID' })
+  plan_exercise_id?: string;
+
   @ApiProperty({ example: 1 })
   @Type(() => Number)
   @IsInt({ message: 'set_number must be an integer' })

@@ -18,6 +18,7 @@ import {
   PaymentStage,
   PaymentStatus,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { isUUID } from 'class-validator';
@@ -28,6 +29,8 @@ import { CoachService } from '../../coaching/coach/coach.service';
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import { PAYMENT_COMPLETED_EVENT } from '../../membership/payment/events/payment-completed.event';
 import type { PaymentCompletedEvent } from '../../membership/payment/events/payment-completed.event';
+import { PAYMENT_FAILED_EVENT } from '../../membership/payment/events/payment-failed.event';
+import type { PaymentFailedEvent } from '../../membership/payment/events/payment-failed.event';
 import {
   PaymongoCheckoutResult,
   PaymongoCheckoutService,
@@ -60,7 +63,7 @@ import {
   BookingConfirmedEvent,
 } from './events/booking-confirmed.event';
 
-const SLOT_INTERVAL_MINUTES = 30;
+const SLOT_INTERVAL_MINUTES = 60;
 const SLOT_INTERVAL_MS = SLOT_INTERVAL_MINUTES * 60 * 1000;
 const SLOTS_PER_DAY = (24 * 60) / SLOT_INTERVAL_MINUTES;
 const BOOKING_LOCK_TTL_SECONDS = 10;
@@ -291,9 +294,15 @@ export class BookingService {
     userId: string,
     dto: CreateBookingDTO,
     idempotencyKey: string | undefined,
+    actorRole?: UserRole,
   ): Promise<BookingCheckoutResponseDTO> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
+    this.assertSelfServicePaymentPolicy(
+      dto.provider,
+      dto.payment_stage,
+      actorRole,
+    );
     const existingPayment =
       await this.paymentRepository.findPaymentByIdempotencyKey(
         normalizedIdempotencyKey,
@@ -301,6 +310,7 @@ export class BookingService {
     const paymentStage = this.resolveInitialProviderPaymentStage(
       dto.provider,
       resolveBookingPaymentStage(dto.payment_stage),
+      actorRole,
     );
 
     if (existingPayment) {
@@ -312,7 +322,7 @@ export class BookingService {
       );
     }
 
-    const schedule = parseBookingSchedule(dto);
+    const schedule = parseBookingSchedule(dto, actorRole !== undefined);
     const amenity = await this.amenityRepository.findActiveAmenityByIdOrThrow(
       dto.amenity_id,
     );
@@ -451,7 +461,20 @@ export class BookingService {
     dto: CreateStaffVenueBookingDTO,
     actorUserId: string,
   ): Promise<BookingCheckoutResponseDTO> {
-    const schedule = parseBookingSchedule(dto);
+    if (dto.payment_stage === CreateStaffInitialPaymentStage.downpayment) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Full Cash Payment Required',
+          status: 422,
+          detail:
+            'Cashier-created facility bookings must record full payment. Downpayment bookings are not available in the cashier flow.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const schedule = parseBookingSchedule(dto, true);
     const amenity = await this.amenityRepository.findActiveAmenityByIdOrThrow(
       dto.amenity_id,
     );
@@ -663,6 +686,19 @@ export class BookingService {
     }
   }
 
+  @OnEvent(PAYMENT_FAILED_EVENT, { async: true })
+  async handlePaymentFailed(event: PaymentFailedEvent): Promise<void> {
+    if (event.payableType !== PayableType.booking) {
+      return;
+    }
+
+    const booking =
+      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(
+        event.payableId,
+      );
+    await this.releaseFailedPendingBooking(booking, event.reason);
+  }
+
   async cancelBooking(bookingId: string, userId: string): Promise<void> {
     const booking =
       await this.bookingRepository.findBookingByIdAndAssertOwnership(
@@ -680,7 +716,7 @@ export class BookingService {
           title: 'Booking Cannot Be Cancelled',
           status: 422,
           detail:
-            'Only pending or confirmed bookings can be cancelled. Downpayments remain non-refundable.',
+            'Only pending or confirmed bookings can be cancelled. Payment handling follows the applicable payment policy.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -852,12 +888,46 @@ export class BookingService {
   private resolveInitialProviderPaymentStage(
     provider: PaymentProvider,
     paymentStage: InitialBookingPaymentStage,
+    actorRole?: UserRole,
   ): InitialBookingPaymentStage {
-    if (provider === PaymentProvider.paymongo) {
-      return PaymentStage.downpayment;
+    void provider;
+    void paymentStage;
+    void actorRole;
+    return PaymentStage.full;
+  }
+
+  private assertSelfServicePaymentPolicy(
+    provider: PaymentProvider,
+    paymentStage: CreateBookingPaymentStage | undefined,
+    actorRole?: UserRole,
+  ): void {
+    if (provider !== PaymentProvider.paymongo) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Online Payment Required',
+        status: 403,
+        detail:
+          'Member and coach facility bookings must be paid in full through PayMongo. Cash bookings are created by the cashier flow only.',
+      });
     }
 
-    return paymentStage;
+    if (
+      paymentStage !== undefined &&
+      paymentStage !== CreateBookingPaymentStage.full
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Full Payment Required',
+          status: 422,
+          detail:
+            'Facility bookings require full payment before confirmation. Downpayment is not available for self-service bookings.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    void actorRole;
   }
 
   private async resumeExistingCheckout(
@@ -927,6 +997,7 @@ export class BookingService {
 
     if (payment.provider === PaymentProvider.cash) {
       if (payment.status === PaymentStatus.failed) {
+        await this.releaseFailedPendingBooking(booking);
         throw new ConflictException({
           type: 'CONFLICT',
           title: 'Payment Attempt Already Failed',
@@ -954,6 +1025,7 @@ export class BookingService {
     }
 
     if (payment.status === PaymentStatus.failed) {
+      await this.releaseFailedPendingBooking(booking);
       throw new ConflictException({
         type: 'CONFLICT',
         title: 'Payment Attempt Already Failed',
@@ -1251,6 +1323,38 @@ export class BookingService {
   private emitPaymentCompleted(event: PaymentCompletedEvent): void {
     this.eventEmitter.emit(PAYMENT_COMPLETED_EVENT, event);
   }
+
+  private async releaseFailedPendingBooking(
+    booking: Pick<
+      AmenityBooking,
+      'amenity_id' | 'ends_at' | 'id' | 'starts_at' | 'status' | 'user_id'
+    >,
+    reason?: string | null,
+  ): Promise<void> {
+    if (booking.status !== BookingStatus.pending) {
+      return;
+    }
+
+    const cancelledAt = new Date();
+    await this.bookingRepository.cancelBooking(booking.id, cancelledAt);
+    this.emitAudit({
+      userId: booking.user_id,
+      action: AuditAction.BOOKING_CANCELLED,
+      entity: 'AmenityBooking',
+      entityId: booking.id,
+      before: { status: BookingStatus.pending } as Prisma.InputJsonValue,
+      after: {
+        status: BookingStatus.cancelled,
+        reason: reason ?? 'Payment failed before booking confirmation.',
+      } as Prisma.InputJsonValue,
+    });
+    this.emitBookingCancelled({
+      bookingId: booking.id,
+      userId: booking.user_id,
+      amenityId: booking.amenity_id,
+      cancelledAt: cancelledAt.toISOString(),
+    });
+  }
 }
 
 function parseAvailabilityRange(date: string): {
@@ -1271,6 +1375,12 @@ function parseAvailabilityRange(date: string): {
     dayStart.getUTCDate() !== day
   ) {
     throw invalidDateError();
+  }
+
+  if (date > getMaxBookableDateKey()) {
+    throw invalidDateError(
+      'date must not be more than one calendar year in the future.',
+    );
   }
 
   return {
@@ -1299,17 +1409,18 @@ function buildAvailabilitySlots(
   });
 }
 
-function invalidDateError(): BadRequestException {
+function invalidDateError(detail = 'date must be a valid YYYY-MM-DD calendar date.'): BadRequestException {
   return new BadRequestException({
     type: 'INVALID_DATE',
     title: 'Invalid Date',
     status: 400,
-    detail: 'date must be a valid YYYY-MM-DD calendar date.',
+    detail,
   });
 }
 
 function parseBookingSchedule(
   dto: Pick<CreateBookingDTO, 'starts_at' | 'ends_at'>,
+  enforceCurrentBookingRules = false,
 ): BookingSchedule {
   const startsAt = new Date(dto.starts_at);
   const endsAt = new Date(dto.ends_at);
@@ -1334,16 +1445,36 @@ function parseBookingSchedule(
     );
   }
 
-  if (!isThirtyMinuteBoundary(startsAt) || !isThirtyMinuteBoundary(endsAt)) {
+  if (
+    enforceCurrentBookingRules &&
+    (toGymDateKey(startsAt) > getMaxBookableDateKey() ||
+      toGymDateKey(endsAt) > getMaxBookableDateKey())
+  ) {
     throw invalidBookingWindowError(
-      'starts_at and ends_at must align to 30-minute slot boundaries.',
+      'Bookings cannot be scheduled more than one calendar year in the future.',
+    );
+  }
+
+  if (
+    !isHourlyBoundary(startsAt, enforceCurrentBookingRules) ||
+    !isHourlyBoundary(endsAt, enforceCurrentBookingRules)
+  ) {
+    throw invalidBookingWindowError(
+      enforceCurrentBookingRules
+        ? 'starts_at and ends_at must align to hourly slot boundaries.'
+        : 'starts_at and ends_at must align to 30-minute slot boundaries.',
     );
   }
 
   const durationMinutes = (endsAt.getTime() - startsAt.getTime()) / (60 * 1000);
-  if (durationMinutes % SLOT_INTERVAL_MINUTES !== 0) {
+  const durationIncrement = enforceCurrentBookingRules
+    ? SLOT_INTERVAL_MINUTES
+    : 30;
+  if (durationMinutes % durationIncrement !== 0) {
     throw invalidBookingWindowError(
-      'Booking duration must be in 30-minute increments.',
+      enforceCurrentBookingRules
+        ? 'Booking duration must be in one-hour increments.'
+        : 'Booking duration must be in 30-minute increments.',
     );
   }
 
@@ -1430,12 +1561,28 @@ function formatSlotKeyTimestamp(value: Date): string {
   return `${year}${month}${day}-${hours}${minutes}`;
 }
 
-function isThirtyMinuteBoundary(value: Date): boolean {
+function isHourlyBoundary(
+  value: Date,
+  enforceCurrentBookingRules: boolean,
+): boolean {
   return (
     value.getUTCSeconds() === 0 &&
     value.getUTCMilliseconds() === 0 &&
-    value.getUTCMinutes() % SLOT_INTERVAL_MINUTES === 0
+    (enforceCurrentBookingRules
+      ? value.getUTCMinutes() === 0
+      : value.getUTCMinutes() % 30 === 0)
   );
+}
+
+function getMaxBookableDateKey(now = new Date()): string {
+  const gymNow = new Date(
+    now.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+  gymNow.setUTCFullYear(gymNow.getUTCFullYear() + 1);
+  const year = gymNow.getUTCFullYear();
+  const month = String(gymNow.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(gymNow.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function toGymDateKey(value: Date): string {

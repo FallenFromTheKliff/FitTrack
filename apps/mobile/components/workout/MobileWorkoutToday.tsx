@@ -21,12 +21,15 @@ import {
   logWorkoutSetMutationOptions,
   startWorkoutSessionMutationOptions,
 } from "@fittrack/query";
+import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
+import type { TrainingPlanSummaryRecord } from "@fittrack/types";
 
 import { FitButton, FitText } from "@/components/fit";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
 import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
+import { MobileWorkoutSessionHistory } from "@/components/workout/MobileWorkoutSessionHistory";
 
 type MobileWorkoutTodayProps = {
   cameraCompletion?: WorkoutCameraTarget | null;
@@ -34,14 +37,27 @@ type MobileWorkoutTodayProps = {
   onShowCamera: (target: WorkoutCameraTarget) => void;
 };
 
-function formatSourceLabel(source?: string, hasCoach = false) {
-  if (source === "coach_assigned" || hasCoach) return "Coach plan";
-  if (source === "ai_generated") return "Smart draft";
+function formatSourceLabel(
+  plan: Pick<TrainingPlanSummaryRecord, "coachId" | "source">,
+) {
+  if (isCoachManagedTrainingPlan(plan)) return "Coach plan";
+  if (plan.source === "ai_generated") return "Smart draft";
   return "Personal plan";
 }
 
 function formatWeightTarget(weightKg?: number | null) {
   return weightKg == null ? "Bodyweight" : `${weightKg} kg`;
+}
+
+function isSameLocalDay(value: string | null, reference: Date) {
+  if (!value) return false;
+  const date = new Date(value);
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getFullYear() === reference.getFullYear() &&
+    date.getMonth() === reference.getMonth() &&
+    date.getDate() === reference.getDate()
+  );
 }
 
 export function MobileWorkoutToday({
@@ -71,8 +87,9 @@ export function MobileWorkoutToday({
     enabled: !!user?.id,
   });
   const plans = plansQuery.data?.data ?? [];
+  const sessions = sessionsQuery.data?.data ?? [];
   const activeSession =
-    (sessionsQuery.data?.data ?? []).find(
+    sessions.find(
       (session) => session.status === "in_progress",
     ) ?? null;
   const effectivePlan =
@@ -80,6 +97,15 @@ export function MobileWorkoutToday({
     plans.find((plan) => plan.isActive) ??
     plans[0] ??
     null;
+  const completedTodaySession = effectivePlan
+    ? sessions.find(
+        (session) =>
+          session.planId === effectivePlan.id &&
+          session.status === "completed" &&
+          isSameLocalDay(session.completedAt ?? session.startedAt, new Date()),
+      ) ?? null
+    : null;
+  const displayedSession = activeSession ?? completedTodaySession;
 
   const planDetailQuery = useQuery({
     ...fitnessPlanDetailQueryOptions(mobileApiClient, effectivePlan?.id),
@@ -90,8 +116,8 @@ export function MobileWorkoutToday({
     enabled: !!effectivePlan?.id && suggestionsVisible,
   });
   const sessionDetailQuery = useQuery({
-    ...fitnessSessionDetailQueryOptions(mobileApiClient, activeSession?.id),
-    enabled: !!activeSession?.id,
+    ...fitnessSessionDetailQueryOptions(mobileApiClient, displayedSession?.id),
+    enabled: !!displayedSession?.id,
   });
   const startMutation = useMutation(
     startWorkoutSessionMutationOptions(mobileApiClient, queryClient),
@@ -187,7 +213,7 @@ export function MobileWorkoutToday({
   const isLoading =
     plansQuery.isLoading ||
     (Boolean(effectivePlan?.id) && planDetailQuery.isLoading) ||
-    (Boolean(activeSession?.id) && sessionDetailQuery.isLoading);
+    (Boolean(displayedSession?.id) && sessionDetailQuery.isLoading);
   const hasError =
     plansQuery.isError ||
     planDetailQuery.isError ||
@@ -249,6 +275,7 @@ export function MobileWorkoutToday({
       await logMutation.mutateAsync({
         input: {
           exerciseId: currentExercise.exerciseId,
+          planExerciseId: currentExercise.id,
           repsCompleted: parsedReps,
           setNumber: nextTarget.setNumber,
           weightKg: parsedWeight,
@@ -375,10 +402,7 @@ export function MobileWorkoutToday({
               </FitText>
               <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
                 {effectivePlan.title} ·{" "}
-                {formatSourceLabel(
-                  effectivePlan.source,
-                  Boolean(effectivePlan.coachId),
-                )}
+                {formatSourceLabel(effectivePlan)}
               </FitText>
             </View>
             <FitText
@@ -460,7 +484,11 @@ export function MobileWorkoutToday({
         </View>
       ) : null}
 
-      {!isLoading && !hasError && day && !activeSession ? (
+      {!isLoading &&
+      !hasError &&
+      day &&
+      !activeSession &&
+      !completedTodaySession ? (
         <FitButton
           disabled={startMutation.isPending}
           label={
@@ -474,6 +502,38 @@ export function MobileWorkoutToday({
             });
           }}
         />
+      ) : null}
+
+      {!isLoading &&
+      !hasError &&
+      day &&
+      !activeSession &&
+      completedTodaySession ? (
+        <View
+          accessibilityLabel="Today's workout is complete"
+          style={{
+            alignItems: "center",
+            backgroundColor: `${colors.success}12`,
+            borderColor: `${colors.success}55`,
+            borderRadius: 8,
+            borderWidth: 1,
+            flexDirection: "row",
+            gap: 9,
+            padding: 12,
+          }}
+        >
+          <Check color={colors.success} size={18} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <FitText
+              style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "900" }}
+            >
+              Today&apos;s workout is complete
+            </FitText>
+            <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>
+              Your sets are saved in Session history. Come back on your next planned day.
+            </FitText>
+          </View>
+        </View>
       ) : null}
 
       {restRemaining > 0 ? (
@@ -852,6 +912,13 @@ export function MobileWorkoutToday({
           }}
         />
       ) : null}
+
+      <MobileWorkoutSessionHistory
+        isError={sessionsQuery.isError}
+        isLoading={sessionsQuery.isLoading}
+        onRetry={() => void sessionsQuery.refetch()}
+        sessions={sessions}
+      />
 
       <Modal
         animationType="fade"

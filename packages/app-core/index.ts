@@ -1,4 +1,6 @@
 export * from "./bookings/booking-transforms";
+export * from "./fitness/coach-plan-calendar";
+export * from "./fitness/recurring-coaching";
 export * from "./auth/auth-session";
 export * from "./auth/createAuthController";
 export * from "./members/createMemberController";

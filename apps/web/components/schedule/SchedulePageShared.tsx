@@ -76,10 +76,16 @@ export type RecurringPlanFormState = {
   coachId: string;
   durationMinutes: number;
   durationMonths: number;
-  frequency: "weekly" | "biweekly";
+  frequency: "weekly" | "biweekly" | "monthly";
   memberId: string;
   preferredDays: number[];
   preferredTime: string;
+  quotedAmount: number;
+  scheduleItems: Array<{
+    date: string;
+    durationMinutes: number;
+    time: string;
+  }>;
   startDate: string;
 };
 
@@ -153,6 +159,7 @@ export const WEEKDAY_OPTIONS = [
 export const RECURRING_FREQUENCY_OPTIONS = [
   { label: "Weekly", value: "weekly" },
   { label: "Biweekly", value: "biweekly" },
+  { label: "Monthly — actual dates", value: "monthly" },
 ];
 
 export const RECURRING_DURATION_OPTIONS = [
@@ -171,6 +178,8 @@ export function createDefaultRecurringPlanForm(): RecurringPlanFormState {
     memberId: "",
     preferredDays: [tomorrow.getDay()],
     preferredTime: "09:00",
+    quotedAmount: 0,
+    scheduleItems: [],
     startDate: toYmd(tomorrow),
   };
 }
@@ -201,14 +210,31 @@ export function getRecurringInput(
   form: RecurringPlanFormState,
   conflictOverrides?: RecurringCoachingPlanInput["sessionOverrides"],
 ): RecurringCoachingPlanInput {
+  const scheduleItems =
+    form.frequency === "monthly" && form.scheduleItems.length > 0
+      ? form.scheduleItems.map((item, index) => ({
+          durationMinutes: item.durationMinutes,
+          scheduledAt: buildLocalIso(item.date, item.time),
+          sequenceIndex: index + 1,
+        }))
+      : undefined;
+  const preferredDays =
+    form.frequency === "monthly" && scheduleItems?.length
+      ? Array.from(
+          new Set(scheduleItems.map((item) => new Date(item.scheduledAt).getUTCDay())),
+        )
+      : form.preferredDays;
+
   return {
     coachId: form.coachId,
     durationMinutes: form.durationMinutes,
     durationMonths: form.durationMonths,
     frequency: form.frequency,
     memberId: form.memberId,
-    preferredDays: form.preferredDays,
+    preferredDays,
     preferredTime: form.preferredTime,
+    ...(form.quotedAmount > 0 ? { quotedAmount: form.quotedAmount } : {}),
+    ...(scheduleItems?.length ? { scheduleItems } : {}),
     sessionOverrides: conflictOverrides,
     startDate: form.startDate,
   };
@@ -216,10 +242,10 @@ export function getRecurringInput(
 
 export function normalizeOperationsTab(
   value: string | null,
-  canManageCoaching: boolean,
+  canManageGymOperations: boolean,
 ): GymOperationsTab {
-  if (canManageCoaching && value === "coaches") return "coaches";
-  if (canManageCoaching && value === "appointments") return "appointments";
+  if (canManageGymOperations && value === "coaches") return "coaches";
+  if (canManageGymOperations && value === "appointments") return "appointments";
   return "schedule";
 }
 

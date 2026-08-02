@@ -74,6 +74,24 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
   const blockedDateSet = useMemo(() => new Set(blockedDates), [blockedDates]);
   const yearRangeStart = year - 7;
   const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
+  const isDateRangeOutsideSelection = (start: Date, end: Date) => {
+    const startYmd = formatDateYMD(start);
+    const endYmd = formatDateYMD(end);
+    return Boolean(
+      (minSelectable && endYmd < minSelectable) ||
+      (maxSelectable && startYmd > maxSelectable),
+    );
+  };
+  const isMonthDisabled = (value: number) =>
+    isDateRangeOutsideSelection(
+      new Date(year, value, 1),
+      new Date(year, value + 1, 0),
+    );
+  const isYearDisabled = (value: number) =>
+    isDateRangeOutsideSelection(
+      new Date(value, 0, 1),
+      new Date(value, 12, 0),
+    );
   const dayCells = Array.from({ length: 42 }, (_, index) => {
     const dayNumber = index - offset + 1;
     if (dayNumber < 1 || dayNumber > monthDays) return null;
@@ -230,15 +248,19 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
               <View style={s.monthGrid}>
                 {MONTH_NAMES_SHORT.map((monthName, index) => {
                   const isActive = index === monthIndex;
+                  const isDisabled = isMonthDisabled(index);
                   return (
                     <FitButton
                       key={monthName}
                       label={monthName}
                       variant={isActive ? "primary" : "ghost"}
                       onPress={() => {
-                        setCursor(new Date(year, index, 1));
-                        setCurrentView("DAYS");
+                        if (!isDisabled) {
+                          setCursor(new Date(year, index, 1));
+                          setCurrentView("DAYS");
+                        }
                       }}
+                      disabled={isDisabled}
                       style={s.monthCell}
                       textStyle={s.pickerText}
                     />
@@ -250,15 +272,19 @@ export default function CalendarModal({ isVisible, selectedDate, allowEmpty, blo
               <View style={s.yearGrid}>
                 {yearCells.map((value) => {
                   const isActive = value === year;
+                  const isDisabled = isYearDisabled(value);
                   return (
                     <FitButton
                       key={value}
                       label={String(value)}
                       variant={isActive ? "primary" : "ghost"}
                       onPress={() => {
-                        setCursor(new Date(value, monthIndex, 1));
-                        setCurrentView("MONTHS");
+                        if (!isDisabled) {
+                          setCursor(new Date(value, monthIndex, 1));
+                          setCurrentView("MONTHS");
+                        }
                       }}
+                      disabled={isDisabled}
                       style={s.yearCell}
                       textStyle={s.pickerText}
                     />

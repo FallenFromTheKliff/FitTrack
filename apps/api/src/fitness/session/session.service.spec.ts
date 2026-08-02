@@ -239,6 +239,47 @@ describe('WorkoutSessionService', () => {
     expect(result.reps_ai_counted).toBe(12);
   });
 
+  it('links a logged set to the exact recurring plan exercise requested by the client', async () => {
+    repo.findSessionByIdOrThrow.mockResolvedValue(makeSession());
+    repo.findActiveExerciseById.mockResolvedValue({ id: 'exercise-1' });
+    repo.findPlanExercise.mockResolvedValue({ id: 'plan-exercise-week-2' });
+    repo.createExerciseLog.mockResolvedValue(
+      makeExerciseLog({ plan_exercise_id: 'plan-exercise-week-2' }),
+    );
+
+    await service.logSet('user-1', 'session-1', {
+      exercise_id: 'exercise-1',
+      plan_exercise_id: 'plan-exercise-week-2',
+      set_number: 1,
+      reps_completed: 10,
+    });
+
+    expect(repo.findPlanExercise).toHaveBeenCalledWith(
+      'plan-1',
+      'exercise-1',
+      'plan-exercise-week-2',
+    );
+    expect(repo.createExerciseLog).toHaveBeenCalledWith(
+      expect.objectContaining({ planExerciseId: 'plan-exercise-week-2' }),
+    );
+  });
+
+  it('rejects a plan exercise that does not belong to the active workout plan', async () => {
+    repo.findSessionByIdOrThrow.mockResolvedValue(makeSession());
+    repo.findActiveExerciseById.mockResolvedValue({ id: 'exercise-1' });
+    repo.findPlanExercise.mockResolvedValue(null);
+
+    await expect(
+      service.logSet('user-1', 'session-1', {
+        exercise_id: 'exercise-1',
+        plan_exercise_id: 'foreign-plan-exercise',
+        set_number: 1,
+      }),
+    ).rejects.toBeInstanceOf(HttpException);
+
+    expect(repo.createExerciseLog).not.toHaveBeenCalled();
+  });
+
   it('rejects logging sets against a completed session', async () => {
     repo.findSessionByIdOrThrow.mockResolvedValue(
       makeSession({ status: SessionStatus.completed }),

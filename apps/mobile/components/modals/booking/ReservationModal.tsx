@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import {
   CalendarDays,
   CheckCircle,
+  ChevronDown,
   Clock,
   Plus,
   Users,
@@ -59,9 +60,7 @@ type Props = {
 };
 
 type BookingPaymentOption =
-  | "cash_downpayment"
-  | "cash_full"
-  | "paymongo_downpayment";
+  | "paymongo_full";
 type ReservationConfirmationState = {
   message: string;
   title: string;
@@ -199,6 +198,16 @@ function getDateParts(dateKey: string) {
 
 function formatDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getMaxBookableDateKey() {
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
+  return formatDateKey(
+    maxDate.getFullYear(),
+    maxDate.getMonth() + 1,
+    maxDate.getDate(),
+  );
 }
 
 function getMonthDateKeys(year: number, month: number) {
@@ -344,9 +353,7 @@ export default function ReservationModal({
     createBookingMutationOptions(mobileApiClient, queryClient),
   );
   const canUsePaymongo = isPaymongoCheckoutEnabled();
-  const defaultPaymentOption: BookingPaymentOption = canUsePaymongo
-    ? "paymongo_downpayment"
-    : "cash_downpayment";
+  const defaultPaymentOption: BookingPaymentOption = "paymongo_full";
 
   const [date, setDate] = useState(getTodayString());
   const [startTime, setStartTime] = useState("");
@@ -355,6 +362,7 @@ export default function ReservationModal({
   const [paymentOption, setPaymentOption] =
     useState<BookingPaymentOption>(defaultPaymentOption);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
+  const [isCoachPickerOpen, setIsCoachPickerOpen] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState<VenueRecord | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [calendarCursor, setCalendarCursor] = useState(() => {
@@ -418,10 +426,13 @@ export default function ReservationModal({
     () => getMonthDateKeys(calendarCursor.year, calendarCursor.month),
     [calendarCursor.month, calendarCursor.year],
   );
+  const maxBookableDateKey = useMemo(() => getMaxBookableDateKey(), []);
   const venueCalendarQueryDates = useMemo(
     () =>
-      isVisible && isCalOpen && selectedVenueId != null ? calendarDateKeys : [],
-    [calendarDateKeys, isCalOpen, isVisible, selectedVenueId],
+      isVisible && isCalOpen && selectedVenueId != null
+        ? calendarDateKeys.filter((dateKey) => dateKey <= maxBookableDateKey)
+        : [],
+    [calendarDateKeys, isCalOpen, isVisible, maxBookableDateKey, selectedVenueId],
   );
   const venueCalendarQueries = useQueries({
     queries: venueCalendarQueryDates.map((dateKey) => ({
@@ -549,38 +560,34 @@ export default function ReservationModal({
     [coachAddOnAmount, venueTotalAmount],
   );
   const isFreeReservation = totalAmount <= 0;
-  const splitAmountDueNow = useMemo(
-    () => roundCurrency(totalAmount * 0.3),
-    [totalAmount],
-  );
-  const splitRemainingBalance = useMemo(
-    () => roundCurrency(Math.max(0, totalAmount - splitAmountDueNow)),
-    [splitAmountDueNow, totalAmount],
-  );
-  const amountDueNow =
-    paymentOption === "cash_full" ? totalAmount : splitAmountDueNow;
-  const remainingBalance =
-    paymentOption === "cash_full" ? 0 : splitRemainingBalance;
-  const paymentProvider =
-    paymentOption === "paymongo_downpayment" ? "paymongo" : "cash";
-  const paymentStage = paymentOption === "cash_full" ? "full" : "downpayment";
+  const amountDueNow = totalAmount;
+  const remainingBalance = 0;
+  const paymentProvider = isFreeReservation ? undefined : "paymongo" as const;
+  const paymentStage = isFreeReservation ? undefined : "full" as const;
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const liveVenueSlots = useMemo(
     () =>
-      [...availability].sort(
+      availability
+        .filter((slot) => {
+          const start = new Date(slot.startTime);
+          const end = new Date(slot.endTime);
+          return (
+            start.getUTCMinutes() === 0 &&
+            end.getTime() - start.getTime() === 60 * 60 * 1000
+          );
+        })
+        .sort(
         (a, b) =>
           new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
-      ),
+        ),
     [availability],
   );
   const confirmButtonLabel = isFreeReservation
     ? "Confirm Reservation"
-    : paymentOption === "paymongo_downpayment" && canUsePaymongo
-      ? "Confirm PayMongo Payment"
-      : paymentOption === "cash_full"
-        ? "Submit Full Cash Payment"
-        : "Submit Downpayment";
+    : canUsePaymongo
+      ? "Pay Full Amount"
+      : "PayMongo Unavailable";
   const paymentOptionSummary = useMemo(() => {
     if (isFreeReservation) {
       return {
@@ -590,33 +597,16 @@ export default function ReservationModal({
       };
     }
 
-    if (paymentOption === "cash_full") {
-      return {
-        body: `Staff will verify your full cash payment of ${formatCurrency(totalAmount)} before the reservation is treated as fully paid.`,
-        eyebrow: "Cash",
-        title: "Full payment",
-      };
-    }
-
-    if (paymentOption === "cash_downpayment") {
-      return {
-        body: `Submit a cash downpayment now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
-        eyebrow: "Cash",
-        title: "Split payment",
-      };
-    }
-
     return {
-      body: `Confirm the testing PayMongo payment for the upfront ${formatCurrency(splitAmountDueNow)} now, then settle the remaining ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
+      body: canUsePaymongo
+        ? `Pay the full ${formatCurrency(totalAmount)} through PayMongo before the reservation is confirmed. No payment means no booking. You will return to FitTrack after checkout.`
+        : "PayMongo checkout is unavailable right now. Try again later; cash payment is available at the cashier only.",
       eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
-      title: "Online downpayment",
+      title: "Full payment required",
     };
   }, [
     canUsePaymongo,
     isFreeReservation,
-    paymentOption,
-    splitAmountDueNow,
-    splitRemainingBalance,
     totalAmount,
   ]);
 
@@ -807,6 +797,7 @@ export default function ReservationModal({
     setNotes([]);
     setPaymentOption(defaultPaymentOption);
     setSelectedCoachId(null);
+    setIsCoachPickerOpen(false);
     setSelectedVenue(null);
     setTimeTarget("start");
     setIsCalOpen(false);
@@ -855,36 +846,29 @@ export default function ReservationModal({
       return;
     }
     try {
-      const result = await Promise.all([
-        createBookingMutation.mutateAsync({
-          payload: {
-            coachId: selectedCoach ? String(selectedCoach.id) : undefined,
-            paymentStage,
-            provider: isFreeReservation ? undefined : paymentProvider,
-            venueId: selectedVenue.id,
-            startTime: isoStart,
-            durationHours: reservationHours,
-            purpose,
-          },
+      const result = await createBookingMutation.mutateAsync({
+        payload: {
+          coachId: selectedCoach ? String(selectedCoach.id) : undefined,
+          paymentStage,
+          provider: paymentProvider,
           venueId: selectedVenue.id,
-          date,
-        }),
-        new Promise((resolve) => setTimeout(resolve, 2000)),
-      ]).then(([response]) => response);
+          startTime: isoStart,
+          durationHours: reservationHours,
+          purpose,
+        },
+        venueId: selectedVenue.id,
+        date,
+      });
       const successTitle = result?.checkout_url
-        ? "Payment confirmed"
+        ? "Checkout ready"
         : isFreeReservation
         ? "Reservation confirmed"
-        : paymentOption === "cash_full"
-          ? "Cash payment submitted"
-          : "Downpayment submitted";
+        : "Reservation confirmed";
       const successMessage = result?.checkout_url
-        ? `Testing payment confirmed for ${selectedVenuePresentation?.name ?? "your venue"} on ${formatBookingDate(date)} at ${startTime} - ${endTime}. Front desk can verify the reservation while you stay in Bookings. Remaining balance: ${formatCurrency(remainingBalance)}.`
+        ? `Complete the PayMongo checkout for ${selectedVenuePresentation?.name ?? "your venue"} on ${formatBookingDate(date)} at ${startTime} - ${endTime}. The booking is not confirmed until full payment succeeds.`
         : isFreeReservation
         ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
-        : paymentOption === "cash_full"
-          ? `Your reservation is pending staff verification for the full cash payment of ${formatCurrency(totalAmount)}.`
-          : `Your reservation is pending staff verification for the upfront ${formatCurrency(amountDueNow)}. The remaining ${formatCurrency(remainingBalance)} can be collected on or after ${formatBookingDate(date)}.`;
+        : `Your reservation for ${selectedVenuePresentation?.name ?? "your venue"} is confirmed after full payment.`;
 
       handleReset();
       onSuccess?.();
@@ -916,29 +900,19 @@ export default function ReservationModal({
       return;
     }
 
-    if (paymentOption === "paymongo_downpayment") {
+    if (!canUsePaymongo) {
+      setIsPaymongoNoticeOpen(true);
+      return;
+    }
+
+    if (paymentOption === "paymongo_full") {
       setReservationConfirmation({
         title: "Review policy and pay?",
-        message: `Confirm the testing PayMongo payment for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} stays due on or after the booking date.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
+        message: `Pay the full ${formatCurrency(amountDueNow)} through PayMongo for ${venueName} on ${scheduleLabel}. The booking is not confirmed if payment fails or is abandoned.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
         yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
       });
       return;
     }
-
-    if (paymentOption === "cash_full") {
-      setReservationConfirmation({
-        title: "Review policy and submit?",
-        message: `Submit a full cash payment request for ${formatCurrency(totalAmount)} for ${venueName} on ${scheduleLabel}. Staff will still verify the payment before it is treated as fully paid.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
-        yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
-      });
-      return;
-    }
-
-    setReservationConfirmation({
-      title: "Review policy and submit?",
-      message: `Submit a cash downpayment request for ${formatCurrency(amountDueNow)} for ${venueName} on ${scheduleLabel}. The remaining ${formatCurrency(remainingBalance)} will stay due on or after the booking date.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`,
-      yesLabel: FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
-    });
   };
 
   return (
@@ -1125,6 +1099,7 @@ export default function ReservationModal({
                       setStartTime("");
                       setEndTime("");
                       setSelectedCoachId(null);
+                      setIsCoachPickerOpen(false);
                     }}
                   >
                     <FitText style={s.amenityEmoji}>
@@ -1187,8 +1162,64 @@ export default function ReservationModal({
                 No coach add-ons are available for the selected date and time.
               </FitText>
             ) : (
-              <View style={s.trainerList}>
-                {availableCoachAddOns.map((coach) => {
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    selectedCoach
+                      ? `Coach add-on: ${getCoachName(selectedCoach)}`
+                      : "Coach add-on: none"
+                  }
+                  accessibilityState={{ expanded: isCoachPickerOpen }}
+                  style={[
+                    s.fieldBtn,
+                    {
+                      borderColor: selectedCoach ? colors.brand : colors.fieldBorder,
+                    },
+                  ]}
+                  onPress={() => setIsCoachPickerOpen((current) => !current)}
+                >
+                  <Users
+                    size={16}
+                    color={selectedCoach ? colors.brand : colors.textMuted}
+                    strokeWidth={2}
+                  />
+                  <FitText
+                    style={[s.fieldBtnText, selectedCoach && { color: colors.textPrimary }]}
+                  >
+                    {selectedCoach
+                      ? `${getCoachName(selectedCoach)} / ${getCoachPriceLabel(selectedCoach)}`
+                      : "No coach add-on"}
+                  </FitText>
+                  <ChevronDown
+                    size={16}
+                    color={colors.textMuted}
+                    strokeWidth={2}
+                    style={{
+                      transform: [{ rotate: isCoachPickerOpen ? "180deg" : "0deg" }],
+                    }}
+                  />
+                </Pressable>
+                {isCoachPickerOpen ? (
+                  <View style={s.trainerList}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove coach add-on"
+                      style={[
+                        s.trainerRow,
+                        !selectedCoach && {
+                          borderColor: colors.brand,
+                          backgroundColor: colors.brand + "12",
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedCoachId(null);
+                        setIsCoachPickerOpen(false);
+                      }}
+                    >
+                      <FitText style={s.trainerName}>No coach add-on</FitText>
+                    </Pressable>
+                    {availableCoachAddOns.map((coach) => {
                   const isActive = selectedCoach?.id === coach.id;
                   return (
                     <Pressable
@@ -1206,6 +1237,7 @@ export default function ReservationModal({
                       onPress={() => {
                         setApiError("");
                         setSelectedCoachId(isActive ? null : String(coach.id));
+                        setIsCoachPickerOpen(false);
                       }}
                     >
                       <View
@@ -1244,8 +1276,10 @@ export default function ReservationModal({
                       ) : null}
                     </Pressable>
                   );
-                })}
-              </View>
+                    })}
+                  </View>
+                ) : null}
+              </>
             )}
             <FitText
               style={coachMatchesWindow ? s.validationHint : s.unavailableText}
@@ -1283,80 +1317,57 @@ export default function ReservationModal({
                 ) : (
                   <>
                     <View style={s.paymentOptionList}>
-                      {[
-                        {
-                          key: "paymongo_downpayment" as const,
-                          label: "PayMongo Downpayment",
-                          meta: `Confirm now ${formatCurrency(splitAmountDueNow)}`,
-                          body: canUsePaymongo
-                            ? `Leave ${formatCurrency(splitRemainingBalance)} for later.`
-                            : "Temporarily unavailable on this local stack.",
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`PayMongo full payment. ${formatCurrency(totalAmount)} due now${paymentOption === "paymongo_full" ? ". Selected." : ""}`}
+                        accessibilityState={{
                           disabled: !canUsePaymongo,
-                        },
-                        {
-                          key: "cash_downpayment" as const,
-                          label: "Cash Downpayment",
-                          meta: `Submit now ${formatCurrency(splitAmountDueNow)}`,
-                          body: `Settle ${formatCurrency(splitRemainingBalance)} on or after the booking date.`,
-                          disabled: false,
-                        },
-                        {
-                          key: "cash_full" as const,
-                          label: "Cash Full Payment",
-                          meta: `Submit now ${formatCurrency(totalAmount)}`,
-                          body: "No remaining balance after staff verifies the payment.",
-                          disabled: false,
-                        },
-                      ].map((option) => {
-                        const isActive = paymentOption === option.key;
-                        return (
-                          <Pressable
-                            key={option.key}
-                            accessibilityRole="button"
-                            accessibilityLabel={`${option.label}. ${option.meta}. ${option.body}${isActive ? " Selected." : ""}`}
-                            accessibilityState={{ disabled: option.disabled, selected: isActive }}
+                          selected: paymentOption === "paymongo_full",
+                        }}
+                        style={[
+                          s.paymentOptionCard,
+                          paymentOption === "paymongo_full" && {
+                            borderColor: colors.brand,
+                            backgroundColor: colors.brand + "12",
+                          },
+                          !canUsePaymongo && s.paymentOptionCardDisabled,
+                        ]}
+                        onPress={() => {
+                          if (!canUsePaymongo) {
+                            setIsPaymongoNoticeOpen(true);
+                            return;
+                          }
+                          setPaymentOption("paymongo_full");
+                        }}
+                      >
+                        <View style={s.paymentOptionText}>
+                          <FitText
                             style={[
-                              s.paymentOptionCard,
-                              isActive && {
-                                borderColor: colors.brand,
-                                backgroundColor: colors.brand + "12",
+                              s.paymentOptionLabel,
+                              paymentOption === "paymongo_full" && {
+                                color: colors.brand,
                               },
-                              option.disabled && s.paymentOptionCardDisabled,
                             ]}
-                            onPress={() => {
-                              if (option.disabled) {
-                                setIsPaymongoNoticeOpen(true);
-                                return;
-                              }
-                              setPaymentOption(option.key);
-                            }}
                           >
-                            <View style={s.paymentOptionText}>
-                              <FitText
-                                style={[
-                                  s.paymentOptionLabel,
-                                  isActive && { color: colors.brand },
-                                ]}
-                              >
-                                {option.label}
-                              </FitText>
-                              <FitText style={s.paymentOptionMeta}>
-                                {option.meta}
-                              </FitText>
-                              <FitText style={s.paymentOptionBody}>
-                                {option.body}
-                              </FitText>
-                            </View>
-                            {isActive ? (
-                              <CheckCircle
-                                size={18}
-                                color={colors.brand}
-                                strokeWidth={2}
-                              />
-                            ) : null}
-                          </Pressable>
-                        );
-                      })}
+                            PayMongo Full Payment
+                          </FitText>
+                          <FitText style={s.paymentOptionMeta}>
+                            {formatCurrency(totalAmount)} due now
+                          </FitText>
+                          <FitText style={s.paymentOptionBody}>
+                            {canUsePaymongo
+                              ? "The booking is confirmed only after PayMongo reports full payment."
+                              : "Unavailable right now. Cash bookings must be completed by the cashier."}
+                          </FitText>
+                        </View>
+                        {paymentOption === "paymongo_full" ? (
+                          <CheckCircle
+                            size={18}
+                            color={colors.brand}
+                            strokeWidth={2}
+                          />
+                        ) : null}
+                      </Pressable>
                     </View>
                     <View style={s.paymentSummaryCard}>
                       <FitText style={s.paymentSummaryEyebrow}>
@@ -1409,9 +1420,7 @@ export default function ReservationModal({
                         </FitText>
                       </View>
                       <FitText style={s.paymentSummaryDeadline}>
-                        {remainingBalance > 0
-                          ? `Next payment window: on or after ${formatBookingDate(date)}.`
-                          : "No later payment is scheduled for this reservation."}
+                        "No later payment is scheduled for this reservation."
                       </FitText>
                     </View>
                   </>
@@ -1551,6 +1560,7 @@ export default function ReservationModal({
         isVisible={isCalOpen}
         selectedDate={date}
         blockPast
+        maxDate={maxBookableDateKey}
         defaultYear={new Date().getFullYear()}
         defaultMonth={new Date().getMonth() + 1}
         blockedDates={calendarBlockedDates}

@@ -267,6 +267,8 @@ export type {
   RecurringCoachingPlanRecord,
   RecurringCoachingPlanSessionRecord,
   RecurringCoachingPlanStatus,
+  RecurringCoachingScheduleItemInput,
+  RecurringCoachingScheduleItemRecord,
   RecurringCoachingPreviewSession,
   RecurringCoachingSessionOverrideInput,
   RecurringCoachingSessionState,

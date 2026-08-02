@@ -3269,6 +3269,9 @@ export function useWorkoutLiveController(
           input: {
             durationSeconds: secondsRef.current,
             exerciseId: loggedExercise.exerciseId,
+            ...(cameraTarget?.planExerciseId
+              ? { planExerciseId: cameraTarget.planExerciseId }
+              : {}),
             ...(poseSessionId ? { poseSessionId } : {}),
             ...(finalizedReps > 0 ? { repsCompleted: finalizedReps } : {}),
             ...(loggedWeightKg !== null ? { weightKg: loggedWeightKg } : {}),

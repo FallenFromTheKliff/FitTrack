@@ -104,7 +104,7 @@ def test_chat_route_returns_provider_status_message_when_openrouter_is_unavailab
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv(
-        "OPENROUTER_ASSISTANT_MODEL",
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
         "meta-llama/llama-3.3-70b-instruct:free",
     )
     monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")
@@ -159,7 +159,7 @@ def test_chat_route_retries_with_openrouter_free_model_after_rate_limit(
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv(
-        "OPENROUTER_ASSISTANT_MODEL",
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
         "meta-llama/llama-3.3-70b-instruct:free",
     )
     monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")

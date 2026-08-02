@@ -116,9 +116,9 @@ type AmenityBookingApiRecord = {
 export type CreateBookingPayload = {
   coachId?: string;
   durationHours: number;
-  paymentStage?: BookingPaymentStage;
+  paymentStage?: "full";
   purpose?: string;
-  provider?: "cash" | "paymongo";
+  provider?: "paymongo";
   startTime: string;
   venueId: string | number;
 };
@@ -377,7 +377,7 @@ export function createBookingsApi(transport: ApiTransport) {
             coach_id: payload.coachId,
             ends_at: endsAt.toISOString(),
             notes: payload.purpose,
-            payment_stage: payload.paymentStage ?? "downpayment",
+            payment_stage: payload.paymentStage ?? "full",
             provider: payload.provider ?? "paymongo",
             starts_at: startsAt.toISOString(),
           },

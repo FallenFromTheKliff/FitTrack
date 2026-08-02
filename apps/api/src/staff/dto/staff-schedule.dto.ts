@@ -57,7 +57,7 @@ export class CreateStaffVenueBookingDTO {
     enum: CreateStaffInitialPaymentStage,
     example: CreateStaffInitialPaymentStage.full,
     description:
-      'Cash payment stage selected by staff. Downpayments remain pending until accepted from the review flow.',
+      'Cashier/admin/staff facility bookings record full cash payment. The legacy downpayment value is rejected by the booking service.',
   })
   @IsOptional()
   @IsEnum(CreateStaffInitialPaymentStage, {

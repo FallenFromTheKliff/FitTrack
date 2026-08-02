@@ -286,6 +286,6 @@ export class TrainingProgressionSuggestionResponseDTO {
   })
   rationale: string;
 
-  @ApiProperty({ example: 'history-rule-v1' })
-  source_revision: 'history-rule-v1';
+  @ApiProperty({ example: 'history-rule-v2' })
+  source_revision: 'history-rule-v2';
 }

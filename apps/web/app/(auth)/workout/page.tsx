@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Camera, Dumbbell, Plus } from "lucide-react";
+import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
 
 import FitButton from "@/components/fit/FitButton";
-import { FitSelect } from "@/components/fit";
+import { FitSelect, FitText } from "@/components/fit";
 import { AccessGate } from "@/components/member-only/MemberOnlyPageControls";
 import {
   EmptyState,
@@ -25,14 +26,19 @@ import {
   TodayWorkoutSteps,
   WorkoutPresetBuilder,
 } from "@/components/workout/WorkoutPresetWorkspace";
+import CoachPlanWeeklyViewer from "@/components/workout/CoachPlanWeeklyViewer";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export default function WorkoutPage() {
   const access = useMemberOnlyAccess("Workout");
   const { user, hasMemberCardAccess, isFrozen } = access;
+  const { colors } = useTheme();
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [activeSessionId, setActiveSessionId] = useState("");
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [showCameraNote, setShowCameraNote] = useState(false);
+  const [coachPlanViewerOpen, setCoachPlanViewerOpen] = useState(false);
+  const [planActionError, setPlanActionError] = useState("");
   const data = useMemberOnlyWorkoutData({
     hasMemberCardAccess,
     planId: selectedPlanId,
@@ -44,7 +50,7 @@ export default function WorkoutPage() {
   const activeSession = sessions.find((session) => session.status === "in_progress") ?? null;
   const completedSessions = sessions.filter((session) => session.status === "completed");
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? plans.find((plan) => plan.isActive) ?? plans[0] ?? null;
-  const isCoachManaged = selectedPlan?.source === "coach_assigned";
+  const isCoachManaged = isCoachManagedTrainingPlan(selectedPlan);
   const selectedPlanDetail = data.planDetailQuery.data ?? null;
   const activeSessionDetail = data.sessionDetailQuery.data ?? null;
   const exercises = data.exercisesQuery.data?.data ?? [];
@@ -89,11 +95,38 @@ export default function WorkoutPage() {
     await data.completeMutation.mutateAsync({ sessionId: activeSession.id, userId: user.id });
   };
 
-  const handlePlanSelect = async (planId: string) => {
+  const handlePlanSelect = (planId: string) => {
     setSelectedPlanId(planId);
-    if (!user?.id || !planId) return;
-    await data.activatePlanMutation.mutateAsync({ planId, userId: user.id });
+    setPlanActionError("");
   };
+
+  const handlePlanActivate = async () => {
+    const planId = selectedPlan?.id;
+    if (!user?.id || !planId) return;
+    try {
+      setPlanActionError("");
+      await data.activatePlanMutation.mutateAsync({ planId, userId: user.id });
+    } catch (error) {
+      setPlanActionError(
+        error instanceof Error ? error.message : "Unable to activate this workout plan.",
+      );
+    }
+  };
+
+  const planSurfaceStyle = isCoachManaged
+    ? {
+        backgroundColor: selectedPlan?.isActive
+          ? `${colors.warning}24`
+          : `${colors.warning}10`,
+        borderColor: selectedPlan?.isActive ? colors.warning : `${colors.warning}88`,
+        borderWidth: selectedPlan?.isActive ? 2 : 1,
+      }
+    : selectedPlan?.isActive
+      ? {
+          backgroundColor: `${colors.brand}10`,
+          borderColor: `${colors.brand}88`,
+        }
+      : undefined;
 
   return (
     <MemberOnlyScreen>
@@ -136,11 +169,14 @@ export default function WorkoutPage() {
         )}
         heading="Workout Presets"
       >
-        <MemberSurface padded>
-          <MemberPanelHeader eyebrow="Plan" title={selectedPlan?.title ?? "Free workout"} />
+        <MemberSurface padded style={planSurfaceStyle}>
+          <MemberPanelHeader
+            eyebrow={isCoachManaged ? "Coach plan" : "Plan"}
+            title={selectedPlan?.title ?? "Free workout"}
+          />
           <MemberText variant="muted">
             {selectedPlan
-              ? `${selectedPlan.daysPerWeek} days per week across ${selectedPlan.durationWeeks} weeks.${selectedPlan.isActive ? " This split is active." : ""}`
+              ? `${selectedPlan.daysPerWeek} days per week across ${selectedPlan.durationWeeks} weeks.${selectedPlan.isActive ? " This split is active." : ""}${isCoachManaged ? " Coach-managed and read-only." : ""}`
               : "No active plan is attached yet."}
           </MemberText>
           {plans.length > 0 ? (
@@ -148,17 +184,43 @@ export default function WorkoutPage() {
               disabled={data.activatePlanMutation.isPending}
               fullWidth
               value={selectedPlan?.id ?? ""}
-              onChange={(event) => void handlePlanSelect(event.target.value)}
+              onChange={(event) => handlePlanSelect(event.target.value)}
               options={plans.map((plan) => ({
-                label: `${plan.title}${plan.isActive ? " (active)" : ""}`,
+                label: `${isCoachManagedTrainingPlan(plan) ? "Coach plan — " : "Personal plan — "}${plan.title}${plan.isActive ? " (active)" : ""}`,
                 value: plan.id,
               }))}
             />
           ) : null}
-          {selectedPlan?.source === "coach_assigned" ? (
-            <MemberText variant="muted">
-              Your coach manages this preset. You can select and complete it, but editing stays locked.
-            </MemberText>
+          {isCoachManaged ? (
+            <>
+              <MemberText variant="muted">
+                Your coach manages this preset. You can select and complete it, but editing stays locked.
+              </MemberText>
+              <FitButton
+                label="View weekly plan"
+                onClick={() => setCoachPlanViewerOpen(true)}
+                variant="ghost"
+              />
+            </>
+          ) : null}
+          {selectedPlan && !selectedPlan.isActive ? (
+            <FitButton
+              disabled={data.activatePlanMutation.isPending}
+              label={
+                data.activatePlanMutation.isPending
+                  ? "Activating plan"
+                  : isCoachManaged
+                    ? "Use Coach Plan"
+                    : "Use Personal Plan"
+              }
+              onClick={() => void handlePlanActivate()}
+              variant="ghost"
+            />
+          ) : null}
+          {planActionError ? (
+            <FitText style={{ color: colors.danger, fontSize: 13 }}>
+              {planActionError}
+            </FitText>
           ) : null}
         </MemberSurface>
         {showPresetBuilder && !isCoachManaged ? (
@@ -202,6 +264,14 @@ export default function WorkoutPage() {
           </MemberSurface>
         ) : null}
       </MemberSection>
+
+      <CoachPlanWeeklyViewer
+        isOpen={coachPlanViewerOpen}
+        onClose={() => setCoachPlanViewerOpen(false)}
+        planId={isCoachManaged ? selectedPlan?.id ?? null : null}
+        planTitle={selectedPlan?.title}
+        userId={user?.id}
+      />
 
       <MemberSection
         action={

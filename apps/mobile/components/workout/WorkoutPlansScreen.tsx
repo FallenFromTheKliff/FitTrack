@@ -1,13 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
-import {
-  ArrowLeft,
-  Check,
-  Dumbbell,
-  Minus,
-  Plus,
-  Trash2,
-} from "lucide-react-native";
+import { ArrowLeft, Check, Minus, Plus, Trash2 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateTrainingPlanInput,
@@ -23,20 +16,16 @@ import {
   fitnessPlansQueryOptions,
   updateFitnessPlanMutationOptions,
 } from "@fittrack/query";
+import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
 
 import { FitButton, FitText } from "@/components/fit";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import CoachPlanWeeklyViewerModal from "@/components/workout/CoachPlanWeeklyViewerModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-const GOALS: Array<{ label: string; value: FitnessGoal }> = [
-  { label: "Build muscle", value: "bulking" },
-  { label: "Maintain", value: "maintenance" },
-  { label: "Cut", value: "cutting" },
-  { label: "Sport", value: "sport_specific" },
-];
 
 type DraftExercise = {
   exerciseId: string;
@@ -62,7 +51,7 @@ type PlanConfirmation = {
 };
 
 function sourceLabel(plan: TrainingPlanSummaryRecord) {
-  if (plan.source === "coach_assigned" || plan.coachId) return "Coach assigned";
+  if (isCoachManagedTrainingPlan(plan)) return "Coach assigned";
   if (plan.source === "ai_generated") return "Smart draft";
   return "Personal";
 }
@@ -70,7 +59,7 @@ function sourceLabel(plan: TrainingPlanSummaryRecord) {
 function detailToDraft(plan: TrainingPlanDetailRecord): DraftDays {
   return Object.fromEntries(
     plan.scheduleDays
-      .filter((day) => day.weekNumber === 1)
+      .filter((day) => day.weekNumber === 1 && day.exercises.length > 0)
       .map((day) => [
         day.dayOfWeek,
         {
@@ -102,7 +91,8 @@ function toPlanInput(
         restSeconds: exercise.restSeconds,
         sets: exercise.sets,
       })),
-      focusLabel: day.focusLabel.trim() || `${DAY_NAMES[Number(dayOfWeek)]} training`,
+      focusLabel:
+        day.focusLabel.trim() || `${DAY_NAMES[Number(dayOfWeek)]} training`,
       weekNumber: 1,
     }))
     .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
@@ -128,11 +118,17 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   const [activeDraftDay, setActiveDraftDay] = useState<number>(1);
   const [exerciseSearch, setExerciseSearch] = useState("");
   const [message, setMessage] = useState("");
-  const [confirmation, setConfirmation] =
-    useState<PlanConfirmation | null>(null);
+  const [viewingPlanId, setViewingPlanId] = useState<string | null>(null);
+  const [viewingPlanTitle, setViewingPlanTitle] = useState("");
+  const [confirmation, setConfirmation] = useState<PlanConfirmation | null>(
+    null,
+  );
 
   const plansQuery = useQuery({
-    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, { limit: 50, page: 1 }),
+    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, {
+      limit: 50,
+      page: 1,
+    }),
     enabled: !!user?.id,
   });
   const exercisesQuery = useQuery({
@@ -140,9 +136,6 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
     enabled: !!user?.id,
   });
   const plans = plansQuery.data?.data ?? [];
-  const hasCoachManagedPlan = plans.some(
-    (plan) => plan.source === "coach_assigned" && Boolean(plan.coachId),
-  );
   const exercises = useMemo(() => {
     const normalized = exerciseSearch.trim().toLowerCase();
     return (exercisesQuery.data?.data ?? [])
@@ -204,7 +197,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
       setActiveDraftDay(firstDay);
       setBuilderOpen(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to open plan.");
+      setMessage(
+        error instanceof Error ? error.message : "Unable to open plan.",
+      );
     }
   };
 
@@ -239,7 +234,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
       [activeDraftDay]: {
         ...current[activeDraftDay],
         exercises: current[activeDraftDay].exercises.map((exercise) =>
-          exercise.exerciseId === exerciseId ? { ...exercise, ...patch } : exercise,
+          exercise.exerciseId === exerciseId
+            ? { ...exercise, ...patch }
+            : exercise,
         ),
       },
     }));
@@ -274,9 +271,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
           userId: user?.id,
         });
         const coachPlanIsActive = plans.some(
-          (plan) =>
-            plan.isActive &&
-            (plan.source === "coach_assigned" || Boolean(plan.coachId)),
+          (plan) => plan.isActive && isCoachManagedTrainingPlan(plan),
         );
         if (coachPlanIsActive) {
           setMessage(
@@ -292,7 +287,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
       }
       resetBuilder();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save plan.");
+      setMessage(
+        error instanceof Error ? error.message : "Unable to save plan.",
+      );
     }
   };
 
@@ -303,7 +300,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
           planId: plan.id,
           userId: user?.id,
         });
-        setMessage(`${plan.title} is now your active plan.`);
+        setMessage("");
       } catch (error) {
         setMessage(
           error instanceof Error ? error.message : "Unable to select plan.",
@@ -312,8 +309,10 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
     };
 
     const replacesCoachDefault =
-      plans.some((candidate) => candidate.isActive && candidate.coachId) &&
-      !plan.coachId;
+      plans.some(
+        (candidate) =>
+          candidate.isActive && isCoachManagedTrainingPlan(candidate),
+      ) && !isCoachManagedTrainingPlan(plan);
     if (replacesCoachDefault) {
       setConfirmation({
         confirmLabel: "Use personal plan",
@@ -331,8 +330,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
     setConfirmation({
       confirmLabel: "Delete",
       destructive: true,
-      message:
-        "This removes the preset but keeps completed workout history.",
+      message: "This removes the preset but keeps completed workout history.",
       onConfirm: async () => {
         try {
           await deleteMutation.mutateAsync({
@@ -385,9 +383,17 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
           </Pressable>
           <View style={{ flex: 1 }}>
             <FitText
-              style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "900" }}
+              style={{
+                color: colors.textPrimary,
+                fontSize: 20,
+                fontWeight: "900",
+              }}
             >
-              {builderOpen ? (editingPlanId ? "Edit plan" : "Create plan") : "Workout plans"}
+              {builderOpen
+                ? editingPlanId
+                  ? "Edit plan"
+                  : "Create plan"
+                : "Workout plans"}
             </FitText>
             <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
               {builderOpen
@@ -415,191 +421,262 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
 
         {!builderOpen ? (
           <>
-            {hasCoachManagedPlan ? (
-              <View
-                style={{
-                  backgroundColor: `${colors.brand}12`,
-                  borderColor: `${colors.brand}55`,
-                  borderRadius: 9,
-                  borderWidth: 1,
-                  gap: 4,
-                  padding: 11,
-                }}
-              >
-                <View
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    gap: 7,
-                  }}
-                >
-                  <Dumbbell color={colors.brand} size={15} />
-                  <FitText
-                    style={{
-                      color: colors.textPrimary,
-                      fontSize: 12,
-                      fontWeight: "900",
-                    }}
-                  >
-                    Your coach has shared a plan
-                  </FitText>
-                </View>
-                <FitText
-                  style={{ color: colors.textMuted, fontSize: 10.5, lineHeight: 16 }}
-                >
-                  Coach plans are highlighted below. You can use one or keep
-                  training with a personal plan.
-                </FitText>
-              </View>
-            ) : null}
-            <FitButton icon={Plus} label="Create Personal Plan" onPress={openCreate} />
+            <FitButton
+              icon={Plus}
+              label="Create Personal Plan"
+              onPress={openCreate}
+            />
 
             <View style={{ gap: 9 }}>
-              {plans.map((plan) => (
-                <View
-                  key={plan.id}
-                  style={{
-                    backgroundColor:
-                      plan.source === "coach_assigned" || plan.coachId
-                        ? `${colors.brand}10`
-                        : colors.surfaceRaised,
-                    borderColor:
-                      plan.source === "coach_assigned" || plan.coachId
-                        ? `${colors.brand}85`
-                        : plan.isActive
-                          ? colors.brand
-                          : colors.border,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    gap: 10,
-                    padding: 12,
-                  }}
-                >
+              {plans.map((plan) => {
+                const isCoachManaged = isCoachManagedTrainingPlan(plan);
+                const sourceAccent = isCoachManaged
+                  ? colors.warning
+                  : colors.textMuted;
+                const activeAccent = isCoachManaged
+                  ? colors.warning
+                  : colors.success;
+                // Coach ownership is a permanent visual category, not an active
+                // selection state. A selected personal plan keeps the normal brand
+                // outline; a coach plan always stays gold and gets a stronger gold
+                // surface when it is active.
+                const cardBackgroundColor = isCoachManaged
+                  ? `${colors.warning}${plan.isActive ? "2A" : "12"}`
+                  : colors.surfaceRaised;
+                const cardBorderColor = isCoachManaged
+                  ? colors.warning
+                  : plan.isActive
+                    ? colors.brand
+                    : colors.border;
+                const cardBorderWidth = isCoachManaged && plan.isActive ? 2 : 1;
+                const isSelfCreated =
+                  !isCoachManaged && plan.source === "self_created";
+                const compactActionStyle = {
+                  alignItems: "center" as const,
+                  backgroundColor: isCoachManaged
+                    ? `${colors.warning}12`
+                    : colors.surface,
+                  borderColor: isCoachManaged
+                    ? `${colors.warning}65`
+                    : colors.border,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  flexDirection: "row" as const,
+                  gap: 3,
+                  justifyContent: "center" as const,
+                  minHeight: 29,
+                  paddingHorizontal: 7,
+                  paddingVertical: 4,
+                };
+
+                return (
                   <View
+                    key={plan.id}
+                    accessibilityLabel={`${sourceLabel(plan)} workout plan: ${plan.title}${plan.isActive ? ", active" : ""}`}
+                    testID={`workout-plan-card-${plan.id}`}
                     style={{
-                      alignItems: "flex-start",
-                      flexDirection: "row",
+                      backgroundColor: cardBackgroundColor,
+                      borderColor: cardBorderColor,
+                      borderRadius: 10,
+                      borderWidth: cardBorderWidth,
                       gap: 10,
-                      justifyContent: "space-between",
+                      padding: 12,
                     }}
                   >
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <FitText
-                        style={{
-                          color: colors.textPrimary,
-                          fontSize: 14,
-                          fontWeight: "900",
-                        }}
-                      >
-                        {plan.title}
-                      </FitText>
-                      <View
-                        style={{
-                          alignItems: "center",
-                          flexDirection: "row",
-                          flexWrap: "wrap",
-                          gap: 6,
-                        }}
-                      >
-                        <View
-                          style={{
-                            backgroundColor:
-                              plan.source === "coach_assigned" || plan.coachId
-                                ? `${colors.brand}20`
-                                : `${colors.textMuted}12`,
-                            borderColor:
-                              plan.source === "coach_assigned" || plan.coachId
-                                ? `${colors.brand}70`
-                                : colors.border,
-                            borderRadius: 6,
-                            borderWidth: 1,
-                            paddingHorizontal: 6,
-                            paddingVertical: 3,
-                          }}
-                        >
-                          <FitText
-                            style={{
-                              color:
-                                plan.source === "coach_assigned" || plan.coachId
-                                  ? colors.brand
-                                  : colors.textMuted,
-                              fontSize: 8.5,
-                              fontWeight: "900",
-                              letterSpacing: 0.4,
-                            }}
-                          >
-                            {sourceLabel(plan).toUpperCase()}
-                          </FitText>
-                        </View>
-                        <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>
-                          {plan.daysPerWeek} days/week
-                        </FitText>
-                      </View>
-                    </View>
-                    {plan.isActive ? (
-                      <View
-                        style={{
-                          alignItems: "center",
-                          backgroundColor: `${colors.success}14`,
-                          borderRadius: 7,
-                          flexDirection: "row",
-                          gap: 4,
-                          paddingHorizontal: 7,
-                          paddingVertical: 5,
-                        }}
-                      >
-                        <Check size={12} color={colors.success} />
+                    <View
+                      style={{
+                        alignItems: "flex-start",
+                        flexDirection: "row",
+                        gap: 10,
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View style={{ flex: 1, gap: 3 }}>
                         <FitText
                           style={{
-                            color: colors.success,
-                            fontSize: 9,
+                            color: colors.textPrimary,
+                            fontSize: 14,
                             fontWeight: "900",
                           }}
                         >
-                          ACTIVE
+                          {plan.title}
                         </FitText>
+                        <View
+                          style={{
+                            alignItems: "center",
+                            flexDirection: "row",
+                            flexWrap: "wrap",
+                            gap: 6,
+                          }}
+                        >
+                          <View
+                            style={{
+                              backgroundColor: isCoachManaged
+                                ? `${colors.warning}20`
+                                : `${colors.textMuted}12`,
+                              borderColor: isCoachManaged
+                                ? `${colors.warning}70`
+                                : colors.border,
+                              borderRadius: 6,
+                              borderWidth: 1,
+                              paddingHorizontal: 6,
+                              paddingVertical: 3,
+                            }}
+                          >
+                            <FitText
+                              style={{
+                                color: sourceAccent,
+                                fontSize: 8.5,
+                                fontWeight: "900",
+                                letterSpacing: 0.4,
+                              }}
+                            >
+                              {sourceLabel(plan).toUpperCase()}
+                            </FitText>
+                          </View>
+                          <FitText
+                            style={{ color: colors.textMuted, fontSize: 10.5 }}
+                          >
+                            {plan.daysPerWeek} days/week
+                          </FitText>
+                        </View>
                       </View>
-                    ) : null}
+                      <View
+                        style={{
+                          alignItems: "center",
+                          flexDirection: "row",
+                          flexShrink: 0,
+                          gap: 5,
+                        }}
+                      >
+                        {isCoachManaged ? (
+                          <Pressable
+                            accessibilityLabel="View weekly plan"
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setViewingPlanId(plan.id);
+                              setViewingPlanTitle(plan.title);
+                            }}
+                            style={compactActionStyle}
+                          >
+                            <FitText
+                              style={{
+                                color: colors.warning,
+                                fontSize: 8.5,
+                                fontWeight: "900",
+                                letterSpacing: 0.4,
+                              }}
+                            >
+                              VIEW
+                            </FitText>
+                          </Pressable>
+                        ) : null}
+                        {!plan.isActive ? (
+                          <Pressable
+                            accessibilityLabel={
+                              isCoachManaged
+                                ? "Use Coach Plan"
+                                : "Use Personal Plan"
+                            }
+                            accessibilityRole="button"
+                            disabled={activateMutation.isPending}
+                            onPress={() => selectPlan(plan)}
+                            style={({ pressed }) => [
+                              compactActionStyle,
+                              {
+                                opacity:
+                                  activateMutation.isPending || pressed
+                                    ? 0.55
+                                    : 1,
+                              },
+                            ]}
+                          >
+                            <FitText
+                              style={{
+                                color: isCoachManaged
+                                  ? colors.warning
+                                  : colors.textPrimary,
+                                fontSize: 8.5,
+                                fontWeight: "900",
+                                letterSpacing: 0.4,
+                              }}
+                            >
+                              USE
+                            </FitText>
+                          </Pressable>
+                        ) : null}
+                        {plan.isActive ? (
+                          <View
+                            style={{
+                              alignItems: "center",
+                              backgroundColor: `${activeAccent}14`,
+                              borderRadius: 7,
+                              flexDirection: "row",
+                              gap: 4,
+                              paddingHorizontal: 7,
+                              paddingVertical: 5,
+                            }}
+                          >
+                            <Check size={12} color={activeAccent} />
+                            <FitText
+                              style={{
+                                color: activeAccent,
+                                fontSize: 9,
+                                fontWeight: "900",
+                              }}
+                            >
+                              ACTIVE
+                            </FitText>
+                          </View>
+                        ) : null}
+                        {isSelfCreated ? (
+                          <Pressable
+                            accessibilityLabel="Edit"
+                            accessibilityRole="button"
+                            onPress={() => void openEdit(plan)}
+                            style={compactActionStyle}
+                          >
+                            <FitText
+                              style={{
+                                color: colors.textPrimary,
+                                fontSize: 8.5,
+                                fontWeight: "900",
+                                letterSpacing: 0.4,
+                              }}
+                            >
+                              EDIT
+                            </FitText>
+                          </Pressable>
+                        ) : null}
+                        {isSelfCreated ? (
+                          <Pressable
+                            accessibilityLabel="Delete"
+                            accessibilityRole="button"
+                            onPress={() => confirmDeletePlan(plan)}
+                            style={[
+                              compactActionStyle,
+                              { paddingHorizontal: 6 },
+                            ]}
+                          >
+                            <Trash2 color={colors.danger} size={12} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
-
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                    {!plan.isActive ? (
-                      <FitButton
-                        disabled={activateMutation.isPending}
-                        label={
-                          plan.source === "coach_assigned" || plan.coachId
-                            ? "Use Coach Plan"
-                            : "Use Personal Plan"
-                        }
-                        onPress={() => selectPlan(plan)}
-                        variant="ghost"
-                      />
-                    ) : null}
-                    {plan.source === "self_created" ? (
-                      <FitButton
-                        label="Edit"
-                        onPress={() => void openEdit(plan)}
-                        variant="ghost"
-                      />
-                    ) : null}
-                    {plan.source === "self_created" ? (
-                      <FitButton
-                        icon={Trash2}
-                        label="Delete"
-                        onPress={() => confirmDeletePlan(plan)}
-                        variant="ghost"
-                      />
-                    ) : null}
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </>
         ) : (
           <>
             <View style={{ gap: 7 }}>
               <FitText
-                style={{ color: colors.textPrimary, fontSize: 11, fontWeight: "800" }}
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: "800",
+                }}
               >
                 Plan name
               </FitText>
@@ -623,47 +700,11 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
 
             <View style={{ gap: 7 }}>
               <FitText
-                style={{ color: colors.textPrimary, fontSize: 11, fontWeight: "800" }}
-              >
-                Goal
-              </FitText>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                {GOALS.map((item) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item.value}
-                    onPress={() => setGoal(item.value)}
-                    style={{
-                      backgroundColor:
-                        goal === item.value
-                          ? `${colors.brand}20`
-                          : colors.surfaceRaised,
-                      borderColor:
-                        goal === item.value ? colors.brand : colors.border,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                    }}
-                  >
-                    <FitText
-                      style={{
-                        color:
-                          goal === item.value ? colors.brand : colors.textPrimary,
-                        fontSize: 10.5,
-                        fontWeight: "800",
-                      }}
-                    >
-                      {item.label}
-                    </FitText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View style={{ gap: 7 }}>
-              <FitText
-                style={{ color: colors.textPrimary, fontSize: 11, fontWeight: "800" }}
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: "800",
+                }}
               >
                 Training days
               </FitText>
@@ -678,7 +719,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                       key={day}
                       onLongPress={() => toggleDay(dayOfWeek)}
                       onPress={() =>
-                        selected ? setActiveDraftDay(dayOfWeek) : toggleDay(dayOfWeek)
+                        selected
+                          ? setActiveDraftDay(dayOfWeek)
+                          : toggleDay(dayOfWeek)
                       }
                       style={{
                         alignItems: "center",
@@ -880,7 +923,19 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                   }}
                   value={exerciseSearch}
                 />
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                <ScrollView
+                  accessibilityLabel="Exercise catalog"
+                  contentContainerStyle={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    paddingBottom: 2,
+                  }}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  style={{ maxHeight: 210 }}
+                  testID="workout-plan-exercise-catalog"
+                >
                   {exercises.length === 0 ? (
                     <FitText
                       style={{
@@ -923,7 +978,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                           backgroundColor: selected
                             ? `${colors.success}12`
                             : colors.surfaceRaised,
-                          borderColor: selected ? colors.success : colors.border,
+                          borderColor: selected
+                            ? colors.success
+                            : colors.border,
                           borderRadius: 8,
                           borderWidth: 1,
                           opacity: selected ? 0.65 : 1,
@@ -933,7 +990,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                       >
                         <FitText
                           style={{
-                            color: selected ? colors.success : colors.textPrimary,
+                            color: selected
+                              ? colors.success
+                              : colors.textPrimary,
                             fontSize: 9.5,
                             fontWeight: "800",
                           }}
@@ -944,17 +1003,23 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                       </Pressable>
                     );
                   })}
-                </View>
+                </ScrollView>
               </>
             ) : null}
 
             <View style={{ flexDirection: "row", gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <FitButton label="Cancel" onPress={resetBuilder} variant="ghost" />
+                <FitButton
+                  label="Cancel"
+                  onPress={resetBuilder}
+                  variant="ghost"
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <FitButton
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={
+                    createMutation.isPending || updateMutation.isPending
+                  }
                   label={
                     createMutation.isPending || updateMutation.isPending
                       ? "Saving"
@@ -969,6 +1034,12 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
           </>
         )}
       </ScrollView>
+      <CoachPlanWeeklyViewerModal
+        isVisible={Boolean(viewingPlanId)}
+        onClose={() => setViewingPlanId(null)}
+        planId={viewingPlanId}
+        planTitle={viewingPlanTitle}
+      />
       <ConfirmModal
         isDestructive={confirmation?.destructive}
         isLoading={activateMutation.isPending || deleteMutation.isPending}

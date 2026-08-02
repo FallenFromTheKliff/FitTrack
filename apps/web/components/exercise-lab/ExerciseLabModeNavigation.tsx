@@ -15,7 +15,7 @@ export function ExerciseLabModeNavigation() {
       style={{
         alignItems: "stretch",
         display: "flex",
-        gap: 8,
+        gap: 6,
         flexWrap: "wrap",
       }}
     >
@@ -38,7 +38,7 @@ export function ExerciseLabModeNavigation() {
               border: `1px solid ${
                 isActive ? colors.brand : colors.border
               }`,
-              borderRadius: 7,
+              borderRadius: 6,
               color: isActive ? colors.onBrand : colors.textPrimary,
               cursor: "pointer",
               display: "inline-flex",
@@ -47,9 +47,9 @@ export function ExerciseLabModeNavigation() {
               fontWeight: 850,
               gap: 8,
               justifyContent: "center",
-              minHeight: 40,
-              minWidth: option.value === "review" ? 146 : 132,
-              padding: "8px 16px",
+              minHeight: 36,
+              minWidth: option.value === "review" ? 128 : 120,
+              padding: "7px 14px",
               transition:
                 "background-color 150ms ease, border-color 150ms ease, color 150ms ease",
               whiteSpace: "nowrap",

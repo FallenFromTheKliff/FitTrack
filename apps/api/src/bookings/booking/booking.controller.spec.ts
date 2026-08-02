@@ -119,7 +119,7 @@ describe('BookingController', () => {
     });
 
     await controller.createBooking(
-      { sub: 'member-1' } as never,
+      { role: UserRole.member, sub: 'member-1' } as never,
       {
         amenity_id: 'amenity-1',
         starts_at: '2026-03-24T10:00:00.000Z',
@@ -138,6 +138,7 @@ describe('BookingController', () => {
         provider: 'paymongo',
       },
       '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      UserRole.member,
     );
   });
 
@@ -166,13 +167,13 @@ describe('BookingController', () => {
     });
   });
 
-  it('returns a non-refundable cancellation message after cancelling', async () => {
+  it('returns a generic cancellation message after cancelling', async () => {
     bookingService.cancelBooking.mockResolvedValue(undefined);
 
     await expect(
       controller.cancelBooking('booking-1', { sub: 'member-1' } as never),
     ).resolves.toEqual({
-      message: 'Booking cancelled. Downpayment is non-refundable.',
+      message: 'Booking cancelled.',
     });
     expect(bookingService.cancelBooking).toHaveBeenCalledWith(
       'booking-1',
