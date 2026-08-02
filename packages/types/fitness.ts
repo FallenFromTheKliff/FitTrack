@@ -434,6 +434,7 @@ export type TrainingPlanExerciseRecord = {
   orderIndex: number;
   reps: number | null;
   restSeconds: number;
+  restSecondsBySet: number[] | null;
   sets: number;
   weightKgTarget: number | null;
 };
@@ -472,6 +473,7 @@ export type CreateTrainingPlanExerciseInput = {
   orderIndex?: number;
   reps?: number;
   restSeconds?: number;
+  restSecondsBySet?: number[];
   sets: number;
   weightKgTarget?: number;
 };

@@ -35,17 +35,24 @@ export function MobileWorkoutSteps({
   const [restRemaining, setRestRemaining] = useState(0);
 
   const plansQuery = useQuery({
-    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, { limit: 50, page: 1 }),
+    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, {
+      limit: 50,
+      page: 1,
+    }),
     enabled: !!user?.id,
   });
   const sessionsQuery = useQuery({
-    ...fitnessSessionsQueryOptions(mobileApiClient, user?.id, { limit: 20, page: 1 }),
+    ...fitnessSessionsQueryOptions(mobileApiClient, user?.id, {
+      limit: 20,
+      page: 1,
+    }),
     enabled: !!user?.id,
   });
   const plans = plansQuery.data?.data ?? [];
   const activeSession =
-    (sessionsQuery.data?.data ?? []).find((session) => session.status === "in_progress") ??
-    null;
+    (sessionsQuery.data?.data ?? []).find(
+      (session) => session.status === "in_progress",
+    ) ?? null;
   const effectivePlan =
     plans.find((plan) => plan.id === selectedPlanId) ??
     plans.find((plan) => plan.isActive) ??
@@ -119,7 +126,9 @@ export function MobileWorkoutSteps({
   return (
     <View style={{ gap: 14, marginBottom: 16 }}>
       <View style={{ gap: 4 }}>
-        <FitText style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "900" }}>
+        <FitText
+          style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "900" }}
+        >
           Today&apos;s workout
         </FitText>
         <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
@@ -137,11 +146,16 @@ export function MobileWorkoutSteps({
               onPress={() => {
                 setSelectedPlanId(item.id);
                 if (user?.id) {
-                  void activateMutation.mutateAsync({ planId: item.id, userId: user.id });
+                  void activateMutation.mutateAsync({
+                    planId: item.id,
+                    userId: user.id,
+                  });
                 }
               }}
               style={{
-                backgroundColor: selected ? `${colors.brand}22` : colors.surfaceRaised,
+                backgroundColor: selected
+                  ? `${colors.brand}22`
+                  : colors.surfaceRaised,
                 borderColor: selected ? colors.brand : colors.border,
                 borderRadius: 9,
                 borderWidth: 1,
@@ -200,7 +214,9 @@ export function MobileWorkoutSteps({
                   key={exercise.id}
                   onPress={() => setSelectedExerciseId(exercise.id)}
                   style={{
-                    backgroundColor: selected ? `${colors.brand}22` : colors.surface,
+                    backgroundColor: selected
+                      ? `${colors.brand}22`
+                      : colors.surface,
                     borderColor: selected ? colors.brand : colors.border,
                     borderRadius: 8,
                     borderWidth: 1,
@@ -226,7 +242,9 @@ export function MobileWorkoutSteps({
               createMutation.isPending ||
               !(selectedExerciseId || exercisesQuery.data?.data[0]?.id)
             }
-            label={createMutation.isPending ? "Saving Preset" : "Save Today Preset"}
+            label={
+              createMutation.isPending ? "Saving Preset" : "Save Today Preset"
+            }
             onPress={async () => {
               const exerciseId =
                 selectedExerciseId || exercisesQuery.data?.data[0]?.id;
@@ -244,7 +262,7 @@ export function MobileWorkoutSteps({
                           exerciseId,
                           orderIndex: 0,
                           reps: 10,
-                          restSeconds: 60,
+                          restSeconds: 75,
                           sets: 3,
                         },
                       ],
@@ -270,7 +288,11 @@ export function MobileWorkoutSteps({
       {!activeSession ? (
         <FitButton
           disabled={!effectivePlan || startMutation.isPending}
-          label={startMutation.isPending ? "Starting Workout" : "Start Today’s Workout"}
+          label={
+            startMutation.isPending
+              ? "Starting Workout"
+              : "Start Today’s Workout"
+          }
           onPress={() => {
             if (!user?.id || !effectivePlan) return;
             void startMutation.mutateAsync({
@@ -294,10 +316,20 @@ export function MobileWorkoutSteps({
             padding: 10,
           }}
         >
-          <FitText style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "800" }}>
+          <FitText
+            style={{
+              color: colors.textPrimary,
+              fontSize: 12,
+              fontWeight: "800",
+            }}
+          >
             <Clock3 size={15} /> Rest {restRemaining}s
           </FitText>
-          <FitButton label="Skip" onPress={() => setRestRemaining(0)} variant="ghost" />
+          <FitButton
+            label="Skip"
+            onPress={() => setRestRemaining(0)}
+            variant="ghost"
+          />
         </View>
       ) : null}
 
@@ -316,7 +348,11 @@ export function MobileWorkoutSteps({
           >
             <View>
               <FitText
-                style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "900" }}
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: "900",
+                }}
               >
                 {exerciseIndex + 1}. {exercise.exerciseName}
               </FitText>
@@ -333,7 +369,11 @@ export function MobileWorkoutSteps({
                     key={setNumber}
                     disabled={done || !activeSession || logMutation.isPending}
                     icon={done ? Check : undefined}
-                    label={done ? `Set ${setNumber} Done` : `Complete Set ${setNumber}`}
+                    label={
+                      done
+                        ? `Set ${setNumber} Done`
+                        : `Complete Set ${setNumber}`
+                    }
                     onPress={async () => {
                       if (!user?.id || !activeSession) return;
                       await logMutation.mutateAsync({
@@ -346,7 +386,10 @@ export function MobileWorkoutSteps({
                         sessionId: activeSession.id,
                         userId: user.id,
                       });
-                      setRestRemaining(exercise.restSeconds);
+                      setRestRemaining(
+                        exercise.restSecondsBySet?.[setNumber - 1] ??
+                          exercise.restSeconds,
+                      );
                     }}
                     variant={done ? "ghost" : "primary"}
                   />
@@ -357,7 +400,9 @@ export function MobileWorkoutSteps({
         ))
       ) : (
         <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-          {effectivePlan ? "Today is a rest day in this preset." : "Create or select a preset."}
+          {effectivePlan
+            ? "Today is a rest day in this preset."
+            : "Create or select a preset."}
         </FitText>
       )}
 

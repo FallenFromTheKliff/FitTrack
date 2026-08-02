@@ -1066,7 +1066,8 @@ model PlanExercise {
   sets             Int      @db.SmallInt
   reps             Int?     @db.SmallInt
   duration_seconds Int?
-  rest_seconds     Int      @default(60)
+  rest_seconds     Int      @default(75)
+  rest_seconds_by_set Json?
   weight_kg_target Decimal? @db.Decimal(6, 2)
   notes            String?
   order_index      Int      @default(0) @db.SmallInt

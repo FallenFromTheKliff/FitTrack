@@ -42,6 +42,7 @@ export type TrainingPlanExerciseWriteInput = {
   reps?: number | null;
   durationSeconds?: number | null;
   restSeconds: number;
+  restSecondsBySet?: number[] | null;
   weightKgTarget?: number | null;
   orderIndex: number;
   notes?: string | null;
@@ -276,6 +277,7 @@ export class TrainingPlanRepository extends BaseRepository {
           reps: exercise.reps ?? null,
           duration_seconds: exercise.durationSeconds ?? null,
           rest_seconds: exercise.restSeconds,
+          rest_seconds_by_set: exercise.restSecondsBySet ?? undefined,
           weight_kg_target: exercise.weightKgTarget ?? null,
           notes: exercise.notes ?? null,
           order_index: exercise.orderIndex,

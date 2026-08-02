@@ -255,6 +255,7 @@ type TrainingPlanExerciseApiRecord = {
   order_index: number;
   reps: number | null;
   rest_seconds: number;
+  rest_seconds_by_set: number[] | null;
   sets: number;
   weight_kg_target: string | null;
 };
@@ -846,6 +847,7 @@ function mapTrainingPlanDetail(
         orderIndex: exercise.order_index,
         reps: exercise.reps,
         restSeconds: exercise.rest_seconds,
+        restSecondsBySet: exercise.rest_seconds_by_set,
         sets: exercise.sets,
         weightKgTarget: toNullableNumber(exercise.weight_kg_target),
       })),
@@ -886,6 +888,7 @@ function toTrainingPlanMutationPayload(input: CreateTrainingPlanInput) {
         order_index: exercise.orderIndex,
         reps: exercise.reps,
         rest_seconds: exercise.restSeconds,
+        rest_seconds_by_set: exercise.restSecondsBySet,
         sets: exercise.sets,
         weight_kg_target: exercise.weightKgTarget,
       })),
@@ -1041,61 +1044,50 @@ function mapPoseFrameAnalysis(
           secondaryJoints: record.movement_contract.secondary_joints ?? [],
           spatialRequirements: record.movement_contract.spatial_requirements
             ? {
-                bodyLineTolerance:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .body_line_tolerance,
-                  ),
-                bodyXDriftMax:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .body_x_drift_max,
-                  ),
-                bodyYTravelMin:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .body_y_travel_min,
-                  ),
-                hipYTravelMin:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .hip_y_travel_min,
-                  ),
-                shoulderHipTravelMin:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .shoulder_hip_travel_min,
-                  ),
-                shoulderYTravelMin:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .shoulder_y_travel_min,
-                  ),
-                torsoSlopeMaxDeg:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .torso_slope_max_deg,
-                  ),
-                torsoSlopeMinDeg:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .torso_slope_min_deg,
-                  ),
-                wristAnchorDriftMax:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .wrist_anchor_drift_max,
-                  ),
-                leftRightSymmetryTolerance:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .left_right_symmetry_tolerance,
-                  ),
-                phaseSyncToleranceMs:
-                  toNullableNumber(
-                    record.movement_contract.spatial_requirements
-                      .phase_sync_tolerance_ms,
-                  ),
+                bodyLineTolerance: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .body_line_tolerance,
+                ),
+                bodyXDriftMax: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .body_x_drift_max,
+                ),
+                bodyYTravelMin: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .body_y_travel_min,
+                ),
+                hipYTravelMin: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .hip_y_travel_min,
+                ),
+                shoulderHipTravelMin: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .shoulder_hip_travel_min,
+                ),
+                shoulderYTravelMin: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .shoulder_y_travel_min,
+                ),
+                torsoSlopeMaxDeg: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .torso_slope_max_deg,
+                ),
+                torsoSlopeMinDeg: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .torso_slope_min_deg,
+                ),
+                wristAnchorDriftMax: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .wrist_anchor_drift_max,
+                ),
+                leftRightSymmetryTolerance: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .left_right_symmetry_tolerance,
+                ),
+                phaseSyncToleranceMs: toNullableNumber(
+                  record.movement_contract.spatial_requirements
+                    .phase_sync_tolerance_ms,
+                ),
               }
             : null,
         }
@@ -1503,10 +1495,14 @@ function toExerciseMutationPayload(
 }
 
 function toExerciseReviewSubmissionPayload(
-  input: CreateExerciseReviewSubmissionInput | UpdateExerciseReviewSubmissionInput,
+  input:
+    | CreateExerciseReviewSubmissionInput
+    | UpdateExerciseReviewSubmissionInput,
 ) {
   return {
-    ...("category" in input && input.category ? { category: input.category } : {}),
+    ...("category" in input && input.category
+      ? { category: input.category }
+      : {}),
     ...("creatorGovernanceNote" in input && input.creatorGovernanceNote?.trim()
       ? { creator_governance_note: input.creatorGovernanceNote.trim() }
       : {}),
@@ -1571,7 +1567,9 @@ function toExerciseReviewSubmissionPayload(
   };
 }
 
-function toExerciseDraftProposalPayload(input: CreateExerciseDraftProposalInput) {
+function toExerciseDraftProposalPayload(
+  input: CreateExerciseDraftProposalInput,
+) {
   return {
     ...(input.category ? { category: input.category } : {}),
     ...(input.description?.trim()
@@ -1608,9 +1606,7 @@ function toMasteryListParams(params?: FitnessMasteryListParams) {
   };
 }
 
-function toMuscleLeaderboardParams(
-  params: FitnessMuscleLeaderboardListParams,
-) {
+function toMuscleLeaderboardParams(params: FitnessMuscleLeaderboardListParams) {
   return {
     scope: params.scope,
     muscle_key: params.muscleKey,
@@ -2119,12 +2115,13 @@ export function createFitnessApi(transport: ApiTransport) {
     async listAdminMilestones(
       params?: AdminMilestoneDefinitionListParams,
     ): Promise<FitnessPaginatedResult<AdminMilestoneDefinitionRecord>> {
-      const result = await unwrapPaginatedResponse<AdminMilestoneDefinitionApiRecord>(
-        transport.get("/admin/gamification/milestones", {
-          params: toAdminMilestoneDefinitionParams(params),
-        }),
-        "Unable to load milestone definitions.",
-      );
+      const result =
+        await unwrapPaginatedResponse<AdminMilestoneDefinitionApiRecord>(
+          transport.get("/admin/gamification/milestones", {
+            params: toAdminMilestoneDefinitionParams(params),
+          }),
+          "Unable to load milestone definitions.",
+        );
 
       return {
         ...result,
@@ -2198,7 +2195,9 @@ export function createFitnessApi(transport: ApiTransport) {
     },
     async listMilestoneEvidence(
       params?: AdminMilestoneEvidenceListParams,
-    ): Promise<FitnessPaginatedResult<FitnessMilestoneEvidenceSubmissionRecord>> {
+    ): Promise<
+      FitnessPaginatedResult<FitnessMilestoneEvidenceSubmissionRecord>
+    > {
       const result =
         await unwrapPaginatedResponse<MilestoneEvidenceSubmissionApiRecord>(
           transport.get("/fitness/milestone-evidence", {
@@ -2565,8 +2564,7 @@ export function createFitnessApi(transport: ApiTransport) {
                       input.movementContract.noCountConditions,
                     oscillating_joints:
                       input.movementContract.oscillatingJoints,
-                    partial_rep_policy:
-                      input.movementContract.partialRepPolicy,
+                    partial_rep_policy: input.movementContract.partialRepPolicy,
                     phase_order: input.movementContract.phaseOrder,
                     primary_joints: input.movementContract.primaryJoints,
                     rep_model: input.movementContract.repModel,

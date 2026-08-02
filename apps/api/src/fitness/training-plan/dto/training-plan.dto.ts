@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -44,12 +45,40 @@ export class CreateTrainingPlanExerciseDTO {
   @Min(1, { message: 'duration_seconds must be at least 1' })
   duration_seconds?: number;
 
-  @ApiPropertyOptional({ example: 60, nullable: true, default: 60 })
+  @ApiPropertyOptional({ example: 75, nullable: true, default: 75 })
   @IsOptional()
   @Type(() => Number)
   @IsInt({ message: 'rest_seconds must be an integer' })
   @Min(0, { message: 'rest_seconds must be at least 0' })
   rest_seconds?: number;
+
+  @ApiPropertyOptional({
+    example: [60, 75, 90],
+    nullable: true,
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray({ message: 'rest_seconds_by_set must be an array' })
+  @ArrayMinSize(1, {
+    message: 'rest_seconds_by_set must contain at least 1 item',
+  })
+  @ArrayMaxSize(20, {
+    message: 'rest_seconds_by_set must not contain more than 20 items',
+  })
+  @Type(() => Number)
+  @IsInt({
+    each: true,
+    message: 'each rest_seconds_by_set value must be an integer',
+  })
+  @Min(0, {
+    each: true,
+    message: 'each rest_seconds_by_set value must be at least 0',
+  })
+  @Max(600, {
+    each: true,
+    message: 'each rest_seconds_by_set value must not exceed 600',
+  })
+  rest_seconds_by_set?: number[];
 
   @ApiPropertyOptional({ example: 80, nullable: true })
   @IsOptional()
@@ -170,8 +199,15 @@ export class TrainingPlanExerciseResponseDTO {
   @ApiPropertyOptional({ example: 90, nullable: true })
   duration_seconds: number | null;
 
-  @ApiProperty({ example: 60 })
+  @ApiProperty({ example: 75 })
   rest_seconds: number;
+
+  @ApiPropertyOptional({
+    example: [60, 75, 90],
+    nullable: true,
+    type: [Number],
+  })
+  rest_seconds_by_set: number[] | null;
 
   @ApiPropertyOptional({ example: '80', nullable: true })
   weight_kg_target: string | null;

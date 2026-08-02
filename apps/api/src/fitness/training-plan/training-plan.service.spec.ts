@@ -64,6 +64,7 @@ describe('TrainingPlanService', () => {
             reps: 10,
             duration_seconds: null,
             rest_seconds: 60,
+            rest_seconds_by_set: null,
             weight_kg_target: { toString: () => '80', toNumber: () => 80 },
             notes: null,
             order_index: 0,
@@ -185,7 +186,8 @@ describe('TrainingPlanService', () => {
               sets: 4,
               reps: 10,
               durationSeconds: null,
-              restSeconds: 60,
+              restSeconds: 75,
+              restSecondsBySet: null,
               weightKgTarget: null,
               orderIndex: 0,
             },
@@ -193,6 +195,73 @@ describe('TrainingPlanService', () => {
         },
       ],
     });
+  });
+
+  it('persists one rest timer per set when configured', async () => {
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+    repo.createPlan.mockResolvedValue(makePlan());
+
+    await service.createPlan('user-1', UserRole.member, {
+      title: 'Timed split',
+      goal: FitnessGoal.maintenance,
+      duration_weeks: 8,
+      days_per_week: 1,
+      schedule: [
+        {
+          week_number: 1,
+          day_of_week: 1,
+          exercises: [
+            {
+              exercise_id: 'exercise-1',
+              sets: 4,
+              reps: 10,
+              rest_seconds: 75,
+              rest_seconds_by_set: [45, 60, 75, 90],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(repo.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schedule: [
+          expect.objectContaining({
+            exercises: [
+              expect.objectContaining({
+                restSeconds: 75,
+                restSecondsBySet: [45, 60, 75, 90],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('rejects per-set timers that do not match the exercise set count', async () => {
+    await expect(
+      service.createPlan('user-1', UserRole.member, {
+        title: 'Broken timers',
+        goal: FitnessGoal.maintenance,
+        duration_weeks: 8,
+        days_per_week: 1,
+        schedule: [
+          {
+            week_number: 1,
+            day_of_week: 1,
+            exercises: [
+              {
+                exercise_id: 'exercise-1',
+                sets: 3,
+                rest_seconds_by_set: [60, 75],
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(repo.createPlan).not.toHaveBeenCalled();
   });
 
   it('rejects plan creation when an exercise is missing or inactive', async () => {

@@ -76,7 +76,10 @@ export function MobileWorkoutToday({
   const [suggestionsVisible, setSuggestionsVisible] = useState(false);
 
   const plansQuery = useQuery({
-    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, { limit: 50, page: 1 }),
+    ...fitnessPlansQueryOptions(mobileApiClient, user?.id, {
+      limit: 50,
+      page: 1,
+    }),
     enabled: !!user?.id,
   });
   const sessionsQuery = useQuery({
@@ -89,21 +92,19 @@ export function MobileWorkoutToday({
   const plans = plansQuery.data?.data ?? [];
   const sessions = sessionsQuery.data?.data ?? [];
   const activeSession =
-    sessions.find(
-      (session) => session.status === "in_progress",
-    ) ?? null;
+    sessions.find((session) => session.status === "in_progress") ?? null;
   const effectivePlan =
     plans.find((plan) => plan.id === activeSession?.planId) ??
     plans.find((plan) => plan.isActive) ??
     plans[0] ??
     null;
   const completedTodaySession = effectivePlan
-    ? sessions.find(
+    ? (sessions.find(
         (session) =>
           session.planId === effectivePlan.id &&
           session.status === "completed" &&
           isSameLocalDay(session.completedAt ?? session.startedAt, new Date()),
-      ) ?? null
+      ) ?? null)
     : null;
   const displayedSession = activeSession ?? completedTodaySession;
 
@@ -229,7 +230,9 @@ export function MobileWorkoutToday({
       planExerciseId: nextTarget.exercise.id,
       planId: effectivePlan.id,
       planTitle: effectivePlan.title,
-      restSeconds: nextTarget.exercise.restSeconds,
+      restSeconds:
+        nextTarget.exercise.restSecondsBySet?.[nextTarget.setNumber - 1] ??
+        nextTarget.exercise.restSeconds,
       sessionId: activeSession.id,
       setNumber: nextTarget.setNumber,
       targetReps: nextTarget.exercise.reps ?? 0,
@@ -264,7 +267,9 @@ export function MobileWorkoutToday({
     }
     if (
       parsedWeight !== undefined &&
-      (!Number.isFinite(parsedWeight) || parsedWeight < 0 || parsedWeight > 1000)
+      (!Number.isFinite(parsedWeight) ||
+        parsedWeight < 0 ||
+        parsedWeight > 1000)
     ) {
       setManualEntryError("Weight must be between 0 and 1000 kg.");
       return;
@@ -284,7 +289,10 @@ export function MobileWorkoutToday({
         userId: user.id,
       });
       setManualEntryOpen(false);
-      setRestRemaining(currentExercise.restSeconds);
+      setRestRemaining(
+        currentExercise.restSecondsBySet?.[nextTarget.setNumber - 1] ??
+          currentExercise.restSeconds,
+      );
     } catch (error) {
       setManualEntryError(
         error instanceof Error ? error.message : "Unable to save this set.",
@@ -304,12 +312,19 @@ export function MobileWorkoutToday({
       >
         <View style={{ flex: 1, gap: 3 }}>
           <FitText
-            style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "900" }}
+            style={{
+              color: colors.textPrimary,
+              fontSize: 20,
+              fontWeight: "900",
+            }}
           >
             Today&apos;s workout
           </FitText>
-          <FitText style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
-            Your plan owns the workout. Camera tracking only counts the current set.
+          <FitText
+            style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}
+          >
+            Your plan owns the workout. Camera tracking only counts the current
+            set.
           </FitText>
         </View>
         <Pressable
@@ -330,7 +345,11 @@ export function MobileWorkoutToday({
           })}
         >
           <FitText
-            style={{ color: colors.textPrimary, fontSize: 11, fontWeight: "800" }}
+            style={{
+              color: colors.textPrimary,
+              fontSize: 11,
+              fontWeight: "800",
+            }}
           >
             Plans
           </FitText>
@@ -347,7 +366,13 @@ export function MobileWorkoutToday({
             padding: 14,
           }}
         >
-          <FitText style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "800" }}>
+          <FitText
+            style={{
+              color: colors.textPrimary,
+              fontSize: 14,
+              fontWeight: "800",
+            }}
+          >
             Preparing today&apos;s workout...
           </FitText>
           <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
@@ -367,11 +392,20 @@ export function MobileWorkoutToday({
             padding: 14,
           }}
         >
-          <FitText style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "900" }}>
+          <FitText
+            style={{
+              color: colors.textPrimary,
+              fontSize: 14,
+              fontWeight: "900",
+            }}
+          >
             Workout data is unavailable
           </FitText>
-          <FitText style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
-            Your progress was not changed. Refresh this page or continue from Plans.
+          <FitText
+            style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}
+          >
+            Your progress was not changed. Refresh this page or continue from
+            Plans.
           </FitText>
         </View>
       ) : null}
@@ -401,8 +435,7 @@ export function MobileWorkoutToday({
                 {day?.focusLabel || effectivePlan.title}
               </FitText>
               <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                {effectivePlan.title} ·{" "}
-                {formatSourceLabel(effectivePlan)}
+                {effectivePlan.title} · {formatSourceLabel(effectivePlan)}
               </FitText>
             </View>
             <FitText
@@ -444,7 +477,11 @@ export function MobileWorkoutToday({
         >
           <Dumbbell size={24} color={colors.brand} />
           <FitText
-            style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "900" }}
+            style={{
+              color: colors.textPrimary,
+              fontSize: 15,
+              fontWeight: "900",
+            }}
           >
             Build your first weekly plan
           </FitText>
@@ -473,11 +510,17 @@ export function MobileWorkoutToday({
           }}
         >
           <FitText
-            style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "900" }}
+            style={{
+              color: colors.textPrimary,
+              fontSize: 15,
+              fontWeight: "900",
+            }}
           >
             Recovery day
           </FitText>
-          <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+          <FitText
+            style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}
+          >
             Nothing is scheduled today. Recover, review your next training day,
             or switch presets from Plans.
           </FitText>
@@ -492,7 +535,9 @@ export function MobileWorkoutToday({
         <FitButton
           disabled={startMutation.isPending}
           label={
-            startMutation.isPending ? "Starting Workout" : "Start Today's Workout"
+            startMutation.isPending
+              ? "Starting Workout"
+              : "Start Today's Workout"
           }
           onPress={() => {
             if (!user?.id || !effectivePlan) return;
@@ -525,12 +570,17 @@ export function MobileWorkoutToday({
           <Check color={colors.success} size={18} />
           <View style={{ flex: 1, gap: 2 }}>
             <FitText
-              style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "900" }}
+              style={{
+                color: colors.textPrimary,
+                fontSize: 13,
+                fontWeight: "900",
+              }}
             >
               Today&apos;s workout is complete
             </FitText>
             <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>
-              Your sets are saved in Session history. Come back on your next planned day.
+              Your sets are saved in Session history. Come back on your next
+              planned day.
             </FitText>
           </View>
         </View>
@@ -552,7 +602,11 @@ export function MobileWorkoutToday({
           <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
             <Clock3 size={16} color={colors.brand} />
             <FitText
-              style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "800" }}
+              style={{
+                color: colors.textPrimary,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
             >
               Rest {restRemaining}s
             </FitText>
@@ -567,254 +621,280 @@ export function MobileWorkoutToday({
               paddingVertical: 6,
             })}
           >
-            <FitText style={{ color: colors.brand, fontSize: 11, fontWeight: "900" }}>
+            <FitText
+              style={{ color: colors.brand, fontSize: 11, fontWeight: "900" }}
+            >
               End rest
             </FitText>
           </Pressable>
         </View>
       ) : null}
 
-      {currentExercise ? [currentExercise].map((exercise) => {
-        const exerciseIndex = orderedExercises.findIndex(
-          (candidate) => candidate.id === exercise.id,
-        );
-        const suggestion = currentSuggestion;
-        return (
-          <View
-            key={exercise.id}
-            style={{
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.border,
-              borderRadius: 8,
-              borderWidth: 0,
-              gap: 13,
-              padding: 16,
-            }}
-          >
-            <View
-              style={{
-                alignItems: "flex-start",
-                flexDirection: "row",
-                gap: 10,
-              }}
-            >
+      {currentExercise
+        ? [currentExercise].map((exercise) => {
+            const exerciseIndex = orderedExercises.findIndex(
+              (candidate) => candidate.id === exercise.id,
+            );
+            const suggestion = currentSuggestion;
+            return (
               <View
+                key={exercise.id}
                 style={{
-                  alignItems: "center",
-                  backgroundColor: `${colors.brand}18`,
-                  borderRadius: 6,
-                  height: 32,
-                  justifyContent: "center",
-                  width: 32,
+                  backgroundColor: colors.surfaceRaised,
+                  borderColor: colors.border,
+                  borderRadius: 8,
+                  borderWidth: 0,
+                  gap: 13,
+                  padding: 16,
                 }}
               >
-                <FitText
-                  style={{ color: colors.brand, fontSize: 11, fontWeight: "900" }}
-                >
-                  {exerciseIndex + 1}
-                </FitText>
-              </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <FitText
+                <View
                   style={{
-                    color: colors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: "900",
+                    alignItems: "flex-start",
+                    flexDirection: "row",
+                    gap: 10,
                   }}
                 >
-                  {exercise.exerciseName}
-                </FitText>
-                <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                  Set {nextTarget?.setNumber ?? 1} of {exercise.sets} ·{" "}
-                  {exercise.reps ?? "timed"} reps
-                  {exercise.weightKgTarget != null
-                    ? ` · ${exercise.weightKgTarget} kg`
-                    : ""}
-                </FitText>
-              </View>
-            </View>
-
-            {!suggestionsVisible ? (
-              <FitButton
-                variant="ghost"
-                icon={Sparkles}
-                label="View progression suggestion"
-                onPress={() => setSuggestionsVisible(true)}
-                style={{ minHeight: 40 }}
-                textStyle={{ fontSize: 11, fontWeight: "800" }}
-              />
-            ) : progressionQuery.isLoading ? (
-              <View
-                style={{
-                  borderColor: colors.border,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  padding: 10,
-                }}
-              >
-                <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                  Reviewing your completed workout history...
-                </FitText>
-              </View>
-            ) : suggestion ? (
-              <View
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  flexDirection: "row",
-                  gap: 8,
-                  padding: 9,
-                }}
-              >
-                <Sparkles size={15} color={colors.brand} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <FitText
+                  <View
                     style={{
-                      color: colors.textPrimary,
-                      fontSize: 11,
-                      fontWeight: "800",
-                    }}
-                  >
-                    Suggested next target: {suggestion.suggestedReps ?? "timed"} reps
-                    {suggestion.suggestedWeightKg != null
-                      ? ` at ${suggestion.suggestedWeightKg} kg`
-                      : ""}
-                  </FitText>
-                  <FitText
-                    style={{ color: colors.textMuted, fontSize: 10, lineHeight: 15 }}
-                  >
-                    {suggestion.rationale}
-                  </FitText>
-                </View>
-                <Pressable
-                  accessibilityLabel="Hide progression suggestion"
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={() => setSuggestionsVisible(false)}
-                >
-                  <X size={15} color={colors.textMuted} />
-                </Pressable>
-              </View>
-            ) : (
-              <View
-                style={{
-                  borderColor: colors.border,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  flexDirection: "row",
-                  gap: 8,
-                  justifyContent: "space-between",
-                  padding: 10,
-                }}
-              >
-                <FitText style={{ color: colors.textMuted, flex: 1, fontSize: 11 }}>
-                  No history-based progression suggestion is available for this exercise yet.
-                </FitText>
-                <Pressable
-                  accessibilityLabel="Hide progression suggestion"
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={() => setSuggestionsVisible(false)}
-                >
-                  <X size={15} color={colors.textMuted} />
-                </Pressable>
-              </View>
-            )}
-
-            <View style={{ gap: 7 }}>
-              {Array.from({ length: exercise.sets }, (_, setIndex) => {
-                const setNumber = setIndex + 1;
-                const done = completed.has(`${exercise.id}:${setNumber}`);
-                return (
-                  <Pressable
-                    accessibilityLabel={
-                      done
-                        ? `${exercise.exerciseName} set ${setNumber} complete`
-                        : `Complete ${exercise.exerciseName} set ${setNumber}`
-                    }
-                    accessibilityRole="button"
-                    disabled={
-                      done ||
-                      !activeSession ||
-                      logMutation.isPending ||
-                      setNumber !== nextTarget?.setNumber ||
-                      restRemaining > 0
-                    }
-                    key={setNumber}
-                    onPress={openManualEntry}
-                    style={({ pressed }) => ({
                       alignItems: "center",
-                      backgroundColor: done
-                        ? `${colors.success}12`
-                        : activeSession
-                          ? `${colors.brand}14`
-                          : colors.surface,
-                      borderColor: done
-                        ? `${colors.success}55`
-                        : activeSession
-                          ? `${colors.brand}55`
-                          : colors.border,
+                      backgroundColor: `${colors.brand}18`,
                       borderRadius: 6,
-                      borderWidth: 1,
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      opacity: pressed ? 0.7 : activeSession || done ? 1 : 0.55,
-                      paddingHorizontal: 11,
-                      paddingVertical: 10,
-                    })}
+                      height: 32,
+                      justifyContent: "center",
+                      width: 32,
+                    }}
                   >
                     <FitText
                       style={{
-                        color: done ? colors.success : colors.textPrimary,
-                        fontSize: 12,
-                        fontWeight: "800",
+                        color: colors.brand,
+                        fontSize: 11,
+                        fontWeight: "900",
                       }}
                     >
-                      Set {setNumber}
+                      {exerciseIndex + 1}
                     </FitText>
-                    <View
-                      style={{ alignItems: "center", flexDirection: "row", gap: 6 }}
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <FitText
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: "900",
+                      }}
                     >
+                      {exercise.exerciseName}
+                    </FitText>
+                    <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+                      Set {nextTarget?.setNumber ?? 1} of {exercise.sets} ·{" "}
+                      {exercise.reps ?? "timed"} reps
+                      {exercise.weightKgTarget != null
+                        ? ` · ${exercise.weightKgTarget} kg`
+                        : ""}
+                    </FitText>
+                  </View>
+                </View>
+
+                {!suggestionsVisible ? (
+                  <FitButton
+                    variant="ghost"
+                    icon={Sparkles}
+                    label="View progression suggestion"
+                    onPress={() => setSuggestionsVisible(true)}
+                    style={{ minHeight: 40 }}
+                    textStyle={{ fontSize: 11, fontWeight: "800" }}
+                  />
+                ) : progressionQuery.isLoading ? (
+                  <View
+                    style={{
+                      borderColor: colors.border,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      padding: 10,
+                    }}
+                  >
+                    <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+                      Reviewing your completed workout history...
+                    </FitText>
+                  </View>
+                ) : suggestion ? (
+                  <View
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      flexDirection: "row",
+                      gap: 8,
+                      padding: 9,
+                    }}
+                  >
+                    <Sparkles size={15} color={colors.brand} />
+                    <View style={{ flex: 1, gap: 2 }}>
                       <FitText
                         style={{
-                          color: done ? colors.success : colors.brand,
+                          color: colors.textPrimary,
                           fontSize: 11,
                           fontWeight: "800",
                         }}
                       >
-                        {done
-                          ? "Completed"
-                          : activeSession
-                            ? setNumber === nextTarget?.setNumber
-                              ? "Mark complete"
-                              : "Upcoming"
-                            : "Ready"}
+                        Suggested next target:{" "}
+                        {suggestion.suggestedReps ?? "timed"} reps
+                        {suggestion.suggestedWeightKg != null
+                          ? ` at ${suggestion.suggestedWeightKg} kg`
+                          : ""}
                       </FitText>
-                      {done ? <Check size={15} color={colors.success} /> : null}
+                      <FitText
+                        style={{
+                          color: colors.textMuted,
+                          fontSize: 10,
+                          lineHeight: 15,
+                        }}
+                      >
+                        {suggestion.rationale}
+                      </FitText>
                     </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    <Pressable
+                      accessibilityLabel="Hide progression suggestion"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => setSuggestionsVisible(false)}
+                    >
+                      <X size={15} color={colors.textMuted} />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View
+                    style={{
+                      borderColor: colors.border,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      flexDirection: "row",
+                      gap: 8,
+                      justifyContent: "space-between",
+                      padding: 10,
+                    }}
+                  >
+                    <FitText
+                      style={{ color: colors.textMuted, flex: 1, fontSize: 11 }}
+                    >
+                      No history-based progression suggestion is available for
+                      this exercise yet.
+                    </FitText>
+                    <Pressable
+                      accessibilityLabel="Hide progression suggestion"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => setSuggestionsVisible(false)}
+                    >
+                      <X size={15} color={colors.textMuted} />
+                    </Pressable>
+                  </View>
+                )}
 
-            {activeSession ? (
-              <FitButton
-                icon={Camera}
-                disabled={restRemaining > 0 || exercise.reps == null}
-                label={
-                  exercise.reps == null
-                    ? "Camera Needs a Rep Target"
-                    : "Track This Set With Camera"
-                }
-                onPress={openCameraForCurrentSet}
-                variant="ghost"
-              />
-            ) : null}
-          </View>
-        );
-      }) : null}
+                <View style={{ gap: 7 }}>
+                  {Array.from({ length: exercise.sets }, (_, setIndex) => {
+                    const setNumber = setIndex + 1;
+                    const done = completed.has(`${exercise.id}:${setNumber}`);
+                    return (
+                      <Pressable
+                        accessibilityLabel={
+                          done
+                            ? `${exercise.exerciseName} set ${setNumber} complete`
+                            : `Complete ${exercise.exerciseName} set ${setNumber}`
+                        }
+                        accessibilityRole="button"
+                        disabled={
+                          done ||
+                          !activeSession ||
+                          logMutation.isPending ||
+                          setNumber !== nextTarget?.setNumber ||
+                          restRemaining > 0
+                        }
+                        key={setNumber}
+                        onPress={openManualEntry}
+                        style={({ pressed }) => ({
+                          alignItems: "center",
+                          backgroundColor: done
+                            ? `${colors.success}12`
+                            : activeSession
+                              ? `${colors.brand}14`
+                              : colors.surface,
+                          borderColor: done
+                            ? `${colors.success}55`
+                            : activeSession
+                              ? `${colors.brand}55`
+                              : colors.border,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          opacity: pressed
+                            ? 0.7
+                            : activeSession || done
+                              ? 1
+                              : 0.55,
+                          paddingHorizontal: 11,
+                          paddingVertical: 10,
+                        })}
+                      >
+                        <FitText
+                          style={{
+                            color: done ? colors.success : colors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: "800",
+                          }}
+                        >
+                          Set {setNumber}
+                        </FitText>
+                        <View
+                          style={{
+                            alignItems: "center",
+                            flexDirection: "row",
+                            gap: 6,
+                          }}
+                        >
+                          <FitText
+                            style={{
+                              color: done ? colors.success : colors.brand,
+                              fontSize: 11,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {done
+                              ? "Completed"
+                              : activeSession
+                                ? setNumber === nextTarget?.setNumber
+                                  ? "Mark complete"
+                                  : "Upcoming"
+                                : "Ready"}
+                          </FitText>
+                          {done ? (
+                            <Check size={15} color={colors.success} />
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {activeSession ? (
+                  <FitButton
+                    icon={Camera}
+                    disabled={restRemaining > 0 || exercise.reps == null}
+                    label={
+                      exercise.reps == null
+                        ? "Camera Needs a Rep Target"
+                        : "Track This Set With Camera"
+                    }
+                    onPress={openCameraForCurrentSet}
+                    variant="ghost"
+                  />
+                ) : null}
+              </View>
+            );
+          })
+        : null}
 
       {day && orderedExercises.length > 0 ? (
         <View style={{ gap: 7 }}>
@@ -957,12 +1037,17 @@ export function MobileWorkoutToday({
             >
               <View style={{ flex: 1, gap: 3 }}>
                 <FitText
-                  style={{ color: colors.textPrimary, fontSize: 17, fontWeight: "900" }}
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: "900",
+                  }}
                 >
                   Log completed set
                 </FitText>
                 <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                  {currentExercise?.exerciseName} · Set {nextTarget?.setNumber ?? 1}
+                  {currentExercise?.exerciseName} · Set{" "}
+                  {nextTarget?.setNumber ?? 1}
                 </FitText>
               </View>
               <Pressable
@@ -978,7 +1063,11 @@ export function MobileWorkoutToday({
             <View style={{ flexDirection: "row", gap: 10 }}>
               <View style={{ flex: 1, gap: 6 }}>
                 <FitText
-                  style={{ color: colors.textMuted, fontSize: 10.5, fontWeight: "800" }}
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 10.5,
+                    fontWeight: "800",
+                  }}
                 >
                   ACTUAL REPS
                 </FitText>
@@ -1001,7 +1090,11 @@ export function MobileWorkoutToday({
               </View>
               <View style={{ flex: 1, gap: 6 }}>
                 <FitText
-                  style={{ color: colors.textMuted, fontSize: 10.5, fontWeight: "800" }}
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 10.5,
+                    fontWeight: "800",
+                  }}
                 >
                   WEIGHT (KG)
                 </FitText>
@@ -1024,9 +1117,15 @@ export function MobileWorkoutToday({
               </View>
             </View>
 
-            <FitText style={{ color: colors.textMuted, fontSize: 10.5, lineHeight: 15 }}>
-              Save what you actually completed. FitTrack uses this history for future
-              progression suggestions.
+            <FitText
+              style={{
+                color: colors.textMuted,
+                fontSize: 10.5,
+                lineHeight: 15,
+              }}
+            >
+              Save what you actually completed. FitTrack uses this history for
+              future progression suggestions.
             </FitText>
             {manualEntryError ? (
               <FitText
@@ -1038,7 +1137,9 @@ export function MobileWorkoutToday({
             ) : null}
             <FitButton
               disabled={logMutation.isPending}
-              label={logMutation.isPending ? "Saving Set" : "Save Completed Set"}
+              label={
+                logMutation.isPending ? "Saving Set" : "Save Completed Set"
+              }
               onPress={() => void submitManualEntry()}
             />
           </View>

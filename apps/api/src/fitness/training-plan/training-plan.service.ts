@@ -24,7 +24,7 @@ import {
   TrainingPlanSummaryRecord,
 } from './training-plan.repository';
 
-const DEFAULT_REST_SECONDS = 60;
+const DEFAULT_REST_SECONDS = 75;
 const PROGRESSION_REP_BAND_SIZE = 2;
 
 function safeLoadIncrementKg(currentWeightKg: number) {
@@ -395,6 +395,9 @@ export class TrainingPlanService {
           reps: exercise.reps,
           durationSeconds: exercise.duration_seconds,
           restSeconds: exercise.rest_seconds,
+          restSecondsBySet: this.toRestSecondsBySet(
+            exercise.rest_seconds_by_set,
+          ),
           weightKgTarget: exercise.weight_kg_target?.toNumber() ?? null,
           orderIndex: exercise.order_index,
           notes: exercise.notes,
@@ -498,6 +501,18 @@ export class TrainingPlanService {
           'schedule cannot contain more than days_per_week entries within the same week.',
         );
       }
+
+      for (const exercise of day.exercises) {
+        if (
+          exercise.restSecondsBySet &&
+          exercise.restSecondsBySet.length !== exercise.sets
+        ) {
+          throw this.buildValidationException(
+            'Invalid Per-Set Rest Timers',
+            'rest_seconds_by_set must contain exactly one timer for each set.',
+          );
+        }
+      }
     }
   }
 
@@ -553,6 +568,7 @@ export class TrainingPlanService {
         reps: exercise.reps ?? null,
         durationSeconds: exercise.duration_seconds ?? null,
         restSeconds: exercise.rest_seconds ?? DEFAULT_REST_SECONDS,
+        restSecondsBySet: exercise.rest_seconds_by_set ?? null,
         weightKgTarget: exercise.weight_kg_target ?? null,
         orderIndex: exercise.order_index ?? index,
       })),
@@ -617,9 +633,28 @@ export class TrainingPlanService {
       reps: exercise.reps ?? null,
       duration_seconds: exercise.duration_seconds ?? null,
       rest_seconds: exercise.rest_seconds,
+      rest_seconds_by_set: this.toRestSecondsBySet(
+        exercise.rest_seconds_by_set,
+      ),
       weight_kg_target: exercise.weight_kg_target?.toString() ?? null,
       notes: exercise.notes ?? null,
       order_index: exercise.order_index,
     };
+  }
+
+  private toRestSecondsBySet(value: Prisma.JsonValue | null): number[] | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+
+    const timers = value.filter(
+      (item): item is number =>
+        typeof item === 'number' &&
+        Number.isInteger(item) &&
+        item >= 0 &&
+        item <= 600,
+    );
+
+    return timers.length === value.length ? timers : null;
   }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { ArrowLeft, Check, Minus, Plus, Trash2 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
 import { FitButton, FitText } from "@/components/fit";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import CoachPlanWeeklyViewerModal from "@/components/workout/CoachPlanWeeklyViewerModal";
+import ExerciseRestTimerModal from "@/components/workout/ExerciseRestTimerModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
@@ -32,6 +33,7 @@ type DraftExercise = {
   exerciseName: string;
   reps: number;
   restSeconds: number;
+  restSecondsBySet: number[] | null;
   sets: number;
 };
 
@@ -68,6 +70,7 @@ function detailToDraft(plan: TrainingPlanDetailRecord): DraftDays {
             exerciseName: exercise.exerciseName,
             reps: exercise.reps ?? 10,
             restSeconds: exercise.restSeconds,
+            restSecondsBySet: exercise.restSecondsBySet,
             sets: exercise.sets,
           })),
           focusLabel: day.focusLabel ?? `${DAY_NAMES[day.dayOfWeek]} training`,
@@ -89,6 +92,7 @@ function toPlanInput(
         orderIndex,
         reps: exercise.reps,
         restSeconds: exercise.restSeconds,
+        restSecondsBySet: exercise.restSecondsBySet ?? undefined,
         sets: exercise.sets,
       })),
       focusLabel:
@@ -118,11 +122,16 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   const [activeDraftDay, setActiveDraftDay] = useState<number>(1);
   const [exerciseSearch, setExerciseSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [builderError, setBuilderError] = useState("");
+  const [restEditorExerciseId, setRestEditorExerciseId] = useState<
+    string | null
+  >(null);
   const [viewingPlanId, setViewingPlanId] = useState<string | null>(null);
   const [viewingPlanTitle, setViewingPlanTitle] = useState("");
   const [confirmation, setConfirmation] = useState<PlanConfirmation | null>(
     null,
   );
+  const saveInFlightRef = useRef(false);
 
   const plansQuery = useQuery({
     ...fitnessPlansQueryOptions(mobileApiClient, user?.id, {
@@ -170,10 +179,13 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
     setDraftDays({});
     setActiveDraftDay(1);
     setExerciseSearch("");
+    setBuilderError("");
+    setRestEditorExerciseId(null);
   };
 
   const openCreate = () => {
     setMessage("");
+    setBuilderError("");
     setEditingPlanId(null);
     setTitle("My weekly split");
     setGoal("maintenance");
@@ -186,6 +198,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
 
   const openEdit = async (plan: TrainingPlanSummaryRecord) => {
     setMessage("");
+    setBuilderError("");
     try {
       const detail = await mobileApiClient.fitness.getPlanById(plan.id);
       const nextDraft = detailToDraft(detail);
@@ -204,6 +217,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   };
 
   const toggleDay = (dayOfWeek: number) => {
+    setBuilderError("");
     setDraftDays((current) => {
       if (current[dayOfWeek]) {
         const next = { ...current };
@@ -227,36 +241,51 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
 
   const patchExercise = (
     exerciseId: string,
-    patch: Partial<Pick<DraftExercise, "reps" | "sets">>,
+    patch: Partial<
+      Pick<DraftExercise, "reps" | "restSeconds" | "restSecondsBySet" | "sets">
+    >,
   ) => {
+    setBuilderError("");
     setDraftDays((current) => ({
       ...current,
       [activeDraftDay]: {
         ...current[activeDraftDay],
-        exercises: current[activeDraftDay].exercises.map((exercise) =>
-          exercise.exerciseId === exerciseId
-            ? { ...exercise, ...patch }
-            : exercise,
-        ),
+        exercises: current[activeDraftDay].exercises.map((exercise) => {
+          if (exercise.exerciseId !== exerciseId) return exercise;
+          const next = { ...exercise, ...patch };
+          if (next.restSecondsBySet) {
+            next.restSecondsBySet = Array.from(
+              { length: next.sets },
+              (_, index) => next.restSecondsBySet?.[index] ?? next.restSeconds,
+            );
+          }
+          return next;
+        }),
       },
     }));
   };
 
   const savePlan = async () => {
+    if (saveInFlightRef.current) return;
     setMessage("");
+    setBuilderError("");
     const input = toPlanInput(title, goal, draftDays);
     if (!input.title) {
-      setMessage("Give this plan a clear name.");
+      setBuilderError("Give this plan a clear name.");
       return;
     }
-    if (
-      input.schedule.length === 0 ||
-      input.schedule.some((day) => day.exercises.length === 0)
-    ) {
-      setMessage("Every selected training day needs at least one exercise.");
+    const emptyDay = input.schedule.find((day) => day.exercises.length === 0);
+    if (input.schedule.length === 0 || emptyDay) {
+      if (emptyDay) setActiveDraftDay(emptyDay.dayOfWeek);
+      setBuilderError(
+        emptyDay
+          ? `Add at least one exercise to ${DAY_NAMES[emptyDay.dayOfWeek]}.`
+          : "Select at least one training day.",
+      );
       return;
     }
 
+    saveInFlightRef.current = true;
     try {
       if (editingPlanId) {
         await updateMutation.mutateAsync({
@@ -287,9 +316,11 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
       }
       resetBuilder();
     } catch (error) {
-      setMessage(
+      setBuilderError(
         error instanceof Error ? error.message : "Unable to save plan.",
       );
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -349,6 +380,13 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   };
 
   const activeDay = draftDays[activeDraftDay];
+  const restEditorExercise = activeDay?.exercises.find(
+    (exercise) => exercise.exerciseId === restEditorExerciseId,
+  );
+  const isSaving =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    activateMutation.isPending;
 
   return (
     <View style={{ backgroundColor: colors.base, flex: 1 }}>
@@ -682,7 +720,10 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
               </FitText>
               <TextInput
                 accessibilityLabel="Workout plan name"
-                onChangeText={setTitle}
+                onChangeText={(value) => {
+                  setTitle(value);
+                  setBuilderError("");
+                }}
                 placeholder="Push Pull Legs"
                 placeholderTextColor={colors.textMuted}
                 style={{
@@ -718,11 +759,14 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                       accessibilityRole="button"
                       key={day}
                       onLongPress={() => toggleDay(dayOfWeek)}
-                      onPress={() =>
-                        selected
-                          ? setActiveDraftDay(dayOfWeek)
-                          : toggleDay(dayOfWeek)
-                      }
+                      onPress={() => {
+                        if (selected) {
+                          setActiveDraftDay(dayOfWeek);
+                          setBuilderError("");
+                          return;
+                        }
+                        toggleDay(dayOfWeek);
+                      }}
                       style={{
                         alignItems: "center",
                         backgroundColor: active
@@ -816,7 +860,8 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                         </FitText>
                         <Pressable
                           accessibilityLabel={`Remove ${exercise.exerciseName}`}
-                          onPress={() =>
+                          onPress={() => {
+                            setBuilderError("");
                             setDraftDays((current) => ({
                               ...current,
                               [activeDraftDay]: {
@@ -828,13 +873,13 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                                     item.exerciseId !== exercise.exerciseId,
                                 ),
                               },
-                            }))
-                          }
+                            }));
+                          }}
                         >
                           <Trash2 size={16} color={colors.danger} />
                         </Pressable>
                       </View>
-                      <View style={{ flexDirection: "row", gap: 8 }}>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
                         {[
                           {
                             key: "sets" as const,
@@ -862,7 +907,8 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                               flex: 1,
                               flexDirection: "row",
                               justifyContent: "space-between",
-                              padding: 7,
+                              paddingHorizontal: 5,
+                              paddingVertical: 7,
                             }}
                           >
                             <Pressable
@@ -876,12 +922,15 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                                 })
                               }
                             >
-                              <Minus size={15} color={colors.textMuted} />
+                              <Minus size={14} color={colors.textMuted} />
                             </Pressable>
                             <FitText
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.82}
+                              numberOfLines={1}
                               style={{
                                 color: colors.textPrimary,
-                                fontSize: 10.5,
+                                fontSize: 9.5,
                                 fontWeight: "800",
                               }}
                             >
@@ -898,10 +947,43 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                                 })
                               }
                             >
-                              <Plus size={15} color={colors.brand} />
+                              <Plus size={14} color={colors.brand} />
                             </Pressable>
                           </View>
                         ))}
+                        <Pressable
+                          accessibilityLabel={`Edit ${exercise.exerciseName} rest timer`}
+                          accessibilityRole="button"
+                          onPress={() =>
+                            setRestEditorExerciseId(exercise.exerciseId)
+                          }
+                          style={{
+                            alignItems: "center",
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            flex: 1,
+                            justifyContent: "center",
+                            paddingHorizontal: 5,
+                            paddingVertical: 7,
+                          }}
+                        >
+                          <FitText
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.82}
+                            numberOfLines={1}
+                            style={{
+                              color: colors.textPrimary,
+                              fontSize: 9.5,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {exercise.restSecondsBySet
+                              ? "Set times"
+                              : `Rest ${exercise.restSeconds}s`}
+                          </FitText>
+                        </Pressable>
                       </View>
                     </View>
                   ))}
@@ -956,7 +1038,8 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                         accessibilityRole="button"
                         disabled={selected}
                         key={exercise.id}
-                        onPress={() =>
+                        onPress={() => {
+                          setBuilderError("");
                           setDraftDays((current) => ({
                             ...current,
                             [activeDraftDay]: {
@@ -967,13 +1050,14 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                                   exerciseId: exercise.id,
                                   exerciseName: exercise.name,
                                   reps: 10,
-                                  restSeconds: 60,
+                                  restSeconds: 75,
+                                  restSecondsBySet: null,
                                   sets: 3,
                                 },
                               ],
                             },
-                          }))
-                        }
+                          }));
+                        }}
                         style={{
                           backgroundColor: selected
                             ? `${colors.success}12`
@@ -1007,6 +1091,29 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
               </>
             ) : null}
 
+            {builderError ? (
+              <View
+                accessibilityLiveRegion="polite"
+                style={{
+                  backgroundColor: `${colors.danger}12`,
+                  borderColor: `${colors.danger}70`,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  padding: 10,
+                }}
+              >
+                <FitText
+                  style={{
+                    color: colors.danger,
+                    fontSize: 11,
+                    fontWeight: "800",
+                  }}
+                >
+                  {builderError}
+                </FitText>
+              </View>
+            ) : null}
+
             <View style={{ flexDirection: "row", gap: 8 }}>
               <View style={{ flex: 1 }}>
                 <FitButton
@@ -1017,11 +1124,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
               </View>
               <View style={{ flex: 1 }}>
                 <FitButton
-                  disabled={
-                    createMutation.isPending || updateMutation.isPending
-                  }
+                  disabled={isSaving}
                   label={
-                    createMutation.isPending || updateMutation.isPending
+                    isSaving
                       ? "Saving"
                       : editingPlanId
                         ? "Save Changes"
@@ -1039,6 +1144,22 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setViewingPlanId(null)}
         planId={viewingPlanId}
         planTitle={viewingPlanTitle}
+      />
+      <ExerciseRestTimerModal
+        exerciseName={restEditorExercise?.exerciseName ?? "Exercise"}
+        isVisible={Boolean(restEditorExercise)}
+        onClose={() => setRestEditorExerciseId(null)}
+        onSave={({ restSeconds, restSecondsBySet }) => {
+          if (!restEditorExercise) return;
+          patchExercise(restEditorExercise.exerciseId, {
+            restSeconds,
+            restSecondsBySet,
+          });
+          setRestEditorExerciseId(null);
+        }}
+        restSeconds={restEditorExercise?.restSeconds ?? 75}
+        restSecondsBySet={restEditorExercise?.restSecondsBySet ?? null}
+        sets={restEditorExercise?.sets ?? 1}
       />
       <ConfirmModal
         isDestructive={confirmation?.destructive}
