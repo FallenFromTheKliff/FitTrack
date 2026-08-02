@@ -39,6 +39,7 @@ import {
   BulkUpdateRecurringPlanSessionsDTO,
   CancelRecurringCoachingPlanDTO,
   CreateRecurringCoachingPlanDTO,
+  EnrollRecurringCoachingPlanDTO,
   InitiateRecurringBillingCyclePaymentDTO,
   PreviewRecurringCoachingPlanDTO,
   RecurringCoachingBillingCycleResponseDTO,
@@ -94,6 +95,68 @@ export class RecurringCoachingPlanService {
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
   ) {}
 
+  async enroll(actor: JwtPayload, dto: EnrollRecurringCoachingPlanDTO) {
+    if (actor.role !== UserRole.member) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Member Enrollment Required',
+        status: 403,
+        detail: 'Only members can enroll in a recurring coaching offer.',
+      });
+    }
+
+    await this.assertActiveMember(actor.sub);
+    const coach = await this.assertCoachVisibleForNewPlan(dto.coach_id);
+    const offer = this.assertMonthlyOffer(coach);
+    const existing = await this.repo.findMemberCoachEnrollment({
+      coachId: dto.coach_id,
+      memberId: actor.sub,
+    });
+
+    if (existing) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Recurring Coaching Enrollment Already Exists',
+        status: 409,
+        detail:
+          'This member already has a pending or active recurring coaching enrollment with the selected coach.',
+      });
+    }
+
+    const { endDate, startDate } = this.getEnrollmentMonthBounds(
+      dto.start_date,
+    );
+    const plan = await this.repo.createPlanWithSessions({
+      billingCycles: [
+        this.buildEnrollmentBillingCycle({
+          amount: offer.monthlyRate,
+          endDate,
+          startDate,
+        }),
+      ],
+      plan: {
+        member: { connect: { id: actor.sub } },
+        coach: { connect: { id: dto.coach_id } },
+        created_by: actor.sub,
+        frequency: RecurringCoachingFrequency.monthly,
+        preferred_days: [],
+        preferred_time: this.toTimeValue('00:00'),
+        start_date: startDate,
+        end_date: endDate,
+        duration_minutes: offer.durationMinutes,
+        quoted_amount: offer.monthlyRate,
+        status: RecurringCoachingPlanStatus.awaiting_payment,
+        total_sessions: 0,
+        completed_sessions: 0,
+      },
+    });
+
+    return {
+      plan: this.toPlanResponse(plan),
+      sessions: [],
+    };
+  }
+
   async previewPlan(actor: JwtPayload, dto: PreviewRecurringCoachingPlanDTO) {
     await this.assertActiveMember(dto.member_id);
     const coach = await this.assertCoachVisibleForNewPlan(dto.coach_id);
@@ -129,50 +192,59 @@ export class RecurringCoachingPlanService {
   }
 
   async createPlan(actor: JwtPayload, dto: CreateRecurringCoachingPlanDTO) {
+    this.assertFreshMonthlyPlanInput(dto);
     await this.assertActiveMember(dto.member_id);
     const coach = await this.assertCoachVisibleForNewPlan(dto.coach_id);
-    this.assertPlanCreator(actor, dto.member_id, coach);
+    this.assertCoachPlanCreator(actor, coach);
+    const offer = this.assertMonthlyOffer(coach);
+    const monthlyRange = this.getExplicitMonthlyScheduleRange(
+      dto.schedule_items!,
+    );
+
+    const normalized = this.normalizePlanInput({
+      ...dto,
+      duration_minutes: offer.durationMinutes,
+      duration_months: 1,
+      start_date: this.toDateString(monthlyRange.startDate),
+      end_date: this.toDateString(monthlyRange.endDate),
+    });
+
+    const enrollment = await this.repo.findMemberCoachEnrollment({
+      coachId: dto.coach_id,
+      memberId: dto.member_id,
+    });
+    const paidCycle = this.assertPaidActiveUnscheduledEnrollment(enrollment);
+    this.assertScheduleInsideEnrollmentWindow(
+      dto.schedule_items!,
+      enrollment!.start_date,
+      enrollment!.end_date,
+    );
+    await this.assertCoachAuthoredTrainingPlan(dto, coach);
 
     if (
-      dto.frequency === RecurringCoachingFrequency.monthly &&
-      !dto.schedule_items?.length
+      normalized.endDate.getTime() >
+      this.addMonths(normalized.startDate, 1).getTime()
     ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Monthly Schedule Required',
+          title: 'One-Month Plan Required',
           status: 422,
           detail:
-            'Monthly coaching plans require explicit actual session dates so irregular weekly schedules can be preserved.',
+            'New monthly coaching plans cannot extend beyond one month from their start date.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const normalized = this.normalizePlanInput(dto);
-    const baseSessions = dto.schedule_items?.length
-      ? await this.buildExplicitScheduleSessions({
-          coachId: dto.coach_id,
-          durationMinutes: normalized.durationMinutes,
-          endDate: normalized.endDate,
-          scheduleItems: dto.schedule_items,
-          startDate: normalized.startDate,
-        })
-      : await this.buildGeneratedSessions({
-          coachId: dto.coach_id,
-          durationMinutes: normalized.durationMinutes,
-          endDate: normalized.endDate,
-          frequency: dto.frequency,
-          preferredDays: normalized.preferredDays,
-          preferredTime: dto.preferred_time,
-          startDate: normalized.startDate,
-        });
-    const sessions = dto.schedule_items?.length
-      ? baseSessions
-      : await this.applySessionOverrides(
-          baseSessions,
-          dto.session_overrides ?? [],
-        );
+    const sessions = await this.buildExplicitScheduleSessions({
+      canonicalDurationMinutes: offer.durationMinutes,
+      coachId: dto.coach_id,
+      durationMinutes: offer.durationMinutes,
+      endDate: normalized.endDate,
+      scheduleItems: dto.schedule_items!,
+      startDate: normalized.startDate,
+    });
 
     this.assertWeeklySessionLimit(sessions);
     const unresolvedConflicts = sessions.filter(
@@ -204,33 +276,37 @@ export class RecurringCoachingPlanService {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Empty Coaching Schedule',
           status: 422,
-          detail: 'A recurring coaching plan must contain at least one actual session.',
+          detail:
+            'A recurring coaching plan must contain at least one actual session.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const quotedAmount =
-      dto.quoted_amount !== undefined
-        ? new Prisma.Decimal(dto.quoted_amount)
-        : activeSessions
-            .reduce(
-              (total, session) =>
-                total.plus(
-                  this.calculateSessionAmounts(coach, session.durationMinutes)
-                    .totalAmount,
-                ),
-              ZERO_DECIMAL,
-            )
-            .toDecimalPlaces(2);
-    if (quotedAmount.lte(ZERO_DECIMAL)) {
+    if (activeSessions.length !== offer.sessionCount) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Invalid Coaching Quote',
+          title: 'Monthly Session Count Mismatch',
+          status: 422,
+          detail: `This coach monthly offer includes exactly ${offer.sessionCount} sessions.`,
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const quotedAmount = new Prisma.Decimal(paidCycle.amount);
+    if (
+      dto.quoted_amount !== undefined &&
+      !new Prisma.Decimal(dto.quoted_amount).eq(quotedAmount)
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Monthly Quote Mismatch',
           status: 422,
           detail:
-            'The recurring coaching quote must be a positive full-payment amount.',
+            'The recurring coaching quote must match the coach monthly offer.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -240,33 +316,37 @@ export class RecurringCoachingPlanService {
       quotedAmount,
       sessions: activeSessions,
       sourceItems: dto.schedule_items,
-    });
-    const plan = await this.repo.createPlanWithSessions({
-      plan: {
-        member: { connect: { id: dto.member_id } },
-        coach: { connect: { id: dto.coach_id } },
-        ...(dto.training_plan_id
-          ? { training_plan: { connect: { id: dto.training_plan_id } } }
-          : {}),
-        created_by: actor.sub,
-        frequency: dto.frequency,
+    }).map((item) => ({
+      ...item,
+      status: RecurringCoachingScheduleItemStatus.activated,
+    }));
+    const plan = await this.repo.fillPaidPlanWithSessions({
+      appointments: this.buildPaidAppointmentRows({
+        coach,
+        memberId: dto.member_id,
+        paidAt: paidCycle.paid_at,
+        scheduleItems,
+        sessions: activeSessions,
+      }),
+      paidAt: paidCycle.paid_at,
+      paidCycleId: paidCycle.id,
+      planId: enrollment!.id,
+      planUpdate: {
+        coach_approved_at: new Date(),
+        completed_sessions: 0,
+        duration_minutes: offer.durationMinutes,
+        end_date: enrollment!.end_date,
+        frequency: RecurringCoachingFrequency.monthly,
         preferred_days: normalized.preferredDays,
         preferred_time: this.toTimeValue(dto.preferred_time),
-        start_date: normalized.startDate,
-        end_date: normalized.endDate,
-        duration_minutes: normalized.durationMinutes,
         quoted_amount: quotedAmount,
-        coach_approved_at: new Date(),
-        status: RecurringCoachingPlanStatus.awaiting_payment,
+        start_date: enrollment!.start_date,
+        status: RecurringCoachingPlanStatus.active,
         total_sessions: activeSessions.length,
-        completed_sessions: 0,
+        training_plan: { connect: { id: dto.training_plan_id! } },
       },
-      billingCycles: this.buildFixedQuoteBillingCycles({
-        endDate: normalized.endDate,
-        scheduleItems,
-        startDate: normalized.startDate,
-      }),
       scheduleItems,
+      trainingPlanId: dto.training_plan_id!,
     });
 
     return {
@@ -302,7 +382,12 @@ export class RecurringCoachingPlanService {
     Prisma.RecurringCoachingScheduleItemCreateManyInput,
     'recurring_plan_id'
   >[] {
-    const providedAmounts = input.sourceItems?.map((item) => item.amount);
+    const sourceItems = input.sourceItems
+      ? [...input.sourceItems].sort(
+          (left, right) => left.sequence_index - right.sequence_index,
+        )
+      : undefined;
+    const providedAmounts = sourceItems?.map((item) => item.amount);
     const hasAllProvidedAmounts =
       Boolean(providedAmounts?.length) &&
       providedAmounts?.every((amount) => amount !== undefined);
@@ -327,14 +412,12 @@ export class RecurringCoachingPlanService {
 
     let allocated = ZERO_DECIMAL;
     return input.sessions.map((session, index) => {
-      const source = input.sourceItems?.[index];
+      const source = sourceItems?.[index];
       const amount = hasAllProvidedAmounts
         ? new Prisma.Decimal(source?.amount ?? 0)
         : index === input.sessions.length - 1
           ? input.quotedAmount.minus(allocated).toDecimalPlaces(2)
-          : input.quotedAmount
-              .div(input.sessions.length)
-              .toDecimalPlaces(2);
+          : input.quotedAmount.div(input.sessions.length).toDecimalPlaces(2);
       allocated = allocated.plus(amount);
       return {
         sequence_index: index + 1,
@@ -344,6 +427,91 @@ export class RecurringCoachingPlanService {
         status: RecurringCoachingScheduleItemStatus.pending_payment,
       };
     });
+  }
+
+  private buildPaidAppointmentRows(input: {
+    coach: RecurringPlanCoachContext;
+    memberId: string;
+    paidAt: Date;
+    scheduleItems: Array<{
+      amount?: Prisma.Decimal | Prisma.DecimalJsLike | number | string;
+      duration_minutes?: number;
+      scheduled_at: Date | string;
+      sequence_index: number;
+    }>;
+    sessions: GeneratedSessionDraft[];
+  }): Array<
+    Omit<
+      Prisma.CoachAppointmentCreateManyInput,
+      'recurring_plan_id' | 'recurring_schedule_item_id'
+    >
+  > {
+    return input.scheduleItems.map((item, index) => {
+      const session = input.sessions[index];
+      if (!session) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Schedule Session Mismatch',
+            status: 422,
+            detail:
+              'Every recurring coaching schedule item must have a matching session.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      const totalAmount = new Prisma.Decimal(
+        (item.amount ?? 0) as Prisma.Decimal.Value,
+      );
+      const gymRevenue = totalAmount
+        .mul(new Prisma.Decimal(input.coach.gym_commission_pct))
+        .div(100)
+        .toDecimalPlaces(2);
+
+      return {
+        user_id: input.memberId,
+        coach_id: session.coachId,
+        status: AppointmentStatus.confirmed,
+        recurring_state: RecurringCoachingSessionState.generated,
+        original_scheduled_at: null,
+        is_free_session: false,
+        scheduled_at:
+          item.scheduled_at instanceof Date
+            ? item.scheduled_at
+            : new Date(item.scheduled_at),
+        duration_minutes: item.duration_minutes ?? 60,
+        total_amount: totalAmount,
+        downpayment_amount: ZERO_DECIMAL,
+        balance_amount: ZERO_DECIMAL,
+        gym_revenue: gymRevenue,
+        coach_earnings: totalAmount.minus(gymRevenue).toDecimalPlaces(2),
+        downpayment_paid_at: input.paidAt,
+        balance_paid_at: input.paidAt,
+      };
+    });
+  }
+
+  private buildEnrollmentBillingCycle(input: {
+    amount: Prisma.Decimal;
+    endDate: Date;
+    startDate: Date;
+  }): Omit<
+    Prisma.RecurringCoachingBillingCycleCreateManyInput,
+    'recurring_plan_id'
+  > {
+    const cycleStart = this.toDateOnlyValue(input.startDate);
+    return {
+      amount: input.amount,
+      cycle_start_date: cycleStart,
+      cycle_end_date: this.toDateOnlyValue(input.endDate),
+      due_date: cycleStart,
+      grace_period_ends_at: this.addDays(
+        cycleStart,
+        RECURRING_BILLING_GRACE_DAYS,
+      ),
+      status: RecurringCoachingBillingCycleStatus.due,
+    };
   }
 
   private buildFixedQuoteBillingCycles(input: {
@@ -357,54 +525,45 @@ export class RecurringCoachingPlanService {
     Prisma.RecurringCoachingBillingCycleCreateManyInput,
     'recurring_plan_id'
   >[] {
-    const groups = new Map<string, { amount: Prisma.Decimal; dates: Date[] }>();
-    for (const item of input.scheduleItems) {
-      const scheduledAt =
-        item.scheduled_at instanceof Date
-          ? item.scheduled_at
-          : new Date(item.scheduled_at);
-      const key = `${scheduledAt.getUTCFullYear()}-${scheduledAt
-        .getUTCMonth()
-        .toString()
-        .padStart(2, '0')}`;
-      const group = groups.get(key) ?? { amount: ZERO_DECIMAL, dates: [] };
-      group.amount = group.amount.plus(
-        new Prisma.Decimal(String(item.amount ?? 0)),
-      );
-      group.dates.push(scheduledAt);
-      groups.set(key, group);
+    if (input.scheduleItems.length === 0) {
+      return [];
     }
 
-    return [...groups.values()]
-      .sort((left, right) => left.dates[0].getTime() - right.dates[0].getTime())
-      .map((group) => {
-        const dates = [...group.dates].sort(
-          (left, right) => left.getTime() - right.getTime(),
-        );
-        const first = dates[0];
-        const cycleStart = this.toDateOnlyValue(
-          first.getTime() < input.startDate.getTime() ? input.startDate : first,
-        );
-        const cycleEnd = this.toDateOnlyValue(dates[dates.length - 1]);
-        return {
-          amount: group.amount.toDecimalPlaces(2),
-          cycle_start_date: cycleStart,
-          cycle_end_date: cycleEnd,
-          due_date: cycleStart,
-          grace_period_ends_at: this.addDays(
-            cycleStart,
-            RECURRING_BILLING_GRACE_DAYS,
+    const amount = input.scheduleItems
+      .reduce(
+        (total, item) =>
+          total.plus(
+            new Prisma.Decimal((item.amount ?? 0) as Prisma.Decimal.Value),
           ),
-          status: RecurringCoachingBillingCycleStatus.due,
-        };
-      });
+        ZERO_DECIMAL,
+      )
+      .toDecimalPlaces(2);
+    const cycleStart = this.toDateOnlyValue(input.startDate);
+    const cycleEnd = this.toDateOnlyValue(input.endDate);
+
+    return [
+      {
+        amount,
+        cycle_start_date: cycleStart,
+        cycle_end_date: cycleEnd,
+        due_date: cycleStart,
+        grace_period_ends_at: this.addDays(
+          cycleStart,
+          RECURRING_BILLING_GRACE_DAYS,
+        ),
+        status: RecurringCoachingBillingCycleStatus.due,
+      },
+    ];
   }
 
   private async buildExplicitScheduleSessions(input: {
+    canonicalDurationMinutes?: number;
     coachId: string;
     durationMinutes: number;
     endDate: Date;
-    scheduleItems: NonNullable<CreateRecurringCoachingPlanDTO['schedule_items']>;
+    scheduleItems: NonNullable<
+      CreateRecurringCoachingPlanDTO['schedule_items']
+    >;
     startDate: Date;
   }): Promise<GeneratedSessionDraft[]> {
     const sorted = [...input.scheduleItems].sort(
@@ -440,7 +599,10 @@ export class RecurringCoachingPlanService {
           HttpStatus.UNPROCESSABLE_ENTITY,
         );
       }
-      const durationMinutes = item.duration_minutes ?? input.durationMinutes;
+      const durationMinutes =
+        input.canonicalDurationMinutes ??
+        item.duration_minutes ??
+        input.durationMinutes;
       const validation = await this.validateSessionCandidate({
         coachId: input.coachId,
         durationMinutes,
@@ -1105,10 +1267,14 @@ export class RecurringCoachingPlanService {
       );
     }
 
+    const preferredDays = dto.schedule_items?.length
+      ? [...new Set(dto.preferred_days)].sort((left, right) => left - right)
+      : this.normalizePreferredDays(dto.preferred_days);
+
     return {
       durationMinutes: dto.duration_minutes ?? 60,
       endDate,
-      preferredDays: this.normalizePreferredDays(dto.preferred_days),
+      preferredDays,
       startDate,
     };
   }
@@ -1156,6 +1322,325 @@ export class RecurringCoachingPlanService {
       }
       counts.set(weekKey, nextCount);
     }
+  }
+
+  private assertFreshMonthlyPlanInput(
+    dto: CreateRecurringCoachingPlanDTO,
+  ): void {
+    if (dto.frequency !== RecurringCoachingFrequency.monthly) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Monthly Plans Only',
+          status: 422,
+          detail:
+            'New recurring coaching plans must use the monthly coach offer. Legacy weekly and biweekly plans remain readable only.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (dto.duration_months !== undefined && dto.duration_months !== 1) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'One-Month Plan Required',
+          status: 422,
+          detail: 'New monthly coaching plans must cover exactly one month.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (!dto.schedule_items?.length) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Monthly Schedule Required',
+          status: 422,
+          detail:
+            'Monthly coaching plans require exact actual session dates before the coach can create the plan.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (dto.session_overrides?.length) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Schedule Overrides Not Allowed',
+          status: 422,
+          detail:
+            'New monthly coaching plans must use the exact dates agreed by the coach; session overrides are not accepted at creation time.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private assertPaidActiveUnscheduledEnrollment(
+    enrollment: RecurringPlanWithSessions | null,
+  ): { id: string; amount: Prisma.Decimal; paid_at: Date } {
+    if (!enrollment) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Member Enrollment Required',
+        status: 403,
+        detail:
+          'The member must enroll and complete the full monthly payment before a coach can author the schedule.',
+      });
+    }
+
+    if (
+      enrollment.status === RecurringCoachingPlanStatus.awaiting_payment ||
+      enrollment.status === RecurringCoachingPlanStatus.draft
+    ) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Full Payment Required',
+        status: 403,
+        detail:
+          'The member must complete the full monthly payment before the coach can author dates or sessions.',
+      });
+    }
+
+    if (enrollment.status !== RecurringCoachingPlanStatus.active) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Enrollment Not Active',
+        status: 409,
+        detail:
+          'Only an active recurring coaching enrollment can receive its monthly schedule.',
+      });
+    }
+
+    if (
+      enrollment.schedule_items.length > 0 ||
+      enrollment.appointments.length > 0
+    ) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Recurring Coaching Schedule Already Exists',
+        status: 409,
+        detail:
+          'This recurring coaching enrollment already has an authored schedule. A second plan cannot be created.',
+      });
+    }
+
+    const paidCycle = enrollment.billing_cycles.find(
+      (cycle) =>
+        cycle.status === RecurringCoachingBillingCycleStatus.paid &&
+        cycle.paid_at !== null,
+    );
+    if (!paidCycle || !paidCycle.paid_at) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Full Payment Required',
+        status: 403,
+        detail:
+          'The member must complete the full monthly payment before the coach can author dates or sessions.',
+      });
+    }
+
+    return {
+      amount: new Prisma.Decimal(paidCycle.amount),
+      id: paidCycle.id,
+      paid_at: paidCycle.paid_at,
+    };
+  }
+
+  private assertScheduleInsideEnrollmentWindow(
+    scheduleItems: NonNullable<
+      CreateRecurringCoachingPlanDTO['schedule_items']
+    >,
+    startDate: Date,
+    endDate: Date,
+  ): void {
+    const startKey = this.toDateString(startDate);
+    const endKey = this.toDateString(endDate);
+    for (const item of scheduleItems) {
+      const scheduledKey = this.toGymDateKey(
+        this.parseDateTime(item.scheduled_at),
+      );
+      if (scheduledKey < startKey || scheduledKey > endKey) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Schedule Outside Purchased Month',
+            status: 422,
+            detail:
+              'Every authored session must fall inside the month purchased by the member.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+    }
+  }
+
+  private getEnrollmentMonthBounds(startDateInput?: string) {
+    const requestedDate = startDateInput
+      ? this.toDateOnlyValue(this.parseDateOnly(startDateInput))
+      : this.getCurrentGymDateOnly();
+    const monthStart = this.toMonthStart(requestedDate);
+    const currentMonthStart = this.toMonthStart(this.getCurrentGymDateOnly());
+
+    if (monthStart.getTime() < currentMonthStart.getTime()) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Enrollment Month',
+          status: 422,
+          detail: 'The purchased coaching month must be current or future.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    return {
+      startDate: monthStart,
+      endDate: this.addDays(this.addMonths(monthStart, 1), -1),
+    };
+  }
+
+  private getExplicitMonthlyScheduleRange(
+    scheduleItems: NonNullable<
+      CreateRecurringCoachingPlanDTO['schedule_items']
+    >,
+  ) {
+    const dates = scheduleItems
+      .map((item) => this.parseDateTime(item.scheduled_at))
+      .sort((left, right) => left.getTime() - right.getTime());
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+    const monthKey = this.toGymDateKey(startDate).slice(0, 7);
+
+    if (
+      dates.some((date) => this.toGymDateKey(date).slice(0, 7) !== monthKey)
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Single Monthly Period Required',
+          status: 422,
+          detail:
+            'Every session in a fresh monthly coaching plan must stay inside the same calendar month.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    return { startDate, endDate };
+  }
+
+  private assertMonthlyOffer(coach: RecurringPlanCoachContext) {
+    if (coach.monthly_offer_active !== true) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Monthly Offer Unavailable',
+          status: 422,
+          detail:
+            'The coach must have an active monthly coaching offer before a plan can be created.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const monthlyRate = new Prisma.Decimal(coach.monthly_rate ?? 0);
+    const sessionCount = Number(coach.monthly_session_count);
+    const durationMinutes = Number(coach.monthly_session_duration_minutes);
+    if (
+      monthlyRate.lte(ZERO_DECIMAL) ||
+      !Number.isInteger(sessionCount) ||
+      sessionCount < 1 ||
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < 30 ||
+      durationMinutes > 180
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Monthly Offer',
+          status: 422,
+          detail:
+            'The coach monthly offer must define a positive rate, at least one included session, and a session duration from 30 to 180 minutes.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    return { durationMinutes, monthlyRate, sessionCount };
+  }
+
+  private async assertCoachAuthoredTrainingPlan(
+    dto: CreateRecurringCoachingPlanDTO,
+    coach: Pick<RecurringPlanCoachContext, 'user_id'>,
+  ): Promise<void> {
+    if (!dto.training_plan_id) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Coach Workout Plan Required',
+          status: 422,
+          detail:
+            'A recurring monthly coaching plan must attach a workout plan authored by the assigned coach for this member.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    if (!coach.user_id) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Coach Workout Plan Required',
+          status: 422,
+          detail:
+            'Standalone coaches cannot create recurring plans without a coach-owned workout plan.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const trainingPlan = await this.repo.findCoachAuthoredTrainingPlan({
+      coachUserId: coach.user_id,
+      memberId: dto.member_id,
+      trainingPlanId: dto.training_plan_id,
+    });
+    if (!trainingPlan) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Coach Workout Plan',
+          status: 422,
+          detail:
+            'The attached workout plan must belong to the member and be authored by the assigned coach.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private assertCoachPlanCreator(
+    actor: JwtPayload,
+    coach: Pick<RecurringPlanCoachContext, 'user_id'>,
+  ): void {
+    if (actor.role === UserRole.admin) {
+      return;
+    }
+
+    if (actor.role === UserRole.coach && coach.user_id === actor.sub) {
+      return;
+    }
+
+    throw new ForbiddenException({
+      type: 'FORBIDDEN',
+      title: 'Coach Creation Required',
+      status: 403,
+      detail:
+        'Only the assigned coach or an administrator can author a monthly recurring coaching schedule.',
+    });
   }
 
   private async assertActiveMember(memberId: string) {
@@ -1733,6 +2218,10 @@ export class RecurringCoachingPlanService {
   }
 
   private weekStartUtc(value: Date): Date {
-    return this.addDays(this.toDateOnlyValue(value), -value.getUTCDay());
+    const gymWallClockDate = this.toGymWallClockDate(value);
+    return this.addDays(
+      this.toDateOnlyValue(gymWallClockDate),
+      -gymWallClockDate.getUTCDay(),
+    );
   }
 }

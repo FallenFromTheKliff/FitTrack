@@ -10,6 +10,11 @@ export type UpdateCoachProfilePayload = {
   displayName?: string;
   hourlyRate?: number;
   isAvailableForBooking?: boolean;
+  monthlyOfferActive?: boolean;
+  monthlyOfferDescription?: string | null;
+  monthlyRate?: number;
+  monthlySessionCount?: number;
+  monthlySessionDurationMinutes?: number;
   scheduleType?: "full_time" | "part_time";
   specialties?: string[];
   yearsExperience?: number;
@@ -80,7 +85,13 @@ export type CoachAppointmentScheduleRecord = {
   activePaymentId?: string | null;
   activePaymentProvider?: "cash" | "paymongo" | null;
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
-  activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
+  activePaymentStatus?:
+    | "awaiting_verification"
+    | "completed"
+    | "failed"
+    | "pending"
+    | "processing"
+    | null;
   amountDueNow?: null;
   assessmentReport?: string | null;
   balancePaidAt?: string | null;
@@ -164,6 +175,11 @@ type CoachApiRecord = {
   hourly_rate?: number | string | null;
   id: string;
   is_available_for_booking?: boolean;
+  monthly_offer_active?: boolean;
+  monthly_offer_description?: string | null;
+  monthly_rate?: number | string | null;
+  monthly_session_count?: number | null;
+  monthly_session_duration_minutes?: number | null;
   profile?: CoachUserProfileApiRecord | null;
   rating_count?: number | null;
   recent_reviews?: CoachPublicReviewApiRecord[];
@@ -190,7 +206,13 @@ type CoachScheduleApiRecord = {
   active_payment_id?: string | null;
   active_payment_provider?: "cash" | "paymongo" | null;
   active_payment_stage?: "balance" | "downpayment" | "full" | null;
-  active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
+  active_payment_status?:
+    | "awaiting_verification"
+    | "completed"
+    | "failed"
+    | "pending"
+    | "processing"
+    | null;
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach_earnings?: number | string | null;
@@ -336,6 +358,12 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
     hourlyRate: toNullableNumber(record.hourly_rate),
     id: record.id,
     isActive: record.is_available_for_booking ?? true,
+    monthlyOfferActive: record.monthly_offer_active ?? false,
+    monthlyOfferDescription: record.monthly_offer_description ?? null,
+    monthlyRate: toNullableNumber(record.monthly_rate),
+    monthlySessionCount: record.monthly_session_count ?? 0,
+    monthlySessionDurationMinutes:
+      record.monthly_session_duration_minutes ?? 60,
     ratingCount: record.rating_count ?? 0,
     recentReviews: (record.recent_reviews ?? []).map((review) => ({
       id: review.id,
@@ -539,6 +567,24 @@ export function createCoachesApi(transport: ApiTransport) {
             : {}),
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
+            : {}),
+          ...(payload.monthlyOfferActive !== undefined
+            ? { monthly_offer_active: payload.monthlyOfferActive }
+            : {}),
+          ...(payload.monthlyOfferDescription !== undefined
+            ? { monthly_offer_description: payload.monthlyOfferDescription }
+            : {}),
+          ...(payload.monthlyRate !== undefined
+            ? { monthly_rate: payload.monthlyRate }
+            : {}),
+          ...(payload.monthlySessionCount !== undefined
+            ? { monthly_session_count: payload.monthlySessionCount }
+            : {}),
+          ...(payload.monthlySessionDurationMinutes !== undefined
+            ? {
+                monthly_session_duration_minutes:
+                  payload.monthlySessionDurationMinutes,
+              }
             : {}),
           ...(payload.scheduleType !== undefined
             ? { schedule_type: payload.scheduleType }

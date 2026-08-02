@@ -177,6 +177,14 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
     const userId = ctx.state.userIds[coachKey];
     const profileId = coachProfileIdFor(coachKey);
     ctx.state.coachProfileIds[coachKey] = profileId;
+    const monthlySessionCounts = [12, 8, 16, 10] as const;
+    const monthlySessionCount =
+      monthlySessionCounts[index % monthlySessionCounts.length];
+    const monthlyRate = 700 + (index % 5) * 100;
+    const monthlyOfferDescription =
+      index % 2 === 0
+        ? 'A coach-led monthly strength plan with flexible weekly session allocation.'
+        : 'A coach-led monthly conditioning plan scheduled around the member and coach availability.';
 
     await ctx.prisma.coachProfile.upsert({
       where: { user_id: userId },
@@ -196,6 +204,11 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
         gym_commission_pct: new Prisma.Decimal(20),
         hourly_rate: new Prisma.Decimal(450 + index * 20),
         is_available_for_booking: true,
+        monthly_offer_active: true,
+        monthly_offer_description: monthlyOfferDescription,
+        monthly_rate: new Prisma.Decimal(monthlyRate),
+        monthly_session_count: monthlySessionCount,
+        monthly_session_duration_minutes: 60,
         rating_count: 10 + index,
         schedule_type:
           index % 3 === 0
@@ -221,6 +234,11 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
         gym_commission_pct: new Prisma.Decimal(20),
         hourly_rate: new Prisma.Decimal(450 + index * 20),
         is_available_for_booking: true,
+        monthly_offer_active: true,
+        monthly_offer_description: monthlyOfferDescription,
+        monthly_rate: new Prisma.Decimal(monthlyRate),
+        monthly_session_count: monthlySessionCount,
+        monthly_session_duration_minutes: 60,
         rating_count: 10 + index,
         schedule_type:
           index % 3 === 0

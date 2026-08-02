@@ -37,6 +37,11 @@ describe('CoachService', () => {
     bio: 'Builds athletic performance programs.',
     certification: 'NASM-CPT',
     hourly_rate: 1200,
+    monthly_rate: 12000,
+    monthly_session_count: 4,
+    monthly_session_duration_minutes: 60,
+    monthly_offer_description: 'Four one-hour strength sessions each month.',
+    monthly_offer_active: true,
     average_rating: 4.75,
     rating_count: 12,
     gym_commission_pct: 20,
@@ -86,6 +91,12 @@ describe('CoachService', () => {
           id: 'coach-1',
           display_name: 'Maria Santos',
           hourly_rate: '1200',
+          monthly_rate: '12000',
+          monthly_session_count: 4,
+          monthly_session_duration_minutes: 60,
+          monthly_offer_description:
+            'Four one-hour strength sessions each month.',
+          monthly_offer_active: true,
           average_rating: '4.75',
           availability_slots: [
             {
@@ -152,6 +163,19 @@ describe('CoachService', () => {
   it('rejects hourly rate updates from coach self-service', async () => {
     await expect(
       service.updateMyProfile('user-1', { hourly_rate: 1500 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
+  });
+
+  it('keeps monthly offer fields read-only for coach self-service', async () => {
+    await expect(
+      service.updateMyProfile('user-1', {
+        monthly_rate: 12500,
+        monthly_session_count: 4,
+        monthly_session_duration_minutes: 60,
+        monthly_offer_description: 'Updated offer',
+        monthly_offer_active: true,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
   });
@@ -232,6 +256,43 @@ describe('CoachService', () => {
       specialization: 'Strength, Mobility',
     });
     expect(eventEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('lets staff-facing management update monthly offer fields', async () => {
+    repo.updateCoachById.mockResolvedValue(
+      makeCoach({
+        monthly_rate: 12500,
+        monthly_session_count: 5,
+        monthly_session_duration_minutes: 45,
+        monthly_offer_description: 'Five focused sessions.',
+        monthly_offer_active: true,
+      }),
+    );
+
+    await expect(
+      service.updateManagedProfile('coach-1', {
+        monthly_rate: 12500,
+        monthly_session_count: 5,
+        monthly_session_duration_minutes: 45,
+        monthly_offer_description: 'Five focused sessions.',
+        monthly_offer_active: true,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        monthly_rate: '12500',
+        monthly_session_count: 5,
+        monthly_session_duration_minutes: 45,
+        monthly_offer_description: 'Five focused sessions.',
+        monthly_offer_active: true,
+      }),
+    );
+    expect(repo.updateCoachById).toHaveBeenCalledWith('coach-1', {
+      monthly_rate: 12500,
+      monthly_session_count: 5,
+      monthly_session_duration_minutes: 45,
+      monthly_offer_description: 'Five focused sessions.',
+      monthly_offer_active: true,
+    });
   });
 
   it('rejects hourly rate updates from the staff-facing management flow', async () => {

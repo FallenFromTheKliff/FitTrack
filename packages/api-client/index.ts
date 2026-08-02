@@ -261,6 +261,7 @@ export type {
   RecurringCoachingBillingCycleRecord,
   RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
+  RecurringCoachingEnrollmentInput,
   RecurringCoachingPlanInput,
   RecurringCoachingPlanMutationResult,
   RecurringCoachingPlanPreviewResult,

@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -76,6 +77,55 @@ export class UpdateCoachProfileDTO {
   @IsNumber({}, { message: 'hourly_rate must be a number' })
   @Min(0, { message: 'hourly_rate must be at least 0' })
   hourly_rate?: number;
+
+  @ApiPropertyOptional({ example: 12000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'monthly_rate must be a valid amount with at most 2 decimals' },
+  )
+  @Min(0, { message: 'monthly_rate must be at least 0' })
+  monthly_rate?: number;
+
+  @ApiPropertyOptional({ example: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'monthly_session_count must be an integer' })
+  @Min(1, { message: 'monthly_session_count must be at least 1' })
+  @Max(31, { message: 'monthly_session_count must not exceed 31' })
+  monthly_session_count?: number;
+
+  @ApiPropertyOptional({ example: 60 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'monthly_session_duration_minutes must be an integer' })
+  @Min(30, {
+    message: 'monthly_session_duration_minutes must be at least 30',
+  })
+  @Max(180, {
+    message: 'monthly_session_duration_minutes must not exceed 180',
+  })
+  monthly_session_duration_minutes?: number;
+
+  @ApiPropertyOptional({
+    example: 'Four one-hour strength sessions each month.',
+    nullable: true,
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'monthly_offer_description must be a string' })
+  @MaxLength(500, {
+    message: 'monthly_offer_description must not exceed 500 characters',
+  })
+  monthly_offer_description?: string | null;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({
+    message: 'monthly_offer_active must be a boolean value',
+  })
+  monthly_offer_active?: boolean;
 
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
@@ -315,6 +365,24 @@ export class CoachListItemResponseDTO {
 
   @ApiProperty({ example: '1200' })
   hourly_rate: string;
+
+  @ApiProperty({ example: '12000' })
+  monthly_rate: string;
+
+  @ApiProperty({ example: 4 })
+  monthly_session_count: number;
+
+  @ApiProperty({ example: 60 })
+  monthly_session_duration_minutes: number;
+
+  @ApiPropertyOptional({
+    example: 'Four one-hour strength sessions each month.',
+    nullable: true,
+  })
+  monthly_offer_description: string | null;
+
+  @ApiProperty({ example: true })
+  monthly_offer_active: boolean;
 
   @ApiProperty({
     enum: CoachScheduleType,

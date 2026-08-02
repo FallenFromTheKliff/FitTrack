@@ -40,6 +40,11 @@ export type RecurringCoachingPlanInput = {
   trainingPlanId?: string;
 };
 
+export type RecurringCoachingEnrollmentInput = {
+  coachId: string;
+  startDate?: string;
+};
+
 export type RecurringCoachingScheduleItemInput = {
   amount?: number;
   durationMinutes?: number;
@@ -445,6 +450,16 @@ function mapBillingCyclePaymentResult(
 
 export function createRecurringCoachingPlansApi(transport: ApiTransport) {
   return {
+    async enroll(input: RecurringCoachingEnrollmentInput) {
+      const result = await unwrapResponse<PlanMutationApiRecord>(
+        transport.post("/bookings/recurring-coaching-plans/enroll", {
+          coach_id: input.coachId,
+          ...(input.startDate ? { start_date: input.startDate } : {}),
+        }),
+        "Unable to start monthly coaching enrollment.",
+      );
+      return mapMutationResult(result);
+    },
     async list() {
       const result = await unwrapResponse<PlanApiRecord[]>(
         transport.get("/bookings/recurring-coaching-plans"),

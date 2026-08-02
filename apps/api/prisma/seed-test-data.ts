@@ -818,6 +818,8 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('850'),
       isAvailableForBooking: true,
+      monthlyRate: new Prisma.Decimal('700'),
+      monthlySessionCount: 12,
       ratingCount: 18,
       specialization: 'Mobility, strength fundamentals, onboarding sessions',
     },
@@ -831,6 +833,8 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       certification: 'NASM-CPT',
       hourlyRate: new Prisma.Decimal('875'),
       isAvailableForBooking: true,
+      monthlyRate: new Prisma.Decimal('700'),
+      monthlySessionCount: 12,
       ratingCount: 14,
       specialization: 'Strength onboarding, form checks, member progression',
     },
@@ -844,6 +848,8 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       certification: 'ACE-CPT',
       hourlyRate: new Prisma.Decimal('900'),
       isAvailableForBooking: true,
+      monthlyRate: new Prisma.Decimal('600'),
+      monthlySessionCount: 8,
       ratingCount: 11,
       specialization: 'Conditioning, boxing, athletic movement',
     },
@@ -857,6 +863,8 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
       certification: 'Yoga Alliance',
       hourlyRate: new Prisma.Decimal('780'),
       isAvailableForBooking: true,
+      monthlyRate: new Prisma.Decimal('550'),
+      monthlySessionCount: 8,
       ratingCount: 9,
       specialization: 'Yoga flow, recovery sessions, breathing work',
     },
@@ -881,6 +889,12 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         contact_phone: seed.contactPhone,
         display_name: seed.displayName,
         hourly_rate: seed.hourlyRate,
+        monthly_offer_active: true,
+        monthly_offer_description:
+          'A coach-led monthly package with flexible weekly session allocation.',
+        monthly_rate: seed.monthlyRate,
+        monthly_session_count: seed.monthlySessionCount,
+        monthly_session_duration_minutes: 60,
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: seed.averageRating,
         rating_count: seed.ratingCount,
@@ -896,6 +910,12 @@ async function ensureCoachProfiles(ensuredAccounts: readonly EnsuredAccount[]) {
         contact_phone: seed.contactPhone,
         display_name: seed.displayName,
         hourly_rate: seed.hourlyRate,
+        monthly_offer_active: true,
+        monthly_offer_description:
+          'A coach-led monthly package with flexible weekly session allocation.',
+        monthly_rate: seed.monthlyRate,
+        monthly_session_count: seed.monthlySessionCount,
+        monthly_session_duration_minutes: 60,
         gym_commission_pct: new Prisma.Decimal('20'),
         average_rating: seed.averageRating,
         rating_count: seed.ratingCount,
@@ -2024,7 +2044,8 @@ async function ensureNutritionFixtures(
           muscle_mass_kg: new Prisma.Decimal(profile.muscleMassKg),
           waist_cm: new Prisma.Decimal(profile.waistCm),
           chest_cm: new Prisma.Decimal(profile.chestCm),
-          notes: 'Baseline nutrition profile seeded for role and dashboard testing.',
+          notes:
+            'Baseline nutrition profile seeded for role and dashboard testing.',
           recorded_at: analyticsAt({ daysAgo: 14, hour: 8 }),
         },
         {
@@ -2036,7 +2057,8 @@ async function ensureNutritionFixtures(
           muscle_mass_kg: new Prisma.Decimal(profile.muscleMassKg),
           waist_cm: new Prisma.Decimal(profile.waistCm),
           chest_cm: new Prisma.Decimal(profile.chestCm),
-          notes: 'Current nutrition checkpoint aligned with the active macro target.',
+          notes:
+            'Current nutrition checkpoint aligned with the active macro target.',
           recorded_at: analyticsAt({ daysAgo: 1, hour: 8 }),
         },
       ],
@@ -2091,7 +2113,7 @@ async function ensureNutritionFixtures(
             Math.round(protein * 0.36 * dailyModifier).toString(),
           ),
           carbs_g: new Prisma.Decimal(
-            Math.round(carbs * 0.30 * dailyModifier).toString(),
+            Math.round(carbs * 0.3 * dailyModifier).toString(),
           ),
           fat_g: new Prisma.Decimal(
             Math.round(fat * 0.28 * dailyModifier).toString(),
@@ -2160,7 +2182,7 @@ async function ensureNutritionFixtures(
             Math.round(carbs * 0.88 * dailyModifier).toString(),
           ),
           fat_g: new Prisma.Decimal(
-            Math.round(fat * 0.90 * dailyModifier).toString(),
+            Math.round(fat * 0.9 * dailyModifier).toString(),
           ),
           quantity: new Prisma.Decimal('1'),
           unit: NutritionUnit.serving,
@@ -4440,14 +4462,18 @@ async function ensureFeatureCoverageFixtures(
         evidence_bars: seed.evidenceBars as Prisma.InputJsonValue,
         hand_shape_profile: {
           exerciseRequirement:
-            seed.category === ExerciseCategory.strength ? 'grip_optional' : 'none',
+            seed.category === ExerciseCategory.strength
+              ? 'grip_optional'
+              : 'none',
           targetLockGesture: 'rock_sign',
         } as Prisma.InputJsonValue,
         instructions: seed.instructions,
         match_hint: seed.matchHint ?? null,
         movement_profile: {
           movementType:
-            seed.category === ExerciseCategory.balance ? 'static_hold' : 'dynamic_rep',
+            seed.category === ExerciseCategory.balance
+              ? 'static_hold'
+              : 'dynamic_rep',
           rigSource: 'seeded_creator_capture',
           thresholds: { downAngle: 145, tolerance: 18, upAngle: 92 },
         } as Prisma.InputJsonValue,
@@ -4456,18 +4482,21 @@ async function ensureFeatureCoverageFixtures(
         origin_label: seed.originLabel,
         pose_session_id:
           seed.key === 'member-active:rotational-press'
-            ? activePose?.id ?? null
+            ? (activePose?.id ?? null)
             : null,
         proposed_name: seed.proposedName,
         published_exercise_id:
           seed.status === ExerciseReviewSubmissionStatus.published
-            ? curlExercise?.id ?? null
+            ? (curlExercise?.id ?? null)
             : null,
         queue_tag: seed.queueTag,
         reviewed_at:
           seed.status === ExerciseReviewSubmissionStatus.pending
             ? null
-            : analyticsAt({ daysAgo: seed.reviewedDaysAgo ?? 1, hour: seed.hour }),
+            : analyticsAt({
+                daysAgo: seed.reviewedDaysAgo ?? 1,
+                hour: seed.hour,
+              }),
         review_notes: seed.reviewNotes ?? null,
         source_label: seed.sourceLabel,
         status: seed.status,
@@ -4711,9 +4740,13 @@ async function ensureFeatureCoverageFixtures(
       .filter((row): row is NonNullable<typeof row> => Boolean(row)),
   });
 
-  const workoutSourceEventId = seedId('progression-source:member-active:workout');
+  const workoutSourceEventId = seedId(
+    'progression-source:member-active:workout',
+  );
   const poseSourceEventId = seedId('progression-source:member-active:pose');
-  const flaggedSourceEventId = seedId('progression-source:member-frozen:flagged');
+  const flaggedSourceEventId = seedId(
+    'progression-source:member-frozen:flagged',
+  );
   const workoutSourceId =
     activeWorkout?.id ?? seedId('source-id:member-active:workout');
 
@@ -5214,7 +5247,8 @@ async function ensureFeatureCoverageFixtures(
       quantity_before: 20,
       quantity_lost: 2,
       quantity_set_to: 18,
-      reason: 'Two adjustable collars were damaged during audit and removed from available inventory.',
+      reason:
+        'Two adjustable collars were damaged during audit and removed from available inventory.',
     },
   });
 
@@ -5259,7 +5293,8 @@ async function ensureFeatureCoverageFixtures(
         end_date: nutritionDate(0),
         focus: InsightFocus.overview,
         insight_payload: {
-          headline: 'Premium members and verified workout sessions are driving engagement.',
+          headline:
+            'Premium members and verified workout sessions are driving engagement.',
           risks: ['Frozen account integrity cases need closure'],
           opportunities: ['Promote recurring coaching to active members'],
         } as Prisma.InputJsonValue,

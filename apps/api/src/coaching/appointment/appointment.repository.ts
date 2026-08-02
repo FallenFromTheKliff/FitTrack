@@ -377,7 +377,7 @@ export class AppointmentRepository extends BaseRepository {
         data: {
           user: { connect: { id: input.userId } },
           coach: { connect: { id: input.coachId } },
-          status: AppointmentStatus.pending_coach,
+          status: AppointmentStatus.pending_payment,
           is_free_session: input.isFreeSession,
           scheduled_at: input.scheduledAt,
           duration_minutes: input.durationMinutes,

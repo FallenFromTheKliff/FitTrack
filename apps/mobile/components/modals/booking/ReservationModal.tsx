@@ -10,7 +10,12 @@ import {
   Users,
   XCircle,
 } from "lucide-react-native";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
   FITTRACK_PAYMENT_POLICY_SUMMARY,
@@ -59,8 +64,7 @@ type Props = {
   onSuccess?: () => void;
 };
 
-type BookingPaymentOption =
-  | "paymongo_full";
+type BookingPaymentOption = "paymongo_full";
 type ReservationConfirmationState = {
   message: string;
   title: string;
@@ -159,7 +163,9 @@ function getUpcomingAvailableDates(coaches: CoachProfileRecord[]) {
         availableDays.add(numericDay);
         return;
       }
-      const weekdayIndex = WEEKDAY_NAMES.findIndex((day) => day === normalizedDay);
+      const weekdayIndex = WEEKDAY_NAMES.findIndex(
+        (day) => day === normalizedDay,
+      );
       if (weekdayIndex >= 0) availableDays.add(weekdayIndex);
     });
   });
@@ -179,8 +185,7 @@ function getUpcomingAvailableDates(coaches: CoachProfileRecord[]) {
       (coach) =>
         !(coach.bookedDates ?? []).includes(dateKey) &&
         coach.availability?.some(
-          (slot) =>
-            slot.isAvailable && matchesDay(dateKey, slot.dayOfWeek),
+          (slot) => slot.isAvailable && matchesDay(dateKey, slot.dayOfWeek),
         ),
     );
     if (availableDays.has(nextDate.getDay()) && hasOpenCoach) {
@@ -301,12 +306,15 @@ function toGymWallClockIso(date: string, minutes: number) {
   const [year, month, day] = date.split("-").map(Number);
   const gymOffsetMinutes = 8 * 60;
   return new Date(
-    Date.UTC(year, month - 1, day, hour, minute) -
-      gymOffsetMinutes * 60 * 1000,
+    Date.UTC(year, month - 1, day, hour, minute) - gymOffsetMinutes * 60 * 1000,
   ).toISOString();
 }
 
-function getReservationWindowMs(date: string, startTime: string, endTime: string) {
+function getReservationWindowMs(
+  date: string,
+  startTime: string,
+  endTime: string,
+) {
   const startMinutes = timeToMinutes(startTime);
   let endMinutes = timeToMinutes(endTime);
   if (endMinutes <= startMinutes) endMinutes += 24 * 60;
@@ -432,7 +440,13 @@ export default function ReservationModal({
       isVisible && isCalOpen && selectedVenueId != null
         ? calendarDateKeys.filter((dateKey) => dateKey <= maxBookableDateKey)
         : [],
-    [calendarDateKeys, isCalOpen, isVisible, maxBookableDateKey, selectedVenueId],
+    [
+      calendarDateKeys,
+      isCalOpen,
+      isVisible,
+      maxBookableDateKey,
+      selectedVenueId,
+    ],
   );
   const venueCalendarQueries = useQueries({
     queries: venueCalendarQueryDates.map((dateKey) => ({
@@ -461,10 +475,15 @@ export default function ReservationModal({
       blockedDates.push(dateKey);
     });
 
-    return { blockedVenueDates: blockedDates, highlightedVenueDates: highlightedDates };
+    return {
+      blockedVenueDates: blockedDates,
+      highlightedVenueDates: highlightedDates,
+    };
   }, [venueCalendarQueries, venueCalendarQueryDates]);
   const calendarHighlightedDates =
-    selectedVenue != null ? highlightedVenueDates : fallbackCoachAvailabilityDates;
+    selectedVenue != null
+      ? highlightedVenueDates
+      : fallbackCoachAvailabilityDates;
   const calendarBlockedDates = selectedVenue != null ? blockedVenueDates : [];
   const handleCalendarMonthChange = useCallback(
     (view: { month: number; year: number }) => {
@@ -491,10 +510,10 @@ export default function ReservationModal({
   });
   const { data: existingBookings = [], isLoading: existingBookingsLoading } =
     useQuery({
-    ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
-    enabled: isVisible && !!user?.id,
-    staleTime: 30_000,
-  });
+      ...bookingsQueryOptions<VenueBookingRecord>(mobileApiClient, user?.id),
+      enabled: isVisible && !!user?.id,
+      staleTime: 30_000,
+    });
   const {
     data: coachAvailability,
     isLoading: coachAvailabilityLoading,
@@ -526,7 +545,9 @@ export default function ReservationModal({
   useEffect(() => {
     if (
       selectedCoachId &&
-      !availableCoachAddOns.some((coach) => String(coach.id) === selectedCoachId)
+      !availableCoachAddOns.some(
+        (coach) => String(coach.id) === selectedCoachId,
+      )
     ) {
       setSelectedCoachId(null);
     }
@@ -561,9 +582,8 @@ export default function ReservationModal({
   );
   const isFreeReservation = totalAmount <= 0;
   const amountDueNow = totalAmount;
-  const remainingBalance = 0;
-  const paymentProvider = isFreeReservation ? undefined : "paymongo" as const;
-  const paymentStage = isFreeReservation ? undefined : "full" as const;
+  const paymentProvider = isFreeReservation ? undefined : ("paymongo" as const);
+  const paymentStage = isFreeReservation ? undefined : ("full" as const);
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const liveVenueSlots = useMemo(
@@ -578,8 +598,8 @@ export default function ReservationModal({
           );
         })
         .sort(
-        (a, b) =>
-          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+          (a, b) =>
+            new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
         ),
     [availability],
   );
@@ -600,15 +620,11 @@ export default function ReservationModal({
     return {
       body: canUsePaymongo
         ? `Pay the full ${formatCurrency(totalAmount)} through PayMongo before the reservation is confirmed. No payment means no booking. You will return to FitTrack after checkout.`
-        : "PayMongo checkout is unavailable right now. Try again later; cash payment is available at the cashier only.",
+        : "PayMongo checkout is unavailable right now. Try again later.",
       eyebrow: canUsePaymongo ? "PayMongo" : "PayMongo unavailable",
       title: "Full payment required",
     };
-  }, [
-    canUsePaymongo,
-    isFreeReservation,
-    totalAmount,
-  ]);
+  }, [canUsePaymongo, isFreeReservation, totalAmount]);
 
   const startSlots = useMemo(
     () =>
@@ -651,7 +667,9 @@ export default function ReservationModal({
     date === getTodayString() &&
     startTime !== "" &&
     timeToMinutes(startTime) <= currentMinutes;
-  const hasOpenStartSlot = startSlots.some((slot) => slot.status === "available");
+  const hasOpenStartSlot = startSlots.some(
+    (slot) => slot.status === "available",
+  );
   const canOpenStartTime =
     Boolean(selectedVenue) &&
     !availabilityLoading &&
@@ -862,13 +880,13 @@ export default function ReservationModal({
       const successTitle = result?.checkout_url
         ? "Checkout ready"
         : isFreeReservation
-        ? "Reservation confirmed"
-        : "Reservation confirmed";
+          ? "Reservation confirmed"
+          : "Reservation confirmed";
       const successMessage = result?.checkout_url
         ? `Complete the PayMongo checkout for ${selectedVenuePresentation?.name ?? "your venue"} on ${formatBookingDate(date)} at ${startTime} - ${endTime}. The booking is not confirmed until full payment succeeds.`
         : isFreeReservation
-        ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
-        : `Your reservation for ${selectedVenuePresentation?.name ?? "your venue"} is confirmed after full payment.`;
+          ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
+          : `Your reservation for ${selectedVenuePresentation?.name ?? "your venue"} is confirmed after full payment.`;
 
       handleReset();
       onSuccess?.();
@@ -933,596 +951,564 @@ export default function ReservationModal({
       >
         <Animated.View style={[s.backdrop, backdropStyle]}>
           <Animated.View style={[s.card, cardStyle]}>
-          <Animated.View style={[s.header, headerBorderStyle]}>
-            <View style={s.headerIcon}>
-              <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
-            </View>
-            <View style={s.headerText}>
-              <FitText style={s.headerTitle}>Make a Reservation</FitText>
-              <FitText style={s.headerSubtitle}>
-                {selectedVenuePresentation
-                  ? `${selectedVenuePresentation.emoji} ${selectedVenuePresentation.name} / PHP ${selectedVenuePresentation.price}/${selectedVenuePresentation.unit}`
-                  : "Book a reservable venue"}
-              </FitText>
-            </View>
-          </Animated.View>
-          <FitModalScrollView
-            style={s.middle}
-            contentContainerStyle={s.body}
-            resetKey={isVisible}
-          >
-            <FitText style={s.sectionLabel}>DATE</FitText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Reservation date: ${date ? formatBookingDate(date) : "Select a date"}`}
-              style={[
-                s.fieldBtn,
-                { borderColor: date ? colors.brand : colors.fieldBorder },
-              ]}
-              onPress={() => setIsCalOpen(true)}
+            <Animated.View style={[s.header, headerBorderStyle]}>
+              <View style={s.headerIcon}>
+                <CalendarDays size={18} color={colors.brand} strokeWidth={2} />
+              </View>
+              <View style={s.headerText}>
+                <FitText style={s.headerTitle}>Make a Reservation</FitText>
+                <FitText style={s.headerSubtitle}>
+                  {selectedVenuePresentation
+                    ? `${selectedVenuePresentation.emoji} ${selectedVenuePresentation.name} / PHP ${selectedVenuePresentation.price}/${selectedVenuePresentation.unit}`
+                    : "Book a reservable venue"}
+                </FitText>
+              </View>
+            </Animated.View>
+            <FitModalScrollView
+              style={s.middle}
+              contentContainerStyle={s.body}
+              resetKey={isVisible}
             >
-              <CalendarDays
-                size={16}
-                color={date ? colors.brand : colors.textMuted}
-                strokeWidth={2}
-              />
-              <FitText
-                style={[s.fieldBtnText, date && { color: colors.textPrimary }]}
-              >
-                {date ? formatBookingDate(date) : "Select a date"}
-              </FitText>
-            </Pressable>
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
-              TIME RANGE
-            </FitText>
-            <View style={s.twoFieldRow}>
+              <FitText style={s.sectionLabel}>DATE</FitText>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Start time: ${startTime || "Select start time"}`}
-                accessibilityState={{ disabled: !canOpenStartTime }}
+                accessibilityLabel={`Reservation date: ${date ? formatBookingDate(date) : "Select a date"}`}
                 style={[
                   s.fieldBtn,
-                  s.fieldBtnFlex,
-                  {
-                    borderColor: startTime ? colors.brand : colors.fieldBorder,
-                    opacity: canOpenStartTime ? 1 : 0.45,
-                  },
+                  { borderColor: date ? colors.brand : colors.fieldBorder },
                 ]}
-                onPress={() => {
-                  if (!canOpenStartTime) return;
-                  setTimeTarget("start");
-                  setIsTimeOpen(true);
-                }}
-                disabled={!canOpenStartTime}
+                onPress={() => setIsCalOpen(true)}
               >
-                <Clock
+                <CalendarDays
                   size={16}
-                  color={startTime ? colors.brand : colors.textMuted}
+                  color={date ? colors.brand : colors.textMuted}
                   strokeWidth={2}
                 />
                 <FitText
                   style={[
                     s.fieldBtnText,
-                    startTime && { color: colors.textPrimary },
+                    date && { color: colors.textPrimary },
                   ]}
                 >
-                  {startTime || "Start Time"}
+                  {date ? formatBookingDate(date) : "Select a date"}
                 </FitText>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`End time: ${endTime || "Select end time"}`}
-                accessibilityState={{ disabled: !canOpenEndTime }}
-                style={[
-                  s.fieldBtn,
-                  s.fieldBtnFlex,
-                  {
-                    borderColor: endTime ? colors.brand : colors.fieldBorder,
-                    opacity: canOpenEndTime ? 1 : 0.45,
-                  },
-                ]}
-                onPress={() => {
-                  if (!canOpenEndTime) return;
-                  setTimeTarget("end");
-                  setIsTimeOpen(true);
-                }}
-                disabled={!canOpenEndTime}
-              >
-                <Clock
-                  size={16}
-                  color={endTime ? colors.brand : colors.textMuted}
-                  strokeWidth={2}
-                />
-                <FitText
-                  style={[
-                    s.fieldBtnText,
-                    endTime && { color: colors.textPrimary },
-                  ]}
-                >
-                  {endTime || "End Time"}
-                </FitText>
-              </Pressable>
-            </View>
-            {startTime === "" || endTime === "" ? (
-              <FitText style={s.validationHint}>
-                Start and end time are required
+              <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+                TIME RANGE
               </FitText>
-            ) : null}
-            {timeAvailabilityMessage !== "" ? (
-              <FitText
-                style={
-                  selectedVenue && !availabilityLoading && !availabilityError
-                    ? s.unavailableText
-                    : s.validationHint
-                }
-              >
-                {timeAvailabilityMessage}
-              </FitText>
-            ) : null}
-            {isSelectedStartInPast ? (
-              <FitText style={s.unavailableText}>
-                Same-day reservations must use a future start time.
-              </FitText>
-            ) : null}
-            {hasConflict ? (
-              <FitText style={s.unavailableText}>
-                The selected time overlaps an active booking.
-              </FitText>
-            ) : null}
-            {hasMemberTimeOverlap ? (
-              <FitText style={s.unavailableText}>
-                You already have a booking in this time window.
-              </FitText>
-            ) : null}
-            {apiError !== "" ? (
-              <FitText style={s.unavailableText}>{apiError}</FitText>
-            ) : null}
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>VENUE</FitText>
-            <View style={s.amenityGrid}>
-              {bookableVenues.map(({ venue, presentation }) => {
-                const isActive = selectedVenue?.id === venue.id;
-                return (
-                  <Pressable
-                    key={venue.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${presentation.name}, PHP ${presentation.price}/${presentation.unit}${isActive ? ", selected" : ""}`}
-                    accessibilityState={{ selected: isActive }}
-                    style={[
-                      s.amenityCard,
-                      isActive && {
-                        borderColor: colors.brand,
-                        backgroundColor: colors.brand + "12",
-                      },
-                    ]}
-                    onPress={() => {
-                      setSelectedVenue(isActive ? null : venue);
-                      setStartTime("");
-                      setEndTime("");
-                      setSelectedCoachId(null);
-                      setIsCoachPickerOpen(false);
-                    }}
-                  >
-                    <FitText style={s.amenityEmoji}>
-                      {presentation.name.slice(0, 1)}
-                    </FitText>
-                    <FitText
-                      style={[
-                        s.amenityName,
-                        isActive && { color: colors.brand, fontWeight: "600" },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {presentation.name}
-                    </FitText>
-                    <FitText
-                      style={[
-                        s.amenityPrice,
-                        isActive && { color: colors.brand },
-                      ]}
-                    >
-                      PHP {presentation.price}/{presentation.unit}
-                    </FitText>
-                    {isActive ? (
-                      <View style={s.amenityCheck}>
-                        <CheckCircle
-                          size={14}
-                          color={colors.brand}
-                          strokeWidth={2}
-                        />
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={s.notesSectionHeader}>
-              <FitText
-                style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
-              >
-                COACH ADD-ON
-              </FitText>
-              <FitText style={s.optionalLabel}>Optional</FitText>
-            </View>
-            <FitText style={s.validationHint}>
-              Review a coach profile here if you want to attach one to this
-              venue reservation.
-            </FitText>
-            {coachesLoading ? (
-              <FitText style={s.validationHint}>
-                Loading coach profiles...
-              </FitText>
-            ) : coachesError ? (
-              <FitText style={s.unavailableText}>
-                {coachesError instanceof Error
-                  ? coachesError.message
-                  : "Unable to load coach profiles."}
-              </FitText>
-            ) : coaches.length === 0 || availableCoachAddOns.length === 0 ? (
-              <FitText style={s.validationHint}>
-                No coach add-ons are available for the selected date and time.
-              </FitText>
-            ) : (
-              <>
+              <View style={s.twoFieldRow}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={
-                    selectedCoach
-                      ? `Coach add-on: ${getCoachName(selectedCoach)}`
-                      : "Coach add-on: none"
-                  }
-                  accessibilityState={{ expanded: isCoachPickerOpen }}
+                  accessibilityLabel={`Start time: ${startTime || "Select start time"}`}
+                  accessibilityState={{ disabled: !canOpenStartTime }}
                   style={[
                     s.fieldBtn,
+                    s.fieldBtnFlex,
                     {
-                      borderColor: selectedCoach ? colors.brand : colors.fieldBorder,
+                      borderColor: startTime
+                        ? colors.brand
+                        : colors.fieldBorder,
+                      opacity: canOpenStartTime ? 1 : 0.45,
                     },
                   ]}
-                  onPress={() => setIsCoachPickerOpen((current) => !current)}
+                  onPress={() => {
+                    if (!canOpenStartTime) return;
+                    setTimeTarget("start");
+                    setIsTimeOpen(true);
+                  }}
+                  disabled={!canOpenStartTime}
                 >
-                  <Users
+                  <Clock
                     size={16}
-                    color={selectedCoach ? colors.brand : colors.textMuted}
+                    color={startTime ? colors.brand : colors.textMuted}
                     strokeWidth={2}
                   />
                   <FitText
-                    style={[s.fieldBtnText, selectedCoach && { color: colors.textPrimary }]}
+                    style={[
+                      s.fieldBtnText,
+                      startTime && { color: colors.textPrimary },
+                    ]}
                   >
-                    {selectedCoach
-                      ? `${getCoachName(selectedCoach)} / ${getCoachPriceLabel(selectedCoach)}`
-                      : "No coach add-on"}
+                    {startTime || "Start Time"}
                   </FitText>
-                  <ChevronDown
-                    size={16}
-                    color={colors.textMuted}
-                    strokeWidth={2}
-                    style={{
-                      transform: [{ rotate: isCoachPickerOpen ? "180deg" : "0deg" }],
-                    }}
-                  />
                 </Pressable>
-                {isCoachPickerOpen ? (
-                  <View style={s.trainerList}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove coach add-on"
-                      style={[
-                        s.trainerRow,
-                        !selectedCoach && {
-                          borderColor: colors.brand,
-                          backgroundColor: colors.brand + "12",
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelectedCoachId(null);
-                        setIsCoachPickerOpen(false);
-                      }}
-                    >
-                      <FitText style={s.trainerName}>No coach add-on</FitText>
-                    </Pressable>
-                    {availableCoachAddOns.map((coach) => {
-                  const isActive = selectedCoach?.id === coach.id;
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`End time: ${endTime || "Select end time"}`}
+                  accessibilityState={{ disabled: !canOpenEndTime }}
+                  style={[
+                    s.fieldBtn,
+                    s.fieldBtnFlex,
+                    {
+                      borderColor: endTime ? colors.brand : colors.fieldBorder,
+                      opacity: canOpenEndTime ? 1 : 0.45,
+                    },
+                  ]}
+                  onPress={() => {
+                    if (!canOpenEndTime) return;
+                    setTimeTarget("end");
+                    setIsTimeOpen(true);
+                  }}
+                  disabled={!canOpenEndTime}
+                >
+                  <Clock
+                    size={16}
+                    color={endTime ? colors.brand : colors.textMuted}
+                    strokeWidth={2}
+                  />
+                  <FitText
+                    style={[
+                      s.fieldBtnText,
+                      endTime && { color: colors.textPrimary },
+                    ]}
+                  >
+                    {endTime || "End Time"}
+                  </FitText>
+                </Pressable>
+              </View>
+              {startTime === "" || endTime === "" ? (
+                <FitText style={s.validationHint}>
+                  Start and end time are required
+                </FitText>
+              ) : null}
+              {timeAvailabilityMessage !== "" ? (
+                <FitText
+                  style={
+                    selectedVenue && !availabilityLoading && !availabilityError
+                      ? s.unavailableText
+                      : s.validationHint
+                  }
+                >
+                  {timeAvailabilityMessage}
+                </FitText>
+              ) : null}
+              {isSelectedStartInPast ? (
+                <FitText style={s.unavailableText}>
+                  Same-day reservations must use a future start time.
+                </FitText>
+              ) : null}
+              {hasConflict ? (
+                <FitText style={s.unavailableText}>
+                  The selected time overlaps an active booking.
+                </FitText>
+              ) : null}
+              {hasMemberTimeOverlap ? (
+                <FitText style={s.unavailableText}>
+                  You already have a booking in this time window.
+                </FitText>
+              ) : null}
+              {apiError !== "" ? (
+                <FitText style={s.unavailableText}>{apiError}</FitText>
+              ) : null}
+              <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+                VENUE
+              </FitText>
+              <View style={s.amenityGrid}>
+                {bookableVenues.map(({ venue, presentation }) => {
+                  const isActive = selectedVenue?.id === venue.id;
                   return (
                     <Pressable
-                      key={coach.id}
+                      key={venue.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`${getCoachName(coach)}, ${coach.specialties?.[0] ?? "General Coaching"}, ${getCoachPriceLabel(coach)}, ${getCoachRatingLabel(coach)}${isActive ? ", selected" : ""}`}
+                      accessibilityLabel={`${presentation.name}, PHP ${presentation.price}/${presentation.unit}${isActive ? ", selected" : ""}`}
                       accessibilityState={{ selected: isActive }}
                       style={[
-                        s.trainerRow,
+                        s.amenityCard,
                         isActive && {
                           borderColor: colors.brand,
                           backgroundColor: colors.brand + "12",
                         },
                       ]}
                       onPress={() => {
-                        setApiError("");
-                        setSelectedCoachId(isActive ? null : String(coach.id));
+                        setSelectedVenue(isActive ? null : venue);
+                        setStartTime("");
+                        setEndTime("");
+                        setSelectedCoachId(null);
                         setIsCoachPickerOpen(false);
                       }}
                     >
-                      <View
+                      <FitText style={s.amenityEmoji}>
+                        {presentation.name.slice(0, 1)}
+                      </FitText>
+                      <FitText
                         style={[
-                          s.trainerAvatar,
-                          isActive && { backgroundColor: colors.brand },
-                        ]}
-                      >
-                        <FitText
-                          style={[
-                            s.trainerAvatarText,
-                            isActive && { color: colors.surface },
-                          ]}
-                        >
-                          {getCoachInitials(coach)}
-                        </FitText>
-                      </View>
-                      <View style={s.trainerInfo}>
-                        <FitText style={s.trainerName}>
-                          {getCoachName(coach)}
-                        </FitText>
-                        <FitText style={s.trainerSpecialty}>
-                          {coach.specialties?.[0] ?? "General Coaching"} {" - "}{" "}
-                          {getCoachPriceLabel(coach)}
-                        </FitText>
-                        <FitText style={s.trainerRating}>
-                          {getCoachRatingLabel(coach)}
-                        </FitText>
-                        <FitText style={s.validationHint}>
-                          {coach.bio?.trim() ||
-                            "Staff has not added a coach bio yet."}
-                        </FitText>
-                      </View>
-                      {isActive ? (
-                        <Users size={18} color={colors.brand} strokeWidth={2} />
-                      ) : null}
-                    </Pressable>
-                  );
-                    })}
-                  </View>
-                ) : null}
-              </>
-            )}
-            <FitText
-              style={coachMatchesWindow ? s.validationHint : s.unavailableText}
-            >
-              {coachStatusMessage}
-            </FitText>
-            <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
-              VENUE RATE
-            </FitText>
-            <View style={[s.inputFieldWrap, { opacity: 0.6 }]}>
-              <FitText style={s.inputPrefix}>PHP</FitText>
-              <FitText style={s.inputField}>
-                {basePrice > 0 ? String(basePrice) : "—"}
-              </FitText>
-            </View>
-            {startTime && endTime ? (
-              <>
-                <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
-                  PAYMENT OPTIONS
-                </FitText>
-                {isFreeReservation ? (
-                  <View style={s.paymentSummaryCard}>
-                    <FitText style={s.paymentSummaryEyebrow}>
-                      Free access
-                    </FitText>
-                    <FitText style={s.paymentSummaryTitle}>
-                      No upfront payment required
-                    </FitText>
-                    <FitText style={s.paymentSummaryBody}>
-                      This reservation currently prices at{" "}
-                      {formatCurrency(totalAmount)} for {reservationHours} hour
-                      {reservationHours === 1 ? "" : "s"}.
-                    </FitText>
-                  </View>
-                ) : (
-                  <>
-                    <View style={s.paymentOptionList}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`PayMongo full payment. ${formatCurrency(totalAmount)} due now${paymentOption === "paymongo_full" ? ". Selected." : ""}`}
-                        accessibilityState={{
-                          disabled: !canUsePaymongo,
-                          selected: paymentOption === "paymongo_full",
-                        }}
-                        style={[
-                          s.paymentOptionCard,
-                          paymentOption === "paymongo_full" && {
-                            borderColor: colors.brand,
-                            backgroundColor: colors.brand + "12",
+                          s.amenityName,
+                          isActive && {
+                            color: colors.brand,
+                            fontWeight: "600",
                           },
-                          !canUsePaymongo && s.paymentOptionCardDisabled,
                         ]}
-                        onPress={() => {
-                          if (!canUsePaymongo) {
-                            setIsPaymongoNoticeOpen(true);
-                            return;
-                          }
-                          setPaymentOption("paymongo_full");
-                        }}
+                        numberOfLines={2}
                       >
-                        <View style={s.paymentOptionText}>
-                          <FitText
-                            style={[
-                              s.paymentOptionLabel,
-                              paymentOption === "paymongo_full" && {
-                                color: colors.brand,
-                              },
-                            ]}
-                          >
-                            PayMongo Full Payment
-                          </FitText>
-                          <FitText style={s.paymentOptionMeta}>
-                            {formatCurrency(totalAmount)} due now
-                          </FitText>
-                          <FitText style={s.paymentOptionBody}>
-                            {canUsePaymongo
-                              ? "The booking is confirmed only after PayMongo reports full payment."
-                              : "Unavailable right now. Cash bookings must be completed by the cashier."}
-                          </FitText>
-                        </View>
-                        {paymentOption === "paymongo_full" ? (
+                        {presentation.name}
+                      </FitText>
+                      <FitText
+                        style={[
+                          s.amenityPrice,
+                          isActive && { color: colors.brand },
+                        ]}
+                      >
+                        PHP {presentation.price}/{presentation.unit}
+                      </FitText>
+                      {isActive ? (
+                        <View style={s.amenityCheck}>
                           <CheckCircle
-                            size={18}
+                            size={14}
                             color={colors.brand}
                             strokeWidth={2}
                           />
-                        ) : null}
-                      </Pressable>
-                    </View>
-                    <View style={s.paymentSummaryCard}>
-                      <FitText style={s.paymentSummaryEyebrow}>
-                        {paymentOptionSummary.eyebrow}
-                      </FitText>
-                      <FitText style={s.paymentSummaryTitle}>
-                        {paymentOptionSummary.title}
-                      </FitText>
-                      <FitText style={s.paymentSummaryBody}>
-                        {paymentOptionSummary.body}
-                      </FitText>
-                      <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>
-                          Venue subtotal
-                        </FitText>
-                        <FitText style={s.paymentSummaryValue}>
-                          {formatCurrency(venueTotalAmount)}
-                        </FitText>
-                      </View>
-                      {selectedCoach ? (
-                        <View style={s.paymentSummaryRow}>
-                          <FitText style={s.paymentSummaryLabel}>
-                            Coach add-on
-                          </FitText>
-                          <FitText style={s.paymentSummaryValue}>
-                            {formatCurrency(coachAddOnAmount)}
-                          </FitText>
                         </View>
                       ) : null}
-                      <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>
-                          Reservation total
-                        </FitText>
-                        <FitText style={s.paymentSummaryValue}>
-                          {formatCurrency(totalAmount)}
-                        </FitText>
-                      </View>
-                      <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>Due now</FitText>
-                        <FitText style={s.paymentSummaryValue}>
-                          {formatCurrency(amountDueNow)}
-                        </FitText>
-                      </View>
-                      <View style={s.paymentSummaryRow}>
-                        <FitText style={s.paymentSummaryLabel}>
-                          Remaining later
-                        </FitText>
-                        <FitText style={s.paymentSummaryValue}>
-                          {formatCurrency(remainingBalance)}
-                        </FitText>
-                      </View>
-                      <FitText style={s.paymentSummaryDeadline}>
-                        "No later payment is scheduled for this reservation."
-                      </FitText>
-                    </View>
-                  </>
-                )}
-              </>
-            ) : null}
-            <View style={s.notesSectionHeader}>
-              <FitText
-                style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
-              >
-                NOTES
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={s.notesSectionHeader}>
+                <FitText
+                  style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
+                >
+                  COACH ADD-ON
+                </FitText>
+                <FitText style={s.optionalLabel}>Optional</FitText>
+              </View>
+              <FitText style={s.validationHint}>
+                Review a coach profile here if you want to attach one to this
+                venue reservation.
               </FitText>
-              <FitButton
-                variant="link"
-                icon={Plus}
-                iconOnly
-                label="Add reservation note"
-                iconSize={18}
-                onPress={() => setNotes((prev) => [...prev, ""])}
-                disabled={notes.length >= 10}
-              />
-            </View>
-            {notes.map((note, idx) => {
-              const atLimit = note.length >= 50;
-              const counterColor =
-                note.length === 50
-                  ? colors.danger
-                  : note.length >= 40
-                    ? colors.warning
-                    : colors.textMuted;
-              return (
-                <View key={idx} style={s.noteRow}>
-                  <View style={s.noteContent}>
-                    <View style={[s.inputFieldWrap, s.noteFieldWrap]}>
-                      <FitText style={s.noteBullet}>-</FitText>
-                      <FitTextInput
-                        nativeID={`reservation-note-${idx + 1}`}
-                        accessibilityLabel={`Reservation note ${idx + 1}`}
-                        value={note}
-                        onChangeText={(text) => {
-                          if (text.length > 50) return;
-                          setNotes((prev) =>
-                            prev.map((currentNote, noteIndex) =>
-                              noteIndex === idx ? text : currentNote,
-                            ),
-                          );
-                        }}
-                        placeholder="Add a note..."
-                        multiline
-                        style={[
-                          s.noteInput,
-                          atLimit && { color: colors.warning },
-                        ]}
-                      />
-                    </View>
-                    <FitText style={[s.noteCounter, { color: counterColor }]}>
-                      {note.length}/50
-                    </FitText>
-                  </View>
+              {coachesLoading ? (
+                <FitText style={s.validationHint}>
+                  Loading coach profiles...
+                </FitText>
+              ) : coachesError ? (
+                <FitText style={s.unavailableText}>
+                  {coachesError instanceof Error
+                    ? coachesError.message
+                    : "Unable to load coach profiles."}
+                </FitText>
+              ) : coaches.length === 0 || availableCoachAddOns.length === 0 ? (
+                <FitText style={s.validationHint}>
+                  No coach add-ons are available for the selected date and time.
+                </FitText>
+              ) : (
+                <>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Remove reservation note ${idx + 1}`}
-                    onPress={() =>
-                      setNotes((prev) =>
-                        prev.filter((_, noteIndex) => noteIndex !== idx),
-                      )
+                    accessibilityLabel={
+                      selectedCoach
+                        ? `Coach add-on: ${getCoachName(selectedCoach)}`
+                        : "Coach add-on: none"
                     }
-                    hitSlop={8}
-                    style={s.noteRemoveBtn}
+                    accessibilityState={{ expanded: isCoachPickerOpen }}
+                    style={[
+                      s.fieldBtn,
+                      {
+                        borderColor: selectedCoach
+                          ? colors.brand
+                          : colors.fieldBorder,
+                      },
+                    ]}
+                    onPress={() => setIsCoachPickerOpen((current) => !current)}
                   >
-                    <XCircle
+                    <Users
+                      size={16}
+                      color={selectedCoach ? colors.brand : colors.textMuted}
+                      strokeWidth={2}
+                    />
+                    <FitText
+                      style={[
+                        s.fieldBtnText,
+                        selectedCoach && { color: colors.textPrimary },
+                      ]}
+                    >
+                      {selectedCoach
+                        ? `${getCoachName(selectedCoach)} / ${getCoachPriceLabel(selectedCoach)}`
+                        : "No coach add-on"}
+                    </FitText>
+                    <ChevronDown
                       size={16}
                       color={colors.textMuted}
                       strokeWidth={2}
+                      style={{
+                        transform: [
+                          { rotate: isCoachPickerOpen ? "180deg" : "0deg" },
+                        ],
+                      }}
                     />
                   </Pressable>
-                </View>
-              );
-            })}
-            {notes.length === 0 ? (
-              <FitText style={s.notesEmptyHint}>Tap + to add a note</FitText>
-            ) : null}
-          </FitModalScrollView>
-          <Animated.View style={[s.footer, footerBorderStyle]}>
-            <FitButton
-              label="Cancel"
-              variant="ghost"
-              onPress={handleClose}
-              disabled={isSubmitting}
-              flex={1}
-            />
-            <FitButton
-              label={isSubmitting ? reservingText : confirmButtonLabel}
-              variant="primary"
-              onPress={handleConfirm}
-              disabled={!canConfirm || isSubmitting}
-              loading={isSubmitting}
-              flex={2}
-            />
+                  {isCoachPickerOpen ? (
+                    <View style={s.trainerList}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove coach add-on"
+                        style={[
+                          s.trainerRow,
+                          !selectedCoach && {
+                            borderColor: colors.brand,
+                            backgroundColor: colors.brand + "12",
+                          },
+                        ]}
+                        onPress={() => {
+                          setSelectedCoachId(null);
+                          setIsCoachPickerOpen(false);
+                        }}
+                      >
+                        <FitText style={s.trainerName}>No coach add-on</FitText>
+                      </Pressable>
+                      {availableCoachAddOns.map((coach) => {
+                        const isActive = selectedCoach?.id === coach.id;
+                        return (
+                          <Pressable
+                            key={coach.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${getCoachName(coach)}, ${coach.specialties?.[0] ?? "General Coaching"}, ${getCoachPriceLabel(coach)}, ${getCoachRatingLabel(coach)}${isActive ? ", selected" : ""}`}
+                            accessibilityState={{ selected: isActive }}
+                            style={[
+                              s.trainerRow,
+                              isActive && {
+                                borderColor: colors.brand,
+                                backgroundColor: colors.brand + "12",
+                              },
+                            ]}
+                            onPress={() => {
+                              setApiError("");
+                              setSelectedCoachId(
+                                isActive ? null : String(coach.id),
+                              );
+                              setIsCoachPickerOpen(false);
+                            }}
+                          >
+                            <View
+                              style={[
+                                s.trainerAvatar,
+                                isActive && { backgroundColor: colors.brand },
+                              ]}
+                            >
+                              <FitText
+                                style={[
+                                  s.trainerAvatarText,
+                                  isActive && { color: colors.surface },
+                                ]}
+                              >
+                                {getCoachInitials(coach)}
+                              </FitText>
+                            </View>
+                            <View style={s.trainerInfo}>
+                              <FitText style={s.trainerName}>
+                                {getCoachName(coach)}
+                              </FitText>
+                              <FitText style={s.trainerSpecialty}>
+                                {coach.specialties?.[0] ?? "General Coaching"}{" "}
+                                {" - "} {getCoachPriceLabel(coach)}
+                              </FitText>
+                              <FitText style={s.trainerRating}>
+                                {getCoachRatingLabel(coach)}
+                              </FitText>
+                              <FitText style={s.validationHint}>
+                                {coach.bio?.trim() ||
+                                  "Staff has not added a coach bio yet."}
+                              </FitText>
+                            </View>
+                            {isActive ? (
+                              <Users
+                                size={18}
+                                color={colors.brand}
+                                strokeWidth={2}
+                              />
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </>
+              )}
+              <FitText
+                style={
+                  coachMatchesWindow ? s.validationHint : s.unavailableText
+                }
+              >
+                {coachStatusMessage}
+              </FitText>
+              <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+                VENUE RATE
+              </FitText>
+              <View style={[s.inputFieldWrap, { opacity: 0.6 }]}>
+                <FitText style={s.inputPrefix}>PHP</FitText>
+                <FitText style={s.inputField}>
+                  {basePrice > 0 ? String(basePrice) : "—"}
+                </FitText>
+              </View>
+              {startTime && endTime ? (
+                <>
+                  <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
+                    PAYMENT OPTIONS
+                  </FitText>
+                  {isFreeReservation ? (
+                    <View style={s.paymentSummaryCard}>
+                      <FitText style={s.paymentSummaryEyebrow}>
+                        Free access
+                      </FitText>
+                      <FitText style={s.paymentSummaryTitle}>
+                        No upfront payment required
+                      </FitText>
+                      <FitText style={s.paymentSummaryBody}>
+                        This reservation currently prices at{" "}
+                        {formatCurrency(totalAmount)} for {reservationHours}{" "}
+                        hour
+                        {reservationHours === 1 ? "" : "s"}.
+                      </FitText>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={s.paymentSummaryCard}>
+                        <FitText style={s.paymentSummaryEyebrow}>
+                          {paymentOptionSummary.eyebrow}
+                        </FitText>
+                        <FitText style={s.paymentSummaryTitle}>
+                          {paymentOptionSummary.title}
+                        </FitText>
+                        <FitText style={s.paymentSummaryBody}>
+                          {paymentOptionSummary.body}
+                        </FitText>
+                        <View style={s.paymentSummaryRow}>
+                          <FitText style={s.paymentSummaryLabel}>
+                            Venue subtotal
+                          </FitText>
+                          <FitText style={s.paymentSummaryValue}>
+                            {formatCurrency(venueTotalAmount)}
+                          </FitText>
+                        </View>
+                        {selectedCoach ? (
+                          <View style={s.paymentSummaryRow}>
+                            <FitText style={s.paymentSummaryLabel}>
+                              Coach add-on
+                            </FitText>
+                            <FitText style={s.paymentSummaryValue}>
+                              {formatCurrency(coachAddOnAmount)}
+                            </FitText>
+                          </View>
+                        ) : null}
+                        <View style={s.paymentSummaryRow}>
+                          <FitText style={s.paymentSummaryLabel}>
+                            Reservation total
+                          </FitText>
+                          <FitText style={s.paymentSummaryValue}>
+                            {formatCurrency(totalAmount)}
+                          </FitText>
+                        </View>
+                        <View style={s.paymentSummaryRow}>
+                          <FitText style={s.paymentSummaryLabel}>
+                            Due now
+                          </FitText>
+                          <FitText style={s.paymentSummaryValue}>
+                            {formatCurrency(amountDueNow)}
+                          </FitText>
+                        </View>
+                        <FitText style={s.paymentSummaryDeadline}>
+                          Full payment is due through PayMongo before this
+                          reservation is confirmed.
+                        </FitText>
+                      </View>
+                    </>
+                  )}
+                </>
+              ) : null}
+              <View style={s.notesSectionHeader}>
+                <FitText
+                  style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
+                >
+                  NOTES
+                </FitText>
+                <FitButton
+                  variant="link"
+                  icon={Plus}
+                  iconOnly
+                  label="Add reservation note"
+                  iconSize={18}
+                  onPress={() => setNotes((prev) => [...prev, ""])}
+                  disabled={notes.length >= 10}
+                />
+              </View>
+              {notes.map((note, idx) => {
+                const atLimit = note.length >= 50;
+                const counterColor =
+                  note.length === 50
+                    ? colors.danger
+                    : note.length >= 40
+                      ? colors.warning
+                      : colors.textMuted;
+                return (
+                  <View key={idx} style={s.noteRow}>
+                    <View style={s.noteContent}>
+                      <View style={[s.inputFieldWrap, s.noteFieldWrap]}>
+                        <FitText style={s.noteBullet}>-</FitText>
+                        <FitTextInput
+                          nativeID={`reservation-note-${idx + 1}`}
+                          accessibilityLabel={`Reservation note ${idx + 1}`}
+                          value={note}
+                          onChangeText={(text) => {
+                            if (text.length > 50) return;
+                            setNotes((prev) =>
+                              prev.map((currentNote, noteIndex) =>
+                                noteIndex === idx ? text : currentNote,
+                              ),
+                            );
+                          }}
+                          placeholder="Add a note..."
+                          multiline
+                          style={[
+                            s.noteInput,
+                            atLimit && { color: colors.warning },
+                          ]}
+                        />
+                      </View>
+                      <FitText style={[s.noteCounter, { color: counterColor }]}>
+                        {note.length}/50
+                      </FitText>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove reservation note ${idx + 1}`}
+                      onPress={() =>
+                        setNotes((prev) =>
+                          prev.filter((_, noteIndex) => noteIndex !== idx),
+                        )
+                      }
+                      hitSlop={8}
+                      style={s.noteRemoveBtn}
+                    >
+                      <XCircle
+                        size={16}
+                        color={colors.textMuted}
+                        strokeWidth={2}
+                      />
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {notes.length === 0 ? (
+                <FitText style={s.notesEmptyHint}>Tap + to add a note</FitText>
+              ) : null}
+            </FitModalScrollView>
+            <Animated.View style={[s.footer, footerBorderStyle]}>
+              <FitButton
+                label="Cancel"
+                variant="ghost"
+                onPress={handleClose}
+                disabled={isSubmitting}
+                flex={1}
+              />
+              <FitButton
+                label={isSubmitting ? reservingText : confirmButtonLabel}
+                variant="primary"
+                onPress={handleConfirm}
+                disabled={!canConfirm || isSubmitting}
+                loading={isSubmitting}
+                flex={2}
+              />
+            </Animated.View>
           </Animated.View>
         </Animated.View>
-      </Animated.View>
       </Modal>
       <NoticeModal
         isVisible={isPaymongoNoticeOpen}

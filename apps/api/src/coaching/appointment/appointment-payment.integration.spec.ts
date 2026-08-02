@@ -105,9 +105,9 @@ describe('Appointment payment integration', () => {
     await moduleRef?.close();
   });
 
-  it('advances pending coaching appointments when the shared payment completion event arrives', async () => {
+  it('confirms pending-payment appointments when the shared full-payment event arrives', async () => {
     paymentRepo.findPaymentByIdOrThrow.mockResolvedValue(
-      createCompletedDownpayment(),
+      createCompletedFullPayment(),
     );
     appointmentRepo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue(
       createPendingPaymentAppointment(),
@@ -124,7 +124,14 @@ describe('Appointment payment integration', () => {
     await flushAsyncEvents();
 
     const updateCalls = appointmentRepo.updateAppointment.mock.calls as Array<
-      [string, { status: string; downpayment_paid_at: Date }]
+      [
+        string,
+        {
+          status: string;
+          downpayment_paid_at: Date;
+          balance_paid_at: Date;
+        },
+      ]
     >;
     const updateInput = updateCalls[0]?.[1];
 
@@ -134,6 +141,7 @@ describe('Appointment payment integration', () => {
     expect(updateCalls[0]?.[0]).toBe('appt-1');
     expect(updateInput?.status).toBe('confirmed');
     expect(updateInput?.downpayment_paid_at).toBeInstanceOf(Date);
+    expect(updateInput?.balance_paid_at).toBeInstanceOf(Date);
     expect(lifecycleQueue.add).toHaveBeenCalledWith(
       COACHING_NO_SHOW_JOB,
       { appointmentId: 'appt-1' },
@@ -159,9 +167,9 @@ describe('Appointment payment integration', () => {
     );
   });
 
-  it('ignores duplicate downpayment completion events after the appointment is already confirmed', async () => {
+  it('ignores duplicate full-payment completion events after the appointment is already confirmed', async () => {
     paymentRepo.findPaymentByIdOrThrow.mockResolvedValue(
-      createCompletedDownpayment(),
+      createCompletedFullPayment(),
     );
     appointmentRepo.findAppointmentLifecycleContextByIdOrThrow.mockResolvedValue(
       createAlreadyConfirmedAppointment(),
@@ -186,18 +194,18 @@ function createPaymentCompletedEvent(): PaymentCompletedEvent {
     userId: 'member-1',
     payableType: PayableType.coaching,
     payableId: 'appt-1',
-    amount: '450',
+    amount: '1500',
   };
 }
 
-function createCompletedDownpayment(): PaymentRecord {
+function createCompletedFullPayment(): PaymentRecord {
   return {
     id: 'payment-1',
     user_id: 'member-1',
     payable_type: PayableType.coaching,
     payable_id: 'appt-1',
-    payment_stage: PaymentStage.downpayment,
-    amount: new Prisma.Decimal('450'),
+    payment_stage: PaymentStage.full,
+    amount: new Prisma.Decimal('1500'),
     currency: 'PHP',
     provider: PaymentProvider.paymongo,
     provider_ref: 'cs_test_coaching',

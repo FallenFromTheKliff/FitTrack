@@ -19,13 +19,13 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
       borderColor: colors.fieldBorder,
       borderRadius: R.md,
       paddingHorizontal: 14,
-      paddingVertical: compact ? 2 : 4
+      paddingVertical: compact ? 2 : 4,
     },
     inputRowFocused: { borderColor: colors.brand },
     inputRowError: { borderColor: colors.danger },
     inputRowDisabled: {
       backgroundColor: colors.surfaceRaised,
-      borderColor: colors.border
+      borderColor: colors.border,
     },
     prefixToggle: {
       flexDirection: "row",
@@ -34,36 +34,36 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
       borderColor: colors.border,
       borderRadius: R.sm,
       overflow: "hidden",
-      marginRight: 10
+      marginRight: 10,
     },
     prefixOption: {
       paddingHorizontal: 8,
       paddingVertical: 6,
-      backgroundColor: colors.surfaceRaised
+      backgroundColor: colors.surfaceRaised,
     },
     prefixOptionActive: {
-      backgroundColor: colors.brand
+      backgroundColor: colors.brand,
     },
     prefixOptionText: {
       fontSize: 11,
       fontWeight: "700",
-      color: colors.textSecondary
+      color: colors.textSecondary,
     },
     prefixOptionTextActive: {
-      color: colors.onBrand ?? "#FFFFFF"
+      color: colors.onBrand ?? "#FFFFFF",
     },
     prefixOptionTextDisabled: {
-      color: colors.textDisabled
+      color: colors.textDisabled,
     },
     multilineInput: {
       minHeight: 96,
       textAlignVertical: "top",
-      paddingVertical: 10
+      paddingVertical: 10,
     },
     pressableField: {
       flex: 1,
       paddingVertical: 14,
-      justifyContent: "center"
+      justifyContent: "center",
     },
     pressableFieldText: { fontSize: 15 },
     pressableFieldTextFilled: { color: colors.textPrimary },
@@ -71,7 +71,7 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
     eyeBtn: { padding: 6 },
     fieldIcon: { marginRight: 10 },
     errorRow: { height: 18, marginLeft: 2 },
-    errorText: { fontSize: 11, color: colors.danger }
+    errorText: { fontSize: 11, color: colors.danger },
   });
 }
 
@@ -83,10 +83,10 @@ export function makeFitSectionStyles(colors: ThemeColors) {
       flexDirection: "row",
       justifyContent: "space-between",
       marginBottom: 10,
-      paddingHorizontal: 4
+      paddingHorizontal: 4,
     },
     headerAccessory: {
-      marginLeft: 12
+      marginLeft: 12,
     },
     heading: {
       fontSize: 12,
@@ -94,27 +94,27 @@ export function makeFitSectionStyles(colors: ThemeColors) {
       color: colors.textMuted,
       letterSpacing: 1,
       marginBottom: 10,
-      paddingHorizontal: 4
+      paddingHorizontal: 4,
     },
     headingInline: {
       flex: 1,
       marginBottom: 0,
-      paddingHorizontal: 0
+      paddingHorizontal: 0,
     },
     subtitle: {
       fontSize: 12,
       color: colors.textMuted,
       lineHeight: 17,
       marginBottom: 10,
-      paddingHorizontal: 4
+      paddingHorizontal: 4,
     },
     card: {
       backgroundColor: colors.surface,
       borderRadius: R.xl,
       borderWidth: 1,
       borderColor: colors.border,
-      overflow: "hidden"
-    }
+      overflow: "hidden",
+    },
   });
 }
 
@@ -126,7 +126,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       paddingVertical: 14,
       paddingHorizontal: 16,
       gap: 14,
-      position: "relative"
+      position: "relative",
     },
     rowBorder: {},
     rowBorderOverlay: {
@@ -134,7 +134,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       bottom: 0,
       left: 16,
       right: 0,
-      height: 1
+      height: 1,
     },
     iconBadge: {
       width: 38,
@@ -142,7 +142,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       borderRadius: R.lg,
       borderWidth: 1,
       alignItems: "center",
-      justifyContent: "center"
+      justifyContent: "center",
     },
     textGroup: { flex: 1, gap: 4 },
     labelRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
@@ -150,7 +150,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       marginLeft: "auto",
       flexDirection: "row",
       alignItems: "center",
-      gap: 8
+      gap: 8,
     },
     rowSelected: { borderWidth: 2, borderRadius: R.lg },
     rowSelectedIndicator: {
@@ -159,7 +159,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       left: 0,
       position: "absolute",
       top: 10,
-      width: 4
+      width: 4,
     },
     ratingPill: { flexDirection: "row", alignItems: "center", gap: 4 },
     ratingText: { fontSize: 13, fontWeight: "700" },
@@ -170,7 +170,7 @@ export function makeFitCardStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderRadius: R.xl,
       paddingHorizontal: 7,
-      paddingVertical: 2
+      paddingVertical: 2,
     },
     trailingPillText: { fontSize: 10, fontWeight: "700" },
     progressTrack: {
@@ -178,31 +178,31 @@ export function makeFitCardStyles(colors: ThemeColors) {
       backgroundColor: colors.border,
       borderRadius: 2,
       marginTop: 6,
-      overflow: "hidden"
+      overflow: "hidden",
     },
     progressFill: { height: 4, borderRadius: 2 },
     dropdownBody: { overflow: "hidden" },
     dropdownInner: {
       paddingHorizontal: 16,
-      paddingBottom: 14
+      paddingBottom: 14,
     },
     dropdownDivider: {
       height: 1,
-      marginBottom: 12
+      marginBottom: 12,
     },
     statTile: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       paddingVertical: 14,
-      gap: 4
+      gap: 4,
     },
     statValue: {
       fontSize: 22,
       fontWeight: "700",
-      textAlign: "center"
+      textAlign: "center",
     },
-    statLabel: { fontSize: 11, textAlign: "center" }
+    statLabel: { fontSize: 11, textAlign: "center" },
   });
 }
 
@@ -216,23 +216,25 @@ export function makeFitFABStyles(_colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
       elevation: 8,
-      boxShadow: "0 4px 16px rgba(0,0,0,0.35)"
+      boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
     },
     iconWrap: {
       width: 30,
       height: 30,
       alignItems: "center",
-      justifyContent: "center"
+      justifyContent: "center",
     },
     iconLayer: {
       position: "absolute",
       alignItems: "center",
-      justifyContent: "center"
-    }
+      justifyContent: "center",
+    },
   });
 }
 
-export const makeFitSearchStyles = (colors: ReturnType<typeof useTheme>["colors"]) => {
+export const makeFitSearchStyles = (
+  colors: ReturnType<typeof useTheme>["colors"],
+) => {
   return StyleSheet.create({
     searchBar: {
       flexDirection: "row",
@@ -243,15 +245,15 @@ export const makeFitSearchStyles = (colors: ReturnType<typeof useTheme>["colors"
       borderColor: colors.border,
       paddingHorizontal: 14,
       height: 46,
-      gap: 8
+      gap: 8,
     },
     searchInput: {
       flex: 1,
       fontSize: 15,
       paddingVertical: 0,
-      paddingHorizontal: 0
+      paddingHorizontal: 0,
     },
-    searchClear: { marginRight: 2 }
+    searchClear: { marginRight: 2 },
   });
 };
 
@@ -262,7 +264,7 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       top: 68,
       left: 20,
       right: 20,
-      zIndex: 200
+      zIndex: 200,
     },
     filterPanel: {
       backgroundColor: colors.surface,
@@ -272,19 +274,30 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       padding: 14,
       gap: 10,
       elevation: 8,
-      boxShadow: "0 4px 12px rgba(0,0,0,0.18)"
+      boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
     },
     filterSection: { gap: 6 },
-    filterLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.5, color: colors.textMuted },
-    filterOptions: { flexDirection: "row", gap: 8, flex: 1 },
-    filterChip: {
+    filterLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      letterSpacing: 0.5,
+      color: colors.textMuted,
+    },
+    filterOptions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
       flex: 1,
+    },
+    filterChip: {
+      flexBasis: "28%",
+      flexGrow: 1,
       alignItems: "center",
       paddingVertical: 7,
-      borderRadius: R.xl,
+      borderRadius: R.md,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surfaceRaised
+      backgroundColor: colors.surfaceRaised,
     },
     filterChipText: { fontSize: 13, color: colors.textSecondary },
     dateRow: { flexDirection: "row", gap: 8 },
@@ -299,7 +312,7 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       borderRadius: R.md,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surfaceRaised
+      backgroundColor: colors.surfaceRaised,
     },
     datePickerText: { fontSize: 13, color: colors.textMuted, flex: 1 },
     dateResetBtn: {
@@ -307,9 +320,9 @@ export function makeFitFilterStyles(colors: ThemeColors) {
       alignItems: "center",
       gap: 4,
       paddingTop: 6,
-      alignSelf: "flex-end"
+      alignSelf: "flex-end",
     },
-    dateResetText: { fontSize: 12, color: colors.textMuted }
+    dateResetText: { fontSize: 12, color: colors.textMuted },
   });
 }
 
@@ -320,7 +333,7 @@ export function makeFABMenuStyles(colors: ThemeColors) {
       bottom: 106,
       right: 20,
       zIndex: 199,
-      gap: 6
+      gap: 6,
     },
     row: {
       flexDirection: "row",
@@ -332,16 +345,16 @@ export function makeFABMenuStyles(colors: ThemeColors) {
       borderColor: colors.border,
       paddingVertical: 11,
       paddingHorizontal: 16,
-      minWidth: 220
+      minWidth: 220,
     },
     iconBox: {
       width: 40,
       height: 40,
       borderRadius: R.md,
       alignItems: "center",
-      justifyContent: "center"
+      justifyContent: "center",
     },
     label: { fontSize: 16, fontWeight: "600", color: colors.textPrimary },
-    sub: { fontSize: 13, color: colors.textMuted, marginTop: 1 }
+    sub: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
   });
 }

@@ -49,7 +49,6 @@ import {
   toMinutes,
   type OverlayConfirmation,
   type SelectOption,
-  type StaffInitialPaymentStage,
 } from "./GymOperationsOverlayShared";
 
 function filterScheduleOptions(
@@ -57,7 +56,9 @@ function filterScheduleOptions(
   searchValue: string,
   selectedValue: string,
 ) {
-  const selectedOption = options.find((option) => option.value === selectedValue);
+  const selectedOption = options.find(
+    (option) => option.value === selectedValue,
+  );
   const normalizedSearch =
     searchValue.trim().toLowerCase() === selectedOption?.label.toLowerCase()
       ? ""
@@ -201,7 +202,9 @@ function sortVenueAvailabilitySlots(slots: VenueAvailabilityRecord[]) {
   );
 }
 
-function findNextCoachSlot(availability: CoachAvailabilityResponse | undefined) {
+function findNextCoachSlot(
+  availability: CoachAvailabilityResponse | undefined,
+) {
   const slots = expandCoachAvailabilitySlots(
     availability?.availability ?? [],
     availability?.scheduleType ?? "part_time",
@@ -211,8 +214,12 @@ function findNextCoachSlot(availability: CoachAvailabilityResponse | undefined) 
   for (let offset = 0; offset <= 30; offset += 1) {
     const candidateDate = getDateInputOffset(offset);
     const dailySlots = slots
-      .filter((slot) => slot.isAvailable && matchesDay(candidateDate, slot.dayOfWeek))
-      .sort((left, right) => toMinutes(left.startTime) - toMinutes(right.startTime));
+      .filter(
+        (slot) => slot.isAvailable && matchesDay(candidateDate, slot.dayOfWeek),
+      )
+      .sort(
+        (left, right) => toMinutes(left.startTime) - toMinutes(right.startTime),
+      );
 
     for (const slot of dailySlots) {
       const durationMinutes = slot.durationMinutes;
@@ -257,7 +264,6 @@ function getUpcomingCoachAvailableDates(
   return dates;
 }
 
-
 export function GymOperationsCreateVenueBookingModal({
   coachOptions,
   isOpen,
@@ -278,7 +284,7 @@ export function GymOperationsCreateVenueBookingModal({
     endsAt: string;
     memberId: string;
     notes?: string;
-    paymentStage?: StaffInitialPaymentStage;
+    paymentStage?: "full";
     startsAt: string;
   }) => void;
   venueOptions: SelectOption[];
@@ -292,7 +298,7 @@ export function GymOperationsCreateVenueBookingModal({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [note, setNote] = useState("");
-  const paymentStage: StaffInitialPaymentStage = "full";
+  const paymentStage = "full" as const;
   const [errorText, setErrorText] = useState("");
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
@@ -337,7 +343,11 @@ export function GymOperationsCreateVenueBookingModal({
       liveVenueSlots
         .filter((slot) => {
           const value = venueAvailabilityTimeValue(slot.startTime);
-          return value && (date !== getDefaultDateInput() || toMinutes(value) > currentMinutes);
+          return (
+            value &&
+            (date !== getDefaultDateInput() ||
+              toMinutes(value) > currentMinutes)
+          );
         })
         .map((slot) => {
           const value = venueAvailabilityTimeValue(slot.startTime);
@@ -351,41 +361,47 @@ export function GymOperationsCreateVenueBookingModal({
     [currentMinutes, date, liveVenueSlots],
   );
   useEffect(() => {
-    const selectedOption = venueStartOptions.find((option) => option.value === startTime);
+    const selectedOption = venueStartOptions.find(
+      (option) => option.value === startTime,
+    );
     if (!selectedOption || selectedOption.disabled) {
-      setStartTime(venueStartOptions.find((option) => !option.disabled)?.value ?? "");
+      setStartTime(
+        venueStartOptions.find((option) => !option.disabled)?.value ?? "",
+      );
     }
   }, [startTime, venueStartOptions]);
-  const venueEndOptions = useMemo(
-    () => {
-      if (!startTime) return [];
-      const startIndex = liveVenueSlots.findIndex(
-        (slot) => venueAvailabilityTimeValue(slot.startTime) === startTime,
-      );
-      if (startIndex === -1 || liveVenueSlots[startIndex]?.status !== "available") {
-        return [];
-      }
+  const venueEndOptions = useMemo(() => {
+    if (!startTime) return [];
+    const startIndex = liveVenueSlots.findIndex(
+      (slot) => venueAvailabilityTimeValue(slot.startTime) === startTime,
+    );
+    if (
+      startIndex === -1 ||
+      liveVenueSlots[startIndex]?.status !== "available"
+    ) {
+      return [];
+    }
 
-      const options: Array<{ label: string; value: string }> = [];
-      let expectedStart = new Date(liveVenueSlots[startIndex].startTime).getTime();
-      for (let index = startIndex; index < liveVenueSlots.length; index += 1) {
-        const slot = liveVenueSlots[index];
-        if (new Date(slot.startTime).getTime() !== expectedStart) break;
-        if (slot.status !== "available") break;
+    const options: Array<{ label: string; value: string }> = [];
+    let expectedStart = new Date(
+      liveVenueSlots[startIndex].startTime,
+    ).getTime();
+    for (let index = startIndex; index < liveVenueSlots.length; index += 1) {
+      const slot = liveVenueSlots[index];
+      if (new Date(slot.startTime).getTime() !== expectedStart) break;
+      if (slot.status !== "available") break;
 
-        const value = venueAvailabilityTimeValue(slot.endTime);
-        if (value && value > startTime) {
-          options.push({
-            label: formatSlotLabel(value),
-            value,
-          });
-        }
-        expectedStart = new Date(slot.endTime).getTime();
+      const value = venueAvailabilityTimeValue(slot.endTime);
+      if (value && value > startTime) {
+        options.push({
+          label: formatSlotLabel(value),
+          value,
+        });
       }
-      return options;
-    },
-    [liveVenueSlots, startTime],
-  );
+      expectedStart = new Date(slot.endTime).getTime();
+    }
+    return options;
+  }, [liveVenueSlots, startTime]);
   useEffect(() => {
     if (!venueEndOptions.some((option) => option.value === endTime)) {
       setEndTime(venueEndOptions[0]?.value ?? "");
@@ -509,329 +525,346 @@ export function GymOperationsCreateVenueBookingModal({
 
   return (
     <>
-    <OverlayFrame
-      isOpen={isOpen}
-      onClose={onClose}
-      closeDisabled={isSubmitting}
-      title="Create venue booking"
-      subtitle="Use this for front-desk or operator-created reservations. The booking is persisted immediately into the shared venue booking table."
-      footer={
-        <FitButton
-          variant="primary"
-          label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
-          icon={CalendarPlus}
-          iconSize={15}
-          onClick={handleCreate}
-          disabled={!canSubmit || isSubmitting}
-          style={actionPillStyle(colors, true)}
-          textStyle={{ fontSize: 13, fontWeight: 700 }}
-        />
-      }
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          display: "grid",
-          gap: 14,
-          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
-          transition: shouldAnimate ? "transform 180ms ease" : "none",
-        }}
-      >
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Member
-              </FitText>
-              <FitSelect
-                id="manual-venue-booking-member"
-                name="manualVenueBookingMember"
-                aria-label="Manual venue booking member"
-                value={memberId}
-                onChange={(event) => setMemberId(event.target.value)}
-                options={memberOptions}
-                placeholder="Select member"
-                compact
-                fullWidth
-              />
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Venue
-              </FitText>
-              <FitSelect
-                id="manual-venue-booking-venue"
-                name="manualVenueBookingVenue"
-                aria-label="Manual venue booking venue"
-                value={venueId}
-                onChange={(event) => {
-                  setVenueId(event.target.value);
-                  setStartTime("");
-                  setEndTime("");
-                }}
-                options={venueOptions}
-                compact
-                fullWidth
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 14,
-            }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Date
-              </FitText>
-              <FitButton
-                variant="ghost"
-                label={date ? formatCompactDate(date) : "Select date"}
-                aria-label={`Manual venue booking date: ${
-                  date ? formatCompactDate(date) : "Select date"
-                }`}
-                onClick={() => setDatePickerOpen(true)}
-                style={{
-                  ...inputStyle,
-                  justifyContent: "flex-start",
-                  minHeight: 46,
-                  width: "100%",
-                }}
-                textStyle={{ fontSize: 13, fontWeight: 700 }}
-              />
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Start time
-              </FitText>
-              <FitSelect
-                id="manual-venue-booking-start-time"
-                name="manualVenueBookingStartTime"
-                aria-label="Manual venue booking start time"
-                value={startTime}
-                onChange={(event) => {
-                  setStartTime(event.target.value);
-                  setEndTime("");
-                }}
-                options={venueStartOptions}
-                disabled={venueAvailabilityLoading || venueStartOptions.length === 0}
-                compact
-                fullWidth
-              />
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                End time
-              </FitText>
-              <FitSelect
-                id="manual-venue-booking-end-time"
-                name="manualVenueBookingEndTime"
-                aria-label="Manual venue booking end time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-                options={venueEndOptions}
-                disabled={!startTime || venueEndOptions.length === 0}
-                compact
-                fullWidth
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Optional coach add-on
-            </FitText>
-            <FitSelect
-              id="manual-venue-booking-coach-addon"
-              name="manualVenueBookingCoachAddon"
-              aria-label="Manual venue booking optional coach add-on"
-              value={coachId}
-              onChange={(event) => setCoachId(event.target.value)}
-              options={[
-                { label: "No coach add-on", value: "" },
-                ...coachOptions,
-              ]}
-              compact
-              fullWidth
-            />
-          </div>
-
-          <OverlayAmountGrid
-            colors={colors}
-            columns="repeat(3, minmax(0, 1fr))"
-            items={[
-              {
-                helper: "Per hour from Facilities",
-                label: "Venue rate",
-                value: formatPeso(venueHourlyRate),
-                valueColor: colors.brand,
-              },
-              {
-                helper: "Selected time window",
-                label: "Duration",
-                value: `${durationMinutes} min`,
-              },
-              {
-                helper: "Due now from selected payment option",
-                label: "Revenue recorded",
-                value: formatPeso(
-                  coachId
-                    ? amountDueNow
-                    : getInitialPaymentAmount(
-                        estimatedVenueTotal,
-                        paymentStage,
-                      ),
-                ),
-                valueColor: colors.brand,
-              },
-            ]}
+      <OverlayFrame
+        isOpen={isOpen}
+        onClose={onClose}
+        closeDisabled={isSubmitting}
+        title="Create venue booking"
+        subtitle="Use this for front-desk or operator-created reservations. The booking is persisted immediately into the shared venue booking table."
+        footer={
+          <FitButton
+            variant="primary"
+            label={isSubmitting ? "CREATING..." : "CREATE BOOKING"}
+            icon={CalendarPlus}
+            iconSize={15}
+            onClick={handleCreate}
+            disabled={!canSubmit || isSubmitting}
+            style={actionPillStyle(colors, true)}
+            textStyle={{ fontSize: 13, fontWeight: 700 }}
           />
-          {coachId ? (
+        }
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            display: "grid",
+            gap: 14,
+            transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
+            transition: shouldAnimate ? "transform 180ms ease" : "none",
+          }}
+        >
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Member
+                </FitText>
+                <FitSelect
+                  id="manual-venue-booking-member"
+                  name="manualVenueBookingMember"
+                  aria-label="Manual venue booking member"
+                  value={memberId}
+                  onChange={(event) => setMemberId(event.target.value)}
+                  options={memberOptions}
+                  placeholder="Select member"
+                  compact
+                  fullWidth
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Venue
+                </FitText>
+                <FitSelect
+                  id="manual-venue-booking-venue"
+                  name="manualVenueBookingVenue"
+                  aria-label="Manual venue booking venue"
+                  value={venueId}
+                  onChange={(event) => {
+                    setVenueId(event.target.value);
+                    setStartTime("");
+                    setEndTime("");
+                  }}
+                  options={venueOptions}
+                  compact
+                  fullWidth
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Date
+                </FitText>
+                <FitButton
+                  variant="ghost"
+                  label={date ? formatCompactDate(date) : "Select date"}
+                  aria-label={`Manual venue booking date: ${
+                    date ? formatCompactDate(date) : "Select date"
+                  }`}
+                  onClick={() => setDatePickerOpen(true)}
+                  style={{
+                    ...inputStyle,
+                    justifyContent: "flex-start",
+                    minHeight: 46,
+                    width: "100%",
+                  }}
+                  textStyle={{ fontSize: 13, fontWeight: 700 }}
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Start time
+                </FitText>
+                <FitSelect
+                  id="manual-venue-booking-start-time"
+                  name="manualVenueBookingStartTime"
+                  aria-label="Manual venue booking start time"
+                  value={startTime}
+                  onChange={(event) => {
+                    setStartTime(event.target.value);
+                    setEndTime("");
+                  }}
+                  options={venueStartOptions}
+                  disabled={
+                    venueAvailabilityLoading || venueStartOptions.length === 0
+                  }
+                  compact
+                  fullWidth
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  End time
+                </FitText>
+                <FitSelect
+                  id="manual-venue-booking-end-time"
+                  name="manualVenueBookingEndTime"
+                  aria-label="Manual venue booking end time"
+                  value={endTime}
+                  onChange={(event) => setEndTime(event.target.value)}
+                  options={venueEndOptions}
+                  disabled={!startTime || venueEndOptions.length === 0}
+                  compact
+                  fullWidth
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textMuted,
+                }}
+              >
+                Optional coach add-on
+              </FitText>
+              <FitSelect
+                id="manual-venue-booking-coach-addon"
+                name="manualVenueBookingCoachAddon"
+                aria-label="Manual venue booking optional coach add-on"
+                value={coachId}
+                onChange={(event) => setCoachId(event.target.value)}
+                options={[
+                  { label: "No coach add-on", value: "" },
+                  ...coachOptions,
+                ]}
+                compact
+                fullWidth
+              />
+            </div>
+
             <OverlayAmountGrid
               colors={colors}
-              columns="minmax(0, 1fr)"
+              columns="repeat(3, minmax(0, 1fr))"
               items={[
                 {
-                  helper: (
-                    <>
-                      Includes {formatPeso(estimatedCoachTotal)} coach add-on /{" "}
-                      {remainingBalance > 0
-                        ? `${formatPeso(remainingBalance)} remaining`
-                        : "fully paid"}
-                    </>
+                  helper: "Per hour from Facilities",
+                  label: "Venue rate",
+                  value: formatPeso(venueHourlyRate),
+                  valueColor: colors.brand,
+                },
+                {
+                  helper: "Selected time window",
+                  label: "Duration",
+                  value: `${durationMinutes} min`,
+                },
+                {
+                  helper: "Due now from selected payment option",
+                  label: "Revenue recorded",
+                  value: formatPeso(
+                    coachId
+                      ? amountDueNow
+                      : getInitialPaymentAmount(
+                          estimatedVenueTotal,
+                          paymentStage,
+                        ),
                   ),
-                  label: "Booking total",
-                  value: formatPeso(estimatedBookingTotal),
                   valueColor: colors.brand,
                 },
               ]}
             />
-          ) : null}
+            {coachId ? (
+              <OverlayAmountGrid
+                colors={colors}
+                columns="minmax(0, 1fr)"
+                items={[
+                  {
+                    helper: (
+                      <>
+                        Includes {formatPeso(estimatedCoachTotal)} coach add-on
+                        /{" "}
+                        {remainingBalance > 0
+                          ? `${formatPeso(remainingBalance)} remaining`
+                          : "fully paid"}
+                      </>
+                    ),
+                    label: "Booking total",
+                    value: formatPeso(estimatedBookingTotal),
+                    valueColor: colors.brand,
+                  },
+                ]}
+              />
+            ) : null}
 
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 12, color: colors.textMuted }}
-          >
-            Cashier bookings record the full amount immediately. Member self-service cash and downpayment options are not available here.
-          </FitText>
-
-          {hasConflict || errorText || venueAvailabilityMessage ? (
-            <div
-              style={{
-                borderRadius: 14,
-                border: `1px solid ${(hasConflict || errorText ? colors.danger : colors.warning)}44`,
-                backgroundColor: `${hasConflict || errorText ? colors.danger : colors.warning}12`,
-                padding: 12,
-              }}
+            <FitText
+              excludeGlobalScale
+              style={{ fontSize: 12, color: colors.textMuted }}
             >
+              Cashier bookings record the full amount immediately. Member
+              self-service cash and downpayment options are not available here.
+            </FitText>
+
+            {hasConflict || errorText || venueAvailabilityMessage ? (
+              <div
+                style={{
+                  borderRadius: 14,
+                  border: `1px solid ${hasConflict || errorText ? colors.danger : colors.warning}44`,
+                  backgroundColor: `${hasConflict || errorText ? colors.danger : colors.warning}12`,
+                  padding: 12,
+                }}
+              >
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    color:
+                      hasConflict || errorText ? colors.danger : colors.warning,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {errorText ||
+                    venueAvailabilityMessage ||
+                    "The selected venue is already occupied in this time window."}
+                </FitText>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gap: 6 }}>
               <FitText
                 excludeGlobalScale
                 style={{
                   fontSize: 12,
-                  color: hasConflict || errorText ? colors.danger : colors.warning,
-                  lineHeight: 1.45,
+                  fontWeight: 700,
+                  color: colors.textMuted,
                 }}
               >
-                {errorText ||
-                  venueAvailabilityMessage ||
-                  "The selected venue is already occupied in this time window."}
+                Operator note
               </FitText>
+              <FitTextArea
+                id="manual-venue-booking-note"
+                name="manualVenueBookingNote"
+                aria-label="Manual venue booking operator note"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={3}
+                placeholder="Optional front-desk or facilities note..."
+                style={textAreaStyle}
+              />
             </div>
-          ) : null}
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Operator note
-            </FitText>
-            <FitTextArea
-              id="manual-venue-booking-note"
-              name="manualVenueBookingNote"
-              aria-label="Manual venue booking operator note"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              rows={3}
-              placeholder="Optional front-desk or facilities note..."
-              style={textAreaStyle}
-            />
           </div>
-        </div>
 
-        <CalendarModal
-          isOpen={datePickerOpen}
-          minDate={getDefaultDateInput()}
-          selectedDate={date}
-          onClose={() => setDatePickerOpen(false)}
-          onSelect={(nextDate) => {
-            if (nextDate) {
-              setDate(nextDate);
-              setStartTime("");
-              setEndTime("");
-            }
-          }}
-        />
-      </div>
-    </OverlayFrame>
-    <ConfirmModal
-      isOpen={!!createConfirm}
-      title={createConfirm?.title ?? "Confirm venue booking"}
-      message={createConfirm?.message ?? ""}
-      confirmLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
-      loadingLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
-      isDanger={createConfirm?.isDanger}
-      isLoading={isSubmitting}
-      onConfirm={() => {
-        const nextAction = createConfirm?.onConfirm;
-        setCreateConfirm(null);
-        nextAction?.();
-      }}
-      onCancel={() => setCreateConfirm(null)}
-    />
+          <CalendarModal
+            isOpen={datePickerOpen}
+            minDate={getDefaultDateInput()}
+            selectedDate={date}
+            onClose={() => setDatePickerOpen(false)}
+            onSelect={(nextDate) => {
+              if (nextDate) {
+                setDate(nextDate);
+                setStartTime("");
+                setEndTime("");
+              }
+            }}
+          />
+        </div>
+      </OverlayFrame>
+      <ConfirmModal
+        isOpen={!!createConfirm}
+        title={createConfirm?.title ?? "Confirm venue booking"}
+        message={createConfirm?.message ?? ""}
+        confirmLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+        loadingLabel={createConfirm?.confirmLabel ?? "CREATE BOOKING"}
+        isDanger={createConfirm?.isDanger}
+        isLoading={isSubmitting}
+        onConfirm={() => {
+          const nextAction = createConfirm?.onConfirm;
+          setCreateConfirm(null);
+          nextAction?.();
+        }}
+        onCancel={() => setCreateConfirm(null)}
+      />
     </>
   );
 }
@@ -854,7 +887,7 @@ export function GymOperationsCreateCoachBookingModal({
     durationMinutes: number;
     memberId: string;
     memberNotes?: string;
-    paymentStage?: StaffInitialPaymentStage;
+    paymentStage?: "full";
     scheduledAt: string;
   }) => void;
 }) {
@@ -867,7 +900,7 @@ export function GymOperationsCreateCoachBookingModal({
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [slotValue, setSlotValue] = useState("");
   const [note, setNote] = useState("");
-  const paymentStage: StaffInitialPaymentStage = "full";
+  const paymentStage = "full" as const;
   const [errorText, setErrorText] = useState("");
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
@@ -1023,345 +1056,366 @@ export function GymOperationsCreateCoachBookingModal({
 
   return (
     <>
-    <OverlayFrame
-      isOpen={isOpen}
-      onClose={onClose}
-      closeDisabled={isSubmitting}
-      title="Create coach booking"
-      subtitle="Create a front-desk coaching session and record the initial cash payment from the shared schedule."
-      footer={
-        <FitButton
-          variant="primary"
-          label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
-          icon={CalendarPlus}
-          iconSize={15}
-          onClick={handleCreate}
-          disabled={!canSubmit || isSubmitting}
-          style={actionPillStyle(colors, true)}
-          textStyle={{ fontSize: 13, fontWeight: 700 }}
-        />
-      }
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          display: "grid",
-          gap: 14,
-          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
-          transition: shouldAnimate ? "transform 180ms ease" : "none",
-        }}
+      <OverlayFrame
+        isOpen={isOpen}
+        onClose={onClose}
+        closeDisabled={isSubmitting}
+        title="Create coach booking"
+        subtitle="Create a front-desk coaching session and record the initial cash payment from the shared schedule."
+        footer={
+          <FitButton
+            variant="primary"
+            label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
+            icon={CalendarPlus}
+            iconSize={15}
+            onClick={handleCreate}
+            disabled={!canSubmit || isSubmitting}
+            style={actionPillStyle(colors, true)}
+            textStyle={{ fontSize: 13, fontWeight: 700 }}
+          />
+        }
       >
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Member
-              </FitText>
-              <ScheduleOptionPicker
-                disabled={isSubmitting}
-                emptyLabel="No members found"
-                inputId="manual-coach-booking-member-search"
-                inputName="manualCoachBookingMemberSearch"
-                inputLabel="Manual coach booking member search"
-                inputStyle={inputStyle}
-                onChange={(option) => {
-                  setMemberId(option.value);
-                  setMemberSearch(option.label);
-                }}
-                onSearchChange={setMemberSearch}
-                options={filteredCoachMemberOptions}
-                placeholder="Search members"
-                searchValue={memberSearch}
-                selectedValue={memberId}
-              />
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Coach
-              </FitText>
-              <ScheduleOptionPicker
-                disabled={isSubmitting}
-                emptyLabel="No coaches found"
-                inputId="manual-coach-booking-coach-search"
-                inputName="manualCoachBookingCoachSearch"
-                inputLabel="Manual coach booking coach search"
-                inputStyle={inputStyle}
-                onChange={(option) => {
-                  setCoachId(option.value);
-                  setSlotValue("");
-                  setCoachSearch(option.label);
-                }}
-                onSearchChange={setCoachSearch}
-                options={filteredCoachOptions}
-                placeholder="Search coaches"
-                searchValue={coachSearch}
-                selectedValue={coachId}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 14,
-            }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Date
-              </FitText>
-              <FitButton
-                variant="ghost"
-                label={date ? formatCompactDate(date) : "Select date"}
-                aria-label={`Manual coach booking date: ${
-                  date ? formatCompactDate(date) : "Select date"
-                }`}
-                onClick={() => setDatePickerOpen(true)}
-                style={{
-                  ...inputStyle,
-                  justifyContent: "flex-start",
-                  minHeight: 46,
-                  width: "100%",
-                  borderColor:
-                    slotOptions.length > 0 ? colors.success : colors.border,
-                }}
-                textStyle={{ fontSize: 13, fontWeight: 700 }}
-              />
-              <FitButton
-                variant="primary"
-                label="NEXT AVAILABLE SLOT"
-                onClick={() => {
-                  setErrorText("");
-                  if (!coachId) {
-                    setErrorText("Select a coach before choosing the next available slot.");
-                    return;
-                  }
-                  if (!nextAvailableSlot) {
-                    setErrorText("No available coach slot was found in the next 30 days.");
-                    return;
-                  }
-                  setDate(nextAvailableSlot.date);
-                  setSlotValue(nextAvailableSlot.slotValue);
-                }}
-                disabled={
-                  isSubmitting ||
-                  coachAvailabilityLoading ||
-                  !coachId ||
-                  !nextAvailableSlot
-                }
-                style={{
-                  ...actionPillStyle(colors, true),
-                  minHeight: 40,
-                  padding: "0 12px",
-                  width: "100%",
-                }}
-                textStyle={{ fontSize: 12, fontWeight: 800 }}
-              />
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 11,
-                  color:
-                    slotOptions.length > 0 ? colors.success : colors.textMuted,
-                }}
-              >
-                {coachAvailabilityLoading
-                  ? "Checking coach availability..."
-                  : slotOptions.length > 0
-                    ? `${slotOptions.length} available coach slot${slotOptions.length === 1 ? "" : "s"} on this date.`
-                    : coachId
-                      ? "No coach slots are available on this date."
-                      : "Select a coach to check availability."}
-              </FitText>
-            </div>
-            <div style={{ display: "grid", gap: 6, gridColumn: "span 2" }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Available timeslot
-              </FitText>
-              <FitSelect
-                id="manual-coach-booking-timeslot"
-                name="manualCoachBookingTimeslot"
-                aria-label="Manual coach booking available timeslot"
-                value={slotValue}
-                onChange={(event) => setSlotValue(event.target.value)}
-                options={slotOptions.map((slot) => ({
-                  label: slot.label,
-                  value: slot.value,
-                }))}
-                placeholder={
-                  coachAvailabilityLoading ? "Loading slots" : "No slots found"
-                }
-                compact
-                fullWidth
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderTop: `1px solid ${colors.border}`,
-              backgroundColor: "transparent",
-              minHeight: 54,
-              paddingTop: 10,
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            <FitText
-              excludeGlobalScale
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            display: "grid",
+            gap: 14,
+            transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
+            transition: shouldAnimate ? "transform 180ms ease" : "none",
+          }}
+        >
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
+            <div
               style={{
-                fontSize: 12,
-                color: colors.textPrimary,
-                lineHeight: 1.45,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
               }}
             >
-              {coachAvailabilityLoading
-                ? "Loading live coach availability."
-                : slotOptions.length > 0
-                  ? `${slotOptions.length} live slot${slotOptions.length === 1 ? "" : "s"} available on the selected date.`
-                  : "No live coach slots are available on the selected date."}
-            </FitText>
-            {selectedSlot ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Member
+                </FitText>
+                <ScheduleOptionPicker
+                  disabled={isSubmitting}
+                  emptyLabel="No members found"
+                  inputId="manual-coach-booking-member-search"
+                  inputName="manualCoachBookingMemberSearch"
+                  inputLabel="Manual coach booking member search"
+                  inputStyle={inputStyle}
+                  onChange={(option) => {
+                    setMemberId(option.value);
+                    setMemberSearch(option.label);
+                  }}
+                  onSearchChange={setMemberSearch}
+                  options={filteredCoachMemberOptions}
+                  placeholder="Search members"
+                  searchValue={memberSearch}
+                  selectedValue={memberId}
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Coach
+                </FitText>
+                <ScheduleOptionPicker
+                  disabled={isSubmitting}
+                  emptyLabel="No coaches found"
+                  inputId="manual-coach-booking-coach-search"
+                  inputName="manualCoachBookingCoachSearch"
+                  inputLabel="Manual coach booking coach search"
+                  inputStyle={inputStyle}
+                  onChange={(option) => {
+                    setCoachId(option.value);
+                    setSlotValue("");
+                    setCoachSearch(option.label);
+                  }}
+                  onSearchChange={setCoachSearch}
+                  options={filteredCoachOptions}
+                  placeholder="Search coaches"
+                  searchValue={coachSearch}
+                  selectedValue={coachId}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Date
+                </FitText>
+                <FitButton
+                  variant="ghost"
+                  label={date ? formatCompactDate(date) : "Select date"}
+                  aria-label={`Manual coach booking date: ${
+                    date ? formatCompactDate(date) : "Select date"
+                  }`}
+                  onClick={() => setDatePickerOpen(true)}
+                  style={{
+                    ...inputStyle,
+                    justifyContent: "flex-start",
+                    minHeight: 46,
+                    width: "100%",
+                    borderColor:
+                      slotOptions.length > 0 ? colors.success : colors.border,
+                  }}
+                  textStyle={{ fontSize: 13, fontWeight: 700 }}
+                />
+                <FitButton
+                  variant="primary"
+                  label="NEXT AVAILABLE SLOT"
+                  onClick={() => {
+                    setErrorText("");
+                    if (!coachId) {
+                      setErrorText(
+                        "Select a coach before choosing the next available slot.",
+                      );
+                      return;
+                    }
+                    if (!nextAvailableSlot) {
+                      setErrorText(
+                        "No available coach slot was found in the next 30 days.",
+                      );
+                      return;
+                    }
+                    setDate(nextAvailableSlot.date);
+                    setSlotValue(nextAvailableSlot.slotValue);
+                  }}
+                  disabled={
+                    isSubmitting ||
+                    coachAvailabilityLoading ||
+                    !coachId ||
+                    !nextAvailableSlot
+                  }
+                  style={{
+                    ...actionPillStyle(colors, true),
+                    minHeight: 40,
+                    padding: "0 12px",
+                    width: "100%",
+                  }}
+                  textStyle={{ fontSize: 12, fontWeight: 800 }}
+                />
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 11,
+                    color:
+                      slotOptions.length > 0
+                        ? colors.success
+                        : colors.textMuted,
+                  }}
+                >
+                  {coachAvailabilityLoading
+                    ? "Checking coach availability..."
+                    : slotOptions.length > 0
+                      ? `${slotOptions.length} available coach slot${slotOptions.length === 1 ? "" : "s"} on this date.`
+                      : coachId
+                        ? "No coach slots are available on this date."
+                        : "Select a coach to check availability."}
+                </FitText>
+              </div>
+              <div style={{ display: "grid", gap: 6, gridColumn: "span 2" }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Available timeslot
+                </FitText>
+                <FitSelect
+                  id="manual-coach-booking-timeslot"
+                  name="manualCoachBookingTimeslot"
+                  aria-label="Manual coach booking available timeslot"
+                  value={slotValue}
+                  onChange={(event) => setSlotValue(event.target.value)}
+                  options={slotOptions.map((slot) => ({
+                    label: slot.label,
+                    value: slot.value,
+                  }))}
+                  placeholder={
+                    coachAvailabilityLoading
+                      ? "Loading slots"
+                      : "No slots found"
+                  }
+                  compact
+                  fullWidth
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                borderTop: `1px solid ${colors.border}`,
+                backgroundColor: "transparent",
+                minHeight: 54,
+                paddingTop: 10,
+                display: "grid",
+                gap: 6,
+              }}
+            >
               <FitText
                 excludeGlobalScale
                 style={{
                   fontSize: 12,
-                  color: colors.textMuted,
+                  color: colors.textPrimary,
                   lineHeight: 1.45,
                 }}
               >
-                Selected: {selectedSlot.label}
+                {coachAvailabilityLoading
+                  ? "Loading live coach availability."
+                  : slotOptions.length > 0
+                    ? `${slotOptions.length} live slot${slotOptions.length === 1 ? "" : "s"} available on the selected date.`
+                    : "No live coach slots are available on the selected date."}
               </FitText>
-            ) : null}
-          </div>
-
-          <OverlayAmountGrid
-            colors={colors}
-            columns="repeat(3, minmax(0, 1fr))"
-            items={[
-              {
-                helper: "Per hour from coach profile",
-                label: "Coach rate",
-                value: formatPeso(coachHourlyRate),
-                valueColor: colors.brand,
-              },
-              {
-                helper: "Selected coach slot",
-                label: "Duration",
-                value: `${selectedSlot?.durationMinutes ?? 0} min`,
-              },
-              {
-                helper: "Due now from selected payment option",
-                label: "Revenue recorded",
-                value: formatPeso(amountDueNow),
-                valueColor: colors.brand,
-              },
-            ]}
-          />
-
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 12, color: colors.textMuted }}
-          >
-            Cashier bookings record the full amount immediately. Member self-service cash and downpayment options are not available here.
-          </FitText>
-
-          {errorText ? (
-            <div
-              style={{
-                borderRadius: 14,
-                border: `1px solid ${colors.danger}44`,
-                backgroundColor: `${colors.danger}12`,
-                padding: 12,
-              }}
-            >
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, color: colors.danger, lineHeight: 1.45 }}
-              >
-                {errorText}
-              </FitText>
+              {selectedSlot ? (
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    color: colors.textMuted,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Selected: {selectedSlot.label}
+                </FitText>
+              ) : null}
             </div>
-          ) : null}
 
-          <div style={{ display: "grid", gap: 6 }}>
+            <OverlayAmountGrid
+              colors={colors}
+              columns="repeat(3, minmax(0, 1fr))"
+              items={[
+                {
+                  helper: "Per hour from coach profile",
+                  label: "Coach rate",
+                  value: formatPeso(coachHourlyRate),
+                  valueColor: colors.brand,
+                },
+                {
+                  helper: "Selected coach slot",
+                  label: "Duration",
+                  value: `${selectedSlot?.durationMinutes ?? 0} min`,
+                },
+                {
+                  helper: "Due now from selected payment option",
+                  label: "Revenue recorded",
+                  value: formatPeso(amountDueNow),
+                  valueColor: colors.brand,
+                },
+              ]}
+            />
+
             <FitText
               excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
+              style={{ fontSize: 12, color: colors.textMuted }}
             >
-              Session note
+              Cashier bookings record the full amount immediately. Member
+              self-service cash and downpayment options are not available here.
             </FitText>
-            <FitTextArea
-              id="manual-coach-booking-note"
-              name="manualCoachBookingNote"
-              aria-label="Manual coach booking session note"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              rows={3}
-              placeholder="Optional handoff note for the coach or front desk..."
-              style={textAreaStyle}
-            />
-          </div>
-        </div>
 
-        <CalendarModal
-          highlightedDates={highlightedCoachDates}
-          isOpen={datePickerOpen}
-          minDate={getDefaultDateInput()}
-          selectedDate={date}
-          onClose={() => setDatePickerOpen(false)}
-          onSelect={(nextDate) => {
-            if (nextDate) setDate(nextDate);
-          }}
-        />
-      </div>
-    </OverlayFrame>
-    <ConfirmModal
-      isOpen={!!createConfirm}
-      title={createConfirm?.title ?? "Confirm coach booking"}
-      message={createConfirm?.message ?? ""}
-      confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
-      loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
-      isDanger={createConfirm?.isDanger}
-      isLoading={isSubmitting}
-      onConfirm={() => {
-        const nextAction = createConfirm?.onConfirm;
-        setCreateConfirm(null);
-        nextAction?.();
-      }}
-      onCancel={() => setCreateConfirm(null)}
-    />
+            {errorText ? (
+              <div
+                style={{
+                  borderRadius: 14,
+                  border: `1px solid ${colors.danger}44`,
+                  backgroundColor: `${colors.danger}12`,
+                  padding: 12,
+                }}
+              >
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    color: colors.danger,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {errorText}
+                </FitText>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textMuted,
+                }}
+              >
+                Session note
+              </FitText>
+              <FitTextArea
+                id="manual-coach-booking-note"
+                name="manualCoachBookingNote"
+                aria-label="Manual coach booking session note"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={3}
+                placeholder="Optional handoff note for the coach or front desk..."
+                style={textAreaStyle}
+              />
+            </div>
+          </div>
+
+          <CalendarModal
+            highlightedDates={highlightedCoachDates}
+            isOpen={datePickerOpen}
+            minDate={getDefaultDateInput()}
+            selectedDate={date}
+            onClose={() => setDatePickerOpen(false)}
+            onSelect={(nextDate) => {
+              if (nextDate) setDate(nextDate);
+            }}
+          />
+        </div>
+      </OverlayFrame>
+      <ConfirmModal
+        isOpen={!!createConfirm}
+        title={createConfirm?.title ?? "Confirm coach booking"}
+        message={createConfirm?.message ?? ""}
+        confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
+        loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH BOOKING"}
+        isDanger={createConfirm?.isDanger}
+        isLoading={isSubmitting}
+        onConfirm={() => {
+          const nextAction = createConfirm?.onConfirm;
+          setCreateConfirm(null);
+          nextAction?.();
+        }}
+        onCancel={() => setCreateConfirm(null)}
+      />
     </>
   );
 }
@@ -1394,8 +1448,9 @@ export function GymOperationsCreateCoachModal({
   const [specialties, setSpecialties] = useState("");
   const [certifications, setCertifications] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
-  const [scheduleType, setScheduleType] =
-    useState<"full_time" | "part_time">("part_time");
+  const [scheduleType, setScheduleType] = useState<"full_time" | "part_time">(
+    "part_time",
+  );
   const [isAvailableForBooking, setIsAvailableForBooking] = useState("active");
   const [bio, setBio] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1518,218 +1573,318 @@ export function GymOperationsCreateCoachModal({
 
   return (
     <>
-    <OverlayFrame
-      isOpen={isOpen}
-      onClose={onClose}
-      closeDisabled={isSubmitting}
-      title="Create coach"
-      subtitle="Create a standalone coach record for Gym Operations. This does not create a mobile/member profile or login account."
-      footer={
-        <FitButton
-          variant="primary"
-          label={isSubmitting ? "CREATING..." : "CREATE COACH"}
-          icon={UserPlus}
-          iconSize={15}
-          onClick={handleCreate}
-          disabled={!canSubmit || isSubmitting}
-          style={actionPillStyle(colors, true)}
-          textStyle={{ fontSize: 13, fontWeight: 700 }}
-        />
-      }
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          display: "grid",
-          gap: 14,
-          transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
-          transition: shouldAnimate ? "transform 180ms ease" : "none",
-        }}
+      <OverlayFrame
+        isOpen={isOpen}
+        onClose={onClose}
+        closeDisabled={isSubmitting}
+        title="Create coach"
+        subtitle="Create a standalone coach record for Gym Operations. This does not create a mobile/member profile or login account."
+        footer={
+          <FitButton
+            variant="primary"
+            label={isSubmitting ? "CREATING..." : "CREATE COACH"}
+            icon={UserPlus}
+            iconSize={15}
+            onClick={handleCreate}
+            disabled={!canSubmit || isSubmitting}
+            style={actionPillStyle(colors, true)}
+            textStyle={{ fontSize: 13, fontWeight: 700 }}
+          />
+        }
       >
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Coach name
-              </FitText>
-              <FitTextInput
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Coach name"
-                style={inputStyle}
-              />
-              {errors.displayName ? (
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            display: "grid",
+            gap: 14,
+            transform: shouldAnimate && isOpen ? "scale(1)" : "scale(0.985)",
+            transition: shouldAnimate ? "transform 180ms ease" : "none",
+          }}
+        >
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
                 <FitText
                   excludeGlobalScale
-                  style={{ fontSize: 11, color: colors.danger }}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
                 >
-                  {errors.displayName}
+                  Coach name
                 </FitText>
-              ) : null}
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Hourly rate
-              </FitText>
-              <FitTextInput
-                type="number"
-                value={hourlyRate}
-                onChange={(event) => setHourlyRate(event.target.value)}
-                placeholder="0"
-                style={inputStyle}
-              />
-              {errors.hourlyRate ? (
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, color: colors.danger }}
-                >
-                  {errors.hourlyRate}
-                </FitText>
-              ) : null}
-            </div>
-          </div>
-
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Contact email
-              </FitText>
-              <FitTextInput
-                value={contactEmail}
-                onChange={(event) => setContactEmail(event.target.value)}
-                placeholder="coach@fittrack.com"
-                style={inputStyle}
-              />
-              {errors.contactEmail ? (
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, color: colors.danger }}
-                >
-                  {errors.contactEmail}
-                </FitText>
-              ) : null}
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Contact phone
-              </FitText>
-              <FitTextInput
-                value={contactPhone}
-                onChange={(event) => setContactPhone(event.target.value)}
-                placeholder="+639171234567"
-                style={inputStyle}
-              />
-              {errors.contactPhone ? (
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, color: colors.danger }}
-                >
-                  {errors.contactPhone}
-                </FitText>
-              ) : null}
-            </div>
-          </div>
-
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Specialties
-              </FitText>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {COACH_SPECIALTY_OPTIONS.map((option) => {
-                  const selected = selectedSpecialties.has(option.value);
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={isSubmitting}
-                      onClick={() => toggleSpecialty(option.value)}
-                      style={{
-                        backgroundColor: selected
-                          ? colors.brand
-                          : colors.surfaceRaised,
-                        border: `1px solid ${
-                          selected ? `${colors.brand}66` : colors.border
-                        }`,
-                        borderRadius: 999,
-                        boxShadow: selected
-                          ? `0 0 0 1px ${colors.brand}22 inset`
-                          : "none",
-                        color: selected
-                          ? colors.onBrand
-                          : colors.textPrimary,
-                        cursor: isSubmitting ? "not-allowed" : "pointer",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        minHeight: 34,
-                        padding: "7px 12px",
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
+                <FitTextInput
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="Coach name"
+                  style={inputStyle}
+                />
+                {errors.displayName ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.displayName}
+                  </FitText>
+                ) : null}
               </div>
-              <FitText
-                excludeGlobalScale
-                style={{ color: colors.textMuted, fontSize: 11 }}
-              >
-                {specialtiesList.length
-                  ? specialtiesList.join(" / ")
-                  : "Select at least one coach specialty."}
-              </FitText>
-              {errors.specialties ? (
+              <div style={{ display: "grid", gap: 6 }}>
                 <FitText
                   excludeGlobalScale
-                  style={{ fontSize: 11, color: colors.danger }}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
                 >
-                  {errors.specialties}
+                  Hourly rate
                 </FitText>
-              ) : null}
+                <FitTextInput
+                  type="number"
+                  value={hourlyRate}
+                  onChange={(event) => setHourlyRate(event.target.value)}
+                  placeholder="0"
+                  style={inputStyle}
+                />
+                {errors.hourlyRate ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.hourlyRate}
+                  </FitText>
+                ) : null}
+              </div>
             </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Contact email
+                </FitText>
+                <FitTextInput
+                  value={contactEmail}
+                  onChange={(event) => setContactEmail(event.target.value)}
+                  placeholder="coach@fittrack.com"
+                  style={inputStyle}
+                />
+                {errors.contactEmail ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.contactEmail}
+                  </FitText>
+                ) : null}
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Contact phone
+                </FitText>
+                <FitTextInput
+                  value={contactPhone}
+                  onChange={(event) => setContactPhone(event.target.value)}
+                  placeholder="+639171234567"
+                  style={inputStyle}
+                />
+                {errors.contactPhone ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.contactPhone}
+                  </FitText>
+                ) : null}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Specialties
+                </FitText>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {COACH_SPECIALTY_OPTIONS.map((option) => {
+                    const selected = selectedSpecialties.has(option.value);
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={isSubmitting}
+                        onClick={() => toggleSpecialty(option.value)}
+                        style={{
+                          backgroundColor: selected
+                            ? colors.brand
+                            : colors.surfaceRaised,
+                          border: `1px solid ${
+                            selected ? `${colors.brand}66` : colors.border
+                          }`,
+                          borderRadius: 999,
+                          boxShadow: selected
+                            ? `0 0 0 1px ${colors.brand}22 inset`
+                            : "none",
+                          color: selected ? colors.onBrand : colors.textPrimary,
+                          cursor: isSubmitting ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          minHeight: 34,
+                          padding: "7px 12px",
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <FitText
+                  excludeGlobalScale
+                  style={{ color: colors.textMuted, fontSize: 11 }}
+                >
+                  {specialtiesList.length
+                    ? specialtiesList.join(" / ")
+                    : "Select at least one coach specialty."}
+                </FitText>
+                {errors.specialties ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.specialties}
+                  </FitText>
+                ) : null}
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Certifications
+                </FitText>
+                <FitTextArea
+                  value={certifications}
+                  onChange={(event) => setCertifications(event.target.value)}
+                  rows={3}
+                  placeholder="NASM-CPT, CrossFit L1"
+                  style={textAreaStyle}
+                />
+                {errors.certifications ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.certifications}
+                  </FitText>
+                ) : null}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Working schedule
+                </FitText>
+                <FitSelect
+                  value={scheduleType}
+                  onChange={(event) =>
+                    setScheduleType(
+                      event.target.value === "full_time"
+                        ? "full_time"
+                        : "part_time",
+                    )
+                  }
+                  options={[
+                    { label: "Full-time", value: "full_time" },
+                    { label: "Part-time", value: "part_time" },
+                  ]}
+                  compact
+                  fullWidth
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Booking visibility
+                </FitText>
+                <FitSelect
+                  value={isAvailableForBooking}
+                  onChange={(event) =>
+                    setIsAvailableForBooking(event.target.value)
+                  }
+                  options={[
+                    { label: "Visible to member booking", value: "active" },
+                    { label: "Hidden until ready", value: "inactive" },
+                  ]}
+                  compact
+                  fullWidth
+                />
+              </div>
+            </div>
+
             <div style={{ display: "grid", gap: 6 }}>
               <FitText
                 excludeGlobalScale
@@ -1739,125 +1894,42 @@ export function GymOperationsCreateCoachModal({
                   color: colors.textMuted,
                 }}
               >
-                Certifications
+                Bio
               </FitText>
               <FitTextArea
-                value={certifications}
-                onChange={(event) => setCertifications(event.target.value)}
-                rows={3}
-                placeholder="NASM-CPT, CrossFit L1"
+                value={bio}
+                onChange={(event) => setBio(event.target.value)}
+                rows={4}
+                placeholder="Short member-facing coach summary..."
                 style={textAreaStyle}
               />
-              {errors.certifications ? (
+              {errors.bio ? (
                 <FitText
                   excludeGlobalScale
                   style={{ fontSize: 11, color: colors.danger }}
                 >
-                  {errors.certifications}
+                  {errors.bio}
                 </FitText>
               ) : null}
             </div>
           </div>
-
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Working schedule
-              </FitText>
-              <FitSelect
-                value={scheduleType}
-                onChange={(event) =>
-                  setScheduleType(
-                    event.target.value === "full_time"
-                      ? "full_time"
-                      : "part_time",
-                  )
-                }
-                options={[
-                  { label: "Full-time", value: "full_time" },
-                  { label: "Part-time", value: "part_time" },
-                ]}
-                compact
-                fullWidth
-              />
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textMuted,
-                }}
-              >
-                Booking visibility
-              </FitText>
-              <FitSelect
-                value={isAvailableForBooking}
-                onChange={(event) =>
-                  setIsAvailableForBooking(event.target.value)
-                }
-                options={[
-                  { label: "Visible to member booking", value: "active" },
-                  { label: "Hidden until ready", value: "inactive" },
-                ]}
-                compact
-                fullWidth
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
-            >
-              Bio
-            </FitText>
-            <FitTextArea
-              value={bio}
-              onChange={(event) => setBio(event.target.value)}
-              rows={4}
-              placeholder="Short member-facing coach summary..."
-              style={textAreaStyle}
-            />
-            {errors.bio ? (
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 11, color: colors.danger }}
-              >
-                {errors.bio}
-              </FitText>
-            ) : null}
-          </div>
         </div>
-
-      </div>
-    </OverlayFrame>
-    <ConfirmModal
-      isOpen={!!createConfirm}
-      title={createConfirm?.title ?? "Confirm coach profile"}
-      message={createConfirm?.message ?? ""}
-      confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
-      loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
-      isDanger={createConfirm?.isDanger}
-      isLoading={isSubmitting}
-      onConfirm={() => {
-        const nextAction = createConfirm?.onConfirm;
-        setCreateConfirm(null);
-        nextAction?.();
-      }}
-      onCancel={() => setCreateConfirm(null)}
-    />
+      </OverlayFrame>
+      <ConfirmModal
+        isOpen={!!createConfirm}
+        title={createConfirm?.title ?? "Confirm coach profile"}
+        message={createConfirm?.message ?? ""}
+        confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
+        loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
+        isDanger={createConfirm?.isDanger}
+        isLoading={isSubmitting}
+        onConfirm={() => {
+          const nextAction = createConfirm?.onConfirm;
+          setCreateConfirm(null);
+          nextAction?.();
+        }}
+        onCancel={() => setCreateConfirm(null)}
+      />
     </>
   );
 }

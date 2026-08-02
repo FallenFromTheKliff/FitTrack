@@ -210,14 +210,21 @@ export default function BookingDetailModal({
   })();
 
   const totalPrice = booking.totalAmount ?? pricing.finalPrice;
-  const showPaymentPlan =
-    booking.paymentPlan === "downpayment" || booking.paymentPlan === "full";
   const remainingBalance = booking.remainingBalance ?? 0;
+  const isLegacySplitPayment =
+    booking.paymentPlan === "downpayment" ||
+    booking.activePaymentStage === "downpayment" ||
+    booking.activePaymentStage === "balance" ||
+    remainingBalance > 0;
+  const showPaymentPlan =
+    booking.paymentPlan === "full" || isLegacySplitPayment;
   const isBalanceCollection =
-    booking.status === "pending_full_payment" && remainingBalance > 0;
+    isLegacySplitPayment &&
+    booking.status === "pending_full_payment" &&
+    remainingBalance > 0;
   const amountDueNow = isBalanceCollection
     ? remainingBalance
-    : booking.amountDueNow ?? totalPrice;
+    : (booking.amountDueNow ?? totalPrice);
   const bookingTypeLabel =
     booking.bookingType === "recurring"
       ? "Recurring booking"
@@ -227,13 +234,11 @@ export default function BookingDetailModal({
       ? "Part of a recurring coach plan."
       : "One-time booking only.";
   const paymentPlanLabel =
-    isBalanceCollection
+    isLegacySplitPayment && isBalanceCollection
       ? "Balance payment"
-      : booking.paymentPlan === "full"
-      ? "Full payment"
-      : booking.paymentPlan === "downpayment"
-        ? "Split payment"
-        : "Free access";
+      : isLegacySplitPayment
+        ? "Legacy split payment"
+        : "PayMongo full payment";
 
   return (
     <Modal
@@ -275,11 +280,7 @@ export default function BookingDetailModal({
                 ]}
               >
                 {VenueIcon ? (
-                  <VenueIcon
-                    size={40}
-                    color={colors.brand}
-                    strokeWidth={1.8}
-                  />
+                  <VenueIcon size={40} color={colors.brand} strokeWidth={1.8} />
                 ) : (
                   <CalendarDays
                     size={40}
@@ -396,17 +397,25 @@ export default function BookingDetailModal({
               </View>
             ) : null}
 
-            {booking.sessionNotes || booking.assessmentReport || booking.coachFeedback ? (
+            {booking.sessionNotes ||
+            booking.assessmentReport ||
+            booking.coachFeedback ? (
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>SESSION REPORT</FitText>
                 {booking.sessionNotes ? (
-                  <FitText style={s.priceSub}>Notes: {booking.sessionNotes}</FitText>
+                  <FitText style={s.priceSub}>
+                    Notes: {booking.sessionNotes}
+                  </FitText>
                 ) : null}
                 {booking.assessmentReport ? (
-                  <FitText style={s.priceSub}>Assessment: {booking.assessmentReport}</FitText>
+                  <FitText style={s.priceSub}>
+                    Assessment: {booking.assessmentReport}
+                  </FitText>
                 ) : null}
                 {booking.coachFeedback ? (
-                  <FitText style={s.priceSub}>Coach feedback: {booking.coachFeedback}</FitText>
+                  <FitText style={s.priceSub}>
+                    Coach feedback: {booking.coachFeedback}
+                  </FitText>
                 ) : null}
               </View>
             ) : null}
@@ -414,7 +423,9 @@ export default function BookingDetailModal({
             {booking.coachReviewRating ? (
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>YOUR COACH REVIEW</FitText>
-                <FitText style={s.detailValue}>{booking.coachReviewRating}/5 stars</FitText>
+                <FitText style={s.detailValue}>
+                  {booking.coachReviewRating}/5 stars
+                </FitText>
                 <FitText style={s.priceSub}>
                   {booking.coachReviewComment?.trim()
                     ? booking.coachReviewComment
@@ -425,18 +436,25 @@ export default function BookingDetailModal({
 
             {showPaymentPlan ? (
               <View style={s.priceCard}>
-                <FitText style={s.detailLabel}>PAYMENT PLAN</FitText>
+                <FitText style={s.detailLabel}>PAYMENT</FitText>
                 <FitText style={s.detailValue}>{paymentPlanLabel}</FitText>
                 <FitText style={s.priceSub}>
-                  Pay now: {formatCurrency(amountDueNow)}
+                  Due now: {formatCurrency(amountDueNow)}
                 </FitText>
-                <FitText style={s.priceSub}>
-                  {remainingBalance > 0
-                    ? `Remaining balance: ${formatCurrency(remainingBalance)} on or after ${formatBookingDate(
-                        booking.nextPaymentDate ?? booking.date,
-                      )}`
-                    : "No remaining balance after the first payment is confirmed."}
-                </FitText>
+                {isLegacySplitPayment ? (
+                  <FitText style={s.priceSub}>
+                    {remainingBalance > 0
+                      ? `Remaining balance: ${formatCurrency(remainingBalance)} on or after ${formatBookingDate(
+                          booking.nextPaymentDate ?? booking.date,
+                        )}`
+                      : "Legacy payment history: no remaining balance recorded."}
+                  </FitText>
+                ) : (
+                  <FitText style={s.priceSub}>
+                    One full PayMongo payment is required before this session is
+                    confirmed.
+                  </FitText>
+                )}
               </View>
             ) : null}
 

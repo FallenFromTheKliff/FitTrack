@@ -9,10 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+import { type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   RecurringCoachingBillingCycleRecord,
@@ -21,7 +18,11 @@ import type {
   StaffAppointmentRecord,
   SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
-import type { CoachProfileRecord, MemberRecord } from "@fittrack/types";
+import type {
+  CoachProfileRecord,
+  MemberRecord,
+  TrainingPlanSummaryRecord,
+} from "@fittrack/types";
 import {
   bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelStaffAppointmentMutationOptions,
@@ -36,6 +37,7 @@ import {
   createStaffBookingMutationOptions,
   createStaffCoachMutationOptions,
   declineCoachAppointmentMutationOptions,
+  fitnessClientPlansQueryOptions,
   markCoachPayoutPaidMutationOptions,
   payAppointmentDownpaymentMutationOptions,
   createRecurringCoachingPlanMutationOptions,
@@ -85,8 +87,10 @@ import {
   SCHEDULE_TIMELINE_HOURS,
   buildLocalIso,
   createDefaultRecurringPlanForm,
+  createFreshMonthlyScheduleDraft,
   getErrorMessage,
   getRecurringInput,
+  getRecurringScheduleIssue,
   normalizeOperationsTab,
   normalizeScheduleSurfaceTab,
   type CoachVisibilityScope,
@@ -182,7 +186,9 @@ function useGymOperationsPageState() {
         queryClient.refetchQueries({ queryKey, type: "active" }),
       ),
     );
-    showFeedback(isCoach ? "Sessions refreshed." : "Gym Operations data refreshed.");
+    showFeedback(
+      isCoach ? "Sessions refreshed." : "Gym Operations data refreshed.",
+    );
   };
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -191,10 +197,7 @@ function useGymOperationsPageState() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [activeOperationsTab, setActiveOperationsTab] =
     useState<GymOperationsTab>(() =>
-      normalizeOperationsTab(
-        searchParams.get("tab"),
-        canManageGymOperations,
-      ),
+      normalizeOperationsTab(searchParams.get("tab"), canManageGymOperations),
     );
   const [activeScheduleSurfaceTab, setActiveScheduleSurfaceTab] =
     useState<ScheduleSurfaceTab>(() =>
@@ -210,13 +213,17 @@ function useGymOperationsPageState() {
   const prevWeek = () => {
     setSlideDir("left");
     setSlideKey((key) => key + 1);
-    setWeekStart((date) => addDays(date, scheduleRangeMode === "weekly" ? -7 : -1));
+    setWeekStart((date) =>
+      addDays(date, scheduleRangeMode === "weekly" ? -7 : -1),
+    );
   };
 
   const nextWeek = () => {
     setSlideDir("right");
     setSlideKey((key) => key + 1);
-    setWeekStart((date) => addDays(date, scheduleRangeMode === "weekly" ? 7 : 1));
+    setWeekStart((date) =>
+      addDays(date, scheduleRangeMode === "weekly" ? 7 : 1),
+    );
   };
 
   const weekDays = useMemo(
@@ -412,7 +419,8 @@ function useGymOperationsPageState() {
     }: {
       appointmentId: string;
       payload: SubmitCoachAppointmentFeedbackPayload;
-    }) => webApiClient.coaches.submitAppointmentFeedback(appointmentId, payload),
+    }) =>
+      webApiClient.coaches.submitAppointmentFeedback(appointmentId, payload),
   });
   const cancelAppointmentMutation = useMutation(
     cancelStaffAppointmentMutationOptions(webApiClient, queryClient),
@@ -501,33 +509,67 @@ function useGymOperationsPageState() {
         })),
     [coachRoster],
   );
-  const memberOptions = useMemo(
-    () => {
-      if (isCoach) {
-        const unique = new Map<string, { label: string; value: string }>();
-        appointmentRows.forEach((appointment) => {
-          const label = getPersonDisplayName(
-            appointment.user.profile,
-            appointment.user.email,
-            "Member",
-          );
-          unique.set(appointment.userId, { label, value: appointment.userId });
-        });
-        return [...unique.values()];
-      }
+  const memberOptions = useMemo(() => {
+    if (isCoach) {
+      const unique = new Map<string, { label: string; value: string }>();
+      appointmentRows.forEach((appointment) => {
+        const label = getPersonDisplayName(
+          appointment.user.profile,
+          appointment.user.email,
+          "Member",
+        );
+        unique.set(appointment.userId, { label, value: appointment.userId });
+      });
+      return [...unique.values()];
+    }
 
-      return (staffUsers as MemberRecord[])
-        .filter(isBookableOperationsMember)
-        .map((member) => {
-          const label = getPersonDisplayName(
-            member.profile,
-            member.email,
-            "Member",
-          );
-          return { label, value: member.id };
-        });
-    },
-    [appointmentRows, isCoach, staffUsers],
+    return (staffUsers as MemberRecord[])
+      .filter(isBookableOperationsMember)
+      .map((member) => {
+        const label = getPersonDisplayName(
+          member.profile,
+          member.email,
+          "Member",
+        );
+        return { label, value: member.id };
+      });
+  }, [appointmentRows, isCoach, staffUsers]);
+  const recurringCoachOffer = useMemo(
+    () =>
+      coachProfiles.find(
+        (coach) => String(coach.id) === recurringPlanForm.coachId,
+      ) ?? null,
+    [coachProfiles, recurringPlanForm.coachId],
+  );
+  const {
+    data: recurringTrainingPlanResult,
+    isLoading: recurringPlansLoading,
+  } = useQuery({
+    ...fitnessClientPlansQueryOptions(
+      webApiClient,
+      user?.id,
+      recurringPlanForm.memberId || undefined,
+      { limit: 50, page: 1 },
+    ),
+    enabled:
+      isCoach &&
+      recurringPlanOpen &&
+      Boolean(user?.id) &&
+      Boolean(recurringPlanForm.memberId),
+    staleTime: 30_000,
+  });
+  const recurringTrainingPlanOptions = useMemo(
+    () =>
+      ((recurringTrainingPlanResult?.data ?? []) as TrainingPlanSummaryRecord[])
+        .filter(
+          (plan) =>
+            plan.coachId === user?.id && plan.source === "coach_assigned",
+        )
+        .map((plan) => ({
+          label: `${plan.title}${plan.isActive ? " · Active" : ""}`,
+          value: plan.id,
+        })),
+    [recurringTrainingPlanResult?.data, user?.id],
   );
   const coachAppointments = useMemo(
     () =>
@@ -574,46 +616,159 @@ function useGymOperationsPageState() {
     payRecurringCycleMutation.isPending ||
     processBookingBalanceMutation.isPending ||
     verifyPaymentMutation.isPending;
+  const recurringMonthlyRate = Number(recurringCoachOffer?.monthlyRate);
+  const recurringMonthlySessionCount = Number(
+    recurringCoachOffer?.monthlySessionCount,
+  );
+  const recurringMonthlyDuration = Number(
+    recurringCoachOffer?.monthlySessionDurationMinutes,
+  );
+  const recurringMonthlyOfferConfigured =
+    recurringCoachOffer?.monthlyOfferActive === true &&
+    Number.isFinite(recurringMonthlyRate) &&
+    recurringMonthlyRate > 0 &&
+    Number.isInteger(recurringMonthlySessionCount) &&
+    recurringMonthlySessionCount > 0 &&
+    Number.isInteger(recurringMonthlyDuration) &&
+    recurringMonthlyDuration >= 30 &&
+    recurringMonthlyDuration <= 180;
+
+  useEffect(() => {
+    if (!isCoach || !recurringPlanOpen || !coachSelfProfile) return;
+    const offerRate = Number(coachSelfProfile.monthlyRate);
+    const offerDuration = Number(
+      coachSelfProfile.monthlySessionDurationMinutes,
+    );
+    const offerSessionCount = Number(coachSelfProfile.monthlySessionCount);
+    setRecurringPlanForm((current) => {
+      const duration =
+        Number.isInteger(offerDuration) && offerDuration > 0
+          ? offerDuration
+          : current.durationMinutes;
+      const scheduleItems =
+        current.memberId &&
+        current.scheduleItems.length === 0 &&
+        Number.isInteger(offerSessionCount) &&
+        offerSessionCount > 0
+          ? createFreshMonthlyScheduleDraft(
+              offerSessionCount,
+              duration,
+              current.preferredTime,
+            )
+          : current.scheduleItems.map((item) => ({
+              ...item,
+              durationMinutes: duration,
+            }));
+      return {
+        ...current,
+        coachId: String(coachSelfProfile.id),
+        durationMinutes: duration,
+        durationMonths: 1,
+        frequency: "monthly",
+        quotedAmount:
+          Number.isFinite(offerRate) && offerRate > 0
+            ? offerRate
+            : current.quotedAmount,
+        scheduleItems,
+        startDate: scheduleItems[0]?.date ?? current.startDate,
+      };
+    });
+  }, [coachSelfProfile, isCoach, recurringPlanOpen]);
+
+  useEffect(() => {
+    if (!recurringPlanOpen || recurringTrainingPlanOptions.length === 0) return;
+    setRecurringPlanForm((current) => {
+      if (
+        recurringTrainingPlanOptions.some(
+          (option) => option.value === current.trainingPlanId,
+        )
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        trainingPlanId: recurringTrainingPlanOptions[0].value,
+      };
+    });
+  }, [recurringPlanOpen, recurringTrainingPlanOptions]);
+
+  useEffect(() => {
+    if (
+      !recurringPlanOpen ||
+      !recurringPlanForm.memberId ||
+      !recurringMonthlyOfferConfigured ||
+      recurringPlanForm.scheduleItems.length > 0
+    ) {
+      return;
+    }
+    const scheduleItems = createFreshMonthlyScheduleDraft(
+      recurringMonthlySessionCount,
+      recurringMonthlyDuration,
+      recurringPlanForm.preferredTime,
+    );
+    setRecurringPlanForm((current) => ({
+      ...current,
+      scheduleItems,
+      startDate: scheduleItems[0]?.date ?? current.startDate,
+    }));
+  }, [
+    recurringMonthlyDuration,
+    recurringMonthlyOfferConfigured,
+    recurringMonthlySessionCount,
+    recurringPlanForm.memberId,
+    recurringPlanForm.preferredTime,
+    recurringPlanForm.scheduleItems.length,
+    recurringPlanOpen,
+  ]);
+
   const recurringPlanMinStartDate = getDefaultDateInput();
   const recurringPlanStartDateInvalid =
     !recurringPlanForm.startDate ||
     recurringPlanForm.startDate < recurringPlanMinStartDate;
+  const recurringScheduleIssue = getRecurringScheduleIssue(
+    recurringPlanForm.scheduleItems,
+    recurringMonthlyOfferConfigured ? recurringMonthlySessionCount : undefined,
+  );
   const recurringPlanInputInvalid =
+    !isCoach ||
+    recurringPlanForm.frequency !== "monthly" ||
     !recurringPlanForm.memberId ||
     !recurringPlanForm.coachId ||
+    !recurringPlanForm.trainingPlanId ||
     recurringPlanStartDateInvalid ||
     !recurringPlanForm.preferredTime ||
-    (recurringPlanForm.frequency !== "monthly" &&
-      recurringPlanForm.preferredDays.length === 0) ||
-    recurringPlanForm.quotedAmount <= 0 ||
-    (recurringPlanForm.frequency === "monthly" &&
-      recurringPlanForm.scheduleItems.length === 0);
-  const repeatableRecurringPlan = useMemo<RecurringCoachingPlanRecord | null>(() => {
-    const candidates = recurringPlans.filter(
-      (plan) =>
-        plan.frequency === "monthly" &&
-        plan.status !== "cancelled" &&
-        plan.memberId === recurringPlanForm.memberId &&
-        (!recurringPlanForm.coachId || plan.coachId === recurringPlanForm.coachId) &&
-        (plan.scheduleItems?.length ?? 0) > 0,
-    );
+    !recurringMonthlyOfferConfigured ||
+    recurringPlanForm.quotedAmount !== recurringMonthlyRate ||
+    recurringPlanForm.durationMinutes !== recurringMonthlyDuration ||
+    Boolean(recurringScheduleIssue);
+  const repeatableRecurringPlan =
+    useMemo<RecurringCoachingPlanRecord | null>(() => {
+      const candidates = recurringPlans.filter(
+        (plan) =>
+          plan.frequency === "monthly" &&
+          plan.status !== "cancelled" &&
+          plan.memberId === recurringPlanForm.memberId &&
+          (!recurringPlanForm.coachId ||
+            plan.coachId === recurringPlanForm.coachId) &&
+          (plan.scheduleItems?.length ?? 0) > 0,
+      );
 
-    return (
-      [...candidates].sort((left, right) => {
-        const leftDate = Math.max(
-          ...(left.scheduleItems ?? []).map((item) =>
-            new Date(item.scheduledAt).getTime(),
-          ),
-        );
-        const rightDate = Math.max(
-          ...(right.scheduleItems ?? []).map((item) =>
-            new Date(item.scheduledAt).getTime(),
-          ),
-        );
-        return rightDate - leftDate;
-      })[0] ?? null
-    );
-  }, [recurringPlanForm.coachId, recurringPlanForm.memberId, recurringPlans]);
+      return (
+        [...candidates].sort((left, right) => {
+          const leftDate = Math.max(
+            ...(left.scheduleItems ?? []).map((item) =>
+              new Date(item.scheduledAt).getTime(),
+            ),
+          );
+          const rightDate = Math.max(
+            ...(right.scheduleItems ?? []).map((item) =>
+              new Date(item.scheduledAt).getTime(),
+            ),
+          );
+          return rightDate - leftDate;
+        })[0] ?? null
+      );
+    }, [recurringPlanForm.coachId, recurringPlanForm.memberId, recurringPlans]);
   const recurringPreviewConflictOverrides = useMemo(
     () =>
       recurringPlanPreview?.sessions
@@ -835,20 +990,12 @@ function useGymOperationsPageState() {
         (resource) => resource.id === activeData.coachId,
       );
       if (!coach) return;
-      const booking = buildManualBooking(
-        coach,
-        targetDay,
-        hour,
-        colors.brand,
-      );
+      const booking = buildManualBooking(coach, targetDay, hour, colors.brand);
       setManualBookings((previous) => [...previous, booking]);
       showFeedback(
-        `${coach.name} assigned to ${targetDay.toLocaleDateString(
-          "en-US",
-          {
-            weekday: "short",
-          },
-        )} ${hour}:00`,
+        `${coach.name} assigned to ${targetDay.toLocaleDateString("en-US", {
+          weekday: "short",
+        })} ${hour}:00`,
       );
       return;
     }
@@ -869,9 +1016,12 @@ function useGymOperationsPageState() {
         },
       }));
       showFeedback(
-        `${booking.resourceName} moved to ${targetDay.toLocaleDateString("en-US", {
-          weekday: "short",
-        })} ${hour}:00`,
+        `${booking.resourceName} moved to ${targetDay.toLocaleDateString(
+          "en-US",
+          {
+            weekday: "short",
+          },
+        )} ${hour}:00`,
       );
     }
   };
@@ -1038,8 +1188,7 @@ function useGymOperationsPageState() {
     () =>
       venues
         .filter(
-          (venue) =>
-            venue.isActive !== false && venue.isReservable !== false,
+          (venue) => venue.isActive !== false && venue.isReservable !== false,
         )
         .map((venue) => ({
           label: venue.name,
@@ -1081,8 +1230,7 @@ function useGymOperationsPageState() {
     setBookingDateRange((current) => ({
       ...current,
       startDate: ymd,
-      endDate:
-        current.endDate && current.endDate < ymd ? ymd : current.endDate,
+      endDate: current.endDate && current.endDate < ymd ? ymd : current.endDate,
     }));
   };
 
@@ -1099,9 +1247,7 @@ function useGymOperationsPageState() {
     setBookingDateRange((current) => ({
       ...current,
       startDate:
-        current.startDate && current.startDate > ymd
-          ? ymd
-          : current.startDate,
+        current.startDate && current.startDate > ymd ? ymd : current.startDate,
       endDate: ymd,
     }));
   };
@@ -1132,7 +1278,10 @@ function useGymOperationsPageState() {
         ) {
           return false;
         }
-        if (bookingDateRange.endDate && bookingDate > bookingDateRange.endDate) {
+        if (
+          bookingDateRange.endDate &&
+          bookingDate > bookingDateRange.endDate
+        ) {
           return false;
         }
         return true;
@@ -1219,8 +1368,10 @@ function useGymOperationsPageState() {
 
   useEffect(() => {
     const currentSurfaceParam = searchParams.get("schedule_view");
-    const normalizedSurfaceParam =
-      normalizeScheduleSurfaceTab(currentSurfaceParam, canViewVenueBookings);
+    const normalizedSurfaceParam = normalizeScheduleSurfaceTab(
+      currentSurfaceParam,
+      canViewVenueBookings,
+    );
 
     const canonicalSurfaceParam = !canViewVenueBookings
       ? null
@@ -1247,7 +1398,13 @@ function useGymOperationsPageState() {
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
       scroll: false,
     });
-  }, [activeScheduleSurfaceTab, canViewVenueBookings, pathname, router, searchParams]);
+  }, [
+    activeScheduleSurfaceTab,
+    canViewVenueBookings,
+    pathname,
+    router,
+    searchParams,
+  ]);
 
   const toggleRecurringPlanDay = (day: number) => {
     setRecurringPlanPreview(null);
@@ -1675,8 +1832,7 @@ function useGymOperationsPageState() {
     provider: PaymentCollectionProvider,
     paymentStage: "downpayment" | "full",
   ) => {
-    const stageLabel =
-      paymentStage === "full" ? "full payment" : "downpayment";
+    const stageLabel = paymentStage === "full" ? "full payment" : "downpayment";
     const providerLabel = provider === "cash" ? "cash" : "PayMongo";
     setPaymentConfirm({
       kind: "coachInitial",
@@ -1802,16 +1958,23 @@ function useGymOperationsPageState() {
         payload,
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.coachSchedule(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.staffAppointments() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.analyticsSnapshot() }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.coachSchedule(user?.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.staffAppointments(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.analyticsSnapshot(),
+        }),
       ]);
       showFeedback("Coach feedback saved for this session.");
       setAppointmentReviewTarget((current) =>
         current?.id === appointment.id
           ? {
               ...current,
-              assessmentReport: payload.assessmentReport ?? current.assessmentReport,
+              assessmentReport:
+                payload.assessmentReport ?? current.assessmentReport,
               coachFeedback: payload.coachFeedback,
             }
           : current,
@@ -1935,8 +2098,7 @@ function useGymOperationsPageState() {
       provider,
       title: "Confirm recurring coach payment",
       message: `Continue and ${label}?`,
-      confirmLabel:
-        provider === "cash" ? "ACCEPT CASH CYCLE" : "OPEN PAYMONGO",
+      confirmLabel: provider === "cash" ? "ACCEPT CASH CYCLE" : "OPEN PAYMONGO",
     });
   };
 
@@ -1985,6 +2147,31 @@ function useGymOperationsPageState() {
       return;
     }
 
+    const monthlyOfferActive =
+      (data.monthlyOfferActive ?? "inactive") === "active";
+    const monthlyRate = Number(data.monthlyRate ?? 0);
+    const monthlySessionCount = Number(data.monthlySessionCount ?? 0);
+    const monthlySessionDurationMinutes = Number(
+      data.monthlySessionDurationMinutes ?? 60,
+    );
+    if (
+      !isCoach &&
+      monthlyOfferActive &&
+      (!Number.isFinite(monthlyRate) ||
+        monthlyRate <= 0 ||
+        !Number.isInteger(monthlySessionCount) ||
+        monthlySessionCount < 1 ||
+        !Number.isInteger(monthlySessionDurationMinutes) ||
+        monthlySessionDurationMinutes < 30 ||
+        monthlySessionDurationMinutes > 180)
+    ) {
+      showFeedback(
+        "An active monthly offer needs a positive full price, included session count, and a 30-180 minute duration.",
+        "danger",
+      );
+      return;
+    }
+
     try {
       const scheduleTypeValue: "full_time" | "part_time" =
         data.scheduleType === "full_time" ? "full_time" : "part_time";
@@ -1998,6 +2185,16 @@ function useGymOperationsPageState() {
         hourlyRate: parsed.data.hourlyRate,
         isAvailableForBooking:
           (data.isAvailableForBooking ?? "active") === "active",
+        ...(!isCoach
+          ? {
+              monthlyOfferActive,
+              monthlyOfferDescription:
+                data.monthlyOfferDescription?.trim() || null,
+              monthlyRate,
+              monthlySessionCount,
+              monthlySessionDurationMinutes,
+            }
+          : {}),
         ...(isAdmin
           ? {
               scheduleType: scheduleTypeValue,
@@ -2234,7 +2431,10 @@ function useGymOperationsPageState() {
 
     const result = await noShowBooking(venueReviewTarget.id);
     if (!result.success) {
-      showFeedback(result.error ?? "Unable to mark venue booking no-show.", "danger");
+      showFeedback(
+        result.error ?? "Unable to mark venue booking no-show.",
+        "danger",
+      );
       return;
     }
 
@@ -2248,7 +2448,7 @@ function useGymOperationsPageState() {
     endsAt: string;
     memberId: string;
     notes?: string;
-    paymentStage?: "downpayment" | "full";
+    paymentStage?: "full";
     startsAt: string;
   }) => {
     try {
@@ -2268,7 +2468,7 @@ function useGymOperationsPageState() {
     durationMinutes: number;
     memberId: string;
     memberNotes?: string;
-    paymentStage?: "downpayment" | "full";
+    paymentStage?: "full";
     scheduledAt: string;
   }) => {
     try {
@@ -2304,83 +2504,217 @@ function useGymOperationsPageState() {
   };
 
   return {
-    activeBlock, activeCoach, activeCoachId,
-    activeOperationsTab, activeScheduleSurfaceTab, allBookings,
-    appointmentReviewReadiness, appointmentReviewTarget, appointmentsLoading,
-    appointmentStatusFilter, appointmentSummary, availabilityEditorCoach,
-    blockDetailOpen, bookableVenueOptions, bulkUpdateRecurringSessionsMutation,
+    activeBlock,
+    activeCoach,
+    activeCoachId,
+    activeOperationsTab,
+    activeScheduleSurfaceTab,
+    allBookings,
+    appointmentReviewReadiness,
+    appointmentReviewTarget,
+    appointmentsLoading,
+    appointmentStatusFilter,
+    appointmentSummary,
+    availabilityEditorCoach,
+    blockDetailOpen,
+    bookableVenueOptions,
+    bulkUpdateRecurringSessionsMutation,
     bookingDateRange,
-    calendarOpen, canAnimate, cancelAppointmentMutation,
-    cancelRecurringPlanMutation, canManageCoaching, canManageGymOperations,
+    calendarOpen,
+    canAnimate,
+    cancelAppointmentMutation,
+    cancelRecurringPlanMutation,
+    canManageCoaching,
+    canManageGymOperations,
     canViewVenueBookings,
     coachAppointments,
-    coachDetailsOpen, coachFilterId, coachOptions,
-    coachProfiles, coachRailAsRow, coachRoster,
-    coachRosterMaxHeight, coachVisibilityScope, colors,
-    cancelAppointmentPending, completeAppointmentMutation,
-    completeAppointmentPending, createCoachBookingMutation, createCoachBookingOpen,
-    createCoachMutation, createCoachOpen, createRecurringPlanMutation,
-    createVenueBookingMutation, createVenueBookingOpen, draggingBooking,
-    draggingCoach, fadeIn, feedbackModal, filteredStaff,
-    filteredVenueBookings, focusedCoachId, focusedCoachScheduleBookings,
-    handleApproveVenueBooking, handleBlockClick, handleBlockDelete,
-    handleBlockSave, handleCancelAppointment, handleCancelVenueBooking,
-    handleCoachFocus, handleCompleteAppointment, handleCompleteVenueBooking,
-    handleConfirmAppointment, handleConfirmPaymentAction, handleConfirmRecurringPlan,
-    handleCreateCoach, handleCreateCoachBooking, handleCreateVenueBooking,
-    handleDragEnd, handleDragStart, handleNoShowVenueBooking,
-    handleVenueEndDateSelect, handleVenueStartDateSelect,
-    handlePreviewRecurringPlan, handleRecurringFutureUpdate, handleRecurringPlanCancel,
-    handleRecurringSessionReschedule, handleRecurringSessionSkip, handleRejectAppointment,
+    coachDetailsOpen,
+    coachFilterId,
+    coachOptions,
+    coachProfiles,
+    coachRailAsRow,
+    coachRoster,
+    coachRosterMaxHeight,
+    coachVisibilityScope,
+    colors,
+    cancelAppointmentPending,
+    completeAppointmentMutation,
+    completeAppointmentPending,
+    createCoachBookingMutation,
+    createCoachBookingOpen,
+    createCoachMutation,
+    createCoachOpen,
+    createRecurringPlanMutation,
+    createVenueBookingMutation,
+    createVenueBookingOpen,
+    draggingBooking,
+    draggingCoach,
+    fadeIn,
+    feedbackModal,
+    filteredStaff,
+    filteredVenueBookings,
+    focusedCoachId,
+    focusedCoachScheduleBookings,
+    handleApproveVenueBooking,
+    handleBlockClick,
+    handleBlockDelete,
+    handleBlockSave,
+    handleCancelAppointment,
+    handleCancelVenueBooking,
+    handleCoachFocus,
+    handleCompleteAppointment,
+    handleCompleteVenueBooking,
+    handleConfirmAppointment,
+    handleConfirmPaymentAction,
+    handleConfirmRecurringPlan,
+    handleCreateCoach,
+    handleCreateCoachBooking,
+    handleCreateVenueBooking,
+    handleDragEnd,
+    handleDragStart,
+    handleNoShowVenueBooking,
+    handleVenueEndDateSelect,
+    handleVenueStartDateSelect,
+    handlePreviewRecurringPlan,
+    handleRecurringFutureUpdate,
+    handleRecurringPlanCancel,
+    handleRecurringSessionReschedule,
+    handleRecurringSessionSkip,
+    handleRejectAppointment,
     handleRepeatLastRecurringSchedule,
-    handleRejectVenueBooking, handleSaveAppointmentFeedback, handleSaveAvailability, handleSaveCoachProfile,
-    handleMarkCoachPayoutPaid, handleSetCoachBookingVisibility, handleStaffClick,
-    leftRailRef, markCoachPayoutPaidMutation, memberOptions, nextWeek, payAppointmentInitialMutation,
-    paymentConfirm, paymentConfirmLoading, payRecurringCycleMutation,
-    prevWeek, processAppointmentBalanceMutation, processBookingBalanceMutation,
-    profileEditorCoach, recurringActionBusy, recurringActionCoachId,
-    recurringActionDate, recurringActionDays, recurringActionReason,
-    recurringActionTime, recurringCompletedCount, recurringCreateBusy,
-    recurringPlanAction, recurringPlanForm, recurringPlanInputInvalid,
-    recurringPlanOpen, recurringPlanPreview, recurringPlanSessions,
+    handleRejectVenueBooking,
+    handleSaveAppointmentFeedback,
+    handleSaveAvailability,
+    handleSaveCoachProfile,
+    handleMarkCoachPayoutPaid,
+    handleSetCoachBookingVisibility,
+    handleStaffClick,
+    leftRailRef,
+    markCoachPayoutPaidMutation,
+    memberOptions,
+    nextWeek,
+    payAppointmentInitialMutation,
+    paymentConfirm,
+    paymentConfirmLoading,
+    payRecurringCycleMutation,
+    prevWeek,
+    processAppointmentBalanceMutation,
+    processBookingBalanceMutation,
+    profileEditorCoach,
+    recurringActionBusy,
+    recurringActionCoachId,
+    recurringActionDate,
+    recurringActionDays,
+    recurringActionReason,
+    recurringActionTime,
+    recurringCompletedCount,
+    recurringCreateBusy,
+    recurringCoachOffer,
+    recurringMonthlyOfferConfigured,
+    recurringMonthlyRate,
+    recurringMonthlySessionCount,
+    recurringMonthlyDuration,
+    recurringPlansLoading,
+    recurringPlanAction,
+    recurringPlanForm,
+    recurringPlanInputInvalid,
+    recurringPlanOpen,
+    recurringPlanPreview,
+    recurringPlanSessions,
+    recurringScheduleIssue,
+    recurringTrainingPlanOptions,
     repeatableRecurringPlan,
-    recurringRemainingCount, refreshGymOperationsData, replaceAvailabilityMutation,
-    requestApproveAppointmentPayment, requestCollectAppointmentBalance,
-    requestCollectAppointmentInitialPayment, requestCollectVenueBalance,
-    requestRecurringCyclePayment, respondAppointmentMutation,
-    respondAppointmentPending, rightScrollRef,
-    rosterBookings, scheduleLoading,
-    scheduleRangeMode, scheduleRosterMaxHeight, scheduleTimelineMaxHeight,
-    selectedCoachProfile, selectedCoachRoster, selectedVenueFilterLabel,
-    venueBookingDateLabel, clearVenueBookingDateRange,
-    isAdmin, isCoach,
-    sensors, setActiveBlock, setActiveCoachId,
-    setActiveOperationsTab, setActiveScheduleSurfaceTab, setAppointmentReviewTarget,
-    setAppointmentStatusFilter, setAvailabilityEditorCoachId, setBlockDetailOpen,
-    setCalendarOpen, setCoachDetailsOpen, setCoachFilterId,
-    setCoachVisibilityScope, setCreateCoachBookingOpen, setCreateCoachOpen,
-    setCreateVenueBookingOpen, setFeedbackModal, setPaymentConfirm, setProfileEditorCoachId,
-    setRecurringActionCoachId, setRecurringActionDate, setRecurringActionReason,
-    setRecurringActionTime, setRecurringPlanAction, setRecurringPlanForm,
-    setRecurringPlanOpen, setRecurringPlanPreview,
-    setScheduleRangeMode, setSlideKey, setVenueFilterId,
-    setVenueEndCalendarOpen, setVenueReviewTarget, setVenueStartCalendarOpen,
-    setVenueStatusFilter, setWeekStart,
-    slideStyle, themeTransition, toggleRecurringActionDay,
-    toggleRecurringPlanDay, updateCoachProfileMutation,
-    updateCoachProfilePending, updateRecurringSessionMutation,
-    venueBookingSummary, venueEndCalendarOpen, venueFilterId,
-    venueFilterOptions, venueReviewTarget, venueStartCalendarOpen,
-    venueStatusFilter, verifyPaymentMutation,
-    visibleTimelineDays, visibleTimelineHours, weekStart,
+    recurringRemainingCount,
+    refreshGymOperationsData,
+    replaceAvailabilityMutation,
+    requestApproveAppointmentPayment,
+    requestCollectAppointmentBalance,
+    requestCollectAppointmentInitialPayment,
+    requestCollectVenueBalance,
+    requestRecurringCyclePayment,
+    respondAppointmentMutation,
+    respondAppointmentPending,
+    rightScrollRef,
+    rosterBookings,
+    scheduleLoading,
+    scheduleRangeMode,
+    scheduleRosterMaxHeight,
+    scheduleTimelineMaxHeight,
+    selectedCoachProfile,
+    selectedCoachRoster,
+    selectedVenueFilterLabel,
+    venueBookingDateLabel,
+    clearVenueBookingDateRange,
+    isAdmin,
+    isCoach,
+    sensors,
+    setActiveBlock,
+    setActiveCoachId,
+    setActiveOperationsTab,
+    setActiveScheduleSurfaceTab,
+    setAppointmentReviewTarget,
+    setAppointmentStatusFilter,
+    setAvailabilityEditorCoachId,
+    setBlockDetailOpen,
+    setCalendarOpen,
+    setCoachDetailsOpen,
+    setCoachFilterId,
+    setCoachVisibilityScope,
+    setCreateCoachBookingOpen,
+    setCreateCoachOpen,
+    setCreateVenueBookingOpen,
+    setFeedbackModal,
+    setPaymentConfirm,
+    setProfileEditorCoachId,
+    setRecurringActionCoachId,
+    setRecurringActionDate,
+    setRecurringActionReason,
+    setRecurringActionTime,
+    setRecurringPlanAction,
+    setRecurringPlanForm,
+    setRecurringPlanOpen,
+    setRecurringPlanPreview,
+    setScheduleRangeMode,
+    setSlideKey,
+    setVenueFilterId,
+    setVenueEndCalendarOpen,
+    setVenueReviewTarget,
+    setVenueStartCalendarOpen,
+    setVenueStatusFilter,
+    setWeekStart,
+    slideStyle,
+    themeTransition,
+    toggleRecurringActionDay,
+    toggleRecurringPlanDay,
+    updateCoachProfileMutation,
+    updateCoachProfilePending,
+    updateRecurringSessionMutation,
+    venueBookingSummary,
+    venueEndCalendarOpen,
+    venueFilterId,
+    venueFilterOptions,
+    venueReviewTarget,
+    venueStartCalendarOpen,
+    venueStatusFilter,
+    verifyPaymentMutation,
+    visibleTimelineDays,
+    visibleTimelineHours,
+    weekStart,
   };
 }
 
-type GymOperationsPageContextValue = ReturnType<typeof useGymOperationsPageState>;
+type GymOperationsPageContextValue = ReturnType<
+  typeof useGymOperationsPageState
+>;
 
-const GymOperationsPageContext = createContext<GymOperationsPageContextValue | null>(null);
+const GymOperationsPageContext =
+  createContext<GymOperationsPageContextValue | null>(null);
 
-export function GymOperationsPageProvider({ children }: { children: ReactNode }) {
+export function GymOperationsPageProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const value = useGymOperationsPageState();
   return (
     <GymOperationsPageContext.Provider value={value}>
@@ -2392,7 +2726,9 @@ export function GymOperationsPageProvider({ children }: { children: ReactNode })
 export function useGymOperationsPage() {
   const context = useContext(GymOperationsPageContext);
   if (!context) {
-    throw new Error("useGymOperationsPage must be used within GymOperationsPageProvider");
+    throw new Error(
+      "useGymOperationsPage must be used within GymOperationsPageProvider",
+    );
   }
   return context;
 }

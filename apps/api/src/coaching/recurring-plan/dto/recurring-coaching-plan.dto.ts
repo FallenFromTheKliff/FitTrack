@@ -159,7 +159,10 @@ export class RecurringCoachingPlanBaseDTO {
   @IsUUID('all', { message: 'training_plan_id must be a valid UUID' })
   training_plan_id?: string;
 
-  @ApiPropertyOptional({ type: RecurringCoachingScheduleItemDTO, isArray: true })
+  @ApiPropertyOptional({
+    type: RecurringCoachingScheduleItemDTO,
+    isArray: true,
+  })
   @IsOptional()
   @IsArray({ message: 'schedule_items must be an array' })
   @ArrayMaxSize(120, {
@@ -168,6 +171,24 @@ export class RecurringCoachingPlanBaseDTO {
   @ValidateNested({ each: true })
   @Type(() => RecurringCoachingScheduleItemDTO)
   schedule_items?: RecurringCoachingScheduleItemDTO[];
+}
+
+export class EnrollRecurringCoachingPlanDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsUUID('all', { message: 'coach_id must be a valid UUID' })
+  coach_id: string;
+
+  @ApiPropertyOptional({
+    example: '2026-05-01',
+    description:
+      'The calendar month to purchase. If omitted, the current gym month is used.',
+  })
+  @IsOptional()
+  @IsISO8601(
+    { strict: false },
+    { message: 'start_date must be a valid ISO date string' },
+  )
+  start_date?: string;
 }
 
 export class PreviewRecurringCoachingPlanDTO extends RecurringCoachingPlanBaseDTO {}
@@ -224,7 +245,6 @@ export class CreateRecurringCoachingPlanDTO extends RecurringCoachingPlanBaseDTO
   @ValidateNested({ each: true })
   @Type(() => RecurringPlanSessionOverrideDTO)
   session_overrides?: RecurringPlanSessionOverrideDTO[];
-
 }
 
 export class UpdateRecurringPlanSessionDTO {
@@ -499,7 +519,10 @@ export class RecurringCoachingPlanResponseDTO {
   @ApiPropertyOptional({ example: '2026-05-01T01:00:00.000Z' })
   coach_approved_at: string | null;
 
-  @ApiPropertyOptional({ type: RecurringCoachingScheduleItemResponseDTO, isArray: true })
+  @ApiPropertyOptional({
+    type: RecurringCoachingScheduleItemResponseDTO,
+    isArray: true,
+  })
   schedule_items?: RecurringCoachingScheduleItemResponseDTO[];
 
   @ApiPropertyOptional({

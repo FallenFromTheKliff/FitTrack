@@ -91,13 +91,33 @@ export default function GymOperationsPage() {
         terms={
           isCoach
             ? [
-                { label: "Coach appointment", value: "A member coaching session that can move through confirmation, completion, or cancellation." },
-                { label: "Availability", value: "The live coach windows used to prevent invalid booking choices." },
+                {
+                  label: "Coach appointment",
+                  value:
+                    "A member coaching session that can move through confirmation, completion, or cancellation.",
+                },
+                {
+                  label: "Availability",
+                  value:
+                    "The live coach windows used to prevent invalid booking choices.",
+                },
               ]
             : [
-                { label: "Venue booking", value: "A reservable facility slot tied to a member, time window, and payment state." },
-                { label: "Coach appointment", value: "A member coaching session that can move through payment, confirmation, completion, or cancellation." },
-                { label: "Availability", value: "The live coach or venue windows used to prevent invalid booking choices." },
+                {
+                  label: "Venue booking",
+                  value:
+                    "A reservable facility slot tied to a member, time window, and payment state.",
+                },
+                {
+                  label: "Coach appointment",
+                  value:
+                    "A member coaching session that can move through payment, confirmation, completion, or cancellation.",
+                },
+                {
+                  label: "Availability",
+                  value:
+                    "The live coach or venue windows used to prevent invalid booking choices.",
+                },
               ]
         }
       />
@@ -211,12 +231,20 @@ function GymOperationsPageBody() {
     recurringActionTime,
     recurringCompletedCount,
     recurringCreateBusy,
+    recurringCoachOffer,
+    recurringMonthlyDuration,
+    recurringMonthlyOfferConfigured,
+    recurringMonthlyRate,
+    recurringMonthlySessionCount,
+    recurringPlansLoading,
     recurringPlanAction,
     recurringPlanForm,
     recurringPlanInputInvalid,
     recurringPlanOpen,
     recurringPlanPreview,
     recurringPlanSessions,
+    recurringScheduleIssue,
+    recurringTrainingPlanOptions,
     repeatableRecurringPlan,
     recurringRemainingCount,
     refreshGymOperationsData,
@@ -274,7 +302,6 @@ function GymOperationsPageBody() {
     slideStyle,
     themeTransition,
     toggleRecurringActionDay,
-    toggleRecurringPlanDay,
     updateCoachProfilePending,
     updateRecurringSessionMutation,
     venueBookingDateLabel,
@@ -295,7 +322,8 @@ function GymOperationsPageBody() {
   const selectedCoachCompletedAppointments = coachAppointments.filter(
     (appointment) =>
       appointment.status === "completed" &&
-      (!selectedCoachProfile || appointment.coachId === selectedCoachProfile.id),
+      (!selectedCoachProfile ||
+        appointment.coachId === selectedCoachProfile.id),
   );
   const selectedCoachEarningsTotal = selectedCoachCompletedAppointments.reduce(
     (sum, appointment) => sum + Number(appointment.coachEarnings ?? 0),
@@ -370,7 +398,9 @@ function GymOperationsPageBody() {
                   onClick={() => {
                     void refreshGymOperationsData();
                   }}
-                  aria-label={isCoach ? "Refresh sessions" : "Refresh Gym Operations data"}
+                  aria-label={
+                    isCoach ? "Refresh sessions" : "Refresh Gym Operations data"
+                  }
                   style={{
                     minHeight: 38,
                     borderRadius: 8,
@@ -380,7 +410,7 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                {activeScheduleSurfaceTab === "coach-schedule" && canManageCoaching ? (
+                {activeScheduleSurfaceTab === "coach-schedule" && isCoach ? (
                   <FitButton
                     variant="primary"
                     data-ui="gym-operations-create-recurring-plan"
@@ -445,7 +475,9 @@ function GymOperationsPageBody() {
                   onClick={() => {
                     void refreshGymOperationsData();
                   }}
-                  aria-label={isCoach ? "Refresh sessions" : "Refresh Gym Operations data"}
+                  aria-label={
+                    isCoach ? "Refresh sessions" : "Refresh Gym Operations data"
+                  }
                   style={{
                     minHeight: 38,
                     borderRadius: 8,
@@ -500,266 +532,276 @@ function GymOperationsPageBody() {
           data-ui="gym-operations-content"
           style={{ minHeight: 180, position: "relative" }}
         >
-        {activeOperationsTab === "schedule" ? (
-          <div
-            data-ui="gym-operations-schedule-panel"
-            data-option-count={canManageGymOperations ? 3 : 1}
-            style={{ display: "grid", gap: 12 }}
-          >
-            {canManageGymOperations ? (
-              <div
-                style={{
-                  alignItems: "center",
-                  borderBottom: `1px solid ${colors.border}`,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  minHeight: 44,
-                  padding: "0 2px 10px",
-                }}
-              >
-                <GymOperationsScheduleViewSwitcher
-                  activeView={activeScheduleSurfaceTab}
-                  colors={colors}
-                  onChange={setActiveScheduleSurfaceTab}
-                />
-              </div>
-            ) : null}
-            {activeScheduleSurfaceTab === "month-calendar" ? (
-              <GymOperationsMonthCalendar />
-            ) : activeScheduleSurfaceTab === "coach-schedule" ? (
-              <div
-                className="gym-operations-schedule-grid"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: coachRailAsRow
-                    ? "minmax(0, 1fr)"
-                    : "94px minmax(0, 1fr)",
-                  gap: 10,
-                  alignItems: "stretch",
-                }}
-              >
-                <CoachIconRail
-                  draggable={canManageGymOperations}
-                  railRef={leftRailRef}
-                  maxHeight={coachRailAsRow ? null : scheduleRosterMaxHeight}
-                  orientation={coachRailAsRow ? "row" : "column"}
-                  filteredStaff={filteredStaff}
-                  bookings={rosterBookings}
-                  selectedStaffId={focusedCoachId}
-                  onStaffPreview={handleCoachFocus}
-                  onStaffClick={
-                    canManageGymOperations ? handleStaffClick : () => undefined
-                  }
-                  requireSecondClickToOpen={canManageGymOperations}
-                  colors={colors}
-                />
+          {activeOperationsTab === "schedule" ? (
+            <div
+              data-ui="gym-operations-schedule-panel"
+              data-option-count={canManageGymOperations ? 3 : 1}
+              style={{ display: "grid", gap: 12 }}
+            >
+              {canManageGymOperations ? (
                 <div
+                  style={{
+                    alignItems: "center",
+                    borderBottom: `1px solid ${colors.border}`,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    minHeight: 44,
+                    padding: "0 2px 10px",
+                  }}
+                >
+                  <GymOperationsScheduleViewSwitcher
+                    activeView={activeScheduleSurfaceTab}
+                    colors={colors}
+                    onChange={setActiveScheduleSurfaceTab}
+                  />
+                </div>
+              ) : null}
+              {activeScheduleSurfaceTab === "month-calendar" ? (
+                <GymOperationsMonthCalendar />
+              ) : activeScheduleSurfaceTab === "coach-schedule" ? (
+                <div
+                  className="gym-operations-schedule-grid"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: coachRailAsRow
+                      ? "minmax(0, 1fr)"
+                      : "94px minmax(0, 1fr)",
+                    gap: 10,
+                    alignItems: "stretch",
+                  }}
+                >
+                  <CoachIconRail
+                    draggable={canManageGymOperations}
+                    railRef={leftRailRef}
+                    maxHeight={coachRailAsRow ? null : scheduleRosterMaxHeight}
+                    orientation={coachRailAsRow ? "row" : "column"}
+                    filteredStaff={filteredStaff}
+                    bookings={rosterBookings}
+                    selectedStaffId={focusedCoachId}
+                    onStaffPreview={handleCoachFocus}
+                    onStaffClick={
+                      canManageGymOperations
+                        ? handleStaffClick
+                        : () => undefined
+                    }
+                    requireSecondClickToOpen={canManageGymOperations}
+                    colors={colors}
+                  />
+                  <div
+                    style={{
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border}`,
+                      backgroundColor: colors.surface,
+                      display: "grid",
+                      gridTemplateRows: "auto minmax(0, 1fr)",
+                      gap: 0,
+                      minHeight: scheduleTimelineMaxHeight,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        minHeight: 48,
+                        padding: "10px 12px",
+                        borderBottom: `1px solid ${colors.border}`,
+                        backgroundColor: colors.surfaceRaised,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 14,
+                          flexWrap: "wrap",
+                        }}
+                        aria-label="Schedule legend"
+                      >
+                        {STATUS_OPTIONS.filter(
+                          (option) => option.value !== "all",
+                        ).map((option) => (
+                          <div
+                            key={option.value}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 2,
+                                backgroundColor: getAppointmentStatusColor(
+                                  option.value,
+                                  colors,
+                                ),
+                              }}
+                            />
+                            <FitText
+                              excludeGlobalScale
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: colors.textSecondary,
+                              }}
+                            >
+                              {getReadableStatus(option.value)}
+                            </FitText>
+                          </div>
+                        ))}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <FitButton
+                          variant="ghost"
+                          iconOnly
+                          icon={ChevronLeft}
+                          iconSize={16}
+                          onClick={prevWeek}
+                          aria-label={
+                            scheduleRangeMode === "weekly"
+                              ? "Previous week"
+                              : "Previous day"
+                          }
+                          style={{ minHeight: 32, borderRadius: 8 }}
+                        />
+                        <FitButton
+                          variant="ghost"
+                          icon={CalendarDays}
+                          iconSize={15}
+                          label={
+                            scheduleRangeMode === "weekly"
+                              ? formatWeekRange(weekStart)
+                              : formatScheduleDay(weekStart)
+                          }
+                          onClick={() => setCalendarOpen(true)}
+                          style={{
+                            minHeight: 32,
+                            minWidth: 188,
+                            padding: "4px 9px",
+                            borderRadius: 8,
+                            backgroundColor: `${colors.brand}12`,
+                            color: colors.brand,
+                            whiteSpace: "nowrap",
+                          }}
+                          textStyle={{
+                            color: colors.brand,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            lineHeight: 1,
+                            whiteSpace: "nowrap",
+                          }}
+                          aria-label={
+                            scheduleRangeMode === "weekly"
+                              ? "Pick week"
+                              : "Pick day"
+                          }
+                        />
+                        {isCoach ? (
+                          <OperationsControlField label="Status" minWidth={154}>
+                            <FitSelect
+                              compact
+                              fullWidth
+                              value={appointmentStatusFilter}
+                              onChange={(event) =>
+                                setAppointmentStatusFilter(
+                                  event.target.value || "all",
+                                )
+                              }
+                              options={STATUS_OPTIONS}
+                              aria-label={`Schedule status filter: ${selectedAppointmentStatusLabel}`}
+                            />
+                          </OperationsControlField>
+                        ) : null}
+                        <FitButton
+                          variant="ghost"
+                          iconOnly
+                          icon={ChevronRight}
+                          iconSize={16}
+                          onClick={nextWeek}
+                          aria-label={
+                            scheduleRangeMode === "weekly"
+                              ? "Next week"
+                              : "Next day"
+                          }
+                          style={{ minHeight: 32, borderRadius: 8 }}
+                        />
+                        <FitButton
+                          variant="ghost"
+                          label={
+                            scheduleRangeMode === "weekly" ? "Weekly" : "Daily"
+                          }
+                          onClick={() => {
+                            setScheduleRangeMode((current) => {
+                              const next =
+                                current === "weekly" ? "daily" : "weekly";
+                              setWeekStart((date) =>
+                                next === "weekly" ? getWeekStart(date) : date,
+                              );
+                              setSlideKey((key) => key + 1);
+                              return next;
+                            });
+                          }}
+                          aria-label="Toggle schedule range"
+                          style={{
+                            minHeight: 32,
+                            width: 74,
+                            borderRadius: 8,
+                            padding: "4px 0",
+                            fontSize: 10,
+                            fontWeight: 800,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div
+                      ref={rightScrollRef}
+                      style={{
+                        height: scheduleTimelineMaxHeight,
+                        minHeight: 0,
+                        overflow: "hidden",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <WeeklyTimeline
+                        weekDays={visibleTimelineDays}
+                        hours={visibleTimelineHours}
+                        bookings={focusedCoachScheduleBookings}
+                        slideStyle={slideStyle as MotionStyle}
+                        isLoading={appointmentsLoading}
+                        colors={colors}
+                        flush
+                        height={Math.max(320, scheduleTimelineMaxHeight)}
+                        allowDrag={false}
+                        onBlockClick={handleBlockClick}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  data-ui="gym-operations-venue-panel"
                   style={{
                     borderRadius: 8,
                     border: `1px solid ${colors.border}`,
                     backgroundColor: colors.surface,
+                    padding: "14px",
                     display: "grid",
-                    gridTemplateRows: "auto minmax(0, 1fr)",
-                    gap: 0,
-                    minHeight: scheduleTimelineMaxHeight,
-                    overflow: "hidden",
+                    gap: 14,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      minHeight: 48,
-                      padding: "10px 12px",
-                      borderBottom: `1px solid ${colors.border}`,
-                      backgroundColor: colors.surfaceRaised,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 14,
-                        flexWrap: "wrap",
-                      }}
-                      aria-label="Schedule legend"
-                    >
-                      {STATUS_OPTIONS.filter((option) => option.value !== "all").map((option) => (
-                        <div
-                          key={option.value}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 2,
-                              backgroundColor: getAppointmentStatusColor(option.value, colors),
-                            }}
-                          />
-                          <FitText
-                            excludeGlobalScale
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 800,
-                              color: colors.textSecondary,
-                            }}
-                          >
-                            {getReadableStatus(option.value)}
-                          </FitText>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <FitButton
-                        variant="ghost"
-                        iconOnly
-                        icon={ChevronLeft}
-                        iconSize={16}
-                        onClick={prevWeek}
-                        aria-label={
-                          scheduleRangeMode === "weekly"
-                            ? "Previous week"
-                            : "Previous day"
-                        }
-                        style={{ minHeight: 32, borderRadius: 8 }}
-                      />
-                      <FitButton
-                        variant="ghost"
-                        icon={CalendarDays}
-                        iconSize={15}
-                        label={
-                          scheduleRangeMode === "weekly"
-                            ? formatWeekRange(weekStart)
-                            : formatScheduleDay(weekStart)
-                        }
-                        onClick={() => setCalendarOpen(true)}
-                        style={{
-                          minHeight: 32,
-                          minWidth: 188,
-                          padding: "4px 9px",
-                          borderRadius: 8,
-                          backgroundColor: `${colors.brand}12`,
-                          color: colors.brand,
-                          whiteSpace: "nowrap",
-                        }}
-                        textStyle={{
-                          color: colors.brand,
-                          fontSize: 11,
-                          fontWeight: 800,
-                          lineHeight: 1,
-                          whiteSpace: "nowrap",
-                        }}
-                        aria-label={
-                          scheduleRangeMode === "weekly"
-                            ? "Pick week"
-                            : "Pick day"
-                        }
-                      />
-                      {isCoach ? (
-                        <OperationsControlField label="Status" minWidth={154}>
-                          <FitSelect
-                            compact
-                            fullWidth
-                            value={appointmentStatusFilter}
-                            onChange={(event) =>
-                              setAppointmentStatusFilter(event.target.value || "all")
-                            }
-                            options={STATUS_OPTIONS}
-                            aria-label={`Schedule status filter: ${selectedAppointmentStatusLabel}`}
-                          />
-                        </OperationsControlField>
-                      ) : null}
-                      <FitButton
-                        variant="ghost"
-                        iconOnly
-                        icon={ChevronRight}
-                        iconSize={16}
-                        onClick={nextWeek}
-                        aria-label={
-                          scheduleRangeMode === "weekly"
-                            ? "Next week"
-                            : "Next day"
-                        }
-                        style={{ minHeight: 32, borderRadius: 8 }}
-                      />
-                      <FitButton
-                        variant="ghost"
-                        label={
-                          scheduleRangeMode === "weekly" ? "Weekly" : "Daily"
-                        }
-                        onClick={() => {
-                          setScheduleRangeMode((current) => {
-                            const next = current === "weekly" ? "daily" : "weekly";
-                            setWeekStart((date) =>
-                              next === "weekly" ? getWeekStart(date) : date,
-                            );
-                            setSlideKey((key) => key + 1);
-                            return next;
-                          });
-                        }}
-                        aria-label="Toggle schedule range"
-                        style={{
-                          minHeight: 32,
-                          width: 74,
-                          borderRadius: 8,
-                          padding: "4px 0",
-                          fontSize: 10,
-                          fontWeight: 800,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    ref={rightScrollRef}
-                    style={{
-                      height: scheduleTimelineMaxHeight,
-                      minHeight: 0,
-                      overflow: "hidden",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <WeeklyTimeline
-                      weekDays={visibleTimelineDays}
-                      hours={visibleTimelineHours}
-                      bookings={focusedCoachScheduleBookings}
-                      slideStyle={slideStyle as MotionStyle}
-                      isLoading={appointmentsLoading}
-                      colors={colors}
-                      flush
-                      height={Math.max(320, scheduleTimelineMaxHeight)}
-                      allowDrag={false}
-                      onBlockClick={handleBlockClick}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div
-                data-ui="gym-operations-venue-panel"
-                style={{
-                  borderRadius: 8,
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: colors.surface,
-                  padding: "14px",
-                  display: "grid",
-                  gap: 14,
-                }}
-              >
                   <div
                     style={{
                       display: "flex",
@@ -803,7 +845,10 @@ function GymOperationsPageBody() {
                         flexWrap: "wrap",
                       }}
                     >
-                      <OperationsControlField label="Venue Filter" minWidth={220}>
+                      <OperationsControlField
+                        label="Venue Filter"
+                        minWidth={220}
+                      >
                         <FitSelect
                           value={venueFilterId}
                           onChange={(event) =>
@@ -815,7 +860,10 @@ function GymOperationsPageBody() {
                           aria-label={`Venue filter: ${selectedVenueFilterLabel}`}
                         />
                       </OperationsControlField>
-                      <OperationsControlField label="Status Filter" minWidth={180}>
+                      <OperationsControlField
+                        label="Status Filter"
+                        minWidth={180}
+                      >
                         <FitSelect
                           value={venueStatusFilter}
                           onChange={(event) =>
@@ -861,7 +909,8 @@ function GymOperationsPageBody() {
                           }}
                         />
                       </OperationsControlField>
-                      {bookingDateRange.startDate || bookingDateRange.endDate ? (
+                      {bookingDateRange.startDate ||
+                      bookingDateRange.endDate ? (
                         <FitButton
                           variant="ghost"
                           label="Clear Dates"
@@ -926,485 +975,371 @@ function GymOperationsPageBody() {
                       onOpenReview={setVenueReviewTarget}
                     />
                   )}
-              </div>
-            )}
-          </div>
-        ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
 
-        {activeOperationsTab === "appointments" && canManageGymOperations ? (
-          <div
-            className="gym-operations-work-panel"
-            data-ui="gym-operations-appointments-panel"
-            style={{
-              borderRadius: 8,
-              border: "none",
-              backgroundColor: "transparent",
-              padding: 0,
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr)",
-              alignItems: "stretch",
-              minHeight: 0,
-            }}
-          >
+          {activeOperationsTab === "appointments" && canManageGymOperations ? (
             <div
+              className="gym-operations-work-panel"
+              data-ui="gym-operations-appointments-panel"
               style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateRows: "auto auto minmax(0, 1fr)",
                 borderRadius: 8,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.surface,
-                padding: 14,
-                minWidth: 0,
+                border: "none",
+                backgroundColor: "transparent",
+                padding: 0,
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr)",
+                alignItems: "stretch",
                 minHeight: 0,
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
+                  display: "grid",
                   gap: 10,
-                  flexWrap: "wrap",
-                  paddingTop: 0,
+                  gridTemplateRows: "auto auto minmax(0, 1fr)",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surface,
+                  padding: 14,
+                  minWidth: 0,
+                  minHeight: 0,
                 }}
               >
-                <div style={{ display: "grid", gap: 6 }}>
-                  <FitText
-                    excludeGlobalScale
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: colors.brand,
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    COACH APPOINTMENTS
-                  </FitText>
-                  <FitText
-                    excludeGlobalScale
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: colors.textPrimary,
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    Appointment control
-                  </FitText>
-                  <FitText
-                    excludeGlobalScale
-                    style={{
-                      fontSize: 12,
-                      color: colors.textMuted,
-                      lineHeight: 1.45,
-                      letterSpacing: 0,
-                    }}
-                  >
-                    Review, filter, and resolve coaching sessions.
-                  </FitText>
-                </div>
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
                     gap: 10,
                     flexWrap: "wrap",
+                    paddingTop: 0,
                   }}
                 >
-                  <OperationsControlField label="Coach Filter" minWidth={220}>
-                    <FitSelect
-                      value={coachFilterId ?? ""}
-                      onChange={(event) =>
-                        setCoachFilterId(event.target.value || null)
-                      }
-                      options={coachOptions}
-                      placeholder="All coaches"
-                      compact
-                      fullWidth
-                      aria-label={`Coach appointment filter: ${selectedCoachAppointmentFilterLabel}`}
-                      style={{ minHeight: 34 }}
-                    />
-                  </OperationsControlField>
-                  <OperationsControlField label="Status Filter" minWidth={180}>
-                    <FitSelect
-                      value={appointmentStatusFilter}
-                      onChange={(event) =>
-                        setAppointmentStatusFilter(event.target.value || "all")
-                      }
-                      options={STATUS_OPTIONS}
-                      compact
-                      fullWidth
-                      aria-label={`Coach appointment status filter: ${selectedAppointmentStatusLabel}`}
-                      style={{ minHeight: 34 }}
-                    />
-                  </OperationsControlField>
-                </div>
-              </div>
-              <OperationsMetricGrid>
-                <OperationsMetricCard
-                  colors={colors}
-                  label="Visible Appointments"
-                  value={appointmentSummary.visible}
-                  tone={colors.brand}
-                />
-                <OperationsMetricCard
-                  colors={colors}
-                  label="Pending Coach Decisions"
-                  value={appointmentSummary.pendingCoach}
-                  tone={colors.warning}
-                />
-                <OperationsMetricCard
-                  colors={colors}
-                  label="Confirmed Sessions"
-                  value={appointmentSummary.confirmed}
-                  tone={colors.success}
-                />
-                <OperationsMetricCard
-                  colors={colors}
-                  label={
-                    coachFilterId
-                      ? "Selected Coach Slots"
-                      : "Preview Coach Slots"
-                  }
-                  value={
-                    selectedCoachProfile
-                      ? (selectedCoachProfile.availability?.length ?? 0)
-                      : coachProfiles.filter((coach) => coach.isActive).length
-                  }
-                />
-              </OperationsMetricGrid>
-
-              {appointmentsLoading ? (
-                <OperationsLoadingBlock
-                  colors={colors}
-                  message="Loading coach appointments..."
-                />
-              ) : (
-                <CoachAppointmentsTable
-                  appointments={coachAppointments}
-                  colors={colors}
-                  onOpenReview={setAppointmentReviewTarget}
-                  resetKey={`${coachFilterId ?? "all"}:${appointmentStatusFilter}`}
-                />
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {activeOperationsTab === "coaches" && canManageGymOperations ? (
-          <div
-            className="gym-operations-coaches-grid"
-            data-ui="gym-operations-coaches-panel"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(270px, 310px) minmax(0, 1fr)",
-              gap: 12,
-              alignItems: "stretch",
-              minHeight: 0,
-            }}
-          >
-                <CoachDirectory
-                  coaches={coachRoster}
-                  colors={colors}
-                  onSelect={(coachId) => setCoachFilterId(coachId)}
-                  onVisibilityChange={(nextScope) => {
-                    setCoachVisibilityScope(nextScope);
-                    const nextCoach = coachRoster.find((coach) => {
-                      if (nextScope === "visible") return coach.isActive;
-                      if (nextScope === "hidden") return !coach.isActive;
-                      return true;
-                    });
-                    setCoachFilterId(nextCoach?.id ?? null);
-                  }}
-                  selectedCoachId={focusedCoachId}
-                  visibilityOptions={COACH_VISIBILITY_SCOPE_OPTIONS}
-                  visibilityScope={coachVisibilityScope}
-                />
-                <div
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 8,
-                    backgroundColor: colors.surface,
-                    padding: 14,
-                    display: "grid",
-                    gap: 12,
-                    minHeight: 0,
-                    transition: canAnimate
-                      ? "border-color 180ms ease"
-                      : "border-color 180ms ease, box-shadow 180ms ease",
-                  }}
-                >
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: colors.brand,
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      COACH APPOINTMENTS
+                    </FitText>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Appointment control
+                    </FitText>
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        fontSize: 12,
+                        color: colors.textMuted,
+                        lineHeight: 1.45,
+                        letterSpacing: 0,
+                      }}
+                    >
+                      Review, filter, and resolve coaching sessions.
+                    </FitText>
+                  </div>
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: 12,
+                      alignItems: "center",
+                      gap: 10,
                       flexWrap: "wrap",
                     }}
                   >
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <FitText
-                        excludeGlobalScale
-                        style={{
-                          fontSize: 24,
-                          fontWeight: 800,
-                          color: colors.textPrimary,
-                          lineHeight: 1.02,
-                        }}
-                      >
-                        {selectedCoachRoster?.name ??
-                          "Choose a coach from the roster"}
-                      </FitText>
-                      <FitText
-                        excludeGlobalScale
-                        style={{ fontSize: 10, color: colors.textMuted }}
-                      >
-                        {selectedCoachRoster
-                          ? selectedCoachRoster.email ||
-                            "No contact email yet."
-                          : "Choose a coach to review their booking profile."}
-                      </FitText>
-                    </div>
-                    <div
+                    <OperationsControlField label="Coach Filter" minWidth={220}>
+                      <FitSelect
+                        value={coachFilterId ?? ""}
+                        onChange={(event) =>
+                          setCoachFilterId(event.target.value || null)
+                        }
+                        options={coachOptions}
+                        placeholder="All coaches"
+                        compact
+                        fullWidth
+                        aria-label={`Coach appointment filter: ${selectedCoachAppointmentFilterLabel}`}
+                        style={{ minHeight: 34 }}
+                      />
+                    </OperationsControlField>
+                    <OperationsControlField
+                      label="Status Filter"
+                      minWidth={180}
+                    >
+                      <FitSelect
+                        value={appointmentStatusFilter}
+                        onChange={(event) =>
+                          setAppointmentStatusFilter(
+                            event.target.value || "all",
+                          )
+                        }
+                        options={STATUS_OPTIONS}
+                        compact
+                        fullWidth
+                        aria-label={`Coach appointment status filter: ${selectedAppointmentStatusLabel}`}
+                        style={{ minHeight: 34 }}
+                      />
+                    </OperationsControlField>
+                  </div>
+                </div>
+                <OperationsMetricGrid>
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Visible Appointments"
+                    value={appointmentSummary.visible}
+                    tone={colors.brand}
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Pending Coach Decisions"
+                    value={appointmentSummary.pendingCoach}
+                    tone={colors.warning}
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Confirmed Sessions"
+                    value={appointmentSummary.confirmed}
+                    tone={colors.success}
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label={
+                      coachFilterId
+                        ? "Selected Coach Slots"
+                        : "Preview Coach Slots"
+                    }
+                    value={
+                      selectedCoachProfile
+                        ? (selectedCoachProfile.availability?.length ?? 0)
+                        : coachProfiles.filter((coach) => coach.isActive).length
+                    }
+                  />
+                </OperationsMetricGrid>
+
+                {appointmentsLoading ? (
+                  <OperationsLoadingBlock
+                    colors={colors}
+                    message="Loading coach appointments..."
+                  />
+                ) : (
+                  <CoachAppointmentsTable
+                    appointments={coachAppointments}
+                    colors={colors}
+                    onOpenReview={setAppointmentReviewTarget}
+                    resetKey={`${coachFilterId ?? "all"}:${appointmentStatusFilter}`}
+                  />
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {activeOperationsTab === "coaches" && canManageGymOperations ? (
+            <div
+              className="gym-operations-coaches-grid"
+              data-ui="gym-operations-coaches-panel"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(270px, 310px) minmax(0, 1fr)",
+                gap: 12,
+                alignItems: "stretch",
+                minHeight: 0,
+              }}
+            >
+              <CoachDirectory
+                coaches={coachRoster}
+                colors={colors}
+                onSelect={(coachId) => setCoachFilterId(coachId)}
+                onVisibilityChange={(nextScope) => {
+                  setCoachVisibilityScope(nextScope);
+                  const nextCoach = coachRoster.find((coach) => {
+                    if (nextScope === "visible") return coach.isActive;
+                    if (nextScope === "hidden") return !coach.isActive;
+                    return true;
+                  });
+                  setCoachFilterId(nextCoach?.id ?? null);
+                }}
+                selectedCoachId={focusedCoachId}
+                visibilityOptions={COACH_VISIBILITY_SCOPE_OPTIONS}
+                visibilityScope={coachVisibilityScope}
+              />
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  backgroundColor: colors.surface,
+                  padding: 14,
+                  display: "grid",
+                  gap: 12,
+                  minHeight: 0,
+                  transition: canAnimate
+                    ? "border-color 180ms ease"
+                    : "border-color 180ms ease, box-shadow 180ms ease",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <FitText
+                      excludeGlobalScale
                       style={{
-                        alignItems: "center",
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
+                        fontSize: 24,
+                        fontWeight: 800,
+                        color: colors.textPrimary,
+                        lineHeight: 1.02,
                       }}
                     >
-                      <FitPill
-                        mode="status"
-                        label={
-                          selectedCoachProfile
-                            ? selectedCoachProfile.isActive
-                              ? "VISIBLE IN BOOKING"
-                              : "HIDDEN FROM BOOKING"
-                            : "NO COACH SELECTED"
-                        }
-                        color={
-                          selectedCoachProfile
-                            ? selectedCoachProfile.isActive
-                              ? colors.brand
-                              : colors.warning
-                            : colors.textMuted
-                        }
-                        fontSize={10}
-                        fontWeight={700}
-                        borderOpacity="35"
-                        bgOpacity="14"
-                        style={{ borderRadius: 6 }}
-                      />
-                      <FitButton
-                        data-ui="gym-operations-manage-availability"
-                        variant="ghost"
-                        label="AVAILABILITY"
-                        onClick={() => {
-                          if (!selectedCoachProfile) return;
-                          setAvailabilityEditorCoachId(selectedCoachProfile.id);
-                        }}
-                        disabled={!selectedCoachProfile}
-                        style={{
-                          minHeight: 34,
-                          borderRadius: 7,
-                          padding: "7px 11px",
-                        }}
-                        textStyle={{ fontSize: 10, fontWeight: 800 }}
-                      />
-                      <FitButton
-                        data-ui="gym-operations-edit-profile"
-                        variant="primary"
-                        label="EDIT PROFILE"
-                        icon={Pencil}
-                        iconSize={13}
-                        onClick={() => {
-                          if (!selectedCoachProfile) return;
-                          setProfileEditorCoachId(selectedCoachProfile.id);
-                        }}
-                        disabled={!selectedCoachProfile}
-                        style={{
-                          minHeight: 34,
-                          borderRadius: 7,
-                          padding: "7px 11px",
-                          backgroundColor: colors.brand,
-                          color: colors.onBrand,
-                        }}
-                        textStyle={{ fontSize: 10, fontWeight: 800 }}
-                      />
-                    </div>
+                      {selectedCoachRoster?.name ??
+                        "Choose a coach from the roster"}
+                    </FitText>
+                    <FitText
+                      excludeGlobalScale
+                      style={{ fontSize: 10, color: colors.textMuted }}
+                    >
+                      {selectedCoachRoster
+                        ? selectedCoachRoster.email || "No contact email yet."
+                        : "Choose a coach to review their booking profile."}
+                    </FitText>
                   </div>
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <FitPill
+                      mode="status"
+                      label={
+                        selectedCoachProfile
+                          ? selectedCoachProfile.isActive
+                            ? "VISIBLE IN BOOKING"
+                            : "HIDDEN FROM BOOKING"
+                          : "NO COACH SELECTED"
+                      }
+                      color={
+                        selectedCoachProfile
+                          ? selectedCoachProfile.isActive
+                            ? colors.brand
+                            : colors.warning
+                          : colors.textMuted
+                      }
+                      fontSize={10}
+                      fontWeight={700}
+                      borderOpacity="35"
+                      bgOpacity="14"
+                      style={{ borderRadius: 6 }}
+                    />
+                    <FitButton
+                      data-ui="gym-operations-manage-availability"
+                      variant="ghost"
+                      label="AVAILABILITY"
+                      onClick={() => {
+                        if (!selectedCoachProfile) return;
+                        setAvailabilityEditorCoachId(selectedCoachProfile.id);
+                      }}
+                      disabled={!selectedCoachProfile}
+                      style={{
+                        minHeight: 34,
+                        borderRadius: 7,
+                        padding: "7px 11px",
+                      }}
+                      textStyle={{ fontSize: 10, fontWeight: 800 }}
+                    />
+                    <FitButton
+                      data-ui="gym-operations-edit-profile"
+                      variant="primary"
+                      label="EDIT PROFILE"
+                      icon={Pencil}
+                      iconSize={13}
+                      onClick={() => {
+                        if (!selectedCoachProfile) return;
+                        setProfileEditorCoachId(selectedCoachProfile.id);
+                      }}
+                      disabled={!selectedCoachProfile}
+                      style={{
+                        minHeight: 34,
+                        borderRadius: 7,
+                        padding: "7px 11px",
+                        backgroundColor: colors.brand,
+                        color: colors.onBrand,
+                      }}
+                      textStyle={{ fontSize: 10, fontWeight: 800 }}
+                    />
+                  </div>
+                </div>
 
-                  <OperationsMetricGrid columns={4}>
-                    <OperationsMetricCard
-                      colors={colors}
-                      label="Weekly Slots"
-                      value={selectedCoachProfile?.availability?.length ?? 0}
-                    />
-                    <OperationsMetricCard
-                      colors={colors}
-                      label="Schedule Type"
-                      value={
-                        selectedCoachProfile?.scheduleType === "full_time"
-                          ? "Full-time"
-                          : "Part-time"
-                      }
-                      tone={colors.brand}
-                    />
-                    <OperationsMetricCard
-                      colors={colors}
-                      label="Hourly Rate"
-                      value={
-                        selectedCoachRoster?.hourlyRate != null
-                          ? `PHP ${selectedCoachRoster.hourlyRate.toLocaleString("en-PH")}`
-                          : "Unset"
-                      }
-                      tone={
-                        selectedCoachRoster?.hourlyRate != null
-                          ? colors.brand
-                          : colors.textPrimary
-                      }
-                    />
-                    <OperationsMetricCard
-                      colors={colors}
-                      label="Upcoming Sessions"
-                      value={coachAppointments.filter(
+                <OperationsMetricGrid columns={4}>
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Weekly Slots"
+                    value={selectedCoachProfile?.availability?.length ?? 0}
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Schedule Type"
+                    value={
+                      selectedCoachProfile?.scheduleType === "full_time"
+                        ? "Full-time"
+                        : "Part-time"
+                    }
+                    tone={colors.brand}
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Hourly Rate"
+                    value={
+                      selectedCoachRoster?.hourlyRate != null
+                        ? `PHP ${selectedCoachRoster.hourlyRate.toLocaleString("en-PH")}`
+                        : "Unset"
+                    }
+                    tone={
+                      selectedCoachRoster?.hourlyRate != null
+                        ? colors.brand
+                        : colors.textPrimary
+                    }
+                  />
+                  <OperationsMetricCard
+                    colors={colors}
+                    label="Upcoming Sessions"
+                    value={
+                      coachAppointments.filter(
                         (appointment) =>
                           !focusedCoachId ||
                           appointment.coachId === focusedCoachId,
-                      ).length}
-                      tone={colors.success}
-                    />
-                  </OperationsMetricGrid>
+                      ).length
+                    }
+                    tone={colors.success}
+                  />
+                </OperationsMetricGrid>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-                      gap: 10,
-                    }}
-                  >
-                    <div
-                      style={{
-                        borderRadius: 8,
-                        border: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surfaceRaised,
-                        padding: "14px 16px",
-                        display: "grid",
-                        gap: 8,
-                      }}
-                    >
-                      <FitText
-                        excludeGlobalScale
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: colors.textPrimary,
-                        }}
-                      >
-                        Availability snapshot
-                      </FitText>
-                      {(selectedCoachProfile?.availability?.length ?? 0) > 0 ? (
-                        selectedCoachProfile?.availability
-                          ?.slice(0, 4)
-                          .map((slot) => (
-                            <FitText
-                              key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}`}
-                              excludeGlobalScale
-                              style={{
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              }}
-                            >
-                              {[
-                                "Sun",
-                                "Mon",
-                                "Tue",
-                                "Wed",
-                                "Thu",
-                                "Fri",
-                                "Sat",
-                              ][slot.dayOfWeek] ?? `Day ${slot.dayOfWeek}`}{" "}
-                              / {slot.startTime} - {slot.endTime}
-                            </FitText>
-                          ))
-                      ) : (
-                        <FitText
-                          excludeGlobalScale
-                          style={{ fontSize: 12, color: colors.textMuted }}
-                        >
-                          No availability recorded yet.
-                        </FitText>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        borderRadius: 8,
-                        border: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surfaceRaised,
-                        padding: "14px 16px",
-                        display: "grid",
-                        gap: 10,
-                      }}
-                    >
-                      <FitText
-                        excludeGlobalScale
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: colors.textPrimary,
-                        }}
-                      >
-                        Expertise & credentials
-                      </FitText>
-                      <div
-                        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
-                      >
-                        {(selectedCoachRoster?.specialties ?? []).length > 0 ? (
-                          selectedCoachRoster?.specialties.map(
-                            (specialty, index) => (
-                              <FitPill
-                                key={specialty}
-                                mode="status"
-                                label={specialty.toUpperCase()}
-                                color={
-                                  index === 0 ? colors.brand : colors.textMuted
-                                }
-                                fontSize={9}
-                                fontWeight={700}
-                                borderOpacity="28"
-                                bgOpacity="12"
-                                style={{ borderRadius: 6 }}
-                              />
-                            ),
-                          )
-                        ) : (
-                          <FitText
-                            excludeGlobalScale
-                            style={{ fontSize: 12, color: colors.textMuted }}
-                          >
-                            No specialties recorded for the current selection.
-                          </FitText>
-                        )}
-                      </div>
-                      <FitText
-                        excludeGlobalScale
-                        style={{
-                          borderTop: `1px solid ${colors.border}`,
-                          color: colors.textSecondary,
-                          fontSize: 11.5,
-                          lineHeight: 1.45,
-                          paddingTop: 9,
-                        }}
-                      >
-                        {(selectedCoachRoster?.certifications ?? []).length > 0
-                          ? selectedCoachRoster?.certifications.join(" · ")
-                          : "No certifications recorded yet."}
-                      </FitText>
-                    </div>
-                  </div>
-
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                    gap: 10,
+                  }}
+                >
                   <div
                     style={{
                       borderRadius: 8,
@@ -1423,21 +1358,35 @@ function GymOperationsPageBody() {
                         color: colors.textPrimary,
                       }}
                     >
-                      Booking bio
+                      Availability snapshot
                     </FitText>
-                    <FitText
-                      excludeGlobalScale
-                      style={{
-                        fontSize: 12,
-                        lineHeight: 1.5,
-                        color: colors.textSecondary,
-                      }}
-                    >
-                      {selectedCoachRoster?.bio?.trim() ||
-                        "No booking bio yet."}
-                    </FitText>
+                    {(selectedCoachProfile?.availability?.length ?? 0) > 0 ? (
+                      selectedCoachProfile?.availability
+                        ?.slice(0, 4)
+                        .map((slot) => (
+                          <FitText
+                            key={`${slot.dayOfWeek}-${slot.startTime}-${slot.endTime}`}
+                            excludeGlobalScale
+                            style={{
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            }}
+                          >
+                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+                              slot.dayOfWeek
+                            ] ?? `Day ${slot.dayOfWeek}`}{" "}
+                            / {slot.startTime} - {slot.endTime}
+                          </FitText>
+                        ))
+                    ) : (
+                      <FitText
+                        excludeGlobalScale
+                        style={{ fontSize: 12, color: colors.textMuted }}
+                      >
+                        No availability recorded yet.
+                      </FitText>
+                    )}
                   </div>
-
                   <div
                     style={{
                       borderRadius: 8,
@@ -1448,68 +1397,175 @@ function GymOperationsPageBody() {
                       gap: 10,
                     }}
                   >
-                    <div
+                    <FitText
+                      excludeGlobalScale
                       style={{
-                        alignItems: "center",
-                        display: "flex",
-                        gap: 10,
-                        justifyContent: "space-between",
-                        flexWrap: "wrap",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: colors.textPrimary,
                       }}
                     >
-                      <div>
+                      Expertise & credentials
+                    </FitText>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {(selectedCoachRoster?.specialties ?? []).length > 0 ? (
+                        selectedCoachRoster?.specialties.map(
+                          (specialty, index) => (
+                            <FitPill
+                              key={specialty}
+                              mode="status"
+                              label={specialty.toUpperCase()}
+                              color={
+                                index === 0 ? colors.brand : colors.textMuted
+                              }
+                              fontSize={9}
+                              fontWeight={700}
+                              borderOpacity="28"
+                              bgOpacity="12"
+                              style={{ borderRadius: 6 }}
+                            />
+                          ),
+                        )
+                      ) : (
                         <FitText
                           excludeGlobalScale
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: colors.textPrimary,
-                          }}
+                          style={{ fontSize: 12, color: colors.textMuted }}
                         >
-                          Earnings breakdown
+                          No specialties recorded for the current selection.
                         </FitText>
-                        <FitText
-                          excludeGlobalScale
-                          style={{
-                            color: colors.textSecondary,
-                            display: "block",
-                            fontSize: 11.5,
-                            marginTop: 3,
-                          }}
-                        >
-                          {selectedCoachCompletedAppointments.length} completed session
-                          {selectedCoachCompletedAppointments.length === 1 ? "" : "s"} /{" "}
-                          {formatPhpAmount(selectedCoachEarningsTotal)} commission
-                        </FitText>
-                      </div>
+                      )}
                     </div>
-                    {selectedCoachCompletedAppointments.length > 0 ? (
-                      <div style={{ display: "grid", gap: 0, overflowX: "auto" }}>
-                        <div style={{ display: "grid", gap: 0, minWidth: 620 }}>
-                          <div
-                            style={{
-                              color: colors.textMuted,
-                              display: "grid",
-                              fontSize: 10,
-                              fontWeight: 800,
-                              gap: 8,
-                              gridTemplateColumns: "1fr 1.2fr 0.9fr 0.8fr 0.8fr",
-                              letterSpacing: "0.06em",
-                              padding: "6px 0 8px",
-                              textTransform: "uppercase",
-                            }}
-                          >
-                            <span>Date</span>
-                            <span>Member Name</span>
-                            <span>Commission</span>
-                            <span>Status</span>
-                            <span>Action</span>
-                          </div>
-                          {selectedCoachCompletedAppointments.map((appointment) => {
-                            const memberName = `${appointment.user.profile?.firstName ?? ""} ${
-                              appointment.user.profile?.lastName ?? ""
-                            }`.trim() || appointment.user.email || "Member";
-                            const isPaid = Boolean(appointment.coachPayoutPaidAt);
+                    <FitText
+                      excludeGlobalScale
+                      style={{
+                        borderTop: `1px solid ${colors.border}`,
+                        color: colors.textSecondary,
+                        fontSize: 11.5,
+                        lineHeight: 1.45,
+                        paddingTop: 9,
+                      }}
+                    >
+                      {(selectedCoachRoster?.certifications ?? []).length > 0
+                        ? selectedCoachRoster?.certifications.join(" · ")
+                        : "No certifications recorded yet."}
+                    </FitText>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surfaceRaised,
+                    padding: "14px 16px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <FitText
+                    excludeGlobalScale
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    Booking bio
+                  </FitText>
+                  <FitText
+                    excludeGlobalScale
+                    style={{
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      color: colors.textSecondary,
+                    }}
+                  >
+                    {selectedCoachRoster?.bio?.trim() || "No booking bio yet."}
+                  </FitText>
+                </div>
+
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.surfaceRaised,
+                    padding: "14px 16px",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      gap: 10,
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <FitText
+                        excludeGlobalScale
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        Earnings breakdown
+                      </FitText>
+                      <FitText
+                        excludeGlobalScale
+                        style={{
+                          color: colors.textSecondary,
+                          display: "block",
+                          fontSize: 11.5,
+                          marginTop: 3,
+                        }}
+                      >
+                        {selectedCoachCompletedAppointments.length} completed
+                        session
+                        {selectedCoachCompletedAppointments.length === 1
+                          ? ""
+                          : "s"}{" "}
+                        / {formatPhpAmount(selectedCoachEarningsTotal)}{" "}
+                        commission
+                      </FitText>
+                    </div>
+                  </div>
+                  {selectedCoachCompletedAppointments.length > 0 ? (
+                    <div style={{ display: "grid", gap: 0, overflowX: "auto" }}>
+                      <div style={{ display: "grid", gap: 0, minWidth: 620 }}>
+                        <div
+                          style={{
+                            color: colors.textMuted,
+                            display: "grid",
+                            fontSize: 10,
+                            fontWeight: 800,
+                            gap: 8,
+                            gridTemplateColumns: "1fr 1.2fr 0.9fr 0.8fr 0.8fr",
+                            letterSpacing: "0.06em",
+                            padding: "6px 0 8px",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          <span>Date</span>
+                          <span>Member Name</span>
+                          <span>Commission</span>
+                          <span>Status</span>
+                          <span>Action</span>
+                        </div>
+                        {selectedCoachCompletedAppointments.map(
+                          (appointment) => {
+                            const memberName =
+                              `${appointment.user.profile?.firstName ?? ""} ${
+                                appointment.user.profile?.lastName ?? ""
+                              }`.trim() ||
+                              appointment.user.email ||
+                              "Member";
+                            const isPaid = Boolean(
+                              appointment.coachPayoutPaidAt,
+                            );
                             return (
                               <div
                                 key={appointment.id}
@@ -1518,28 +1574,51 @@ function GymOperationsPageBody() {
                                   borderTop: `1px solid ${colors.border}`,
                                   display: "grid",
                                   gap: 8,
-                                  gridTemplateColumns: "1fr 1.2fr 0.9fr 0.8fr 0.8fr",
+                                  gridTemplateColumns:
+                                    "1fr 1.2fr 0.9fr 0.8fr 0.8fr",
                                   minHeight: 42,
                                   padding: "8px 0",
                                 }}
                               >
-                                <FitText excludeGlobalScale style={{ fontSize: 11.5, fontWeight: 700 }}>
-                                  {new Date(appointment.scheduledAt).toLocaleDateString("en-PH", {
+                                <FitText
+                                  excludeGlobalScale
+                                  style={{ fontSize: 11.5, fontWeight: 700 }}
+                                >
+                                  {new Date(
+                                    appointment.scheduledAt,
+                                  ).toLocaleDateString("en-PH", {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
                                   })}
                                 </FitText>
-                                <FitText excludeGlobalScale style={{ fontSize: 11.5, color: colors.textSecondary }}>
+                                <FitText
+                                  excludeGlobalScale
+                                  style={{
+                                    fontSize: 11.5,
+                                    color: colors.textSecondary,
+                                  }}
+                                >
                                   {memberName}
-                                </FitText>
-                                <FitText excludeGlobalScale style={{ fontSize: 11.5, color: colors.brand, fontWeight: 800 }}>
-                                  {formatPhpAmount(Number(appointment.coachEarnings ?? 0))}
                                 </FitText>
                                 <FitText
                                   excludeGlobalScale
                                   style={{
-                                    color: isPaid ? colors.success : colors.warning,
+                                    fontSize: 11.5,
+                                    color: colors.brand,
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {formatPhpAmount(
+                                    Number(appointment.coachEarnings ?? 0),
+                                  )}
+                                </FitText>
+                                <FitText
+                                  excludeGlobalScale
+                                  style={{
+                                    color: isPaid
+                                      ? colors.success
+                                      : colors.warning,
                                     fontSize: 11,
                                     fontWeight: 800,
                                   }}
@@ -1549,29 +1628,38 @@ function GymOperationsPageBody() {
                                 <FitButton
                                   variant="ghost"
                                   label={isPaid ? "PAID" : "MARK PAID"}
-                                  onClick={() => void handleMarkCoachPayoutPaid(appointment)}
-                                  disabled={isPaid || markCoachPayoutPaidMutation.isPending}
-                                  style={{ minHeight: 28, padding: "5px 8px", borderRadius: 8 }}
+                                  onClick={() =>
+                                    void handleMarkCoachPayoutPaid(appointment)
+                                  }
+                                  disabled={
+                                    isPaid ||
+                                    markCoachPayoutPaidMutation.isPending
+                                  }
+                                  style={{
+                                    minHeight: 28,
+                                    padding: "5px 8px",
+                                    borderRadius: 8,
+                                  }}
                                   textStyle={{ fontSize: 10, fontWeight: 800 }}
                                 />
                               </div>
                             );
-                          })}
-                        </div>
+                          },
+                        )}
                       </div>
-                    ) : (
-                      <FitText
-                        excludeGlobalScale
-                        style={{ color: colors.textMuted, fontSize: 12 }}
-                      >
-                        Completed sessions and payout status will appear here.
-                      </FitText>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <FitText
+                      excludeGlobalScale
+                      style={{ color: colors.textMuted, fontSize: 12 }}
+                    >
+                      Completed sessions and payout status will appear here.
+                    </FitText>
+                  )}
                 </div>
-
               </div>
-        ) : null}
+            </div>
+          ) : null}
         </div>
 
         <StaffDetailsModal
@@ -1647,17 +1735,28 @@ function GymOperationsPageBody() {
           inputInvalid={recurringPlanInputInvalid}
           isBusy={recurringCreateBusy}
           isCreatePending={createRecurringPlanMutation.isPending}
-          isOpen={canManageCoaching && recurringPlanOpen}
+          isOpen={isCoach && recurringPlanOpen}
           memberOptions={memberOptions}
+          monthlyOffer={{
+            description: recurringCoachOffer?.monthlyOfferDescription ?? null,
+            durationMinutes: recurringMonthlyDuration,
+            isConfigured: recurringMonthlyOfferConfigured,
+            rate: recurringMonthlyRate,
+            sessionCount: recurringMonthlySessionCount,
+          }}
           onClose={() => setRecurringPlanOpen(false)}
-          onConfirm={(skipConflicts) => void handleConfirmRecurringPlan(skipConflicts)}
+          onConfirm={(skipConflicts) =>
+            void handleConfirmRecurringPlan(skipConflicts)
+          }
           onPreview={() => void handlePreviewRecurringPlan()}
           onRepeatLastSchedule={handleRepeatLastRecurringSchedule}
           onResetPreview={() => setRecurringPlanPreview(null)}
-          onToggleDay={toggleRecurringPlanDay}
           preview={recurringPlanPreview}
           repeatablePlan={repeatableRecurringPlan}
+          scheduleIssue={recurringScheduleIssue}
           setForm={setRecurringPlanForm}
+          trainingPlanOptions={recurringTrainingPlanOptions}
+          trainingPlansLoading={recurringPlansLoading}
         />
         <GymOperationsCoachAppointmentModal
           appointment={appointmentReviewTarget}
@@ -1686,7 +1785,10 @@ function GymOperationsPageBody() {
           isCoachView={isCoach}
           onSaveFeedback={(payload) => {
             if (!appointmentReviewTarget) return;
-            void handleSaveAppointmentFeedback(appointmentReviewTarget, payload);
+            void handleSaveAppointmentFeedback(
+              appointmentReviewTarget,
+              payload,
+            );
           }}
           onCancelAppointment={(note) => {
             if (!appointmentReviewTarget) return;
@@ -1721,10 +1823,7 @@ function GymOperationsPageBody() {
           }}
           onCollectBalance={(provider) => {
             if (!appointmentReviewTarget) return;
-            requestCollectAppointmentBalance(
-              appointmentReviewTarget,
-              provider,
-            );
+            requestCollectAppointmentBalance(appointmentReviewTarget, provider);
           }}
           onCollectInitialPayment={(provider, paymentStage) => {
             if (!appointmentReviewTarget) return;
@@ -1810,8 +1909,7 @@ function GymOperationsPageBody() {
             })) ?? []
           }
           isSaving={
-            replaceAvailabilityMutation.isPending ||
-            updateCoachProfilePending
+            replaceAvailabilityMutation.isPending || updateCoachProfilePending
           }
           onClose={() => setAvailabilityEditorCoachId(null)}
           onSave={(slots) => void handleSaveAvailability(slots)}
@@ -1862,8 +1960,16 @@ function GymOperationsPageBody() {
         />
         <FitModal
           isOpen={feedbackModal !== null}
-          title={feedbackModal?.tone === "danger" ? "Schedule Action Failed" : "Schedule Updated"}
-          subtitle={feedbackModal?.tone === "danger" ? "Review the message before trying again" : "The schedule change has been applied."}
+          title={
+            feedbackModal?.tone === "danger"
+              ? "Schedule Action Failed"
+              : "Schedule Updated"
+          }
+          subtitle={
+            feedbackModal?.tone === "danger"
+              ? "Review the message before trying again"
+              : "The schedule change has been applied."
+          }
           icon={feedbackModal?.tone === "danger" ? CircleAlert : CircleCheck}
           onClose={() => setFeedbackModal(null)}
           footer={
@@ -1877,7 +1983,10 @@ function GymOperationsPageBody() {
           <FitText
             as="p"
             style={{
-              color: feedbackModal?.tone === "danger" ? colors.danger : colors.textSecondary,
+              color:
+                feedbackModal?.tone === "danger"
+                  ? colors.danger
+                  : colors.textSecondary,
               fontSize: 13,
               lineHeight: 1.5,
             }}
@@ -1894,10 +2003,21 @@ function GymOperationsPageBody() {
           }
           subtitle="Keep this member-facing profile trustworthy before new bookings."
           fields={COACH_PROFILE_FIELDS.map((field) =>
-            field.name === "scheduleType" && !isAdmin
+            (field.name === "scheduleType" && !isAdmin) ||
+            (isCoach &&
+              [
+                "monthlyOfferActive",
+                "monthlyRate",
+                "monthlySessionCount",
+                "monthlySessionDurationMinutes",
+                "monthlyOfferDescription",
+              ].includes(field.name))
               ? {
                   ...field,
-                  hint: "Admin controlled. Staff and coaches can view this value but cannot change it.",
+                  hint:
+                    field.name === "scheduleType"
+                      ? "Admin controlled. Staff and coaches can view this value but cannot change it."
+                      : "Admin or staff controls the published monthly offer.",
                   readOnly: true,
                 }
               : field,
@@ -1919,8 +2039,24 @@ function GymOperationsPageBody() {
                     profileEditorCoach.hourlyRate != null
                       ? String(profileEditorCoach.hourlyRate)
                       : "",
-                  scheduleType:
-                    profileEditorCoach.scheduleType ?? "part_time",
+                  monthlyOfferActive: profileEditorCoach.monthlyOfferActive
+                    ? "active"
+                    : "inactive",
+                  monthlyOfferDescription:
+                    profileEditorCoach.monthlyOfferDescription ?? "",
+                  monthlyRate:
+                    profileEditorCoach.monthlyRate != null
+                      ? String(profileEditorCoach.monthlyRate)
+                      : "",
+                  monthlySessionCount:
+                    profileEditorCoach.monthlySessionCount != null
+                      ? String(profileEditorCoach.monthlySessionCount)
+                      : "",
+                  monthlySessionDurationMinutes:
+                    profileEditorCoach.monthlySessionDurationMinutes != null
+                      ? String(profileEditorCoach.monthlySessionDurationMinutes)
+                      : "60",
+                  scheduleType: profileEditorCoach.scheduleType ?? "part_time",
                   isAvailableForBooking: profileEditorCoach.isActive
                     ? "active"
                     : "inactive",
@@ -1928,9 +2064,7 @@ function GymOperationsPageBody() {
               : undefined
           }
           submitLabel={
-            updateCoachProfilePending
-              ? "SAVING PROFILE"
-              : "SAVE PROFILE"
+            updateCoachProfilePending ? "SAVING PROFILE" : "SAVE PROFILE"
           }
           isLoading={updateCoachProfilePending}
           disableUnchanged

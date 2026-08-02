@@ -41,8 +41,14 @@ export type CoachDecision =
 export type StaffInitialPaymentStage = "downpayment" | "full";
 export type PaymentCollectionProvider = "cash" | "paymongo";
 export type SelectOption = {
+  coachUserId?: string;
   hourlyRate?: number | null;
   label: string;
+  monthlyOfferActive?: boolean;
+  monthlyOfferDescription?: string | null;
+  monthlyRate?: number | null;
+  monthlySessionCount?: number | null;
+  monthlySessionDurationMinutes?: number | null;
   value: string;
 };
 export type OverlayConfirmation = {
@@ -294,12 +300,14 @@ export function toIsoString(date: string, time: string) {
   const [hour, minute] = time.split(":").map(Number);
   const gymOffsetMinutes = 8 * 60;
   return new Date(
-    Date.UTC(year, month - 1, day, hour, minute) -
-      gymOffsetMinutes * 60 * 1000,
+    Date.UTC(year, month - 1, day, hour, minute) - gymOffsetMinutes * 60 * 1000,
   ).toISOString();
 }
 
-export function buildStatusTone(status: string | undefined, colors: ThemeColors) {
+export function buildStatusTone(
+  status: string | undefined,
+  colors: ThemeColors,
+) {
   switch (status) {
     case "pending_coach":
     case "pending":
@@ -307,9 +315,7 @@ export function buildStatusTone(status: string | undefined, colors: ThemeColors)
         bg: colors.brand,
         color: colors.onBrand,
         label:
-          status === "pending_coach"
-            ? "Pending coach"
-            : "Pending downpayment",
+          status === "pending_coach" ? "Pending coach" : "Pending downpayment",
       };
     case "pending_payment":
       return {
@@ -423,7 +429,10 @@ export function modalTextAreaStyle(colors: ThemeColors): CSSProperties {
   };
 }
 
-export function actionPillStyle(colors: ThemeColors, active = false): CSSProperties {
+export function actionPillStyle(
+  colors: ThemeColors,
+  active = false,
+): CSSProperties {
   return {
     minHeight: 36,
     borderRadius: 10,

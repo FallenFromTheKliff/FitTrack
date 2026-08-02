@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import {
   AppointmentStatus,
   CoachWorkoutAssignmentSource,
   CoachWorkoutAssignmentState,
-  Payment,
+  PlanSource,
   Prisma,
   RecurringCoachingBillingCycleStatus,
   RecurringCoachingPlanStatus,
@@ -37,7 +41,7 @@ export type RecurringPlanCoachContext = Prisma.CoachProfileGetPayload<{
 export type RecurringPlanWithSessions = Prisma.RecurringCoachingPlanGetPayload<{
   include: {
     appointments: {
-      orderBy: { scheduled_at: 'asc' },
+      orderBy: { scheduled_at: 'asc' };
       include: { workout_assignment: true };
     };
     billing_cycles: {
@@ -90,6 +94,38 @@ export class RecurringCoachingPlanRepository {
           include: {
             profile: true,
           },
+        },
+      },
+    });
+  }
+
+  findMemberCoachEnrollment(input: {
+    coachId: string;
+    memberId: string;
+  }): Promise<RecurringPlanWithSessions | null> {
+    return this.prisma.recurringCoachingPlan.findFirst({
+      where: {
+        coach_id: input.coachId,
+        member_id: input.memberId,
+        status: {
+          in: [
+            RecurringCoachingPlanStatus.awaiting_payment,
+            RecurringCoachingPlanStatus.active,
+            RecurringCoachingPlanStatus.paused,
+          ],
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      include: {
+        coach: { select: { user_id: true } },
+        appointments: {
+          orderBy: { scheduled_at: 'asc' },
+          include: { workout_assignment: true },
+        },
+        billing_cycles: { orderBy: { cycle_start_date: 'asc' } },
+        schedule_items: {
+          orderBy: { sequence_index: 'asc' },
+          include: { appointment: true },
         },
       },
     });
@@ -203,6 +239,167 @@ export class RecurringCoachingPlanRepository {
     });
   }
 
+  async fillPaidPlanWithSessions(input: {
+    appointments: Array<
+      Omit<
+        Prisma.CoachAppointmentCreateManyInput,
+        'recurring_plan_id' | 'recurring_schedule_item_id'
+      >
+    >;
+    paidAt: Date;
+    paidCycleId: string;
+    planId: string;
+    planUpdate: Prisma.RecurringCoachingPlanUpdateInput;
+    scheduleItems: Array<
+      Omit<
+        Prisma.RecurringCoachingScheduleItemCreateManyInput,
+        'recurring_plan_id'
+      >
+    >;
+    trainingPlanId: string;
+  }): Promise<RecurringPlanWithSessions> {
+    return this.prisma.$transaction(async (tx) => {
+      const plan = await tx.recurringCoachingPlan.findUnique({
+        where: { id: input.planId },
+        select: { status: true },
+      });
+      if (!plan || plan.status !== RecurringCoachingPlanStatus.active) {
+        throw new ForbiddenException({
+          type: 'FORBIDDEN',
+          title: 'Full Payment Required',
+          status: 403,
+          detail:
+            'The recurring coaching enrollment must be active before sessions can be authored.',
+        });
+      }
+
+      const paidCycle = await tx.recurringCoachingBillingCycle.findFirst({
+        where: {
+          id: input.paidCycleId,
+          recurring_plan_id: input.planId,
+          status: RecurringCoachingBillingCycleStatus.paid,
+        },
+        select: { paid_at: true },
+      });
+      if (!paidCycle?.paid_at) {
+        throw new ForbiddenException({
+          type: 'FORBIDDEN',
+          title: 'Full Payment Required',
+          status: 403,
+          detail:
+            'The member must complete the full monthly payment before sessions can be authored.',
+        });
+      }
+
+      const [existingScheduleItem, existingAppointment] = await Promise.all([
+        tx.recurringCoachingScheduleItem.findFirst({
+          where: { recurring_plan_id: input.planId },
+          select: { id: true },
+        }),
+        tx.coachAppointment.findFirst({
+          where: { recurring_plan_id: input.planId },
+          select: { id: true },
+        }),
+      ]);
+      if (existingScheduleItem || existingAppointment) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Recurring Coaching Schedule Already Exists',
+          status: 409,
+          detail:
+            'This recurring coaching enrollment already has an authored schedule.',
+        });
+      }
+
+      if (input.scheduleItems.length !== input.appointments.length) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Schedule Session Mismatch',
+          status: 409,
+          detail:
+            'Every recurring coaching schedule item must have one matching appointment.',
+        });
+      }
+
+      const trainingPlan = await tx.trainingPlan.findUnique({
+        where: { id: input.trainingPlanId },
+        select: {
+          schedule_days: {
+            orderBy: [{ week_number: 'asc' }, { day_of_week: 'asc' }],
+          },
+        },
+      });
+      if (!trainingPlan) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Workout Plan Not Found',
+          status: 409,
+          detail:
+            'The linked coach workout plan no longer exists and the schedule was not authored.',
+        });
+      }
+
+      await tx.recurringCoachingPlan.update({
+        where: { id: input.planId },
+        data: input.planUpdate,
+      });
+
+      for (const [index, scheduleItem] of input.scheduleItems.entries()) {
+        const item = await tx.recurringCoachingScheduleItem.create({
+          data: {
+            ...scheduleItem,
+            recurring_plan_id: input.planId,
+          },
+        });
+        const appointment = await tx.coachAppointment.create({
+          data: {
+            ...input.appointments[index],
+            recurring_plan_id: input.planId,
+            recurring_schedule_item_id: item.id,
+            downpayment_paid_at: paidCycle.paid_at,
+            balance_paid_at: paidCycle.paid_at,
+          },
+        });
+
+        const scheduleDay = trainingPlan.schedule_days.length
+          ? trainingPlan.schedule_days[
+              index % trainingPlan.schedule_days.length
+            ]
+          : null;
+        if (scheduleDay) {
+          await tx.coachWorkoutAssignment.create({
+            data: {
+              appointment_id: appointment.id,
+              training_plan_id: scheduleDay.plan_id,
+              training_schedule_day_id: scheduleDay.id,
+              sequence_index: scheduleItem.sequence_index,
+              source: CoachWorkoutAssignmentSource.automatic,
+              state: CoachWorkoutAssignmentState.assigned,
+            },
+          });
+        }
+      }
+
+      return tx.recurringCoachingPlan.findUniqueOrThrow({
+        where: { id: input.planId },
+        include: {
+          coach: { select: { user_id: true } },
+          appointments: {
+            orderBy: { scheduled_at: 'asc' },
+            include: { workout_assignment: true },
+          },
+          billing_cycles: {
+            orderBy: { cycle_start_date: 'asc' },
+          },
+          schedule_items: {
+            orderBy: { sequence_index: 'asc' },
+            include: { appointment: true },
+          },
+        },
+      });
+    });
+  }
+
   findPlanWithSessions(
     planId: string,
   ): Promise<RecurringPlanWithSessions | null> {
@@ -222,6 +419,23 @@ export class RecurringCoachingPlanRepository {
           include: { appointment: true },
         },
       },
+    });
+  }
+
+  findCoachAuthoredTrainingPlan(input: {
+    trainingPlanId: string;
+    memberId: string;
+    coachUserId: string;
+  }) {
+    return this.prisma.trainingPlan.findFirst({
+      where: {
+        id: input.trainingPlanId,
+        user_id: input.memberId,
+        coach_id: input.coachUserId,
+        source: PlanSource.coach_assigned,
+        is_template: false,
+      },
+      select: { id: true },
     });
   }
 
@@ -306,7 +520,7 @@ export class RecurringCoachingPlanRepository {
     cycleId: string;
     data: Prisma.PaymentCreateInput;
     processingStatus: RecurringCoachingBillingCycleStatus;
-  }): Promise<{ cycle: Prisma.RecurringCoachingBillingCycleGetPayload<{}>; payment: Payment }> {
+  }) {
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({ data: input.data });
       const cycle = await tx.recurringCoachingBillingCycle.update({
@@ -374,7 +588,7 @@ export class RecurringCoachingPlanRepository {
 
       if (plan.schedule_items.length > 0) {
         const scheduleDays = plan.training_plan?.schedule_days ?? [];
-        for (const [index, item] of plan.schedule_items.entries()) {
+        for (const item of plan.schedule_items) {
           const totalAmount = new Prisma.Decimal(item.amount);
           const gymRevenue = totalAmount
             .mul(new Prisma.Decimal(plan.coach.gym_commission_pct))
@@ -402,7 +616,7 @@ export class RecurringCoachingPlanRepository {
           });
 
           const scheduleDay = scheduleDays.length
-            ? scheduleDays[index % scheduleDays.length]
+            ? scheduleDays[(item.sequence_index - 1) % scheduleDays.length]
             : null;
           if (scheduleDay) {
             await tx.coachWorkoutAssignment.create({
@@ -470,15 +684,15 @@ export class RecurringCoachingPlanRepository {
             ],
           },
           grace_period_ends_at: { lt: now },
-            recurring_plan: {
-              status: {
-                in: [
-                  RecurringCoachingPlanStatus.active,
-                  RecurringCoachingPlanStatus.paused,
-                  RecurringCoachingPlanStatus.awaiting_payment,
-                ],
-              },
+          recurring_plan: {
+            status: {
+              in: [
+                RecurringCoachingPlanStatus.active,
+                RecurringCoachingPlanStatus.paused,
+                RecurringCoachingPlanStatus.awaiting_payment,
+              ],
             },
+          },
         },
         select: {
           id: true,
@@ -490,7 +704,8 @@ export class RecurringCoachingPlanRepository {
       await this.cancelPlan({
         cancelledAt: now,
         planId: cycle.recurring_plan_id,
-        reason: 'Recurring coach plan cancelled after unpaid monthly billing cycle exceeded the 7-day grace period.',
+        reason:
+          'Recurring coach plan cancelled after unpaid monthly billing cycle exceeded the 7-day grace period.',
       });
       await this.updateBillingCycle(cycle.id, {
         status: RecurringCoachingBillingCycleStatus.overdue,
@@ -536,7 +751,10 @@ export class RecurringCoachingPlanRepository {
           },
         },
         include: { appointment: true },
-        orderBy: [{ appointment: { scheduled_at: 'asc' } }, { sequence_index: 'asc' }],
+        orderBy: [
+          { appointment: { scheduled_at: 'asc' } },
+          { sequence_index: 'asc' },
+        ],
       });
 
       const skipped = assignments.find(

@@ -44,8 +44,21 @@ const COACH_SELF_UPDATE_FIELDS = [
 const COACH_ADMIN_UPDATE_FIELDS = [
   ...COACH_SELF_UPDATE_FIELDS,
   'hourly_rate',
+  'monthly_rate',
+  'monthly_session_count',
+  'monthly_session_duration_minutes',
+  'monthly_offer_description',
+  'monthly_offer_active',
   'gym_commission_pct',
   'schedule_type',
+] as const;
+const COACH_STAFF_UPDATE_FIELDS = [
+  ...COACH_SELF_UPDATE_FIELDS,
+  'monthly_rate',
+  'monthly_session_count',
+  'monthly_session_duration_minutes',
+  'monthly_offer_description',
+  'monthly_offer_active',
 ] as const;
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
@@ -192,10 +205,10 @@ export class CoachService {
     coachId: string,
     dto: UpdateCoachProfileDTO,
   ): Promise<CoachDetailResponseDTO> {
-    this.assertCoachOwnedFields(dto);
+    this.assertStaffManagedFields(dto);
 
     return this.toCoachDetail(
-      await this.repo.updateCoachById(coachId, this.toSelfUpdateInput(dto)),
+      await this.repo.updateCoachById(coachId, this.toStaffUpdateInput(dto)),
     );
   }
 
@@ -267,6 +280,24 @@ export class CoachService {
   }
 
   private assertCoachOwnedFields(dto: UpdateCoachProfileDTO): void {
+    const commercialField = [
+      'monthly_rate',
+      'monthly_session_count',
+      'monthly_session_duration_minutes',
+      'monthly_offer_description',
+      'monthly_offer_active',
+    ].find((field) => dto[field as keyof UpdateCoachProfileDTO] !== undefined);
+
+    if (commercialField) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Monthly Offer Update Forbidden',
+        status: 403,
+        detail:
+          'Only admin or staff users can update the coach monthly coaching offer.',
+      });
+    }
+
     if (dto.gym_commission_pct !== undefined) {
       throw new ForbiddenException({
         type: 'FORBIDDEN',
@@ -293,11 +324,46 @@ export class CoachService {
     }
   }
 
+  private assertStaffManagedFields(dto: UpdateCoachProfileDTO): void {
+    if (dto.schedule_type !== undefined) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Schedule Type Update Forbidden',
+        status: 403,
+        detail: 'Only admin users can update a coach schedule_type.',
+      });
+    }
+    if (dto.gym_commission_pct !== undefined) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Commission Update Forbidden',
+        status: 403,
+        detail: 'Only admin users can update gym_commission_pct.',
+      });
+    }
+    if (dto.hourly_rate !== undefined) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Rate Update Forbidden',
+        status: 403,
+        detail: 'Only admin users can update a coach hourly_rate.',
+      });
+    }
+  }
+
   private toSelfUpdateInput(
     dto: UpdateCoachProfileDTO,
   ): Prisma.CoachProfileUpdateInput {
     return {
       ...pickDefined(dto, COACH_SELF_UPDATE_FIELDS),
+    };
+  }
+
+  private toStaffUpdateInput(
+    dto: UpdateCoachProfileDTO,
+  ): Prisma.CoachProfileUpdateInput {
+    return {
+      ...pickDefined(dto, COACH_STAFF_UPDATE_FIELDS),
     };
   }
 
@@ -322,6 +388,11 @@ export class CoachService {
       bio: coach.bio,
       certification: coach.certification,
       hourly_rate: coach.hourly_rate.toString(),
+      monthly_rate: coach.monthly_rate.toString(),
+      monthly_session_count: coach.monthly_session_count,
+      monthly_session_duration_minutes: coach.monthly_session_duration_minutes,
+      monthly_offer_description: coach.monthly_offer_description,
+      monthly_offer_active: coach.monthly_offer_active,
       schedule_type: coach.schedule_type,
       average_rating: coach.average_rating?.toString() ?? null,
       rating_count: coach.rating_count,

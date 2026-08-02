@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { CalendarDays, ClipboardList, UsersRound } from "lucide-react";
 import type {
   RecurringCoachingBillingCycleRecord,
@@ -87,6 +84,7 @@ export type RecurringPlanFormState = {
     time: string;
   }>;
   startDate: string;
+  trainingPlanId: string;
 };
 
 export type RecurringPlanActionState = {
@@ -173,15 +171,99 @@ export function createDefaultRecurringPlanForm(): RecurringPlanFormState {
   return {
     coachId: "",
     durationMinutes: 60,
-    durationMonths: 3,
-    frequency: "weekly",
+    durationMonths: 1,
+    frequency: "monthly",
     memberId: "",
     preferredDays: [tomorrow.getDay()],
     preferredTime: "09:00",
     quotedAmount: 0,
     scheduleItems: [],
     startDate: toYmd(tomorrow),
+    trainingPlanId: "",
   };
+}
+
+export function createFreshMonthlyScheduleDraft(
+  sessionCount: number,
+  durationMinutes: number,
+  preferredTime: string,
+) {
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const daysInMonth = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    0,
+  ).getDate();
+  const sessionsByGymWeek = new Map<string, number>();
+  const rows: RecurringPlanFormState["scheduleItems"] = [];
+
+  for (
+    let day = 1;
+    day <= daysInMonth && rows.length < sessionCount;
+    day += 1
+  ) {
+    const date = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    const weekKey = toYmd(weekStart);
+    const count = sessionsByGymWeek.get(weekKey) ?? 0;
+    if (count >= 5) continue;
+    sessionsByGymWeek.set(weekKey, count + 1);
+    rows.push({
+      date: toYmd(date),
+      durationMinutes,
+      time: preferredTime,
+    });
+  }
+
+  return rows;
+}
+
+export function getRecurringScheduleIssue(
+  scheduleItems: RecurringPlanFormState["scheduleItems"],
+  expectedCount?: number,
+) {
+  if (expectedCount != null && scheduleItems.length !== expectedCount) {
+    return `Add exactly ${expectedCount} actual session date${expectedCount === 1 ? "" : "s"} from the monthly offer.`;
+  }
+
+  const seen = new Set<string>();
+  const sessionsByGymWeek = new Map<string, number>();
+  const monthKey = scheduleItems[0]?.date.slice(0, 7) ?? "";
+
+  for (const item of scheduleItems) {
+    if (!item.date || !item.time) {
+      return "Every monthly session needs an actual date and time.";
+    }
+    if (!Number.isFinite(item.durationMinutes) || item.durationMinutes <= 0) {
+      return "Every monthly session needs a valid duration.";
+    }
+    if (!monthKey || item.date.slice(0, 7) !== monthKey) {
+      return "Every session in a fresh plan must stay inside the same calendar month.";
+    }
+
+    const slotKey = `${item.date}T${item.time}`;
+    if (seen.has(slotKey)) {
+      return `Duplicate session date and time: ${item.date} at ${item.time}.`;
+    }
+    seen.add(slotKey);
+
+    const date = new Date(`${item.date}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      return "One or more monthly session dates are invalid.";
+    }
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+    const weekCount = (sessionsByGymWeek.get(weekKey) ?? 0) + 1;
+    if (weekCount > 5) {
+      return `A monthly plan cannot place more than five sessions in the gym week of ${weekKey}.`;
+    }
+    sessionsByGymWeek.set(weekKey, weekCount);
+  }
+
+  return null;
 }
 
 export function buildLocalIso(date: string, time: string) {
@@ -221,7 +303,9 @@ export function getRecurringInput(
   const preferredDays =
     form.frequency === "monthly" && scheduleItems?.length
       ? Array.from(
-          new Set(scheduleItems.map((item) => new Date(item.scheduledAt).getUTCDay())),
+          new Set(
+            scheduleItems.map((item) => new Date(item.scheduledAt).getUTCDay()),
+          ),
         )
       : form.preferredDays;
 
@@ -237,6 +321,7 @@ export function getRecurringInput(
     ...(scheduleItems?.length ? { scheduleItems } : {}),
     sessionOverrides: conflictOverrides,
     startDate: form.startDate,
+    ...(form.trainingPlanId ? { trainingPlanId: form.trainingPlanId } : {}),
   };
 }
 
@@ -309,6 +394,42 @@ export const COACH_PROFILE_FIELDS: FieldConfig[] = [
     required: true,
     placeholder: "e.g. 850",
     hint: "Use whole Philippine peso values only.",
+  },
+  {
+    name: "monthlyOfferActive",
+    label: "Monthly Offer",
+    type: "select",
+    required: true,
+    hint: "Admin/staff configure whether this coach's monthly offer is shown to members.",
+    options: [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ],
+  },
+  {
+    name: "monthlyRate",
+    label: "Monthly Rate",
+    type: "text",
+    placeholder: "e.g. 12000",
+    hint: "Full monthly quote in Philippine pesos.",
+  },
+  {
+    name: "monthlySessionCount",
+    label: "Included Sessions",
+    type: "text",
+    placeholder: "e.g. 12",
+  },
+  {
+    name: "monthlySessionDurationMinutes",
+    label: "Session Duration (minutes)",
+    type: "text",
+    placeholder: "e.g. 60",
+  },
+  {
+    name: "monthlyOfferDescription",
+    label: "Monthly Offer Description",
+    type: "textarea",
+    placeholder: "Describe the monthly coaching offer members can review.",
   },
   {
     name: "scheduleType",
@@ -440,7 +561,10 @@ export function OperationsLoadingBlock({
         alignItems: "center",
       }}
     >
-      <FitText excludeGlobalScale style={{ fontSize: 14, color: colors.textMuted }}>
+      <FitText
+        excludeGlobalScale
+        style={{ fontSize: 14, color: colors.textMuted }}
+      >
         {message}
       </FitText>
     </div>

@@ -72,6 +72,11 @@ export interface CoachProfileRecord {
   certifications?: string[];
   yearsExperience?: number | null;
   hourlyRate?: number | null;
+  monthlyRate?: number | null;
+  monthlySessionCount?: number;
+  monthlySessionDurationMinutes?: number;
+  monthlyOfferDescription?: string | null;
+  monthlyOfferActive?: boolean;
   ratingCount?: number;
   recentReviews?: CoachPublicReviewRecord[];
   scheduleType?: "full_time" | "part_time";

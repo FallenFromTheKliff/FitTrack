@@ -26,6 +26,7 @@ import {
   BulkUpdateRecurringPlanSessionsDTO,
   CancelRecurringCoachingPlanDTO,
   CreateRecurringCoachingPlanDTO,
+  EnrollRecurringCoachingPlanDTO,
   InitiateRecurringBillingCyclePaymentDTO,
   PreviewRecurringCoachingPlanDTO,
   RecurringBillingCycleCheckoutResponseDTO,
@@ -41,6 +42,24 @@ export class RecurringCoachingPlanController {
   constructor(
     private readonly recurringPlanService: RecurringCoachingPlanService,
   ) {}
+
+  @Post('enroll')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({
+    summary:
+      'Enroll as a member in an active coach monthly offer and create a payment shell without scheduling sessions.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Recurring coaching enrollment created.',
+  })
+  enroll(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: EnrollRecurringCoachingPlanDTO,
+  ) {
+    return this.recurringPlanService.enroll(user, dto);
+  }
 
   @Post('preview')
   @UseGuards(RolesGuard)
@@ -91,9 +110,11 @@ export class RecurringCoachingPlanController {
   }
 
   @Post(':id/billing-cycles/:cycleId/pay')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member, UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary:
-      'Start cash verification or PayMongo checkout for a recurring coaching monthly billing cycle.',
+      'Start the full PayMongo checkout for a recurring coaching monthly billing cycle.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiParam({ name: 'cycleId', format: 'uuid' })

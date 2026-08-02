@@ -212,8 +212,9 @@ export class AppointmentService {
       throw this.buildUnavailableCoachError();
     }
 
-    const isFreeSession =
-      await this.subscriptionService.hasCoachingAccess(userId);
+    // Book a Trainer is always a paid flow. Subscription/free-session records
+    // remain readable, but a new member booking must not bypass checkout.
+    const isFreeSession = false;
     const amounts = calculateAppointmentAmounts(
       coach,
       dto.duration_minutes,
@@ -282,6 +283,19 @@ export class AppointmentService {
     dto: CreateStaffCoachBookingDTO,
     actorUserId: string,
   ): Promise<AppointmentResponseDTO> {
+    if (dto.payment_stage === CreateStaffInitialPaymentStage.downpayment) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Full Cash Payment Required',
+          status: 422,
+          detail:
+            'Staff-created coaching appointments must record full cash payment. Downpayment appointments are not available in the staff flow.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
     const scheduledAt = this.parseScheduledAt(dto.scheduled_at);
     const coach = await this.repo.findCoachScheduleContextOrThrow(dto.coach_id);
     const appointmentEndsAt = new Date(
@@ -315,7 +329,7 @@ export class AppointmentService {
       dto.duration_minutes,
       false,
     );
-    const paymentStage = resolveStaffAppointmentPaymentStage(dto.payment_stage);
+    const paymentStage = resolveStaffAppointmentPaymentStage();
     const paymentAmount =
       paymentStage === PaymentStage.full
         ? amounts.totalAmount
@@ -1276,10 +1290,12 @@ export class AppointmentService {
 
   private assertMemberAppointmentPaymentPolicy(
     provider: PaymentProvider,
-    paymentStage: Extract<
-      PaymentStage,
-      typeof PaymentStage.downpayment | typeof PaymentStage.full
-    > | undefined,
+    paymentStage:
+      | Extract<
+          PaymentStage,
+          typeof PaymentStage.downpayment | typeof PaymentStage.full
+        >
+      | undefined,
     role: UserRole,
   ): void {
     if (this.isStaffPaymentProcessor(role)) {
@@ -1311,10 +1327,12 @@ export class AppointmentService {
   }
 
   private resolveAppointmentInitialPaymentStage(
-    paymentStage: Extract<
-      PaymentStage,
-      typeof PaymentStage.downpayment | typeof PaymentStage.full
-    > | undefined,
+    paymentStage:
+      | Extract<
+          PaymentStage,
+          typeof PaymentStage.downpayment | typeof PaymentStage.full
+        >
+      | undefined,
     role: UserRole,
   ): Extract<
     PaymentStage,
@@ -1339,7 +1357,7 @@ export class AppointmentService {
           title: 'Appointment Response Not Allowed',
           status: 422,
           detail:
-            'Only pending coach appointments can be accepted or rejected.',
+            'Only legacy pending-coach appointments can be accepted or rejected.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1681,7 +1699,7 @@ export class AppointmentService {
           title: 'Payment Cannot Be Started',
           status: 422,
           detail:
-            'Only coach-accepted appointments awaiting payment can start a full payment.',
+            'Only coaching appointments in the pending-payment state can start a full payment.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1848,15 +1866,32 @@ export class AppointmentService {
         : payment.payment_stage === PaymentStage.full
           ? 'full payment'
           : 'downpayment';
-    const checkout = await this.paymongoCheckoutService.createCheckoutSession({
-      amount: this.toMinorAmount(payment.amount),
-      description: `Coaching appointment ${paymentLabel}`,
-      idempotencyKey: payment.idempotency_key,
-      metadata: {
-        payment_id: payment.id,
-        appointment_id: appointmentId,
-      },
-    });
+    let checkout: PaymongoCheckoutResult;
+    try {
+      checkout = await this.paymongoCheckoutService.createCheckoutSession({
+        amount: this.toMinorAmount(payment.amount),
+        description: `Coaching appointment ${paymentLabel}`,
+        idempotencyKey: payment.idempotency_key,
+        metadata: {
+          payment_id: payment.id,
+          appointment_id: appointmentId,
+        },
+      });
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Checkout Session Creation Failed',
+          status: HttpStatus.BAD_GATEWAY,
+          detail: 'Unable to start the PayMongo checkout session.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
 
     await this.paymentRepository.updatePayment(
       payment.id,
@@ -1973,13 +2008,9 @@ function calculateAppointmentAmounts(
   };
 }
 
-function resolveStaffAppointmentPaymentStage(
-  paymentStage?: CreateStaffInitialPaymentStage,
-): Extract<
+function resolveStaffAppointmentPaymentStage(): Extract<
   PaymentStage,
   typeof PaymentStage.downpayment | typeof PaymentStage.full
 > {
-  return paymentStage === CreateStaffInitialPaymentStage.downpayment
-    ? PaymentStage.downpayment
-    : PaymentStage.full;
+  return PaymentStage.full;
 }

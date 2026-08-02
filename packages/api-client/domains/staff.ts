@@ -29,7 +29,13 @@ export type StaffAppointmentRecord = {
   activePaymentId?: string | null;
   activePaymentProvider?: "cash" | "paymongo" | null;
   activePaymentStage?: "balance" | "downpayment" | "full" | null;
-  activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
+  activePaymentStatus?:
+    | "awaiting_verification"
+    | "completed"
+    | "failed"
+    | "pending"
+    | "processing"
+    | null;
   amountDueNow?: number | null;
   assessmentReport?: string | null;
   balancePaidAt?: string | null;
@@ -100,7 +106,7 @@ export type CreateStaffVenueBookingPayload = {
   endsAt: string;
   memberId: string;
   notes?: string;
-  paymentStage?: "downpayment" | "full";
+  paymentStage?: "full";
   startsAt: string;
 };
 
@@ -109,7 +115,7 @@ export type CreateStaffCoachBookingPayload = {
   durationMinutes: number;
   memberId: string;
   memberNotes?: string;
-  paymentStage?: "downpayment" | "full";
+  paymentStage?: "full";
   scheduledAt: string;
 };
 
@@ -122,6 +128,11 @@ export type CreateStaffCoachPayload = {
   gymCommissionPct?: number;
   hourlyRate?: number;
   isAvailableForBooking?: boolean;
+  monthlyOfferActive?: boolean;
+  monthlyOfferDescription?: string | null;
+  monthlyRate?: number;
+  monthlySessionCount?: number;
+  monthlySessionDurationMinutes?: number;
   scheduleType?: "full_time" | "part_time";
   specialties?: string[];
 };
@@ -156,7 +167,13 @@ type StaffAppointmentApiRecord = {
   active_payment_id?: string | null;
   active_payment_provider?: "cash" | "paymongo" | null;
   active_payment_stage?: "balance" | "downpayment" | "full" | null;
-  active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
+  active_payment_status?:
+    | "awaiting_verification"
+    | "completed"
+    | "failed"
+    | "pending"
+    | "processing"
+    | null;
   balance_amount?: number | string | null;
   balance_paid_at?: string | null;
   coach: StaffAppointmentCoachApiRecord;
@@ -218,6 +235,16 @@ type StaffCoachApiRecord = {
   is_active?: boolean | null;
   is_available_for_booking?: boolean | null;
   isActive?: boolean | null;
+  monthly_offer_active?: boolean | null;
+  monthly_offer_description?: string | null;
+  monthly_rate?: number | string | null;
+  monthly_session_count?: number | null;
+  monthly_session_duration_minutes?: number | null;
+  monthlyOfferActive?: boolean | null;
+  monthlyOfferDescription?: string | null;
+  monthlyRate?: number | string | null;
+  monthlySessionCount?: number | null;
+  monthlySessionDurationMinutes?: number | null;
   schedule_type?: "full_time" | "part_time";
   scheduleType?: "full_time" | "part_time";
   specialization?: string | null;
@@ -323,6 +350,19 @@ function mapStaffCoach(
       record.is_active ??
       record.is_available_for_booking ??
       true,
+    monthlyOfferActive:
+      record.monthlyOfferActive ?? record.monthly_offer_active ?? false,
+    monthlyOfferDescription:
+      record.monthlyOfferDescription ??
+      record.monthly_offer_description ??
+      null,
+    monthlyRate: toNullableNumber(record.monthlyRate ?? record.monthly_rate),
+    monthlySessionCount:
+      record.monthlySessionCount ?? record.monthly_session_count ?? 0,
+    monthlySessionDurationMinutes:
+      record.monthlySessionDurationMinutes ??
+      record.monthly_session_duration_minutes ??
+      60,
     scheduleType: record.scheduleType ?? record.schedule_type ?? "part_time",
     specialties: splitMultiValue(
       record.specialties ?? record.specialization ?? null,
@@ -342,8 +382,7 @@ function mapStaffAppointment(
   const isPaidInFull = Boolean(
     record.downpayment_paid_at && record.balance_paid_at,
   );
-  const isFullPaymentFlow =
-    activePaymentStage === "full" || isPaidInFull;
+  const isFullPaymentFlow = activePaymentStage === "full" || isPaidInFull;
   const hasPaymentSummary =
     (totalAmount ?? 0) > 0 && (downpaymentAmount ?? 0) > 0;
 
@@ -504,6 +543,24 @@ export function createStaffApi(transport: ApiTransport) {
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
             : {}),
+          ...(payload.monthlyOfferActive !== undefined
+            ? { monthly_offer_active: payload.monthlyOfferActive }
+            : {}),
+          ...(payload.monthlyOfferDescription !== undefined
+            ? { monthly_offer_description: payload.monthlyOfferDescription }
+            : {}),
+          ...(payload.monthlyRate !== undefined
+            ? { monthly_rate: payload.monthlyRate }
+            : {}),
+          ...(payload.monthlySessionCount !== undefined
+            ? { monthly_session_count: payload.monthlySessionCount }
+            : {}),
+          ...(payload.monthlySessionDurationMinutes !== undefined
+            ? {
+                monthly_session_duration_minutes:
+                  payload.monthlySessionDurationMinutes,
+              }
+            : {}),
           ...(payload.scheduleType !== undefined
             ? { schedule_type: payload.scheduleType }
             : {}),
@@ -533,6 +590,24 @@ export function createStaffApi(transport: ApiTransport) {
             : {}),
           ...(payload.hourlyRate !== undefined
             ? { hourly_rate: payload.hourlyRate }
+            : {}),
+          ...(payload.monthlyOfferActive !== undefined
+            ? { monthly_offer_active: payload.monthlyOfferActive }
+            : {}),
+          ...(payload.monthlyOfferDescription !== undefined
+            ? { monthly_offer_description: payload.monthlyOfferDescription }
+            : {}),
+          ...(payload.monthlyRate !== undefined
+            ? { monthly_rate: payload.monthlyRate }
+            : {}),
+          ...(payload.monthlySessionCount !== undefined
+            ? { monthly_session_count: payload.monthlySessionCount }
+            : {}),
+          ...(payload.monthlySessionDurationMinutes !== undefined
+            ? {
+                monthly_session_duration_minutes:
+                  payload.monthlySessionDurationMinutes,
+              }
             : {}),
           ...(payload.isAvailableForBooking !== undefined
             ? { is_available_for_booking: payload.isAvailableForBooking }
@@ -646,7 +721,10 @@ export function createStaffApi(transport: ApiTransport) {
     },
     markCoachPayoutPaid(appointmentId: string) {
       return unwrapVoidResponse(
-        transport.patch(`/staff/appointments/${appointmentId}/coach-payout`, {}),
+        transport.patch(
+          `/staff/appointments/${appointmentId}/coach-payout`,
+          {},
+        ),
         "Unable to mark coach payout paid.",
       );
     },
