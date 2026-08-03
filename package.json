@@ -14,6 +14,7 @@
     "dev:stack:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai --no-mobile-web && pnpm --dir apps/mobile run dev",
     "dev:stack:web": "node tasks/integration-builder/dev-stack-supervisor.mjs start",
     "dev:stack:web:ai": "node tasks/integration-builder/dev-stack-supervisor.mjs start --include-ai",
+    "dev:stack:web:ai:mobile-web-deployed": "node scripts/dev-stack-web-ai-mobile-deployed.js",
     "dev:stack:paymongo:tunnel": "node tasks/integration-builder/paymongo-tunnel.mjs",
     "dev:stack:status": "node tasks/integration-builder/dev-stack-supervisor.mjs status",
     "dev:stack:stop": "node tasks/integration-builder/dev-stack-supervisor.mjs stop",
@@ -91,3 +92,4 @@
     }
   }
 }
+
