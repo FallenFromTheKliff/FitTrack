@@ -431,7 +431,15 @@ function resolveRailwayInvocation() {
   );
 }
 
-function run(command, args, { allowFailure = false, captureOutput = false } = {}) {
+function run(
+  command,
+  args,
+  {
+    allowFailure = false,
+    captureOutput = false,
+    echoCapturedOutput = true,
+  } = {},
+) {
   console.log(`\n> ${command} ${args.join(' ')}`);
   const invocation =
     command === 'railway'
@@ -451,7 +459,7 @@ function run(command, args, { allowFailure = false, captureOutput = false } = {}
 
   const stdout = captureOutput ? String(result.stdout ?? '') : '';
   const stderr = captureOutput ? String(result.stderr ?? '') : '';
-  if (captureOutput) {
+  if (captureOutput && echoCapturedOutput) {
     if (stdout) {
       process.stdout.write(stdout);
     }
@@ -496,7 +504,11 @@ function queryDeployments(service, environment) {
   const result = run(
     'railway',
     deploymentListArgs(service, environment),
-    { allowFailure: true, captureOutput: true },
+    {
+      allowFailure: true,
+      captureOutput: true,
+      echoCapturedOutput: false,
+    },
   );
 
   if (result.status !== 0) {
