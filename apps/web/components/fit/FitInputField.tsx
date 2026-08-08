@@ -34,6 +34,9 @@ type Props<TFieldValues extends FieldValues> = {
   optional?: boolean;
   autoComplete?: string;
   onChangeValue?: (value: string) => void;
+  sanitizeValue?: (value: string) => string;
+  formatInputValue?: (value: string) => string;
+  prefix?: string;
   onFocusChange?: (focused: boolean) => void;
   compact?: boolean;
   pressable?: boolean;
@@ -60,6 +63,9 @@ export default function FitInputField<TFieldValues extends FieldValues>({
   optional = false,
   autoComplete,
   onChangeValue,
+  sanitizeValue,
+  formatInputValue,
+  prefix,
   onFocusChange,
   compact = false,
   pressable = false,
@@ -85,8 +91,12 @@ export default function FitInputField<TFieldValues extends FieldValues>({
       control={control}
       name={name}
       rules={rules}
-      render={({ field: { onChange, onBlur, value } }) => (
-        <div className={cn(className)} style={s.wrapper}>
+      render={({ field: { onChange, onBlur, value } }) => {
+        const rawValue = value == null ? "" : String(value);
+        const renderedValue = formatInputValue ? formatInputValue(rawValue) : rawValue;
+
+        return (
+          <div className={cn(className)} style={s.wrapper}>
           <div style={s.labelRow}>
             <FitText
               as="label"
@@ -134,6 +144,24 @@ export default function FitInputField<TFieldValues extends FieldValues>({
             </div>
           ) : (
             <div style={{ ...s.inputRow(borderColor, disabled), ...inputRowStyle }}>
+              {prefix ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    paddingRight: 8,
+                    marginRight: 8,
+                    borderRight: `1px solid ${colors.border}`,
+                    color: disabled ? colors.textDisabled : colors.textSecondary,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {prefix}
+                </span>
+              ) : null}
               {Icon && (
                 <Icon
                   size={15}
@@ -160,14 +188,18 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 <FitTextInput
                   id={name}
                   type={resolvedType}
-                  value={value ?? ""}
+                  value={renderedValue}
                   placeholder={placeholder}
                   maxLength={maxLength}
                   disabled={disabled}
                   autoComplete={autoComplete}
                   className="w-full placeholder:text-text-muted"
                   style={{ color: disabled ? colors.textDisabled : colors.textPrimary }}
-                  onChange={(e) => { onChange(e.target.value); onChangeValue?.(e.target.value); }}
+                  onChange={(e) => {
+                    const nextValue = sanitizeValue ? sanitizeValue(e.target.value) : e.target.value;
+                    onChange(nextValue);
+                    onChangeValue?.(nextValue);
+                  }}
                   onFocus={() => { setFocused(true); onFocusChange?.(true); }}
                   onBlur={() => { setFocused(false); onBlur(); onFocusChange?.(false); }}
                 />
@@ -196,8 +228,9 @@ export default function FitInputField<TFieldValues extends FieldValues>({
               )}
             </div>
           )}
-        </div>
-      )}
+          </div>
+        );
+      }}
     />
   );
 }

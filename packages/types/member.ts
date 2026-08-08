@@ -87,7 +87,7 @@ export type UpdateMemberInput = {
 };
 
 export type UpdateMembershipCardInput = {
-  action: "grant" | "revoke";
+  action: "grant" | "revoke" | "remove";
   id: string;
   reason?: string;
   source?: Extract<MembershipCardSource, "admin_grant" | "admin_repair">;

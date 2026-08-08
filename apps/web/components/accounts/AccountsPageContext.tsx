@@ -157,6 +157,7 @@ type AccountsPageContextValue = {
   handleMessageMember: (member: MemberRecord) => void;
   handleRejectDeleteRequest: () => Promise<void>;
   handleRejectMembershipPayment: () => Promise<void>;
+  handleRemoveMembership: () => Promise<void>;
   handleRestoreMember: () => Promise<void>;
   handleRevokeMembershipCard: () => Promise<void>;
   handleVerifyNonMember: () => Promise<void>;
@@ -192,9 +193,11 @@ type AccountsPageContextValue = {
   q: string;
   queueEditConfirmation: (data: Record<string, string>) => void;
   rejectLoadingLabel: string;
+  rejectTerminationTarget: MemberRecord | null;
   restoreLoading: boolean;
   restoreLoadingLabel: string;
   restoreTarget: MemberRecord | null;
+  removeMembershipTarget: MemberRecord | null;
   verifyNonMemberTarget: MemberRecord | null;
   revokeCardTarget: MemberRecord | null;
   roleSelectOptions: SelectOption[];
@@ -219,7 +222,9 @@ type AccountsPageContextValue = {
   setPaymentReviewAction: Dispatch<SetStateAction<PaymentReviewAction>>;
   setPendingEditSubmission: Dispatch<SetStateAction<Record<string, string> | null>>;
   setQ: Dispatch<SetStateAction<string>>;
+  setRejectTerminationTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setRestoreTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setRemoveMembershipTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setVerifyNonMemberTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setRevokeCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setScanFeedback: Dispatch<SetStateAction<AttendanceScanFeedback | null>>;
@@ -334,9 +339,11 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const [deleteTarget, setDeleteTarget] = useState<MemberRecord | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<MemberRecord | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<MemberRecord | null>(null);
+  const [rejectTerminationTarget, setRejectTerminationTarget] = useState<MemberRecord | null>(null);
   const [verifyNonMemberTarget, setVerifyNonMemberTarget] = useState<MemberRecord | null>(null);
   const [grantCardTarget, setGrantCardTarget] = useState<MemberRecord | null>(null);
   const [revokeCardTarget, setRevokeCardTarget] = useState<MemberRecord | null>(null);
+  const [removeMembershipTarget, setRemoveMembershipTarget] = useState<MemberRecord | null>(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
@@ -574,7 +581,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       !isSelfEdit &&
       editTarget.role?.name !== "ADMIN" &&
       editTarget.status !== "pending" &&
-      !editPendingRequest &&
       !isEditTargetArchived,
   );
   const canVerifyNonMemberTarget = Boolean(
@@ -585,7 +591,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       pendingRequestsByUserId,
     }),
   );
-  const canTerminateEditTarget = Boolean(isAdmin && !isSelfEdit && editPendingRequest);
+  const canTerminateEditTarget = Boolean(canManageAccounts && !isSelfEdit && editPendingRequest);
   const canRestoreEditTarget = Boolean(
     editTarget &&
       !isSelfEdit &&
@@ -712,8 +718,10 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     setPendingEditSubmission(null);
     setGrantCardTarget(null);
     setRevokeCardTarget(null);
+    setRemoveMembershipTarget(null);
     setArchiveTarget(null);
     setRestoreTarget(null);
+    setRejectTerminationTarget(null);
     setVerifyNonMemberTarget(null);
     setEditTarget(null);
     setMobileInspectorOpen(false);
@@ -755,8 +763,9 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   };
 
   const handleRejectDeleteRequest = async () => {
-    if (!editTarget) return;
-    const request = pendingRequestsByUserId.get(editTarget.id);
+    const target = rejectTerminationTarget ?? editTarget;
+    if (!target) return;
+    const request = pendingRequestsByUserId.get(target.id);
     if (!request) {
       notify(
         "warning",
@@ -767,8 +776,8 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     }
     try {
       await rejectDeletionMutation.mutateAsync(request.id);
-      closeInspector();
-      notify("success", "Termination request denied", "The account stays active in the directory.");
+      setRejectTerminationTarget(null);
+      notify("success", "Termination request rejected", "The account stays active with its normal actions restored.");
     } catch {
       notify(
         "error",
@@ -783,6 +792,28 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     setArchiveLoading(true);
     await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
     const memberName = fullName(archiveTarget) || archiveTarget.email;
+    const pendingRequest = pendingRequestsByUserId.get(archiveTarget.id);
+    if (pendingRequest) {
+      try {
+        await approveDeletionMutation.mutateAsync(pendingRequest.id);
+        setArchiveTarget(null);
+        closeInspector();
+        notify(
+          "success",
+          `${memberName} archived`,
+          "The pending termination request was approved and the account was moved to Archived.",
+        );
+      } catch {
+        notify(
+          "error",
+          "Could not archive this person",
+          "Try again after the latest termination request state has loaded.",
+        );
+      } finally {
+        setArchiveLoading(false);
+      }
+      return;
+    }
     const result = await deleteUser(archiveTarget.id);
     setArchiveLoading(false);
     if (result.success) {
@@ -854,6 +885,32 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
       notify("success", "Member access updated", result.message);
     } catch (error) {
       notifyActionError("Could not update member access", error, "Failed to revoke membership-card access.");
+    }
+  };
+
+  const handleRemoveMembership = async () => {
+    const target = removeMembershipTarget ?? editTarget;
+    if (!target || target.role?.name !== "USER" || !canManageMemberCard) return;
+    if (getMembershipFieldValue(target) !== "active") return;
+
+    try {
+      const result = await membershipCardMutation.mutateAsync({
+        id: target.id,
+        payload: {
+          action: "remove",
+          reason: "Removed via account module.",
+        },
+      });
+
+      patchOpenMember(target.id, { membershipCard: null });
+      setRemoveMembershipTarget(null);
+      notify("success", "Membership removed", result.message);
+    } catch (error) {
+      notifyActionError(
+        "Could not remove membership",
+        error,
+        "Failed to return this account to the non-member state.",
+      );
     }
   };
 
@@ -1171,6 +1228,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         handleMessageMember,
         handleRejectDeleteRequest,
         handleRejectMembershipPayment,
+        handleRemoveMembership,
         handleRestoreMember,
         handleRevokeMembershipCard,
         handleVerifyNonMember,
@@ -1206,9 +1264,11 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         q,
         queueEditConfirmation,
         rejectLoadingLabel,
+        rejectTerminationTarget,
         restoreLoading,
         restoreLoadingLabel,
         restoreTarget,
+        removeMembershipTarget,
         verifyNonMemberTarget,
         revokeCardTarget,
         roleSelectOptions,
@@ -1233,7 +1293,9 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         setPaymentReviewAction,
         setPendingEditSubmission,
         setQ,
+        setRejectTerminationTarget,
         setRestoreTarget,
+        setRemoveMembershipTarget,
         setVerifyNonMemberTarget,
         setRevokeCardTarget,
         setScanFeedback,

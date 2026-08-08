@@ -157,7 +157,8 @@ export class UserRepository extends BaseRepository {
       },
       deletedAt: null,
       role: UserRole.member,
-      status: { in: [UserStatus.active, UserStatus.pending] },
+      status: UserStatus.active,
+      membership_card: { is: { status: 'active' } },
     });
 
     if (!user) {
@@ -178,6 +179,7 @@ export class UserRepository extends BaseRepository {
       deletedAt: null,
       role: UserRole.member,
       status: UserStatus.active,
+      membership_card: { is: { status: 'active' } },
     });
 
     if (!user) {

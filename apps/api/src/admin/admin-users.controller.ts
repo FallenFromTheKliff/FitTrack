@@ -10,7 +10,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../common/decorators';
@@ -82,9 +87,10 @@ export class AdminUsersController {
 
   @Patch(':id/membership-card')
   @Roles(UserRole.admin, UserRole.staff)
+  @ApiBody({ type: UpdateMembershipCardDto })
   @ApiOperation({
     summary:
-      'Grant or revoke membership-card access for a member directory record.',
+      'Grant, revoke, or remove membership-card access for a member directory record.',
   })
   updateMembershipCard(
     @Param('id', ParseUUIDPipe) id: string,

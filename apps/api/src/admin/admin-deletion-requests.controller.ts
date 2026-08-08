@@ -54,10 +54,10 @@ export class AdminDeletionRequestsController {
   }
 
   @Patch(':id/reject')
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary:
-      'Reject a pending member account deletion request. Admin only.',
+      'Reject a pending member account deletion request. Admin and staff only.',
   })
   rejectDeletionRequest(
     @Param('id', ParseUUIDPipe) id: string,

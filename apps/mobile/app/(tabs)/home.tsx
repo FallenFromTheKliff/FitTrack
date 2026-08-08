@@ -292,7 +292,7 @@ export default function HomeScreen() {
   const nutritionSummary = nutritionSummaryQuery.data ?? null;
 
   const loggedCalories = nutritionSummary?.logged.calories ?? user?.currentCalories ?? 0;
-  const targetCalories = activeNutrition?.macros.targetCalories ?? nutritionSummary?.target?.calories ?? null;
+  const targetCalories = activeNutrition?.macros?.targetCalories ?? nutritionSummary?.target?.calories ?? null;
   const remainingCalories = nutritionSummary?.remaining?.calories ?? (
     targetCalories !== null ? Math.max(targetCalories - loggedCalories, 0) : null
   );

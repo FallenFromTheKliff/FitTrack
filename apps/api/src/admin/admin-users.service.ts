@@ -520,6 +520,41 @@ export class AdminUsersService {
       );
     }
 
+    if (dto.action === 'remove') {
+      if (!user.membership_card) {
+        throw new NotFoundException('Membership card not found');
+      }
+
+      if (user.membership_card.status !== 'active') {
+        throw new BadRequestException(
+          'Only active membership-card access can be removed',
+        );
+      }
+
+      const removedAt = new Date();
+      await this.prisma.membershipCard.delete({
+        where: { user_id: userId },
+      });
+
+      await this.emitAccountActivity({
+        action: 'membership_card_removed',
+        actorId: actingUserId,
+        details: {
+          reason: dto.reason?.trim() || null,
+        },
+        occurredAt: removedAt.toISOString(),
+        targetEmail: getPreferredAccountEmail(user.auth_identities),
+        targetName: getProfileDisplayName(user.profile),
+        targetRole: user.role,
+        targetUserId: user.id,
+      });
+
+      return {
+        membershipCard: null,
+        message: 'Membership removed. Account is now a non-member.',
+      };
+    }
+
     if (dto.action === 'grant') {
       const now = new Date();
       const isRestore = user.membership_card?.status === 'revoked';
@@ -1152,9 +1187,10 @@ export class AdminUsersService {
       | 'account_restored'
       | 'account_verified_non_member'
       | 'coach_upgraded'
-      | 'membership_card_granted'
-      | 'membership_card_revoked'
-      | 'payment_approved';
+       | 'membership_card_granted'
+       | 'membership_card_revoked'
+       | 'membership_card_removed'
+       | 'payment_approved';
     actorId: string;
     details?: Record<string, boolean | number | string | null>;
     occurredAt?: string;

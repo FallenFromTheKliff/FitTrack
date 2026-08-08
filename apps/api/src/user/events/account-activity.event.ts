@@ -10,6 +10,7 @@ export type AccountActivityAction =
   | 'attendance_check_in'
   | 'membership_card_granted'
   | 'membership_card_revoked'
+  | 'membership_card_removed'
   | 'payment_approved'
   | 'termination_approved'
   | 'termination_rejected';

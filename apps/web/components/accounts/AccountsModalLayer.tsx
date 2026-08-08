@@ -47,12 +47,15 @@ export default function AccountsModalLayer() {
     handleDelete,
     handleEdit,
     handleGrantMembershipCard,
+    handleRejectDeleteRequest,
     handleRejectMembershipPayment,
+    handleRemoveMembership,
     handleRestoreMember,
     handleRevokeMembershipCard,
     handleVerifyNonMember,
     isAccountsHamburgerMode,
     isApproveDeletionPending,
+    isRejectDeletionPending,
     isMembershipCardPending,
     isMembershipPaymentReviewPending,
     isScanAttendancePending,
@@ -64,10 +67,13 @@ export default function AccountsModalLayer() {
     pendingEditSubmission,
     pendingMembershipPayment,
     pendingRequestsByUserId,
+    rejectLoadingLabel,
+    rejectTerminationTarget,
     queueEditConfirmation,
     restoreLoading,
     restoreLoadingLabel,
     restoreTarget,
+    removeMembershipTarget,
     revokeCardTarget,
     scanFeedback,
     scanOpen,
@@ -77,6 +83,8 @@ export default function AccountsModalLayer() {
     setEditDraft,
     setEditModalOpen,
     setGrantCardTarget,
+    setRejectTerminationTarget,
+    setRemoveMembershipTarget,
     setNoticeModal,
     setPaymentReviewAction,
     setPendingEditSubmission,
@@ -91,6 +99,9 @@ export default function AccountsModalLayer() {
   const verifyAccountRoleLabel = verifyNonMemberTarget
     ? getDirectoryRoleLabel(verifyNonMemberTarget.role?.name).toLowerCase()
     : "account";
+  const archiveFulfillsTermination = archiveTarget
+    ? pendingRequestsByUserId.has(archiveTarget.id)
+    : false;
 
   return (
     <>
@@ -331,6 +342,22 @@ export default function AccountsModalLayer() {
           onCancel={() => setRevokeCardTarget(null)}
         />
       ) : null}
+      {canManageMemberCard ? (
+        <ConfirmModal
+          isOpen={!!removeMembershipTarget}
+          title="Remove Membership"
+          message={`Remove active membership access for ${
+            removeMembershipTarget?.email ?? "this account"
+          }? The account stays active and returns to the non-member state. It will not be banned or archived.`}
+          confirmLabel="REMOVE MEMBERSHIP"
+          loadingLabel={membershipCardLoadingLabel}
+          confirmIcon={BadgeCheck}
+          isDanger
+          isLoading={isMembershipCardPending}
+          onConfirm={handleRemoveMembership}
+          onCancel={() => setRemoveMembershipTarget(null)}
+        />
+      ) : null}
       {verifyNonMemberTarget ? (
         <ConfirmModal
           isOpen={!!verifyNonMemberTarget}
@@ -349,6 +376,21 @@ export default function AccountsModalLayer() {
           isLoading={false}
           onConfirm={handleVerifyNonMember}
           onCancel={() => setVerifyNonMemberTarget(null)}
+        />
+      ) : null}
+      {canManageAccounts ? (
+        <ConfirmModal
+          isOpen={!!rejectTerminationTarget}
+          title="Reject Termination Request"
+          message={`Reject the pending termination request for ${
+            rejectTerminationTarget?.email ?? "this account"
+          }? The request will be cleared and the account will remain active with its normal actions restored.`}
+          confirmLabel="REJECT TERMINATION REQUEST"
+          loadingLabel={rejectLoadingLabel}
+          isDanger
+          isLoading={isRejectDeletionPending}
+          onConfirm={handleRejectDeleteRequest}
+          onCancel={() => setRejectTerminationTarget(null)}
         />
       ) : null}
       {canInspectAccounts ? (
@@ -371,9 +413,15 @@ export default function AccountsModalLayer() {
         <ConfirmModal
           isOpen={!!archiveTarget}
           title="Archive Account"
-          message={`Archive ${
-            archiveTarget?.email ?? "this account"
-          } from the account directory? The profile stays recoverable in Archived.`}
+          message={
+            archiveFulfillsTermination
+              ? `Archive ${
+                  archiveTarget?.email ?? "this account"
+                } from the account directory? This fulfills the pending termination request and moves the profile to Archived.`
+              : `Archive ${
+                  archiveTarget?.email ?? "this account"
+                } from the account directory? The profile stays recoverable in Archived.`
+          }
           confirmLabel="ARCHIVE ACCOUNT"
           loadingLabel={archiveLoadingLabel}
           confirmIcon={Archive}

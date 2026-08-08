@@ -764,10 +764,11 @@ export function AccountInspectorFooter() {
     canEditTargetDetails,
     canManageMemberCard,
     canManualCheckInTarget,
-    canManageAccounts,
-    canRestoreEditTarget,
-    canArchiveEditTarget,
-    canVerifyNonMemberTarget,
+  canManageAccounts,
+  canRestoreEditTarget,
+  canArchiveEditTarget,
+  canTerminateEditTarget,
+  canVerifyNonMemberTarget,
     editTarget,
     handleManualCheckIn,
     isCoach,
@@ -780,8 +781,10 @@ export function AccountInspectorFooter() {
     pendingMembershipPayment,
     setArchiveTarget,
     setPaymentReviewAction,
-    setGrantCardTarget,
-    setRestoreTarget,
+  setGrantCardTarget,
+  setRejectTerminationTarget,
+  setRemoveMembershipTarget,
+  setRestoreTarget,
     setRevokeCardTarget,
     setVerifyNonMemberTarget,
   } = useAccountsPage();
@@ -944,6 +947,27 @@ export function AccountInspectorFooter() {
               }}
               textStyle={{ ...compactTextStyle, color: membershipActionTone.color }}
             />
+            {editTargetMembershipStatus === "active" ? (
+              <FitButton
+                variant="ghost"
+                label="Remove Membership"
+                icon={X}
+                iconSize={13}
+                fullWidth
+                disabled={!editTarget || !canManageMemberCard || isMembershipCardPending}
+                onClick={() => {
+                  if (!editTarget || !canManageMemberCard) return;
+                  setRemoveMembershipTarget(editTarget);
+                }}
+                style={{
+                  ...secondaryActionStyle,
+                  ...compactActionStyle,
+                  border: `1px solid ${colors.danger}42`,
+                  backgroundColor: `${colors.danger}10`,
+                }}
+                textStyle={{ ...compactTextStyle, color: colors.danger }}
+              />
+            ) : null}
             <FitButton
               variant="ghost"
               label={verifyAccountActionLabel}
@@ -1001,6 +1025,24 @@ export function AccountInspectorFooter() {
               }}
               textStyle={{ ...compactTextStyle, color: accountLifecycleActionColor }}
             />
+            {canTerminateEditTarget && editTarget ? (
+              <FitButton
+                variant="ghost"
+                label="Reject Termination Request"
+                icon={X}
+                iconSize={13}
+                fullWidth
+                onClick={() => setRejectTerminationTarget(editTarget)}
+                style={{
+                  ...secondaryActionStyle,
+                  ...compactActionStyle,
+                  gridColumn: "1 / -1",
+                  border: `1px solid ${colors.danger}42`,
+                  backgroundColor: `${colors.danger}10`,
+                }}
+                textStyle={{ ...compactTextStyle, color: colors.danger }}
+              />
+            ) : null}
             {canReviewMembershipPayment ? (
               <>
                 <FitButton

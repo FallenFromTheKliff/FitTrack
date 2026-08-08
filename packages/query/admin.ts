@@ -469,13 +469,11 @@ export function deleteUserMutationOptions(
 ) {
   return mutationOptions({
     mutationFn: (id: string) => client.admin.deleteUser(id),
-    onSuccess: async (_data, id) => {
-      queryClient.setQueryData(
-        queryKeys.adminMembers(),
-        (prev: { id: string }[] | undefined) =>
-          prev ? prev.filter((member) => member.id !== id) : [],
-      );
-      await invalidateNotificationQueries(queryClient);
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAdminMembersQuery(queryClient),
+        invalidateNotificationQueries(queryClient),
+      ]);
     },
   });
 }

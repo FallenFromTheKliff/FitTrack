@@ -213,6 +213,8 @@ export class NotificationDomainEventsListener {
         return `Member card granted: ${target}`;
       case 'membership_card_revoked':
         return `Member card revoked: ${target}`;
+      case 'membership_card_removed':
+        return `Membership removed: ${target}`;
       case 'payment_approved':
         return `Payment approved: ${target}`;
       case 'termination_approved':
@@ -247,6 +249,8 @@ export class NotificationDomainEventsListener {
         return `${target}${role} received active membership-card access.`;
       case 'membership_card_revoked':
         return `${target}${role} had membership-card access revoked.`;
+      case 'membership_card_removed':
+        return `${target}${role} had membership-card access removed and is now a non-member.`;
       case 'payment_approved':
         return `${target}${role} had a payment approved from the payments review flow.`;
       case 'termination_approved':

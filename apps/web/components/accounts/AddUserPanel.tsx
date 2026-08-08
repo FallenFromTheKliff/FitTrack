@@ -22,6 +22,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   adminCreateUserSchema,
   authStrongPasswordPattern,
+  coerceAuthPhilippineMobileInput,
+  composeAuthPhilippineMobileNumber,
+  formatAuthPhilippineMobileDigits,
   isAllowedAuthEmailDomain,
   isSupportedAuthPhilippineMobileNumber,
   normalizePhilippineMobileNumber,
@@ -139,6 +142,12 @@ const SYMBOL_CHARS = "!@#$%&*_-";
 const ALL_PASSWORD_CHARS = `${UPPERCASE_CHARS}${LOWERCASE_CHARS}${NUMBER_CHARS}${SYMBOL_CHARS}`;
 const GENERATED_PASSWORD_LENGTH = 16;
 
+function sanitizeCreatePhoneInput(value: string) {
+  const coerced = coerceAuthPhilippineMobileInput(value, "+63");
+  const digits = formatAuthPhilippineMobileDigits(coerced.value, "+63");
+  return digits ? composeAuthPhilippineMobileNumber("+63", digits) : "";
+}
+
 function getRandomInt(max: number) {
   if (max <= 0) return 0;
 
@@ -250,6 +259,7 @@ export default function AddUserPanel({
     handleSubmit,
     register,
     setValue,
+    trigger,
   } = useForm<AdminCreateUserFormValues>({
     defaultValues: {
       firstName: "",
@@ -259,10 +269,14 @@ export default function AddUserPanel({
       phone_no: "",
       role: "member",
     },
-    mode: "onBlur",
+    mode: "onChange",
     reValidateMode: "onChange",
     resolver,
   });
+
+  useEffect(() => {
+    void trigger();
+  }, [trigger]);
 
   const watchedValues = (useWatch({ control }) ?? {}) as Partial<AdminCreateUserFormValues>;
   const activeRole = (useWatch({ control, name: "role" }) ?? "member") as CreateRole;
@@ -440,7 +454,13 @@ export default function AddUserPanel({
 
   const openReviewStep = () => {
     void handleSubmit((data) => {
-      setReviewData(adminCreateUserSchema.parse(data));
+      const parsedData = adminCreateUserSchema.parse(data);
+      setReviewData({
+        ...parsedData,
+        phone_no: parsedData.phone_no
+          ? normalizePhilippineMobileNumber(parsedData.phone_no)
+          : undefined,
+      });
     })();
   };
 
@@ -1033,11 +1053,14 @@ export default function AddUserPanel({
                         icon={Phone}
                         label="Phone"
                         name="phone_no"
-                        placeholder="09XXXXXXXXX"
+                        placeholder="9171234567"
                         type="tel"
                         disabled={submitting}
+                        prefix="+63"
                         optional
-                        maxLength={13}
+                        maxLength={10}
+                        formatInputValue={(value) => formatAuthPhilippineMobileDigits(value, "+63")}
+                        sanitizeValue={sanitizeCreatePhoneInput}
                         rules={{
                           validate: (value) => {
                             const normalizedValue = value.trim().length > 0

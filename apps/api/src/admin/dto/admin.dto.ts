@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import { ActivityLevel, UserRole, UserStatus } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsString,
@@ -135,12 +136,21 @@ export class UpgradeToCoachDto {
 }
 
 export class UpdateMembershipCardDto {
-  @IsString()
-  @IsIn(['grant', 'revoke'], {
-    message: 'action must be one of: grant, revoke',
+  @ApiProperty({
+    description: 'Membership-card lifecycle operation.',
+    enum: ['grant', 'revoke', 'remove'],
+    example: 'remove',
   })
-  action: 'grant' | 'revoke';
+  @IsString()
+  @IsIn(['grant', 'revoke', 'remove'], {
+    message: 'action must be one of: grant, revoke, remove',
+  })
+  action: 'grant' | 'revoke' | 'remove';
 
+  @ApiPropertyOptional({
+    description: 'Source used when granting or restoring membership access.',
+    enum: ['admin_grant', 'admin_repair'],
+  })
   @IsOptional()
   @IsString()
   @IsIn(['admin_grant', 'admin_repair'], {
@@ -148,6 +158,10 @@ export class UpdateMembershipCardDto {
   })
   source?: 'admin_grant' | 'admin_repair';
 
+  @ApiPropertyOptional({
+    description: 'Optional operator reason recorded in the activity event.',
+    maxLength: 500,
+  })
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
