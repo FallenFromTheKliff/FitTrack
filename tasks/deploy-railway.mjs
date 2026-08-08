@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -222,6 +222,12 @@ export function classifyDeploymentStatus(status) {
 function fail(message) {
   console.error(`\n[railway-deploy] ${message}`);
   process.exit(1);
+}
+
+function restoreTerminalTitle() {
+  if (process.platform === 'win32') {
+    process.title = 'FitTrack Railway Deploy';
+  }
 }
 
 let railwayInvocation;
@@ -486,6 +492,52 @@ function run(
   return captureOutput ? { status, stdout, stderr } : status;
 }
 
+function appendBoundedOutput(current, chunk) {
+  const next = current + String(chunk);
+  if (next.length <= CAPTURED_COMMAND_MAX_BUFFER_BYTES) {
+    return next;
+  }
+
+  const half = Math.floor(CAPTURED_COMMAND_MAX_BUFFER_BYTES / 2);
+  return `${next.slice(0, half)}\n[railway-deploy] captured output truncated\n${next.slice(-half)}`;
+}
+
+function runStreamingCaptured(command, args) {
+  console.log(`\n> ${command} ${args.join(' ')}`);
+  const invocation =
+    command === 'railway'
+      ? resolveRailwayInvocation()
+      : { command, prefixArgs: [] };
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      invocation.command,
+      [...invocation.prefixArgs, ...args],
+      {
+        cwd: process.cwd(),
+        shell: false,
+        stdio: ['inherit', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      stdout = appendBoundedOutput(stdout, chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      stderr = appendBoundedOutput(stderr, chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      restoreTerminalTitle();
+      resolve({ status: status ?? 1, stdout, stderr });
+    });
+  });
+}
+
 function deploymentListArgs(service, environment) {
   return [
     'deployment',
@@ -612,9 +664,14 @@ function waitForDeploymentSuccess({
   );
 }
 
-function deployService({ service, environment, deploymentSource, deployMessage }) {
+async function deployService({
+  service,
+  environment,
+  deploymentSource,
+  deployMessage,
+}) {
   const priorLookup = queryDeployments(service, environment);
-  const upResult = run(
+  const upResult = await runStreamingCaptured(
     'railway',
     [
       'up',
@@ -628,7 +685,6 @@ function deployService({ service, environment, deploymentSource, deployMessage }
       '--message',
       deployMessage,
     ],
-    { allowFailure: true, captureOutput: true },
   );
 
   if (upResult.status === 0) {
@@ -699,7 +755,8 @@ function authenticate({ browserless, reauth }) {
   run('railway', ['whoami']);
 }
 
-function main() {
+async function main() {
+  restoreTerminalTitle();
   if (hasFlag('help', 'h')) {
     printHelp();
     process.exit(0);
@@ -776,6 +833,7 @@ function main() {
       process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
       'db:push',
     ]);
+    restoreTerminalTitle();
   }
 
   const deployMessage = `FitTrack CLI deploy ${new Date().toISOString()}`;
@@ -784,7 +842,7 @@ function main() {
   const deploymentSource = shouldDeploy ? createDeploymentSnapshot() : undefined;
 
   if (!hasFlag('skip-api')) {
-    deployService({
+    await deployService({
       service: 'api',
       environment,
       deploymentSource,
@@ -793,7 +851,7 @@ function main() {
   }
 
   if (!hasFlag('skip-ai')) {
-    deployService({
+    await deployService({
       service: 'ai',
       environment,
       deploymentSource,
@@ -802,7 +860,7 @@ function main() {
   }
 
   if (!hasFlag('skip-web')) {
-    deployService({
+    await deployService({
       service: 'web',
       environment,
       deploymentSource,
@@ -834,5 +892,10 @@ function main() {
 }
 
 if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
-  main();
+  main().catch((error) => {
+    console.error(
+      `\n[railway-deploy] ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = 1;
+  });
 }
