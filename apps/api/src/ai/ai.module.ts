@@ -10,6 +10,7 @@ import { AiController } from './ai.controller';
 import { AiInteractionLogRepository } from './ai-interaction-log.repository';
 import { AiPythonClientService } from './ai-python-client.service';
 import { AiService } from './ai.service';
+import { BrodigyAccessGuard } from './brodigy-access.guard';
 import { GymChatController } from './gym-chat.controller';
 import { GymChatInteractionLogRepository } from './gym-chat-interaction-log.repository';
 import { GymChatMessageRepository } from './gym-chat-message.repository';
@@ -29,6 +30,7 @@ import { GymKnowledgeService } from './gym-knowledge.service';
   controllers: [AiController, GymChatController, GymKnowledgeController],
   providers: [
     AiService,
+    BrodigyAccessGuard,
     GymChatService,
     GymKnowledgeService,
     AiPythonClientService,

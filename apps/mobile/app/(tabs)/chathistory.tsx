@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Bot, MessageSquarePlus, RotateCcw, Trash2, X, SlidersHorizontal } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
+import { ApiClientError } from "@fittrack/api-client";
 import { getAiContextLabel, getAiSessionDisplayTitle } from "@fittrack/app-config";
 import {
   archiveAiChatSessionMutationOptions,
@@ -49,6 +50,10 @@ const CHAT_STATUS_FILTERS: { label: string; value: ChatStatusFilter }[] = [
   { label: "Deleted", value: "deleted" }
 ];
 
+function isForbiddenError(error: unknown) {
+  return error instanceof ApiClientError && error.status === 403;
+}
+
 export default function ChatHistoryScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -63,22 +68,11 @@ export default function ChatHistoryScreen() {
   const s = useMemo(() => makeBookingsScreenStyles(colors), [colors]);
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
   const isCoachRole = user?.role === "COACH";
-  const hasBrodigyAccess = isCoachRole || user?.membershipAccess === "member";
-  const isMemberLocked = !!user && !hasBrodigyAccess;
-  const memberLockStatusLabel = membershipCardStatus === "pending_verification"
-    ? "Pending verification"
-    : membershipCardStatus === "revoked"
-      ? "Revoked"
-      : hasBrodigyAccess
-        ? isCoachRole
-          ? "Coach"
-          : "Member"
-        : "Non-member";
-  const memberLockMessage = membershipCardStatus === "pending_verification"
-    ? "Your membership card payment is waiting for verification. BrodigyAI history unlocks as soon as the card becomes active."
-    : membershipCardStatus === "revoked"
-      ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
-      : "BrodigyAI history unlocks after this account has an active membership card.";
+  const hasBrodigyAccess =
+    user?.role === "ADMIN" ||
+    user?.role === "STAFF" ||
+    isCoachRole ||
+    (user?.role === "USER" && user.membershipAccess === "member");
 
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
@@ -103,6 +97,34 @@ export default function ChatHistoryScreen() {
     archiveAiChatSessionMutationOptions(mobileApiClient, queryClient, user?.id)
   );
   const restoreMutation = useMutation(restoreAiChatSessionMutationOptions(mobileApiClient, queryClient));
+  const isServerAccessDenied = [
+    sessionsQuery.error,
+    archiveMutation.error,
+    restoreMutation.error
+  ].some(isForbiddenError);
+  const isMemberLocked = !hasBrodigyAccess || isServerAccessDenied;
+  const memberLockStatusLabel = isServerAccessDenied
+    ? "Access denied"
+    : membershipCardStatus === "pending_verification"
+      ? "Pending verification"
+      : membershipCardStatus === "revoked"
+        ? "Revoked"
+        : hasBrodigyAccess
+          ? user?.role === "ADMIN"
+            ? "Admin"
+            : user?.role === "STAFF"
+              ? "Staff"
+              : isCoachRole
+                ? "Coach"
+                : "Member"
+          : "Non-member";
+  const memberLockMessage = isServerAccessDenied
+    ? "BrodigyAI access was denied for this account. Refresh your membership status or contact the gym if this looks incorrect."
+    : membershipCardStatus === "pending_verification"
+      ? "Your membership card payment is waiting for verification. BrodigyAI history unlocks as soon as the card becomes active."
+      : membershipCardStatus === "revoked"
+        ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
+        : "BrodigyAI history unlocks after this account has an active membership card.";
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -131,12 +153,12 @@ export default function ChatHistoryScreen() {
   ], [colors.brand, colors.danger, colors.surfaceRaised, router, setFabOpen, statusFilter]);
 
   useFocusEffect(useCallback(() => {
-    registerFAB({ screenIcon: Bot, menuItems, scrollY, visible: !deleteMode && !isMemberLocked });
+    registerFAB({ screenIcon: Bot, menuItems, scrollY, visible: !deleteMode });
     return () => {
       setIsFilterOpen(false);
       unregisterFAB();
     };
-  }, [deleteMode, isMemberLocked, menuItems, registerFAB, scrollY, unregisterFAB]));
+  }, [deleteMode, menuItems, registerFAB, scrollY, unregisterFAB]));
 
   const handleStartDateSelect = (date: string) => {
     setStartDate(date);
@@ -310,18 +332,7 @@ export default function ChatHistoryScreen() {
               {statusMessage}
             </FitText>
           ) : null}
-          {isMemberLocked ? (
-            <PremiumFeatureGate
-              eyebrow="MEMBERSHIP CARD REQUIRED"
-              statusLabel={memberLockStatusLabel}
-              title={memberLockStatusLabel === "Pending verification"
-                ? "Membership card verification in progress"
-                : "BrodigyAI history stays locked"}
-              message={memberLockMessage}
-              actionLabel="Open Profile"
-              onActionPress={() => router.push("/(tabs)/profile")}
-            />
-          ) : sessionsQuery.isPending ? (
+          {sessionsQuery.isPending ? (
             <View style={s.emptyState}>
               <Bot size={40} color={colors.textMuted} strokeWidth={1.5} />
               <FitText style={s.emptyTitle}>Loading conversations...</FitText>
@@ -469,6 +480,42 @@ export default function ChatHistoryScreen() {
         onSelect={handleEndDateSelect}
         onClose={() => setIsEndCalOpen(false)}
       />
+      {isMemberLocked ? (
+        <View
+          accessibilityLabel="BrodigyAI membership upgrade required"
+          accessibilityViewIsModal
+          onStartShouldSetResponder={() => true}
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.overlay,
+            bottom: 0,
+            justifyContent: "center",
+            left: 0,
+            padding: 20,
+            position: "absolute",
+            right: 0,
+            top: 0,
+            zIndex: 1000,
+          }}
+        >
+          <View style={{ maxWidth: 520, width: "100%" }}>
+            <PremiumFeatureGate
+              actionLabel="Open Profile Settings"
+              eyebrow="BRODIGYAI PREMIUM FEATURE"
+              message={`${memberLockMessage} Upgrade or refresh your membership in Profile Settings to unlock BrodigyAI.`}
+              onActionPress={() => router.push("/(tabs)/profile")}
+              statusLabel={memberLockStatusLabel}
+              title={
+                memberLockStatusLabel === "Pending verification"
+                  ? "Membership card verification in progress"
+                  : memberLockStatusLabel === "Access denied"
+                    ? "BrodigyAI access is unavailable"
+                    : "Upgrade membership to unlock BrodigyAI"
+              }
+            />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -361,6 +361,52 @@ describe('AiPythonClientService', () => {
     ).rejects.toThrow(HttpException);
   });
 
+  it('maps Brodigy chat timeouts to a redacted 503 response', async () => {
+    const configValues = {
+      'ai.apiBaseUrl': 'https://ai.fittrack.test',
+      'ai.requestTimeoutMs': 10000,
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback?: string | number) =>
+          configValues[key as keyof typeof configValues] ?? fallback,
+      ),
+    };
+    const timeoutError = Object.assign(new Error('provider timeout'), {
+      name: 'TimeoutError',
+    });
+    const fetchMock = jest.fn<typeof fetch>().mockRejectedValue(timeoutError);
+    global.fetch = fetchMock;
+
+    const service = new AiPythonClientService(config as ConfigService);
+
+    await expect(
+      service.chat({
+        messages: [{ role: 'user', content: 'Are you open today?' }],
+        userContext: {
+          age: null,
+          gender: null,
+          weight_kg: null,
+          height_cm: null,
+          activity_level: null,
+          fitness_goal: null,
+        },
+        sessionContext: {
+          session_id: 'session-1',
+          context_type: 'general',
+          assistant_scope: 'member_fitness',
+        },
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'SERVICE_UNAVAILABLE',
+        status: 503,
+        detail:
+          'BrodigyAI timed out while waiting for the AI service. Please try again.',
+      },
+    });
+  });
+
   it('rejects malformed upstream chat payloads', async () => {
     const configValues = {
       'ai.apiBaseUrl': 'https://ai.fittrack.test',

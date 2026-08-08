@@ -45,6 +45,7 @@ import { AiInteractionLogRepository } from './ai-interaction-log.repository';
 import {
   AIChatAction,
   AIChatInput,
+  AIChatResponse,
   AssistantScope,
   AiGeneratePlanResponse,
   AiGeneratedDay,
@@ -52,6 +53,9 @@ import {
   AiGeneratedWeek,
   AiPythonClientService,
   GeneratePlanInput,
+  GymChatGroundingInput,
+  GymChatInput,
+  GymChatResponse,
 } from './ai-python-client.service';
 import { AIChatDTO, AIChatResponseDTO } from './dto/chat.dto';
 import {
@@ -59,6 +63,8 @@ import {
   AiChatSessionResponseDTO,
 } from './dto/chat-session.dto';
 import { GeneratePlanDTO } from './dto/generate-plan.dto';
+import type { GymProfileResponseDTO } from './dto/gym-knowledge.dto';
+import { GymKnowledgeService } from './gym-knowledge.service';
 
 type ProfileAggregate = {
   profile: {
@@ -159,6 +165,7 @@ type PlanPromptBlueprint = {
 
 const SESSION_INACTIVITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_CHAT_HISTORY_MESSAGES = 20;
+const MAX_GYM_PROVIDER_HISTORY_MESSAGES = 4;
 const MAX_SESSION_TITLE_LENGTH = 80;
 
 @Injectable()
@@ -170,6 +177,7 @@ export class AiService {
     private readonly workoutSessionService: WorkoutSessionService,
     private readonly nutritionService: NutritionService,
     private readonly aiClient: AiPythonClientService,
+    private readonly gymKnowledgeService: GymKnowledgeService,
     private readonly eventEmitter: EventEmitter2,
     private readonly aiChatSessionRepository: AiChatSessionRepository,
     private readonly aiChatMessageRepository: AiChatMessageRepository,
@@ -241,8 +249,7 @@ export class AiService {
   ): Promise<AIChatResponseDTO> {
     const actorRole =
       typeof actorRoleOrDto === 'string' ? actorRoleOrDto : UserRole.member;
-    const dto =
-      typeof actorRoleOrDto === 'string' ? maybeDto : actorRoleOrDto;
+    const dto = typeof actorRoleOrDto === 'string' ? maybeDto : actorRoleOrDto;
 
     if (!dto) {
       throw this.buildValidationException(
@@ -258,29 +265,52 @@ export class AiService {
         resolved.session.id,
         MAX_CHAT_HISTORY_MESSAGES,
       );
-    const userContext = await this.buildChatUserContext(userId);
-    const requestPayload = this.buildChatRequestPayload(
-      resolved.session,
-      history,
-      userContext,
-      dto.message,
-      assistantScope,
-    );
-    const promptBlueprint = this.buildChatPromptBlueprint(
-      resolved.session,
-      history,
-      userContext,
-      dto.message,
-      assistantScope,
-    );
-    const persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
-      requestPayload,
-      promptBlueprint,
-    );
+    const useGymChatProvider =
+      typeof actorRoleOrDto === 'string' && actorRole === UserRole.member;
+    let requestPayload: AIChatInput | GymChatInput;
+    let persistedRequestPayload: AIChatInput | GymChatInput;
+
+    if (useGymChatProvider) {
+      requestPayload = this.buildGymChatRequestPayload(
+        resolved.session.id,
+        history,
+        await this.gymKnowledgeService.getGymProfile(),
+        dto.message,
+      );
+      persistedRequestPayload = requestPayload;
+    } else {
+      const [userContext, gymProfile] = await Promise.all([
+        this.buildChatUserContext(userId),
+        this.gymKnowledgeService.getGymProfile(),
+      ]);
+      requestPayload = this.buildChatRequestPayload(
+        resolved.session,
+        history,
+        userContext,
+        gymProfile,
+        dto.message,
+        assistantScope,
+      );
+      const promptBlueprint = this.buildChatPromptBlueprint(
+        resolved.session,
+        history,
+        userContext,
+        dto.message,
+        assistantScope,
+      );
+      persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
+        requestPayload,
+        promptBlueprint,
+      );
+    }
     const startedAt = Date.now();
 
     try {
-      const response = await this.aiClient.chat(requestPayload);
+      const response: AIChatResponse = useGymChatProvider
+        ? this.toLegacyChatResponse(
+            await this.aiClient.chatGym(requestPayload as GymChatInput),
+          )
+        : await this.aiClient.chat(requestPayload as AIChatInput);
       const latencyMs = Date.now() - startedAt;
       const { actionTriggered, actionResult } =
         await this.validateAndExecuteAction(
@@ -406,7 +436,11 @@ export class AiService {
   }
 
   private resolveAssistantScope(actorRole: UserRole): AssistantScope {
-    if (actorRole === UserRole.admin || actorRole === UserRole.coach) {
+    if (
+      actorRole === UserRole.admin ||
+      actorRole === UserRole.coach ||
+      actorRole === UserRole.staff
+    ) {
       return 'admin_business';
     }
 
@@ -419,7 +453,8 @@ export class AiService {
         type: 'FORBIDDEN',
         title: 'BrodigyAI Access Denied',
         status: HttpStatus.FORBIDDEN,
-        detail: 'BrodigyAI is available to admins, coaches, and members only.',
+        detail:
+          'BrodigyAI is available to admins, coaches, staff, and members only.',
       },
       HttpStatus.FORBIDDEN,
     );
@@ -443,11 +478,15 @@ export class AiService {
       planInput: {
         duration_weeks: dto.duration_weeks,
         days_per_week: dto.days_per_week,
-        preferences: [dto.preferences?.trim(), recentExerciseHistory
-          ? `Use this recent workout history to calibrate exercise selection and volume: ${recentExerciseHistory}`
-          : null]
-          .filter(Boolean)
-          .join('\n') || null,
+        preferences:
+          [
+            dto.preferences?.trim(),
+            recentExerciseHistory
+              ? `Use this recent workout history to calibrate exercise selection and volume: ${recentExerciseHistory}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join('\n') || null,
       },
       allowedExercises: allowedExercises.map((exercise) => ({
         name: exercise.name,
@@ -973,10 +1012,6 @@ export class AiService {
       );
 
     if (dto.start_new_session) {
-      if (activeSession) {
-        await this.archiveInactiveSession(activeSession);
-      }
-
       return {
         session: await this.aiChatSessionRepository.createSession({
           userId,
@@ -997,8 +1032,6 @@ export class AiService {
     }
 
     if (this.isSessionInactive(activeSession.last_activity_at)) {
-      await this.archiveInactiveSession(activeSession);
-
       return {
         session: await this.aiChatSessionRepository.createSession({
           userId,
@@ -1038,11 +1071,16 @@ export class AiService {
     session: AiChatSessionRecord,
     history: AiChatMessageRecord[],
     userContext: AIChatInput['userContext'],
+    gymProfile: GymProfileResponseDTO,
     message: string,
     assistantScope: AssistantScope,
   ): AIChatInput {
     return {
       messages: [
+        {
+          role: 'assistant',
+          content: this.buildGymGroundingMessage(gymProfile),
+        },
         ...history.map((entry) => ({
           role: entry.role,
           content: entry.content,
@@ -1059,6 +1097,94 @@ export class AiService {
         assistant_scope: assistantScope,
       },
     };
+  }
+
+  private buildGymChatRequestPayload(
+    sessionId: string,
+    history: AiChatMessageRecord[],
+    gymProfile: GymProfileResponseDTO,
+    message: string,
+  ): GymChatInput {
+    const sessionHistory: GymChatGroundingInput['session_history'] = history
+      .filter(
+        (entry) =>
+          entry.role === ChatRole.user || entry.role === ChatRole.assistant,
+      )
+      .slice(-MAX_GYM_PROVIDER_HISTORY_MESSAGES)
+      .map((entry) => ({
+        role: entry.role as 'user' | 'assistant',
+        content: entry.content,
+      }));
+
+    return {
+      sessionId,
+      message,
+      grounding: {
+        operating_hours: [],
+        special_schedules: [],
+        promotions: [],
+        faqs: [
+          {
+            category: 'general',
+            question: 'Gym name',
+            answer: gymProfile.name,
+          },
+          {
+            category: 'general',
+            question: 'Gym address',
+            answer: gymProfile.location,
+          },
+          {
+            category: 'general',
+            question: 'Gym phone',
+            answer: gymProfile.phone,
+          },
+          {
+            category: 'general',
+            question: 'Gym email',
+            answer: gymProfile.email,
+          },
+          {
+            category: 'general',
+            question: 'Gym opening time',
+            answer: gymProfile.opening_time,
+          },
+          {
+            category: 'general',
+            question: 'Gym closing time',
+            answer: gymProfile.closing_time,
+          },
+        ],
+        membership_plans: [],
+        session_history: sessionHistory,
+      },
+      policy: {
+        gymOnly: true,
+        refuseOutOfScope: true,
+      },
+    };
+  }
+
+  private toLegacyChatResponse(response: GymChatResponse): AIChatResponse {
+    return {
+      content: response.reply,
+      action: 'NONE',
+      params: null,
+      model_used: response.model_used ?? null,
+      token_count: response.token_count ?? null,
+    };
+  }
+
+  private buildGymGroundingMessage(profile: GymProfileResponseDTO): string {
+    return [
+      '[Current gym grounding. Use this only when relevant to the user intent; do not invent or override it.]',
+      `Gym name: ${profile.name}`,
+      `Address: ${profile.location}`,
+      `Contact phone: ${profile.phone}`,
+      `Contact email: ${profile.email}`,
+      `Opening time: ${profile.opening_time}`,
+      `Closing time: ${profile.closing_time}`,
+    ].join('\n');
   }
 
   private buildChatPromptBlueprint(

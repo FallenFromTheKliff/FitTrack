@@ -14,6 +14,7 @@ import AiPageHeader from "@/components/chatbot/AiPageHeader";
 import { useAiPageController } from "@/hooks/ai/useAiPageController";
 import { ConfirmModal } from "@/components/modals";
 import { FitButton } from "@/components/fit";
+import { PremiumGate } from "@/components/member-only/MemberOnlyPrimitives";
 
 export default function AiPage() {
   const { user } = useAuth();
@@ -53,9 +54,12 @@ function BrodigyAiPageBody({ role }: { role: string }) {
     handleSend,
     handleStartFresh,
     input,
+    isMemberLocked,
     isSelectedSessionDeleted,
     lastError,
     message,
+    memberLockMessage,
+    memberLockStatusLabel,
     messages,
     restoreMutation,
     selectedSession,
@@ -133,7 +137,8 @@ function BrodigyAiPageBody({ role }: { role: string }) {
     () => ({
       ...s.page,
       height: "calc(100vh - 154px)",
-      ...fadeIn
+      ...fadeIn,
+      position: "relative" as const
     }),
     [fadeIn, s.page]
   );
@@ -147,6 +152,7 @@ function BrodigyAiPageBody({ role }: { role: string }) {
         mutedColor={colors.textMuted}
       />
       <div
+        aria-hidden={isMemberLocked}
         data-brodigy-grid="true"
         data-mobile-pane={mobilePane}
         style={{
@@ -157,6 +163,7 @@ function BrodigyAiPageBody({ role }: { role: string }) {
           gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
           minHeight: 0,
           minWidth: 0,
+          pointerEvents: isMemberLocked ? "none" : "auto",
           position: "relative",
         }}
       >
@@ -193,23 +200,59 @@ function BrodigyAiPageBody({ role }: { role: string }) {
           }}
         >
           <ChatPanel
-            disabled={sendMutation.isPending || isSelectedSessionDeleted}
+            disabled={isMemberLocked || sendMutation.isPending || isSelectedSessionDeleted}
             input={input}
             isLoading={sendMutation.isPending}
-            isReadOnly={isSelectedSessionDeleted}
+            isReadOnly={isMemberLocked || isSelectedSessionDeleted}
             messages={messages}
             onBack={() => setMobilePane("history")}
             onInputChange={setInput}
             onSend={handleSend}
             placeholder={
-              isSelectedSessionDeleted
-                ? "Restore this chat to continue the conversation."
-                : getChatPlaceholder(role)
+              isMemberLocked
+                ? "Upgrade membership to use BrodigyAI."
+                : isSelectedSessionDeleted
+                  ? "Restore this chat to continue the conversation."
+                  : getChatPlaceholder(role)
             }
             showBackButton={isMobileBrodigy}
           />
         </div>
       </div>
+      {isMemberLocked ? (
+        <div
+          aria-label="BrodigyAI membership upgrade required"
+          aria-modal="true"
+          role="dialog"
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.overlay,
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: 24,
+            position: "absolute",
+            zIndex: 20,
+          }}
+        >
+          <div style={{ maxHeight: "100%", maxWidth: 560, overflow: "auto", width: "100%" }}>
+            <PremiumGate
+              actionHref="/profile"
+              actionLabel="Open Profile Settings"
+              eyebrow="BRODIGYAI PREMIUM FEATURE"
+              message={`${memberLockMessage} Upgrade or refresh your membership in Profile Settings to unlock BrodigyAI.`}
+              statusLabel={memberLockStatusLabel}
+              title={
+                memberLockStatusLabel === "Pending verification"
+                  ? "Membership card verification in progress"
+                  : memberLockStatusLabel === "Access denied"
+                    ? "BrodigyAI access is unavailable"
+                    : "Upgrade membership to unlock BrodigyAI"
+              }
+            />
+          </div>
+        </div>
+      ) : null}
       <style>{`
         .brodigy-compact-new-chat {
           display: block;

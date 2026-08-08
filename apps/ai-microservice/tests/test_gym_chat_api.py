@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -62,7 +65,43 @@ def _build_grounding_payload() -> dict[str, object]:
                 "question": "How do downpayments work?",
                 "answer": "A downpayment reserves the booking; the remaining balance is settled before completion.",
                 "keywords": ["payment", "downpayment", "balance"],
-            }
+            },
+            {
+                "category": "general",
+                "question": "Gym name",
+                "answer": "SERTFIT Gym",
+                "keywords": ["gym", "name"],
+            },
+            {
+                "category": "general",
+                "question": "Gym address",
+                "answer": "123 Fitness Ave, New York, NY 10001",
+                "keywords": ["gym", "address", "location"],
+            },
+            {
+                "category": "general",
+                "question": "Gym phone",
+                "answer": "+639281234567",
+                "keywords": ["gym", "phone", "contact"],
+            },
+            {
+                "category": "general",
+                "question": "Gym email",
+                "answer": "contact@sertfit.com",
+                "keywords": ["gym", "email", "contact"],
+            },
+            {
+                "category": "general",
+                "question": "Gym opening time",
+                "answer": "06:00",
+                "keywords": ["gym", "hours", "opening"],
+            },
+            {
+                "category": "general",
+                "question": "Gym closing time",
+                "answer": "22:00",
+                "keywords": ["gym", "hours", "closing"],
+            },
         ],
         "membership_plans": [
             {
@@ -75,8 +114,24 @@ def _build_grounding_payload() -> dict[str, object]:
         "session_history": [
             {
                 "role": "user",
-                "content": "I want to compare your membership plans.",
-            }
+                "content": "Turn one.",
+            },
+            {
+                "role": "assistant",
+                "content": "Turn two.",
+            },
+            {
+                "role": "user",
+                "content": "Turn three.",
+            },
+            {
+                "role": "assistant",
+                "content": "Turn four.",
+            },
+            {
+                "role": "user",
+                "content": "Turn five.",
+            },
         ],
         "user_context": {
             "first_name": "Alex",
@@ -86,33 +141,175 @@ def _build_grounding_payload() -> dict[str, object]:
     }
 
 
-def test_gym_chat_route_returns_grounded_membership_reply() -> None:
+class _FakeResponse:
+    def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
+def _openrouter_response(
+    draft: dict[str, object],
+    *,
+    model: str = "primary-model",
+    tokens: int = 41,
+    status_code: int = 200,
+) -> _FakeResponse:
+    return _FakeResponse(
+        {
+            "model": model,
+            "usage": {"total_tokens": tokens},
+            "choices": [{"message": {"content": json.dumps(draft)}}],
+        },
+        status_code=status_code,
+    )
+
+
+def _configure_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[dict[str, object]],
+    responses: list[_FakeResponse],
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_CHAT_MODEL", "primary-model")
+    monkeypatch.setenv("OPENROUTER_FREE_MODEL_FALLBACK", "openrouter/free")
+
+    def fake_post(*_args: object, **kwargs: object) -> _FakeResponse:
+        request_payload = kwargs["json"]
+        assert isinstance(request_payload, dict)
+        calls.append(request_payload)
+        return responses[min(len(calls) - 1, len(responses) - 1)]
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+
+def test_gym_chat_route_calls_openrouter_with_bounded_identity_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    _configure_openrouter(
+        monkeypatch,
+        calls,
+        [
+            _openrouter_response(
+                {
+                    "reply": "The model confirms the gym opens at 06:00 and closes at 22:00.",
+                    "out_of_scope": False,
+                    "sources": ["gym_identity"],
+                    "follow_up_suggestions": ["Ask about today's gym hours."],
+                }
+            )
+        ],
+    )
+    grounding = _build_grounding_payload()
     client = TestClient(app)
 
     response = client.post(
         "/chat/gym",
         json={
             "session_id": "gym-session-1",
-            "message": "What membership plans do you offer right now?",
-            "grounding": _build_grounding_payload(),
+            "message": "When do you open today?",
+            "grounding": grounding,
             "policy": {"gym_only": True, "refuse_out_of_scope": True},
         },
     )
 
     assert response.status_code == 200
     assert response.json() == {
-        "reply": "Alex, Membership option: Monthly Flex at PHP 1999 for 30 days.",
+        "reply": "The model confirms the gym opens at 06:00 and closes at 22:00.",
         "out_of_scope": False,
-        "sources": ["membership_plans"],
-        "follow_up_suggestions": [
-            "Ask which membership plan fits your visit frequency."
-        ],
-        "model_used": None,
-        "token_count": None,
+        "sources": ["gym_identity"],
+        "follow_up_suggestions": ["Ask about today's gym hours."],
+        "model_used": "primary-model",
+        "token_count": 41,
     }
 
+    assert len(calls) == 1
+    request_payload = calls[0]
+    assert request_payload["models"] == ["primary-model", "openrouter/free"]
+    assert "model" not in request_payload
+    assert request_payload["provider"] == {
+        "require_parameters": True,
+        "allow_fallbacks": True,
+    }
+    assert "strict JSON" in request_payload["messages"][0]["content"]
+    provider_input = json.loads(request_payload["messages"][1]["content"])
+    assert provider_input == {
+        "current_message": "When do you open today?",
+        "gym_identity": {
+            "name": "SERTFIT Gym",
+            "address": "123 Fitness Ave, New York, NY 10001",
+            "opening_time": "06:00",
+            "closing_time": "22:00",
+            "contact": {
+                "phone": "+639281234567",
+                "email": "contact@sertfit.com",
+            },
+        },
+        "recent_turns": grounding["session_history"][-4:],
+    }
+    assert "user_context" not in provider_input
+    assert "membership_plans" not in provider_input
+    assert "session_history" not in provider_input
 
-def test_gym_chat_route_refuses_out_of_scope_prompts() -> None:
+
+def test_gym_chat_route_keeps_a_single_free_router_lane_when_fallback_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    _configure_openrouter(
+        monkeypatch,
+        calls,
+        [
+            _openrouter_response(
+                {
+                    "reply": "The free router answered from the supplied gym identity.",
+                    "out_of_scope": False,
+                    "sources": ["gym_identity"],
+                    "follow_up_suggestions": [],
+                },
+                model="openrouter/free",
+            )
+        ],
+    )
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_CHAT_MODEL", "openrouter/free")
+
+    response = TestClient(app).post(
+        "/chat/gym",
+        json={
+            "session_id": "gym-session-free-router",
+            "message": "What is the gym address?",
+            "grounding": _build_grounding_payload(),
+            "policy": {"gym_only": True, "refuse_out_of_scope": True},
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["model"] == "openrouter/free"
+    assert "models" not in calls[0]
+
+
+def test_gym_chat_route_asks_provider_to_refuse_out_of_scope_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    _configure_openrouter(
+        monkeypatch,
+        calls,
+        [
+            _openrouter_response(
+                {
+                    "reply": "I can help with gym support questions only.",
+                    "out_of_scope": True,
+                    "sources": [],
+                    "follow_up_suggestions": ["Ask about gym hours."],
+                }
+            )
+        ],
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -126,21 +323,12 @@ def test_gym_chat_route_refuses_out_of_scope_prompts() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "reply": (
-            "I can only help with gym support topics like hours, bookings, "
-            "payments, memberships, coaching, training, promotions, schedules, "
-            "and FAQs."
-        ),
-        "out_of_scope": True,
-        "sources": [],
-        "follow_up_suggestions": [
-            "Ask about gym hours or holiday schedules.",
-            "Ask about membership plans or current promotions.",
-        ],
-        "model_used": None,
-        "token_count": None,
-    }
+    assert response.json()["reply"] == "I can help with gym support questions only."
+    assert response.json()["out_of_scope"] is True
+    assert response.json()["model_used"] == "primary-model"
+    assert len(calls) == 1
+    provider_input = json.loads(calls[0]["messages"][1]["content"])
+    assert provider_input["current_message"] == "Can you help me pick stocks for my portfolio?"
 
 
 def test_gym_chat_route_returns_422_for_invalid_policy_payload() -> None:
@@ -219,81 +407,109 @@ def test_gym_chat_route_returns_422_for_nested_extra_fields() -> None:
     assert "Extra inputs are not permitted" in error_payload["detail"]
 
 
-def test_gym_chat_route_answers_opening_and_closing_hours() -> None:
-    client = TestClient(app)
+def test_gym_chat_route_uses_openrouter_model_fallback_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    _configure_openrouter(
+        monkeypatch,
+        calls,
+        [
+            _openrouter_response(
+                {"error": {"message": "primary rate limited"}},
+                status_code=503,
+            ),
+            _openrouter_response(
+                {"error": {"message": "structured output unavailable"}},
+                status_code=503,
+            ),
+            _openrouter_response(
+                {
+                    "reply": "The fallback model answered from the supplied gym identity.",
+                    "out_of_scope": False,
+                    "sources": ["gym_identity"],
+                    "follow_up_suggestions": [],
+                },
+                model="openrouter/free",
+                tokens=55,
+            ),
+        ],
+    )
 
-    response = client.post(
+    response = TestClient(app).post(
         "/chat/gym",
         json={
             "session_id": "gym-session-6",
-            "message": "When is SertFit opening and closing time?",
+            "message": "What is the gym address?",
             "grounding": _build_grounding_payload(),
             "policy": {"gym_only": True, "refuse_out_of_scope": True},
         },
     )
 
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["out_of_scope"] is False
-    assert payload["sources"] == ["operating_hours"]
-    assert "Current gym hours: Monday: 06:00-22:00; Saturday: 08:00-20:00." in payload["reply"]
+    assert response.json()["model_used"] == "openrouter/free"
+    assert response.json()["token_count"] == 55
+    assert len(calls) == 3
+    assert calls[0]["models"] == ["primary-model", "openrouter/free"]
+    assert calls[1]["models"] == ["primary-model", "openrouter/free"]
+    assert calls[2]["models"] == ["primary-model", "openrouter/free"]
+    assert "model" not in calls[0]
+    assert "response_format" not in calls[2]
 
 
-def test_gym_chat_route_answers_booking_faq() -> None:
-    client = TestClient(app)
+def test_gym_chat_route_rejects_a_malformed_provider_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    _configure_openrouter(
+        monkeypatch,
+        calls,
+        [
+            _openrouter_response(
+                {
+                    "reply": "Missing required contract fields.",
+                    "out_of_scope": False,
+                }
+            )
+        ],
+    )
 
-    response = client.post(
+    response = TestClient(app).post(
         "/chat/gym",
         json={
             "session_id": "gym-session-7",
-            "message": "How do I book a coach appointment?",
+            "message": "What are today's gym hours?",
             "grounding": _build_grounding_payload(),
             "policy": {"gym_only": True, "refuse_out_of_scope": True},
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["out_of_scope"] is False
-    assert payload["sources"] == ["faqs"]
-    assert "How do I book a coach appointment?" in payload["reply"]
+    assert response.status_code == 502
+    assert response.json()["type"] == "BAD_GATEWAY"
+    assert "Brodigy contract" in response.json()["detail"]
 
 
-def test_gym_chat_route_answers_payment_faq() -> None:
-    client = TestClient(app)
+def test_gym_chat_route_returns_provider_configuration_error_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "OPENROUTER_ASSISTANT_MODEL",
+        "OPENROUTER_INSIGHT_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
-    response = client.post(
+    response = TestClient(app).post(
         "/chat/gym",
         json={
             "session_id": "gym-session-8",
-            "message": "How does the downpayment balance work?",
+            "message": "What is the gym address?",
             "grounding": _build_grounding_payload(),
             "policy": {"gym_only": True, "refuse_out_of_scope": True},
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["out_of_scope"] is False
-    assert payload["sources"] == ["faqs"]
-    assert "How do downpayments work?" in payload["reply"]
-
-
-def test_gym_chat_route_refuses_member_sensitive_analytics() -> None:
-    client = TestClient(app)
-
-    response = client.post(
-        "/chat/gym",
-        json={
-            "session_id": "gym-session-9",
-            "message": "What are the total sales and attendance this month?",
-            "grounding": _build_grounding_payload(),
-            "policy": {"gym_only": True, "refuse_out_of_scope": True},
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["out_of_scope"] is True
-    assert payload["sources"] == []
-    assert "private business analytics" in payload["reply"]
+    assert response.status_code == 503
+    assert response.json()["type"] == "SERVICE_UNAVAILABLE"
+    assert "not configured" in response.json()["detail"]

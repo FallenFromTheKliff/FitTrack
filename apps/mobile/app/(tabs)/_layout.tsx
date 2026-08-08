@@ -111,7 +111,12 @@ function TabsLayoutInner() {
       ? getCoachModuleLabel(activeTab, activeCoachView)
       : SIDEBAR_NAV_LABELS_BY_TAB[activeTab]
   }`;
-  const isAutoHelpEligible = AUTO_HELP_TABS.includes(activeTab);
+  const isBrodigyMembershipLocked =
+    activeTab === "chatbot" &&
+    user?.role === "USER" &&
+    user.membershipAccess !== "member";
+  const isAutoHelpEligible =
+    AUTO_HELP_TABS.includes(activeTab) && !isBrodigyMembershipLocked;
   const isChatScreen = segments.includes("chatbot" as never);
   const showBackButton = isChatScreen;
   const showOverlay = isSidebarOpen || isFabOpen;
@@ -188,6 +193,14 @@ function TabsLayoutInner() {
     };
   }, [activeTab, isAutoHelpEligible, user?.id]);
 
+  useEffect(() => {
+    if (!isBrodigyMembershipLocked) return;
+    setHelpVisible(false);
+    setAutoHelpTab(null);
+    setNeverAutoHelpChecked(false);
+    setHelpDismissScopeVisible(false);
+  }, [isBrodigyMembershipLocked]);
+
   const handleMenuPress = () => {
     if (isFabOpen || isCameraActive) return;
     setSidebarOpen(!isSidebarOpen);
@@ -250,6 +263,7 @@ function TabsLayoutInner() {
       <Header
         onMenuPress={handleMenuPress}
         onHelpPress={() => {
+          if (isBrodigyMembershipLocked) return;
           openHelp(null);
         }}
         onNotificationsPress={() => setNotificationsVisible(true)}
@@ -338,7 +352,7 @@ function TabsLayoutInner() {
         <NotificationInboxPanel onClose={() => setNotificationsVisible(false)} />
       </SettingsModal>
       <SettingsModal
-        visible={helpVisible}
+        visible={helpVisible && !isBrodigyMembershipLocked}
         title={activeHelpTitle}
         icon={HelpCircle}
         showFixedCloseButton
@@ -355,7 +369,7 @@ function TabsLayoutInner() {
       >
         <MobileHelpPanel content={activeHelpContent} />
       </SettingsModal>
-      {helpDismissScopeVisible ? (
+      {helpDismissScopeVisible && !isBrodigyMembershipLocked ? (
         <ConfirmModal
           isVisible={helpDismissScopeVisible}
           title="Hide automatic Help?"

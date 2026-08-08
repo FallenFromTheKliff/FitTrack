@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { makeBrodigyStyles } from "@/styles/shared/ScreenStyles";
-import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import { FitText, FitTextInput } from "@/components/fit/FitText";
 
 import type { ChatbotMessage } from "@/hooks/chatbot/useChatbotScreen";
@@ -18,8 +17,6 @@ type ChatbotScreenContentProps = {
   isPending: boolean;
   isSessionDeleted: boolean;
   lastError: string;
-  memberLockMessage: string;
-  memberLockStatusLabel: string;
   messages: ChatbotMessage[];
   onInputChange: (value: string) => void;
   onSend: () => void;
@@ -36,8 +33,6 @@ export default function ChatbotScreenContent({
   isPending,
   isSessionDeleted,
   lastError,
-  memberLockMessage,
-  memberLockStatusLabel,
   messages,
   onInputChange,
   onSend,
@@ -81,15 +76,7 @@ export default function ChatbotScreenContent({
             {statusMessage}
           </FitText>
         ) : null}
-        {isMemberLocked ? (
-          <PremiumFeatureGate
-            eyebrow="MEMBERSHIP CARD REQUIRED"
-            statusLabel={memberLockStatusLabel}
-            title={memberLockStatusLabel === "Pending verification" ? "Membership card verification in progress" : "BrodigyAI chat stays locked"}
-            message={memberLockMessage}
-          />
-        ) : (
-          <>
+        <>
             {isSessionDeleted ? (
               <FitText style={{ fontSize: 12, color: colors.danger, marginBottom: 12 }}>
                 This chat is deleted. Restore it from BrodigyAI history before sending another message.
@@ -127,8 +114,7 @@ export default function ChatbotScreenContent({
                 </View>
               </View>
             ) : null}
-          </>
-        )}
+        </>
       </ScrollView>
       <View style={[styles.inputBar, { paddingBottom: Math.max(14, insets.bottom + 10) }]}>
         <View style={styles.inputWrap}>

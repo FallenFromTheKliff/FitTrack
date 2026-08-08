@@ -4,6 +4,12 @@ Use the dedicated dev-only seeder when you want realistic records for manual fil
 
 ## Commands
 
+- Canonical local realistic seed:
+  - `pnpm.cmd seed:realistic --target=local --mode=reset --users=100 --exercise-history=100`
+- Canonical Railway realistic reset:
+  - `pnpm.cmd seed:realistic --target=railway --mode=reset --users=100 --exercise-history=100 --allow-remote-reset --confirm=RESET_REMOTE_DYNAMIC_SEED`
+- `pnpm test:seed:dynamic`
+  - runs the bounded no-database seed contract checks
 - `pnpm db:seed:dynamic`
   - resets the local Docker Postgres database and seeds the modular realistic scenario with 100 users
 - `pnpm db:seed:dynamic:additive`
@@ -34,15 +40,15 @@ The manifest includes:
 ## Recommended Use
 
 1. Start the local infra and app surfaces you want to test.
-2. Run `pnpm db:seed:dynamic` for broad demo data, or `pnpm db:seed:test` for the narrower deterministic manual-test pack.
+2. Run one of the canonical realistic commands above for broad demo data, or `pnpm db:seed:test` for the narrower deterministic manual-test pack.
 3. Open `.artifacts/dynamic-seed-manifest.json`, `.artifacts/test-data-manifest.json`, or run `pnpm db:seed:test:report`.
 4. Log in with one of the listed credentials and work through the suggested paths.
 
 ## Dynamic Demo Credentials
 
-- `seed.admin@fittrack.com` / `SeedAdmin!2026`
-- `seed.staff@fittrack.com` / `SeedStaff!2026`
-- `seed.coach@fittrack.com` / `SeedCoach!2026`
+- `seed.admin@fittrack.com` / `SeedMember!2026`
+- `seed.staff@fittrack.com` / `SeedMember!2026`
+- `seed.coach@fittrack.com` / `SeedMember!2026`
 - `seed.member.active@fittrack.com` / `SeedMember!2026`
 - `seed.member.premium@fittrack.com` / `SeedMember!2026`
 - `seed.member.frozen@fittrack.com` / `SeedMember!2026`

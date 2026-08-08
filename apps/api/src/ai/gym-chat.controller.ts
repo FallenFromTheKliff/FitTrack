@@ -19,11 +19,15 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDTO } from '../user/dto/user-dto';
+import { BrodigyAccessGuard } from './brodigy-access.guard';
 import {
   GymChatMessageResponseDTO,
   GymChatReplyResponseDTO,
@@ -80,8 +84,14 @@ export class GymChatController {
 
   @Post('messages')
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'Send a grounded gym chat message.',
   })
@@ -100,8 +110,14 @@ export class GymChatController {
   }
 
   @Get('sessions')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: "List the authenticated user's gym chat sessions.",
   })
@@ -118,8 +134,14 @@ export class GymChatController {
   }
 
   @Get('sessions/:id/messages')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'List owned message history for a gym chat session.',
   })
@@ -145,8 +167,14 @@ export class GymChatController {
   }
 
   @Delete('sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'Archive an owned gym chat session.',
   })

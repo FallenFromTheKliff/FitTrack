@@ -9,6 +9,7 @@ import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AiController } from './ai.controller';
+import { BrodigyAccessGuard } from './brodigy-access.guard';
 
 function getMethodGuardMetadata(
   methodName:
@@ -98,10 +99,11 @@ describe('AiController', () => {
     'restoreSession',
     'generatePlan',
   ] as const)('protects %s with JWT auth', (methodName) => {
-    expect(getMethodGuardMetadata(methodName)).toEqual([
-      JwtAuthGuard,
-      RolesGuard,
-    ]);
+    expect(getMethodGuardMetadata(methodName)).toEqual(
+      methodName === 'generatePlan'
+        ? [JwtAuthGuard, RolesGuard]
+        : [JwtAuthGuard, RolesGuard, BrodigyAccessGuard],
+    );
   });
 
   it.each([
@@ -111,10 +113,11 @@ describe('AiController', () => {
     'getChatMessages',
     'archiveSession',
     'restoreSession',
-  ] as const)('allows admins, coaches, and members to %s', (methodName) => {
+  ] as const)('allows operators and members to %s', (methodName) => {
     expect(getRolesMetadata(methodName)).toEqual([
       UserRole.admin,
       UserRole.coach,
+      UserRole.staff,
       UserRole.member,
     ]);
   });

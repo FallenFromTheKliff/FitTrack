@@ -39,6 +39,10 @@ function normalizeSessionId(value?: string | string[]) {
   return sessionId;
 }
 
+function isForbiddenError(error: unknown) {
+  return error instanceof ApiClientError && error.status === 403;
+}
+
 export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions = {}) {
   const params = useLocalSearchParams<{ from?: string | string[]; sessionId?: string | string[] }>();
   const router = useRouter();
@@ -57,22 +61,11 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
   const isFrozen = user?.status === "frozen";
   const membershipCardStatus = user?.membershipCard?.status ?? "none";
   const isCoachRole = user?.role === "COACH";
-  const hasBrodigyAccess = isCoachRole || user?.membershipAccess === "member";
-  const isMemberLocked = !!user && !hasBrodigyAccess;
-  const memberLockStatusLabel = membershipCardStatus === "pending_verification"
-    ? "Pending verification"
-    : membershipCardStatus === "revoked"
-      ? "Revoked"
-      : hasBrodigyAccess
-        ? isCoachRole
-          ? "Coach"
-          : "Member"
-        : "Non-member";
-  const memberLockMessage = membershipCardStatus === "pending_verification"
-    ? "Your membership card payment is waiting for verification. BrodigyAI unlocks as soon as the card becomes active."
-    : membershipCardStatus === "revoked"
-      ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
-      : "BrodigyAI chat unlocks after this account has an active membership card.";
+  const hasBrodigyAccess =
+    user?.role === "ADMIN" ||
+    user?.role === "STAFF" ||
+    isCoachRole ||
+    (user?.role === "USER" && user.membershipAccess === "member");
   const greetingMessage = isCoachRole ? WEB_GREETING_MESSAGE : MOBILE_GREETING_MESSAGE;
 
   useEffect(() => {
@@ -98,6 +91,35 @@ export function useChatbotScreen({ isFocused = true }: UseChatbotScreenOptions =
   const sendMutation = useMutation(aiChatMutationOptions(mobileApiClient, queryClient, user?.id));
   const selectedSession = sessions.find((session) => session.id === activeSessionId) ?? sessionQuery.data ?? null;
   const isSessionDeleted = selectedSession ? !selectedSession.is_active : false;
+  const isServerAccessDenied = [
+    sessionsQuery.error,
+    sessionQuery.error,
+    messagesQuery.error,
+    sendMutation.error,
+  ].some(isForbiddenError);
+  const isMemberLocked = !hasBrodigyAccess || isServerAccessDenied;
+  const memberLockStatusLabel = isServerAccessDenied
+    ? "Access denied"
+    : membershipCardStatus === "pending_verification"
+      ? "Pending verification"
+      : membershipCardStatus === "revoked"
+        ? "Revoked"
+        : hasBrodigyAccess
+          ? user?.role === "ADMIN"
+            ? "Admin"
+            : user?.role === "STAFF"
+              ? "Staff"
+              : isCoachRole
+                ? "Coach"
+                : "Member"
+          : "Non-member";
+  const memberLockMessage = isServerAccessDenied
+    ? "BrodigyAI access was denied for this account. Refresh your membership status or contact the gym if this looks incorrect."
+    : membershipCardStatus === "pending_verification"
+      ? "Your membership card payment is waiting for verification. BrodigyAI unlocks as soon as the card becomes active."
+      : membershipCardStatus === "revoked"
+        ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
+        : "BrodigyAI chat unlocks after this account has an active membership card.";
 
   const messages = useMemo<ChatbotMessage[]>(() => {
     const liveMessages = (messagesQuery.data?.data ?? []).map<ChatbotMessage>((message) => ({

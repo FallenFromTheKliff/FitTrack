@@ -16,11 +16,13 @@ import type {
   SeedState,
 } from './types';
 
+export const DYNAMIC_SEED_PASSWORD = 'SeedMember!2026';
+
 const DEFAULT_PASSWORDS = {
-  admin: 'SeedAdmin!2026',
-  coach: 'SeedCoach!2026',
-  member: 'SeedMember!2026',
-  staff: 'SeedStaff!2026',
+  admin: DYNAMIC_SEED_PASSWORD,
+  coach: DYNAMIC_SEED_PASSWORD,
+  member: DYNAMIC_SEED_PASSWORD,
+  staff: DYNAMIC_SEED_PASSWORD,
 } as const;
 
 export const DEMO_ACCOUNTS: readonly SeedAccount[] = [

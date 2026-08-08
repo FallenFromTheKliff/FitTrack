@@ -16,6 +16,7 @@ import { GymChatMessageRepository } from './gym-chat-message.repository';
 import { GymChatSessionRepository } from './gym-chat-session.repository';
 import { GymKnowledgeRepository } from './gym-knowledge.repository';
 import { GymChatService } from './gym-chat.service';
+import { GymKnowledgeService } from './gym-knowledge.service';
 
 describe('GymChatService', () => {
   let service: GymChatService;
@@ -59,6 +60,17 @@ describe('GymChatService', () => {
     listFaqEntries: jest.fn(),
   };
 
+  const gymKnowledgeService = {
+    getGymProfile: jest.fn().mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,6 +94,7 @@ describe('GymChatService', () => {
           provide: GymKnowledgeRepository,
           useValue: gymKnowledgeRepository,
         },
+        { provide: GymKnowledgeService, useValue: gymKnowledgeService },
       ],
     }).compile();
 
@@ -301,6 +314,26 @@ describe('GymChatService', () => {
         price: '1999',
       }),
     ]);
+    expect(chatRequest.grounding.faqs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          question: 'Gym name',
+          answer: 'SERTFIT Gym',
+        }),
+        expect.objectContaining({
+          question: 'Gym address',
+          answer: '123 Fitness Ave, New York, NY 10001',
+        }),
+        expect.objectContaining({
+          question: 'Gym opening time',
+          answer: '06:00',
+        }),
+        expect.objectContaining({
+          question: 'Gym closing time',
+          answer: '22:00',
+        }),
+      ]),
+    );
     expect(chatRequest.grounding.session_history).toEqual([
       {
         role: GymChatRole.assistant,
@@ -310,7 +343,6 @@ describe('GymChatService', () => {
     expect(chatRequest.grounding.user_context).toEqual({
       first_name: 'Alex',
       role: 'member',
-      active_membership: true,
     });
     expect(gymChatMessageRepository.createMessage).toHaveBeenNthCalledWith(1, {
       sessionId: 'session-1',
@@ -448,7 +480,7 @@ describe('GymChatService', () => {
     });
   });
 
-  it('archives stale implicitly reused sessions and creates a fresh replacement', async () => {
+  it('creates a fresh replacement without archiving stale implicitly reused sessions', async () => {
     gymChatSessionRepository.findMostRecentOwnedActiveSession.mockResolvedValue(
       {
         id: 'stale-session',
@@ -511,8 +543,7 @@ describe('GymChatService', () => {
 
     await service.sendMessage('user-1', { message: 'Start over.' });
 
-    expect(gymChatSessionRepository.updateSessionById).toHaveBeenNthCalledWith(
-      1,
+    expect(gymChatSessionRepository.updateSessionById).not.toHaveBeenCalledWith(
       'stale-session',
       { isActive: false },
     );

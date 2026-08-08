@@ -1,5 +1,10 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { GymChatRole, MembershipPlan, Prisma } from '@prisma/client';
+import {
+  GymChatRole,
+  GymFaqCategory,
+  MembershipPlan,
+  Prisma,
+} from '@prisma/client';
 
 import { PaginatedResult } from '../common/base-repository/base-repository';
 import { SubscriptionService } from '../membership/subscription/subscription.service';
@@ -7,6 +12,7 @@ import { PaginationDTO } from '../user/dto/user-dto';
 import { UserService } from '../user/user.service';
 import {
   AiPythonClientService,
+  GymChatFaqInput,
   GymChatGroundingInput,
   GymChatInput,
 } from './ai-python-client.service';
@@ -17,6 +23,7 @@ import {
   GymChatSessionResponseDTO,
   SendGymChatMessageDTO,
 } from './dto/gym-chat-session.dto';
+import type { GymProfileResponseDTO } from './dto/gym-knowledge.dto';
 import {
   CreateGymChatInteractionLogInput,
   GymChatInteractionLogRepository,
@@ -30,6 +37,7 @@ import {
   GymChatSessionRepository,
 } from './gym-chat-session.repository';
 import { GymKnowledgeRepository } from './gym-knowledge.repository';
+import { GymKnowledgeService } from './gym-knowledge.service';
 
 type GymChatUserAggregate = {
   role: string;
@@ -58,6 +66,7 @@ export class GymChatService {
     private readonly gymChatMessageRepository: GymChatMessageRepository,
     private readonly gymChatInteractionLogRepository: GymChatInteractionLogRepository,
     private readonly gymKnowledgeRepository: GymKnowledgeRepository,
+    private readonly gymKnowledgeService: GymKnowledgeService,
   ) {}
 
   async sendMessage(
@@ -236,8 +245,6 @@ export class GymChatService {
     }
 
     if (this.isSessionInactive(activeSession.last_activity_at)) {
-      await this.archiveInactiveSession(activeSession);
-
       return {
         session: await this.gymChatSessionRepository.createSession({ userId }),
         seedTitle: true,
@@ -262,7 +269,7 @@ export class GymChatService {
       plans,
       sessionHistory,
       aggregate,
-      hasActiveMembership,
+      gymProfile,
     ] = await Promise.all([
       this.gymKnowledgeRepository.listOperatingHours(),
       this.gymKnowledgeRepository.listSpecialSchedules({
@@ -286,7 +293,7 @@ export class GymChatService {
         MAX_GYM_CHAT_HISTORY_MESSAGES,
       ),
       this.userService.getMyProfile(userId) as Promise<GymChatUserAggregate>,
-      this.subscriptionService.hasSubscriptionAccess(userId),
+      this.gymKnowledgeService.getGymProfile(),
     ]);
 
     return {
@@ -314,12 +321,15 @@ export class GymChatService {
         ends_at: entry.ends_at.toISOString(),
         pricing_note: entry.pricing_note,
       })),
-      faqs: faqEntries.data.map((entry) => ({
-        category: entry.category,
-        question: entry.question,
-        answer: entry.answer,
-        keywords: this.normalizeGroundedSources(entry.keywords),
-      })),
+      faqs: [
+        ...faqEntries.data.map((entry) => ({
+          category: entry.category,
+          question: entry.question,
+          answer: entry.answer,
+          keywords: this.normalizeGroundedSources(entry.keywords),
+        })),
+        ...this.buildGymProfileFaqs(gymProfile),
+      ],
       membership_plans: plans.data.map((plan) =>
         this.toMembershipPlanPayload(plan),
       ),
@@ -341,9 +351,52 @@ export class GymChatService {
       user_context: {
         first_name: aggregate.profile.first_name,
         role: aggregate.role,
-        active_membership: hasActiveMembership,
       },
     };
+  }
+
+  private buildGymProfileFaqs(
+    profile: GymProfileResponseDTO,
+  ): GymChatFaqInput[] {
+    const entries: Array<{
+      question: string;
+      answer: string;
+      keywords: string[];
+    }> = [
+      { question: 'Gym name', answer: profile.name, keywords: ['gym', 'name'] },
+      {
+        question: 'Gym address',
+        answer: profile.location,
+        keywords: ['gym', 'address', 'location'],
+      },
+      {
+        question: 'Gym phone',
+        answer: profile.phone,
+        keywords: ['gym', 'phone', 'contact'],
+      },
+      {
+        question: 'Gym email',
+        answer: profile.email,
+        keywords: ['gym', 'email', 'contact'],
+      },
+      {
+        question: 'Gym opening time',
+        answer: profile.opening_time,
+        keywords: ['gym', 'hours', 'opening'],
+      },
+      {
+        question: 'Gym closing time',
+        answer: profile.closing_time,
+        keywords: ['gym', 'hours', 'closing'],
+      },
+    ];
+
+    return entries.map(({ question, answer, keywords }) => ({
+      category: GymFaqCategory.general,
+      question,
+      answer,
+      keywords,
+    }));
   }
 
   private buildGymChatRequestPayload(

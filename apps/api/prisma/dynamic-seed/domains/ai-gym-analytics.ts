@@ -85,6 +85,7 @@ const GYM_EQUIPMENT = [
   ],
 ] as const;
 
+import { buildBrodigyHistoryKeys, pickBrodigyQuestion } from '../brodigy';
 const FAQS = [
   [
     GymFaqCategory.hours,
@@ -114,24 +115,29 @@ const FAQS = [
 ] as const;
 
 async function seedAiChat(ctx: DynamicSeedContext) {
-  const memberKeys = [
+  const prioritizedMemberKeys = [
     'member-active',
     'member-premium',
     ...ctx.state.premiumMemberKeys.slice(0, 24),
-  ].filter((key, index, source) => source.indexOf(key) === index);
+  ];
+  const userKeys = buildBrodigyHistoryKeys(
+    ctx.state.accounts.map((account) => account.key),
+    prioritizedMemberKeys,
+  );
   const sessionRows: Prisma.AiChatSessionCreateManyInput[] = [];
   const messageRows: Prisma.AiChatMessageCreateManyInput[] = [];
   const interactionRows: Prisma.AiInteractionLogCreateManyInput[] = [];
 
-  memberKeys.forEach((memberKey, index) => {
-    const userId = ctx.state.userIds[memberKey];
+  userKeys.forEach((userKey, index) => {
+    const userId = ctx.state.userIds[userKey];
+    const question = pickBrodigyQuestion(ctx.rng);
     const context =
       index % 3 === 0
         ? ChatContext.training_plan
         : index % 3 === 1
           ? ChatContext.nutrition
           : ChatContext.general;
-    const sessionId = seedId(`ai-session:${memberKey}:${context}`);
+    const sessionId = seedId('ai-session:' + userKey + ':' + context);
     sessionRows.push({
       id: sessionId,
       context_type: context,
@@ -147,38 +153,42 @@ async function seedAiChat(ctx: DynamicSeedContext) {
       user_id: userId,
     });
 
-    const prompts = [
-      'Can you help me adjust my plan around sore legs?',
-      'How should I hit my protein target today?',
-      'What should I focus on before my booking?',
-    ];
     messageRows.push(
       {
-        id: seedId(`ai-message:${memberKey}:user`),
+        id: seedId('ai-message:' + userKey + ':user'),
         action_triggered:
           context === ChatContext.nutrition ? 'nutrition_review' : null,
-        content: prompts[index % prompts.length],
+        content: question.prompt,
         created_at: daysFrom(ctx.config.anchorDate, -1, 18, index % 50),
         role: ChatRole.user,
         session_id: sessionId,
       },
       {
-        id: seedId(`ai-message:${memberKey}:assistant`),
+        id: seedId('ai-message:' + userKey + ':assistant'),
         action_triggered:
           context === ChatContext.training_plan ? 'plan_adjustment' : null,
-        content:
-        'Keep the next session lighter, prioritize recovery, and use your current logs as the source of truth.',
-        created_at: daysFrom(ctx.config.anchorDate, -1, 18, (index % 50) + 2),
+        content: question.answer,
+        created_at: daysFrom(
+          ctx.config.anchorDate,
+          -1,
+          18,
+          (index % 50) + 2,
+        ),
         role: ChatRole.assistant,
         session_id: sessionId,
       },
     );
     interactionRows.push({
-      id: seedId(`ai-interaction:${memberKey}`),
+      id: seedId('ai-interaction:' + userKey),
       action_result: { status: 'seeded', applied: index % 2 === 0 },
       action_triggered:
         context === ChatContext.training_plan ? 'plan_adjustment' : null,
-      created_at: daysFrom(ctx.config.anchorDate, -1, 18, (index % 50) + 3),
+      created_at: daysFrom(
+        ctx.config.anchorDate,
+        -1,
+        18,
+        (index % 50) + 3,
+      ),
       interaction_type:
         context === ChatContext.training_plan
           ? InteractionType.plan_generation
@@ -188,10 +198,15 @@ async function seedAiChat(ctx: DynamicSeedContext) {
       latency_ms: 580 + index * 13,
       model_used: 'seeded-local-simulator',
       request_payload: {
-        prompt: prompts[index % prompts.length],
+        category: question.category,
+        prompt: question.prompt,
         source: 'dynamic-seed',
       },
-      response_payload: { answer: 'seeded response', grounded: true },
+      response_payload: {
+        answer: question.answer,
+        category: question.category,
+        grounded: true,
+      },
       session_id: sessionId,
       token_count: 420 + index * 4,
       user_id: userId,

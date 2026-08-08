@@ -1,6 +1,10 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { UserRole } from '@prisma/client';
 
+import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { BrodigyAccessGuard } from './brodigy-access.guard';
 import { GymChatController } from './gym-chat.controller';
 
 function getMethodGuardMetadata(
@@ -17,6 +21,23 @@ function getMethodGuardMetadata(
 
   return Reflect.getMetadata(GUARDS_METADATA, descriptor?.value as object) as
     | unknown[]
+    | undefined;
+}
+
+function getRolesMetadata(
+  methodName:
+    | 'sendMessage'
+    | 'getMySessions'
+    | 'getSessionMessages'
+    | 'archiveSession',
+): UserRole[] | undefined {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    GymChatController.prototype,
+    methodName,
+  );
+
+  return Reflect.getMetadata(ROLES_KEY, descriptor?.value as object) as
+    | UserRole[]
     | undefined;
 }
 
@@ -41,7 +62,25 @@ describe('GymChatController', () => {
     'getSessionMessages',
     'archiveSession',
   ] as const)('protects %s with JWT auth', (methodName) => {
-    expect(getMethodGuardMetadata(methodName)).toEqual([JwtAuthGuard]);
+    expect(getMethodGuardMetadata(methodName)).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+      BrodigyAccessGuard,
+    ]);
+  });
+
+  it.each([
+    'sendMessage',
+    'getMySessions',
+    'getSessionMessages',
+    'archiveSession',
+  ] as const)('allows operators and members to %s', (methodName) => {
+    expect(getRolesMetadata(methodName)).toEqual([
+      UserRole.admin,
+      UserRole.coach,
+      UserRole.staff,
+      UserRole.member,
+    ]);
   });
 
   it('sends gym chat messages through the service', async () => {

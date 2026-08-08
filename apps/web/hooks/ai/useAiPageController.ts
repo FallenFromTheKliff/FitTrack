@@ -28,12 +28,21 @@ function normalizeSessionId(value: string | null) {
   return value;
 }
 
+function isForbiddenError(error: unknown) {
+  return error instanceof ApiClientError && error.status === 403;
+}
+
 export function useAiPageController() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(2600);
   const { user } = useAuth();
+  const hasBrodigyAccess =
+    user?.role === "ADMIN" ||
+    user?.role === "STAFF" ||
+    user?.role === "COACH" ||
+    (user?.role === "USER" && user.membershipAccess === "member");
 
   const sessionParam = searchParams.get("sessionId");
   const promptParam = searchParams.get("prompt")?.trim() ?? "";
@@ -46,9 +55,10 @@ export function useAiPageController() {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const autoPromptRef = useRef<string | null>(null);
 
-  const sessionsQuery = useQuery(
-    aiChatSessionsQueryOptions(webApiClient, { limit: 50 }),
-  );
+  const sessionsQuery = useQuery({
+    ...aiChatSessionsQueryOptions(webApiClient, { limit: 50 }),
+    enabled: hasBrodigyAccess,
+  });
   const sessions = sessionsQuery.data?.data ?? [];
   const firstActiveSessionId =
     sessions.find((session) => session.is_active)?.id ?? null;
@@ -75,6 +85,7 @@ export function useAiPageController() {
   const sessionQuery = useQuery({
     ...aiChatSessionQueryOptions(webApiClient, activeSessionId ?? ""),
     enabled:
+      hasBrodigyAccess &&
       !!activeSessionId &&
       !sessions.some((session) => session.id === activeSessionId),
   });
@@ -83,7 +94,7 @@ export function useAiPageController() {
     ...aiChatMessagesQueryOptions(webApiClient, activeSessionId ?? "", {
       limit: 100,
     }),
-    enabled: !!activeSessionId,
+    enabled: hasBrodigyAccess && !!activeSessionId,
   });
 
   const sendMutation = useMutation(
@@ -99,6 +110,38 @@ export function useAiPageController() {
     sessions.find((session) => session.id === activeSessionId) ??
     sessionQuery.data ??
     null;
+  const isServerAccessDenied = [
+    sessionsQuery.error,
+    sessionQuery.error,
+    messagesQuery.error,
+    sendMutation.error,
+    archiveMutation.error,
+    restoreMutation.error,
+  ].some(isForbiddenError);
+  const isMemberLocked = !hasBrodigyAccess || isServerAccessDenied;
+  const membershipCardStatus = user?.membershipCard?.status ?? "none";
+  const memberLockStatusLabel = isServerAccessDenied
+    ? "Access denied"
+    : membershipCardStatus === "pending_verification"
+      ? "Pending verification"
+      : membershipCardStatus === "revoked"
+        ? "Revoked"
+        : hasBrodigyAccess
+          ? user?.role === "ADMIN"
+            ? "Admin"
+            : user?.role === "STAFF"
+              ? "Staff"
+              : user?.role === "COACH"
+                ? "Coach"
+                : "Member"
+          : "Non-member";
+  const memberLockMessage = isServerAccessDenied
+    ? "BrodigyAI access was denied for this account. Refresh your membership status or contact the gym if this looks incorrect."
+    : membershipCardStatus === "pending_verification"
+      ? "Your membership card payment is waiting for verification. BrodigyAI unlocks as soon as the card becomes active."
+      : membershipCardStatus === "revoked"
+        ? "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected."
+        : "BrodigyAI access unlocks after this account has an active membership card.";
 
   const messages = useMemo<ChatPanelMessage[]>(() => {
     const records = (messagesQuery.data?.data ?? []).map<ChatPanelMessage>(
@@ -141,6 +184,7 @@ export function useAiPageController() {
 
   const sendMessage = useCallback(
     async (messageText: string) => {
+      if (isMemberLocked) return;
       const trimmedInput = messageText.trim();
       const parsed = aiChatSchema.safeParse({
         context_type: "general",
@@ -181,7 +225,14 @@ export function useAiPageController() {
         setPendingMessage(null);
       }
     },
-    [activeSessionId, isExplicitNewSession, router, sendMutation, showMessage],
+    [
+      activeSessionId,
+      isExplicitNewSession,
+      isMemberLocked,
+      router,
+      sendMutation,
+      showMessage,
+    ],
   );
 
   const handleSend = useCallback(async () => {
@@ -205,7 +256,7 @@ export function useAiPageController() {
   ]);
 
   const handleDelete = useCallback(async () => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || isMemberLocked) return;
     try {
       await archiveMutation.mutateAsync({ sessionId: activeSessionId });
       setLastError("");
@@ -219,10 +270,10 @@ export function useAiPageController() {
       showMessage(errorMessage);
       return null;
     }
-  }, [activeSessionId, archiveMutation, router, showMessage]);
+  }, [activeSessionId, archiveMutation, isMemberLocked, router, showMessage]);
 
   const handleRestore = useCallback(async () => {
-    if (!selectedSession?.id) return null;
+    if (!selectedSession?.id || isMemberLocked) return null;
     try {
       await restoreMutation.mutateAsync({ sessionId: selectedSession.id });
       setLastError("");
@@ -240,7 +291,7 @@ export function useAiPageController() {
       showMessage(errorMessage);
       return null;
     }
-  }, [restoreMutation, router, selectedSession, showMessage]);
+  }, [isMemberLocked, restoreMutation, router, selectedSession, showMessage]);
 
   return {
     activeSessionId,
@@ -251,6 +302,9 @@ export function useAiPageController() {
     handleSend,
     handleStartFresh,
     input,
+    isMemberLocked,
+    memberLockMessage,
+    memberLockStatusLabel,
     isSelectedSessionDeleted: selectedSession
       ? !selectedSession.is_active
       : false,

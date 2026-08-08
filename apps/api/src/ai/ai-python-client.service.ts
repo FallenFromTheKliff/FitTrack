@@ -700,7 +700,7 @@ export class AiPythonClientService {
       body: JSON.stringify({
         session_id: input.sessionId,
         message: input.message,
-        grounding: input.grounding,
+        grounding: this.buildGymProviderGrounding(input.grounding),
         policy: {
           gym_only: input.policy.gymOnly,
           refuse_out_of_scope: input.policy.refuseOutOfScope,
@@ -736,6 +736,34 @@ export class AiPythonClientService {
     }
 
     return payload;
+  }
+
+  private buildGymProviderGrounding(
+    grounding: GymChatGroundingInput,
+  ): GymChatGroundingInput {
+    const identityQuestions = new Set([
+      'gym name',
+      'gym address',
+      'gym location',
+      'gym phone',
+      'gym email',
+      'gym opening time',
+      'gym closing time',
+    ]);
+    const publicHours = grounding.operating_hours
+      .filter((entry) => !entry.is_closed)
+      .slice(0, 1);
+
+    return {
+      operating_hours: publicHours,
+      special_schedules: [],
+      promotions: [],
+      faqs: grounding.faqs.filter((entry) =>
+        identityQuestions.has(entry.question.trim().toLowerCase()),
+      ),
+      membership_plans: [],
+      session_history: grounding.session_history.slice(-4),
+    };
   }
 
   async generateBusinessInsight(
@@ -819,8 +847,7 @@ export class AiPythonClientService {
           type: 'BAD_GATEWAY',
           title: 'Exercise Draft Generation Failed',
           status: 502,
-          detail:
-            'The AI exercise-draft service rejected the draft request.',
+          detail: 'The AI exercise-draft service rejected the draft request.',
         },
         HttpStatus.BAD_GATEWAY,
       );

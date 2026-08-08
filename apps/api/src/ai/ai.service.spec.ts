@@ -18,8 +18,12 @@ import { AI_SESSION_ARCHIVED_EVENT } from './events/ai-session-archived.event';
 import { AiChatMessageRepository } from './ai-chat-message.repository';
 import { AiChatSessionRepository } from './ai-chat-session.repository';
 import { AiInteractionLogRepository } from './ai-interaction-log.repository';
-import { AiPythonClientService } from './ai-python-client.service';
+import {
+  AiPythonClientService,
+  type GymChatInput,
+} from './ai-python-client.service';
 import { AiService } from './ai.service';
+import { GymKnowledgeService } from './gym-knowledge.service';
 
 describe('AiService', () => {
   let service: AiService;
@@ -48,7 +52,19 @@ describe('AiService', () => {
   const aiClient = {
     assertHealthy: jest.fn(),
     chat: jest.fn(),
+    chatGym: jest.fn(),
     generatePlan: jest.fn(),
+  };
+
+  const gymKnowledgeService = {
+    getGymProfile: jest.fn().mockResolvedValue({
+      name: 'SERTFIT Gym',
+      phone: '+639281234567',
+      location: '123 Fitness Ave, New York, NY 10001',
+      email: 'contact@sertfit.com',
+      opening_time: '06:00',
+      closing_time: '22:00',
+    }),
   };
 
   const aiChatSessionRepository = {
@@ -86,6 +102,7 @@ describe('AiService', () => {
         { provide: WorkoutSessionService, useValue: workoutSessionService },
         { provide: NutritionService, useValue: nutritionService },
         { provide: AiPythonClientService, useValue: aiClient },
+        { provide: GymKnowledgeService, useValue: gymKnowledgeService },
         { provide: EventEmitter2, useValue: eventEmitter },
         {
           provide: AiChatSessionRepository,
@@ -321,6 +338,10 @@ describe('AiService', () => {
         messages: [
           {
             role: ChatRole.assistant,
+            content: expect.stringContaining('Gym name: SERTFIT Gym'),
+          },
+          {
+            role: ChatRole.assistant,
             content: 'How can I help today?',
           },
           {
@@ -389,9 +410,102 @@ describe('AiService', () => {
     );
   });
 
+  it('routes the authenticated active-member chain through chatGym with bounded public grounding', async () => {
+    aiChatSessionRepository.findOwnedActiveSessionByContext.mockResolvedValue(
+      null,
+    );
+    aiChatSessionRepository.createSession.mockResolvedValue({
+      id: 'member-session-1',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      title: null,
+      is_active: true,
+      last_activity_at: new Date('2026-03-27T05:00:00.000Z'),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+    aiChatMessageRepository.listRecentMessagesBySessionId.mockResolvedValue(
+      Array.from({ length: 20 }, (_, index) => ({
+        id: `message-${index}`,
+        session_id: 'member-session-1',
+        role: index % 2 === 0 ? ChatRole.user : ChatRole.assistant,
+        content: `history-${index}`,
+        action_triggered: null,
+        created_at: new Date(
+          `2026-03-27T05:${String(index).padStart(2, '0')}:00.000Z`,
+        ),
+        updated_at: new Date(
+          `2026-03-27T05:${String(index).padStart(2, '0')}:00.000Z`,
+        ),
+      })),
+    );
+    aiClient.chatGym.mockResolvedValue({
+      reply: 'SERTFIT Gym is open until 22:00.',
+      out_of_scope: false,
+      sources: ['gym_identity'],
+      follow_up_suggestions: [],
+      model_used: 'openrouter-test-model',
+      token_count: 31,
+    });
+
+    await expect(
+      service.chat('user-1', UserRole.member, {
+        message: 'What time does the gym close?',
+      }),
+    ).resolves.toEqual({
+      session_id: 'member-session-1',
+      reply: 'SERTFIT Gym is open until 22:00.',
+      action_triggered: null,
+      action_result: null,
+    });
+
+    expect(aiClient.chatGym).toHaveBeenCalledTimes(1);
+    expect(aiClient.chat).not.toHaveBeenCalled();
+    expect(userService.getMyProfile).not.toHaveBeenCalled();
+
+    const chatGymMock = aiClient.chatGym as jest.MockedFunction<
+      (input: GymChatInput) => Promise<unknown>
+    >;
+    const providerRequest = chatGymMock.mock.calls[0]?.[0];
+    expect(providerRequest).toMatchObject({
+      sessionId: 'member-session-1',
+      message: 'What time does the gym close?',
+      policy: { gymOnly: true, refuseOutOfScope: true },
+      grounding: {
+        session_history: [
+          { role: ChatRole.user, content: 'history-16' },
+          { role: ChatRole.assistant, content: 'history-17' },
+          { role: ChatRole.user, content: 'history-18' },
+          { role: ChatRole.assistant, content: 'history-19' },
+        ],
+        membership_plans: [],
+      },
+    });
+    expect(providerRequest.grounding.faqs).toEqual([
+      { category: 'general', question: 'Gym name', answer: 'SERTFIT Gym' },
+      {
+        category: 'general',
+        question: 'Gym address',
+        answer: '123 Fitness Ave, New York, NY 10001',
+      },
+      { category: 'general', question: 'Gym phone', answer: '+639281234567' },
+      {
+        category: 'general',
+        question: 'Gym email',
+        answer: 'contact@sertfit.com',
+      },
+      { category: 'general', question: 'Gym opening time', answer: '06:00' },
+      { category: 'general', question: 'Gym closing time', answer: '22:00' },
+    ]);
+    expect(providerRequest.grounding).not.toHaveProperty('user_context');
+    expect(JSON.stringify(providerRequest)).not.toContain('history-0');
+    expect(JSON.stringify(providerRequest)).not.toContain('membership-status');
+  });
+
   it.each([
     [UserRole.admin, 'admin-1', 'admin-session-1'],
     [UserRole.coach, 'coach-1', 'coach-session-1'],
+    [UserRole.staff, 'staff-1', 'staff-session-1'],
   ] as const)(
     'scopes %s chat to business operations and suppresses assistant actions',
     async (role, userId, sessionId) => {
@@ -463,8 +577,8 @@ describe('AiService', () => {
         expect.objectContaining({
           requestPayload: expect.objectContaining({
             promptBlueprint: expect.objectContaining({
-            persona:
-              'FitTrack business operations assistant: concise, operational, and grounded in gym management workflows.',
+              persona:
+                'FitTrack business operations assistant: concise, operational, and grounded in gym management workflows.',
               actionPolicy: expect.objectContaining({
                 allowedActions: ['NONE'],
               }),
@@ -475,26 +589,6 @@ describe('AiService', () => {
           }),
         }),
       );
-    },
-  );
-
-  it.each([UserRole.staff])(
-    'denies %s BrodigyAI access before resolving chat sessions',
-    async (role) => {
-      await expect(
-        service.chat('staff-1', role, {
-          message: 'Can BrodigyAI help with revenue today?',
-        }),
-      ).rejects.toMatchObject({
-        response: expect.objectContaining({
-          status: 403,
-        }),
-      });
-
-      expect(
-        aiChatSessionRepository.findOwnedActiveSessionByContext,
-      ).not.toHaveBeenCalled();
-      expect(aiClient.chat).not.toHaveBeenCalled();
     },
   );
 
@@ -563,7 +657,7 @@ describe('AiService', () => {
     ).toBe(false);
   });
 
-  it('archives the current active context session when the client explicitly starts a new conversation', async () => {
+  it('starts a new conversation without archiving the current active context session', async () => {
     userService.getMyProfile.mockResolvedValue({
       profile: {
         date_of_birth: new Date('1998-03-26'),
@@ -619,9 +713,13 @@ describe('AiService', () => {
       action_result: null,
     });
 
-    expect(aiChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
+    expect(aiChatSessionRepository.updateSessionById).not.toHaveBeenCalledWith(
       'session-existing',
       { isActive: false },
+    );
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+      AI_SESSION_ARCHIVED_EVENT,
+      expect.objectContaining({ sessionId: 'session-existing' }),
     );
     expect(aiChatSessionRepository.createSession).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -629,7 +727,7 @@ describe('AiService', () => {
     });
   });
 
-  it('archives stale context sessions discovered during implicit reuse and creates a fresh replacement', async () => {
+  it('creates a fresh replacement without archiving a stale context session during implicit reuse', async () => {
     userService.getMyProfile.mockResolvedValue({
       profile: {
         date_of_birth: new Date('1998-03-26'),
@@ -684,11 +782,11 @@ describe('AiService', () => {
       action_result: null,
     });
 
-    expect(aiChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
+    expect(aiChatSessionRepository.updateSessionById).not.toHaveBeenCalledWith(
       'stale-session',
       { isActive: false },
     );
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
+    expect(eventEmitter.emit).not.toHaveBeenCalledWith(
       AI_SESSION_ARCHIVED_EVENT,
       expect.objectContaining({
         userId: 'user-1',

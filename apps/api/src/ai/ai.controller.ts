@@ -39,6 +39,7 @@ import {
 } from '../fitness/training-plan/dto/training-plan.dto';
 import { PaginationDTO } from '../user/dto/user-dto';
 import { AiService } from './ai.service';
+import { BrodigyAccessGuard } from './brodigy-access.guard';
 import { AIChatDTO, AIChatResponseDTO } from './dto/chat.dto';
 import {
   AiChatMessageResponseDTO,
@@ -98,9 +99,14 @@ export class AiController {
 
   @Post('chat')
   @Throttle({ default: { limit: 10, ttl: 60 } })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiBody({ type: AIChatDTO })
   @ApiOperation({
     summary:
@@ -128,9 +134,14 @@ export class AiController {
   }
 
   @Get('chat/sessions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: "List the authenticated user's AI chat sessions.",
   })
@@ -147,9 +158,14 @@ export class AiController {
   }
 
   @Get('chat/sessions/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'Get a single owned AI chat session.',
   })
@@ -174,9 +190,14 @@ export class AiController {
   }
 
   @Get('chat/sessions/:id/messages')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'List owned message history for an AI chat session.',
   })
@@ -202,9 +223,14 @@ export class AiController {
   }
 
   @Delete('chat/sessions/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'Soft delete an owned AI chat session.',
   })
@@ -226,9 +252,14 @@ export class AiController {
   }
 
   @Patch('chat/sessions/:id/restore')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.coach, UserRole.member)
+  @UseGuards(JwtAuthGuard, RolesGuard, BrodigyAccessGuard)
+  @Roles(UserRole.admin, UserRole.coach, UserRole.staff, UserRole.member)
   @ApiBearerAuth('access-token')
+  @ApiResponse({
+    status: 403,
+    description:
+      'BrodigyAI requires an active member account or an admin, coach, or staff account.',
+  })
   @ApiOperation({
     summary: 'Restore a soft-deleted owned AI chat session.',
   })
