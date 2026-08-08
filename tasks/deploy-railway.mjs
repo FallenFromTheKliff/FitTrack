@@ -7,11 +7,26 @@ import {
   rmSync,
 } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const REMOTE_RESET_CONFIRMATION = 'RESET_RAILWAY_DATABASE';
 const DYNAMIC_SEED_CONFIRMATION = 'RESET_REMOTE_DYNAMIC_SEED';
 const DEFAULT_ENVIRONMENT = 'production';
 const DEFAULT_SEED_USERS = 100;
+const DEFAULT_LINK_SERVICE = 'api';
+const DEPLOYMENT_LIST_LIMIT = 100;
+const DEPLOYMENT_STATUS_MAX_ATTEMPTS = 30;
+const DEPLOYMENT_STATUS_INTERVAL_MS = 30_000;
+const CAPTURED_COMMAND_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
+const PENDING_DEPLOYMENT_STATUSES = new Set([
+  'BUILDING',
+  'DEPLOYING',
+  'INITIALIZING',
+  'WAITING',
+  'QUEUED',
+]);
+const DEPLOYMENT_ID_PATTERN =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 const argv = process.argv.slice(2).filter((arg) => arg !== '--');
 
@@ -70,6 +85,138 @@ Examples:
   pnpm deploy:railway -- --project_name:fittrack-full-system --reauth
   pnpm deploy:railway -- --project_name:fittrack-full-system --reset-db --confirm:${REMOTE_RESET_CONFIRMATION}
 `);
+}
+
+export function isPostUploadGraphqlTimeout(output) {
+  const text = String(output ?? '');
+  const hasRailwayTransportMarker =
+    /reqwest/i.test(text) || /backboard\.railway\.com\/graphql/i.test(text);
+  const hasGraphqlMarker = /graphql/i.test(text);
+  const hasTimeoutMarker =
+    /(?:operation\s+timed\s+out|timed\s*out|timeout|timed_out)/i.test(text);
+
+  return hasRailwayTransportMarker && hasGraphqlMarker && hasTimeoutMarker;
+}
+
+export function parseDeploymentList(output) {
+  const text = String(output ?? '').trim();
+  if (!text) {
+    throw new Error('Railway returned an empty deployment list.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(
+      `Railway returned invalid deployment JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const deployments = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.deployments)
+      ? parsed.deployments
+      : Array.isArray(parsed?.data?.deployments)
+        ? parsed.data.deployments
+        : undefined;
+
+  if (!deployments) {
+    throw new Error('Railway deployment JSON did not contain a deployment array.');
+  }
+
+  return deployments.map((deployment) => {
+    const value = deployment && typeof deployment === 'object' ? deployment : {};
+    const id = value.id ?? value.deploymentId ?? value.deployment_id;
+    const rawStatus = value.status ?? value.deploymentStatus;
+
+    return {
+      ...value,
+      id: id === undefined || id === null ? undefined : String(id),
+      status:
+        rawStatus === undefined || rawStatus === null
+          ? undefined
+          : String(rawStatus).trim().toUpperCase(),
+    };
+  });
+}
+
+function extractDeploymentId(output) {
+  const text = String(output ?? '');
+  const buildLogsId = text.match(
+    /Build Logs:\s*https?:\/\/[^\s]+[?&]id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+  );
+  if (buildLogsId?.[1]) {
+    return buildLogsId[1];
+  }
+
+  const labelledId = text.match(
+    /(?:deployment[_\s-]*id|deploymentId)\s*[:=]\s*["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+  );
+  if (labelledId?.[1]) {
+    return labelledId[1];
+  }
+
+  const ids = [...text.matchAll(DEPLOYMENT_ID_PATTERN)].map(([id]) => id);
+  return ids.length === 1 ? ids[0] : undefined;
+}
+
+function deploymentMessage(deployment) {
+  const values = [
+    deployment?.message,
+    deployment?.description,
+    deployment?.meta?.message,
+    deployment?.meta?.commitMessage,
+    deployment?.meta?.deploymentMessage,
+  ];
+
+  return values.filter((value) => value !== undefined && value !== null).join(' ');
+}
+
+export function identifyUploadedDeployment({
+  output,
+  priorDeployments,
+  currentDeployments,
+  deployMessage,
+}) {
+  const outputId = extractDeploymentId(output);
+  if (outputId) {
+    return outputId;
+  }
+
+  if (!Array.isArray(priorDeployments) || !Array.isArray(currentDeployments)) {
+    return undefined;
+  }
+
+  const priorIds = new Set(
+    priorDeployments.map((deployment) => deployment?.id).filter(Boolean),
+  );
+  let candidates = currentDeployments.filter(
+    (deployment) => deployment?.id && !priorIds.has(deployment.id),
+  );
+
+  if (deployMessage) {
+    const messageMatches = candidates.filter((deployment) =>
+      deploymentMessage(deployment).includes(deployMessage),
+    );
+    return messageMatches.length === 1 ? messageMatches[0].id : undefined;
+  }
+
+  return candidates.length === 1 ? candidates[0].id : undefined;
+}
+
+export function classifyDeploymentStatus(status) {
+  const normalized = String(status ?? '').trim().toUpperCase();
+  if (normalized === 'SUCCESS') {
+    return 'success';
+  }
+  if (normalized === 'FAILED' || normalized === 'CRASHED') {
+    return 'failure';
+  }
+  if (PENDING_DEPLOYMENT_STATUSES.has(normalized)) {
+    return 'pending';
+  }
+  return 'unknown';
 }
 
 function fail(message) {
@@ -284,7 +431,7 @@ function resolveRailwayInvocation() {
   );
 }
 
-function run(command, args, { allowFailure = false } = {}) {
+function run(command, args, { allowFailure = false, captureOutput = false } = {}) {
   console.log(`\n> ${command} ${args.join(' ')}`);
   const invocation =
     command === 'railway'
@@ -295,10 +442,23 @@ function run(command, args, { allowFailure = false } = {}) {
     [...invocation.prefixArgs, ...args],
     {
       cwd: process.cwd(),
-      stdio: 'inherit',
+      encoding: captureOutput ? 'utf8' : undefined,
+      maxBuffer: captureOutput ? CAPTURED_COMMAND_MAX_BUFFER_BYTES : undefined,
+      stdio: captureOutput ? ['inherit', 'pipe', 'pipe'] : 'inherit',
       shell: false,
     },
   );
+
+  const stdout = captureOutput ? String(result.stdout ?? '') : '';
+  const stderr = captureOutput ? String(result.stderr ?? '') : '';
+  if (captureOutput) {
+    if (stdout) {
+      process.stdout.write(stdout);
+    }
+    if (stderr) {
+      process.stderr.write(stderr);
+    }
+  }
 
   if (result.error) {
     if (result.error.code === 'ENOENT') {
@@ -315,7 +475,192 @@ function run(command, args, { allowFailure = false } = {}) {
     fail(`Command failed with exit code ${status}. Deployment stopped.`);
   }
 
-  return status;
+  return captureOutput ? { status, stdout, stderr } : status;
+}
+
+function deploymentListArgs(service, environment) {
+  return [
+    'deployment',
+    'list',
+    '--service',
+    service,
+    '--environment',
+    environment,
+    '--limit',
+    `${DEPLOYMENT_LIST_LIMIT}`,
+    '--json',
+  ];
+}
+
+function queryDeployments(service, environment) {
+  const result = run(
+    'railway',
+    deploymentListArgs(service, environment),
+    { allowFailure: true, captureOutput: true },
+  );
+
+  if (result.status !== 0) {
+    return {
+      deployments: undefined,
+      error: `deployment list exited with code ${result.status}`,
+    };
+  }
+
+  try {
+    return { deployments: parseDeploymentList(result.stdout) };
+  } catch (error) {
+    return {
+      deployments: undefined,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function requireDeployments(service, environment, reason) {
+  const result = queryDeployments(service, environment);
+  if (result.error) {
+    fail(
+      `Could not inspect ${service} deployment after ${reason}: ${result.error}. ` +
+        'The uploaded deployment identity could not be verified.',
+    );
+  }
+  return result.deployments;
+}
+
+function sleep(milliseconds) {
+  if (milliseconds <= 0) {
+    return;
+  }
+
+  const signal = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(signal, 0, 0, milliseconds);
+}
+
+function waitForDeploymentSuccess({
+  service,
+  environment,
+  deploymentId,
+  initialDeployments,
+}) {
+  let lastStatus;
+
+  for (let attempt = 1; attempt <= DEPLOYMENT_STATUS_MAX_ATTEMPTS; attempt += 1) {
+    const deployments =
+      attempt === 1
+        ? initialDeployments
+        : requireDeployments(service, environment, `status check ${attempt}`);
+    const deployment = deployments.find((candidate) => candidate.id === deploymentId);
+    if (!deployment) {
+      if (attempt === DEPLOYMENT_STATUS_MAX_ATTEMPTS) {
+        fail(
+          `Deployment ${deploymentId} for ${service} was not present after ` +
+            `${DEPLOYMENT_STATUS_MAX_ATTEMPTS} bounded status checks.`,
+        );
+      }
+      sleep(DEPLOYMENT_STATUS_INTERVAL_MS);
+      continue;
+    }
+
+    lastStatus = deployment.status;
+    const outcome = classifyDeploymentStatus(lastStatus);
+    if (outcome === 'success') {
+      console.log(
+        `[railway-deploy] Recovered ${service} deployment ${deploymentId}: SUCCESS.`,
+      );
+      return;
+    }
+
+    if (outcome === 'failure') {
+      fail(
+        `Deployment ${deploymentId} for ${service} reached ${lastStatus}; ` +
+          'the Railway up failure was not recovered.',
+      );
+    }
+
+    if (outcome === 'unknown') {
+      fail(
+        `Deployment ${deploymentId} for ${service} reported unknown status ` +
+          `"${lastStatus ?? 'missing'}"; deployment stopped.`,
+      );
+    }
+
+    if (attempt < DEPLOYMENT_STATUS_MAX_ATTEMPTS) {
+      console.log(
+        `[railway-deploy] ${service} deployment ${deploymentId} is ${lastStatus}; ` +
+          `waiting for status (${attempt}/${DEPLOYMENT_STATUS_MAX_ATTEMPTS}).`,
+      );
+      sleep(DEPLOYMENT_STATUS_INTERVAL_MS);
+    }
+  }
+
+  fail(
+    `Deployment ${deploymentId} for ${service} did not reach SUCCESS after ` +
+      `${DEPLOYMENT_STATUS_MAX_ATTEMPTS} bounded status checks; last status ` +
+      `was ${lastStatus ?? 'missing'}.`,
+  );
+}
+
+function deployService({ service, environment, deploymentSource, deployMessage }) {
+  const priorLookup = queryDeployments(service, environment);
+  const upResult = run(
+    'railway',
+    [
+      'up',
+      deploymentSource,
+      '--path-as-root',
+      '--service',
+      service,
+      '--environment',
+      environment,
+      '--ci',
+      '--message',
+      deployMessage,
+    ],
+    { allowFailure: true, captureOutput: true },
+  );
+
+  if (upResult.status === 0) {
+    return;
+  }
+
+  const output = `${upResult.stdout}\n${upResult.stderr}`;
+  if (!isPostUploadGraphqlTimeout(output)) {
+    fail(
+      `Railway up for ${service} failed with exit code ${upResult.status}; ` +
+        'the failure was not the bounded post-upload GraphQL timeout recovery case. ' +
+        'Deployment stopped.',
+    );
+  }
+
+  console.log(
+    `[railway-deploy] Railway up for ${service} reported a post-upload GraphQL ` +
+      'timeout; verifying the uploaded deployment before continuing.',
+  );
+  const currentDeployments = requireDeployments(
+    service,
+    environment,
+    'post-upload timeout recovery',
+  );
+  const deploymentId = identifyUploadedDeployment({
+    output,
+    priorDeployments: priorLookup.deployments,
+    currentDeployments,
+    deployMessage,
+  });
+
+  if (!deploymentId) {
+    fail(
+      `Could not identify the uploaded ${service} deployment after the post-upload ` +
+        'GraphQL timeout; deployment stopped.',
+    );
+  }
+
+  waitForDeploymentSuccess({
+    service,
+    environment,
+    deploymentId,
+    initialDeployments: currentDeployments,
+  });
 }
 
 function authenticate({ browserless, reauth }) {
@@ -342,150 +687,140 @@ function authenticate({ browserless, reauth }) {
   run('railway', ['whoami']);
 }
 
-if (hasFlag('help', 'h')) {
-  printHelp();
-  process.exit(0);
-}
+function main() {
+  if (hasFlag('help', 'h')) {
+    printHelp();
+    process.exit(0);
+  }
 
-if (hasFlag('check-cli')) {
-  run('railway', ['--version']);
-  console.log('\n[railway-deploy] Railway CLI resolution succeeded.');
-  process.exit(0);
-}
+  if (hasFlag('check-cli')) {
+    run('railway', ['--version']);
+    console.log('\n[railway-deploy] Railway CLI resolution succeeded.');
+    process.exit(0);
+  }
 
-if (hasFlag('check-snapshot')) {
-  createDeploymentSnapshot();
-  console.log('\n[railway-deploy] Deployment snapshot validation succeeded.');
-  process.exit(0);
-}
+  if (hasFlag('check-snapshot')) {
+    createDeploymentSnapshot();
+    console.log('\n[railway-deploy] Deployment snapshot validation succeeded.');
+    process.exit(0);
+  }
 
-const projectName = getOption('project_name', 'project-name', 'project');
-const environment =
-  getOption('environment', 'environment_name', 'environment-name') ??
-  DEFAULT_ENVIRONMENT;
-const seedUsersValue = getOption('seed-users', 'seed_users');
-const seedUsers = Number.parseInt(seedUsersValue ?? `${DEFAULT_SEED_USERS}`, 10);
-const resetDatabase = hasFlag('reset-db', 'reset_db');
-const confirmation = getOption('confirm');
+  const projectName = getOption('project_name', 'project-name', 'project');
+  const environment =
+    getOption('environment', 'environment_name', 'environment-name') ??
+    DEFAULT_ENVIRONMENT;
+  const seedUsersValue = getOption('seed-users', 'seed_users');
+  const seedUsers = Number.parseInt(seedUsersValue ?? `${DEFAULT_SEED_USERS}`, 10);
+  const resetDatabase = hasFlag('reset-db', 'reset_db');
+  const confirmation = getOption('confirm');
 
-if (!projectName) {
-  printHelp();
-  fail('--project_name:<project-name> is required.');
-}
+  if (!projectName) {
+    printHelp();
+    fail('--project_name:<project-name> is required.');
+  }
 
-if (!Number.isSafeInteger(seedUsers) || seedUsers < 11 || seedUsers > 10_000) {
-  fail('--seed-users must be an integer from 11 to 10000.');
-}
+  if (!Number.isSafeInteger(seedUsers) || seedUsers < 11 || seedUsers > 10_000) {
+    fail('--seed-users must be an integer from 11 to 10000.');
+  }
 
-if (resetDatabase && confirmation !== REMOTE_RESET_CONFIRMATION) {
-  fail(
-    `Destructive reset requires --confirm:${REMOTE_RESET_CONFIRMATION}.`,
+  if (resetDatabase && confirmation !== REMOTE_RESET_CONFIRMATION) {
+    fail(
+      `Destructive reset requires --confirm:${REMOTE_RESET_CONFIRMATION}.`,
+    );
+  }
+
+  console.log(
+    `[railway-deploy] project=${projectName} environment=${environment} ` +
+      `resetDb=${resetDatabase ? 'yes' : 'no'}`,
   );
-}
 
-console.log(
-  `[railway-deploy] project=${projectName} environment=${environment} ` +
-    `resetDb=${resetDatabase ? 'yes' : 'no'}`,
-);
+  run('railway', ['--version']);
+  authenticate({
+    browserless: hasFlag('browserless'),
+    reauth: hasFlag('reauth'),
+  });
 
-run('railway', ['--version']);
-authenticate({
-  browserless: hasFlag('browserless'),
-  reauth: hasFlag('reauth'),
-});
-
-run('railway', [
-  'link',
-  '--project',
-  projectName,
-  '--environment',
-  environment,
-]);
-run('railway', ['status']);
-
-if (!hasFlag('skip-schema')) {
   run('railway', [
-    'run',
-    '--service',
-    'Postgres',
+    'link',
+    '--project',
+    projectName,
     '--environment',
     environment,
-    '--no-local',
-    'node',
-    'tasks/run-with-railway-public-database.mjs',
-    process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-    'db:push',
-  ]);
-}
-
-const deployMessage = `FitTrack CLI deploy ${new Date().toISOString()}`;
-const shouldDeploy =
-  !hasFlag('skip-api') || !hasFlag('skip-ai') || !hasFlag('skip-web');
-const deploymentSource = shouldDeploy ? createDeploymentSnapshot() : undefined;
-
-if (!hasFlag('skip-api')) {
-  run('railway', [
-    'up',
-    deploymentSource,
-    '--path-as-root',
     '--service',
-    'api',
-    '--environment',
-    environment,
-    '--ci',
-    '--message',
-    deployMessage,
+    DEFAULT_LINK_SERVICE,
   ]);
+  run('railway', ['status']);
+
+  if (!hasFlag('skip-schema')) {
+    run('railway', [
+      'run',
+      '--service',
+      'Postgres',
+      '--environment',
+      environment,
+      '--no-local',
+      'node',
+      'tasks/run-with-railway-public-database.mjs',
+      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+      'db:push',
+    ]);
+  }
+
+  const deployMessage = `FitTrack CLI deploy ${new Date().toISOString()}`;
+  const shouldDeploy =
+    !hasFlag('skip-api') || !hasFlag('skip-ai') || !hasFlag('skip-web');
+  const deploymentSource = shouldDeploy ? createDeploymentSnapshot() : undefined;
+
+  if (!hasFlag('skip-api')) {
+    deployService({
+      service: 'api',
+      environment,
+      deploymentSource,
+      deployMessage,
+    });
+  }
+
+  if (!hasFlag('skip-ai')) {
+    deployService({
+      service: 'ai',
+      environment,
+      deploymentSource,
+      deployMessage,
+    });
+  }
+
+  if (!hasFlag('skip-web')) {
+    deployService({
+      service: 'web',
+      environment,
+      deploymentSource,
+      deployMessage,
+    });
+  }
+
+  if (resetDatabase) {
+    run('railway', [
+      'run',
+      '--service',
+      'Postgres',
+      '--environment',
+      environment,
+      '--no-local',
+      'node',
+      'tasks/run-with-railway-public-database.mjs',
+      'node',
+      'tasks/seed-realistic.mjs',
+      '--target=railway',
+      '--mode=reset',
+      `--users=${seedUsers}`,
+      '--allow-remote-reset',
+      `--confirm=${DYNAMIC_SEED_CONFIRMATION}`,
+    ]);
+  }
+
+  console.log('\n[railway-deploy] Completed successfully.');
 }
 
-if (!hasFlag('skip-ai')) {
-  run('railway', [
-    'up',
-    deploymentSource,
-    '--path-as-root',
-    '--service',
-    'ai',
-    '--environment',
-    environment,
-    '--ci',
-    '--message',
-    deployMessage,
-  ]);
+if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main();
 }
-
-if (!hasFlag('skip-web')) {
-  run('railway', [
-    'up',
-    deploymentSource,
-    '--path-as-root',
-    '--service',
-    'web',
-    '--environment',
-    environment,
-    '--ci',
-    '--message',
-    deployMessage,
-  ]);
-}
-
-if (resetDatabase) {
-  run('railway', [
-    'run',
-    '--service',
-    'Postgres',
-    '--environment',
-    environment,
-    '--no-local',
-    'node',
-    'tasks/run-with-railway-public-database.mjs',
-    'node',
-    'tasks/seed-realistic.mjs',
-    '--target=railway',
-    '--mode=reset',
-    `--users=${seedUsers}`,
-    '--allow-remote-reset',
-    `--confirm=${DYNAMIC_SEED_CONFIRMATION}`,
-  ]);
-}
-
-console.log('\n[railway-deploy] Completed successfully.');
