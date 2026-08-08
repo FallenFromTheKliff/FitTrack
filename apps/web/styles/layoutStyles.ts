@@ -432,13 +432,19 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             border: `1px solid ${active ? colors.brand : cardBorder}`,
             boxShadow: "none",
             textDecoration: "none",
+            width: "100%",
+            minWidth: 0,
+            boxSizing: "border-box",
+            overflow: "hidden",
             flexShrink: 0
         }),
         profileCardTop: {
             display: "flex",
             alignItems: "flex-start",
             gap: 14,
-            width: "100%"
+            width: "100%",
+            minWidth: 0,
+            overflow: "hidden"
         } as CSSProperties,
         profileSeparator: {
             width: "100%",
@@ -459,7 +465,12 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             flexShrink: 0
         } as CSSProperties,
         profileName: {
-            color: textPrimary
+            color: textPrimary,
+            minWidth: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
         } as CSSProperties,
         profileAvatarText: {
             color: onBrand
@@ -473,7 +484,9 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             textAlign: "left",
             justifyContent: "flex-start",
             gap: 4,
-            paddingTop: 2
+            paddingTop: 2,
+            maxWidth: "100%",
+            overflow: "hidden"
         } as CSSProperties,
         profileManageWrap: {
             display: "inline-flex",
@@ -486,6 +499,8 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             borderRadius: 8,
             padding: "3px 7px",
             width: "fit-content",
+            maxWidth: "100%",
+            overflow: "hidden",
             backgroundColor: sidebarBg,
             color: manageText
         } as CSSProperties,
@@ -495,7 +510,11 @@ export function sidebarStyles(colors: ThemeColors, activeThemeKey?: ThemeKey) {
             fontWeight: 600,
             color: manageText,
             margin: 0,
-            width: "fit-content"
+            width: "fit-content",
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
         } as CSSProperties,
         navList: {
             flex: 1,

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format, getDay, getDaysInMonth, startOfMonth } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { CALENDAR_VIEW_OPTIONS, MONTH_NAMES, MONTH_NAMES_SHORT, WEEK_DAYS } from "@fittrack/app-config";
@@ -16,6 +16,13 @@ type Props = {
   isOpen: boolean;
   maxDate?: string | null;
   minDate?: string | null;
+  closeOnSelect?: boolean;
+  keepViewOnMonthSelect?: boolean;
+  keepViewOnYearSelect?: boolean;
+  preserveViewOnSelectedDateChange?: boolean;
+  yearRangeEnd?: number;
+  yearRangeStart?: number;
+  noScroll?: boolean;
   selectedDate?: string;
   onSelect: (dateYmd: string) => void;
   onClose: () => void;
@@ -26,6 +33,13 @@ export default function CalendarModal({
   isOpen,
   maxDate,
   minDate,
+  closeOnSelect = true,
+  keepViewOnMonthSelect = false,
+  keepViewOnYearSelect = false,
+  preserveViewOnSelectedDateChange = false,
+  yearRangeEnd,
+  yearRangeStart,
+  noScroll = true,
   selectedDate,
   onSelect,
   onClose,
@@ -34,14 +48,23 @@ export default function CalendarModal({
   const s = modalStyles(colors);
   const selected = useMemo(() => parseDateYMD(selectedDate), [selectedDate]);
   const [cursor, setCursor] = useState<Date>(selected);
+  const [draftDate, setDraftDate] = useState(selectedDate ?? "");
   const [currentView, setCurrentView] = useState<CalendarViewMode>("DAYS");
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setCursor(parseDateYMD(selectedDate));
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+
+    setCursor(parseDateYMD(selectedDate));
+    setDraftDate(selectedDate ?? "");
+    if (!wasOpenRef.current || !preserveViewOnSelectedDateChange) {
       setCurrentView("DAYS");
     }
-  }, [isOpen, selectedDate]);
+    wasOpenRef.current = true;
+  }, [isOpen, preserveViewOnSelectedDateChange, selectedDate]);
 
   const year = cursor.getFullYear();
   const monthIndex = cursor.getMonth();
@@ -50,13 +73,17 @@ export default function CalendarModal({
   const todayYmd = formatDateYMD(new Date());
   const minDateYmd = minDate === null ? null : minDate ?? todayYmd;
   const maxDateYmd = maxDate ?? null;
-  const selectedYmd = selectedDate ?? "";
+  const selectedYmd = closeOnSelect ? selectedDate ?? "" : draftDate;
   const highlightedDateSet = useMemo(
     () => new Set(highlightedDates),
     [highlightedDates],
   );
-  const yearRangeStart = year - 7;
-  const yearCells = Array.from({ length: 16 }, (_, index) => yearRangeStart + index);
+  const resolvedYearRangeStart = yearRangeStart ?? year - 7;
+  const resolvedYearRangeEnd = yearRangeEnd ?? year + 8;
+  const yearCells = Array.from(
+    { length: Math.max(0, resolvedYearRangeEnd - resolvedYearRangeStart + 1) },
+    (_, index) => resolvedYearRangeStart + index,
+  );
   const headerTitle = format(cursor, "MMMM yyyy");
   const dayCells = Array.from({ length: 42 }, (_, index) => {
     const dayNumber = index - offset + 1;
@@ -64,6 +91,21 @@ export default function CalendarModal({
     const nextDate = new Date(year, monthIndex, dayNumber);
     return { dayNumber, ymd: formatDateYMD(nextDate) };
   });
+  const calendarFooterButtonStyle = {
+    boxSizing: "border-box" as const,
+    height: 38,
+    minHeight: 38,
+  };
+  const updateDraftDate = (dateYmd: string) => {
+    setDraftDate(dateYmd);
+    if (dateYmd) setCursor(parseDateYMD(dateYmd));
+  };
+  const getDraftDay = () => (draftDate ? parseDateYMD(draftDate).getDate() : 1);
+  const getDateForMonth = (nextYear: number, nextMonth: number) => {
+    const monthStart = new Date(nextYear, nextMonth, 1);
+    const day = Math.min(getDraftDay(), getDaysInMonth(monthStart));
+    return new Date(nextYear, nextMonth, day);
+  };
 
   return (
     <FitModal
@@ -74,18 +116,19 @@ export default function CalendarModal({
       titleStyle={{ fontSize: 16, fontWeight: 700 }}
       maxWidth={500}
       closeAriaLabel="Close calendar"
-      noScroll
+      noScroll={noScroll}
       contentStyle={s.calendarPadding}
       footer={
-        <>
-          <FitButton variant="ghost" onClick={() => onSelect("")} style={s.calendarClearBtn}>
-            Clear
-          </FitButton>
+        <div style={{ ...s.calendarFooter, marginTop: 0, width: "100%", boxSizing: "border-box" }}>
           <FitButton
             variant="ghost"
             onClick={() => {
-              onSelect(todayYmd);
-              onClose();
+              if (closeOnSelect) {
+                onSelect(todayYmd);
+                onClose();
+                return;
+              }
+              updateDraftDate(todayYmd);
             }}
             disabled={
               Boolean(
@@ -93,11 +136,46 @@ export default function CalendarModal({
                   (maxDateYmd && todayYmd > maxDateYmd),
               )
             }
-            style={s.calendarTodayBtn}
+            style={{ ...s.calendarTodayBtn, ...calendarFooterButtonStyle, flex: "0 0 auto" }}
           >
             Today
           </FitButton>
-        </>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 10,
+              flex: "0 1 220px",
+              width: 220,
+              maxWidth: "100%",
+            }}
+          >
+            <FitButton
+              variant="ghost"
+              onClick={() => {
+                if (closeOnSelect) {
+                  onSelect("");
+                  return;
+                }
+                updateDraftDate("");
+              }}
+              style={{ ...s.calendarClearBtn, ...calendarFooterButtonStyle, width: "100%", minWidth: 0 }}
+            >
+              Clear
+            </FitButton>
+            {!closeOnSelect ? (
+              <FitButton
+                variant="primary"
+                label="Done"
+                onClick={() => {
+                  onSelect(draftDate);
+                  onClose();
+                }}
+                style={{ ...calendarFooterButtonStyle, width: "100%", minWidth: 0 }}
+              />
+            ) : null}
+          </div>
+        </div>
       }
     >
       <div style={s.calendarViewRow}>
@@ -142,8 +220,12 @@ export default function CalendarModal({
                     label={String(cell.dayNumber)}
                     onClick={() => {
                       if (isDisabled) return;
-                      onSelect(cell.ymd);
-                      onClose();
+                      if (closeOnSelect) {
+                        onSelect(cell.ymd);
+                        onClose();
+                        return;
+                      }
+                      updateDraftDate(cell.ymd);
                     }}
                     disabled={isDisabled}
                     style={{
@@ -184,8 +266,10 @@ export default function CalendarModal({
                   variant={isActive ? "primary" : "ghost"}
                   label={monthName}
                   onClick={() => {
-                    setCursor(new Date(year, index, 1));
-                    setCurrentView("DAYS");
+                    const nextDate = getDateForMonth(year, index);
+                    setCursor(nextDate);
+                    if (!closeOnSelect) setDraftDate(formatDateYMD(nextDate));
+                    if (closeOnSelect && !keepViewOnMonthSelect) setCurrentView("DAYS");
                   }}
                   style={s.calendarPickerBtn(isActive)}
                   aria-label={`Select ${MONTH_NAMES[index]}`}
@@ -211,8 +295,10 @@ export default function CalendarModal({
                   label={String(value)}
                   onClick={() => {
                     if (isDisabled) return;
-                    setCursor(new Date(value, monthIndex, 1));
-                    setCurrentView("MONTHS");
+                    const nextDate = getDateForMonth(value, monthIndex);
+                    setCursor(nextDate);
+                    if (!closeOnSelect) setDraftDate(formatDateYMD(nextDate));
+                    if (closeOnSelect && !keepViewOnYearSelect) setCurrentView("MONTHS");
                   }}
                   disabled={isDisabled}
                   style={s.calendarPickerBtn(isActive)}

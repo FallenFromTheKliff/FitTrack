@@ -57,7 +57,8 @@
     "storybook": "pnpm --filter @fittrack/web storybook",
     "storybook:build": "pnpm --filter @fittrack/web storybook:build",
     "clean": "node tasks/clean-workspaces.mjs",
-    "refresh:packages-db-client": "pnpm clean && pnpm install && pnpm db:migrate:generate"
+    "refresh:packages-db-client": "pnpm clean && pnpm install && pnpm db:migrate:generate",
+    "deploy:railway": "node tasks/deploy-railway.mjs"
   },
   "devDependencies": {
     "@playwright/mcp": "^0.0.68",

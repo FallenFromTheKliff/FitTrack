@@ -204,6 +204,102 @@ describe('AdminUsersService', () => {
     );
   });
 
+  it('matches normalized name tokens for admin and staff directory searches', async () => {
+    prisma.user.findMany.mockResolvedValue([]);
+
+    const cases = [
+      { query: 'Nelson', tokens: ['Nelson'] },
+      { query: 'Dela Cruz', tokens: ['Dela', 'Cruz'] },
+      { query: 'Nelson Dela Cruz', tokens: ['Nelson', 'Dela', 'Cruz'] },
+      {
+        query: '  Nelson   Dela   Cruz  ',
+        tokens: ['Nelson', 'Dela', 'Cruz'],
+      },
+      { query: 'nELsOn dELA cRUZ', tokens: ['nELsOn', 'dELA', 'cRUZ'] },
+    ];
+
+    for (const actingRole of [UserRole.admin, UserRole.staff]) {
+      for (const { query, tokens } of cases) {
+        await service.getAll(actingRole, { search: query });
+
+        const lastCall =
+          prisma.user.findMany.mock.calls[
+            prisma.user.findMany.mock.calls.length - 1
+          ][0];
+        const where = lastCall.where;
+
+        expect(where.OR).toEqual([
+          {
+            AND: tokens.map((token) => ({
+              OR: [
+                {
+                  profile: {
+                    first_name: { contains: token, mode: 'insensitive' },
+                  },
+                },
+                {
+                  profile: {
+                    last_name: { contains: token, mode: 'insensitive' },
+                  },
+                },
+              ],
+            })),
+          },
+          {
+            auth_identities: {
+              some: {
+                identifier: {
+                  contains: query.trim(),
+                  mode: 'insensitive',
+                },
+              },
+            },
+          },
+          {
+            profile: {
+              phone: { contains: query.trim(), mode: 'insensitive' },
+            },
+          },
+        ]);
+      }
+    }
+  });
+
+  it('preserves whole-query non-name directory search predicates', async () => {
+    prisma.user.findMany.mockResolvedValue([]);
+
+    await service.getAll(UserRole.staff, { search: 'member@fittrack.test' });
+
+    const lastCall =
+      prisma.user.findMany.mock.calls[
+        prisma.user.findMany.mock.calls.length - 1
+      ][0];
+    const where = lastCall.where;
+
+    expect(where.OR).toEqual(
+      expect.arrayContaining([
+        {
+          auth_identities: {
+            some: {
+              identifier: {
+                contains: 'member@fittrack.test',
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          profile: {
+            phone: {
+              contains: 'member@fittrack.test',
+              mode: 'insensitive',
+            },
+          },
+        },
+      ]),
+    );
+  });
+
   it('keeps QR unavailable when the membership card is pending or revoked', async () => {
     prisma.user.findMany.mockResolvedValue(
       ['pending_verification', 'revoked'].map((status, index) => ({

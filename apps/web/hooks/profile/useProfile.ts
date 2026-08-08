@@ -3,7 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { buildRenderableAssetUrl, calcBMI, formatDate, formatMonthYear, splitFullName } from "@fittrack/utils";
+import {
+  buildRenderableAssetUrl,
+  calcBMI,
+  formatDate,
+  formatDateYMD,
+  formatMonthYear,
+  splitFullName
+} from "@fittrack/utils";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
 import { updatePhoneMutationOptions, updateProfileMutationOptions, uploadImageMutationOptions } from "@fittrack/query";
 import {
@@ -18,21 +25,92 @@ import type { PersonalFieldKey } from "@/data/profile/profile";
 
 export type PersonalData = Record<PersonalFieldKey, string>;
 
+export type ProfileFieldKey = PersonalFieldKey | "weightKg" | "heightCm";
+export type ProfileFieldErrors = Partial<Record<ProfileFieldKey, string>>;
+
+const PROFILE_NAME_PATTERN = /^[\p{L}\s]+$/u;
+
+function normalizeDateOfBirthValue(value?: string | null) {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) return "";
+
+  return normalized.match(/^(\d{4}-\d{2}-\d{2})(?:$|T)/)?.[1] ?? normalized;
+}
+
+export function getProfileFieldErrors(
+  personalData: PersonalData,
+  weightKg: string,
+  heightCm: string
+): ProfileFieldErrors {
+  const errors: ProfileFieldErrors = {};
+  const first = personalData.firstName.trim();
+  const last = personalData.lastName.trim();
+  const phone = personalData.phone.trim();
+  const dateOfBirth = personalData.dateOfBirth.trim();
+
+  if (!first) errors.firstName = "First name is required.";
+  else if (!PROFILE_NAME_PATTERN.test(first)) {
+    errors.firstName = "Use letters and spaces only.";
+  } else if (first.length < 2) {
+    errors.firstName = "First name must be at least 2 characters.";
+  }
+
+  if (!last) errors.lastName = "Last name is required.";
+  else if (!PROFILE_NAME_PATTERN.test(last)) {
+    errors.lastName = "Use letters and spaces only.";
+  } else if (last.length < 2) {
+    errors.lastName = "Last name must be at least 2 characters.";
+  }
+
+  if (!phone) {
+    errors.phone = "Phone number is required.";
+  } else if (!isSupportedPhilippineMobileNumber(phone)) {
+    errors.phone = "Enter a valid PH mobile number.";
+  }
+
+  if (dateOfBirth) {
+    const dateParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth);
+    const parsedDate = dateParts
+      ? new Date(Number(dateParts[1]), Number(dateParts[2]) - 1, Number(dateParts[3]))
+      : null;
+    const isRealCalendarDate = Boolean(
+      dateParts &&
+        parsedDate &&
+        parsedDate.getFullYear() === Number(dateParts[1]) &&
+        parsedDate.getMonth() === Number(dateParts[2]) - 1 &&
+        parsedDate.getDate() === Number(dateParts[3])
+    );
+    const todayYmd = formatDateYMD(new Date());
+    if (!isRealCalendarDate) {
+      errors.dateOfBirth = "Date of birth must be a real calendar date.";
+    } else if (dateOfBirth > todayYmd) {
+      errors.dateOfBirth = "Date of birth cannot be in the future.";
+    }
+  }
+
+  if (weightKg.trim() !== "") {
+    const weight = Number(weightKg);
+    if (!Number.isFinite(weight) || weight < 0) {
+      errors.weightKg = "Weight must be a numeric value.";
+    }
+  }
+
+  if (heightCm.trim() !== "") {
+    const height = Number(heightCm);
+    if (!Number.isFinite(height) || height < 0) {
+      errors.heightCm = "Height must be a numeric value.";
+    }
+  }
+
+  return errors;
+}
+
 export function validateProfileFields(
   personalData: PersonalData,
   weightKg: string,
   heightCm: string
 ): string | null {
-  const first = personalData.firstName.trim();
-  const last = personalData.lastName.trim();
-  const phone = personalData.phone.trim();
-  if (!first || !last) return "First and last name are required.";
-  if (phone && !isSupportedPhilippineMobileNumber(phone)) return "Please enter a valid PH mobile number.";
-  if (
-    (weightKg.trim() !== "" && (Number.isNaN(Number(weightKg)) || Number(weightKg) < 0)) ||
-    (heightCm.trim() !== "" && (Number.isNaN(Number(heightCm)) || Number(heightCm) < 0))
-  ) return "Weight and height must be numeric values.";
-  return null;
+  return Object.values(getProfileFieldErrors(personalData, weightKg, heightCm))[0] ?? null;
 }
 
 function toSaveErrorMessage(error: unknown) {
@@ -56,7 +134,7 @@ export function useProfilePage() {
     };
   }, [user?.name, user?.profile?.firstName, user?.profile?.lastName]);
 
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
   const [saving, setSaving] = useState(false);
   const [terminating, setTerminating] = useState(false);
   const [showTerminateConfirm, setShowTerminateConfirm] = useState(false);
@@ -73,10 +151,11 @@ export function useProfilePage() {
     lastName: resolvedName.lastName,
     email: user?.email ?? "",
     phone: formatPhilippineMobileForInput(user?.phone_no),
-    dateOfBirth: user?.dateOfBirth ?? ""
+    dateOfBirth: normalizeDateOfBirthValue(user?.dateOfBirth)
   });
   const [weightKg, setWeightKg] = useState(String(user?.weightKg ?? ""));
   const [heightCm, setHeightCm] = useState(String(user?.heightCm ?? ""));
+  const [touchedFields, setTouchedFields] = useState<Partial<Record<ProfileFieldKey, boolean>>>({});
 
   useEffect(() => {
     if (editing) return;
@@ -86,7 +165,7 @@ export function useProfilePage() {
       lastName: resolvedName.lastName,
       email: user?.email ?? "",
       phone: formatPhilippineMobileForInput(user?.phone_no),
-      dateOfBirth: user?.dateOfBirth ?? ""
+      dateOfBirth: normalizeDateOfBirthValue(user?.dateOfBirth)
     });
     setWeightKg(String(user?.weightKg ?? ""));
     setHeightCm(String(user?.heightCm ?? ""));
@@ -134,8 +213,9 @@ export function useProfilePage() {
     return (
       personalData.firstName !== baselineName.firstName ||
       personalData.lastName !== baselineName.lastName ||
-      personalData.phone !== formatPhilippineMobileForInput(user?.phone_no) ||
-      personalData.dateOfBirth !== (user?.dateOfBirth ?? "") ||
+      normalizePhilippineMobileNumber(personalData.phone) !==
+        normalizePhilippineMobileNumber(user?.phone_no ?? "") ||
+      personalData.dateOfBirth !== normalizeDateOfBirthValue(user?.dateOfBirth) ||
       weightKg !== String(user?.weightKg ?? "") ||
       heightCm !== String(user?.heightCm ?? "") ||
       !!avatarFile
@@ -155,7 +235,33 @@ export function useProfilePage() {
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: avatarPreviewUrl ?? user?.avatarUri ?? null
   });
-  const isAdmin = user?.role === "ADMIN";
+  const fieldErrors = useMemo(() => {
+    if (!editing) return {};
+
+    const errors = getProfileFieldErrors(personalData, weightKg, heightCm);
+    return (Object.keys(errors) as ProfileFieldKey[]).reduce<ProfileFieldErrors>(
+      (visibleErrors, field) => {
+        const error = errors[field];
+        if (touchedFields[field] && error) visibleErrors[field] = error;
+        return visibleErrors;
+      },
+      {}
+    );
+  }, [editing, heightCm, personalData, touchedFields, weightKg]);
+
+  const setEditing = (nextEditing: boolean) => {
+    setEditingState(nextEditing);
+    setTouchedFields({});
+  };
+
+  const updatePersonalField = (field: PersonalFieldKey, value: string) => {
+    setPersonalData((prev) => ({ ...prev, [field]: value }));
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const markPersonalFieldTouched = (field: PersonalFieldKey) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
 
   const persistProfileChanges = async () => {
     const fullName = [personalData.firstName.trim(), personalData.lastName.trim()]
@@ -217,9 +323,12 @@ export function useProfilePage() {
 
   const handleSave = async () => {
     if (saving) return;
-    const error = validateProfileFields(personalData, weightKg, heightCm);
-    if (error) {
-      showMessage(error);
+    const errors = getProfileFieldErrors(personalData, weightKg, heightCm);
+    if (Object.keys(errors).length > 0) {
+      setTouchedFields((prev) => ({
+        ...prev,
+        ...Object.fromEntries(Object.keys(errors).map((field) => [field, true]))
+      }));
       return;
     }
 
@@ -267,10 +376,11 @@ export function useProfilePage() {
       lastName: resetName.lastName,
       email: user?.email ?? "",
       phone: formatPhilippineMobileForInput(user?.phone_no),
-      dateOfBirth: user?.dateOfBirth ?? ""
+      dateOfBirth: normalizeDateOfBirthValue(user?.dateOfBirth)
     });
     setWeightKg(String(user?.weightKg ?? ""));
     setHeightCm(String(user?.heightCm ?? ""));
+    setTouchedFields({});
     setAvatarFile(null);
     setEditing(false);
   };
@@ -278,6 +388,8 @@ export function useProfilePage() {
   return {
     personalData,
     setPersonalData,
+    updatePersonalField,
+    markPersonalFieldTouched,
     weightKg,
     setWeightKg,
     heightCm,
@@ -307,7 +419,7 @@ export function useProfilePage() {
     dobDisplay,
     initials,
     displayedAvatarUri,
-    isAdmin,
+    fieldErrors,
     message,
     showMessage,
     setAvatarFile,

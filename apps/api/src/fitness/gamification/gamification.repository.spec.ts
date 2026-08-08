@@ -14,9 +14,15 @@ describe('GamificationRepository', () => {
     findMany: jest.fn(),
   };
 
+  const seasonalStanding = {
+    findMany: jest.fn(),
+    count: jest.fn(),
+  };
+
   const prisma = {
     muscleMasteryProgress,
     exerciseLog,
+    seasonalStanding,
     $transaction: jest.fn(),
   };
 
@@ -25,6 +31,60 @@ describe('GamificationRepository', () => {
   beforeEach(() => {
     repo = new GamificationRepository(prisma as never);
     jest.clearAllMocks();
+  });
+
+  it('normalizes and tokenizes ranking governance member searches', async () => {
+    const expectedNameToken = (token: string) => ({
+      OR: [
+        {
+          user: {
+            profile: {
+              is: {
+                first_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+          },
+        },
+        {
+          user: {
+            profile: {
+              is: {
+                last_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    seasonalStanding.findMany.mockResolvedValue([]);
+    seasonalStanding.count.mockResolvedValue(0);
+    prisma.$transaction.mockResolvedValue([[], 0]);
+
+    await repo.listAdminSeasonStandings({
+      search: '  nELsOn   DeLa   CrUz  ',
+    });
+
+    const query = seasonalStanding.findMany.mock.calls[0][0];
+    expect(query.where.OR[0]).toEqual({
+      AND: [
+        expectedNameToken('nELsOn'),
+        expectedNameToken('DeLa'),
+        expectedNameToken('CrUz'),
+      ],
+    });
+    expect(query.where.OR[1]).toEqual({
+      user: {
+        ranking_profile: {
+          is: {
+            display_alias: {
+              contains: 'nELsOn DeLa CrUz',
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+    });
   });
 
   it('lists mastery rows for one user with the requested filters', async () => {

@@ -1,7 +1,7 @@
 interface:
   display_name: "FitTrack Orchestrator"
   short_description: "Thin router for FitTrack task planning and skill routing"
-  default_prompt: "Use $fittrack-orchestrator to classify a FitTrack request, choose the right downstream skills, and coordinate bounded local or delegated work."
+  default_prompt: "Use $fittrack-orchestrator as Sol: create one compact Luna packet, delegate one-turn bounded implementation to Luna 5.6 Max, use one actual wait, route independent QA and one repair cycle to Terra 5.6 Max, and return only compact evidence and decisions."
 
 policy:
   allow_implicit_invocation: true

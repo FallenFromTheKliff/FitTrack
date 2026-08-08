@@ -24,6 +24,7 @@ import AppFeedbackSettingsSection from "@/components/settings/AppFeedbackSetting
 import FeedbackInboxSection from "@/components/settings/FeedbackInboxSection";
 import NotificationPreferencesSection from "@/components/settings/NotificationPreferencesSection";
 import SecuritySettingsSection from "@/components/settings/SecuritySettingsSection";
+import GymProfileSection from "@/components/profile/GymProfileSection";
 
 type SettingsModalKey =
   | "appearance"
@@ -217,6 +218,13 @@ export default function GymSettingsPage() {
   if (user?.role) {
     return (
       <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
+        <div style={appearanceFade}>
+          {user?.role !== "COACH" ? (
+            <FitSection heading="Gym Identity & Hours" headingStyle={{ fontSize: 13 }}>
+              <GymProfileSection canEdit={user?.role === "ADMIN"} />
+            </FitSection>
+          ) : null}
+        </div>
         <div style={appearanceFade}>
           <PreferenceLaunchSection onOpen={setActiveModal} />
         </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -29,6 +29,8 @@ import { useTheme, useFontClass } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTimedMessage } from "@fittrack/hooks";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
+import { WEB_API_BASE_URL } from "@/lib/api-client";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 import { canAccessWebPage, getWebPortalLabel } from "@/lib/portal-access";
 import { sidebarStyles } from "@/styles/layoutStyles";
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
@@ -239,10 +241,15 @@ export default function Sidebar({
   );
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const fontClass = useFontClass();
   const s = sidebarStyles(colors, activeThemeKey);
   const initials =
     user?.avatarInitials ?? user?.name?.slice(0, 2).toUpperCase() ?? "AU";
+  const avatarUri = buildRenderableAssetUrl({
+    apiBaseUrl: WEB_API_BASE_URL,
+    assetUrl: user?.avatarUri ?? null,
+  });
   const isCoach = user?.role === "COACH";
   const profileHref = "/profile";
   const isProfileActive = isRouteMatch(path, profileHref);
@@ -259,6 +266,10 @@ export default function Sidebar({
         .filter((section) => section.items.length > 0),
     [user?.role],
   );
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUri]);
 
   const handleLogout = async () => {
     if (logoutLoading) return;
@@ -320,15 +331,24 @@ export default function Sidebar({
         onClick={isMobileOverlay ? onClose : undefined}
       >
         <div style={s.profileCardTop}>
-          <div style={s.profileCardAvatar}>
-            <FitText
-              style={{ ...s.profileAvatarText, fontSize: 20, fontWeight: 700 }}
-              excludeGlobalScale
-            >
-              {initials}
-            </FitText>
+          <div style={{ ...s.profileCardAvatar, overflow: "hidden" }}>
+            {avatarUri && !avatarFailed ? (
+              <img
+                src={avatarUri}
+                alt={(user?.name ?? "Account") + " avatar"}
+                onError={() => setAvatarFailed(true)}
+                style={{ height: "100%", objectFit: "cover", width: "100%" }}
+              />
+            ) : (
+              <FitText
+                style={{ ...s.profileAvatarText, fontSize: 20, fontWeight: 700 }}
+                excludeGlobalScale
+              >
+                {initials}
+              </FitText>
+            )}
           </div>
-          <div style={s.profileCardInfo}>
+          <div style={{ ...s.profileCardInfo, flex: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
             <FitText
               style={{
                 ...s.profileName,
@@ -338,6 +358,9 @@ export default function Sidebar({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 display: "block",
+                minWidth: 0,
+                maxWidth: "100%",
+                width: "100%",
               }}
               excludeGlobalScale
             >

@@ -1266,7 +1266,8 @@ export class GamificationRepository extends BaseRepository {
   }): Promise<PaginatedResult<AdminSeasonStandingRecord>> {
     const page = input.page ?? 1;
     const limit = input.limit ?? 20;
-    const trimmedSearch = input.search?.trim();
+    const normalizedSearch = input.search?.trim().replace(/\s+/g, ' ');
+    const searchTerms = normalizedSearch?.split(' ').filter(Boolean) ?? [];
     const trimmedMuscleKey = input.muscleKey?.trim();
     const userWhere: Prisma.UserWhereInput = {};
 
@@ -1300,39 +1301,45 @@ export class GamificationRepository extends BaseRepository {
             status: { not: SeasonStatus.archived },
           },
       ...(Object.keys(userWhere).length ? { user: userWhere } : {}),
-      ...(trimmedSearch
+      ...(normalizedSearch
         ? {
             OR: [
               {
-                user: {
-                  profile: {
-                    is: {
-                      first_name: {
-                        contains: trimmedSearch,
-                        mode: 'insensitive',
+                AND: searchTerms.map((term) => ({
+                  OR: [
+                    {
+                      user: {
+                        profile: {
+                          is: {
+                            first_name: {
+                              contains: term,
+                              mode: 'insensitive',
+                            },
+                          },
+                        },
                       },
                     },
-                  },
-                },
-              },
-              {
-                user: {
-                  profile: {
-                    is: {
-                      last_name: {
-                        contains: trimmedSearch,
-                        mode: 'insensitive',
+                    {
+                      user: {
+                        profile: {
+                          is: {
+                            last_name: {
+                              contains: term,
+                              mode: 'insensitive',
+                            },
+                          },
+                        },
                       },
                     },
-                  },
-                },
+                  ],
+                })),
               },
               {
                 user: {
                   ranking_profile: {
                     is: {
                       display_alias: {
-                        contains: trimmedSearch,
+                        contains: normalizedSearch,
                         mode: 'insensitive',
                       },
                     },

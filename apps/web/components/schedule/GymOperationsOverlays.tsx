@@ -841,11 +841,9 @@ export function GymOperationsCreateVenueBookingModal({
             selectedDate={date}
             onClose={() => setDatePickerOpen(false)}
             onSelect={(nextDate) => {
-              if (nextDate) {
-                setDate(nextDate);
-                setStartTime("");
-                setEndTime("");
-              }
+              setDate(nextDate);
+              setStartTime("");
+              setEndTime("");
             }}
           />
         </div>
@@ -1396,7 +1394,7 @@ export function GymOperationsCreateCoachBookingModal({
             selectedDate={date}
             onClose={() => setDatePickerOpen(false)}
             onSelect={(nextDate) => {
-              if (nextDate) setDate(nextDate);
+              setDate(nextDate);
             }}
           />
         </div>

@@ -388,17 +388,25 @@ export class AdminUsersService {
     }
 
     const search = filters.search?.trim();
+    const normalizedNameSearch = search?.replace(/\s+/g, ' ');
     if (search) {
+      const nameTokens = normalizedNameSearch?.split(' ') ?? [];
       where.OR = [
         {
-          profile: {
-            first_name: { contains: search, mode: 'insensitive' },
-          },
-        },
-        {
-          profile: {
-            last_name: { contains: search, mode: 'insensitive' },
-          },
+          AND: nameTokens.map((token) => ({
+            OR: [
+              {
+                profile: {
+                  first_name: { contains: token, mode: 'insensitive' },
+                },
+              },
+              {
+                profile: {
+                  last_name: { contains: token, mode: 'insensitive' },
+                },
+              },
+            ],
+          })),
         },
         {
           auth_identities: {

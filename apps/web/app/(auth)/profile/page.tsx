@@ -23,7 +23,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { buildRenderableAssetUrl, calcBMI, formatDate } from "@fittrack/utils";
+import { buildRenderableAssetUrl, calcBMI, formatDate, formatDateYMD } from "@fittrack/utils";
 import { profileStyles } from "@/styles/pageStyles";
 import { PERSONAL_FIELDS } from "@/data/profile/profile";
 import { useProfilePage } from "@/hooks/profile/useProfile";
@@ -58,8 +58,10 @@ import {
 } from "@/components/member-only/memberOnlyUtils";
 import { useMemberOnlyAccess, useMemberOnlyProfileData } from "@/hooks/member-only/useMemberOnlyData";
 import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
-import { sanitizePhoneInput } from "./helpers";
-import GymProfileSection from "@/components/profile/GymProfileSection";
+import {
+  getPhilippinePhoneDigits,
+  toPhilippinePhoneValue,
+} from "@/components/profile/profileFieldUtils";
 import CoachReceivedReviewsPanel from "@/components/profile/CoachReceivedReviewsPanel";
 import {
   coachSelfProfileQueryOptions,
@@ -981,6 +983,8 @@ function OperationsProfileSettingsPage() {
   const {
     personalData,
     setPersonalData,
+    updatePersonalField,
+    markPersonalFieldTouched,
     editing,
     setEditing,
     saving,
@@ -988,10 +992,10 @@ function OperationsProfileSettingsPage() {
     showDobCalendar,
     setShowDobCalendar,
     hasChanges,
+    fieldErrors,
     roleValue,
     initials,
     displayedAvatarUri,
-    isAdmin,
     message,
     setAvatarFile,
     handleSave,
@@ -1007,7 +1011,8 @@ function OperationsProfileSettingsPage() {
     value,
     placeholder,
     type = "text",
-    onChange
+    onChange,
+    error
   }: {
     id: string;
     label: string;
@@ -1016,6 +1021,7 @@ function OperationsProfileSettingsPage() {
     placeholder: string;
     type?: string;
     onChange: (value: string) => void;
+    error?: string;
   }) => (
     <div>
       <FitText style={s.fieldLabel}>{label}</FitText>
@@ -1032,20 +1038,30 @@ function OperationsProfileSettingsPage() {
           style={editing ? s.inputBase : s.inputDisabled}
         />
       </div>
+      {error ? (
+        <FitText as="p" role="alert" style={{ color: colors.danger, fontSize: 12, margin: "6px 0 0" }}>
+          {error}
+        </FitText>
+      ) : null}
     </div>
   );
 
   return (
     <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
       <div style={s.outerWrap}>
-        <div style={s.innerWrap}>
+        <div style={{ ...s.innerWrap, width: "min(100%, 760px)" }}>
           {message ? (
             <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
               <FitText style={{ fontSize: 13, color: colors.success, fontWeight: 600 }}>{message}</FitText>
             </div>
           ) : null}
-          <div style={s.shell}>
-            <div style={s.twoColGrid}>
+          <div style={{ ...s.shell, padding: 12 }}>
+            <div
+              style={{
+                ...s.twoColGrid,
+                ...(isCoach ? {} : { gridTemplateColumns: "minmax(0, 1fr)" }),
+              }}
+            >
               <div style={{ ...s.panel, display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, marginBottom: 12 }}>
                   <input
@@ -1093,9 +1109,6 @@ function OperationsProfileSettingsPage() {
                   </FitText>
                 </div>
                 <FitText style={{ fontSize: 19, fontWeight: 800, marginBottom: 10 }}>My Profile</FitText>
-                <FitText as="p" style={{ fontSize: 13, color: colors.textMuted, marginBottom: 14 }}>
-                  Keep this surface focused on personal management details for the active web account.
-                </FitText>
                 <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
                   <div style={s.twoColumnFieldGrid}>
                     {renderLabeledInput({
@@ -1104,7 +1117,8 @@ function OperationsProfileSettingsPage() {
                       icon: User,
                       value: personalData.firstName,
                       placeholder: "First name",
-                      onChange: (value) => setPersonalData((prev) => ({ ...prev, firstName: value }))
+                      onChange: (value) => updatePersonalField("firstName", value),
+                      error: fieldErrors.firstName,
                     })}
                     {renderLabeledInput({
                       id: "profile-last-name",
@@ -1112,64 +1126,112 @@ function OperationsProfileSettingsPage() {
                       icon: User,
                       value: personalData.lastName,
                       placeholder: "Last name",
-                      onChange: (value) => setPersonalData((prev) => ({ ...prev, lastName: value }))
+                      onChange: (value) => updatePersonalField("lastName", value),
+                      error: fieldErrors.lastName,
                     })}
                   </div>
-                  {PERSONAL_FIELDS.filter((field) => field.key !== "firstName" && field.key !== "lastName").map((field) => (
-                    <div key={field.key}>
-                      <FitText style={s.fieldLabel}>{field.label}</FitText>
-                      {field.key === "dateOfBirth" ? (
-                        <FitButton
-                          variant="field"
-                          aria-label={`${field.label}: ${personalData.dateOfBirth ? formatDate(personalData.dateOfBirth, "MMM d, yyyy") : "Select date"}`}
-                          disabled={!editing}
-                          onClick={() => {
-                            if (!editing) return;
-                            setShowDobCalendar(true);
-                          }}
-                          showTrailing={false}
-                          style={{
-                            ...(editing ? s.inputBase : s.inputDisabled),
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            cursor: editing ? "pointer" : "not-allowed",
-                            textAlign: "left"
-                          }}
-                          textStyle={{ color: personalData.dateOfBirth ? colors.textPrimary : colors.textMuted }}
-                        >
-                          {personalData.dateOfBirth ? formatDate(personalData.dateOfBirth, "MMM d, yyyy") : "Select date"}
-                        </FitButton>
-                      ) : (
-                        <div style={{ position: "relative" }}>
-                          <field.icon size={14} color={colors.textMuted} style={s.fieldIcon} />
-                          <FitTextInput
-                            id={`profile-${field.key}`}
-                            aria-label={field.label}
-                            type={field.type || "text"}
-                            value={personalData[field.key]}
-                            placeholder={field.placeholder}
-                            disabled={!editing || field.key === "email"}
-                            inputMode={field.key === "phone" ? "numeric" : undefined}
-                            pattern={field.key === "phone" ? "[0-9]*" : undefined}
-                            maxLength={field.key === "phone" ? 11 : undefined}
-                            onChange={(event) => {
-                              const nextValue = field.key === "phone"
-                                ? sanitizePhoneInput(event.target.value)
-                                : event.target.value;
-                              setPersonalData((prev) => ({ ...prev, [field.key]: nextValue }));
-                            }}
-                            style={editing && field.key !== "email" ? s.inputBase : s.inputDisabled}
-                          />
-                        </div>
-                      )}
-                      {field.key === "email" ? (
-                        <FitText style={{ fontSize: 12, color: colors.textMuted, marginTop: 6 }}>
-                          Email updates are managed outside profile settings.
-                        </FitText>
-                      ) : null}
-                    </div>
-                  ))}
+                  {PERSONAL_FIELDS.filter((field) => field.key !== "firstName" && field.key !== "lastName").map((field) => {
+                    const isPhoneField = field.key === "phone";
+                    const fieldError = fieldErrors[field.key];
+                    return (
+                      <div key={field.key}>
+                        <FitText style={s.fieldLabel}>{field.label}</FitText>
+                        {field.key === "dateOfBirth" ? (
+                          <>
+                            <FitButton
+                              variant="field"
+                              aria-label={
+                                field.label +
+                                ": " +
+                                (personalData.dateOfBirth
+                                  ? formatDate(personalData.dateOfBirth, "MMM d, yyyy")
+                                  : "Select date")
+                              }
+                              disabled={!editing}
+                              onClick={() => {
+                                if (!editing) return;
+                                markPersonalFieldTouched("dateOfBirth");
+                                setShowDobCalendar(true);
+                              }}
+                              showTrailing={false}
+                              style={{
+                                ...(editing ? s.inputBase : s.inputDisabled),
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                cursor: editing ? "pointer" : "not-allowed",
+                                textAlign: "left"
+                              }}
+                              textStyle={{ color: personalData.dateOfBirth ? colors.textPrimary : colors.textMuted }}
+                            >
+                              {personalData.dateOfBirth
+                                ? formatDate(personalData.dateOfBirth, "MMM d, yyyy")
+                                : "Select date"}
+                            </FitButton>
+                            <FitText as="p" style={{ color: colors.textMuted, fontSize: 12, margin: "6px 0 0" }}>
+                              Selected date:{" "}
+                              {personalData.dateOfBirth
+                                ? formatDate(personalData.dateOfBirth, "MMM d, yyyy")
+                                : "Not set"}
+                            </FitText>
+                          </>
+                        ) : (
+                          <div style={{ position: "relative" }}>
+                            <field.icon size={14} color={colors.textMuted} style={s.fieldIcon} />
+                            {isPhoneField ? (
+                              <FitText
+                                as="span"
+                                aria-hidden="true"
+                                style={{
+                                  color: colors.textMuted,
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  left: 36,
+                                  pointerEvents: "none",
+                                  position: "absolute",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                }}
+                              >
+                                +63
+                              </FitText>
+                            ) : null}
+                            <FitTextInput
+                              id={"profile-" + field.key}
+                              aria-label={field.label}
+                              type={field.type || "text"}
+                              value={isPhoneField ? getPhilippinePhoneDigits(personalData.phone) : personalData[field.key]}
+                              placeholder={isPhoneField ? "917xxxxxxx" : field.placeholder}
+                              disabled={!editing || field.key === "email"}
+                              inputMode={isPhoneField ? "numeric" : undefined}
+                              pattern={isPhoneField ? "[0-9]{10}" : undefined}
+                              maxLength={isPhoneField ? 10 : undefined}
+                              onChange={(event) => {
+                                const nextValue = isPhoneField
+                                  ? toPhilippinePhoneValue(event.target.value)
+                                  : event.target.value;
+                                updatePersonalField(field.key, nextValue);
+                              }}
+                              style={{
+                                ...(editing && field.key !== "email" ? s.inputBase : s.inputDisabled),
+                                ...(isPhoneField ? { paddingLeft: 72 } : {}),
+                              }}
+                            />
+                          </div>
+                        )}
+                        {field.key === "email" ? (
+                          <FitText style={{ fontSize: 12, color: colors.textMuted, marginTop: 6 }}>
+                            Email updates are managed outside profile settings.
+                          </FitText>
+                        ) : null}
+                        {fieldError ? (
+                          <FitText as="p" role="alert" style={{ color: colors.danger, fontSize: 12, margin: "6px 0 0" }}>
+                            {fieldError}
+                          </FitText>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
                   {editing ? (
@@ -1186,7 +1248,7 @@ function OperationsProfileSettingsPage() {
                         label={saving ? saveLabel : "SAVE CHANGES"}
                         icon={Save}
                         loading={saving}
-                        disabled={!hasChanges}
+                        disabled={!hasChanges || Object.keys(fieldErrors).length > 0}
                         fullWidth
                         style={s.actionBtn}
                         onClick={handleSave}
@@ -1204,12 +1266,13 @@ function OperationsProfileSettingsPage() {
                   )}
                 </div>
               </div>
-              <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
-                {isCoach ? <CoachProfileSnapshotPanel /> : null}
-                {isCoach ? <CoachProfileManagementPanel /> : null}
-                {isCoach ? <CoachReceivedReviewsPanel /> : null}
-                {!isCoach ? <GymProfileSection canEdit={isAdmin} /> : null}
-              </div>
+              {isCoach ? (
+                <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+                  <CoachProfileSnapshotPanel />
+                  <CoachProfileManagementPanel />
+                  <CoachReceivedReviewsPanel />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1217,8 +1280,16 @@ function OperationsProfileSettingsPage() {
       <CalendarModal
         isOpen={showDobCalendar}
         minDate={null}
+        maxDate={formatDateYMD(new Date())}
+        closeOnSelect={false}
+        keepViewOnMonthSelect
+        keepViewOnYearSelect
+        preserveViewOnSelectedDateChange
+        yearRangeStart={new Date().getFullYear() - 100}
+        yearRangeEnd={new Date().getFullYear()}
+        noScroll={false}
         selectedDate={personalData.dateOfBirth}
-        onSelect={(dateYmd) => setPersonalData((prev) => ({ ...prev, dateOfBirth: dateYmd }))}
+        onSelect={(dateYmd) => updatePersonalField("dateOfBirth", dateYmd)}
         onClose={() => setShowDobCalendar(false)}
       />
     </FitSection>

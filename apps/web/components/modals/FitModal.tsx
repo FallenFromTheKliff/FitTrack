@@ -64,6 +64,7 @@ export default function FitModal({
   const animationFrameRef = useRef<number | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const subtitleId = useId();
@@ -77,6 +78,10 @@ export default function FitModal({
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled]);
 
   useEffect(() => {
     if (animationFrameRef.current !== null) {
@@ -181,7 +186,7 @@ export default function FitModal({
         return;
       }
 
-      if (event.key === "Escape" && !closeDisabled) {
+      if (event.key === "Escape" && !closeDisabledRef.current) {
         event.preventDefault();
         onCloseRef.current();
       }
@@ -205,7 +210,7 @@ export default function FitModal({
       });
       previousFocusRef.current?.focus({ preventScroll: true });
     };
-  }, [isOpen, portalRoot, closeDisabled]);
+  }, [isOpen, portalRoot]);
 
   if ((!isOpen && !visible) || !portalRoot) return null;
 
