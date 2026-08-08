@@ -53,9 +53,6 @@ import {
   AiGeneratedWeek,
   AiPythonClientService,
   GeneratePlanInput,
-  GymChatGroundingInput,
-  GymChatInput,
-  GymChatResponse,
 } from './ai-python-client.service';
 import { AIChatDTO, AIChatResponseDTO } from './dto/chat.dto';
 import {
@@ -164,8 +161,7 @@ type PlanPromptBlueprint = {
 };
 
 const SESSION_INACTIVITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const MAX_CHAT_HISTORY_MESSAGES = 20;
-const MAX_GYM_PROVIDER_HISTORY_MESSAGES = 4;
+const MAX_CHAT_HISTORY_MESSAGES = 4;
 const MAX_SESSION_TITLE_LENGTH = 80;
 
 @Injectable()
@@ -265,52 +261,35 @@ export class AiService {
         resolved.session.id,
         MAX_CHAT_HISTORY_MESSAGES,
       );
-    const useGymChatProvider =
-      typeof actorRoleOrDto === 'string' && actorRole === UserRole.member;
-    let requestPayload: AIChatInput | GymChatInput;
-    let persistedRequestPayload: AIChatInput | GymChatInput;
-
-    if (useGymChatProvider) {
-      requestPayload = this.buildGymChatRequestPayload(
-        resolved.session.id,
-        history,
-        await this.gymKnowledgeService.getGymProfile(),
-        dto.message,
-      );
-      persistedRequestPayload = requestPayload;
-    } else {
-      const [userContext, gymProfile] = await Promise.all([
-        this.buildChatUserContext(userId),
-        this.gymKnowledgeService.getGymProfile(),
-      ]);
-      requestPayload = this.buildChatRequestPayload(
-        resolved.session,
-        history,
-        userContext,
-        gymProfile,
-        dto.message,
-        assistantScope,
-      );
-      const promptBlueprint = this.buildChatPromptBlueprint(
-        resolved.session,
-        history,
-        userContext,
-        dto.message,
-        assistantScope,
-      );
-      persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
-        requestPayload,
-        promptBlueprint,
-      );
-    }
+    const [userContext, gymProfile] = await Promise.all([
+      this.buildChatUserContext(userId),
+      this.gymKnowledgeService.getGymProfile(),
+    ]);
+    const requestPayload = this.buildChatRequestPayload(
+      resolved.session,
+      history,
+      userContext,
+      gymProfile,
+      dto.message,
+      assistantScope,
+      actorRole,
+    );
+    const promptBlueprint = this.buildChatPromptBlueprint(
+      resolved.session,
+      history,
+      userContext,
+      dto.message,
+      assistantScope,
+      actorRole,
+    );
+    const persistedRequestPayload = this.enrichRequestPayloadWithBlueprint(
+      requestPayload,
+      promptBlueprint,
+    );
     const startedAt = Date.now();
 
     try {
-      const response: AIChatResponse = useGymChatProvider
-        ? this.toLegacyChatResponse(
-            await this.aiClient.chatGym(requestPayload as GymChatInput),
-          )
-        : await this.aiClient.chat(requestPayload as AIChatInput);
+      const response: AIChatResponse = await this.aiClient.chat(requestPayload);
       const latencyMs = Date.now() - startedAt;
       const { actionTriggered, actionResult } =
         await this.validateAndExecuteAction(
@@ -441,11 +420,11 @@ export class AiService {
       actorRole === UserRole.coach ||
       actorRole === UserRole.staff
     ) {
-      return 'admin_business';
+      return 'all';
     }
 
     if (actorRole === UserRole.member) {
-      return 'member_fitness';
+      return 'all';
     }
 
     throw new HttpException(
@@ -1074,6 +1053,7 @@ export class AiService {
     gymProfile: GymProfileResponseDTO,
     message: string,
     assistantScope: AssistantScope,
+    actorRole: UserRole,
   ): AIChatInput {
     return {
       messages: [
@@ -1095,83 +1075,11 @@ export class AiService {
         session_id: session.id,
         context_type: session.context_type,
         assistant_scope: assistantScope,
+        allowed_actions:
+          actorRole === UserRole.member
+            ? ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE']
+            : ['NONE'],
       },
-    };
-  }
-
-  private buildGymChatRequestPayload(
-    sessionId: string,
-    history: AiChatMessageRecord[],
-    gymProfile: GymProfileResponseDTO,
-    message: string,
-  ): GymChatInput {
-    const sessionHistory: GymChatGroundingInput['session_history'] = history
-      .filter(
-        (entry) =>
-          entry.role === ChatRole.user || entry.role === ChatRole.assistant,
-      )
-      .slice(-MAX_GYM_PROVIDER_HISTORY_MESSAGES)
-      .map((entry) => ({
-        role: entry.role as 'user' | 'assistant',
-        content: entry.content,
-      }));
-
-    return {
-      sessionId,
-      message,
-      grounding: {
-        operating_hours: [],
-        special_schedules: [],
-        promotions: [],
-        faqs: [
-          {
-            category: 'general',
-            question: 'Gym name',
-            answer: gymProfile.name,
-          },
-          {
-            category: 'general',
-            question: 'Gym address',
-            answer: gymProfile.location,
-          },
-          {
-            category: 'general',
-            question: 'Gym phone',
-            answer: gymProfile.phone,
-          },
-          {
-            category: 'general',
-            question: 'Gym email',
-            answer: gymProfile.email,
-          },
-          {
-            category: 'general',
-            question: 'Gym opening time',
-            answer: gymProfile.opening_time,
-          },
-          {
-            category: 'general',
-            question: 'Gym closing time',
-            answer: gymProfile.closing_time,
-          },
-        ],
-        membership_plans: [],
-        session_history: sessionHistory,
-      },
-      policy: {
-        gymOnly: true,
-        refuseOutOfScope: true,
-      },
-    };
-  }
-
-  private toLegacyChatResponse(response: GymChatResponse): AIChatResponse {
-    return {
-      content: response.reply,
-      action: 'NONE',
-      params: null,
-      model_used: response.model_used ?? null,
-      token_count: response.token_count ?? null,
     };
   }
 
@@ -1180,8 +1088,6 @@ export class AiService {
       '[Current gym grounding. Use this only when relevant to the user intent; do not invent or override it.]',
       `Gym name: ${profile.name}`,
       `Address: ${profile.location}`,
-      `Contact phone: ${profile.phone}`,
-      `Contact email: ${profile.email}`,
       `Opening time: ${profile.opening_time}`,
       `Closing time: ${profile.closing_time}`,
     ].join('\n');
@@ -1193,64 +1099,46 @@ export class AiService {
     userContext: AIChatInput['userContext'],
     message: string,
     assistantScope: AssistantScope,
+    actorRole: UserRole,
   ): ChatPromptBlueprint {
-    const messagePurpose = this.inferChatMessagePurpose(
-      message,
-      session.context_type,
-    );
-    const isAdminBusiness = assistantScope === 'admin_business';
+    const messagePurpose = this.inferChatMessagePurpose(session.context_type);
+    const canExecuteMemberActions = actorRole === UserRole.member;
 
     return {
       version: 'v1',
       domain: 'chat',
-      persona: isAdminBusiness
-        ? 'FitTrack business operations assistant: concise, operational, and grounded in gym management workflows.'
-        : 'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
-      objective: isAdminBusiness
-        ? 'Help authorized operators reason about business operations, analytics interpretation, staffing, inventory, members as accounts, and management decisions without inventing live KPI values.'
-        : 'Help the user make the safest useful next step inside FitTrack without inventing profile facts or overpromising.',
+      persona:
+        'BrodigyAI: concise, warm, practical, and grounded in the current FitTrack workflow.',
+      objective:
+        'Help eligible users with the useful in-scope part of their request across fitness, nutrition, recovery, public gym information, app help, and authorized gym operations without inventing private facts or live records.',
       responseStyle: [
         'Keep replies brief and practical.',
-        isAdminBusiness
-          ? 'Use an operator tone, not member coaching language.'
-          : 'Use a supportive coach tone, not a lecture.',
-        'Ask at most one clarifying question when the next step is unclear.',
-        'Prefer specific next actions over generic motivation.',
+        'Use an AI assistant tone that is natural and specific, not canned.',
+        'Ask at most one concise clarifying question when an in-scope request is ambiguous.',
+        'Prefer a useful next step over generic motivation.',
       ],
-      guardrails: isAdminBusiness
-        ? [
-            'Answer only gym business, admin, and operations questions.',
-            'Do not provide workout programming, fitness coaching, macros, TDEE changes, or meal logging.',
-            'Do not invent live KPI values; direct users to Analytics or Generate Insights for source-of-truth numbers.',
-            'Keep the reply grounded in the visible context and recent conversation.',
-          ]
-        : [
-            'Do not invent weights, measurements, meal logs, plan adherence, or other profile facts that are not in the provided context or chat history.',
-            'Do not claim a logged action or plan update unless the requested action is supported by the visible context and response policy.',
-            'Do not answer business analytics, revenue, staffing, inventory, or admin operations questions.',
-            'Do not provide medical diagnosis or emergency guidance; safely redirect when the user asks for medical advice.',
-            'Stay inside the current FitTrack workflow and keep the reply grounded in the user context and recent conversation.',
-          ],
+      guardrails: [
+        'Use the current message, no more than four recent turns, and public gym identity or hours only when relevant.',
+        'Allowed topics include greetings, fitness, workouts, macros and nutrition education, cutting or bulking, TDEE, recovery, SERTFIT public information, app help, and authorized gym operations.',
+        'Role and access guards control private data and action execution; do not infer or reveal the user role, name, membership, plans, secrets, credentials, or private records.',
+        'Do not invent live KPI values, schedules, membership details, or other business facts that are not supplied.',
+        'Do not claim an action was completed. The backend validates any action metadata before execution.',
+        'Refuse or redirect unrelated requests, including photosynthesis or Python array-sorting questions, without answering the unrelated topic.',
+        'For urgent medical situations, keep the response safety-first and direct the user to qualified local help.',
+      ],
       actionPolicy: {
-        allowedActions: isAdminBusiness
-          ? ['NONE']
-          : ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE'],
-        triggerNotes: isAdminBusiness
-          ? [
-              'Always return NONE for business operations chat.',
-              'Point users to Analytics or Generate Insights for live metric generation.',
-            ]
-          : [
-              'Return GENERATE_PLAN when the user clearly asks for a workout or training plan.',
-              'Return ADJUST_TDEE when the user asks to recalculate calories or macros.',
-              'Return LOG_NUTRITION when the user is clearly asking to log a meal or nutrition entry.',
-              'Return NONE for general coaching, clarification, or unsupported requests.',
-            ],
+        allowedActions: canExecuteMemberActions
+          ? ['ADJUST_TDEE', 'GENERATE_PLAN', 'LOG_NUTRITION', 'NONE']
+          : ['NONE'],
+        triggerNotes: [
+          'Return GENERATE_PLAN only when the user clearly asks for a workout or training plan.',
+          'Return ADJUST_TDEE only when the user clearly asks to recalculate calories or macros.',
+          'Return LOG_NUTRITION only when the user clearly asks to log a meal or nutrition entry.',
+          'Return NONE for general coaching, clarification, unrelated requests, or actions the backend will not authorize for this role.',
+        ],
         safetyNotes: [
-          'Prefer NONE when the intent is ambiguous rather than guessing.',
-          isAdminBusiness
-            ? 'If the request is outside scope, acknowledge the limitation and steer back to business operations guidance.'
-            : 'If the request is outside scope, acknowledge the limitation and steer back to training, nutrition, or TDEE guidance.',
+          'Ask one concise clarification when an in-scope request is ambiguous rather than guessing.',
+          'Refuse unrelated requests briefly and redirect to the supported BrodigyAI capabilities.',
         ],
       },
       context: {
@@ -1331,38 +1219,13 @@ export class AiService {
     };
   }
 
-  private inferChatMessagePurpose(
-    message: string,
-    contextType: ChatContext,
-  ): string {
-    const normalized = message.toLowerCase();
-
+  private inferChatMessagePurpose(contextType: ChatContext): string {
     if (contextType === ChatContext.training_plan) {
       return 'training_plan_guidance';
     }
 
     if (contextType === ChatContext.tdee_adjustment) {
       return 'tdee_adjustment';
-    }
-
-    if (normalized.includes('macro') || normalized.includes('calorie')) {
-      return 'nutrition_guidance';
-    }
-
-    if (
-      normalized.includes('meal') ||
-      normalized.includes('nutrition') ||
-      normalized.includes('food')
-    ) {
-      return 'nutrition_guidance';
-    }
-
-    if (
-      normalized.includes('workout') ||
-      normalized.includes('training') ||
-      normalized.includes('plan')
-    ) {
-      return 'training_guidance';
     }
 
     return 'general_support';

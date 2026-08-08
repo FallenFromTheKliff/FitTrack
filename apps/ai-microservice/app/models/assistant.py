@@ -26,7 +26,12 @@ class AssistantChatUserContext(StrictModel):
 class AssistantChatSessionContext(StrictModel):
     session_id: str = Field(min_length=1)
     context_type: str = Field(min_length=1)
-    assistant_scope: Literal["admin_business", "member_fitness"] = "member_fitness"
+    # Older direct callers may still send the legacy scope labels. The
+    # authenticated Nest path sends "all" after enforcing role/action access.
+    assistant_scope: Literal["all", "admin_business", "member_fitness"] = "member_fitness"
+    allowed_actions: list[
+        Literal["ADJUST_TDEE", "GENERATE_PLAN", "LOG_NUTRITION", "NONE"]
+    ] = Field(default_factory=lambda: ["NONE"])
 
 
 class AssistantChatRequest(StrictModel):

@@ -20,7 +20,7 @@ import { AiChatSessionRepository } from './ai-chat-session.repository';
 import { AiInteractionLogRepository } from './ai-interaction-log.repository';
 import {
   AiPythonClientService,
-  type GymChatInput,
+  type AIChatInput,
 } from './ai-python-client.service';
 import { AiService } from './ai.service';
 import { GymKnowledgeService } from './gym-knowledge.service';
@@ -352,7 +352,13 @@ describe('AiService', () => {
         sessionContext: expect.objectContaining({
           session_id: 'session-1',
           context_type: ChatContext.general,
-          assistant_scope: 'member_fitness',
+          assistant_scope: 'all',
+          allowed_actions: [
+            'ADJUST_TDEE',
+            'GENERATE_PLAN',
+            'LOG_NUTRITION',
+            'NONE',
+          ],
         }),
       }),
     );
@@ -386,12 +392,12 @@ describe('AiService', () => {
           promptBlueprint: expect.objectContaining({
             domain: 'chat',
             persona:
-              'FitTrack in-app coach: concise, warm, and action-oriented, with fitness-aware coaching language.',
+              'BrodigyAI: concise, warm, practical, and grounded in the current FitTrack workflow.',
             context: expect.objectContaining({
               sessionId: 'session-1',
               contextType: ChatContext.general,
               latestUserMessage: 'I want help with meal planning.',
-              messagePurpose: 'nutrition_guidance',
+              messagePurpose: 'general_support',
               userContext: expect.objectContaining({
                 fitness_goal: FitnessGoal.cutting,
               }),
@@ -410,7 +416,17 @@ describe('AiService', () => {
     );
   });
 
-  it('routes the authenticated active-member chain through chatGym with bounded public grounding', async () => {
+  it('routes active members through the shared semantic chat path with bounded public grounding', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: null,
+        gender: null,
+        weight_kg: null,
+        height_cm: null,
+        activity_level: null,
+        fitness_goal: null,
+      },
+    });
     aiChatSessionRepository.findOwnedActiveSessionByContext.mockResolvedValue(
       null,
     );
@@ -425,7 +441,7 @@ describe('AiService', () => {
       updated_at: new Date('2026-03-27T05:00:00.000Z'),
     });
     aiChatMessageRepository.listRecentMessagesBySessionId.mockResolvedValue(
-      Array.from({ length: 20 }, (_, index) => ({
+      Array.from({ length: 4 }, (_, index) => ({
         id: `message-${index}`,
         session_id: 'member-session-1',
         role: index % 2 === 0 ? ChatRole.user : ChatRole.assistant,
@@ -439,11 +455,10 @@ describe('AiService', () => {
         ),
       })),
     );
-    aiClient.chatGym.mockResolvedValue({
-      reply: 'SERTFIT Gym is open until 22:00.',
-      out_of_scope: false,
-      sources: ['gym_identity'],
-      follow_up_suggestions: [],
+    aiClient.chat.mockResolvedValue({
+      content: 'SERTFIT Gym closes at 22:00 today.',
+      action: 'NONE',
+      params: null,
       model_used: 'openrouter-test-model',
       token_count: 31,
     });
@@ -454,51 +469,56 @@ describe('AiService', () => {
       }),
     ).resolves.toEqual({
       session_id: 'member-session-1',
-      reply: 'SERTFIT Gym is open until 22:00.',
+      reply: 'SERTFIT Gym closes at 22:00 today.',
       action_triggered: null,
       action_result: null,
     });
 
-    expect(aiClient.chatGym).toHaveBeenCalledTimes(1);
-    expect(aiClient.chat).not.toHaveBeenCalled();
-    expect(userService.getMyProfile).not.toHaveBeenCalled();
+    expect(aiClient.chat).toHaveBeenCalledTimes(1);
+    expect(aiClient.chatGym).not.toHaveBeenCalled();
+    expect(userService.getMyProfile).toHaveBeenCalledWith('user-1');
 
-    const chatGymMock = aiClient.chatGym as jest.MockedFunction<
-      (input: GymChatInput) => Promise<unknown>
+    const chatMock = aiClient.chat as jest.MockedFunction<
+      (input: AIChatInput) => Promise<unknown>
     >;
-    const providerRequest = chatGymMock.mock.calls[0]?.[0];
+    const providerRequest = chatMock.mock.calls[0]?.[0];
     expect(providerRequest).toMatchObject({
-      sessionId: 'member-session-1',
-      message: 'What time does the gym close?',
-      policy: { gymOnly: true, refuseOutOfScope: true },
-      grounding: {
-        session_history: [
-          { role: ChatRole.user, content: 'history-16' },
-          { role: ChatRole.assistant, content: 'history-17' },
-          { role: ChatRole.user, content: 'history-18' },
-          { role: ChatRole.assistant, content: 'history-19' },
+      messages: [
+        {
+          role: ChatRole.assistant,
+        },
+        { role: ChatRole.user, content: 'history-0' },
+        { role: ChatRole.assistant, content: 'history-1' },
+        { role: ChatRole.user, content: 'history-2' },
+        { role: ChatRole.assistant, content: 'history-3' },
+        { role: 'user', content: 'What time does the gym close?' },
+      ],
+      sessionContext: {
+        session_id: 'member-session-1',
+        context_type: ChatContext.general,
+        assistant_scope: 'all',
+        allowed_actions: [
+          'ADJUST_TDEE',
+          'GENERATE_PLAN',
+          'LOG_NUTRITION',
+          'NONE',
         ],
-        membership_plans: [],
       },
     });
-    expect(providerRequest.grounding.faqs).toEqual([
-      { category: 'general', question: 'Gym name', answer: 'SERTFIT Gym' },
-      {
-        category: 'general',
-        question: 'Gym address',
-        answer: '123 Fitness Ave, New York, NY 10001',
-      },
-      { category: 'general', question: 'Gym phone', answer: '+639281234567' },
-      {
-        category: 'general',
-        question: 'Gym email',
-        answer: 'contact@sertfit.com',
-      },
-      { category: 'general', question: 'Gym opening time', answer: '06:00' },
-      { category: 'general', question: 'Gym closing time', answer: '22:00' },
-    ]);
-    expect(providerRequest.grounding).not.toHaveProperty('user_context');
-    expect(JSON.stringify(providerRequest)).not.toContain('history-0');
+    expect(providerRequest.messages[0]?.content).toContain(
+      'Gym name: SERTFIT Gym',
+    );
+    expect(providerRequest.messages).toHaveLength(6);
+    expect(providerRequest.messages[0]?.content).toContain(
+      'Opening time: 06:00',
+    );
+    expect(providerRequest.messages[0]?.content).toContain(
+      'Closing time: 22:00',
+    );
+    expect(JSON.stringify(providerRequest)).not.toContain('+639281234567');
+    expect(JSON.stringify(providerRequest)).not.toContain(
+      'contact@sertfit.com',
+    );
     expect(JSON.stringify(providerRequest)).not.toContain('membership-status');
   });
 
@@ -507,7 +527,7 @@ describe('AiService', () => {
     [UserRole.coach, 'coach-1', 'coach-session-1'],
     [UserRole.staff, 'staff-1', 'staff-session-1'],
   ] as const)(
-    'scopes %s chat to business operations and suppresses assistant actions',
+    'shares the semantic chat scope for %s and suppresses assistant actions',
     async (role, userId, sessionId) => {
       userService.getMyProfile.mockResolvedValue({
         profile: {
@@ -564,7 +584,8 @@ describe('AiService', () => {
           sessionContext: expect.objectContaining({
             session_id: sessionId,
             context_type: ChatContext.general,
-            assistant_scope: 'admin_business',
+            assistant_scope: 'all',
+            allowed_actions: ['NONE'],
           }),
         }),
       );
@@ -578,12 +599,12 @@ describe('AiService', () => {
           requestPayload: expect.objectContaining({
             promptBlueprint: expect.objectContaining({
               persona:
-                'FitTrack business operations assistant: concise, operational, and grounded in gym management workflows.',
+                'BrodigyAI: concise, warm, practical, and grounded in the current FitTrack workflow.',
               actionPolicy: expect.objectContaining({
                 allowedActions: ['NONE'],
               }),
               context: expect.objectContaining({
-                assistantScope: 'admin_business',
+                assistantScope: 'all',
               }),
             }),
           }),
@@ -803,7 +824,13 @@ describe('AiService', () => {
         sessionContext: expect.objectContaining({
           session_id: 'fresh-session',
           context_type: ChatContext.nutrition,
-          assistant_scope: 'member_fitness',
+          assistant_scope: 'all',
+          allowed_actions: [
+            'ADJUST_TDEE',
+            'GENERATE_PLAN',
+            'LOG_NUTRITION',
+            'NONE',
+          ],
         }),
       }),
     );

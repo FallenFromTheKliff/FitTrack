@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 
 import httpx
 import pytest
@@ -53,6 +54,7 @@ def test_chat_route_uses_openrouter_assistant_model_when_available(
     calls: list[dict[str, object]] = []
 
     def fake_post(*args, **kwargs):
+        assert isinstance(kwargs["verify"], ssl.SSLContext)
         calls.append(kwargs["json"])
         return _openrouter_response(
             {
@@ -364,21 +366,98 @@ def test_chat_route_wraps_plain_text_provider_reply_as_none_action(
     assert payload["token_count"] == 29
 
 
-def test_chat_route_refuses_out_of_scope_prompts(
+@pytest.mark.parametrize(
+    (
+        "provider_content",
+        "allowed_actions",
+        "expected_content",
+        "expected_action",
+        "expected_params",
+    ),
+    [
+        (
+            {
+                "response": "Lunch logged.\\nReview the portions before saving.",
+                "action": "LOG_NUTRITION",
+                "params": {"meal_type": "lunch"},
+                "provider_metadata": {"request_id": "hidden"},
+            },
+            ["LOG_NUTRITION", "NONE"],
+            "Lunch logged.\nReview the portions before saving.",
+            "LOG_NUTRITION",
+            {"meal_type": "lunch"},
+        ),
+        (
+            json.dumps(
+                {
+                    "reply": "**Recovery**\n\n- Sleep consistently\n- Keep one easy day",
+                    "action_triggered": "NONE",
+                    "action_result": None,
+                    "model_used": "provider-wrapper-model",
+                }
+            ),
+            ["NONE"],
+            "**Recovery**\n\n- Sleep consistently\n- Keep one easy day",
+            "NONE",
+            None,
+        ),
+        (
+            json.dumps(
+                json.dumps(
+                    {
+                        "response": "Line one\\nLine two",
+                        "action": "NONE",
+                        "params": None,
+                    }
+                )
+            ),
+            ["NONE"],
+            "Line one\nLine two",
+            "NONE",
+            None,
+        ),
+        (
+            "**Today**\n\n- Squat with control\n- Stop if form breaks down",
+            ["NONE"],
+            "**Today**\n\n- Squat with control\n- Stop if form breaks down",
+            "NONE",
+            None,
+        ),
+    ],
+)
+def test_chat_route_normalizes_supported_provider_output_shapes(
     monkeypatch: pytest.MonkeyPatch,
+    provider_content: object,
+    allowed_actions: list[str],
+    expected_content: str,
+    expected_action: str,
+    expected_params: dict[str, object] | None,
 ) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
 
-    client = TestClient(app)
-    response = client.post(
+    class ProviderResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "usage": {"total_tokens": 44},
+                "choices": [{"message": {"content": provider_content}}],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: ProviderResponse(),
+    )
+
+    response = TestClient(app).post(
         "/chat",
         json={
-            "messages": [
-                {"role": "user", "content": "Explain the French Revolution in detail."}
-            ],
+            "messages": [{"role": "user", "content": "Help with today's plan."}],
             "user_context": {
                 "age": 29,
                 "gender": "female",
@@ -388,101 +467,197 @@ def test_chat_route_refuses_out_of_scope_prompts(
                 "fitness_goal": "cutting",
             },
             "session_context": {
-                "session_id": "assistant-session-scope",
+                "session_id": "assistant-session-normalized-output",
                 "context_type": "general",
+                "allowed_actions": allowed_actions,
             },
         },
     )
 
     payload = response.json()
-
     assert response.status_code == 200
-    assert payload["action"] == "NONE"
-    assert payload["model_used"] == "intent-guard"
-    assert "fitness, training, nutrition" in payload["content"]
+    assert payload["content"] == expected_content
+    assert payload["action"] == expected_action
+    assert payload["params"] == expected_params
+    assert "provider_metadata" not in payload["content"]
+    assert '"action"' not in payload["content"]
+    assert '"params"' not in payload["content"]
 
 
-def test_chat_route_admin_scope_refuses_fitness_coaching(
+@pytest.mark.parametrize(
+    "provider_message",
+    [
+        {
+            "content": {
+                "action": "NONE",
+                "params": None,
+                "provider_metadata": {"request_id": "hidden"},
+            }
+        },
+        {
+            "content": json.dumps(
+                {
+                    "response": {
+                        "reply": {
+                            "content": {
+                                "action": "NONE",
+                                "params": None,
+                            }
+                        }
+                    },
+                    "provider_metadata": {"request_id": "hidden"},
+                }
+            )
+        },
+        {
+            "content": [
+                {
+                    "type": "reasoning",
+                    "provider_metadata": {"request_id": "hidden"},
+                }
+            ]
+        },
+    ],
+)
+def test_chat_route_uses_friendly_fallback_for_success_without_human_text(
     monkeypatch: pytest.MonkeyPatch,
+    provider_message: dict[str, object],
 ) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
 
-    client = TestClient(app)
-    response = client.post(
+    class MalformedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "choices": [
+                    {
+                        "message": provider_message,
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: MalformedResponse(),
+    )
+
+    response = TestClient(app).post(
         "/chat",
         json={
-            "messages": [
-                {"role": "user", "content": "Build me a 4 week workout plan."}
-            ],
-            "user_context": {
-                "age": None,
-                "gender": None,
-                "weight_kg": None,
-                "height_cm": None,
-                "activity_level": None,
-                "fitness_goal": None,
-            },
+            "messages": [{"role": "user", "content": "Give me one workout tip."}],
+            "user_context": {},
             "session_context": {
-                "session_id": "admin-session-fitness-refusal",
+                "session_id": "assistant-session-malformed-output",
                 "context_type": "general",
-                "assistant_scope": "admin_business",
             },
         },
     )
 
     payload = response.json()
-
     assert response.status_code == 200
+    assert payload["model_used"] == "meta-llama/llama-3.3-70b-instruct:free"
     assert payload["action"] == "NONE"
-    assert payload["model_used"] == "intent-guard"
-    assert "admin business operations" in payload["content"]
-    assert "can't handle fitness coaching" in payload["content"]
+    assert payload["params"] is None
+    assert payload["content"] == "I couldn't format that response cleanly. Please try again."
+    assert "OpenRouter" not in payload["content"]
+    assert "provider_metadata" not in payload["content"]
+    assert '"action"' not in payload["content"]
+    assert '"params"' not in payload["content"]
 
 
-def test_chat_route_member_scope_refuses_business_ops(
+def test_chat_route_extracts_nested_content_block_text_and_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_ASSISTANT_CHAT_MODEL", raising=False)
-    monkeypatch.delenv("OPENROUTER_INSIGHT_MODEL", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
 
-    client = TestClient(app)
-    response = client.post(
+    class NestedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(
+                                        {
+                                            "response": {
+                                                "reply": {
+                                                    "content": "Keep the next set controlled.\\nStop before form breaks down."
+                                                }
+                                            },
+                                            "action": "LOG_NUTRITION",
+                                            "params": {"meal_type": "lunch"},
+                                        }
+                                    ),
+                                }
+                            ],
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: NestedResponse(),
+    )
+
+    response = TestClient(app).post(
         "/chat",
         json={
-            "messages": [
-                {"role": "user", "content": "How do I improve revenue and staffing?"}
-            ],
-            "user_context": {
-                "age": 29,
-                "gender": "female",
-                "weight_kg": 62,
-                "height_cm": 165,
-                "activity_level": "moderate",
-                "fitness_goal": "cutting",
-            },
+            "messages": [{"role": "user", "content": "Log lunch and give one tip."}],
+            "user_context": {},
             "session_context": {
-                "session_id": "member-business-refusal",
-                "context_type": "general",
-                "assistant_scope": "member_fitness",
+                "session_id": "assistant-session-nested-live-shape",
+                "context_type": "nutrition",
+                "allowed_actions": ["LOG_NUTRITION", "NONE"],
             },
         },
     )
 
     payload = response.json()
-
     assert response.status_code == 200
-    assert payload["action"] == "NONE"
-    assert payload["model_used"] == "intent-guard"
-    assert "business analytics" in payload["content"]
+    assert payload["content"] == (
+        "Keep the next set controlled.\nStop before form breaks down."
+    )
+    assert payload["action"] == "LOG_NUTRITION"
+    assert payload["params"] == {"meal_type": "lunch"}
+    assert '"action"' not in payload["content"]
+    assert '"params"' not in payload["content"]
 
 
-def test_chat_route_answers_admin_allowed_part_of_mixed_prompt(
+@pytest.mark.parametrize("role", ["ADMIN", "COACH", "STAFF", "MEMBER"])
+@pytest.mark.parametrize(
+    ("message", "expected_mode"),
+    [
+        ("hello", "answer"),
+        ("Can you explain macros for a cutting phase?", "answer"),
+        ("How do I cut while keeping my strength?", "answer"),
+        ("Where is SERTFIT and what are today's hours?", "answer"),
+        ("Can you explain that?", "clarify"),
+        ("What is photosynthesis?", "refuse"),
+        ("How do I reverse-sort a Python array?", "refuse"),
+    ],
+)
+def test_chat_route_uses_one_shared_semantic_policy_for_every_role_and_example(
     monkeypatch: pytest.MonkeyPatch,
+    role: str,
+    message: str,
+    expected_mode: str,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv(
@@ -492,53 +667,81 @@ def test_chat_route_answers_admin_allowed_part_of_mixed_prompt(
     calls: list[dict[str, object]] = []
 
     def fake_post(*args, **kwargs):
-        calls.append(kwargs["json"])
+        request_payload = kwargs["json"]
+        calls.append(request_payload)
+        provider_input = json.loads(request_payload["messages"][1]["content"])
+        current_message = provider_input["messages"][-1]["content"]
+        if current_message == "Can you explain that?":
+            content = "Could you clarify whether you mean the exercise, nutrition, or gym question?"
+        elif current_message in {
+            "What is photosynthesis?",
+            "How do I reverse-sort a Python array?",
+        }:
+            content = "I can help with fitness, nutrition, recovery, gym information, app help, or authorized gym operations."
+        else:
+            content = f"BrodigyAI can help with this FitTrack question: {current_message}"
         return _openrouter_response(
-            {
-                "content": "Review revenue, attendance, and staffing before the evening rush.",
-                "action": "GENERATE_PLAN",
-                "params": {"duration_weeks": 4, "days_per_week": 3},
-            },
+            {"content": content, "action": "NONE", "params": None},
             model="meta-llama/llama-3.3-70b-instruct:free",
             tokens=61,
         )
 
     monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
 
-    client = TestClient(app)
-    response = client.post(
+    allowed_actions = (
+        ["ADJUST_TDEE", "GENERATE_PLAN", "LOG_NUTRITION", "NONE"]
+        if role == "MEMBER"
+        else ["NONE"]
+    )
+    response = TestClient(app).post(
         "/chat",
         json={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "How should I improve revenue, and can you make me a workout plan?",
-                }
-            ],
+            "messages": [{"role": "user", "content": message}],
             "user_context": {
-                "age": None,
-                "gender": None,
-                "weight_kg": None,
-                "height_cm": None,
-                "activity_level": None,
-                "fitness_goal": None,
+                "age": 29,
+                "gender": "female",
+                "weight_kg": 62,
+                "height_cm": 165,
+                "activity_level": "moderate",
+                "fitness_goal": "cutting",
             },
             "session_context": {
-                "session_id": "admin-mixed-scope",
+                "session_id": f"semantic-{role.lower()}",
                 "context_type": "general",
-                "assistant_scope": "admin_business",
+                "assistant_scope": "all",
+                "allowed_actions": allowed_actions,
             },
         },
     )
 
     payload = response.json()
-
     assert response.status_code == 200
     assert payload["action"] == "NONE"
     assert payload["params"] is None
-    assert "Review revenue, attendance, and staffing" in payload["content"]
-    assert "fitness coaching" in payload["content"]
-    assert len(calls) == 2
+    assert len(calls) == 1
+
+    system_prompt = calls[0]["messages"][0]["content"]
+    assert "Shared capability policy for every eligible Brodigy role" in system_prompt
+    assert "macros and nutrition education" in system_prompt
+    assert "photosynthesis" in system_prompt
+    assert "reverse" in system_prompt
+    assert "admin business operations assistant" not in system_prompt
+    assert "in-app fitness and nutrition assistant" not in system_prompt
+
+    provider_input = json.loads(calls[0]["messages"][1]["content"])
+    assert provider_input["messages"][-1]["content"] == message
+    assert len(provider_input["messages"]) <= 4
+    assert provider_input["session_context"] == {"context_type": "general"}
+    assert provider_input["action_policy"]["allowed_actions"] == allowed_actions
+    assert "session_id" not in provider_input["session_context"]
+    assert "assistant_scope" not in provider_input["session_context"]
+
+    if expected_mode == "clarify":
+        assert "clarify" in payload["content"].lower()
+    elif expected_mode == "refuse":
+        assert message not in payload["content"]
+        assert "python array" not in payload["content"].lower()
+        assert "photosynthesis" not in payload["content"].lower()
 
 
 def test_generate_plan_route_uses_openrouter_plan_model_when_available(
@@ -753,6 +956,18 @@ def test_openrouter_timeout_is_configurable_and_bounded(
 
     monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "not-a-number")
     assert provider._read_request_timeout_seconds() == 25
+
+
+def test_openrouter_ssl_context_ignores_optional_keylog_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SSLKEYLOGFILE", r"\\.\unavailable\keylog.txt")
+
+    context = OpenRouterAssistantProvider()._build_ssl_context()
+
+    assert isinstance(context, ssl.SSLContext)
+    assert context.check_hostname is True
+    assert context.verify_mode == ssl.CERT_REQUIRED
 
 
 def test_openrouter_request_variants_continue_after_a_timeout(

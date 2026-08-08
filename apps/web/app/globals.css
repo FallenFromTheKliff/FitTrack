@@ -275,6 +275,32 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
   }
 }
 
+@keyframes fitDotBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-3px);
+  }
+}
+
+.brodigy-thinking-dot {
+  transform: translateY(0);
+  transform-origin: center;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brodigy-thinking-dot {
+    animation: none !important;
+    transform: none !important;
+    will-change: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fit-dropdown-trigger,
   .fit-dropdown-trigger::before,

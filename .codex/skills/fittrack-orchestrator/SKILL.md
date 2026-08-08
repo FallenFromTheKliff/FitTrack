@@ -16,6 +16,7 @@ Do not replace `$integration`. Route to `$integration` when the task is full-sta
 - Sol 5.6 High is the parent architect, foreman, ownership coordinator, and final communicator. Keep Sol out of routine broad scans, implementation diaries, repeated polling, and line-by-line QA.
 - Luna 5.6 Max is the default implementation and focused discovery worker. Prefer `.codex/agents/luna-max-worker.toml`, or use the closest domain worker with model `gpt-5.6-luna` and reasoning effort `max`.
 - Terra 5.6 Max is the independent QA and fallback repair worker. Prefer `.codex/agents/terra-max-worker.toml` with model `gpt-5.6-terra` and reasoning effort `max`.
+- Luna and Terra run at Standard/default speed. Keep Max reasoning, omit `service_tier` from spawn calls, and never request `priority` or Fast service unless the user explicitly prioritizes speed over token usage.
 - The repository grants standing permission for bounded Luna and Terra delegation. Preserve human gates for destructive, production, credential, security, cost, and product-direction decisions.
 - Use Obsidian as the durable coordination plane and compact final agent responses as the notification plane.
 

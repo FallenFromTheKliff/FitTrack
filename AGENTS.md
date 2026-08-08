@@ -61,6 +61,7 @@ The user has granted standing permission to use bounded Luna and Terra subagents
 - Terra inspects changed files plus at most 4 directly coupled files, runs one targeted verification gate, and gets one objective same-scope repair cycle. Terra's final response is capped at 180 words.
 - Use exactly one actual `wait_agent` call per worker with a sufficiently long timeout. Resume the running wait cell when necessary; do not issue another agent-status request.
 - Sol loads only the orchestrator skill. Each worker loads its assigned leaf skill inside its isolated context unless Sol itself must perform that domain work.
+- Spawn Luna and Terra at Standard/default speed while retaining Max reasoning. Omit `service_tier`; do not use `priority` or Fast service unless the user explicitly overrides the token-first default.
 
 ## MCP Routing
 

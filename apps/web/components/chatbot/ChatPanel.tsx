@@ -199,10 +199,18 @@ export default function ChatPanel({
               </FitText>
             </div>
             <div style={s.aiBubble}>
-              <div style={s.dotsWrap}>
-                <div style={s.dot} />
-                <div style={s.dot} />
-                <div style={s.dot} />
+              <div
+                style={s.dotsWrap}
+                role="status"
+                aria-label="Brodigy is thinking"
+              >
+                {[0, 1, 2].map((index) => (
+                  <div
+                    key={index}
+                    className="brodigy-thinking-dot"
+                    style={{ ...s.dot, animationDelay: `${index * 140}ms` }}
+                  />
+                ))}
               </div>
             </div>
           </div>
